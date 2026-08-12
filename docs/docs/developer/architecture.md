@@ -216,7 +216,7 @@ a code change a developer ships.
 ### Domains and orchestrators
 
 Every integration registers into one or more **domains** — `geocoding`,
-`routing`, `transit`, `live-transit`, `data-source`, `poi-search`, `photos`,
+`routing`, `transit`, `live-transit`, `data-source`, `poi-search`, `search-suggestions`, `photos`,
 `reviews`, `weather`, `knowledge`, `map-overlay`, `street-level-imagery`,
 `road-conditions`, `gtfs-catalog`. Each domain has
 a dedicated **orchestrator integration** (`integrations/geocoding/`,
@@ -233,6 +233,21 @@ prefix; map overlays are **independent layers**. The transit orchestrator is the
 most involved — it routes id-bearing requests by provider prefix (`bvg:`, `mo:`,
 `g-<slug>:`), waterfalls trip-planning by priority, fans stops and alerts out in
 parallel, and deduplicates overlapping results.
+
+`search-suggestions` is a concurrent merge domain for exact place codes,
+explicit aliases/references, and conservative acronyms. Its provider contract
+returns normalized match evidence, stable/cross-source identifiers,
+importance, and per-result attribution. The built-in providers adapt
+OurAirports, the configured transit orchestrator, and the independently built
+`osm_search` PostGIS schema. This domain deliberately does not replace the
+geocoding fallback chain; `SearchBar` merges both responses after each has
+applied its own semantics.
+
+The OSM alias index is an ODbL-derived data product owned by `data-manager`.
+The manager streams a selected PBF through Osmium into an
+`osm_search__staging` schema, validates it, and atomically swaps it into
+`osm_search`. Publication epochs invalidate provider caches without key scans,
+and a failed rebuild leaves the previous live schema queryable.
 
 ## The integration host lifecycle
 

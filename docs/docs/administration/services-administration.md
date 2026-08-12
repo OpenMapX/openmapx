@@ -207,6 +207,29 @@ template. Each queues a background job whose log you can follow in the activity
 view. The destructive cleanup operation asks for confirmation first. The full
 data workflow is documented in [Preparing data](../install/preparing-data.md).
 
+### OSM code and alias search index
+
+The data workflow also operates the local OSM code/alias/acronym index used by
+consumer autocomplete. It shows the source region and fingerprint, current
+build stage, place and term counts, publication epoch and time, whether a newer
+PBF has made the index stale, and the last error. Building is explicit: select
+the downloaded region and confirm the operation, or run
+`openmapx data search-index build [region]`. A new PBF never triggers a
+country- or planet-scale rebuild during API boot.
+
+The job requires PostGIS and Osmium Tool. It streams records in bounded batches
+into `osm_search__staging`, builds exact/prefix and geographic indexes, validates
+counts and referential integrity, then swaps schemas in one database
+transaction. Extraction, validation, or publication failure keeps the prior
+snapshot live. During a rebuild the existing snapshot remains searchable;
+after a new PBF the stale snapshot also remains available until replaced.
+
+Plan temporary disk for the source PBF, staging tables and indexes, and the
+previous live schema during publication. The feature initially supports one
+active extract or `planet`, not overlapping regional unions. All derived rows
+remain isolated in `osm_search` and retain OpenStreetMap's ODbL attribution;
+they are never mixed into the independently licensed Overture schema.
+
 ## Related admin surfaces
 
 A few service-adjacent pages sit alongside this one:

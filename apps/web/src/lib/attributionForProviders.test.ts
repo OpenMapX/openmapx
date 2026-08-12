@@ -4,6 +4,7 @@ import {
   attributionsForProviders,
   attributionsForSources,
   type DataSourceResolver,
+  mergeAttributions,
   type ProviderMetaResolver,
 } from "./attributionForProviders";
 
@@ -74,5 +75,19 @@ describe("attributionsForSources", () => {
 
   it("credits nothing for an unknown source — never a domain-wide fallback", () => {
     expect(attributionsForSources(registry, ["does-not-exist", undefined, null])).toEqual([]);
+  });
+});
+
+describe("mergeAttributions", () => {
+  it("retains first-seen order and content while deduplicating source ids", () => {
+    const first = { sourceId: "osm", name: "OpenStreetMap" };
+    const duplicate = { sourceId: "osm", name: "Wrong later label" };
+    const second = { sourceId: "ourairports", name: "OurAirports" };
+
+    expect(mergeAttributions([first], [duplicate, second])).toEqual([first, second]);
+  });
+
+  it("returns an empty list for empty groups", () => {
+    expect(mergeAttributions([], [])).toEqual([]);
   });
 });

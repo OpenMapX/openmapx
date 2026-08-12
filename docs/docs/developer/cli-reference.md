@@ -132,11 +132,19 @@ hardlinks, authenticated feeds — lives in
 | `data overture-conflate [region]` | Resume the installed release's durable extraction, scoring, exact assignment, or publication phase. Flag: `--restart` deliberately discards saved phases and starts from extraction. |
 | `data overture-status` | Show the installed release, durable phase, cursors, counts, timings, heartbeat age, and last error. |
 | `data overture-extract [region]` | Stream OSM POIs from the local PBF and atomically replace `overture_places.osm_pois` (diagnostic/manual use). |
+| `data search-index build [region]` | Stream the selected OSM PBF into a staged alias/reference/acronym index, validate it, and publish it atomically. |
+| `data search-index status` | Show the active index region, health/staleness, epoch, row counts, fingerprints, timestamps, and last build error. |
 
 `data download osm`, `data build`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing
 commands error out asking for one. Regions use Geofabrik's path naming
 (`europe/germany`, `north-america/us/california`, or `planet`).
+
+The search-index build requires the region's PBF to be registered with the
+data-manager first. It supports one active region (or `planet`) and never runs
+implicitly during API startup. Downloading a newer PBF marks the published
+index stale; run the build command again when you are ready to pay the CPU,
+database, and temporary-disk cost.
 
 ## `ext`
 

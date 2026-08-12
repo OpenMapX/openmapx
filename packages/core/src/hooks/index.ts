@@ -140,6 +140,7 @@ export {
   useUpdateList,
   useUpdatePlace,
 } from "./useSavedPlaces";
+export { useSearchSuggestions } from "./useSearchSuggestions";
 export { type SunTimesResponse, useSunTimes } from "./useSunTimes";
 export {
   type MetObservation,

@@ -97,6 +97,17 @@ Nominatim, none for Pelias).
 Every upstream call is proxied through your own API server, so the geocoder only
 ever sees your server's address, not your users'.
 
+### Geocoders and code catalogs are separate
+
+The provider chain remains responsible for ordinary names, addresses, streets,
+regions, and reverse geocoding. Airport codes, public transit-stop codes, OSM
+aliases/references, and conservative generated acronyms are collected by the
+`search-suggestions` integration instead. Keeping these paths separate avoids
+turning a configured geocoder into an implicit global codes index, preserves
+its existing fallback semantics, and lets each specialist result carry exact
+match evidence and source attribution. The search bar merges both normalized
+responses before rendering.
+
 ## Photon
 
 Photon is the simplest engine to stand up: it consumes no source data from the

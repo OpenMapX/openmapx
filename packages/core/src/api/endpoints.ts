@@ -4,6 +4,7 @@ export const API_ENDPOINTS = {
   geocodeReverse: "/api/integrations/geocoding/geocode/reverse",
   geocodeCountry: "/api/integrations/geocoding/geocode/country",
   autocomplete: "/api/integrations/geocoding/autocomplete",
+  searchSuggestions: "/api/integrations/search-suggestions/search",
   directions: "/api/integrations/routing/directions",
   directionsOptimize: "/api/integrations/routing/directions/optimize",
   directionsEv: "/api/integrations/routing/directions/ev",

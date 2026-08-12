@@ -8,13 +8,16 @@ import HomeIcon from "@mui/icons-material/Home";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import SearchIcon from "@mui/icons-material/Search";
 import WorkIcon from "@mui/icons-material/Work";
+import Box from "@mui/material/Box";
+import Chip from "@mui/material/Chip";
 import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import type { AutocompleteResult } from "@openmapx/core";
-import { isTransitRawCategory } from "@openmapx/core";
+import { isTransitRawCategory, normalizeSearchTerm } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { BRAND } from "@/lib/theme";
 import { BrandLogo } from "./BrandLogo";
@@ -87,6 +90,7 @@ export function AutocompleteDropdown({
   onSelect,
   highlightedIndex = -1,
 }: AutocompleteDropdownProps) {
+  const t = useTranslations("search");
   const activeRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
@@ -99,30 +103,56 @@ export function AutocompleteDropdown({
 
   return (
     <List dense disablePadding>
-      {suggestions.map((s, i) => (
-        <li
-          key={`${s.id}-${s.type}-${s.sublabel ?? i}`}
-          ref={i === highlightedIndex ? activeRef : undefined}
-          style={{ listStyle: "none" }}
-        >
-          {i > 0 && <Divider />}
-          <ListItemButton
-            onClick={() => onSelect(s)}
-            selected={i === highlightedIndex}
-            sx={{ px: 2, py: 1 }}
+      {suggestions.map((s, i) => {
+        const matchedValue = s.searchMatch?.value.trim();
+        const showMatchedValue =
+          Boolean(matchedValue) &&
+          normalizeSearchTerm(matchedValue ?? "") !== normalizeSearchTerm(s.label);
+        return (
+          <li
+            key={`${s.id}-${s.type}-${s.sublabel ?? i}`}
+            ref={i === highlightedIndex ? activeRef : undefined}
+            style={{ listStyle: "none" }}
           >
-            <ListItemIcon sx={{ minWidth: 36 }}>{getResultIcon(s)}</ListItemIcon>
-            <ListItemText
-              primary={s.label}
-              secondary={s.sublabel}
-              slotProps={{
-                primary: { sx: { fontSize: 14, fontWeight: 400 } },
-                secondary: { sx: { fontSize: 12 } },
-              }}
-            />
-          </ListItemButton>
-        </li>
-      ))}
+            {i > 0 && <Divider />}
+            <ListItemButton
+              onClick={() => onSelect(s)}
+              selected={i === highlightedIndex}
+              sx={{ px: 2, py: 1 }}
+            >
+              <ListItemIcon sx={{ minWidth: 36 }}>{getResultIcon(s)}</ListItemIcon>
+              <ListItemText
+                primary={
+                  <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
+                    <Box component="span" sx={{ minWidth: 0 }}>
+                      {s.label}
+                    </Box>
+                    {showMatchedValue && (
+                      <Chip
+                        label={matchedValue}
+                        aria-label={`${t("matchedValue")}: ${matchedValue}`}
+                        size="small"
+                        variant="outlined"
+                        sx={{
+                          height: 20,
+                          fontSize: 11,
+                          flexShrink: 0,
+                          "& .MuiChip-label": { px: 0.75 },
+                        }}
+                      />
+                    )}
+                  </Box>
+                }
+                secondary={s.sublabel}
+                slotProps={{
+                  primary: { sx: { fontSize: 14, fontWeight: 400 } },
+                  secondary: { sx: { fontSize: 12 } },
+                }}
+              />
+            </ListItemButton>
+          </li>
+        );
+      })}
     </List>
   );
 }

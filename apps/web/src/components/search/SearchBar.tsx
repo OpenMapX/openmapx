@@ -37,6 +37,7 @@ import {
   detectShortPlusCodeCity,
   idsFromPrimaryOrCoords,
   isTransitRawCategory,
+  mergeAutocompleteSuggestions,
   PANEL,
   parseCoordinateInput,
   parseDMSCoordinateInput,
@@ -44,7 +45,6 @@ import {
   resolveStopAsPlace,
   useActiveSidePanel,
   useAdaptiveDebounce,
-  useAirportSearch,
   useAutocomplete,
   useBrandSuggest,
   useCategorySearchStore,
@@ -63,9 +63,9 @@ import {
   usePresetSuggest,
   useSavedPlacesStore,
   useSearchStore,
+  useSearchSuggestions,
   useSettingsStore,
   useSidebarStore,
-  useStopSearch,
 } from "@openmapx/core";
 import { isPlausibleNlSearch } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
@@ -78,7 +78,7 @@ import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { NlpConsentDialog } from "@/components/ui/NlpConsentDialog";
 import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/ui/nlpConsent";
-import { attributionsForProviders } from "@/lib/attributionForProviders";
+import { attributionsForProviders, mergeAttributions } from "@/lib/attributionForProviders";
 import {
   useAiSearchDisclosure,
   useIntegrationDisclosures,
@@ -100,73 +100,8 @@ import { VoiceSearchButton } from "./VoiceSearchButton";
  *  re-parse it on every SearchBar render. */
 const PALETTE_SHORTCUT = parseShortcut("Mod+K");
 
-/** Bigram set of a string. */
-function bigrams(s: string): Map<string, number> {
-  const map = new Map<string, number>();
-  for (let i = 0; i < s.length - 1; i++) {
-    const bg = s.slice(i, i + 2);
-    map.set(bg, (map.get(bg) ?? 0) + 1);
-  }
-  return map;
-}
-
-/** Sørensen–Dice coefficient (0..1). */
-function diceSimilarity(a: string, b: string): number {
-  if (a === b) return 1;
-  if (a.length < 2 || b.length < 2) return 0;
-  const bg1 = bigrams(a);
-  const bg2 = bigrams(b);
-  let intersection = 0;
-  for (const [bg, count] of bg1) {
-    intersection += Math.min(count, bg2.get(bg) ?? 0);
-  }
-  return (2 * intersection) / (a.length - 1 + (b.length - 1));
-}
-
-/** Score a search result against the query (higher = more relevant). */
-function searchRelevance(result: AutocompleteResult, query: string): number {
-  const q = query.toLowerCase();
-  const label = result.label.toLowerCase();
-
-  // Dice similarity on full strings
-  let score = diceSimilarity(q, label);
-
-  // Prefix bonus: label starts with query
-  if (label.startsWith(q)) {
-    score += 0.4;
-  } else if (label.includes(q)) {
-    // Substring bonus (weaker)
-    score += 0.15;
-  }
-
-  // Check sublabel too (e.g. "Berlin" might appear in address sublabel)
-  if (result.sublabel) {
-    const sub = result.sublabel.toLowerCase();
-    if (sub.includes(q)) score += 0.05;
-  }
-
-  // Labeled places (Home, Work, custom) get a strong boost to appear near the top
-  if (result.type === "labeled_place") score += 0.5;
-
-  return score;
-}
-
-const MODE_LABEL_KEYS: Record<string, string> = {
-  bus: "bus",
-  rail: "rail",
-  subway: "subway",
-  tram: "tram",
-  ferry: "ferry",
-  gondola: "gondola",
-  funicular: "funicular",
-  cable_car: "cableCar",
-  monorail: "monorail",
-  walking: "walking",
-};
-
 export function SearchBar() {
   const t = useTranslations("search");
-  const tModes = useTranslations("searchModes");
   const tSaved = useTranslations("saved");
   const tCmd = useTranslations("commandPalette");
   const tCommon = useTranslations("common");
@@ -216,7 +151,6 @@ export function SearchBar() {
   );
   const { data: viewportCountry } = useCountryFromCoordinates(countryProbe);
   const { data: brandData } = useBrandSuggest(debouncedQuery, viewportCountry ?? undefined);
-  const { data: airportSearchData } = useAirportSearch(debouncedQuery, 5);
   const { data: chipTranslations = {} } = useChipTranslations(locale);
 
   // NLP search fires on submit whenever the query does NOT resolve to a
@@ -226,6 +160,12 @@ export function SearchBar() {
   // reads; the hook's query key rounds the center so tiny pans don't refetch.
   const mapCenterRaw = mapRef.current?.getCenter();
   const mapCenter: LngLat | null = mapCenterRaw ? [mapCenterRaw.lng, mapCenterRaw.lat] : null;
+  const { data: aggregateSearchData, isFetching: aggregateSearchFetching } = useSearchSuggestions(
+    debouncedQuery,
+    locale,
+    mapCenter,
+    8,
+  );
   const mapBoundsRaw = mapRef.current?.getBounds();
   const mapBbox: BoundingBox | null = mapBoundsRaw
     ? {
@@ -321,11 +261,6 @@ export function SearchBar() {
       setNlpCloudAccess("defer-to-server");
     }
   }, [nlpCloudAccess, nlpData, nlpSubmitted]);
-
-  // Stop search — slower debounce to reduce transit API load
-  const rawStopQuery = query.trim().length >= 2 ? query.trim() : "";
-  const debouncedStopQuery = useDebounce(rawStopQuery, 750);
-  const { data: stopSearchData } = useStopSearch(debouncedStopQuery);
 
   // Labeled places (Home, Work, custom) for search suggestions
   const { data: labeledPlaces } = useLabeledPlaces();
@@ -480,46 +415,6 @@ export function SearchBar() {
     }));
   }, [presetData, t]);
 
-  // Airports — match the IATA / ICAO / name index loaded by knowledge-ourairports.
-  // Surfaces results like "DUS — Düsseldorf Airport" alongside the geocoder.
-  // Uses the `oa:` place-resolver scheme so selection drives straight to the
-  // airport's full place panel (runways / frequencies / navaids) instead of a
-  // coordinate-based reverse-geocode that may land on a building inside the
-  // airport polygon.
-  const airportSuggestions = useMemo<AutocompleteResult[]>(() => {
-    return (airportSearchData?.matches ?? []).map((a) => {
-      const codeBadge = a.iata ?? a.icao ?? a.ident;
-      const labelPrefix = codeBadge ? `${codeBadge} — ` : "";
-      const cityCountry = [a.municipality, a.isoCountry].filter(Boolean).join(", ");
-      return {
-        id: `oa:${a.ident}`,
-        label: `${labelPrefix}${a.name}`,
-        sublabel: cityCountry,
-        coordinates: [a.lng, a.lat],
-        type: "poi" as const,
-        rawCategory: "aeroway/aerodrome",
-        presetIconKey: "maki-airport",
-      };
-    });
-  }, [airportSearchData]);
-
-  const stopSuggestions = useMemo<AutocompleteResult[]>(
-    () =>
-      (stopSearchData ?? []).map(
-        (stop): AutocompleteResult => ({
-          id: `stop-${stop.id}`,
-          label: stop.name,
-          sublabel: stop.modes
-            .map((m) => (MODE_LABEL_KEYS[m] ? tModes(MODE_LABEL_KEYS[m]) : m))
-            .join(", "),
-          coordinates: [stop.lng, stop.lat],
-          type: "transit_stop",
-          transitStop: stop,
-        }),
-      ),
-    [stopSearchData, tModes],
-  );
-
   // Labeled places — match against translated label name, place name, and address
   const labeledSuggestions = useMemo<AutocompleteResult[]>(
     () =>
@@ -566,28 +461,21 @@ export function SearchBar() {
       return filtered.length > 0 ? filtered : items;
     };
 
-    return (
-      syntheticResult
-        ? [syntheticResult]
-        : [
-            ...labeledSuggestions,
-            ...categorySuggestions,
-            ...brandSuggestions,
-            ...presetSuggestions,
-            ...airportSuggestions,
-            ...narrowResults(suggestions),
-            ...narrowResults(stopSuggestions).slice(0, 3),
-          ].sort((a, b) => searchRelevance(b, q) - searchRelevance(a, q))
-    ).filter(
-      (s, i, arr) =>
-        arr.findIndex((x) => {
-          if (x.label !== s.label || (x.sublabel ?? "") !== (s.sublabel ?? "")) return false;
-          if (!x.coordinates || !s.coordinates) return x.id === s.id;
-          const dlng = x.coordinates[0] - s.coordinates[0];
-          const dlat = x.coordinates[1] - s.coordinates[1];
-          return dlng * dlng + dlat * dlat < 0.0001; // ~1 km
-        }) === i,
+    if (syntheticResult) return [syntheticResult];
+
+    const placeSuggestions = mergeAutocompleteSuggestions(
+      [...(aggregateSearchData?.suggestions ?? []), ...narrowResults(suggestions)],
+      q,
+      mapCenter ?? undefined,
     );
+
+    return [
+      ...labeledSuggestions,
+      ...categorySuggestions,
+      ...brandSuggestions,
+      ...presetSuggestions,
+      ...placeSuggestions,
+    ];
   }, [
     q,
     syntheticResult,
@@ -595,9 +483,9 @@ export function SearchBar() {
     categorySuggestions,
     brandSuggestions,
     presetSuggestions,
-    airportSuggestions,
+    aggregateSearchData,
+    mapCenter,
     suggestions,
-    stopSuggestions,
   ]);
 
   // Nearby mode: the dropdown shows category suggestions (+ a free-text item)
@@ -644,9 +532,25 @@ export function SearchBar() {
   // behaviour of crediting every healthy geocoder regardless of who served.
   // Plain const (not a hook): this sits below an early return, and the lookup
   // is a handful of registry reads that <AttributionStrip> dedupes downstream.
-  const geocodingAttributions = attributionsForProviders(
-    registry,
-    new Set(effectiveSuggestions.map((s) => s.provider)),
+  const visibleProviderIds = new Set(
+    effectiveSuggestions.flatMap((suggestion) => [
+      suggestion.provider,
+      ...(suggestion.contributingProviders ?? []),
+    ]),
+  );
+  const aggregateProviderIds = new Set(
+    (aggregateSearchData?.suggestions ?? []).flatMap((suggestion) => [
+      suggestion.provider,
+      ...(suggestion.contributingProviders ?? []),
+    ]),
+  );
+  const hasVisibleAggregateSuggestion = [...aggregateProviderIds].some((provider) =>
+    visibleProviderIds.has(provider),
+  );
+  const geocodingAttributions = attributionsForProviders(registry, visibleProviderIds);
+  const visibleAttributions = mergeAttributions(
+    hasVisibleAggregateSuggestion ? (aggregateSearchData?.attributions ?? []) : [],
+    geocodingAttributions,
   );
   // The NLP card is additive and only shown for plausible natural-language
   // intents (confidence + at least one category). It never replaces the
@@ -727,7 +631,7 @@ export function SearchBar() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (!showDropdown) return;
-    const count = displaySuggestions.length;
+    const count = effectiveSuggestions.length;
     if (e.key === "ArrowDown") {
       e.preventDefault();
       setHighlightedIndex((prev) => (prev < count - 1 ? prev + 1 : 0));
@@ -950,7 +854,7 @@ export function SearchBar() {
     !nearbyMode &&
     isFocused &&
     query.trim().length >= 2 &&
-    isFetching &&
+    (isFetching || aggregateSearchFetching) &&
     !showDropdown &&
     !syntheticResult;
 
@@ -1262,9 +1166,9 @@ export function SearchBar() {
                   onSelect={handleSelectAny}
                   highlightedIndex={highlightedIndex}
                 />
-                {geocodingAttributions.length > 0 && (
+                {visibleAttributions.length > 0 && (
                   <Box sx={{ display: "flex", justifyContent: "center", px: 1, py: 0.5 }}>
-                    <AttributionStrip attributions={geocodingAttributions} variant="inline" />
+                    <AttributionStrip attributions={visibleAttributions} variant="inline" />
                   </Box>
                 )}
               </Box>
@@ -1334,9 +1238,9 @@ export function SearchBar() {
                 onSelect={handleSelectAny}
                 highlightedIndex={highlightedIndex}
               />
-              {geocodingAttributions.length > 0 && (
+              {visibleAttributions.length > 0 && (
                 <Box sx={{ display: "flex", justifyContent: "center", px: 1, py: 1 }}>
-                  <AttributionStrip attributions={geocodingAttributions} variant="inline" />
+                  <AttributionStrip attributions={visibleAttributions} variant="inline" />
                 </Box>
               )}
             </>

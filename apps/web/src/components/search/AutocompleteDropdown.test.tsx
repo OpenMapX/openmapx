@@ -3,6 +3,8 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent } from "@/test";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+
 function makeResult(overrides: Partial<AutocompleteResult> = {}): AutocompleteResult {
   return {
     id: "r1",
@@ -60,5 +62,57 @@ describe("AutocompleteDropdown", () => {
     const buttons = screen.getAllByRole("button");
     expect(buttons[1].className).toContain("Mui-selected");
     expect(buttons[0].className).not.toContain("Mui-selected");
+  });
+
+  it("shows a compact matched-value badge and exposes it in the row name", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({
+            id: "oa:EDDF",
+            label: "Frankfurt am Main Airport",
+            type: "poi",
+            searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
+          }),
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("FRA").className).toContain("MuiChip-label");
+    screen.getByRole("button", { name: /Frankfurt am Main Airport.*FRA/i });
+  });
+
+  it("does not render an empty or redundant badge for an ordinary result", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({
+            label: "Berlin",
+            searchMatch: { kind: "name", value: "Berlin", normalized: "berlin" },
+          }),
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    expect(document.querySelector(".MuiChip-root")).toBeNull();
+  });
+
+  it("returns the unchanged canonical label when a badge row is clicked", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const suggestion = makeResult({
+      id: "oa:EDDF",
+      label: "Frankfurt am Main Airport",
+      type: "poi",
+      searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
+    });
+    render(<AutocompleteDropdown suggestions={[suggestion]} onSelect={onSelect} />);
+
+    await user.click(screen.getByRole("button", { name: /Frankfurt am Main Airport.*FRA/i }));
+
+    const selected = onSelect.mock.calls[0]?.[0] as AutocompleteResult;
+    expect(selected.label).toBe("Frankfurt am Main Airport");
   });
 });

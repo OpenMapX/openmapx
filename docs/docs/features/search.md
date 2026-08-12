@@ -29,6 +29,8 @@ the things you might type without a separate mode:
 | A plain-language question          | A parsed intent that runs the matching category, filter, area, and hours search |
 | A transit stop name                | The stop, with its line modes, opening straight to the stop    |
 | An airport name or IATA/ICAO code  | The airport, opening its detail panel (runways, frequencies)   |
+| A public place or stop code        | The matching airport, station, or coded OSM feature            |
+| An explicit alias or acronym       | The canonical place name, with the matched value shown beside it |
 | Latitude/longitude or a Plus Code  | A pin at those exact coordinates                               |
 | "Home" / "Work" or a saved label   | Your own labeled places, surfaced near the top                 |
 
@@ -38,6 +40,24 @@ top. Pressing Enter on a precise match (an address, street, or region) flies
 straight there; a broader, name-only query opens a results panel scoped to what
 you can currently see on the map. Coordinates and Plus Codes are detected client
 side and resolved without a round trip to a geocoder at all.
+
+### Codes, aliases, and acronyms
+
+OpenMapX combines several suggestion catalogs without asking a general
+geocoder to understand every specialist identifier. Exact authoritative codes
+rank first, followed by explicit references and aliases, ordinary place names,
+and finally conservatively generated acronyms. A suggestion always displays
+the canonical place name; when the matched code or alias differs, a compact
+badge shows what matched.
+
+Coverage is intentionally tiered. OurAirports provides global airport codes.
+Enabled transit providers contribute the public stop codes their source
+actually exposes. OpenStreetMap aliases, references, and generated acronyms are
+available inside the one PBF region for which the operator has built the local
+search index. Generated acronyms require an exact match and are limited to
+high-signal institutions and facilities; lowercase matches must also be nearby
+or highly important. The first release does not include UN/LOCODE, fuzzy
+acronym matching, or a global codes registry.
 
 ### Voice search
 
@@ -83,11 +103,19 @@ code, which region-aware features use to decide what's available where you are.
 
 ## How it works
 
-Every search request the app makes goes to the **geocoding** integration, which
+Name and address requests go to the **geocoding** integration, which
 exposes the search routes (`/geocode`, `/autocomplete`, `/geocode/reverse`) and
 owns the logic around them — query normalization, caching, and result shaping.
 What it does *not* do is talk to a geocoder directly. That job belongs to the
 provider integrations it orchestrates.
+
+Specialist code and alias matches use the separate **search-suggestions**
+orchestrator. It fans out concurrently to airport, transit, and local OSM-index
+providers with independent timeouts, then ranks and deduplicates their results.
+The web merges that response with geocoder results and keeps the existing
+geocoder fallback chain unchanged. If a suggestion provider is unavailable,
+normal geocoder, category, brand, preset, and saved-place suggestions continue
+to work.
 
 ### A configurable provider chain
 

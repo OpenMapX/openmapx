@@ -40,6 +40,7 @@ export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
   photos: "photos",
   knowledge: "knowledge",
   "poi-search": "poiSearch",
+  "search-suggestions": "searchSuggestions",
   weather: "weather",
   reviews: "reviews",
   "live-transit": "liveTransit",

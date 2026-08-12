@@ -33,6 +33,7 @@ import { formatBytes } from "@/lib/storageFormat";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { OvertureMaintenance } from "./OvertureMaintenance";
+import { SearchIndexMaintenance } from "./SearchIndexMaintenance";
 import { TransitSourcesSection } from "./TransitSourcesSection";
 
 interface OsmInfo {
@@ -964,6 +965,7 @@ export function DataWorkflowsPage() {
         <DataOperationsSection apiUrl={apiUrl} />
         <OsmSection osm={data.osm} />
         <OvertureMaintenance apiUrl={apiUrl} />
+        <SearchIndexMaintenance apiUrl={apiUrl} />
         <TransitSourcesSection apiUrl={apiUrl} />
         <MotisTransitousSection status={data.motisTransitous} />
         <SharedMobilityPolicySection apiUrl={apiUrl} />

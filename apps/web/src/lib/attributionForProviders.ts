@@ -5,6 +5,20 @@ import {
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 
+/** Merge response-scoped attribution groups, preserving the first credit for each source. */
+export function mergeAttributions(...groups: Attribution[][]): Attribution[] {
+  const seen = new Set<string>();
+  const merged: Attribution[] = [];
+  for (const group of groups) {
+    for (const attribution of group) {
+      if (!attribution.sourceId || seen.has(attribution.sourceId)) continue;
+      seen.add(attribution.sourceId);
+      merged.push(attribution);
+    }
+  }
+  return merged;
+}
+
 /**
  * Map a provider's per-record runtime attribution ({@link DataSourceAttribution}
  * — e.g. France IRVE's per-station Licence-Ouverte publisher credit, an EV
