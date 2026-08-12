@@ -11,10 +11,12 @@ interface CachedValue<T> {
   fetchedAt: string;
 }
 
-interface LoadWithFreshAndStaleCacheOptions<T> {
+export interface LoadWithFreshAndStaleCacheOptions<T> {
   key: string;
   freshTtlSeconds: number;
   staleTtlSeconds: number;
+  /** Defaults to true to preserve existing stale-cache behavior. */
+  shouldUseStaleOnError?: (error: unknown) => boolean;
   load: () => Promise<T>;
 }
 
@@ -55,6 +57,7 @@ async function loadAndCache<T>(
   try {
     value = await options.load();
   } catch (error) {
+    if (options.shouldUseStaleOnError && !options.shouldUseStaleOnError(error)) throw error;
     const stale = await ctx.cache.get<CachedValue<T>>(`${options.key}:stale`);
     if (stale) return { ...stale, stale: true };
     throw error;

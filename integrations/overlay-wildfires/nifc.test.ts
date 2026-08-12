@@ -384,6 +384,34 @@ describe("loadNifc", () => {
     expect(clearTimeoutSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("classifies an abort while reading the response body as a timeout", async () => {
+    vi.useFakeTimers();
+    const cause = new DOMException("Aborted", "AbortError");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          ({
+            ok: true,
+            status: 200,
+            json: () =>
+              new Promise((_resolve, reject) => {
+                init.signal?.addEventListener("abort", () => reject(cause));
+              }),
+          }) as Response,
+      ),
+    );
+
+    const pending = loadNifc(createContext(), BOUNDS);
+    const rejection = expect(pending).rejects.toMatchObject({
+      provider: "nifc",
+      kind: "timeout",
+      cause,
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
+  });
+
   it("rejects non-2xx, malformed JSON, and invalid feature collections", async () => {
     vi.stubGlobal(
       "fetch",

@@ -29,6 +29,15 @@ export class WildfireSourceError extends Error {
   }
 }
 
+export function isAbortError(error: unknown): boolean {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "name" in error &&
+    (error as { name?: unknown }).name === "AbortError"
+  );
+}
+
 export interface NormalizedViewport {
   west: number;
   south: number;

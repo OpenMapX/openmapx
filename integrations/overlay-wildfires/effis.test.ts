@@ -207,6 +207,35 @@ describe("loadEffis", () => {
     );
   });
 
+  it("classifies an abort while reading the response body as a timeout", async () => {
+    vi.useFakeTimers();
+    const cause = new DOMException("Aborted", "AbortError");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init: RequestInit) =>
+          ({
+            ok: true,
+            status: 200,
+            headers: new Headers(),
+            text: () =>
+              new Promise((_resolve, reject) => {
+                init.signal?.addEventListener("abort", () => reject(cause));
+              }),
+          }) as Response,
+      ),
+    );
+
+    const pending = loadEffis(createContext(), BOUNDS);
+    const rejection = expect(pending).rejects.toMatchObject({
+      provider: "effis",
+      kind: "timeout",
+      cause,
+    });
+    await vi.advanceTimersByTimeAsync(30_000);
+    await rejection;
+  });
+
   it("splits wrapped viewports, deduplicates feature ids, and caps the merged result", async () => {
     const wrapped: NormalizedViewport = { west: 170, south: 10, east: -170, north: 20, zoom: 6 };
     const first = Array.from({ length: 2_001 }, (_, index) =>

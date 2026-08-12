@@ -1,6 +1,7 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { dedupeByFeatureId, nifcOffsetForZoom, splitAntimeridian } from "./bounds.js";
 import {
+  isAbortError,
   type NifcProperties,
   type NormalizedViewport,
   type WildfireProviderData,
@@ -172,7 +173,7 @@ async function fetchNifcCollection(
     try {
       response = await fetch(buildNifcUrl(bounds), { signal: controller.signal });
     } catch (error) {
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || isAbortError(error)) {
         throw new WildfireSourceError("NIFC request aborted", {
           provider: "nifc",
           kind: "timeout",
@@ -197,6 +198,13 @@ async function fetchNifcCollection(
     try {
       payload = await response.json();
     } catch (error) {
+      if (controller.signal.aborted || isAbortError(error)) {
+        throw new WildfireSourceError("NIFC request aborted", {
+          provider: "nifc",
+          kind: "timeout",
+          cause: error,
+        });
+      }
       throw new WildfireSourceError("Invalid NIFC JSON response", {
         provider: "nifc",
         kind: "upstream-payload",

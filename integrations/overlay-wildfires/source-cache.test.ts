@@ -1,6 +1,7 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadWithFreshAndStaleCache } from "./source-cache.js";
+import { WildfireSourceError } from "./types.js";
 
 const NOW = "2026-08-12T12:00:00.000Z";
 
@@ -81,6 +82,47 @@ describe("loadWithFreshAndStaleCache", () => {
     ).resolves.toEqual({ ...stale, stale: true });
     expect(cache.get).toHaveBeenNthCalledWith(1, "nifc:viewport:fresh");
     expect(cache.get).toHaveBeenNthCalledWith(2, "nifc:viewport:stale");
+  });
+
+  it("uses stale data only when an explicit predicate accepts the source failure", async () => {
+    const stale = { value: { version: "stale" }, fetchedAt: "2026-08-12T10:00:00.000Z" };
+    const error = new WildfireSourceError("NIFC API returned 503", {
+      provider: "nifc",
+      kind: "upstream-status",
+      upstreamStatus: 503,
+    });
+    const { ctx } = createContext({ "nifc:viewport:stale": stale });
+
+    await expect(
+      loadWithFreshAndStaleCache(ctx, {
+        key: "nifc:viewport",
+        freshTtlSeconds: 300,
+        staleTtlSeconds: 86_400,
+        shouldUseStaleOnError: (caught) => caught === error,
+        load: async () => {
+          throw error;
+        },
+      }),
+    ).resolves.toEqual({ ...stale, stale: true });
+  });
+
+  it("rethrows a loader failure when its explicit stale predicate rejects it", async () => {
+    const stale = { value: { version: "stale" }, fetchedAt: "2026-08-12T10:00:00.000Z" };
+    const error = new Error("NIFC API returned 503 while formatting a response");
+    const { ctx, cache } = createContext({ "nifc:viewport:stale": stale });
+
+    await expect(
+      loadWithFreshAndStaleCache(ctx, {
+        key: "nifc:viewport",
+        freshTtlSeconds: 300,
+        staleTtlSeconds: 86_400,
+        shouldUseStaleOnError: () => false,
+        load: async () => {
+          throw error;
+        },
+      }),
+    ).rejects.toBe(error);
+    expect(cache.get).toHaveBeenCalledTimes(1);
   });
 
   it("rethrows a loader failure when no stale value exists", async () => {

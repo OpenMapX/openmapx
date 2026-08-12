@@ -2,6 +2,7 @@ import { createMockIntegrationContext } from "@openmapx/integration-framework/te
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { csvToGeoJSON, parseAcqDateTime } from "./firms.js";
 import { setup } from "./index.js";
+import { WildfireSourceError } from "./types.js";
 
 describe("parseAcqDateTime", () => {
   it("pads HHMM time and parses as UTC epoch ms", () => {
@@ -426,6 +427,86 @@ describe("wildfire source routes", () => {
       body: { fetchedAt: "2026-08-12T11:00:00.000Z", stale: true },
     });
     expect(result.result().headers.get("Cache-Control")).toBe("public, max-age=300, s-maxage=300");
+  });
+
+  it("rethrows a lookalike programmer error instead of serving stale NIFC data", async () => {
+    const payload = {
+      type: "FeatureCollection",
+      get features(): never {
+        throw new Error("NIFC API returned 503 while formatting a response");
+      },
+    };
+    fetchMock.mockResolvedValueOnce(response(200, payload));
+    const ctx = createMockIntegrationContext({
+      cache: {
+        get: async (key) =>
+          key.endsWith(":stale")
+            ? {
+                value: {
+                  type: "FeatureCollection",
+                  features: [],
+                  source: "nifc",
+                  truncated: false,
+                },
+                fetchedAt: "2026-08-12T11:00:00.000Z",
+              }
+            : null,
+        set: async () => undefined,
+        del: async () => undefined,
+        withCache: async <_T>(_key, _ttl, load) => load(),
+      },
+    });
+    setup(ctx);
+    const result = replyFake();
+
+    await expect(
+      routeHandler(ctx, "/perimeters/nifc")(
+        { query: VALID_VIEWPORT, params: {}, body: undefined, headers: {} },
+        result.reply,
+      ),
+    ).rejects.toThrow("NIFC API returned 503 while formatting a response");
+  });
+
+  it("rethrows a different provider's typed failure instead of serving stale NIFC data", async () => {
+    const payload = {
+      type: "FeatureCollection",
+      get features(): never {
+        throw new WildfireSourceError("EFFIS API returned 503", {
+          provider: "effis",
+          kind: "upstream-status",
+          upstreamStatus: 503,
+        });
+      },
+    };
+    fetchMock.mockResolvedValueOnce(response(200, payload));
+    const ctx = createMockIntegrationContext({
+      cache: {
+        get: async (key) =>
+          key.endsWith(":stale")
+            ? {
+                value: {
+                  type: "FeatureCollection",
+                  features: [],
+                  source: "nifc",
+                  truncated: false,
+                },
+                fetchedAt: "2026-08-12T11:00:00.000Z",
+              }
+            : null,
+        set: async () => undefined,
+        del: async () => undefined,
+        withCache: async <_T>(_key, _ttl, load) => load(),
+      },
+    });
+    setup(ctx);
+    const result = replyFake();
+
+    await expect(
+      routeHandler(ctx, "/perimeters/nifc")(
+        { query: VALID_VIEWPORT, params: {}, body: undefined, headers: {} },
+        result.reply,
+      ),
+    ).rejects.toMatchObject({ provider: "effis", kind: "upstream-status" });
   });
 
   it("serves stale NOAA data with its fresh cache policy", async () => {

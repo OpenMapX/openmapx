@@ -10,6 +10,7 @@ import {
   type WildfireProvider,
   type WildfireProviderData,
   WildfireSourceError,
+  type WildfireSourceFailureKind,
 } from "./types.js";
 
 export { csvToGeoJSON, parseAcqDateTime } from "./firms.js";
@@ -21,6 +22,13 @@ const SOURCE_CACHE = {
   effis: { fresh: 1_800, stale: 172_800 },
   "noaa-hms": { fresh: 600, stale: 86_400 },
 } as const;
+const STALE_SOURCE_FAILURE_KINDS: readonly WildfireSourceFailureKind[] = [
+  "upstream-status",
+  "upstream-payload",
+  "network",
+  "timeout",
+  "feature-cap",
+];
 
 type ViewportSource = "nifc" | "effis";
 type RouteReply = Parameters<RouteHandler>[1];
@@ -57,6 +65,14 @@ function sourceFailureDetails(
   };
 }
 
+function shouldUseStaleSourceFailure(source: WildfireProvider, error: unknown): boolean {
+  return (
+    error instanceof WildfireSourceError &&
+    error.provider === source &&
+    STALE_SOURCE_FAILURE_KINDS.includes(error.kind)
+  );
+}
+
 function sendCachedSource(
   reply: RouteReply,
   cache: { fresh: number },
@@ -86,6 +102,7 @@ function viewportSourceHandler(
         key: viewportCacheKey(source, bounds),
         freshTtlSeconds: SOURCE_CACHE[source].fresh,
         staleTtlSeconds: SOURCE_CACHE[source].stale,
+        shouldUseStaleOnError: (error) => shouldUseStaleSourceFailure(source, error),
         load: () => load(ctx, bounds),
       });
       sendCachedSource(reply, SOURCE_CACHE[source], result);
@@ -106,6 +123,7 @@ function noaaSmokeHandler(ctx: IntegrationContext): RouteHandler {
         key: "wildfires:noaa-hms",
         freshTtlSeconds: SOURCE_CACHE[source].fresh,
         staleTtlSeconds: SOURCE_CACHE[source].stale,
+        shouldUseStaleOnError: (error) => shouldUseStaleSourceFailure(source, error),
         load: () => loadNoaaSmoke(ctx),
       });
       sendCachedSource(reply, SOURCE_CACHE[source], result);

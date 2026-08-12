@@ -1,5 +1,6 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import {
+  isAbortError,
   type NoaaSmokeProperties,
   type WildfireProviderData,
   WildfireSourceError,
@@ -169,7 +170,7 @@ async function fetchNoaaSmokePage(
     try {
       response = await fetch(buildNoaaSmokeUrl(offset), { signal: controller.signal });
     } catch (error) {
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || isAbortError(error)) {
         throw new WildfireSourceError("NOAA request aborted", {
           provider: "noaa-hms",
           kind: "timeout",
@@ -194,6 +195,13 @@ async function fetchNoaaSmokePage(
     try {
       payload = await response.json();
     } catch (error) {
+      if (controller.signal.aborted || isAbortError(error)) {
+        throw new WildfireSourceError("NOAA request aborted", {
+          provider: "noaa-hms",
+          kind: "timeout",
+          cause: error,
+        });
+      }
       throw new WildfireSourceError("Invalid NOAA JSON response", {
         provider: "noaa-hms",
         kind: "upstream-payload",

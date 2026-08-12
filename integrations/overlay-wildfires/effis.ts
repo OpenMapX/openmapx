@@ -2,6 +2,7 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { dedupeByFeatureId, splitAntimeridian } from "./bounds.js";
 import {
   type EffisProperties,
+  isAbortError,
   type NormalizedViewport,
   type WildfireProviderData,
   WildfireSourceError,
@@ -182,7 +183,7 @@ async function fetchEffisCollection(
         signal: controller.signal,
       });
     } catch (error) {
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || isAbortError(error)) {
         throw new EffisSourceError("EFFIS request aborted", { kind: "timeout", cause: error });
       }
       throw new EffisSourceError("EFFIS request failed", { kind: "network", cause: error });
@@ -199,6 +200,9 @@ async function fetchEffisCollection(
     try {
       body = await response.text();
     } catch (error) {
+      if (controller.signal.aborted || isAbortError(error)) {
+        throw new EffisSourceError("EFFIS request aborted", { kind: "timeout", cause: error });
+      }
       throw new EffisSourceError("Invalid EFFIS upstream response", {
         kind: "upstream-payload",
         cause: error,
