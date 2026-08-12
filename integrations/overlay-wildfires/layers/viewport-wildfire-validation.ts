@@ -12,6 +12,18 @@ function isOptionalString(value: unknown): boolean {
   return value === undefined || typeof value === "string";
 }
 
+const CANONICAL_ISO_UTC_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/;
+
+function isCanonicalIsoUtcTimestamp(value: unknown): value is string {
+  if (typeof value !== "string" || !CANONICAL_ISO_UTC_TIMESTAMP.test(value)) return false;
+  const milliseconds = Date.parse(value);
+  return Number.isFinite(milliseconds) && new Date(milliseconds).toISOString() === value;
+}
+
+function isOptionalCanonicalIsoUtcTimestamp(value: unknown): boolean {
+  return value === undefined || isCanonicalIsoUtcTimestamp(value);
+}
+
 function isOptionalNonNegativeNumber(value: unknown): boolean {
   return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0);
 }
@@ -75,9 +87,9 @@ function isNifcProperties(value: UnknownRecord): value is UnknownRecord & NifcPr
     value.coverage === "United States" &&
     typeof value.name === "string" &&
     isOptionalNonNegativeNumber(value.areaAcres) &&
-    isOptionalString(value.observedAt) &&
-    isOptionalString(value.updatedAt) &&
-    isOptionalString(value.discoveredAt) &&
+    isOptionalCanonicalIsoUtcTimestamp(value.observedAt) &&
+    isOptionalCanonicalIsoUtcTimestamp(value.updatedAt) &&
+    isOptionalCanonicalIsoUtcTimestamp(value.discoveredAt) &&
     (value.containmentPercent === undefined ||
       (typeof value.containmentPercent === "number" &&
         Number.isFinite(value.containmentPercent) &&
@@ -92,8 +104,8 @@ function isEffisProperties(value: UnknownRecord): value is UnknownRecord & Effis
   return (
     value.kind === "satellite-burned-area" &&
     value.provider === "effis" &&
-    isOptionalString(value.detectedAt) &&
-    isOptionalString(value.updatedAt) &&
+    isOptionalCanonicalIsoUtcTimestamp(value.detectedAt) &&
+    isOptionalCanonicalIsoUtcTimestamp(value.updatedAt) &&
     isOptionalString(value.countryCode) &&
     isOptionalString(value.region) &&
     isOptionalString(value.locality) &&
@@ -123,8 +135,7 @@ export function isViewportWildfireFeatureCollection(
     Array.isArray(value.features) &&
     value.features.every((feature) => isProviderFeature(feature, sourceId)) &&
     value.source === sourceId &&
-    typeof value.fetchedAt === "string" &&
-    Number.isFinite(Date.parse(value.fetchedAt)) &&
+    isCanonicalIsoUtcTimestamp(value.fetchedAt) &&
     typeof value.stale === "boolean" &&
     typeof value.truncated === "boolean"
   );

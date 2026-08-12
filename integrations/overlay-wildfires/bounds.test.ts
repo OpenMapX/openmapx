@@ -33,6 +33,23 @@ describe("normalizeViewport", () => {
       zoom: 22,
     });
   });
+
+  it.each([
+    [170, -170, 168, -168],
+    [31, -31, 1, -1],
+    [30.1, -30.1, -180, 180],
+    [30, -30, -180, 180],
+    [10, -10, -180, 180],
+    [1, -1, -180, 180],
+  ])(
+    "expands wrapped longitude interval %s..%s without collapsing it",
+    (west, east, expectedWest, expectedEast) => {
+      expect(normalizeViewport({ west, south: -10, east, north: 10, zoom: 5 })).toMatchObject({
+        west: expectedWest,
+        east: expectedEast,
+      });
+    },
+  );
 });
 
 it("splits an antimeridian viewport", () => {

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, renderHook, waitFor } from "@/test";
+import { normalizeViewport } from "../bounds";
 import { useWildfireStore } from "../store";
 import type { WildfireFeatureCollection } from "../types";
 import { useViewportWildfireSource } from "./use-viewport-wildfire-source";
@@ -187,6 +188,35 @@ describe("useViewportWildfireSource", () => {
       await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
       const query = new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams;
       expect([query.get("west"), query.get("east")]).toEqual([expectedWest, expectedEast]);
+    },
+  );
+
+  it.each([
+    [170, 190, 168, -168],
+    [391, 689, 1, -1],
+    [390, 690, -180, 180],
+    [370, 710, -180, 180],
+    [721, 1079, -180, 180],
+  ])(
+    "preserves client viewport coverage through backend expansion for %s..%s",
+    async (rawWest, rawEast, expectedWest, expectedEast) => {
+      vi.spyOn(fake.map, "getBounds").mockReturnValue({
+        getWest: () => rawWest,
+        getSouth: () => -10,
+        getEast: () => rawEast,
+        getNorth: () => 10,
+      } as ReturnType<FakeMap["map"]["getBounds"]>);
+      const fetchMock = vi.fn(async () => response());
+      vi.stubGlobal("fetch", fetchMock);
+
+      mountSource();
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const query = Object.fromEntries(new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams);
+      expect(normalizeViewport(query)).toMatchObject({
+        west: expectedWest,
+        east: expectedEast,
+      });
     },
   );
 
@@ -525,6 +555,39 @@ describe("useViewportWildfireSource", () => {
         {
           ...NIFC_FEATURE,
           properties: { ...NIFC_FEATURE.properties, containmentPercent: 101 },
+        },
+      ],
+    };
+    const fetchMock = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(response(good))
+      .mockResolvedValueOnce(response(malformed));
+    vi.stubGlobal("fetch", fetchMock);
+    const { params } = mountSource();
+    await act(async () => {});
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300_000);
+    });
+
+    expect(params.publish).toHaveBeenCalledTimes(1);
+    expect(params.publish).toHaveBeenCalledWith(good);
+    expect(useWildfireStore.getState().statuses.nifc).toMatchObject({
+      error: "unavailable",
+      featureCount: 1,
+    });
+  });
+
+  it("rejects a non-canonical timestamp refresh and retains the last valid collection", async () => {
+    vi.useFakeTimers();
+    const good = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE] };
+    const malformed = {
+      ...good,
+      fetchedAt: "0",
+      features: [
+        {
+          ...NIFC_FEATURE,
+          properties: { ...NIFC_FEATURE.properties, observedAt: "2026-02-30T12:00:00.000Z" },
         },
       ],
     };

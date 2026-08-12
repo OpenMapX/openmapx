@@ -26,6 +26,10 @@ function viewportStep(zoom: number): number {
   return 0.02;
 }
 
+function clampLongitude(longitude: number): number {
+  return Math.max(MIN_LON, Math.min(MAX_LON, longitude));
+}
+
 export function normalizeViewport(query: ViewportQuery): NormalizedViewport {
   const west = parseFinite(query, "west");
   const south = parseFinite(query, "south");
@@ -41,16 +45,33 @@ export function normalizeViewport(query: ViewportQuery): NormalizedViewport {
   // A normal viewport has east >= west. A wrapped viewport already carries
   // its antimeridian crossing and should retain that relationship while its
   // latitude bounds are expanded and quantized.
-  const crossesAntimeridian = west > east;
-  const longitudeSpan = crossesAntimeridian ? 360 - west + east : east - west;
+  const boundedWest = clampLongitude(west);
+  const boundedEast = clampLongitude(east);
+  const crossesAntimeridian = boundedWest > boundedEast;
+  const longitudeSpan = crossesAntimeridian
+    ? MAX_LON - boundedWest + (boundedEast - MIN_LON)
+    : boundedEast - boundedWest;
   const longitudePadding = Math.max(0, longitudeSpan * 0.1);
-  const expandedWest = west - longitudePadding;
-  const expandedEast = east + longitudePadding;
+  const paddedLongitudeSpan = longitudeSpan + longitudePadding * 2;
   const latitudeSpan = north - south;
   const latitudePadding = Math.max(0, latitudeSpan * 0.1);
 
-  const normalizedWest = Math.max(MIN_LON, Math.min(MAX_LON, expandedWest));
-  const normalizedEast = Math.max(MIN_LON, Math.min(MAX_LON, expandedEast));
+  let normalizedWest = MIN_LON;
+  let normalizedEast = MAX_LON;
+  if (paddedLongitudeSpan < 360) {
+    const expandedWest = clampLongitude(boundedWest - longitudePadding);
+    const expandedEast = clampLongitude(boundedEast + longitudePadding);
+    const quantizedWest = clampLongitude(quantizeOutward(expandedWest, step, "floor"));
+    const quantizedEast = clampLongitude(quantizeOutward(expandedEast, step, "ceil"));
+
+    // A wrapped interval that meets after outward quantization covers the
+    // entire world; representing it as equal endpoints would instead mean
+    // an empty viewport to downstream providers.
+    if (!crossesAntimeridian || quantizedWest > quantizedEast) {
+      normalizedWest = quantizedWest;
+      normalizedEast = quantizedEast;
+    }
+  }
   const quantizedSouth = Math.max(
     -MAX_LAT,
     Math.min(MAX_LAT, quantizeOutward(south - latitudePadding, step, "floor")),
@@ -61,9 +82,9 @@ export function normalizeViewport(query: ViewportQuery): NormalizedViewport {
   );
 
   return {
-    west: Math.max(MIN_LON, Math.min(MAX_LON, quantizeOutward(normalizedWest, step, "floor"))),
+    west: normalizedWest,
     south: quantizedSouth,
-    east: Math.max(MIN_LON, Math.min(MAX_LON, quantizeOutward(normalizedEast, step, "ceil"))),
+    east: normalizedEast,
     north: quantizedNorth,
     zoom,
   };
