@@ -95,6 +95,8 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
   const showHeatmap = useWildfireStore((s) => s.showHeatmap);
   const setLoading = useWildfireStore((s) => s.setLoading);
   const setLastUpdated = useWildfireStore((s) => s.setLastUpdated);
+  const setSourceStatus = useWildfireStore((s) => s.setSourceStatus);
+  const resetSourceStatus = useWildfireStore((s) => s.resetSourceStatus);
   const t = useTranslations("wildfires");
   const fetchedRef = useRef(false);
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
@@ -113,24 +115,63 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
 
     const request = beginRequest();
     setLoading(true);
+    setSourceStatus("firms", { loading: true, error: null });
     try {
       const res = await fetch(url, { signal: request.signal });
-      if (!request.isCurrent() || !res.ok) return;
+      if (!request.isCurrent()) return;
+      if (!res.ok) throw new Error(`FIRMS source returned ${res.status}`);
       const data = await res.json();
       if (!request.isCurrent()) return;
 
       publishGeoJson([{ sourceId: SOURCE_ID, data }]);
-      setLastUpdated(Date.now());
+      const fetchedAt = Date.now();
+      setLastUpdated(fetchedAt);
+      setSourceStatus("firms", {
+        loading: false,
+        fetchedAt,
+        stale: false,
+        truncated: false,
+        error: null,
+        featureCount:
+          typeof data === "object" &&
+          data !== null &&
+          "features" in data &&
+          Array.isArray(data.features)
+            ? data.features.length
+            : 0,
+      });
     } catch {
-      // Silent fetch failure
+      if (request.isCurrent()) {
+        setSourceStatus("firms", { loading: false, error: "unavailable" });
+      }
     } finally {
-      if (request.isLatest()) setLoading(false);
+      if (request.isLatest()) {
+        setLoading(false);
+        setSourceStatus("firms", { loading: false });
+      }
     }
-  }, [beginRequest, env, mapRef, dayRange, source, publishGeoJson, setLoading, setLastUpdated]);
+  }, [
+    beginRequest,
+    env,
+    mapRef,
+    dayRange,
+    source,
+    publishGeoJson,
+    setLoading,
+    setLastUpdated,
+    setSourceStatus,
+  ]);
 
   useEffect(() => {
-    return () => setLoading(false);
-  }, [setLoading]);
+    if (!active) {
+      setLoading(false);
+      resetSourceStatus("firms");
+    }
+    return () => {
+      setLoading(false);
+      resetSourceStatus("firms");
+    };
+  }, [active, resetSourceStatus, setLoading]);
 
   useEffect(() => {
     void styleVersion;

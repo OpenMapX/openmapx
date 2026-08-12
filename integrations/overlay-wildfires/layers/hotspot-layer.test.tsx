@@ -104,6 +104,7 @@ beforeEach(() => {
     showHeatmap: false,
     lastUpdated: null,
   });
+  useWildfireStore.getState().resetSourceStatus("firms");
 });
 
 afterEach(() => {
@@ -548,6 +549,37 @@ describe("HotspotLayer", () => {
 
     await waitFor(() => expect(useWildfireStore.getState().lastUpdated).not.toBeNull());
     expect(useWildfireStore.getState().loading).toBe(false);
+    expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+      loading: false,
+      fetchedAt: expect.any(Number),
+      stale: false,
+      truncated: false,
+      error: null,
+      featureCount: 1,
+    });
+  });
+
+  it("reports a FIRMS failure independently and resets its status when hidden", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status: 503, json: async () => ({}) })),
+    );
+    const view = render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms.error).toBe("unavailable"),
+    );
+    expect(useWildfireStore.getState().statuses.nifc.error).toBeNull();
+
+    view.rerender(<HotspotLayer active={false} popupController={popupController()} />);
+    await waitFor(() =>
+      expect(useWildfireStore.getState().statuses.firms).toMatchObject({
+        loading: false,
+        fetchedAt: null,
+        error: null,
+        featureCount: null,
+      }),
+    );
   });
 
   it("suppresses a stale FIRMS response after a newer request publishes", async () => {

@@ -160,7 +160,7 @@ describe("wildfire presentation", () => {
         { key: "started", value: "2 Jan 2026, 15:04" },
         { key: "ended", value: "2 Jan 2026, 17:04" },
       ],
-      caveatKeys: ["noaaObservedSmokeCaveat"],
+      caveatKeys: ["noaaObservedSmokeCaveat", "noaaSmokeDensityCaveat"],
     });
   });
 
@@ -265,6 +265,15 @@ describe("wildfire presentation", () => {
       "country",
       "sourceClass",
       "effisBurnedAreaCaveat",
+      "observedSmoke",
+      "density",
+      "light",
+      "medium",
+      "heavy",
+      "started",
+      "ended",
+      "noaaObservedSmokeCaveat",
+      "noaaSmokeDensityCaveat",
     ];
     const wildfireMessages = messages.wildfires as Record<string, string>;
 

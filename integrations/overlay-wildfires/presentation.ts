@@ -53,7 +53,7 @@ export interface WildfirePopupModel {
     | { kind: "escaped"; value: string }
     | { kind: "message"; key: "satelliteDerivedBurnedArea" | "observedSmoke" };
   fields: WildfirePopupField[];
-  caveatKeys: Array<"effisBurnedAreaCaveat" | "noaaObservedSmokeCaveat">;
+  caveatKeys: Array<"effisBurnedAreaCaveat" | "noaaObservedSmokeCaveat" | "noaaSmokeDensityCaveat">;
 }
 
 export type WildfirePopupTranslate = (key: string, values?: { value?: string }) => string;
@@ -213,6 +213,6 @@ export function buildNoaaSmokePopupModel(
       dateField("started", properties.startedAt, locale),
       dateField("ended", properties.endedAt, locale),
     ]),
-    caveatKeys: ["noaaObservedSmokeCaveat"],
+    caveatKeys: ["noaaObservedSmokeCaveat", "noaaSmokeDensityCaveat"],
   };
 }
