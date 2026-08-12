@@ -1,4 +1,6 @@
 import { describe, expect, it } from "vitest";
+import de from "../../packages/i18n/locales/de.json";
+import en from "../../packages/i18n/locales/en.json";
 import {
   acresToHectares,
   buildEffisPopupModel,
@@ -8,6 +10,7 @@ import {
   formatWildfireDate,
   NIFC_PERIMETER_STYLE,
   NOAA_SMOKE_OPACITY,
+  renderWildfirePopupModel,
   type WildfirePopupValue,
 } from "./presentation.js";
 
@@ -218,5 +221,54 @@ describe("wildfire presentation", () => {
       lineWidth: 1,
       lineDasharray: [3, 2],
     });
+  });
+
+  it("renders semantic popup values through translated labels and units", () => {
+    const model = buildEffisPopupModel(
+      {
+        id: "effis:render",
+        kind: "satellite-burned-area",
+        provider: "effis",
+        areaHectares: 12.5,
+      },
+      "en-GB",
+    );
+    const translate = (key: string, values?: { value?: string }) =>
+      values?.value === undefined ? `[${key}]` : `[${key}:${values.value}]`;
+
+    const html = renderWildfirePopupModel(model, translate);
+
+    expect(html).toContain("[satelliteDerivedBurnedArea]");
+    expect(html).toContain("[area]");
+    expect(html).toContain("[hectares:12.5]");
+    expect(html).toContain("[effisBurnedAreaCaveat]");
+  });
+
+  it.each([
+    ["en", en],
+    ["de", de],
+  ])("ships every polygon popup message used by the %s renderer", (_locale, messages) => {
+    const required = [
+      "satelliteDerivedBurnedArea",
+      "reportedArea",
+      "acres",
+      "hectares",
+      "containment",
+      "observed",
+      "updated",
+      "discovered",
+      "region",
+      "cause",
+      "area",
+      "detected",
+      "locality",
+      "country",
+      "sourceClass",
+      "effisBurnedAreaCaveat",
+    ];
+    const wildfireMessages = messages.wildfires as Record<string, string>;
+
+    for (const key of required) expect(wildfireMessages[key]).toBeTypeOf("string");
+    expect(wildfireMessages.effisBurnedAreaCaveat).toMatch(/wildfire|Waldbrand/i);
   });
 });

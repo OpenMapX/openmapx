@@ -56,6 +56,38 @@ export interface WildfirePopupModel {
   caveatKeys: Array<"effisBurnedAreaCaveat" | "noaaObservedSmokeCaveat">;
 }
 
+export type WildfirePopupTranslate = (key: string, values?: { value?: string }) => string;
+
+function renderPopupValue(value: WildfirePopupValue, translate: WildfirePopupTranslate): string {
+  if (typeof value === "string") return value;
+  if (value.kind === "density") return escapeHtml(translate(value.value));
+  return value.values
+    .map(({ formatted, unitKey }) => escapeHtml(translate(unitKey, { value: formatted })))
+    .join(" / ");
+}
+
+/** Render a safe popup from a semantic model; all user-facing copy is supplied by i18n. */
+export function renderWildfirePopupModel(
+  model: WildfirePopupModel,
+  translate: WildfirePopupTranslate,
+): string {
+  const title =
+    model.title.kind === "escaped" ? model.title.value : escapeHtml(translate(model.title.key));
+  const fields = model.fields
+    .map(
+      ({ key, value }) =>
+        `<div style="display:grid;grid-template-columns:auto 1fr;gap:8px;font-size:12px"><span style="color:#666">${escapeHtml(translate(key))}</span><span>${renderPopupValue(value, translate)}</span></div>`,
+    )
+    .join("");
+  const caveats = model.caveatKeys
+    .map(
+      (key) =>
+        `<p style="margin:8px 0 0;font-size:11px;line-height:1.35;color:#666">${escapeHtml(translate(key))}</p>`,
+    )
+    .join("");
+  return `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:220px;max-width:300px;padding-right:18px"><div style="font-weight:700;margin-bottom:6px">${title}</div><div style="display:grid;gap:4px">${fields}</div>${caveats}</div>`;
+}
+
 export function acresToHectares(acres: number): number {
   return acres * ACRES_TO_HECTARES;
 }

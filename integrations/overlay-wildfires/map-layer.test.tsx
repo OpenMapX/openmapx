@@ -6,12 +6,16 @@ import { useWildfireStore } from "./store";
 const popupState = vi.hoisted(() => ({
   instances: [] as Array<{ removeCalls: number }>,
 }));
+const attributionState = vi.hoisted(() => ({
+  filtered: vi.fn(),
+}));
+const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
 
 let fake: FakeMap;
 
 vi.mock("@/lib/MapContext", () => ({
   useMap: () => ({
-    mapRef: { current: fake.map },
+    mapRef: mapContext.mapRef,
     mapReady: true,
     styleVersion: 0,
   }),
@@ -23,9 +27,11 @@ vi.mock("@/lib/EnvProvider", () => ({
 
 vi.mock("@/lib/useIntegrationAttribution", () => ({
   useIntegrationAttribution: vi.fn(),
+  useIntegrationSourceAttributions: attributionState.filtered,
 }));
 
 vi.mock("next-intl", () => ({
+  useLocale: () => "en-GB",
   useTranslations: () => (key: string) => key,
 }));
 
@@ -78,16 +84,21 @@ const HOTSPOT_FEATURE = {
 
 beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true });
+  mapContext.mapRef.current = fake.map;
   popupState.instances.length = 0;
   useWildfireStore.setState({
     layerVisible: true,
     showHotspots: false,
+    showNifcPerimeters: false,
+    showEffisBurnedAreas: false,
+    showNoaaSmoke: false,
     showHeatmap: false,
     loading: false,
     lastUpdated: null,
     dayRange: 1,
     source: "VIIRS_SNPP_NRT",
   });
+  attributionState.filtered.mockClear();
 });
 
 afterEach(() => {
@@ -95,6 +106,45 @@ afterEach(() => {
 });
 
 describe("WildfireLayer hotspot composition", () => {
+  it("composes both polygon sources and credits only the enabled wildfire providers", async () => {
+    useWildfireStore.setState({ showNifcPerimeters: true, showEffisBurnedAreas: true });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => ({
+        ok: true,
+        status: 200,
+        json: async () => ({
+          type: "FeatureCollection",
+          features: [{ type: "Feature", properties: {}, geometry: null }],
+          source: url.includes("perimeters/nifc") ? "nifc" : "effis",
+          fetchedAt: "2026-08-12T12:00:00.000Z",
+          stale: false,
+          truncated: false,
+        }),
+      })),
+    );
+
+    render(<WildfireLayer />);
+
+    await waitFor(() =>
+      expect(fake.state.sources.has("openmapx-wildfires-nifc-source")).toBe(true),
+    );
+    await waitFor(() =>
+      expect(fake.state.sources.has("openmapx-wildfires-effis-source")).toBe(true),
+    );
+    await waitFor(() => {
+      expect(attributionState.filtered).toHaveBeenLastCalledWith("overlay-wildfires", [
+        "nifc-wfigs",
+        "effis",
+      ]);
+    });
+    expect(
+      attributionState.filtered.mock.calls.some(([, sourceIds]) =>
+        (sourceIds as string[]).includes("noaa-hms"),
+      ),
+    ).toBe(false);
+  });
+
   it("keeps FIRMS inactive until showHotspots turns on, then removes it when turned off", async () => {
     const fetchMock = vi.fn(async () => ({
       ok: true,
