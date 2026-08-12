@@ -683,6 +683,58 @@ describe("SunTimeLayer zone popup", () => {
     expect(fake.map.getCanvasContainer().style.cursor).toBe("");
   });
 
+  it("keeps an open popup alive across a live-mode clock tick, and reflects the ticked time on the next click", () => {
+    // Live mode (timeMs: null): `instant` tracks `nowMs`, which the shared
+    // clock effect ticks every TICK_MS. The click-handler effect must not
+    // rebind on that tick — if it did, its cleanup would close whatever
+    // popup is currently open out from under the user reading it.
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(Date.UTC(2026, 6, 15, 12, 0, 0)));
+    useSunTimeStore.setState({
+      layerVisible: true,
+      showTerminator: false,
+      showTimeZones: true,
+      timeMs: null,
+    });
+    render(<SunTimeLayer />);
+
+    const clickEvent = {
+      lngLat: { lng: 13.4, lat: 52.5 },
+      features: [
+        {
+          properties: {
+            tzid: "Europe/Berlin",
+            offsetMinutes: 120,
+            offsetLabel: "UTC+2",
+            color: "hsl(30, 55%, 55%)",
+          },
+        },
+      ],
+    };
+
+    act(() => {
+      fake.emit("click", clickEvent);
+    });
+    expect(popupInstances).toHaveLength(1);
+    expect(popupInstances[0]?.html).toContain("14:00");
+    expect(popupInstances[0]?.removed).toBe(false);
+
+    act(() => {
+      vi.advanceTimersByTime(60_000);
+    });
+
+    // A tick alone must never close the popup.
+    expect(popupInstances[0]?.removed).toBe(false);
+
+    // A fresh click after the tick must not be answered from a frozen
+    // closure either — the ref-based fix can't silently stop updating.
+    act(() => {
+      fake.emit("click", clickEvent);
+    });
+    expect(popupInstances).toHaveLength(2);
+    expect(popupInstances[1]?.html).toContain("14:01");
+  });
+
   it("tears down the click handler, the interactive registration and the open popup when the sub-toggle turns off, not just on unmount", async () => {
     render(<SunTimeLayer />);
     await vi.waitFor(() => expect(INTERACTIVE_LAYER_IDS.has(TZ_FILL_LAYER_ID)).toBe(true));

@@ -161,6 +161,13 @@ export default function SunTimeLayer() {
   }, [clockNeeded, timeMs, setNowMs]);
 
   const instant = timeMs ?? nowMs;
+  // Read by the zone-click handler below without being a dependency of its
+  // effect: `instant` changes every TICK_MS in live mode, and that effect
+  // must not rebind (tearing down the open popup along with it) on every
+  // tick. Assigned unconditionally on every render, same pattern as
+  // AreaPickerMap's onChangeRef/boundaryRef.
+  const instantRef = useRef(instant);
+  instantRef.current = instant;
   const bands = useMemo(() => twilightBands(new Date(instant), { bands: BAND_COUNT }), [instant]);
   const subsolar = useMemo(() => {
     const { lng, lat } = subsolarPoint(new Date(instant));
@@ -493,9 +500,11 @@ export default function SunTimeLayer() {
   // Zone click popup, registered only while tzActive so it tears down the
   // same run the sub-toggle turns off, not just on unmount — matching the
   // teardown discipline `syncLayers` above already applies to the layers
-  // themselves. `instant` is a dependency so a stale closure never answers a
-  // click with the wall-clock time from when the layer mounted instead of
-  // the scrubbed one currently on screen.
+  // themselves. `instant` is deliberately NOT a dependency: it ticks every
+  // TICK_MS in live mode, and rebinding this effect on every tick would run
+  // the cleanup below and silently close whatever popup the user has open.
+  // `onClick` instead reads `instantRef.current`, so a click still answers
+  // with whatever instant the map is drawing right now.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -504,7 +513,7 @@ export default function SunTimeLayer() {
     const onClick = (e: MapLayerMouseEvent) => {
       const feature = e.features?.[0];
       if (!feature) return;
-      const properties = feature.properties as Record<string, string>;
+      const properties = feature.properties as Record<string, string | number>;
       const tzid = String(properties.tzid ?? "");
       if (!tzid) return;
 
@@ -513,7 +522,7 @@ export default function SunTimeLayer() {
       // whole merged group — Berlin's is tagged Europe/Paris. The offset and
       // the local time are exact for every point in the polygon; the name is
       // not, so it stays out of the UI and is used only to derive the clock.
-      const localTime = formatInTimeZone(new Date(instant), tzid);
+      const localTime = formatInTimeZone(new Date(instantRef.current), tzid);
       if (localTime === null) return;
 
       const html =
@@ -546,7 +555,7 @@ export default function SunTimeLayer() {
       popupRef.current?.remove();
       INTERACTIVE_LAYER_IDS.delete(TZ_FILL_LAYER_ID);
     };
-  }, [mapRef, mapReady, styleVersion, tzActive, instant]);
+  }, [mapRef, mapReady, styleVersion, tzActive]);
 
   return null;
 }
