@@ -237,23 +237,42 @@ describe("normalizeNifcFeature", () => {
     ).toBeNull();
   });
 
+  it.each([[[-181, 35]], [[-120, 91]], [[Number.NaN, 35]], [[-120, Number.POSITIVE_INFINITY]]])(
+    "rejects out-of-range or non-finite positions: %j",
+    (position) => {
+      expect(
+        normalizeNifcFeature(
+          nifcFeature(
+            { OBJECTID: 6, attr_IncidentName: "Bad position", attr_IncidentTypeCategory: "WF" },
+            {
+              type: "Polygon",
+              coordinates: [[position, [-119, 35], [-119, 36], position]],
+            } as never,
+          ),
+        ),
+      ).toBeNull();
+    },
+  );
+
   it.each([
-    [-181, 35],
-    [-120, 91],
-    [Number.NaN, 35],
-    [-120, Number.POSITIVE_INFINITY],
-  ])("rejects out-of-range or non-finite positions: %j", (position) => {
+    [180, 0],
+    [-180, 0],
+    [0, 90],
+    [0, -90],
+  ])("accepts valid 4326 boundary position [%i, %i]", (longitude, latitude) => {
+    const position = [longitude, latitude];
+    const geometry = {
+      type: "Polygon" as const,
+      coordinates: [[position, [0, 0], [longitude, 0], position]],
+    };
     expect(
       normalizeNifcFeature(
         nifcFeature(
-          { OBJECTID: 6, attr_IncidentName: "Bad position", attr_IncidentTypeCategory: "WF" },
-          {
-            type: "Polygon",
-            coordinates: [[position, [-119, 35], [-119, 36], [-120, 35]]],
-          } as never,
+          { OBJECTID: 7, attr_IncidentName: "Boundary", attr_IncidentTypeCategory: "WF" },
+          geometry,
         ),
       ),
-    ).toBeNull();
+    ).not.toBeNull();
   });
 
   it.each([null, { type: "Point", coordinates: [-120, 35] }, { type: "Polygon", coordinates: [] }])(
