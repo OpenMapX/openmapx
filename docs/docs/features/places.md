@@ -112,7 +112,7 @@ in the `knowledge` domain.
 | ------------------------- | ------------------------------------------------------------------------------------ | ------------------- |
 | `knowledge-wikipedia`     | The article summary shown on Info, plus the Wikipedia link and Commons images        | CC BY-SA / GFDL     |
 | `knowledge-wikidata`      | The "About this place" structured facts and a fallback description                    | CC0                 |
-| `knowledge-sunrise-sunset`| Sunrise, sunset, and day-length for the place's exact coordinates                     | Free with attribution |
+| `knowledge-sun-time`      | Sunrise, sunset, and day-length for the place's exact coordinates                     | Free with attribution |
 
 A place is matched to Wikipedia and Wikidata through its OSM `wikipedia` and
 `wikidata` tags (and the geocoder fills these in where it can), so the encyclopedia

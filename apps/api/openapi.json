@@ -2783,21 +2783,21 @@
         "x-openmapx-source": "integrations/knowledge-ourairports/index.ts"
       }
     },
-    "/api/integrations/knowledge-sunrise-sunset/times": {
+    "/api/integrations/knowledge-sun-time/times": {
       "get": {
-        "operationId": "getApiIntegrationsKnowledgeSunriseSunsetTimes",
+        "operationId": "getApiIntegrationsKnowledgeSunTimeTimes",
         "responses": {
           "default": {
             "description": "Integration response"
           }
         },
-        "summary": "GET /times (knowledge-sunrise-sunset)",
+        "summary": "GET /times (knowledge-sun-time)",
         "tags": [
           "integrations"
         ],
         "x-openmapx-auth": "public",
-        "x-openmapx-integration": "knowledge-sunrise-sunset",
-        "x-openmapx-source": "integrations/knowledge-sunrise-sunset/index.ts"
+        "x-openmapx-integration": "knowledge-sun-time",
+        "x-openmapx-source": "integrations/knowledge-sun-time/index.ts"
       }
     },
     "/api/integrations/knowledge-tides-canada/tides": {
