@@ -1,26 +1,31 @@
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { layerRegistrations } from "@/components/map/layers/layerStack";
+import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useWildfireStore } from "../store";
+
+const translations = vi.hoisted(() => ({ t: (key: string) => key }));
+const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
+const env = vi.hoisted(() => ({ apiUrl: "https://api.test" }));
 
 let fake: FakeMap;
 let styleVersion = 0;
 
 vi.mock("@/lib/MapContext", () => ({
   useMap: () => ({
-    mapRef: { current: fake.map },
+    mapRef: mapContext.mapRef,
     mapReady: true,
     styleVersion,
   }),
 }));
 
 vi.mock("@/lib/EnvProvider", () => ({
-  useEnv: () => ({ apiUrl: "https://api.test" }),
+  useEnv: () => env,
 }));
 
 vi.mock("next-intl", () => ({
-  useTranslations: () => (key: string) => key,
+  useTranslations: () => translations.t,
 }));
 
 vi.mock("maplibre-gl", () => ({
@@ -90,6 +95,7 @@ function response(data = HOTSPOT_COLLECTION) {
 
 beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true });
+  mapContext.mapRef.current = fake.map;
   styleVersion = 0;
   useWildfireStore.setState({
     loading: false,
@@ -375,35 +381,87 @@ describe("HotspotLayer", () => {
     });
   });
 
-  it("changes the hotspot cursor on entry, clears it on leave, and unregisters listeners on unmount", () => {
+  it("uses exact delegated FIRMS listener signatures and replaces them without duplicates", () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => response()),
     );
-    const { unmount } = render(<HotspotLayer active popupController={popupController()} />);
-    fake.setRenderedFeatures(CIRCLE_LAYER_ID, [
-      {
-        type: "Feature",
-        properties: {},
-        geometry: { type: "Point", coordinates: [8, 50] },
-      } as MapGeoJSONFeature,
-    ]);
+    const controller = popupController();
+    const { rerender, unmount } = render(<HotspotLayer active popupController={controller} />);
+    const mountedCalls = [...fake.state.listenerCalls];
+    const clickRegistration = mountedCalls.find(
+      (call) => call.method === "on" && call.event === "click" && call.layerId === CIRCLE_LAYER_ID,
+    );
+    const enterRegistration = mountedCalls.find(
+      (call) =>
+        call.method === "on" && call.event === "mouseenter" && call.layerId === CIRCLE_LAYER_ID,
+    );
+    const leaveRegistration = mountedCalls.find(
+      (call) =>
+        call.method === "on" && call.event === "mouseleave" && call.layerId === CIRCLE_LAYER_ID,
+    );
+    const styleRegistrations = mountedCalls.filter(
+      (call) => call.method === "on" && call.event === "styledata" && call.layerId === undefined,
+    );
+
+    expect(clickRegistration).toBeDefined();
+    expect(enterRegistration).toBeDefined();
+    expect(leaveRegistration).toBeDefined();
+    expect(styleRegistrations).toHaveLength(2);
+    expect(INTERACTIVE_LAYER_IDS.has(CIRCLE_LAYER_ID)).toBe(true);
+    expect(fake.state.handlers.get("click")?.size).toBe(1);
+    expect(fake.state.handlers.get("mouseenter")?.size).toBe(1);
+    expect(fake.state.handlers.get("mouseleave")?.size).toBe(1);
+    expect(fake.state.handlers.get("styledata")?.size).toBe(2);
+
+    const callsBeforePlainRerender = fake.state.listenerCalls.length;
+    rerender(<HotspotLayer active popupController={controller} />);
+    expect(fake.state.listenerCalls).toHaveLength(callsBeforePlainRerender);
 
     act(() => {
-      fake.emit("mousemove", { point: { x: 1, y: 1 } });
+      fake.emit("mouseenter");
     });
     expect(fake.state.canvas.style.cursor).toBe("pointer");
-
-    fake.setRenderedFeatures(CIRCLE_LAYER_ID, []);
     act(() => {
-      fake.emit("mousemove", { point: { x: 1, y: 1 } });
+      fake.emit("mouseleave");
     });
     expect(fake.state.canvas.style.cursor).toBe("");
 
+    styleVersion = 1;
+    rerender(<HotspotLayer active popupController={controller} />);
+    for (const registration of [
+      clickRegistration,
+      enterRegistration,
+      leaveRegistration,
+      ...styleRegistrations,
+    ]) {
+      expect(fake.state.listenerCalls).toContainEqual({
+        method: "off",
+        event: registration?.event,
+        layerId: registration?.layerId,
+        handler: registration?.handler,
+      });
+    }
+    expect(fake.state.handlers.get("click")?.size).toBe(1);
+    expect(fake.state.handlers.get("mouseenter")?.size).toBe(1);
+    expect(fake.state.handlers.get("mouseleave")?.size).toBe(1);
+    expect(fake.state.handlers.get("styledata")?.size).toBe(2);
+
     unmount();
+    const onCalls = fake.state.listenerCalls.filter((call) => call.method === "on");
+    for (const registration of onCalls) {
+      expect(fake.state.listenerCalls).toContainEqual({
+        method: "off",
+        event: registration.event,
+        layerId: registration.layerId,
+        handler: registration.handler,
+      });
+    }
     expect(fake.state.handlers.get("click")?.size ?? 0).toBe(0);
-    expect(fake.state.handlers.get("mousemove")?.size ?? 0).toBe(0);
+    expect(fake.state.handlers.get("mouseenter")?.size ?? 0).toBe(0);
+    expect(fake.state.handlers.get("mouseleave")?.size ?? 0).toBe(0);
     expect(fake.state.handlers.get("styledata")?.size ?? 0).toBe(0);
+    expect(INTERACTIVE_LAYER_IDS.has(CIRCLE_LAYER_ID)).toBe(false);
   });
 
   it("aborts an active request and clears loading when hidden", async () => {

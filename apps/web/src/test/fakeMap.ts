@@ -60,6 +60,13 @@ export interface FakeMapState {
   light: Record<string, unknown> | null;
   missingStyleImageResolver: MissingStyleImageResolver | null;
   handlers: Map<string, Set<(...args: unknown[]) => void>>;
+  /** Every registered or removed map listener, preserving overload arguments and handler identity. */
+  listenerCalls: Array<{
+    method: "on" | "off";
+    event: string;
+    layerId?: string;
+    handler: (...args: unknown[]) => void;
+  }>;
 }
 
 export interface FakeMap {
@@ -120,6 +127,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     light: null,
     missingStyleImageResolver: null,
     handlers: new Map(),
+    listenerCalls: [],
     counts: {
       setData: new Map(),
       setPaintProperty: new Map(),
@@ -157,12 +165,17 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     // MapLibre overloads: on(type, handler) and on(type, layerId, handler).
     const handler = rest[rest.length - 1] as (...a: unknown[]) => void;
     if (typeof handler !== "function") return api.map;
+    const layerId = typeof rest[0] === "string" ? rest[0] : undefined;
+    state.listenerCalls.push({ method: "on", event, layerId, handler });
     if (!state.handlers.has(event)) state.handlers.set(event, new Set());
     state.handlers.get(event)?.add(handler);
     return api.map;
   };
   const off = (event: string, ...rest: unknown[]) => {
     const handler = rest[rest.length - 1] as (...a: unknown[]) => void;
+    if (typeof handler !== "function") return api.map;
+    const layerId = typeof rest[0] === "string" ? rest[0] : undefined;
+    state.listenerCalls.push({ method: "off", event, layerId, handler });
     state.handlers.get(event)?.delete(handler);
     return api.map;
   };

@@ -193,6 +193,24 @@ describe("fake map operation counters", () => {
 });
 
 describe("fake map interaction controls", () => {
+  it("records generic and delegated listener lifecycle calls with their exact handler identity", () => {
+    const fake = createFakeMap();
+    const generic = () => {};
+    const delegated = () => {};
+
+    fake.map.on("styledata", generic);
+    fake.map.on("click", "hotspots", delegated);
+    fake.map.off("click", "hotspots", delegated);
+    fake.map.off("styledata", generic);
+
+    expect(fake.state.listenerCalls).toEqual([
+      { method: "on", event: "styledata", layerId: undefined, handler: generic },
+      { method: "on", event: "click", layerId: "hotspots", handler: delegated },
+      { method: "off", event: "click", layerId: "hotspots", handler: delegated },
+      { method: "off", event: "styledata", layerId: undefined, handler: generic },
+    ]);
+  });
+
   it("exposes a focusable canvas for keyboard interaction tests", () => {
     const fake = createFakeMap();
     document.body.appendChild(fake.state.canvas);

@@ -349,19 +349,23 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
       );
     };
 
-    const onMouseMove = (e: maplibregl.MapMouseEvent) => {
-      if (!map.getLayer(CIRCLE_LAYER_ID)) return;
-      const features = map.queryRenderedFeatures(e.point, { layers: [CIRCLE_LAYER_ID] });
-      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
+    const onMouseEnter = () => {
+      map.getCanvasContainer().style.cursor = "pointer";
+    };
+
+    const onMouseLeave = () => {
+      map.getCanvasContainer().style.cursor = "";
     };
 
     map.on("click", CIRCLE_LAYER_ID, onClick);
-    map.on("mousemove", onMouseMove);
+    map.on("mouseenter", CIRCLE_LAYER_ID, onMouseEnter);
+    map.on("mouseleave", CIRCLE_LAYER_ID, onMouseLeave);
     INTERACTIVE_LAYER_IDS.add(CIRCLE_LAYER_ID);
 
     return () => {
       map.off("click", CIRCLE_LAYER_ID, onClick);
-      map.off("mousemove", onMouseMove);
+      map.off("mouseenter", CIRCLE_LAYER_ID, onMouseEnter);
+      map.off("mouseleave", CIRCLE_LAYER_ID, onMouseLeave);
       map.getCanvasContainer().style.cursor = "";
       popupController.close();
       INTERACTIVE_LAYER_IDS.delete(CIRCLE_LAYER_ID);
