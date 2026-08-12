@@ -11,20 +11,24 @@ function source(sourceId: string): DataSource | undefined {
 
 describe("wildfire source disclosures", () => {
   it("declares the two implemented server-side perimeter and burned-area sources", () => {
-    expect(source("nifc")).toMatchObject({
+    expect(source("nifc-wfigs")).toMatchObject({
       name: "NIFC WFIGS Current Interagency Fire Perimeters",
+      url: "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
       apiHosts: ["services3.arcgis.com"],
+      license: "U.S. Government data — NIFC disclaimer",
+      licenseUrl: "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
       endUserExposure: "server-only",
       personalData: false,
       cookies: false,
       dpaAvailable: false,
       attribution:
-        "National Interagency Fire Center (NIFC) / WFIGS — dynamic data, not legal documents. NIFC gives no warranty, expressed or implied, as to accuracy, reliability, or completeness.",
+        "National Interagency Fire Center (NIFC) / WFIGS and contributing agencies — dynamic data, not legal documents. NIFC gives no warranty, expressed or implied, as to accuracy, reliability, or completeness.",
     });
     expect(source("effis")).toMatchObject({
       name: "EFFIS / Copernicus Emergency Management Service",
+      url: "https://forest-fire.emergency.copernicus.eu/applications/data-and-services",
       apiHosts: ["maps.effis.emergency.copernicus.eu"],
-      license: "CC BY 4.0",
+      license: "CC-BY-4.0",
       endUserExposure: "server-only",
       personalData: false,
       cookies: false,
@@ -36,25 +40,29 @@ describe("wildfire source disclosures", () => {
 
   it.each([
     [
-      "nifc",
+      "nifc-wfigs",
       "not legal documents",
       "no browser IP, identity, or exact device location is forwarded",
+      "zoom-derived simplification offset",
     ],
     [
       "effis",
       "not an authoritative fire perimeter",
       "no browser IP, identity, or exact device location is forwarded",
+      undefined,
     ],
-  ])("discloses %s source limits in English and German", (sourceId, enLimit, enPrivacy) => {
+  ])("discloses %s source limits in English and German", (sourceId, enLimit, enPrivacy, offset) => {
     const enEntry = en.dataSources[sourceId as keyof typeof en.dataSources];
     const deEntry = de.dataSources[sourceId as keyof typeof de.dataSources];
 
     expect(enEntry.purpose).toContain(enLimit);
     expect(enEntry.dataSent).toContain(enPrivacy);
+    if (offset) expect(enEntry.dataSent).toContain(offset);
     expect(deEntry.purpose).toBeTruthy();
     expect(deEntry.dataSent).toContain(
       "keine Browser-IP, Identität oder exakte Gerätestandortdaten",
     );
+    if (offset) expect(deEntry.dataSent).toContain("zoomabhängiger Vereinfachungsversatz");
     expect(deEntry.dataReceived).toBeTruthy();
   });
 });

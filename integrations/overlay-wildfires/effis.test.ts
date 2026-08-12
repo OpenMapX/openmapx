@@ -23,10 +23,14 @@ const POLYGON = {
   ],
 };
 
-function effisFeature(properties: Record<string, unknown>, geometry = POLYGON) {
+function effisFeature(
+  properties: Record<string, unknown>,
+  geometry = POLYGON,
+  topLevelId: string | number | undefined = properties.ID as string | number | undefined,
+) {
   return {
     type: "Feature" as const,
-    id: properties.ID as string | number,
+    ...(topLevelId === undefined ? {} : { id: topLevelId }),
     properties,
     geometry,
   };
@@ -47,37 +51,47 @@ describe("buildEffisUrl", () => {
     expect(url.searchParams.get("request")).toBe("GetFeature");
     expect(url.searchParams.get("typename")).toBe("ms:modis.ba.poly.week");
     expect(url.searchParams.get("outputformat")).toBe("geojson");
-    expect(url.searchParams.get("bbox")).toBe("-10,35,30,60,EPSG:4326");
+    expect(url.searchParams.get("bbox")).toBe("35,-10,60,30,EPSG:4326");
     expect(url.searchParams.get("maxfeatures")).toBe("2001");
+  });
+
+  it("uses the EFFIS WFS 1.1 latitude-longitude axis order from the live contract", () => {
+    const url = new URL(buildEffisUrl({ west: 19, south: 35, east: 29, north: 43, zoom: 6 }));
+
+    expect(url.searchParams.get("bbox")).toBe("35,19,43,29,EPSG:4326");
   });
 });
 
 describe("normalizeEffisFeature", () => {
-  it("normalizes burned-area metadata without presenting it as a reported perimeter", () => {
+  it("normalizes a representative live EFFIS feature without a top-level id", () => {
     const result = normalizeEffisFeature(
-      effisFeature({
-        ID: 42,
-        AREA_HA: " 123.5 ",
-        FIREDATE: "2026-08-10 11:30:00",
-        UPDATED: "2026-08-11T12:45:00Z",
-        COUNTRY: " ES ",
-        REGION: " Galicia ",
-        LOCALITY: " N.A. ",
-        SOURCE: " MODIS ",
-      }),
+      effisFeature(
+        {
+          id: "weekly-42",
+          AREA_HA: " 123.5 ",
+          FIREDATE: "2026-08-10 11:30:00",
+          LASTUPDATE: "2026-08-11 12:45:00.123456",
+          COUNTRY: " ES ",
+          PROVINCE: " Galicia ",
+          COMMUNE: " N.A. ",
+          CLASS: " MODIS ",
+        },
+        POLYGON,
+        undefined,
+      ),
     );
 
     expect(result).toMatchObject({
       type: "Feature",
-      id: "effis:42",
+      id: "effis:weekly-42",
       geometry: POLYGON,
       properties: {
-        id: "effis:42",
+        id: "effis:weekly-42",
         kind: "satellite-burned-area",
         provider: "effis",
         areaHectares: 123.5,
         detectedAt: "2026-08-10T11:30:00.000Z",
-        updatedAt: "2026-08-11T12:45:00.000Z",
+        updatedAt: "2026-08-11T12:45:00.123Z",
         countryCode: "ES",
         region: "Galicia",
         sourceClass: "MODIS",
@@ -217,5 +231,31 @@ describe("loadEffis", () => {
     expect(result.truncated).toBe(true);
     expect(result).not.toHaveProperty("fetchedAt");
     expect(result).not.toHaveProperty("stale");
+  });
+
+  it("reports truncation when an upstream segment reaches the request cap before normalization", async () => {
+    const invalidAtCap = [
+      effisFeature(
+        { id: "invalid", AREA_HA: "1" },
+        { type: "Point", coordinates: [10, 45] },
+        undefined,
+      ),
+      ...Array.from({ length: 2_000 }, () =>
+        effisFeature({ id: "duplicate", AREA_HA: "1" }, POLYGON, undefined),
+      ),
+    ];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () =>
+          new Response(JSON.stringify({ type: "FeatureCollection", features: invalidAtCap })),
+      ),
+    );
+
+    const result = await loadEffis(createContext(), BOUNDS);
+
+    expect(result.features).toHaveLength(1);
+    expect(result.features[0].id).toBe("effis:duplicate");
+    expect(result.truncated).toBe(true);
   });
 });

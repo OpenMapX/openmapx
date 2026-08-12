@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "documentation": "https://firms.modaps.eosdis.nasa.gov/, https://data-nifc.opendata.arcgis.com/datasets/nifc::wfigs-current-interagency-fire-perimeters/about, https://forest-fire.emergency.copernicus.eu/",
+  "documentation": "https://firms.modaps.eosdis.nasa.gov/, https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824, https://forest-fire.emergency.copernicus.eu/applications/data-and-services",
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,
@@ -73,13 +73,13 @@
       "dpaAvailable": false
     },
     {
-      "sourceId": "nifc",
+      "sourceId": "nifc-wfigs",
       "name": "NIFC WFIGS Current Interagency Fire Perimeters",
-      "url": "https://data-nifc.opendata.arcgis.com/datasets/nifc::wfigs-current-interagency-fire-perimeters/about",
+      "url": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
       "apiHosts": ["services3.arcgis.com"],
-      "license": "U.S. Government data (NIFC limitations of use)",
+      "license": "U.S. Government data — NIFC disclaimer",
       "licenseUrl": "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
-      "attribution": "National Interagency Fire Center (NIFC) / WFIGS — dynamic data, not legal documents. NIFC gives no warranty, expressed or implied, as to accuracy, reliability, or completeness.",
+      "attribution": "National Interagency Fire Center (NIFC) / WFIGS and contributing agencies — dynamic data, not legal documents. NIFC gives no warranty, expressed or implied, as to accuracy, reliability, or completeness.",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://www.doi.gov/privacy",
@@ -91,9 +91,9 @@
     {
       "sourceId": "effis",
       "name": "EFFIS / Copernicus Emergency Management Service",
-      "url": "https://forest-fire.emergency.copernicus.eu/",
+      "url": "https://forest-fire.emergency.copernicus.eu/applications/data-and-services",
       "apiHosts": ["maps.effis.emergency.copernicus.eu"],
-      "license": "CC BY 4.0",
+      "license": "CC-BY-4.0",
       "licenseUrl": "https://forest-fire.emergency.copernicus.eu/about-effis/data-license",
       "attribution": "EFFIS / Copernicus Emergency Management Service, © European Union, modified by OpenMapX.",
       "commercialUse": "yes",

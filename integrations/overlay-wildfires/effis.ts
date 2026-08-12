@@ -47,7 +47,7 @@ function optionalString(value: unknown): string | undefined {
 function sourceDateToIso(value: unknown): string | undefined {
   const string = nonEmptyString(value);
   if (!string) return undefined;
-  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(string)
+  const normalized = /^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}(?:\.\d{1,6})?$/.test(string)
     ? `${string.replace(" ", "T")}Z`
     : string;
   const date = new Date(normalized);
@@ -97,10 +97,14 @@ function stableId(
   feature: RawEffisFeature,
   properties: Record<string, unknown>,
 ): string | undefined {
-  const value = feature.id ?? properties.ID;
-  if (value === null || value === undefined || value === "") return undefined;
-  const id = String(value).replace(/^effis:/, "");
-  return id ? `effis:${id}` : undefined;
+  for (const value of [properties.id, feature.id, properties.ID]) {
+    if (value === null || value === undefined || value === "") continue;
+    const id = String(value)
+      .trim()
+      .replace(/^effis:/, "");
+    if (id) return `effis:${id}`;
+  }
+  return undefined;
 }
 
 export function buildEffisUrl(bounds: NormalizedViewport): string {
@@ -112,7 +116,7 @@ export function buildEffisUrl(bounds: NormalizedViewport): string {
   url.searchParams.set("outputformat", "geojson");
   url.searchParams.set(
     "bbox",
-    `${bounds.west},${bounds.south},${bounds.east},${bounds.north},EPSG:4326`,
+    `${bounds.south},${bounds.west},${bounds.north},${bounds.east},EPSG:4326`,
   );
   url.searchParams.set("maxfeatures", String(REQUESTED_FEATURES));
   return url.toString();
@@ -130,9 +134,10 @@ export function normalizeEffisFeature(input: unknown): NormalizedEffisFeature | 
   const detectedAt = sourceDateToIso(raw.FIREDATE);
   const updatedAt = sourceDateToIso(raw.UPDATED) ?? sourceDateToIso(raw.LASTUPDATE);
   const countryCode = optionalString(raw.COUNTRY);
-  const region = optionalString(raw.REGION);
-  const locality = optionalString(raw.LOCALITY);
-  const sourceClass = optionalString(raw.SOURCE_CLASS) ?? optionalString(raw.SOURCE);
+  const region = optionalString(raw.PROVINCE) ?? optionalString(raw.REGION);
+  const locality = optionalString(raw.COMMUNE) ?? optionalString(raw.LOCALITY);
+  const sourceClass =
+    optionalString(raw.CLASS) ?? optionalString(raw.SOURCE_CLASS) ?? optionalString(raw.SOURCE);
   const properties: EffisProperties = {
     id,
     kind: "satellite-burned-area",
@@ -208,6 +213,9 @@ export async function loadEffis(
   const collections = await Promise.all(
     splitAntimeridian(bounds).map((part) => fetchEffisCollection(ctx, part)),
   );
+  const upstreamTruncated = collections.some(
+    (collection) => collection.features.length >= REQUESTED_FEATURES,
+  );
   const normalized = collections.map((collection) => ({
     type: "FeatureCollection" as const,
     features: collection.features
@@ -215,7 +223,7 @@ export async function loadEffis(
       .filter((feature): feature is NormalizedEffisFeature => feature !== null),
   }));
   const merged = dedupeByFeatureId(normalized);
-  const truncated = merged.features.length > MAX_FEATURES;
+  const truncated = upstreamTruncated || merged.features.length > MAX_FEATURES;
   return {
     type: "FeatureCollection",
     features: merged.features.slice(0, MAX_FEATURES),
