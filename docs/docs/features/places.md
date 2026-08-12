@@ -54,6 +54,10 @@ Overview is a stack of detail rows, each self-hiding when it has nothing to show
 - **Phone** and **Website** — tap-to-call and click-through links, each copyable.
 - **Wikipedia** — a link to the article when the place is linked to one.
 - **Add a label** — tag the place as Home, Work, or a custom name for fast recall.
+- **Local time** — the current wall clock at the place, its UTC offset, and how
+  far ahead or behind you it is. Shown only when the place is in a different time
+  zone *and* a different offset from yours, so a place across a border that keeps
+  the same clock adds no row.
 - **Weather**, **Sunrise & sunset**, and (on the coast) **Tides** and **Marine
   weather** — expandable readouts for the place's exact location.
 
@@ -112,7 +116,7 @@ in the `knowledge` domain.
 | ------------------------- | ------------------------------------------------------------------------------------ | ------------------- |
 | `knowledge-wikipedia`     | The article summary shown on Info, plus the Wikipedia link and Commons images        | CC BY-SA / GFDL     |
 | `knowledge-wikidata`      | The "About this place" structured facts and a fallback description                    | CC0                 |
-| `knowledge-sun-time`      | Sunrise, sunset, and day-length for the place's exact coordinates                     | Free with attribution |
+| `knowledge-sun-time`      | Sunrise, sunset, and day-length for the place's exact coordinates, plus a coordinate-to-time-zone lookup | Free with attribution |
 
 A place is matched to Wikipedia and Wikidata through its OSM `wikipedia` and
 `wikidata` tags (and the geocoder fills these in where it can), so the encyclopedia

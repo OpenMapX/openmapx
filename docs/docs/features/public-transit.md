@@ -53,6 +53,13 @@ first-and-last-mile mode — walking by default, or your own bike, a shared
 bike/scooter, or a park-and-ride car leg — so a bike-plus-transit or
 drive-to-the-station option appears next to the pure transit itineraries.
 
+**Trips that cross a time zone** are labelled rather than silently converted.
+Departure is shown in the origin's local time and arrival in the destination's,
+each with a `UTC±N` chip and a note that the arrival is in destination local
+time, so the printed span always matches the stated duration. A trip whose ends
+share a UTC offset is left exactly as it was — crossing a border without changing
+the clock adds no annotation.
+
 ### Route options
 
 A "Route options" control mirrors the choices you'd expect from a consumer maps
