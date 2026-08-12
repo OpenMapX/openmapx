@@ -4,7 +4,7 @@
   "dataSources": {
     "firms": {
       "purpose": "Aktive Waldbrand-/Feuererkennungen weltweit, nach Feuerstrahlungsleistung skaliert und nach Aktualität eingefärbt",
-      "dataSent": "Satellitenquelle (VIIRS oder MODIS), Zeitraum in Tagen (1-3)",
+      "dataSent": "Nur Satellitenquelle (VIIRS oder MODIS) und Zeitraum in Tagen (1-3) werden serverseitig übermittelt; OpenMapX leitet keine Browser-IP, Identität oder exakten Gerätestandortdaten weiter",
       "dataReceived": "CSV mit Breitengrad, Längengrad, Datum/Uhrzeit, Konfidenz, Satellit, Feuerstrahlungsleistung (MW), Temperatur (K)"
     },
     "nifc-wfigs": {

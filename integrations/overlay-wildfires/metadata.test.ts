@@ -68,10 +68,13 @@ describe("wildfire source disclosures", () => {
     });
   });
 
-  it("links the canonical NOAA HMS source in integration documentation", () => {
-    expect(manifest.documentation.split(", ")).toContain(
+  it("lists all four official provider documentation URLs", () => {
+    expect(manifest.documentation.split(", ")).toEqual([
+      "https://firms.modaps.eosdis.nasa.gov/",
+      "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
+      "https://forest-fire.emergency.copernicus.eu/applications/data-and-services",
       "https://www.ospo.noaa.gov/products/land/hms.html",
-    );
+    ]);
   });
 
   it.each([
@@ -127,5 +130,16 @@ describe("wildfire source disclosures", () => {
     expect(de.dataSources["noaa-hms"].dataSent).toMatch(
       /Quellen- und Zeitauswahl.*keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben/i,
     );
+  });
+
+  it("makes the FIRMS server-side source/time and privacy boundary explicit in both locales", () => {
+    expect(en.dataSources.firms.dataSent).toMatch(
+      /satellite source.*day range.*sent server-side.*no browser IP, identity, or exact device location is forwarded by OpenMapX/i,
+    );
+    expect(de.dataSources.firms.dataSent).toMatch(/Satellitenquelle.*Zeitraum.*serverseitig/i);
+    expect(de.dataSources.firms.dataSent).toMatch(
+      /keine Browser-IP, Identität oder exakten Gerätestandortdaten/i,
+    );
+    expect(de.dataSources.firms.dataSent).toMatch(/OpenMapX/i);
   });
 });
