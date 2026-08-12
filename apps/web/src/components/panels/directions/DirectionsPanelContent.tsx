@@ -32,6 +32,7 @@ import {
   rankItineraries,
   TRANSIT_ACCESS_MOTIS_MODES,
   TRANSIT_ACCESS_RENTAL_FORM_FACTORS,
+  timeZoneAt,
   useAutocomplete,
   useCapabilities,
   useDebounce,
@@ -131,6 +132,14 @@ export function DirectionsPanelContent() {
     setTransitDepartureTime,
     setTransitArrivalTime,
   } = useDirectionsStore();
+  // Only meaningful when the trip actually crosses zones. Same-zone trips pass
+  // null so every arrival keeps rendering exactly as it does today.
+  const destinationTimeZone = useMemo(() => {
+    if (!origin || !destination) return null;
+    const from = timeZoneAt(origin[1], origin[0]);
+    const to = timeZoneAt(destination[1], destination[0]);
+    return from && to && from !== to ? to : null;
+  }, [origin, destination]);
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   const evVehicleId = useSettingsStore((s) => s.evVehicleId);
@@ -630,6 +639,7 @@ export function DirectionsPanelContent() {
         destinationLabel={destinationLabel}
         provider={transitPlanData?.provider}
         attributions={transitPlanAttributions}
+        destinationTimeZone={destinationTimeZone}
         onBack={() => setTransitDetailsIndex(null)}
       />
     );
@@ -1081,6 +1091,7 @@ export function DirectionsPanelContent() {
                     active={i === activeItineraryIndex}
                     isLowestCo2={lowestCo2Grams !== null && itin.co2Grams === lowestCo2Grams}
                     replanOptions={transitReplanOptions}
+                    destinationTimeZone={destinationTimeZone}
                     onSelect={() => {
                       setActiveItineraryIndex(i);
                       snapTo("peek");
@@ -1101,6 +1112,11 @@ export function DirectionsPanelContent() {
                   {i < transitItineraries.length - 1 && <Divider />}
                 </Box>
               ))}
+              {destinationTimeZone && (
+                <Typography sx={{ fontSize: 11, color: "text.secondary", px: 2, pb: 1 }}>
+                  {t("arrivalInDestinationTime")}
+                </Typography>
+              )}
               {(transitPlanData?.previousPageToken || transitPlanData?.nextPageToken) && (
                 <Box sx={{ px: 2, py: 1, borderTop: "1px solid", borderColor: "divider" }}>
                   <Box sx={{ display: "flex", justifyContent: "space-between", gap: 1 }}>

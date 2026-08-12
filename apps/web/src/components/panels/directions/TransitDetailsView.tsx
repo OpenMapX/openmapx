@@ -27,6 +27,7 @@ import {
   geocodeStopAsPlace,
   PANEL,
   safeHref,
+  tzOffsetLabel,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
@@ -195,6 +196,7 @@ export function TransitDetailsView({
   destinationLabel,
   provider,
   attributions,
+  destinationTimeZone = null,
   onBack,
 }: {
   itinerary: TripItinerary;
@@ -205,6 +207,8 @@ export function TransitDetailsView({
   provider?: string;
   /** Trip-plan envelope attributions, rendered at the bottom of the details. */
   attributions?: Attribution[];
+  /** Set only when the trip crosses a time-zone boundary; renders the arrival in that zone with an offset chip. */
+  destinationTimeZone?: string | null;
   onBack: () => void;
 }) {
   const t = useTranslations("directions");
@@ -234,7 +238,15 @@ export function TransitDetailsView({
     );
   }
   const startTime = fmt.time(itinerary.startTime);
-  const endTime = fmt.time(itinerary.endTime);
+  const endTime = fmt.time(
+    itinerary.endTime,
+    destinationTimeZone ? { timeZone: destinationTimeZone } : undefined,
+  );
+  // tzOffsetLabel returns null for an unrecognised zone; gate on the label so
+  // an unresolved destinationTimeZone doesn't still open an empty chip.
+  const destinationOffsetLabel = destinationTimeZone
+    ? tzOffsetLabel(new Date(itinerary.endTime), destinationTimeZone)
+    : null;
   const summaryBits: string[] = [];
   if (itinerary.transfers > 0) summaryBits.push(t("transfers", { count: itinerary.transfers }));
   if (itinerary.walkDistance > 0) {
@@ -301,6 +313,11 @@ export function TransitDetailsView({
         >
           {startTime} – {endTime}{" "}
         </Typography>
+        {destinationOffsetLabel && (
+          <Typography component="span" sx={{ fontSize: 11, color: "text.secondary", ml: 0.5 }}>
+            {destinationOffsetLabel}
+          </Typography>
+        )}
         <Typography
           variant="body1"
           component="span"

@@ -751,7 +751,8 @@
     "rideBook": "Book",
     "rideNoQuotes": "{provider} did not return a price for this trip.",
     "ridePickupTime": "Pick up at",
-    "ridePrebookNotice": "This service needs at least {minutes} minutes' notice."
+    "ridePrebookNotice": "This service needs at least {minutes} minutes' notice.",
+    "arrivalInDestinationTime": "Arrival shown in destination local time"
   },
   "openingHours": {
     "open24Hours": "Open 24 hours",

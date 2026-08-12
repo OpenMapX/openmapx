@@ -15,6 +15,7 @@ import type { TransitReplanOptions } from "@openmapx/core";
 import {
   formatDistance,
   formatDuration,
+  tzOffsetLabel,
   useRefreshTransitItinerary,
   useSettingsStore,
   useVehicleJourney,
@@ -232,6 +233,7 @@ export function TransitItineraryCard({
   active,
   isLowestCo2 = false,
   replanOptions,
+  destinationTimeZone = null,
   onSelect,
   onDetails,
   onRefreshed,
@@ -240,6 +242,8 @@ export function TransitItineraryCard({
   active: boolean;
   isLowestCo2?: boolean;
   replanOptions?: TransitReplanOptions;
+  /** Set only when the trip crosses a time-zone boundary; renders the arrival in that zone with an offset chip. */
+  destinationTimeZone?: string | null;
   onSelect: () => void;
   onDetails: () => void;
   onRefreshed?: (itinerary: TripItinerary, changed: boolean, fallbackOccurred: boolean) => void;
@@ -261,7 +265,15 @@ export function TransitItineraryCard({
   // Plan-time robustness cue: a very short scheduled transfer buffer.
   const tightTransfer = itineraryTransferRisk(itinerary.legs) !== null;
   const startTime = fmt.time(itinerary.startTime);
-  const endTime = fmt.time(itinerary.endTime);
+  const endTime = fmt.time(
+    itinerary.endTime,
+    destinationTimeZone ? { timeZone: destinationTimeZone } : undefined,
+  );
+  // tzOffsetLabel returns null for an unrecognised zone; gate on the label so
+  // an unresolved destinationTimeZone doesn't still open an empty chip.
+  const destinationOffsetLabel = destinationTimeZone
+    ? tzOffsetLabel(new Date(itinerary.endTime), destinationTimeZone)
+    : null;
   /**
    * Starts the trip and reports why it could not be, if it could not be.
    *
@@ -314,6 +326,11 @@ export function TransitItineraryCard({
           >
             {startTime} – {endTime}
           </Typography>
+          {destinationOffsetLabel && (
+            <Typography component="span" sx={{ fontSize: 11, color: "text.secondary", ml: 0.5 }}>
+              {destinationOffsetLabel}
+            </Typography>
+          )}
         </Box>
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
           {occupancy && <OccupancyIndicator level={occupancy} size={16} />}

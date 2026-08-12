@@ -1,6 +1,7 @@
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TransitItineraryCard } from "./TransitRouteView";
+import { SAMPLE_TRANSIT_ITINERARY } from "./TransitRouteView.fixtures";
 
 vi.mock("@/lib/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
@@ -70,31 +71,7 @@ describe("TransitItineraryCard", () => {
   it("renders a first-class CO2 badge for the lowest-emission itinerary", () => {
     const markup = renderToStaticMarkup(
       <TransitItineraryCard
-        itinerary={{
-          duration: 164,
-          startTime: "2026-04-21T22:08:16+02:00",
-          endTime: "2026-04-21T22:11:00+02:00",
-          transfers: 1,
-          walkDistance: 250,
-          co2Grams: 43.151,
-          legs: [
-            {
-              mode: "rail",
-              startTime: "2026-04-21T22:08:16+02:00",
-              endTime: "2026-04-21T22:11:00+02:00",
-              from: { name: "Nationaltheatret", lat: 59.915, lng: 10.728 },
-              to: { name: "Oslo S", lat: 59.911, lng: 10.753 },
-              route: { shortName: "R13", longName: "Drammen-Oslo S-Dal", color: "DF2027" },
-              geometry: {
-                type: "LineString",
-                coordinates: [
-                  [10.728, 59.915],
-                  [10.753, 59.911],
-                ],
-              },
-            },
-          ],
-        }}
+        itinerary={SAMPLE_TRANSIT_ITINERARY}
         active={false}
         isLowestCo2
         onSelect={() => {}}

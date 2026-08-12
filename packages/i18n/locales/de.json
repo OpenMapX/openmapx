@@ -751,7 +751,8 @@
     "rideBook": "Buchen",
     "rideNoQuotes": "{provider} hat für diese Fahrt keinen Preis geliefert.",
     "ridePickupTime": "Abholung um",
-    "ridePrebookNotice": "Dieser Dienst benötigt mindestens {minutes} Minuten Vorlauf."
+    "ridePrebookNotice": "Dieser Dienst benötigt mindestens {minutes} Minuten Vorlauf.",
+    "arrivalInDestinationTime": "Ankunft in Ortszeit am Ziel"
   },
   "openingHours": {
     "open24Hours": "24 Stunden geöffnet",
