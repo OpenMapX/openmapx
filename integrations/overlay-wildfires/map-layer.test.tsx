@@ -66,6 +66,41 @@ import { WildfireLayer } from "./map-layer";
 
 const SOURCE_ID = "openmapx-wildfires-source";
 const CIRCLE_LAYER_ID = "openmapx-wildfires-circles";
+const POLYGON_GEOMETRY = {
+  type: "Polygon",
+  coordinates: [
+    [
+      [8, 50],
+      [9, 50],
+      [9, 51],
+      [8, 50],
+    ],
+  ],
+};
+
+function providerFeature(source: "nifc" | "effis") {
+  const id = `${source}:1`;
+  return {
+    type: "Feature",
+    id,
+    properties:
+      source === "nifc"
+        ? {
+            id,
+            kind: "reported-perimeter",
+            provider: source,
+            coverage: "United States",
+            name: "Pine Fire",
+          }
+        : {
+            id,
+            kind: "satellite-burned-area",
+            provider: source,
+            areaHectares: 42,
+          },
+    geometry: POLYGON_GEOMETRY,
+  };
+}
 
 const HOTSPOT_FEATURE = {
   type: "Feature",
@@ -113,14 +148,17 @@ describe("WildfireLayer hotspot composition", () => {
       vi.fn(async (url: string) => ({
         ok: true,
         status: 200,
-        json: async () => ({
-          type: "FeatureCollection",
-          features: [{ type: "Feature", properties: {}, geometry: null }],
-          source: url.includes("perimeters/nifc") ? "nifc" : "effis",
-          fetchedAt: "2026-08-12T12:00:00.000Z",
-          stale: false,
-          truncated: false,
-        }),
+        json: async () => {
+          const source = url.includes("perimeters/nifc") ? "nifc" : "effis";
+          return {
+            type: "FeatureCollection",
+            features: [providerFeature(source)],
+            source,
+            fetchedAt: "2026-08-12T12:00:00.000Z",
+            stale: false,
+            truncated: false,
+          };
+        },
       })),
     );
 

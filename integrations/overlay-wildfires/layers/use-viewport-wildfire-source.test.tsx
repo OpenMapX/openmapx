@@ -1,8 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, renderHook, waitFor } from "@/test";
-import { useWildfireStore, type WildfireSourceId } from "../store";
+import { useWildfireStore } from "../store";
 import type { WildfireFeatureCollection } from "../types";
 import { useViewportWildfireSource } from "./use-viewport-wildfire-source";
+import type { ViewportWildfireSourceId } from "./viewport-wildfire-validation";
 
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
 
@@ -17,6 +18,54 @@ const EMPTY_COLLECTION: WildfireFeatureCollection = {
   fetchedAt: "2026-08-12T12:00:00.000Z",
   stale: false,
   truncated: false,
+};
+
+const NIFC_FEATURE: GeoJSON.Feature = {
+  type: "Feature",
+  id: "nifc:1",
+  properties: {
+    id: "nifc:1",
+    kind: "reported-perimeter",
+    provider: "nifc",
+    coverage: "United States",
+    name: "Pine Fire",
+    areaAcres: 100,
+  },
+  geometry: {
+    type: "Polygon",
+    coordinates: [
+      [
+        [8, 50],
+        [9, 50],
+        [9, 51],
+        [8, 50],
+      ],
+    ],
+  },
+};
+
+const EFFIS_FEATURE: GeoJSON.Feature = {
+  type: "Feature",
+  id: "effis:1",
+  properties: {
+    id: "effis:1",
+    kind: "satellite-burned-area",
+    provider: "effis",
+    areaHectares: 42,
+  },
+  geometry: {
+    type: "MultiPolygon",
+    coordinates: [
+      [
+        [
+          [8, 50],
+          [9, 50],
+          [9, 51],
+          [8, 50],
+        ],
+      ],
+    ],
+  },
 };
 
 function response(
@@ -41,7 +90,7 @@ function deferredResponse() {
 function mountSource(
   options: Partial<{
     active: boolean;
-    sourceId: WildfireSourceId;
+    sourceId: ViewportWildfireSourceId;
     endpoint: string;
     refreshMs: number;
     publish: (data: WildfireFeatureCollection) => void;
@@ -113,6 +162,34 @@ afterEach(() => {
 });
 
 describe("useViewportWildfireSource", () => {
+  it.each([
+    [170, 190, "170", "-170"],
+    [-190, -170, "170", "-170"],
+    [-20, 30, "-20", "30"],
+    [530, 550, "170", "-170"],
+    [190, 530, "-170", "170"],
+    [10, 370, "-180", "180"],
+    [-540, -180, "-180", "180"],
+  ])(
+    "normalizes the unwrapped longitude interval %s..%s to %s..%s",
+    async (west, east, expectedWest, expectedEast) => {
+      vi.spyOn(fake.map, "getBounds").mockReturnValue({
+        getWest: () => west,
+        getSouth: () => -10,
+        getEast: () => east,
+        getNorth: () => 10,
+      } as ReturnType<FakeMap["map"]["getBounds"]>);
+      const fetchMock = vi.fn(async () => response());
+      vi.stubGlobal("fetch", fetchMock);
+
+      mountSource();
+
+      await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+      const query = new URL(String(fetchMock.mock.calls[0]?.[0])).searchParams;
+      expect([query.get("west"), query.get("east")]).toEqual([expectedWest, expectedEast]);
+    },
+  );
+
   it("fetches the exact viewport at zoom three and preserves an antimeridian crossing", async () => {
     vi.spyOn(fake.map, "getBounds").mockReturnValue({
       getWest: () => 170,
@@ -310,7 +387,7 @@ describe("useViewportWildfireSource", () => {
 
   it("marks a 503 unavailable without replacing the last good collection", async () => {
     vi.useFakeTimers();
-    const good = { ...EMPTY_COLLECTION, features: [{ type: "Feature" } as GeoJSON.Feature] };
+    const good = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE] };
     const fetchMock = vi
       .fn<() => Promise<Response>>()
       .mockResolvedValueOnce(response(good))
@@ -330,6 +407,196 @@ describe("useViewportWildfireSource", () => {
       error: "unavailable",
       featureCount: 1,
     });
+  });
+
+  it.each([
+    ["non-object feature", null],
+    ["missing stable id", { ...NIFC_FEATURE, id: undefined }],
+    ["mismatched stable id", { ...NIFC_FEATURE, id: "nifc:other" }],
+    [
+      "wrong discriminant",
+      {
+        ...NIFC_FEATURE,
+        properties: { ...NIFC_FEATURE.properties, kind: "satellite-burned-area" },
+      },
+    ],
+    [
+      "invalid optional property type",
+      { ...NIFC_FEATURE, properties: { ...NIFC_FEATURE.properties, areaAcres: "100" } },
+    ],
+    [
+      "unclosed ring",
+      {
+        ...NIFC_FEATURE,
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [8, 50],
+              [9, 50],
+              [9, 51],
+              [8, 51],
+            ],
+          ],
+        },
+      },
+    ],
+    [
+      "out-of-range coordinate",
+      {
+        ...NIFC_FEATURE,
+        geometry: {
+          type: "Polygon",
+          coordinates: [
+            [
+              [181, 50],
+              [9, 50],
+              [9, 51],
+              [181, 50],
+            ],
+          ],
+        },
+      },
+    ],
+  ])("rejects an entire NIFC collection with a %s", async (_name, malformed) => {
+    const data = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE, malformed] };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response(data as WildfireFeatureCollection)),
+    );
+    const { params } = mountSource();
+
+    await waitFor(() => expect(useWildfireStore.getState().statuses.nifc.loading).toBe(false));
+
+    expect(params.publish).not.toHaveBeenCalled();
+    expect(useWildfireStore.getState().statuses.nifc.error).toBe("unavailable");
+  });
+
+  it("rejects an entire EFFIS collection with invalid provider properties", async () => {
+    const malformed = {
+      ...EFFIS_FEATURE,
+      properties: { ...EFFIS_FEATURE.properties, areaHectares: "42" },
+    };
+    const data = {
+      ...EMPTY_COLLECTION,
+      source: "effis" as const,
+      features: [EFFIS_FEATURE, malformed],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response(data as WildfireFeatureCollection)),
+    );
+    const { params } = mountSource({
+      sourceId: "effis",
+      endpoint: "https://api.test/api/integrations/overlay-wildfires/burned-areas/effis",
+    });
+
+    await waitFor(() => expect(useWildfireStore.getState().statuses.effis.loading).toBe(false));
+
+    expect(params.publish).not.toHaveBeenCalled();
+    expect(useWildfireStore.getState().statuses.effis.error).toBe("unavailable");
+  });
+
+  it("accepts a valid EFFIS MultiPolygon with provider-specific properties", async () => {
+    const data: WildfireFeatureCollection = {
+      ...EMPTY_COLLECTION,
+      source: "effis",
+      features: [EFFIS_FEATURE],
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response(data)),
+    );
+    const { params } = mountSource({
+      sourceId: "effis",
+      endpoint: "https://api.test/api/integrations/overlay-wildfires/burned-areas/effis",
+    });
+
+    await waitFor(() => expect(params.publish).toHaveBeenCalledWith(data));
+    expect(useWildfireStore.getState().statuses.effis.featureCount).toBe(1);
+  });
+
+  it("rejects a malformed refresh and retains the last valid provider collection", async () => {
+    vi.useFakeTimers();
+    const good = { ...EMPTY_COLLECTION, features: [NIFC_FEATURE] };
+    const malformed = {
+      ...EMPTY_COLLECTION,
+      features: [
+        {
+          ...NIFC_FEATURE,
+          properties: { ...NIFC_FEATURE.properties, containmentPercent: 101 },
+        },
+      ],
+    };
+    const fetchMock = vi
+      .fn<() => Promise<Response>>()
+      .mockResolvedValueOnce(response(good))
+      .mockResolvedValueOnce(response(malformed));
+    vi.stubGlobal("fetch", fetchMock);
+    const { params } = mountSource();
+    await act(async () => {});
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300_000);
+    });
+
+    expect(params.publish).toHaveBeenCalledTimes(1);
+    expect(params.publish).toHaveBeenCalledWith(good);
+    expect(useWildfireStore.getState().statuses.nifc).toMatchObject({
+      error: "unavailable",
+      featureCount: 1,
+    });
+  });
+
+  it("invalid replacement bounds supersede and abort the active request", async () => {
+    vi.useFakeTimers();
+    const pending = deferredResponse();
+    const fetchMock = vi.fn(() => pending.promise);
+    vi.stubGlobal("fetch", fetchMock);
+    const bounds = { west: -5 };
+    vi.spyOn(fake.map, "getBounds").mockImplementation(
+      () =>
+        ({
+          getWest: () => bounds.west,
+          getSouth: () => 40,
+          getEast: () => 5,
+          getNorth: () => 50,
+        }) as ReturnType<FakeMap["map"]["getBounds"]>,
+    );
+    const { params } = mountSource();
+    await act(async () => {});
+    const firstSignal = fetchMock.mock.calls[0]?.[1]?.signal as AbortSignal;
+
+    bounds.west = Number.NaN;
+    act(() => fake.emit("moveend"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(250);
+    });
+    await act(async () =>
+      pending.resolve(response({ ...EMPTY_COLLECTION, features: [NIFC_FEATURE] })),
+    );
+
+    expect(firstSignal.aborted).toBe(true);
+    expect(params.publish).not.toHaveBeenCalled();
+    expect(useWildfireStore.getState().statuses.nifc.error).toBe("unavailable");
+  });
+
+  it("cancels pending move timers and ignores late map events after unmount", async () => {
+    vi.useFakeTimers();
+    const fetchMock = vi.fn(async () => response());
+    vi.stubGlobal("fetch", fetchMock);
+    const { unmount } = mountSource();
+    await act(async () => {});
+
+    act(() => fake.emit("moveend"));
+    unmount();
+    act(() => fake.emit("moveend"));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fake.state.handlers.get("moveend")?.size ?? 0).toBe(0);
   });
 
   it("aborts on deactivation, clears rendered data, and resets only its source status", async () => {

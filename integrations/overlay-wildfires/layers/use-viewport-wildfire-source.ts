@@ -3,14 +3,18 @@
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMap } from "@/lib/MapContext";
-import { useWildfireStore, type WildfireSourceId } from "../store";
+import { useWildfireStore } from "../store";
 import type { WildfireFeatureCollection } from "../types";
+import {
+  isViewportWildfireFeatureCollection,
+  type ViewportWildfireSourceId,
+} from "./viewport-wildfire-validation";
 
 const VIEWPORT_DEBOUNCE_MS = 200;
 
 export interface ViewportWildfireSourceOptions {
   active: boolean;
-  sourceId: WildfireSourceId;
+  sourceId: ViewportWildfireSourceId;
   endpoint: string;
   minZoom: number;
   refreshMs: number;
@@ -18,34 +22,42 @@ export interface ViewportWildfireSourceOptions {
   clear(): void;
 }
 
-function isWildfireFeatureCollection(
-  value: unknown,
-  sourceId: WildfireSourceId,
-): value is WildfireFeatureCollection {
-  if (typeof value !== "object" || value === null) return false;
-  const collection = value as Partial<WildfireFeatureCollection>;
-  return (
-    collection.type === "FeatureCollection" &&
-    Array.isArray(collection.features) &&
-    collection.source === sourceId &&
-    typeof collection.fetchedAt === "string" &&
-    Number.isFinite(Date.parse(collection.fetchedAt)) &&
-    typeof collection.stale === "boolean" &&
-    typeof collection.truncated === "boolean"
-  );
+function normalizeLongitude(longitude: number): number {
+  const normalized = ((((longitude + 180) % 360) + 360) % 360) - 180;
+  return Object.is(normalized, -0) ? 0 : normalized;
+}
+
+function normalizeLongitudeInterval(west: number, east: number): { west: number; east: number } {
+  const unwrappedWidth = east - west;
+  if (Math.abs(unwrappedWidth) >= 360) return { west: -180, east: 180 };
+
+  const width = unwrappedWidth < 0 ? unwrappedWidth + 360 : unwrappedWidth;
+  const normalizedWest = normalizeLongitude(west);
+  const unwrappedEast = normalizedWest + width;
+  const normalizedEast = unwrappedEast > 180 ? unwrappedEast - 360 : unwrappedEast;
+  return { west: normalizedWest, east: normalizedEast };
 }
 
 function viewportUrl(endpoint: string, map: MaplibreMap): string | null {
   const zoom = Math.floor(map.getZoom());
   const bounds = map.getBounds();
-  const values = {
+  const rawValues = {
     west: bounds.getWest(),
     south: bounds.getSouth(),
     east: bounds.getEast(),
     north: bounds.getNorth(),
     zoom,
   };
-  if (!Object.values(values).every(Number.isFinite)) return null;
+  if (!Object.values(rawValues).every(Number.isFinite)) return null;
+
+  const longitudeInterval = normalizeLongitudeInterval(rawValues.west, rawValues.east);
+  const values = {
+    west: longitudeInterval.west,
+    south: rawValues.south,
+    east: longitudeInterval.east,
+    north: rawValues.north,
+    zoom,
+  };
 
   const query = new URLSearchParams();
   for (const [key, value] of Object.entries(values)) query.set(key, String(value));
@@ -102,6 +114,8 @@ export function useViewportWildfireSource({
 
       const url = viewportUrl(endpoint, map);
       if (!url) {
+        abortRequest();
+        lastRequestedUrlRef.current = null;
         setSourceStatus(sourceId, { loading: false, error: "unavailable" });
         return;
       }
@@ -120,7 +134,7 @@ export function useViewportWildfireSource({
         if (!result.ok) throw new Error(`Wildfire source returned ${result.status}`);
         const data: unknown = await result.json();
         if (controller.signal.aborted || generationRef.current !== generation) return;
-        if (!isWildfireFeatureCollection(data, sourceId)) {
+        if (!isViewportWildfireFeatureCollection(data, sourceId)) {
           throw new Error("Invalid wildfire FeatureCollection");
         }
 
