@@ -63,6 +63,17 @@ const HOTSPOT_COLLECTION = {
   ],
 };
 
+const REPLACEMENT_COLLECTION = {
+  type: "FeatureCollection" as const,
+  features: [
+    {
+      type: "Feature" as const,
+      properties: { frp: 100, ageMs: 1_000 },
+      geometry: { type: "Point" as const, coordinates: [9, 51] },
+    },
+  ],
+};
+
 function popupController() {
   return {
     open: vi.fn(),
@@ -157,6 +168,149 @@ describe("HotspotLayer", () => {
     });
   });
 
+  it("keeps the exact FIRMS circle and heatmap visual contract", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response()),
+    );
+    useWildfireStore.setState({ showHeatmap: true });
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    expect(fake.state.sources.get(SOURCE_ID)).toMatchObject({ type: "geojson" });
+    expect(fake.state.layers.get(CIRCLE_LAYER_ID)).toMatchObject({
+      id: CIRCLE_LAYER_ID,
+      type: "circle",
+      source: SOURCE_ID,
+    });
+    expect(fake.state.layers.get(CIRCLE_LAYER_ID)).not.toHaveProperty("minzoom");
+    expect(fake.state.layers.get(CIRCLE_LAYER_ID)).not.toHaveProperty("maxzoom");
+    expect(fake.state.paint.get(CIRCLE_LAYER_ID)).toEqual({
+      "circle-radius": [
+        "interpolate",
+        ["linear"],
+        ["zoom"],
+        2,
+        [
+          "*",
+          [
+            "interpolate",
+            ["linear"],
+            ["get", "frp"],
+            0,
+            3,
+            10,
+            5,
+            50,
+            8,
+            200,
+            13,
+            500,
+            18,
+            1000,
+            24,
+          ],
+          0.5,
+        ],
+        5,
+        [
+          "*",
+          [
+            "interpolate",
+            ["linear"],
+            ["get", "frp"],
+            0,
+            3,
+            10,
+            5,
+            50,
+            8,
+            200,
+            13,
+            500,
+            18,
+            1000,
+            24,
+          ],
+          0.8,
+        ],
+        8,
+        ["interpolate", ["linear"], ["get", "frp"], 0, 3, 10, 5, 50, 8, 200, 13, 500, 18, 1000, 24],
+        12,
+        [
+          "*",
+          [
+            "interpolate",
+            ["linear"],
+            ["get", "frp"],
+            0,
+            3,
+            10,
+            5,
+            50,
+            8,
+            200,
+            13,
+            500,
+            18,
+            1000,
+            24,
+          ],
+          1.6,
+        ],
+      ],
+      "circle-color": [
+        "interpolate",
+        ["linear"],
+        ["get", "ageMs"],
+        0,
+        "#ef4444",
+        3_600_000,
+        "#f97316",
+        21_600_000,
+        "#fb923c",
+        43_200_000,
+        "#fbbf24",
+        86_400_000,
+        "#fcd34d",
+        172_800_000,
+        "#fde68a",
+      ],
+      "circle-opacity": 0.8,
+      "circle-stroke-color": "#ffffff",
+      "circle-stroke-width": 0.8,
+    });
+    expect(fake.state.layers.get(HEATMAP_LAYER_ID)).toMatchObject({
+      id: HEATMAP_LAYER_ID,
+      type: "heatmap",
+      source: SOURCE_ID,
+    });
+    expect(fake.state.layers.get(HEATMAP_LAYER_ID)).not.toHaveProperty("minzoom");
+    expect(fake.state.layers.get(HEATMAP_LAYER_ID)).not.toHaveProperty("maxzoom");
+    expect(fake.state.paint.get(HEATMAP_LAYER_ID)).toEqual({
+      "heatmap-weight": ["interpolate", ["linear"], ["get", "frp"], 0, 0, 1000, 1],
+      "heatmap-intensity": ["interpolate", ["linear"], ["zoom"], 0, 1, 9, 3],
+      "heatmap-color": [
+        "interpolate",
+        ["linear"],
+        ["heatmap-density"],
+        0,
+        "rgba(0,0,0,0)",
+        0.2,
+        "#ffffb2",
+        0.4,
+        "#fecc5c",
+        0.6,
+        "#fd8d3c",
+        0.8,
+        "#f03b20",
+        1.0,
+        "#bd0026",
+      ],
+      "heatmap-radius": ["interpolate", ["linear"], ["zoom"], 0, 4, 9, 30],
+      "heatmap-opacity": ["interpolate", ["linear"], ["zoom"], 7, 1, 12, 0],
+    });
+  });
+
   it("aborts and replaces the FIRMS request when sensor or hotspot age changes", async () => {
     const signals: AbortSignal[] = [];
     const fetchMock = vi.fn((_url: string, init: RequestInit) => {
@@ -181,17 +335,24 @@ describe("HotspotLayer", () => {
     expect(String(fetchMock.mock.calls[2][0])).toContain("dayRange=3&source=MODIS_NRT");
   });
 
-  it("recreates the source and layers then republishes FIRMS data after a style reload", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => response()),
-    );
+  it("replays retained FIRMS data immediately through a style reload while a replacement waits", async () => {
+    const pendingResponses: Array<(value: ReturnType<typeof response>) => void> = [];
+    const fetchMock = vi.fn(() => {
+      if (fetchMock.mock.calls.length === 1) return Promise.resolve(response(HOTSPOT_COLLECTION));
+      return new Promise<ReturnType<typeof response>>((resolve) => pendingResponses.push(resolve));
+    });
+    vi.stubGlobal("fetch", fetchMock);
     const controller = popupController();
     useWildfireStore.setState({ showHeatmap: true });
     const { rerender } = render(<HotspotLayer active popupController={controller} />);
     await waitFor(() => {
       expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
     });
+
+    act(() => {
+      useWildfireStore.getState().setSource("MODIS_NRT");
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
 
     act(() => {
       fake.map.setStyle({} as never);
@@ -203,6 +364,167 @@ describe("HotspotLayer", () => {
     expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.type).toBe("circle");
     expect(fake.state.layers.get(HEATMAP_LAYER_ID)?.type).toBe("heatmap");
     expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(HOTSPOT_COLLECTION);
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(pendingResponses).toHaveLength(2);
+
+    await act(async () => {
+      pendingResponses[1]?.(response(REPLACEMENT_COLLECTION));
+    });
+    await waitFor(() => {
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(REPLACEMENT_COLLECTION);
+    });
+  });
+
+  it("changes the hotspot cursor on entry, clears it on leave, and unregisters listeners on unmount", () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response()),
+    );
+    const { unmount } = render(<HotspotLayer active popupController={popupController()} />);
+    fake.setRenderedFeatures(CIRCLE_LAYER_ID, [
+      {
+        type: "Feature",
+        properties: {},
+        geometry: { type: "Point", coordinates: [8, 50] },
+      } as MapGeoJSONFeature,
+    ]);
+
+    act(() => {
+      fake.emit("mousemove", { point: { x: 1, y: 1 } });
+    });
+    expect(fake.state.canvas.style.cursor).toBe("pointer");
+
+    fake.setRenderedFeatures(CIRCLE_LAYER_ID, []);
+    act(() => {
+      fake.emit("mousemove", { point: { x: 1, y: 1 } });
+    });
+    expect(fake.state.canvas.style.cursor).toBe("");
+
+    unmount();
+    expect(fake.state.handlers.get("click")?.size ?? 0).toBe(0);
+    expect(fake.state.handlers.get("mousemove")?.size ?? 0).toBe(0);
+    expect(fake.state.handlers.get("styledata")?.size ?? 0).toBe(0);
+  });
+
+  it("aborts an active request and clears loading when hidden", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) => {
+        signal = init.signal as AbortSignal;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          );
+        });
+      }),
+    );
+    const controller = popupController();
+    const { rerender } = render(<HotspotLayer active popupController={controller} />);
+    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(true));
+
+    rerender(<HotspotLayer active={false} popupController={controller} />);
+
+    await waitFor(() => expect(signal?.aborted).toBe(true));
+    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
+    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+  });
+
+  it("aborts an active request and clears loading when unmounted", async () => {
+    let signal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn((_url: string, init: RequestInit) => {
+        signal = init.signal as AbortSignal;
+        return new Promise((_resolve, reject) => {
+          signal?.addEventListener("abort", () =>
+            reject(new DOMException("Aborted", "AbortError")),
+          );
+        });
+      }),
+    );
+    const { unmount } = render(<HotspotLayer active popupController={popupController()} />);
+    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(true));
+
+    unmount();
+
+    await waitFor(() => expect(signal?.aborted).toBe(true));
+    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
+  });
+
+  it("clears loading without updating the timestamp when FIRMS responds non-OK", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, json: async () => HOTSPOT_COLLECTION })),
+    );
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
+    expect(useWildfireStore.getState().lastUpdated).toBeNull();
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual({
+      type: "FeatureCollection",
+      features: [],
+    });
+  });
+
+  it("clears loading without updating the timestamp when FIRMS JSON decoding fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => Promise.reject(new Error("invalid JSON")),
+      })),
+    );
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() => expect(useWildfireStore.getState().loading).toBe(false));
+    expect(useWildfireStore.getState().lastUpdated).toBeNull();
+  });
+
+  it("sets lastUpdated only after a current successful FIRMS response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => response()),
+    );
+    render(<HotspotLayer active popupController={popupController()} />);
+
+    await waitFor(() => expect(useWildfireStore.getState().lastUpdated).not.toBeNull());
+    expect(useWildfireStore.getState().loading).toBe(false);
+  });
+
+  it("suppresses a stale FIRMS response after a newer request publishes", async () => {
+    let resolveFirst: ((value: ReturnType<typeof response>) => void) | undefined;
+    let resolveSecond: ((value: ReturnType<typeof response>) => void) | undefined;
+    const fetchMock = vi.fn(
+      (_url: string) =>
+        new Promise<ReturnType<typeof response>>((resolve) => {
+          if (resolveFirst) resolveSecond = resolve;
+          else resolveFirst = resolve;
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+    render(<HotspotLayer active popupController={popupController()} />);
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+
+    act(() => {
+      useWildfireStore.getState().setSource("MODIS_NRT");
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
+    if (!resolveFirst || !resolveSecond) throw new Error("both FIRMS requests did not start");
+
+    await act(async () => {
+      resolveSecond?.(response(REPLACEMENT_COLLECTION));
+    });
+    await waitFor(() => {
+      expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(REPLACEMENT_COLLECTION);
+    });
+    const latestUpdated = useWildfireStore.getState().lastUpdated;
+
+    await act(async () => {
+      resolveFirst?.(response(HOTSPOT_COLLECTION));
+    });
+    expect(fake.state.sources.get(SOURCE_ID)?.data).toEqual(REPLACEMENT_COLLECTION);
+    expect(useWildfireStore.getState().lastUpdated).toBe(latestUpdated);
   });
 
   it("escapes external hotspot strings before handing popup HTML to the coordinator", () => {

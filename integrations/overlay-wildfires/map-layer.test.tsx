@@ -1,0 +1,159 @@
+import type { MapGeoJSONFeature } from "maplibre-gl";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import { useWildfireStore } from "./store";
+
+const popupState = vi.hoisted(() => ({
+  instances: [] as Array<{ removeCalls: number }>,
+}));
+
+let fake: FakeMap;
+
+vi.mock("@/lib/MapContext", () => ({
+  useMap: () => ({
+    mapRef: { current: fake.map },
+    mapReady: true,
+    styleVersion: 0,
+  }),
+}));
+
+vi.mock("@/lib/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "https://api.test" }),
+}));
+
+vi.mock("@/lib/useIntegrationAttribution", () => ({
+  useIntegrationAttribution: vi.fn(),
+}));
+
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string) => key,
+}));
+
+vi.mock("maplibre-gl", () => ({
+  Popup: class {
+    removeCalls = 0;
+
+    constructor() {
+      popupState.instances.push(this);
+    }
+
+    setLngLat() {
+      return this;
+    }
+
+    setHTML() {
+      return this;
+    }
+
+    addTo() {
+      return this;
+    }
+
+    remove() {
+      this.removeCalls += 1;
+      return this;
+    }
+  },
+}));
+
+import { WildfireLayer } from "./map-layer";
+
+const SOURCE_ID = "openmapx-wildfires-source";
+const CIRCLE_LAYER_ID = "openmapx-wildfires-circles";
+
+const HOTSPOT_FEATURE = {
+  type: "Feature",
+  properties: {
+    frp: 12,
+    brightness: 301,
+    confidence: "high",
+    satellite: "VIIRS",
+    ageMs: 60_000,
+    dayNight: "D",
+    acqDate: "2026-08-12",
+    acqTime: "1234",
+  },
+  geometry: { type: "Point", coordinates: [8, 50] },
+} as unknown as MapGeoJSONFeature;
+
+beforeEach(() => {
+  fake = createFakeMap({ styleLoaded: true });
+  popupState.instances.length = 0;
+  useWildfireStore.setState({
+    layerVisible: true,
+    showHotspots: false,
+    showHeatmap: false,
+    loading: false,
+    lastUpdated: null,
+    dayRange: 1,
+    source: "VIIRS_SNPP_NRT",
+  });
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("WildfireLayer hotspot composition", () => {
+  it("keeps FIRMS inactive until showHotspots turns on, then removes it when turned off", async () => {
+    const fetchMock = vi.fn(async () => ({
+      ok: true,
+      json: async () => ({ type: "FeatureCollection", features: [] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    render(<WildfireLayer />);
+
+    expect(fetchMock).not.toHaveBeenCalled();
+    expect(fake.state.sources.has(SOURCE_ID)).toBe(false);
+
+    act(() => {
+      useWildfireStore.getState().setShowHotspots(true);
+    });
+    await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(1));
+    expect(fake.state.layers.get(CIRCLE_LAYER_ID)?.type).toBe("circle");
+
+    act(() => {
+      useWildfireStore.getState().setShowHotspots(false);
+    });
+    await waitFor(() => expect(fake.state.sources.has(SOURCE_ID)).toBe(false));
+    expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(false);
+  });
+
+  it("owns one popup at a time and clears the closed popup before another activation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ type: "FeatureCollection", features: [] }),
+      })),
+    );
+    useWildfireStore.setState({ showHotspots: true });
+    render(<WildfireLayer />);
+    await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
+
+    act(() => {
+      fake.emit("click", { features: [HOTSPOT_FEATURE] });
+      fake.emit("click", { features: [HOTSPOT_FEATURE] });
+    });
+    expect(popupState.instances).toHaveLength(2);
+    expect(popupState.instances[0]?.removeCalls).toBe(1);
+    expect(popupState.instances[1]?.removeCalls).toBe(0);
+
+    act(() => {
+      useWildfireStore.getState().setShowHotspots(false);
+    });
+    await waitFor(() => expect(popupState.instances[1]?.removeCalls).toBe(1));
+
+    act(() => {
+      useWildfireStore.getState().setShowHotspots(true);
+    });
+    await waitFor(() => expect(fake.state.layers.has(CIRCLE_LAYER_ID)).toBe(true));
+    act(() => {
+      fake.emit("click", { features: [HOTSPOT_FEATURE] });
+    });
+
+    expect(popupState.instances).toHaveLength(3);
+    expect(popupState.instances[1]?.removeCalls).toBe(1);
+    expect(popupState.instances[2]?.removeCalls).toBe(0);
+  });
+});

@@ -129,6 +129,10 @@ export function HotspotLayer({ active, popupController }: HotspotLayerProps) {
   }, [beginRequest, env, mapRef, dayRange, source, publishGeoJson, setLoading, setLastUpdated]);
 
   useEffect(() => {
+    return () => setLoading(false);
+  }, [setLoading]);
+
+  useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
