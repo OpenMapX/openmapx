@@ -51,6 +51,9 @@ describe("buildNoaaSmokeUrl", () => {
     const url = new URL(buildNoaaSmokeUrl());
 
     expect(url.hostname).toBe("services2.arcgis.com");
+    expect(url.pathname).toBe(
+      "/C8EMgrsFcRFL6LrL/arcgis/rest/services/NOAA_Satellite_Smoke_Detection_%28v1%29/FeatureServer/0/query",
+    );
     expect(url.searchParams.get("where")).toBe("1=1");
     expect(url.searchParams.get("outFields")).toBe("FID,Satellite,Start,End_,Density");
     expect(url.searchParams.get("outSR")).toBe("4326");
@@ -68,10 +71,30 @@ describe("parseHmsUtc", () => {
     expect(parseHmsUtc("2026224 1200")).toBe("2026-08-12T12:00:00.000Z");
   });
 
-  it.each(["", "2026224 2460", "2026224 120", "2026000 1200", "2026367 1200"])(
-    "rejects invalid HMS timestamp %j",
-    (value) => expect(parseHmsUtc(value)).toBeUndefined(),
-  );
+  it("accepts day 366 only in a Gregorian leap year", () => {
+    expect(parseHmsUtc("2024366 1200")).toBe("2024-12-31T12:00:00.000Z");
+    expect(parseHmsUtc("2000366 1200")).toBe("2000-12-31T12:00:00.000Z");
+    expect(parseHmsUtc("2026366 1200")).toBeUndefined();
+    expect(parseHmsUtc("2100366 1200")).toBeUndefined();
+  });
+
+  it.each([
+    ["2026001 0000", "2026-01-01T00:00:00.000Z"],
+    ["2026365 2359", "2026-12-31T23:59:00.000Z"],
+  ])("preserves valid HMS boundary timestamp %s", (raw, expected) => {
+    expect(parseHmsUtc(raw)).toBe(expected);
+  });
+
+  it.each([
+    "",
+    "2026224 2460",
+    "2026224 2400",
+    "2026224 1260",
+    "2026224 120",
+    "2026000 1200",
+    "2026366 1200",
+    "2026367 1200",
+  ])("rejects invalid HMS timestamp %j", (value) => expect(parseHmsUtc(value)).toBeUndefined());
 });
 
 describe("normalizeSmokeDensity", () => {

@@ -55,11 +55,23 @@ describe("wildfire source disclosures", () => {
       apiHosts: ["services2.arcgis.com"],
       license: "CC0-1.0",
       licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+      attribution:
+        "NOAA Hazard Mapping System (HMS) Smoke Detection, dedicated to the public domain under CC0 1.0.",
+      commercialUse: "yes",
+      providerCountry: "US",
+      providerPrivacyUrl:
+        "https://www.noaa.gov/sites/default/files/legacy/document/2021/Mar/NOAAPrivacyPolicy_Final_May2017.pdf",
       endUserExposure: "server-only",
       personalData: false,
       cookies: false,
       dpaAvailable: false,
     });
+  });
+
+  it("links the canonical NOAA HMS source in integration documentation", () => {
+    expect(manifest.documentation.split(", ")).toContain(
+      "https://www.ospo.noaa.gov/products/land/hms.html",
+    );
   });
 
   it.each([
@@ -106,5 +118,14 @@ describe("wildfire source disclosures", () => {
       expect(de.dataSources[sourceId]?.dataSent).toBeTruthy();
       expect(de.dataSources[sourceId]?.dataReceived).toBeTruthy();
     }
+  });
+
+  it("makes the NOAA server-side source/time and privacy boundary explicit in both locales", () => {
+    expect(en.dataSources["noaa-hms"].dataSent).toMatch(
+      /source and time selection.*no browser IP, identity, or exact device location is forwarded/i,
+    );
+    expect(de.dataSources["noaa-hms"].dataSent).toMatch(
+      /Quellen- und Zeitauswahl.*keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben/i,
+    );
   });
 });

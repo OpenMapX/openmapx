@@ -98,12 +98,15 @@ export function parseHmsUtc(value: string): string | undefined {
   const match = /^(\d{4})(\d{3})\s+(\d{2})(\d{2})$/.exec(value.trim());
   if (!match) return undefined;
   const [, year, ordinal, hour, minute] = match;
+  const yearNumber = Number(year);
   const ordinalNumber = Number(ordinal);
   const hourNumber = Number(hour);
   const minuteNumber = Number(minute);
+  const maximumOrdinal =
+    yearNumber % 4 === 0 && (yearNumber % 100 !== 0 || yearNumber % 400 === 0) ? 366 : 365;
   if (
     ordinalNumber < 1 ||
-    ordinalNumber > 366 ||
+    ordinalNumber > maximumOrdinal ||
     hourNumber < 0 ||
     hourNumber > 23 ||
     minuteNumber < 0 ||
@@ -111,7 +114,7 @@ export function parseHmsUtc(value: string): string | undefined {
   ) {
     return undefined;
   }
-  const ms = Date.UTC(Number(year), 0, ordinalNumber, hourNumber, minuteNumber);
+  const ms = Date.UTC(yearNumber, 0, ordinalNumber, hourNumber, minuteNumber);
   return Number.isFinite(ms) ? new Date(ms).toISOString() : undefined;
 }
 
