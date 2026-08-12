@@ -1953,6 +1953,11 @@
     "astronomicalTwilight": "Astronomische Dämmerung",
     "noData": "Sonnenzeitdaten nicht verfügbar"
   },
+  "localTime": {
+    "localTime": "Ortszeit",
+    "ahead": "{span} vor dir",
+    "behind": "{span} hinter dir"
+  },
   "environment": {
     "environmentalSensors": "Umweltsensoren",
     "toggleOverlay": "Umwelt-Overlay umschalten",

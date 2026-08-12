@@ -1953,6 +1953,11 @@
     "astronomicalTwilight": "Astronomical twilight",
     "noData": "Sun times data unavailable"
   },
+  "localTime": {
+    "localTime": "Local time",
+    "ahead": "{span} ahead of you",
+    "behind": "{span} behind you"
+  },
   "environment": {
     "environmentalSensors": "Environmental Sensors",
     "toggleOverlay": "Toggle environment overlay",

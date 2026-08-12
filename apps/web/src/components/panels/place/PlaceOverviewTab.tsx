@@ -66,6 +66,7 @@ import { PlaceCitySections } from "./PlaceCitySections";
 import { PlaceFoodActions } from "./PlaceFoodActions";
 import { PlaceHarborFacilities } from "./PlaceHarborFacilities";
 import { PlaceHotelActions } from "./PlaceHotelActions";
+import { PlaceLocalTime } from "./PlaceLocalTime";
 import { PlaceMarineWeatherContent } from "./PlaceMarineWeather";
 import { PlaceSunTimes } from "./PlaceSunTimes";
 import { PlaceTagDetails } from "./PlaceTagDetails";
@@ -730,6 +731,8 @@ export function PlaceOverviewTab({
               enabled={weatherExpanded}
             />
           </ExpandableDetailRow>
+
+          <PlaceLocalTime lat={place.coordinates[1]} lng={place.coordinates[0]} />
 
           {/* Sunrise & sunset (expandable) */}
           <ExpandableDetailRow
