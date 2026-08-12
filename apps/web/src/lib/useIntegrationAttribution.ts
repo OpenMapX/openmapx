@@ -26,6 +26,22 @@ export function useIntegrationAttribution(integrationId: string, active: boolean
   useMapAttributions(`integration:${integrationId}`, attributions);
 }
 
+/** Register only the manifest sources currently painted by an integration. */
+export function useIntegrationSourceAttributions(
+  integrationId: string,
+  sourceIds: readonly string[],
+): void {
+  const registry = useIntegrationRegistry();
+  const meta = registry.get(integrationId);
+  const attributions = useMemo<Attribution[]>(() => {
+    const enabledSourceIds = new Set(sourceIds);
+    return (meta?.dataSources ?? [])
+      .filter((source) => enabledSourceIds.has(source.sourceId))
+      .map(dataSourceToAttribution);
+  }, [meta, sourceIds]);
+  useMapAttributions(`integration:${integrationId}`, attributions);
+}
+
 /**
  * Aggregate every enabled integration's manifest data sources for a given
  * domain. Use this for orchestrator-style overlays that render data sourced
