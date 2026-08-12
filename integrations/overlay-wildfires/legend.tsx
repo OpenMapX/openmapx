@@ -3,13 +3,21 @@
 import Box from "@mui/material/Box";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Switch from "@mui/material/Switch";
+import { alpha } from "@mui/material/styles";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import { useOverlayVisibilitySetter } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { useMapStore, useOverlayVisibilitySetter } from "@openmapx/core";
+import { useLocale, useTranslations } from "next-intl";
+import type { ReactNode } from "react";
 import { OverlayLegend } from "@/components/map/OverlayLegend";
-import type { WildfireSourceId, WildfireSourceStatus } from "./store";
+import {
+  EFFIS_BURNED_AREA_STYLE,
+  NIFC_PERIMETER_STYLE,
+  NOAA_SMOKE_OPACITY,
+  NOAA_SMOKE_STYLE,
+} from "./presentation";
+import type { WildfireSourceStatus } from "./store";
 import { useWildfireStore } from "./store";
 
 const DAY_RANGES = [1, 2, 3] as const;
@@ -29,264 +37,449 @@ const FRP_SIZES = [
   { label: "500+", size: 20 },
 ] as const;
 
-interface SourceSummary {
-  loading: boolean;
-  errorCount: number;
-  stale: boolean;
-  lastUpdated: number | null;
+interface SourceRowProps {
+  id: string;
+  title: string;
+  coverage: string;
+  switchLabel: string;
+  checked: boolean;
+  onChange(checked: boolean): void;
+  status: WildfireSourceStatus;
+  zoomGated?: boolean;
+  children?: ReactNode;
 }
 
-export function summarizeWildfireSources(
-  statuses: Record<WildfireSourceId, WildfireSourceStatus>,
-  enabled: readonly WildfireSourceId[],
-): SourceSummary {
-  const selected = enabled.map((id) => statuses[id]);
-  const fetched = selected
-    .map((status) => status.fetchedAt)
-    .filter((value): value is number => value !== null);
-  return {
-    loading: selected.some((status) => status.loading),
-    errorCount: selected.filter((status) => status.error !== null).length,
-    stale: selected.some((status) => status.stale),
-    lastUpdated: fetched.length > 0 ? Math.max(...fetched) : null,
-  };
+function SourceRow({
+  id,
+  title,
+  coverage,
+  switchLabel,
+  checked,
+  onChange,
+  status,
+  zoomGated = false,
+  children,
+}: SourceRowProps) {
+  return (
+    <Box
+      component="section"
+      data-testid={`wildfire-source-${id}`}
+      sx={{ borderTop: "1px solid", borderColor: "divider", pt: 0.8, mt: 0.8 }}
+    >
+      <FormControlLabel
+        labelPlacement="start"
+        label={
+          <Box>
+            <Typography component="h3" sx={{ fontSize: 11.5, fontWeight: 650, lineHeight: 1.25 }}>
+              {title}
+            </Typography>
+            <Typography sx={{ fontSize: 9.5, color: "text.secondary", lineHeight: 1.3 }}>
+              {coverage}
+            </Typography>
+          </Box>
+        }
+        control={
+          <Switch
+            size="small"
+            checked={checked}
+            onChange={(event) => onChange(event.target.checked)}
+            slotProps={{ input: { "aria-label": switchLabel } }}
+          />
+        }
+        sx={{
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 1,
+          m: 0,
+          width: "100%",
+          "& .MuiFormControlLabel-label": { flex: 1 },
+        }}
+      />
+      <SourceStatus enabled={checked} status={status} zoomGated={zoomGated} />
+      {children}
+    </Box>
+  );
+}
+
+function SourceStatus({
+  enabled,
+  status,
+  zoomGated,
+}: {
+  enabled: boolean;
+  status: WildfireSourceStatus;
+  zoomGated: boolean;
+}) {
+  const t = useTranslations("wildfires");
+  const locale = useLocale();
+  if (!enabled) return null;
+
+  if (zoomGated) {
+    return (
+      <Typography role="status" aria-live="polite" sx={{ fontSize: 10, color: "text.secondary" }}>
+        {t("zoomInToLoadPolygons")}
+      </Typography>
+    );
+  }
+
+  const formattedTime =
+    status.fetchedAt !== null && Number.isFinite(status.fetchedAt)
+      ? new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(
+          status.fetchedAt,
+        )
+      : null;
+  const hasStatus =
+    status.loading ||
+    status.error !== null ||
+    status.featureCount !== null ||
+    formattedTime !== null ||
+    status.stale ||
+    status.truncated;
+  if (!hasStatus) return null;
+
+  return (
+    <Box role="status" aria-live="polite" sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
+      {status.loading ? <StatusText>{t("loading")}</StatusText> : null}
+      {status.error !== null ? (
+        <StatusText color="error.main">{t("sourceUnavailable")}</StatusText>
+      ) : null}
+      {status.featureCount === 0 ? (
+        <StatusText>{t("noFeaturesInView")}</StatusText>
+      ) : status.featureCount !== null ? (
+        <StatusText>{t("featureCount", { count: status.featureCount })}</StatusText>
+      ) : null}
+      {status.stale ? (
+        <StatusText color="warning.main">
+          {formattedTime ? t("staleTime", { time: formattedTime }) : t("staleData")}
+        </StatusText>
+      ) : formattedTime ? (
+        <StatusText>{t("updatedTime", { time: formattedTime })}</StatusText>
+      ) : null}
+      {status.truncated ? (
+        <StatusText color="warning.main">{t("truncatedForView")}</StatusText>
+      ) : null}
+    </Box>
+  );
+}
+
+function StatusText({
+  children,
+  color = "text.secondary",
+}: {
+  children: ReactNode;
+  color?: string;
+}) {
+  return (
+    <Typography component="span" sx={{ fontSize: 10, color, lineHeight: 1.35 }}>
+      {children}
+    </Typography>
+  );
+}
+
+interface SwatchProps {
+  label: string;
+  fillColor: string;
+  fillOpacity?: number;
+  lineColor?: string;
+  dashed?: boolean;
+}
+
+function Swatch({
+  label,
+  fillColor,
+  fillOpacity = 1,
+  lineColor = fillColor,
+  dashed = false,
+}: SwatchProps) {
+  return (
+    <Box sx={{ display: "flex", alignItems: "center", gap: 0.45 }}>
+      <Box
+        component="span"
+        role="img"
+        aria-label={label}
+        data-fill-opacity={fillOpacity}
+        data-line-style={dashed ? "dashed" : "solid"}
+        sx={{
+          width: 22,
+          height: 10,
+          borderRadius: "2px",
+          bgcolor: alpha(fillColor, fillOpacity),
+          border: `1.5px ${dashed ? "dashed" : "solid"} ${lineColor}`,
+          boxSizing: "border-box",
+        }}
+      />
+      <Typography sx={{ fontSize: 9.5, color: "text.secondary", lineHeight: 1.25 }}>
+        {label}
+      </Typography>
+    </Box>
+  );
+}
+
+function Caveat({ children }: { children: ReactNode }) {
+  return (
+    <Typography sx={{ fontSize: 9.5, color: "text.secondary", lineHeight: 1.35, mt: 0.45 }}>
+      {children}
+    </Typography>
+  );
 }
 
 export function WildfireLegend() {
   const t = useTranslations("wildfires");
-  const panelOpen = useWildfireStore((s) => s.panelOpen);
-  const layerVisible = useWildfireStore((s) => s.layerVisible);
-  const dayRange = useWildfireStore((s) => s.dayRange);
-  const source = useWildfireStore((s) => s.source);
-  const showHotspots = useWildfireStore((s) => s.showHotspots);
-  const showNifcPerimeters = useWildfireStore((s) => s.showNifcPerimeters);
-  const showEffisBurnedAreas = useWildfireStore((s) => s.showEffisBurnedAreas);
-  const showNoaaSmoke = useWildfireStore((s) => s.showNoaaSmoke);
-  const showHeatmap = useWildfireStore((s) => s.showHeatmap);
-  const statuses = useWildfireStore((s) => s.statuses);
+  const zoom = useMapStore((state) => state.zoom);
+  const panelOpen = useWildfireStore((state) => state.panelOpen);
+  const layerVisible = useWildfireStore((state) => state.layerVisible);
+  const dayRange = useWildfireStore((state) => state.dayRange);
+  const source = useWildfireStore((state) => state.source);
+  const showHotspots = useWildfireStore((state) => state.showHotspots);
+  const showNifcPerimeters = useWildfireStore((state) => state.showNifcPerimeters);
+  const showEffisBurnedAreas = useWildfireStore((state) => state.showEffisBurnedAreas);
+  const showNoaaSmoke = useWildfireStore((state) => state.showNoaaSmoke);
+  const showHeatmap = useWildfireStore((state) => state.showHeatmap);
+  const statuses = useWildfireStore((state) => state.statuses);
   const setLayerVisible = useOverlayVisibilitySetter("wildfires");
-  const setDayRange = useWildfireStore((s) => s.setDayRange);
-  const setSource = useWildfireStore((s) => s.setSource);
-  const setShowHotspots = useWildfireStore((s) => s.setShowHotspots);
-  const setShowNifcPerimeters = useWildfireStore((s) => s.setShowNifcPerimeters);
-  const setShowEffisBurnedAreas = useWildfireStore((s) => s.setShowEffisBurnedAreas);
-  const setShowNoaaSmoke = useWildfireStore((s) => s.setShowNoaaSmoke);
-  const setShowHeatmap = useWildfireStore((s) => s.setShowHeatmap);
-  const enabledSources: WildfireSourceId[] = [];
-  if (showHotspots) enabledSources.push("firms");
-  if (showNifcPerimeters) enabledSources.push("nifc");
-  if (showEffisBurnedAreas) enabledSources.push("effis");
-  if (showNoaaSmoke) enabledSources.push("noaa-hms");
-  const summary = summarizeWildfireSources(statuses, enabledSources);
-
-  const sourceToggles = [
-    {
-      id: "hotspots",
-      label: t("hotspotDetections"),
-      checked: showHotspots,
-      setChecked: setShowHotspots,
-    },
-    {
-      id: "nifc",
-      label: t("nifcPerimeters"),
-      checked: showNifcPerimeters,
-      setChecked: setShowNifcPerimeters,
-    },
-    {
-      id: "effis",
-      label: t("effisBurnedAreas"),
-      checked: showEffisBurnedAreas,
-      setChecked: setShowEffisBurnedAreas,
-    },
-    {
-      id: "noaa",
-      label: t("observedSmoke"),
-      checked: showNoaaSmoke,
-      setChecked: setShowNoaaSmoke,
-    },
-  ] as const;
+  const setDayRange = useWildfireStore((state) => state.setDayRange);
+  const setSource = useWildfireStore((state) => state.setSource);
+  const setShowHotspots = useWildfireStore((state) => state.setShowHotspots);
+  const setShowNifcPerimeters = useWildfireStore((state) => state.setShowNifcPerimeters);
+  const setShowEffisBurnedAreas = useWildfireStore((state) => state.setShowEffisBurnedAreas);
+  const setShowNoaaSmoke = useWildfireStore((state) => state.setShowNoaaSmoke);
+  const setShowHeatmap = useWildfireStore((state) => state.setShowHeatmap);
+  const loading =
+    layerVisible &&
+    ((showHotspots && statuses.firms.loading) ||
+      (showNifcPerimeters && statuses.nifc.loading) ||
+      (showEffisBurnedAreas && statuses.effis.loading) ||
+      (showNoaaSmoke && statuses["noaa-hms"].loading));
 
   return (
     <OverlayLegend
       title={t("wildfires")}
       panelOpen={panelOpen}
       layerVisible={layerVisible}
-      loading={layerVisible && summary.loading}
+      loading={loading}
       setLayerVisible={setLayerVisible}
       toggleAriaLabel={t("toggleOverlay")}
-      paperSx={{ maxWidth: "calc(100vw - 24px)" }}
-      headerSx={{ mb: 0.75 }}
+      paperSx={{ maxWidth: "min(380px, calc(100vw - 24px))" }}
+      headerSx={{ mb: 0.15 }}
     >
-      <Box sx={{ display: "flex", gap: 0.25, flexWrap: "wrap", mb: showHotspots ? 0.75 : 0 }}>
-        {sourceToggles.map(({ id, label, checked, setChecked }) => (
-          <FormControlLabel
-            key={id}
-            label={<Typography sx={{ fontSize: 10.5 }}>{label}</Typography>}
-            control={
-              <Switch
-                size="small"
-                checked={checked}
-                onChange={(event) => setChecked(event.target.checked)}
-              />
-            }
-            sx={{ m: 0, mr: 1 }}
-          />
-        ))}
-      </Box>
+      <SourceRow
+        id="firms"
+        title={t("hotspotDetections")}
+        coverage={t("coverageGlobal")}
+        switchLabel={t("showHotspots")}
+        checked={showHotspots}
+        onChange={setShowHotspots}
+        status={statuses.firms}
+      >
+        <Caveat>{t("firmsHotspotCaveat")}</Caveat>
+        {showHotspots ? (
+          <Box sx={{ mt: 0.65 }}>
+            <Box sx={{ display: "flex", gap: 1.25, alignItems: "flex-end", flexWrap: "wrap" }}>
+              <Box>
+                <Typography sx={{ fontSize: 10, color: "text.secondary", mb: 0.3 }}>
+                  {t("hotspotAge")}
+                </Typography>
+                <ToggleButtonGroup
+                  value={dayRange}
+                  exclusive
+                  onChange={(_, value) => value !== null && setDayRange(value)}
+                  size="small"
+                  sx={{ height: 26 }}
+                >
+                  {DAY_RANGES.map((days) => (
+                    <ToggleButton
+                      key={days}
+                      value={days}
+                      sx={{ fontSize: 10, px: 0.9, py: 0, textTransform: "none", minWidth: 0 }}
+                    >
+                      {t("nDays", { count: days })}
+                    </ToggleButton>
+                  ))}
+                </ToggleButtonGroup>
+              </Box>
 
-      {showHotspots && (
-        <>
-          <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", flexWrap: "wrap" }}>
-            <Box>
-              <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.3 }}>
-                {t("dayRange")}
-              </Typography>
-              <ToggleButtonGroup
-                value={dayRange}
-                exclusive
-                onChange={(_, val) => val !== null && setDayRange(val)}
-                size="small"
-                sx={{ height: 26 }}
-              >
-                {DAY_RANGES.map((days) => (
+              <Box>
+                <Typography sx={{ fontSize: 10, color: "text.secondary", mb: 0.3 }}>
+                  {t("sensor")}
+                </Typography>
+                <ToggleButtonGroup
+                  value={source}
+                  exclusive
+                  onChange={(_, value) => value && setSource(value)}
+                  size="small"
+                  sx={{ height: 26 }}
+                >
                   <ToggleButton
-                    key={days}
-                    value={days}
-                    sx={{ fontSize: 10.5, px: 1, py: 0, textTransform: "none", minWidth: 0 }}
+                    value="VIIRS_SNPP_NRT"
+                    sx={{ fontSize: 10, px: 0.9, py: 0, textTransform: "none", minWidth: 0 }}
                   >
-                    {t("nDays", { count: days })}
+                    {t("viirs375m")}
                   </ToggleButton>
-                ))}
-              </ToggleButtonGroup>
-            </Box>
+                  <ToggleButton
+                    value="MODIS_NRT"
+                    sx={{ fontSize: 10, px: 0.9, py: 0, textTransform: "none", minWidth: 0 }}
+                  >
+                    {t("modis1km")}
+                  </ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
 
-            <Box>
-              <Typography sx={{ fontSize: 10.5, color: "text.secondary", mb: 0.3 }}>
-                {t("sensor")}
-              </Typography>
-              <ToggleButtonGroup
-                value={source}
-                exclusive
-                onChange={(_, val) => val && setSource(val)}
-                size="small"
-                sx={{ height: 26 }}
-              >
-                <ToggleButton
-                  value="VIIRS_SNPP_NRT"
-                  sx={{ fontSize: 10.5, px: 1, py: 0, textTransform: "none", minWidth: 0 }}
-                >
-                  VIIRS 375m
-                </ToggleButton>
-                <ToggleButton
-                  value="MODIS_NRT"
-                  sx={{ fontSize: 10.5, px: 1, py: 0, textTransform: "none", minWidth: 0 }}
-                >
-                  MODIS 1km
-                </ToggleButton>
-              </ToggleButtonGroup>
-            </Box>
-
-            <Box sx={{ display: "flex", alignItems: "center", pt: 1.5 }}>
               <FormControlLabel
-                label={<Typography sx={{ fontSize: 10.5 }}>{t("heatmap")}</Typography>}
+                label={<Typography sx={{ fontSize: 10 }}>{t("heatmap")}</Typography>}
                 control={
                   <Switch
                     size="small"
                     checked={showHeatmap}
                     onChange={(event) => setShowHeatmap(event.target.checked)}
-                    sx={{ mr: 0.5 }}
                   />
                 }
-                sx={{ m: 0 }}
+                sx={{ m: 0, height: 26 }}
               />
             </Box>
-          </Box>
-          <Box sx={{ display: "flex", gap: 2, mt: 0.75, alignItems: "flex-start" }}>
-            <Box>
-              <Typography sx={{ fontSize: 10, color: "text.secondary", mb: 0.3 }}>
-                {t("recencyScale")}
-              </Typography>
-              <Box sx={{ display: "flex", gap: 0.75 }}>
-                {RECENCY_LEGEND.map((entry) => (
-                  <Box
-                    key={entry.labelKey}
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 0.25,
-                    }}
-                  >
-                    <Box
-                      sx={{ width: 20, height: 10, borderRadius: "2px", bgcolor: entry.color }}
-                    />
-                    <Typography sx={{ fontSize: 9, lineHeight: 1.2, whiteSpace: "nowrap" }}>
-                      {t(entry.labelKey)}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
-            </Box>
 
-            <Box>
-              <Typography sx={{ fontSize: 10, color: "text.secondary", mb: 0.3 }}>
-                {t("frpSize")}
-              </Typography>
-              <Box sx={{ display: "flex", gap: 1, alignItems: "flex-end" }}>
-                {FRP_SIZES.map((entry) => (
-                  <Box
-                    key={entry.label}
-                    sx={{
-                      display: "flex",
-                      flexDirection: "column",
-                      alignItems: "center",
-                      gap: 0.25,
-                    }}
-                  >
+            <Box
+              sx={{
+                display: "flex",
+                gap: 1.5,
+                mt: 0.7,
+                alignItems: "flex-start",
+                flexWrap: "wrap",
+              }}
+            >
+              <Box>
+                <Typography sx={{ fontSize: 9.5, color: "text.secondary", mb: 0.3 }}>
+                  {t("recencyScale")}
+                </Typography>
+                <Box sx={{ display: "flex", gap: 0.55 }}>
+                  {RECENCY_LEGEND.map((entry) => (
                     <Box
+                      key={entry.labelKey}
                       sx={{
-                        width: entry.size,
-                        height: entry.size,
-                        borderRadius: "50%",
-                        bgcolor: "#ef4444",
-                        border: "1.5px solid var(--omx-overlay-bg)",
-                        boxShadow: "0 0 0 0.5px var(--omx-shadow-soft)",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 0.25,
                       }}
-                    />
-                    <Typography sx={{ fontSize: 9, lineHeight: 1.2 }}>{entry.label}</Typography>
-                  </Box>
-                ))}
+                    >
+                      <Box
+                        component="span"
+                        aria-hidden="true"
+                        sx={{ width: 19, height: 9, borderRadius: "2px", bgcolor: entry.color }}
+                      />
+                      <Typography sx={{ fontSize: 8.5, lineHeight: 1.2, whiteSpace: "nowrap" }}>
+                        {t(entry.labelKey)}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
+
+              <Box>
+                <Typography sx={{ fontSize: 9.5, color: "text.secondary", mb: 0.3 }}>
+                  {t("frpSize")}
+                </Typography>
+                <Box sx={{ display: "flex", gap: 0.9, alignItems: "flex-end" }}>
+                  {FRP_SIZES.map((entry) => (
+                    <Box
+                      key={entry.label}
+                      sx={{
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        gap: 0.25,
+                      }}
+                    >
+                      <Box
+                        component="span"
+                        aria-hidden="true"
+                        sx={{
+                          width: entry.size,
+                          height: entry.size,
+                          borderRadius: "50%",
+                          bgcolor: "#ef4444",
+                          border: "1.5px solid var(--omx-overlay-bg)",
+                          boxShadow: "0 0 0 0.5px var(--omx-shadow-soft)",
+                        }}
+                      />
+                      <Typography sx={{ fontSize: 8.5, lineHeight: 1.2 }}>{entry.label}</Typography>
+                    </Box>
+                  ))}
+                </Box>
               </Box>
             </Box>
           </Box>
-        </>
-      )}
+        ) : null}
+      </SourceRow>
 
-      <Box
-        role="status"
-        data-last-updated={summary.lastUpdated ?? undefined}
-        data-error-count={summary.errorCount}
-        sx={{ display: "grid", gap: 0.15, mt: 0.75 }}
+      <SourceRow
+        id="nifc"
+        title={t("nifcPerimeters")}
+        coverage={t("coverageUnitedStates")}
+        switchLabel={t("showReportedPerimeters")}
+        checked={showNifcPerimeters}
+        onChange={setShowNifcPerimeters}
+        status={statuses.nifc}
+        zoomGated={zoom < 3}
       >
-        {summary.errorCount > 0 && (
-          <Typography sx={{ fontSize: 10.5, color: "error.main" }}>
-            {t("sourceUnavailable", { count: summary.errorCount })}
-          </Typography>
-        )}
-        {summary.stale && (
-          <Typography sx={{ fontSize: 10.5, color: "warning.main" }}>{t("staleData")}</Typography>
-        )}
-        {summary.lastUpdated !== null && (
-          <Typography sx={{ fontSize: 10.5, color: "text.secondary" }}>
-            {t("lastUpdated", {
-              time: new Date(summary.lastUpdated).toLocaleTimeString(undefined, {
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            })}
-          </Typography>
-        )}
-      </Box>
+        <Box sx={{ mt: 0.45 }}>
+          <Swatch
+            label={t("reportedPerimeter")}
+            fillColor={NIFC_PERIMETER_STYLE.fillColor}
+            fillOpacity={NIFC_PERIMETER_STYLE.fillOpacity}
+            lineColor={NIFC_PERIMETER_STYLE.lineColor}
+          />
+        </Box>
+        <Caveat>{t("nifcCurrentPerimeterCaveat")}</Caveat>
+      </SourceRow>
+
+      <SourceRow
+        id="effis"
+        title={t("effisBurnedAreas")}
+        coverage={t("coverageEffisRegion")}
+        switchLabel={t("showSatelliteBurnedAreas")}
+        checked={showEffisBurnedAreas}
+        onChange={setShowEffisBurnedAreas}
+        status={statuses.effis}
+        zoomGated={zoom < 3}
+      >
+        <Box sx={{ mt: 0.45 }}>
+          <Swatch
+            label={t("effisSevenDayProduct")}
+            fillColor={EFFIS_BURNED_AREA_STYLE.fillColor}
+            fillOpacity={EFFIS_BURNED_AREA_STYLE.fillOpacity}
+            lineColor={EFFIS_BURNED_AREA_STYLE.lineColor}
+            dashed
+          />
+        </Box>
+        <Caveat>{t("effisBurnedAreaCaveat")}</Caveat>
+      </SourceRow>
+
+      <SourceRow
+        id="noaa-hms"
+        title={t("observedSmoke")}
+        coverage={t("coverageNorthAmerica")}
+        switchLabel={t("showObservedSmoke")}
+        checked={showNoaaSmoke}
+        onChange={setShowNoaaSmoke}
+        status={statuses["noaa-hms"]}
+      >
+        <Typography sx={{ fontSize: 9.5, color: "text.secondary", mt: 0.45, mb: 0.3 }}>
+          {t("qualitativeDensity")}
+        </Typography>
+        <Box sx={{ display: "flex", gap: 0.85, flexWrap: "wrap" }}>
+          {(["light", "medium", "heavy"] as const).map((density) => (
+            <Swatch
+              key={density}
+              label={t(density)}
+              fillColor={NOAA_SMOKE_STYLE.fillColor}
+              fillOpacity={NOAA_SMOKE_OPACITY[density]}
+              lineColor={NOAA_SMOKE_STYLE.lineColor}
+            />
+          ))}
+        </Box>
+        <Caveat>{t("noaaObservedSmokeCaveat")}</Caveat>
+        <Caveat>{t("noaaSmokeDensityCaveat")}</Caveat>
+      </SourceRow>
     </OverlayLegend>
   );
 }
