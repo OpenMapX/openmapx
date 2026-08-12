@@ -120,9 +120,9 @@ export function buildNifcUrl(bounds: NormalizedViewport): string {
 }
 
 export function normalizeNifcFeature(input: unknown): NormalizedNifcFeature | null {
-  if (!hasObjectProperties(input) || input.type !== "Feature" || !validGeometry(input.geometry)) {
-    return null;
-  }
+  if (!hasObjectProperties(input) || input.type !== "Feature") return null;
+  const geometry = input.geometry;
+  if (!validGeometry(geometry)) return null;
   const feature = input as RawNifcFeature;
   if (!hasObjectProperties(feature.properties)) return null;
   const raw = feature.properties;
@@ -153,7 +153,7 @@ export function normalizeNifcFeature(input: unknown): NormalizedNifcFeature | nu
     ...(nonEmptyString(raw.attr_FireCause) ? { cause: nonEmptyString(raw.attr_FireCause) } : {}),
   };
 
-  return { type: "Feature", id, properties, geometry: feature.geometry };
+  return { type: "Feature", id, properties, geometry };
 }
 
 async function fetchNifcCollection(

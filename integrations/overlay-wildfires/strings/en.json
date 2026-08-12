@@ -16,6 +16,11 @@
       "purpose": "Satellite-derived weekly MODIS burned-area polygons for Europe, the Middle East, and North Africa; not an authoritative fire perimeter.",
       "dataSent": "Generalized bounding-box coordinates (west, south, east, north), sent server-side; no browser IP, identity, or exact device location is forwarded.",
       "dataReceived": "GeoJSON with satellite-derived burned-area Polygon/MultiPolygon geometry, area in hectares, dates, country/region/locality, and source class; it is not an authoritative perimeter"
+    },
+    "noaa-hms": {
+      "purpose": "Observed smoke plume polygons from NOAA's Hazard Mapping System (HMS), derived from satellite imagery; density is qualitative and not a measured smoke concentration.",
+      "dataSent": "Source and time selection only, sent server-side; no browser IP, identity, or exact device location is forwarded.",
+      "dataReceived": "GeoJSON with observed smoke plume Polygon/MultiPolygon geometry and FID, satellite, start/end time, and qualitative density attributes"
     }
   }
 }

@@ -16,6 +16,11 @@
       "purpose": "Satellitenabgeleitete wöchentliche MODIS-Flächen verbrannter Gebiete für Europa, den Nahen Osten und Nordafrika; kein autoritativer Brandperimeter.",
       "dataSent": "Generalisierte Begrenzungsrahmen-Koordinaten (West, Süd, Ost, Nord) werden serverseitig übermittelt; keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben.",
       "dataReceived": "GeoJSON mit satellitenabgeleiteter Polygon-/MultiPolygon-Geometrie verbrannter Flächen, Hektarfläche, Daten, Land/Region/Ort und Quellenklasse; kein autoritativer Brandperimeter"
+    },
+    "noaa-hms": {
+      "purpose": "Beobachtete Rauchfahnenpolygone aus dem NOAA Hazard Mapping System (HMS), aus Satellitenbildern abgeleitet; die Dichte ist qualitativ und keine gemessene Rauchkonzentration.",
+      "dataSent": "Nur Quellen- und Zeitauswahl wird serverseitig übermittelt; keine Browser-IP, Identität oder exakte Gerätestandortdaten werden weitergegeben.",
+      "dataReceived": "GeoJSON mit beobachteter Rauchfahnen-Polygon-/MultiPolygon-Geometrie sowie FID-, Satelliten-, Start-/Endzeit- und qualitativen Dichteattributen"
     }
   }
 }

@@ -10,7 +10,20 @@ function source(sourceId: string): DataSource | undefined {
 }
 
 describe("wildfire source disclosures", () => {
-  it("declares the two implemented server-side perimeter and burned-area sources", () => {
+  it("declares all four sources in the shipped order with server-only exposure", () => {
+    expect(manifest.dataSources.map((candidate) => candidate.sourceId)).toEqual([
+      "firms",
+      "nifc-wfigs",
+      "effis",
+      "noaa-hms",
+    ]);
+    for (const declared of manifest.dataSources) {
+      expect(declared.endUserExposure).toBe("server-only");
+      expect(declared.providerPrivacyUrl).toBeTruthy();
+    }
+  });
+
+  it("declares the implemented server-side perimeter, burned-area, and smoke sources", () => {
     expect(source("nifc-wfigs")).toMatchObject({
       name: "NIFC WFIGS Current Interagency Fire Perimeters",
       url: "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
@@ -36,6 +49,17 @@ describe("wildfire source disclosures", () => {
       attribution:
         "EFFIS / Copernicus Emergency Management Service, © European Union, modified by OpenMapX.",
     });
+    expect(source("noaa-hms")).toMatchObject({
+      name: "NOAA Hazard Mapping System (HMS) Smoke Detection",
+      url: "https://www.ospo.noaa.gov/products/land/hms.html",
+      apiHosts: ["services2.arcgis.com"],
+      license: "CC0-1.0",
+      licenseUrl: "https://creativecommons.org/publicdomain/zero/1.0/",
+      endUserExposure: "server-only",
+      personalData: false,
+      cookies: false,
+      dpaAvailable: false,
+    });
   });
 
   it.each([
@@ -51,11 +75,17 @@ describe("wildfire source disclosures", () => {
       "no browser IP, identity, or exact device location is forwarded",
       undefined,
     ],
+    [
+      "noaa-hms",
+      "observed smoke plume",
+      "no browser IP, identity, or exact device location is forwarded",
+      undefined,
+    ],
   ])("discloses %s source limits in English and German", (sourceId, enLimit, enPrivacy, offset) => {
     const enEntry = en.dataSources[sourceId as keyof typeof en.dataSources];
     const deEntry = de.dataSources[sourceId as keyof typeof de.dataSources];
 
-    expect(enEntry.purpose).toContain(enLimit);
+    expect(enEntry.purpose).toMatch(new RegExp(enLimit, "i"));
     expect(enEntry.dataSent).toContain(enPrivacy);
     if (offset) expect(enEntry.dataSent).toContain(offset);
     expect(deEntry.purpose).toBeTruthy();
@@ -64,5 +94,17 @@ describe("wildfire source disclosures", () => {
     );
     if (offset) expect(deEntry.dataSent).toContain("zoomabhängiger Vereinfachungsversatz");
     expect(deEntry.dataReceived).toBeTruthy();
+  });
+
+  it("localizes every declared source disclosure", () => {
+    for (const declared of manifest.dataSources) {
+      const sourceId = declared.sourceId as keyof typeof en.dataSources;
+      expect(en.dataSources[sourceId]?.purpose).toBeTruthy();
+      expect(en.dataSources[sourceId]?.dataSent).toBeTruthy();
+      expect(en.dataSources[sourceId]?.dataReceived).toBeTruthy();
+      expect(de.dataSources[sourceId]?.purpose).toBeTruthy();
+      expect(de.dataSources[sourceId]?.dataSent).toBeTruthy();
+      expect(de.dataSources[sourceId]?.dataReceived).toBeTruthy();
+    }
   });
 });
