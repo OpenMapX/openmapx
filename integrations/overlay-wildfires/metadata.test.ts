@@ -24,12 +24,32 @@ describe("wildfire source disclosures", () => {
   });
 
   it("declares the implemented server-side perimeter, burned-area, and smoke sources", () => {
+    const firms = source("firms");
+    expect(firms).toMatchObject({
+      name: "NASA FIRMS",
+      url: "https://firms.modaps.eosdis.nasa.gov/",
+      license: "U.S. Public Domain",
+      licenseUrl:
+        "https://www.earthdata.nasa.gov/engage/open-data-services-software-policies/data-use-guidance",
+      commercialUse: "yes",
+      providerCountry: "US",
+      providerPrivacyUrl: "https://www.nasa.gov/privacy/",
+      endUserExposure: "server-only",
+      personalData: false,
+      cookies: false,
+      dpaAvailable: false,
+    });
+    expect(firms && new URL(firms.url).hostname).toBe("firms.modaps.eosdis.nasa.gov");
+    expect(firms?.apiHosts ?? []).toEqual([]);
+    expect(firms?.attribution).toBeUndefined();
+
     expect(source("nifc-wfigs")).toMatchObject({
       name: "NIFC WFIGS Current Interagency Fire Perimeters",
       url: "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
       apiHosts: ["services3.arcgis.com"],
       license: "U.S. Government data — NIFC disclaimer",
       licenseUrl: "https://www.arcgis.com/home/item.html?id=d1c32af3212341869b3c810f1a215824",
+      providerPrivacyUrl: "https://www.doi.gov/privacy",
       endUserExposure: "server-only",
       personalData: false,
       cookies: false,
@@ -42,6 +62,8 @@ describe("wildfire source disclosures", () => {
       url: "https://forest-fire.emergency.copernicus.eu/applications/data-and-services",
       apiHosts: ["maps.effis.emergency.copernicus.eu"],
       license: "CC-BY-4.0",
+      providerPrivacyUrl:
+        "https://commission.europa.eu/privacy-policy-websites-managed-european-commission_en",
       endUserExposure: "server-only",
       personalData: false,
       cookies: false,
