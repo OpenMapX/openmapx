@@ -100,4 +100,106 @@ describe("loadWithFreshAndStaleCache", () => {
     expect(cache.get).toHaveBeenNthCalledWith(1, "nifc:viewport:fresh");
     expect(cache.get).toHaveBeenNthCalledWith(2, "nifc:viewport:stale");
   });
+
+  it("shares one loader invocation across concurrent fresh misses for the same key", async () => {
+    const { ctx } = createContext();
+    let resolveLoad: (value: { version: "fresh" }) => void;
+    const load = vi.fn(
+      () =>
+        new Promise<{ version: "fresh" }>((resolve) => {
+          resolveLoad = resolve;
+        }),
+    );
+    const options = {
+      key: "nifc:viewport",
+      freshTtlSeconds: 300,
+      staleTtlSeconds: 86_400,
+      load,
+    };
+
+    const first = loadWithFreshAndStaleCache(ctx, options);
+    const second = loadWithFreshAndStaleCache(ctx, options);
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(load).toHaveBeenCalledTimes(1);
+    if (!resolveLoad) throw new Error("loader did not start");
+    resolveLoad({ version: "fresh" });
+    await expect(Promise.all([first, second])).resolves.toEqual([
+      { value: { version: "fresh" }, fetchedAt: NOW, stale: false },
+      { value: { version: "fresh" }, fetchedAt: NOW, stale: false },
+    ]);
+  });
+
+  it("loads concurrent fresh misses for different keys independently", async () => {
+    const { ctx } = createContext();
+    const firstLoad = vi.fn(async () => ({ source: "nifc" }));
+    const secondLoad = vi.fn(async () => ({ source: "firms" }));
+
+    const [first, second] = await Promise.all([
+      loadWithFreshAndStaleCache(ctx, {
+        key: "nifc:viewport",
+        freshTtlSeconds: 300,
+        staleTtlSeconds: 86_400,
+        load: firstLoad,
+      }),
+      loadWithFreshAndStaleCache(ctx, {
+        key: "firms:world",
+        freshTtlSeconds: 300,
+        staleTtlSeconds: 86_400,
+        load: secondLoad,
+      }),
+    ]);
+
+    expect(first).toMatchObject({ value: { source: "nifc" }, stale: false });
+    expect(second).toMatchObject({ value: { source: "firms" }, stale: false });
+    expect(firstLoad).toHaveBeenCalledTimes(1);
+    expect(secondLoad).toHaveBeenCalledTimes(1);
+  });
+
+  it("removes a failed shared load so a later request retries", async () => {
+    const { ctx } = createContext();
+    const error = new Error("upstream unavailable");
+    const load = vi
+      .fn<() => Promise<{ version: string }>>()
+      .mockRejectedValueOnce(error)
+      .mockResolvedValueOnce({ version: "retried" });
+    const options = {
+      key: "nifc:viewport",
+      freshTtlSeconds: 300,
+      staleTtlSeconds: 86_400,
+      load,
+    };
+
+    const first = loadWithFreshAndStaleCache(ctx, options);
+    const second = loadWithFreshAndStaleCache(ctx, options);
+
+    await expect(Promise.all([first, second])).rejects.toBe(error);
+    expect(load).toHaveBeenCalledTimes(1);
+    await expect(loadWithFreshAndStaleCache(ctx, options)).resolves.toMatchObject({
+      value: { version: "retried" },
+      stale: false,
+    });
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it("returns fresh data when cache writes fail", async () => {
+    const stale = { value: { version: "stale" }, fetchedAt: "2026-08-12T10:00:00.000Z" };
+    const cache = {
+      get: vi.fn(async <T>(key: string) => (key === "nifc:viewport:stale" ? (stale as T) : null)),
+      set: vi.fn(async () => {
+        throw new Error("cache unavailable");
+      }),
+    };
+    const ctx = { cache } as unknown as IntegrationContext;
+
+    await expect(
+      loadWithFreshAndStaleCache(ctx, {
+        key: "nifc:viewport",
+        freshTtlSeconds: 300,
+        staleTtlSeconds: 86_400,
+        load: async () => ({ version: "fresh" }),
+      }),
+    ).resolves.toEqual({ value: { version: "fresh" }, fetchedAt: NOW, stale: false });
+  });
 });
