@@ -50,14 +50,14 @@ export function PlaceLocalTime({ lat, lng }: Props) {
   if (diff === null || diff === 0 || !clock || !label) return null;
 
   return (
-    <Box
-      aria-label={t("localTime")}
-      sx={{ display: "flex", alignItems: "baseline", gap: 1, py: 0.5 }}
-    >
-      <Typography sx={{ fontWeight: 600, fontSize: 16 }}>{clock}</Typography>
-      <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
-        {label} · {formatLead(t, diff)}
-      </Typography>
+    <Box sx={{ py: 0.5 }}>
+      <Typography sx={{ fontSize: 12, color: "text.secondary" }}>{t("localTime")}</Typography>
+      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
+        <Typography sx={{ fontWeight: 600, fontSize: 16 }}>{clock}</Typography>
+        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+          {label} · {formatLead(t, diff)}
+        </Typography>
+      </Box>
     </Box>
   );
 }
