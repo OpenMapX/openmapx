@@ -4,6 +4,7 @@ import { layerRegistrations } from "@/components/map/layers/layerStack";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import type { WildfirePopupController } from "../popup-controller";
+import { NOAA_SMOKE_DENSITY_STYLE } from "../presentation";
 import { useWildfireStore } from "../store";
 
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
@@ -233,23 +234,23 @@ describe("NoaaSmokeLayer", () => {
       "match",
       ["get", "density"],
       "light",
-      0.08,
+      NOAA_SMOKE_DENSITY_STYLE.light.fillOpacity,
       "medium",
-      0.15,
+      NOAA_SMOKE_DENSITY_STYLE.medium.fillOpacity,
       "heavy",
-      0.24,
-      0.08,
+      NOAA_SMOKE_DENSITY_STYLE.heavy.fillOpacity,
+      NOAA_SMOKE_DENSITY_STYLE.light.fillOpacity,
     ]);
     expect(fake.state.paint.get(NOAA_SMOKE_FILL)?.["fill-color"]).toEqual([
       "match",
       ["get", "density"],
       "light",
-      "#cbd5e1",
+      NOAA_SMOKE_DENSITY_STYLE.light.fillColor,
       "medium",
-      "#94a3b8",
+      NOAA_SMOKE_DENSITY_STYLE.medium.fillColor,
       "heavy",
-      "#64748b",
-      "#94a3b8",
+      NOAA_SMOKE_DENSITY_STYLE.heavy.fillColor,
+      NOAA_SMOKE_DENSITY_STYLE.medium.fillColor,
     ]);
     expect(fake.state.layers.get(NOAA_SMOKE_FILL)?.type).toBe("fill");
     expect(fake.state.layers.get(NOAA_SMOKE_LINE)?.type).toBe("line");
@@ -319,6 +320,7 @@ describe("NoaaSmokeLayer", () => {
     expect(useWildfireStore.getState().statuses["noaa-hms"]).toMatchObject({
       loading: false,
       error: "unavailable",
+      fetchedAt: Date.parse(first.fetchedAt),
       featureCount: 1,
     });
   });

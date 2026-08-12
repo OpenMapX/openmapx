@@ -71,6 +71,20 @@ describe("WildfireLegend source controls", () => {
     const hotspots = within(screen.getByTestId("wildfire-source-firms"));
     expect(hotspots.getByText("wildfires.hotspotAge")).toBeTruthy();
     expect(hotspots.getByText("wildfires.sensor")).toBeTruthy();
+    const ageGroup = hotspots.getByRole("group", { name: "wildfires.hotspotAge" });
+    const ageButtons = within(ageGroup).getAllByRole("button", { name: "wildfires.nDays" });
+    expect(ageButtons).toHaveLength(3);
+    expect(ageButtons[0]).toHaveAttribute("aria-pressed", "true");
+    expect(ageButtons[1]).toHaveAttribute("aria-pressed", "false");
+    expect(ageButtons[2]).toHaveAttribute("aria-pressed", "false");
+    const sensorGroup = hotspots.getByRole("group", { name: "wildfires.sensor" });
+    expect(
+      within(sensorGroup).getByRole("button", { name: "wildfires.viirs375m" }),
+    ).toHaveAttribute("aria-pressed", "true");
+    expect(within(sensorGroup).getByRole("button", { name: "wildfires.modis1km" })).toHaveAttribute(
+      "aria-pressed",
+      "false",
+    );
     expect(hotspots.getByRole("switch", { name: "wildfires.heatmap" })).toBeTruthy();
     expect(hotspots.getByText("wildfires.recencyScale")).toBeTruthy();
     expect(hotspots.getByText("wildfires.frpSize")).toBeTruthy();
@@ -184,6 +198,87 @@ describe("WildfireLegend source semantics and status", () => {
     ).toBeNull();
   });
 
+  it("shows stale data without inventing a fetched time", () => {
+    useWildfireStore.getState().setSourceStatus("effis", { stale: true, featureCount: 3 });
+    render(<WildfireLegend />);
+
+    const effis = within(screen.getByTestId("wildfire-source-effis"));
+    expect(effis.getByText("wildfires.staleData")).toBeTruthy();
+    expect(effis.queryByText("wildfires.staleTime")).toBeNull();
+    expect(effis.getByText("wildfires.featureCount")).toBeTruthy();
+  });
+
+  it("retains count and fetched time when a refresh fails", () => {
+    useWildfireStore.getState().setSourceStatus("nifc", {
+      fetchedAt: Date.UTC(2026, 7, 12, 12),
+      featureCount: 7,
+    });
+    useWildfireStore.getState().setSourceStatus("nifc", { error: "unavailable" });
+    render(<WildfireLegend />);
+
+    const nifc = within(screen.getByTestId("wildfire-source-nifc"));
+    expect(nifc.getByText("wildfires.sourceUnavailable")).toBeTruthy();
+    expect(nifc.getByText("wildfires.featureCount")).toBeTruthy();
+    expect(nifc.getByText("wildfires.updatedTime")).toBeTruthy();
+  });
+
+  it("hides source status while that source row is disabled", () => {
+    useWildfireStore.setState({ showEffisBurnedAreas: false });
+    useWildfireStore.getState().setSourceStatus("effis", {
+      loading: true,
+      error: "unavailable",
+      stale: true,
+      truncated: true,
+      featureCount: 2,
+    });
+    render(<WildfireLegend />);
+
+    const effis = within(screen.getByTestId("wildfire-source-effis"));
+    expect(effis.queryByRole("status")).toBeNull();
+    for (const key of [
+      "loading",
+      "sourceUnavailable",
+      "staleData",
+      "truncatedForView",
+      "featureCount",
+    ]) {
+      expect(effis.queryByText(`wildfires.${key}`)).toBeNull();
+    }
+  });
+
+  it("ignores an invalid fetched timestamp without losing the retained count", () => {
+    useWildfireStore.getState().setSourceStatus("nifc", {
+      fetchedAt: Number.MAX_VALUE,
+      featureCount: 5,
+    });
+
+    expect(() => render(<WildfireLegend />)).not.toThrow();
+    const nifc = within(screen.getByTestId("wildfire-source-nifc"));
+    expect(nifc.getByText("wildfires.featureCount")).toBeTruthy();
+    expect(nifc.queryByText("wildfires.updatedTime")).toBeNull();
+  });
+
+  it("keeps fetched times source-local without an aggregate timestamp", () => {
+    useWildfireStore.getState().setSourceStatus("firms", {
+      fetchedAt: Date.UTC(2026, 7, 12, 11),
+      featureCount: 2,
+    });
+    useWildfireStore.getState().setSourceStatus("nifc", {
+      fetchedAt: Date.UTC(2026, 7, 12, 12),
+      featureCount: 3,
+    });
+    render(<WildfireLegend />);
+
+    expect(
+      within(screen.getByTestId("wildfire-source-firms")).getByText("wildfires.updatedTime"),
+    ).toBeTruthy();
+    expect(
+      within(screen.getByTestId("wildfire-source-nifc")).getByText("wildfires.updatedTime"),
+    ).toBeTruthy();
+    expect(document.querySelector("[data-last-updated]")).toBeNull();
+    expect(screen.queryByText("wildfires.lastUpdated")).toBeNull();
+  });
+
   it("describes EFFIS as seven-day satellite burned area and NOAA density qualitatively", () => {
     useWildfireStore.setState({ showNoaaSmoke: true });
     render(<WildfireLegend />);
@@ -216,15 +311,14 @@ describe("WildfireLegend source semantics and status", () => {
     ).toHaveAttribute("data-line-style", "dashed");
 
     const noaa = within(screen.getByTestId("wildfire-source-noaa-hms"));
-    for (const [density, opacity] of [
-      ["light", "0.08"],
-      ["medium", "0.15"],
-      ["heavy", "0.24"],
+    for (const [density, color, opacity] of [
+      ["light", "#cbd5e1", "0.08"],
+      ["medium", "#94a3b8", "0.15"],
+      ["heavy", "#64748b", "0.24"],
     ] as const) {
-      expect(noaa.getByRole("img", { name: `wildfires.${density}` })).toHaveAttribute(
-        "data-fill-opacity",
-        opacity,
-      );
+      const swatch = noaa.getByRole("img", { name: `wildfires.${density}` });
+      expect(swatch).toHaveAttribute("data-fill-color", color);
+      expect(swatch).toHaveAttribute("data-fill-opacity", opacity);
     }
   });
 

@@ -3,10 +3,10 @@ import type { EffisProperties, NifcProperties, NoaaSmokeProperties } from "./typ
 
 const ACRES_TO_HECTARES = 0.40468564224;
 
-export const NOAA_SMOKE_OPACITY = {
-  light: 0.08,
-  medium: 0.15,
-  heavy: 0.24,
+export const NOAA_SMOKE_DENSITY_STYLE = {
+  light: { fillColor: "#cbd5e1", fillOpacity: 0.08 },
+  medium: { fillColor: "#94a3b8", fillOpacity: 0.15 },
+  heavy: { fillColor: "#64748b", fillOpacity: 0.24 },
 } as const;
 
 export const NIFC_PERIMETER_STYLE = {
@@ -25,7 +25,6 @@ export const EFFIS_BURNED_AREA_STYLE = {
 } as const;
 
 export const NOAA_SMOKE_STYLE = {
-  fillColor: "#94a3b8",
   lineColor: "#64748b",
   lineOpacity: 0.35,
   lineWidth: 0.75,

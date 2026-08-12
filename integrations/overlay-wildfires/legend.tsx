@@ -14,7 +14,7 @@ import { OverlayLegend } from "@/components/map/OverlayLegend";
 import {
   EFFIS_BURNED_AREA_STYLE,
   NIFC_PERIMETER_STYLE,
-  NOAA_SMOKE_OPACITY,
+  NOAA_SMOKE_DENSITY_STYLE,
   NOAA_SMOKE_STYLE,
 } from "./presentation";
 import type { WildfireSourceStatus } from "./store";
@@ -122,10 +122,11 @@ function SourceStatus({
     );
   }
 
+  const fetchedAt = status.fetchedAt === null ? null : new Date(status.fetchedAt);
   const formattedTime =
-    status.fetchedAt !== null && Number.isFinite(status.fetchedAt)
+    fetchedAt !== null && Number.isFinite(fetchedAt.getTime())
       ? new Intl.DateTimeFormat(locale, { dateStyle: "short", timeStyle: "short" }).format(
-          status.fetchedAt,
+          fetchedAt,
         )
       : null;
   const hasStatus =
@@ -197,6 +198,7 @@ function Swatch({
         component="span"
         role="img"
         aria-label={label}
+        data-fill-color={fillColor}
         data-fill-opacity={fillOpacity}
         data-line-style={dashed ? "dashed" : "solid"}
         sx={{
@@ -280,6 +282,7 @@ export function WildfireLegend() {
                   {t("hotspotAge")}
                 </Typography>
                 <ToggleButtonGroup
+                  aria-label={t("hotspotAge")}
                   value={dayRange}
                   exclusive
                   onChange={(_, value) => value !== null && setDayRange(value)}
@@ -303,6 +306,7 @@ export function WildfireLegend() {
                   {t("sensor")}
                 </Typography>
                 <ToggleButtonGroup
+                  aria-label={t("sensor")}
                   value={source}
                   exclusive
                   onChange={(_, value) => value && setSource(value)}
@@ -471,8 +475,8 @@ export function WildfireLegend() {
             <Swatch
               key={density}
               label={t(density)}
-              fillColor={NOAA_SMOKE_STYLE.fillColor}
-              fillOpacity={NOAA_SMOKE_OPACITY[density]}
+              fillColor={NOAA_SMOKE_DENSITY_STYLE[density].fillColor}
+              fillOpacity={NOAA_SMOKE_DENSITY_STYLE[density].fillOpacity}
               lineColor={NOAA_SMOKE_STYLE.lineColor}
             />
           ))}

@@ -9,7 +9,7 @@ import {
   EFFIS_BURNED_AREA_STYLE,
   formatWildfireDate,
   NIFC_PERIMETER_STYLE,
-  NOAA_SMOKE_OPACITY,
+  NOAA_SMOKE_DENSITY_STYLE,
   renderWildfirePopupModel,
   type WildfirePopupValue,
 } from "./presentation.js";
@@ -203,8 +203,12 @@ describe("wildfire presentation", () => {
     );
   });
 
-  it("maps NOAA smoke density to the specified restrained opacity", () => {
-    expect(NOAA_SMOKE_OPACITY).toEqual({ light: 0.08, medium: 0.15, heavy: 0.24 });
+  it("maps NOAA smoke density to the specified colors and restrained opacity", () => {
+    expect(NOAA_SMOKE_DENSITY_STYLE).toEqual({
+      light: { fillColor: "#cbd5e1", fillOpacity: 0.08 },
+      medium: { fillColor: "#94a3b8", fillOpacity: 0.15 },
+      heavy: { fillColor: "#64748b", fillOpacity: 0.24 },
+    });
   });
 
   it("keeps operational NIFC and satellite-derived EFFIS polygons visually distinct", () => {

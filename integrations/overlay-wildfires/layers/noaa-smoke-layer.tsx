@@ -12,7 +12,7 @@ import { useMap } from "@/lib/MapContext";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
 import {
   buildNoaaSmokePopupModel,
-  NOAA_SMOKE_OPACITY,
+  NOAA_SMOKE_DENSITY_STYLE,
   NOAA_SMOKE_STYLE,
   renderWildfirePopupModel,
   type WildfirePopupTranslate,
@@ -127,24 +127,24 @@ const FILL_OPACITY: maplibregl.ExpressionSpecification = [
   "match",
   ["get", "density"],
   "light",
-  NOAA_SMOKE_OPACITY.light,
+  NOAA_SMOKE_DENSITY_STYLE.light.fillOpacity,
   "medium",
-  NOAA_SMOKE_OPACITY.medium,
+  NOAA_SMOKE_DENSITY_STYLE.medium.fillOpacity,
   "heavy",
-  NOAA_SMOKE_OPACITY.heavy,
-  NOAA_SMOKE_OPACITY.light,
+  NOAA_SMOKE_DENSITY_STYLE.heavy.fillOpacity,
+  NOAA_SMOKE_DENSITY_STYLE.light.fillOpacity,
 ];
 
 const FILL_COLOR: maplibregl.ExpressionSpecification = [
   "match",
   ["get", "density"],
   "light",
-  "#cbd5e1",
+  NOAA_SMOKE_DENSITY_STYLE.light.fillColor,
   "medium",
-  NOAA_SMOKE_STYLE.fillColor,
+  NOAA_SMOKE_DENSITY_STYLE.medium.fillColor,
   "heavy",
-  "#64748b",
-  NOAA_SMOKE_STYLE.fillColor,
+  NOAA_SMOKE_DENSITY_STYLE.heavy.fillColor,
+  NOAA_SMOKE_DENSITY_STYLE.medium.fillColor,
 ];
 
 export interface NoaaSmokeLayerProps {
