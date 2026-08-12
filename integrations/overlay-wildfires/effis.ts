@@ -1,6 +1,12 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { dedupeByFeatureId, splitAntimeridian } from "./bounds.js";
-import type { EffisProperties, NormalizedViewport, WildfireProviderData } from "./types.js";
+import {
+  type EffisProperties,
+  type NormalizedViewport,
+  type WildfireProviderData,
+  WildfireSourceError,
+  type WildfireSourceErrorOptions,
+} from "./types.js";
 
 const EFFIS_WFS_URL = "https://maps.effis.emergency.copernicus.eu/effis";
 const FETCH_TIMEOUT_MS = 30_000;
@@ -16,9 +22,9 @@ type RawEffisFeature = {
 };
 type NormalizedEffisFeature = GeoJSON.Feature<EffisGeometry, EffisProperties>;
 
-export class EffisSourceError extends Error {
-  constructor(message: string) {
-    super(message);
+export class EffisSourceError extends WildfireSourceError {
+  constructor(message: string, options: Omit<WildfireSourceErrorOptions, "provider">) {
+    super(message, { provider: "effis", ...options });
     this.name = "EffisSourceError";
   }
 }
@@ -169,38 +175,56 @@ async function fetchEffisCollection(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(buildEffisUrl(bounds), {
-      headers: { Accept: "application/geo+json, application/json" },
-      signal: controller.signal,
-    });
+    let response: Response;
+    try {
+      response = await fetch(buildEffisUrl(bounds), {
+        headers: { Accept: "application/geo+json, application/json" },
+        signal: controller.signal,
+      });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new EffisSourceError("EFFIS request aborted", { kind: "timeout", cause: error });
+      }
+      throw new EffisSourceError("EFFIS request failed", { kind: "network", cause: error });
+    }
     if (!response.ok) {
       ctx.log.warn(`EFFIS API returned ${response.status}`);
-      throw new EffisSourceError(`EFFIS API returned ${response.status}`);
+      throw new EffisSourceError(`EFFIS API returned ${response.status}`, {
+        kind: "upstream-status",
+        upstreamStatus: response.status,
+      });
     }
 
-    const body = await response.text();
+    let body: string;
+    try {
+      body = await response.text();
+    } catch (error) {
+      throw new EffisSourceError("Invalid EFFIS upstream response", {
+        kind: "upstream-payload",
+        cause: error,
+      });
+    }
     if (isXmlException(body, response.headers.get("content-type"))) {
-      throw new EffisSourceError("Invalid EFFIS upstream response");
+      throw new EffisSourceError("Invalid EFFIS upstream response", { kind: "upstream-payload" });
     }
 
     let payload: unknown;
     try {
       payload = JSON.parse(body);
-    } catch {
-      throw new EffisSourceError("Invalid EFFIS upstream response");
+    } catch (error) {
+      throw new EffisSourceError("Invalid EFFIS upstream response", {
+        kind: "upstream-payload",
+        cause: error,
+      });
     }
     if (
       !isObject(payload) ||
       payload.type !== "FeatureCollection" ||
       !Array.isArray(payload.features)
     ) {
-      throw new EffisSourceError("Invalid EFFIS upstream response");
+      throw new EffisSourceError("Invalid EFFIS upstream response", { kind: "upstream-payload" });
     }
     return payload as unknown as GeoJSON.FeatureCollection;
-  } catch (error) {
-    if (error instanceof EffisSourceError) throw error;
-    if (controller.signal.aborted) throw new EffisSourceError("EFFIS request aborted");
-    throw new EffisSourceError("EFFIS request failed");
   } finally {
     clearTimeout(timer);
   }

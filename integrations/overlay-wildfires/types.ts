@@ -1,5 +1,34 @@
 export type WildfireProvider = "nifc" | "effis" | "noaa-hms";
 
+export type WildfireSourceFailureKind =
+  | "upstream-status"
+  | "upstream-payload"
+  | "network"
+  | "timeout"
+  | "feature-cap";
+
+export interface WildfireSourceErrorOptions {
+  provider: WildfireProvider;
+  kind: WildfireSourceFailureKind;
+  upstreamStatus?: number;
+  cause?: unknown;
+}
+
+/** A known provider failure that public routes may safely translate to a 503. */
+export class WildfireSourceError extends Error {
+  readonly provider: WildfireProvider;
+  readonly kind: WildfireSourceFailureKind;
+  readonly upstreamStatus?: number;
+
+  constructor(message: string, options: WildfireSourceErrorOptions) {
+    super(message, options.cause === undefined ? undefined : { cause: options.cause });
+    this.name = "WildfireSourceError";
+    this.provider = options.provider;
+    this.kind = options.kind;
+    this.upstreamStatus = options.upstreamStatus;
+  }
+}
+
 export interface NormalizedViewport {
   west: number;
   south: number;

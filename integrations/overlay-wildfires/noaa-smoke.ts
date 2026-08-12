@@ -1,5 +1,9 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import type { NoaaSmokeProperties, WildfireProviderData } from "./types.js";
+import {
+  type NoaaSmokeProperties,
+  type WildfireProviderData,
+  WildfireSourceError,
+} from "./types.js";
 
 const NOAA_HMS_QUERY_URL =
   "https://services2.arcgis.com/C8EMgrsFcRFL6LrL/arcgis/rest/services/NOAA_Satellite_Smoke_Detection_%28v1%29/FeatureServer/0/query";
@@ -161,33 +165,62 @@ async function fetchNoaaSmokePage(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(buildNoaaSmokeUrl(offset), { signal: controller.signal });
+    let response: Response;
+    try {
+      response = await fetch(buildNoaaSmokeUrl(offset), { signal: controller.signal });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new WildfireSourceError("NOAA request aborted", {
+          provider: "noaa-hms",
+          kind: "timeout",
+          cause: error,
+        });
+      }
+      throw new WildfireSourceError("NOAA request failed", {
+        provider: "noaa-hms",
+        kind: "network",
+        cause: error,
+      });
+    }
     if (!response.ok) {
       ctx.log.warn(`NOAA API returned ${response.status}`);
-      throw new Error(`NOAA API returned ${response.status}`);
+      throw new WildfireSourceError(`NOAA API returned ${response.status}`, {
+        provider: "noaa-hms",
+        kind: "upstream-status",
+        upstreamStatus: response.status,
+      });
     }
     let payload: unknown;
     try {
       payload = await response.json();
-    } catch {
-      throw new Error("Invalid NOAA JSON response");
+    } catch (error) {
+      throw new WildfireSourceError("Invalid NOAA JSON response", {
+        provider: "noaa-hms",
+        kind: "upstream-payload",
+        cause: error,
+      });
     }
-    if (isObject(payload) && "error" in payload) throw new Error("NOAA ArcGIS error response");
+    if (isObject(payload) && "error" in payload) {
+      throw new WildfireSourceError("NOAA ArcGIS error response", {
+        provider: "noaa-hms",
+        kind: "upstream-payload",
+      });
+    }
     if (
       !isObject(payload) ||
       payload.type !== "FeatureCollection" ||
       !Array.isArray(payload.features)
     ) {
-      throw new Error("Invalid NOAA FeatureCollection");
+      throw new WildfireSourceError("Invalid NOAA FeatureCollection", {
+        provider: "noaa-hms",
+        kind: "upstream-payload",
+      });
     }
     return {
       features: payload.features,
       exceededTransferLimit:
         isObject(payload.properties) && payload.properties.exceededTransferLimit === true,
     };
-  } catch (error) {
-    if (controller.signal.aborted) throw new Error("NOAA request aborted");
-    throw error;
   } finally {
     clearTimeout(timer);
   }
@@ -211,5 +244,8 @@ export async function loadNoaaSmoke(ctx: IntegrationContext): Promise<WildfirePr
       };
     }
   }
-  throw new Error(`NOAA response exceeded ${MAX_FEATURES.toLocaleString("en-US")} feature cap`);
+  throw new WildfireSourceError(
+    `NOAA response exceeded ${MAX_FEATURES.toLocaleString("en-US")} feature cap`,
+    { provider: "noaa-hms", kind: "feature-cap" },
+  );
 }

@@ -7,6 +7,7 @@ import {
   normalizeSmokeDensity,
   parseHmsUtc,
 } from "./noaa-smoke.js";
+import { WildfireSourceError } from "./types.js";
 
 const POLYGON = {
   type: "Polygon" as const,
@@ -289,5 +290,18 @@ describe("loadNoaaSmoke", () => {
       vi.fn(async () => new Response(JSON.stringify({ type: "FeatureCollection" }))),
     );
     await expect(loadNoaaSmoke(createContext())).rejects.toThrow("Invalid NOAA FeatureCollection");
+  });
+
+  it("classifies HTTP-200 ArcGIS error payloads as typed NOAA source failures", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: { code: 400 } }))),
+    );
+
+    await expect(loadNoaaSmoke(createContext())).rejects.toBeInstanceOf(WildfireSourceError);
+    await expect(loadNoaaSmoke(createContext())).rejects.toMatchObject({
+      provider: "noaa-hms",
+      kind: "upstream-payload",
+    });
   });
 });

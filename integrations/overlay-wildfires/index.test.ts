@@ -216,6 +216,21 @@ function routeHandler(ctx: ReturnType<typeof createMockIntegrationContext>, path
   return registration.handler;
 }
 
+function recordingCache() {
+  const writes: Array<{ key: string; ttl: number }> = [];
+  return {
+    cache: {
+      get: async () => null,
+      set: async (key: string, _value: unknown, ttl: number) => {
+        writes.push({ key, ttl });
+      },
+      del: async () => undefined,
+      withCache: async <_T>(_key: string, _ttl: number, load: () => Promise<_T>) => load(),
+    },
+    writes,
+  };
+}
+
 describe("wildfire source routes", () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -313,6 +328,70 @@ describe("wildfire source routes", () => {
     );
   });
 
+  it.each([
+    {
+      path: "/perimeters/nifc",
+      payload: validNifcCollection(),
+      query: VALID_VIEWPORT,
+      cacheKey: "wildfires:nifc:-123.1:36.9:-121.9:38.1:offset:0.001",
+      freshTtl: 300,
+      staleTtl: 86_400,
+    },
+    {
+      path: "/burned-areas/effis",
+      payload: validEffisCollection(),
+      query: VALID_VIEWPORT,
+      cacheKey: "wildfires:effis:-123.1:36.9:-121.9:38.1",
+      freshTtl: 1_800,
+      staleTtl: 172_800,
+    },
+    {
+      path: "/smoke/noaa",
+      payload: { type: "FeatureCollection", features: [] },
+      query: {},
+      cacheKey: "wildfires:noaa-hms",
+      freshTtl: 600,
+      staleTtl: 86_400,
+    },
+  ])(
+    "uses the exact cache key and TTLs for $path",
+    async ({ path, payload, query, cacheKey, freshTtl, staleTtl }) => {
+      fetchMock.mockResolvedValueOnce(response(200, payload));
+      const recorder = recordingCache();
+      const ctx = createMockIntegrationContext({ cache: recorder.cache });
+      setup(ctx);
+      const result = replyFake();
+
+      await routeHandler(ctx, path)(
+        { query, params: {}, body: undefined, headers: {} },
+        result.reply,
+      );
+
+      expect(recorder.writes).toEqual([
+        { key: `${cacheKey}:fresh`, ttl: freshTtl },
+        { key: `${cacheKey}:stale`, ttl: staleTtl },
+      ]);
+    },
+  );
+
+  it("returns a fresh NOAA envelope with its 600-second cache policy", async () => {
+    fetchMock.mockResolvedValueOnce(response(200, { type: "FeatureCollection", features: [] }));
+    const ctx = createMockIntegrationContext();
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/smoke/noaa")(
+      { query: {}, params: {}, body: undefined, headers: {} },
+      result.reply,
+    );
+
+    expect(result.result()).toMatchObject({
+      statusCode: 200,
+      body: { source: "noaa-hms", stale: false },
+    });
+    expect(result.result().headers.get("Cache-Control")).toBe("public, max-age=600, s-maxage=600");
+  });
+
   it("serves stale NIFC data with its original fetched time", async () => {
     fetchMock.mockRejectedValueOnce(new Error("NIFC API returned 502"));
     const ctx = createMockIntegrationContext({
@@ -349,6 +428,42 @@ describe("wildfire source routes", () => {
     expect(result.result().headers.get("Cache-Control")).toBe("public, max-age=300, s-maxage=300");
   });
 
+  it("serves stale NOAA data with its fresh cache policy", async () => {
+    fetchMock.mockRejectedValueOnce(new Error("upstream connection closed"));
+    const ctx = createMockIntegrationContext({
+      cache: {
+        get: async (key) =>
+          key.endsWith(":stale")
+            ? {
+                value: {
+                  type: "FeatureCollection",
+                  features: [],
+                  source: "noaa-hms",
+                  truncated: false,
+                },
+                fetchedAt: "2026-08-12T11:00:00.000Z",
+              }
+            : null,
+        set: async () => undefined,
+        del: async () => undefined,
+        withCache: async <_T>(_key, _ttl, load) => load(),
+      },
+    });
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/smoke/noaa")(
+      { query: {}, params: {}, body: undefined, headers: {} },
+      result.reply,
+    );
+
+    expect(result.result()).toMatchObject({
+      statusCode: 200,
+      body: { fetchedAt: "2026-08-12T11:00:00.000Z", stale: true },
+    });
+    expect(result.result().headers.get("Cache-Control")).toBe("public, max-age=600, s-maxage=600");
+  });
+
   it.each([
     ["/perimeters/nifc", "nifc_unavailable"],
     ["/burned-areas/effis", "effis_unavailable"],
@@ -373,8 +488,52 @@ describe("wildfire source routes", () => {
     expect(result.result().headers.get("Cache-Control")).toBe("no-store");
   });
 
+  it("maps an HTTP-200 NOAA ArcGIS error payload to a no-store source failure", async () => {
+    fetchMock.mockResolvedValueOnce(response(200, { error: { code: 400 } }));
+    const ctx = createMockIntegrationContext();
+    setup(ctx);
+    const result = replyFake();
+
+    await routeHandler(ctx, "/smoke/noaa")(
+      { query: {}, params: {}, body: undefined, headers: {} },
+      result.reply,
+    );
+
+    expect(result.result()).toMatchObject({
+      statusCode: 503,
+      body: { code: "noaa_hms_unavailable" },
+    });
+    expect(result.result().headers.get("Cache-Control")).toBe("no-store");
+  });
+
+  it("rethrows a programmer error that only resembles an NOAA source failure", async () => {
+    const payload = {
+      type: "FeatureCollection",
+      get features(): never {
+        throw new Error("NOAA API returned 503 while formatting a response");
+      },
+    };
+    fetchMock.mockResolvedValueOnce(response(200, payload));
+    const ctx = createMockIntegrationContext();
+    setup(ctx);
+    const result = replyFake();
+
+    await expect(
+      routeHandler(ctx, "/smoke/noaa")(
+        { query: {}, params: {}, body: undefined, headers: {} },
+        result.reply,
+      ),
+    ).rejects.toThrow("NOAA API returned 503 while formatting a response");
+  });
+
   it("rethrows an unexpected NIFC error for monitoring", async () => {
-    fetchMock.mockRejectedValueOnce(new Error("programmer failure"));
+    const payload = {
+      type: "FeatureCollection",
+      get features(): never {
+        throw new Error("programmer failure");
+      },
+    };
+    fetchMock.mockResolvedValueOnce(response(200, payload));
     const ctx = createMockIntegrationContext();
     setup(ctx);
     const result = replyFake();

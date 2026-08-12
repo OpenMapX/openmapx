@@ -1,11 +1,16 @@
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 import { nifcOffsetForZoom, normalizeViewport } from "./bounds.js";
-import { EffisSourceError, loadEffis } from "./effis.js";
+import { loadEffis } from "./effis.js";
 import { type FirmsDayRange, type FirmsSource, loadFirms } from "./firms.js";
 import { loadNifc } from "./nifc.js";
 import { loadNoaaSmoke } from "./noaa-smoke.js";
 import { loadWithFreshAndStaleCache } from "./source-cache.js";
-import type { NormalizedViewport, WildfireProvider, WildfireProviderData } from "./types.js";
+import {
+  type NormalizedViewport,
+  type WildfireProvider,
+  type WildfireProviderData,
+  WildfireSourceError,
+} from "./types.js";
 
 export { csvToGeoJSON, parseAcqDateTime } from "./firms.js";
 
@@ -45,37 +50,11 @@ function sourceFailureDetails(
   source: WildfireProvider,
   error: unknown,
 ): { kind: string; upstreamStatus?: number } | null {
-  if (error instanceof EffisSourceError) {
-    const upstreamStatus = upstreamStatusFromMessage(error.message);
-    return { kind: "source-error", ...(upstreamStatus === undefined ? {} : { upstreamStatus }) };
-  }
-  if (error instanceof Error && error.name === "AbortError") return { kind: "aborted" };
-  if (!(error instanceof Error)) return null;
-
-  const prefixes = {
-    nifc: ["NIFC API returned", "Invalid NIFC", "NIFC request aborted"],
-    effis: [],
-    "noaa-hms": [
-      "NOAA API returned",
-      "Invalid NOAA",
-      "NOAA request aborted",
-      "NOAA response exceeded",
-    ],
-  } as const;
-  if (prefixes[source].some((prefix) => error.message.startsWith(prefix))) {
-    const upstreamStatus = upstreamStatusFromMessage(error.message);
-    return {
-      kind: upstreamStatus === undefined ? "source-error" : "upstream-status",
-      ...(upstreamStatus === undefined ? {} : { upstreamStatus }),
-    };
-  }
-  if (error instanceof TypeError && /fetch/i.test(error.message)) return { kind: "network" };
-  return null;
-}
-
-function upstreamStatusFromMessage(message: string): number | undefined {
-  const match = /API returned (\d{3})/.exec(message);
-  return match ? Number(match[1]) : undefined;
+  if (!(error instanceof WildfireSourceError) || error.provider !== source) return null;
+  return {
+    kind: error.kind,
+    ...(error.upstreamStatus === undefined ? {} : { upstreamStatus: error.upstreamStatus }),
+  };
 }
 
 function sendCachedSource(

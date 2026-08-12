@@ -1,7 +1,7 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildNifcUrl, loadNifc, normalizeNifcFeature } from "./nifc.js";
-import type { NormalizedViewport } from "./types.js";
+import { type NormalizedViewport, WildfireSourceError } from "./types.js";
 
 const BOUNDS: NormalizedViewport = {
   west: -125,
@@ -404,6 +404,20 @@ describe("loadNifc", () => {
     await expect(loadNifc(createContext(), BOUNDS)).rejects.toThrow(
       "Invalid NIFC FeatureCollection",
     );
+  });
+
+  it("classifies a known upstream status with provider metadata", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("unavailable", { status: 503 })),
+    );
+
+    await expect(loadNifc(createContext(), BOUNDS)).rejects.toBeInstanceOf(WildfireSourceError);
+    await expect(loadNifc(createContext(), BOUNDS)).rejects.toMatchObject({
+      provider: "nifc",
+      kind: "upstream-status",
+      upstreamStatus: 503,
+    });
   });
 
   it("caps normalized features at 2,000 and reports truncation", async () => {

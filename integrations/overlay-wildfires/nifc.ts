@@ -1,6 +1,11 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { dedupeByFeatureId, nifcOffsetForZoom, splitAntimeridian } from "./bounds.js";
-import type { NifcProperties, NormalizedViewport, WildfireProviderData } from "./types.js";
+import {
+  type NifcProperties,
+  type NormalizedViewport,
+  type WildfireProviderData,
+  WildfireSourceError,
+} from "./types.js";
 
 const NIFC_QUERY_URL =
   "https://services3.arcgis.com/T4QMspbfLg3qTGWY/arcgis/rest/services/WFIGS_Interagency_Perimeters_Current/FeatureServer/0/query";
@@ -163,28 +168,52 @@ async function fetchNifcCollection(
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
   try {
-    const response = await fetch(buildNifcUrl(bounds), { signal: controller.signal });
+    let response: Response;
+    try {
+      response = await fetch(buildNifcUrl(bounds), { signal: controller.signal });
+    } catch (error) {
+      if (controller.signal.aborted) {
+        throw new WildfireSourceError("NIFC request aborted", {
+          provider: "nifc",
+          kind: "timeout",
+          cause: error,
+        });
+      }
+      throw new WildfireSourceError("NIFC request failed", {
+        provider: "nifc",
+        kind: "network",
+        cause: error,
+      });
+    }
     if (!response.ok) {
       ctx.log.warn(`NIFC API returned ${response.status}`);
-      throw new Error(`NIFC API returned ${response.status}`);
+      throw new WildfireSourceError(`NIFC API returned ${response.status}`, {
+        provider: "nifc",
+        kind: "upstream-status",
+        upstreamStatus: response.status,
+      });
     }
     let payload: unknown;
     try {
       payload = await response.json();
-    } catch {
-      throw new Error("Invalid NIFC JSON response");
+    } catch (error) {
+      throw new WildfireSourceError("Invalid NIFC JSON response", {
+        provider: "nifc",
+        kind: "upstream-payload",
+        cause: error,
+      });
     }
     if (
       !hasObjectProperties(payload) ||
       payload.type !== "FeatureCollection" ||
       !Array.isArray(payload.features)
     ) {
-      throw new Error("Invalid NIFC FeatureCollection");
+      throw new WildfireSourceError("Invalid NIFC FeatureCollection", {
+        provider: "nifc",
+        kind: "upstream-payload",
+      });
     }
     return payload as unknown as GeoJSON.FeatureCollection;
-  } catch (error) {
-    if (controller.signal.aborted) throw new Error("NIFC request aborted");
-    throw error;
   } finally {
     clearTimeout(timer);
   }
