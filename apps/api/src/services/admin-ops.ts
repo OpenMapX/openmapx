@@ -227,13 +227,13 @@ export async function applyHardlinksFromPlan(
     );
   }
 
-  opts.log?.("Ensuring data-manager is running for hardlink apply...");
+  await opts.log?.("Ensuring data-manager is running for hardlink apply...");
   const dmStart = await dockerComposeAction("data-manager", "start");
   if (dmStart.exitCode !== 0) {
     throw new Error(`docker compose up data-manager exited with ${dmStart.exitCode}`);
   }
 
-  opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
+  await opts.log?.(`Applying hardlink plan (${plan.length} entries, prune enabled)...`);
   const { client, url } = await waitForDataManagerClient();
   const result = await client.link(plan, { prune: true });
   return { applied: true, entries: plan.length, via: url, ...result };

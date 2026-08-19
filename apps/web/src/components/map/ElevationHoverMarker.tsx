@@ -26,27 +26,29 @@ export function ElevationHoverMarker() {
 
     let cancelled = false;
 
-    import("maplibre-gl").then((maplibregl) => {
-      if (cancelled || !mapRef.current) return;
+    void import("maplibre-gl")
+      .then((maplibregl) => {
+        if (cancelled || !mapRef.current) return;
 
-      if (markerRef.current) {
-        markerRef.current.setLngLat(hoveredPoint.lngLat);
-        return;
-      }
+        if (markerRef.current) {
+          markerRef.current.setLngLat(hoveredPoint.lngLat);
+          return;
+        }
 
-      const el = document.createElement("div");
-      el.style.width = "14px";
-      el.style.height = "14px";
-      el.style.borderRadius = "50%";
-      el.style.backgroundColor = "#207E23";
-      el.style.border = "2px solid #fff";
-      el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
-      el.style.pointerEvents = "none";
+        const el = document.createElement("div");
+        el.style.width = "14px";
+        el.style.height = "14px";
+        el.style.borderRadius = "50%";
+        el.style.backgroundColor = "#207E23";
+        el.style.border = "2px solid #fff";
+        el.style.boxShadow = "0 1px 4px rgba(0,0,0,0.3)";
+        el.style.pointerEvents = "none";
 
-      markerRef.current = new maplibregl.Marker({ element: el, anchor: "center" })
-        .setLngLat(hoveredPoint.lngLat)
-        .addTo(mapRef.current);
-    });
+        markerRef.current = new maplibregl.Marker({ element: el, anchor: "center" })
+          .setLngLat(hoveredPoint.lngLat)
+          .addTo(mapRef.current);
+      })
+      .catch(() => undefined);
 
     return () => {
       cancelled = true;

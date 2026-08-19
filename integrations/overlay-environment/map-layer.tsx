@@ -303,7 +303,7 @@ export function EnvironmentLayer() {
 
       if (!fetchedRef.current) {
         fetchedRef.current = true;
-        fetchStations();
+        void fetchStations();
       }
     };
 
@@ -330,7 +330,7 @@ export function EnvironmentLayer() {
 
   const debouncedFetch = useDebouncedCallback(() => {
     fetchedRef.current = true;
-    fetchStations();
+    void fetchStations();
   }, 800);
 
   useEffect(() => {

@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import type { BoundingBox } from "@openmapx/core";
 import { TTL, withCache } from "./cache.js";
+import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import { filterCatalogByBbox, loadCatalog, normalizeFormFactor } from "./gbfs-catalog.js";
 import {
   applicableMobilityRules,
@@ -48,29 +49,12 @@ function normalizeAreaGeometry(
 
 const ENTUR_CLIENT_NAME = "openmapx-server";
 const ENTUR_GRAPHQL_URL = "https://api.entur.io/mobility/v2/graphql";
-const ENTUR_GBFS_HOSTNAME = "api.entur.io";
-const ENTUR_GBFS_PATH_PREFIX = "/mobility/v2/gbfs/";
 const ENTUR_QUERY_CACHE_TTL = TTL.sharedMobility.stations;
 const DEFAULT_SLOW_ZONE_KPH = 20;
 const ENGLISH_LANGS = new Set(["en", "eng"]);
 const NORWEGIAN_LANGS = new Set(["no", "nor", "nob", "nno", "nb", "nn"]);
 
-/**
- * Recognise an Entur-hosted GBFS discovery URL. A substring test would also
- * match a lookalike such as
- * https://evil.example/api.entur.io/mobility/v2/gbfs/, so parse the URL and
- * compare the hostname exactly.
- */
-export function isEnturGbfsUrl(url: string): boolean {
-  try {
-    const parsed = new URL(url);
-    return (
-      parsed.hostname === ENTUR_GBFS_HOSTNAME && parsed.pathname.startsWith(ENTUR_GBFS_PATH_PREFIX)
-    );
-  } catch {
-    return false;
-  }
-}
+export { isEnturGbfsUrl } from "./entur-gbfs.js";
 
 interface EnturTranslatedString {
   translation?: Array<{ language?: string | null; value?: string | null } | null> | null;

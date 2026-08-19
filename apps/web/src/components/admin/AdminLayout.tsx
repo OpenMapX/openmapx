@@ -4,7 +4,8 @@ import Box from "@mui/material/Box";
 import { useCallback, useState } from "react";
 import { useHydrated } from "@/lib/useHydrated";
 import { AdminSidebar } from "./AdminSidebar";
-import { AdminTopBar, TOPBAR_HEIGHT } from "./AdminTopBar";
+import { AdminTopBar } from "./AdminTopBar";
+import { TOPBAR_HEIGHT } from "./layoutConstants";
 import { AdminThemeProvider } from "./shared/AdminThemeProvider";
 import { AdminToastProvider } from "./shared/AdminToast";
 

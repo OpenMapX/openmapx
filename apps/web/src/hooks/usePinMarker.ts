@@ -45,22 +45,23 @@ export function usePinMarker(
 
     let destroyed = false;
 
-    import("maplibre-gl").then((maplibregl) => {
-      if (destroyed || !mapRef.current) return;
+    void import("maplibre-gl")
+      .then((maplibregl) => {
+        if (destroyed || !mapRef.current) return;
 
-      // Move and relabel existing marker instead of recreating
-      if (markerRef.current) {
-        markerRef.current.setLngLat(coords);
-        if (labelRef.current) labelRef.current.textContent = label;
-        return;
-      }
+        // Move and relabel existing marker instead of recreating
+        if (markerRef.current) {
+          markerRef.current.setLngLat(coords);
+          if (labelRef.current) labelRef.current.textContent = label;
+          return;
+        }
 
-      const el = document.createElement("div");
-      el.style.cssText = "cursor:pointer;";
+        const el = document.createElement("div");
+        el.style.cssText = "cursor:pointer;";
 
-      const svgDiv = document.createElement("div");
-      svgDiv.style.cssText = "transform-origin:bottom center;";
-      svgDiv.innerHTML = `
+        const svgDiv = document.createElement("div");
+        svgDiv.style.cssText = "transform-origin:bottom center;";
+        svgDiv.innerHTML = `
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="32" viewBox="0 0 27 43">
           <path d="M13.5 0C6.044 0 0 6.044 0 13.5c0 9.219 13.5 29.5 13.5 29.5S27 22.719 27 13.5C27 6.044 20.956 0 13.5 0z"
                 fill="${color.fill}" stroke="${color.stroke}" stroke-width="1"/>
@@ -68,33 +69,34 @@ export function usePinMarker(
         </svg>
       `;
 
-      const labelContainer = document.createElement("div");
-      labelContainer.style.cssText =
-        "position:absolute;left:26px;top:0;bottom:0;display:flex;align-items:center;pointer-events:none;";
+        const labelContainer = document.createElement("div");
+        labelContainer.style.cssText =
+          "position:absolute;left:26px;top:0;bottom:0;display:flex;align-items:center;pointer-events:none;";
 
-      const labelSpan = document.createElement("span");
-      labelSpan.textContent = label;
-      labelSpan.style.cssText = [
-        "white-space:nowrap",
-        "max-width:200px",
-        "overflow:hidden",
-        "text-overflow:ellipsis",
-        "font-size:14px",
-        "font-weight:700",
-        "color:#B81C16",
-        "text-shadow:0 1px 2px rgba(255,255,255,0.9),0 0 4px rgba(255,255,255,0.7)",
-        "font-family:'Plus Jakarta Sans',Arial,sans-serif",
-      ].join(";");
+        const labelSpan = document.createElement("span");
+        labelSpan.textContent = label;
+        labelSpan.style.cssText = [
+          "white-space:nowrap",
+          "max-width:200px",
+          "overflow:hidden",
+          "text-overflow:ellipsis",
+          "font-size:14px",
+          "font-weight:700",
+          "color:#B81C16",
+          "text-shadow:0 1px 2px rgba(255,255,255,0.9),0 0 4px rgba(255,255,255,0.7)",
+          "font-family:'Plus Jakarta Sans',Arial,sans-serif",
+        ].join(";");
 
-      labelRef.current = labelSpan;
-      labelContainer.appendChild(labelSpan);
-      el.appendChild(svgDiv);
-      if (showLabel) el.appendChild(labelContainer);
+        labelRef.current = labelSpan;
+        labelContainer.appendChild(labelSpan);
+        el.appendChild(svgDiv);
+        if (showLabel) el.appendChild(labelContainer);
 
-      markerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
-        .setLngLat(coords)
-        .addTo(mapRef.current);
-    });
+        markerRef.current = new maplibregl.Marker({ element: el, anchor: "bottom" })
+          .setLngLat(coords)
+          .addTo(mapRef.current);
+      })
+      .catch(() => undefined);
 
     return () => {
       destroyed = true;

@@ -50,7 +50,7 @@ export function ServiceLogsDrawer({
     const controller = new AbortController();
     abortRef.current = controller;
 
-    (async () => {
+    void (async () => {
       try {
         const res = await fetch(`${apiUrl}/api/admin/services/${serviceId}/logs`, {
           credentials: "include",

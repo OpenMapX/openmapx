@@ -11,7 +11,7 @@ import {
 } from "@openmapx/mobility-formats";
 import { MOBILITYDATA_GBFS_CATALOG_URL } from "@openmapx/transitous-core";
 import { TTL, withCache } from "./cache.js";
-import { isEnturGbfsUrl } from "./entur-mobility.js";
+import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
 import type { GbfsCatalogEntry, VehicleFormFactor } from "./types/shared-mobility.js";
 

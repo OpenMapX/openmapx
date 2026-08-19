@@ -16,7 +16,7 @@ jest.mock("@react-native-community/netinfo", () => ({
 jest.mock("expo-keep-awake", () => ({
   __esModule: true,
   activateKeepAwakeAsync: jest.fn(async () => undefined),
-  deactivateKeepAwake: jest.fn(),
+  deactivateKeepAwake: jest.fn(async () => undefined),
 }));
 
 // Deterministic tests: never let a suite reach a real network, and surface the

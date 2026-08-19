@@ -79,60 +79,62 @@ export function WaypointMarkers() {
 
     let destroyed = false;
 
-    import("maplibre-gl").then((maplibregl) => {
-      if (destroyed || !mapRef.current) return;
+    void import("maplibre-gl")
+      .then((maplibregl) => {
+        if (destroyed || !mapRef.current) return;
 
-      const currentIds = new Set<string>();
+        const currentIds = new Set<string>();
 
-      waypoints.forEach((wp, i) => {
-        if (!wp.coords) return;
-        currentIds.add(wp.id);
+        waypoints.forEach((wp, i) => {
+          if (!wp.coords) return;
+          currentIds.add(wp.id);
 
-        const existing = markersRef.current.get(wp.id);
-        if (existing) {
-          existing.setLngLat(wp.coords);
-          return;
-        }
+          const existing = markersRef.current.get(wp.id);
+          if (existing) {
+            existing.setLngLat(wp.coords);
+            return;
+          }
 
-        const isOrigin = i === 0;
-        const isDestination = i === waypoints.length - 1;
+          const isOrigin = i === 0;
+          const isDestination = i === waypoints.length - 1;
 
-        let el: HTMLDivElement;
-        let anchor: maplibregl.MarkerOptions["anchor"] = "center";
+          let el: HTMLDivElement;
+          let anchor: maplibregl.MarkerOptions["anchor"] = "center";
 
-        if (isOrigin) {
-          el = createOriginElement();
-        } else if (isDestination) {
-          el = createDestinationElement();
-          anchor = "bottom";
-        } else {
-          el = createWaypointElement(i);
-        }
+          if (isOrigin) {
+            el = createOriginElement();
+          } else if (isDestination) {
+            el = createDestinationElement();
+            anchor = "bottom";
+          } else {
+            el = createWaypointElement(i);
+          }
 
-        const map = mapRef.current;
-        if (!map) return;
+          const map = mapRef.current;
+          if (!map) return;
 
-        const marker = new maplibregl.Marker({ element: el, anchor, draggable: true })
-          .setLngLat(wp.coords)
-          .addTo(map);
+          const marker = new maplibregl.Marker({ element: el, anchor, draggable: true })
+            .setLngLat(wp.coords)
+            .addTo(map);
 
-        marker.on("dragend", () => {
-          const lngLat = marker.getLngLat();
-          const coords: LngLat = [lngLat.lng, lngLat.lat];
-          setWaypoint(i, coords, wp.label);
+          marker.on("dragend", () => {
+            const lngLat = marker.getLngLat();
+            const coords: LngLat = [lngLat.lng, lngLat.lat];
+            setWaypoint(i, coords, wp.label);
+          });
+
+          markersRef.current.set(wp.id, marker);
         });
 
-        markersRef.current.set(wp.id, marker);
-      });
-
-      // Remove markers for waypoints that no longer exist
-      for (const [id, marker] of markersRef.current) {
-        if (!currentIds.has(id)) {
-          marker.remove();
-          markersRef.current.delete(id);
+        // Remove markers for waypoints that no longer exist
+        for (const [id, marker] of markersRef.current) {
+          if (!currentIds.has(id)) {
+            marker.remove();
+            markersRef.current.delete(id);
+          }
         }
-      }
-    });
+      })
+      .catch(() => undefined);
 
     return () => {
       destroyed = true;

@@ -18,7 +18,7 @@ import {
   type ManagedOAuthClient,
   managedOAuthClientMatchesExpected,
   validatePublicHostname,
-} from "./provisioning.js";
+} from "./provisioning-contract.js";
 
 const MAX_HEALTH_CACHE_MS = 15_000;
 const HEALTH_TIMEOUT_MS = 2_000;

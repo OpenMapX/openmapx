@@ -189,7 +189,7 @@ export function AirQualityLayer() {
 
       if (!fetchedRef.current) {
         fetchedRef.current = true;
-        fetchStations();
+        void fetchStations();
       }
     };
 

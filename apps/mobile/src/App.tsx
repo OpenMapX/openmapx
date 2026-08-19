@@ -135,12 +135,12 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   useEffect(() => {
     const shouldHold = visibility === "active" && shellState.context.navigating;
     if (!shouldHold) {
-      deactivateKeepAwake();
+      void deactivateKeepAwake().catch(() => undefined);
       return;
     }
     void activateKeepAwakeAsync().catch(() => undefined);
     return () => {
-      deactivateKeepAwake();
+      void deactivateKeepAwake().catch(() => undefined);
     };
   }, [visibility, shellState.context.navigating]);
 

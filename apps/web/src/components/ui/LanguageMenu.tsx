@@ -25,7 +25,7 @@ export function LanguageMenu({ anchorEl, onClose }: LanguageMenuProps) {
   const handleLanguageChange = (newLocale: string) => {
     onClose();
     if (newLocale === locale) return;
-    setLocaleAndReload(newLocale);
+    void setLocaleAndReload(newLocale);
   };
 
   return (

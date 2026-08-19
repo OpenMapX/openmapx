@@ -93,17 +93,19 @@ export function MapClickHandler() {
     }
 
     let destroyed = false;
-    import("maplibre-gl").then((ml) => {
-      if (destroyed || !mapRef.current) return;
-      const el = document.createElement("div");
-      el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="32" viewBox="0 0 27 43">
+    void import("maplibre-gl")
+      .then((ml) => {
+        if (destroyed || !mapRef.current) return;
+        const el = document.createElement("div");
+        el.innerHTML = `<svg xmlns="http://www.w3.org/2000/svg" width="20" height="32" viewBox="0 0 27 43">
         <path d="M13.5 0C6.044 0 0 6.044 0 13.5c0 9.219 13.5 29.5 13.5 29.5S27 22.719 27 13.5C27 6.044 20.956 0 13.5 0z" fill="#757575" stroke="#424242" stroke-width="1"/>
         <circle cx="13.5" cy="13.5" r="5.5" fill="white"/>
       </svg>`;
-      markerRef.current = new ml.Marker({ element: el, anchor: "bottom" })
-        .setLngLat(clickedLngLat)
-        .addTo(mapRef.current);
-    });
+        markerRef.current = new ml.Marker({ element: el, anchor: "bottom" })
+          .setLngLat(clickedLngLat)
+          .addTo(mapRef.current);
+      })
+      .catch(() => undefined);
 
     return () => {
       destroyed = true;

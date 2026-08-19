@@ -23,20 +23,21 @@ export function UserLocationMarker() {
 
     let destroyed = false;
 
-    import("maplibre-gl").then((maplibregl) => {
-      if (destroyed || !mapRef.current) return;
+    void import("maplibre-gl")
+      .then((maplibregl) => {
+        if (destroyed || !mapRef.current) return;
 
-      if (markerRef.current) {
-        markerRef.current.setLngLat(userLocation);
-        return;
-      }
+        if (markerRef.current) {
+          markerRef.current.setLngLat(userLocation);
+          return;
+        }
 
-      const wrapper = document.createElement("div");
-      wrapper.style.cssText = "position:relative;width:16px;height:16px;";
+        const wrapper = document.createElement("div");
+        wrapper.style.cssText = "position:relative;width:16px;height:16px;";
 
-      // Outer pulsing ring
-      const pulse = document.createElement("div");
-      pulse.style.cssText = `
+        // Outer pulsing ring
+        const pulse = document.createElement("div");
+        pulse.style.cssText = `
         position:absolute;
         inset:-4px;
         border-radius:50%;
@@ -44,9 +45,9 @@ export function UserLocationMarker() {
         animation:loc-pulse 2s ease-out infinite;
       `;
 
-      // Inner blue dot with white border
-      const dot = document.createElement("div");
-      dot.style.cssText = `
+        // Inner blue dot with white border
+        const dot = document.createElement("div");
+        dot.style.cssText = `
         position:absolute;
         inset:0;
         border-radius:50%;
@@ -55,26 +56,27 @@ export function UserLocationMarker() {
         box-shadow:0 2px 6px rgba(0,0,0,0.35);
       `;
 
-      wrapper.appendChild(pulse);
-      wrapper.appendChild(dot);
+        wrapper.appendChild(pulse);
+        wrapper.appendChild(dot);
 
-      // Inject keyframes once
-      if (!document.getElementById("loc-pulse-style")) {
-        const style = document.createElement("style");
-        style.id = "loc-pulse-style";
-        style.textContent = `
+        // Inject keyframes once
+        if (!document.getElementById("loc-pulse-style")) {
+          const style = document.createElement("style");
+          style.id = "loc-pulse-style";
+          style.textContent = `
           @keyframes loc-pulse {
             0%   { transform:scale(0.5); opacity:1; }
             100% { transform:scale(2);   opacity:0; }
           }
         `;
-        document.head.appendChild(style);
-      }
+          document.head.appendChild(style);
+        }
 
-      markerRef.current = new maplibregl.Marker({ element: wrapper, anchor: "center" })
-        .setLngLat(userLocation)
-        .addTo(mapRef.current);
-    });
+        markerRef.current = new maplibregl.Marker({ element: wrapper, anchor: "center" })
+          .setLngLat(userLocation)
+          .addTo(mapRef.current);
+      })
+      .catch(() => undefined);
 
     return () => {
       destroyed = true;

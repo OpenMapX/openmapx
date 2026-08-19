@@ -84,13 +84,13 @@ export default function StatusDashboard() {
   }, [apiUrl]);
 
   useEffect(() => {
-    fetchStatus();
+    void fetchStatus();
   }, [fetchStatus]);
 
   useEffect(() => {
     if (!autoRefresh) return;
     const interval = setInterval(() => {
-      if (document.visibilityState === "visible") fetchStatus();
+      if (document.visibilityState === "visible") void fetchStatus();
     }, 30_000);
     return () => clearInterval(interval);
   }, [autoRefresh, fetchStatus]);

@@ -6,7 +6,7 @@
 import type { BoundingBox, LngLat } from "@openmapx/core";
 import { bboxContains } from "@openmapx/core";
 import { cacheGet, cacheSet, TTL } from "./cache.js";
-import { isEnturGbfsUrl } from "./entur-mobility.js";
+import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import {
   filterCatalogByBbox,
   loadCatalog,

@@ -12,9 +12,7 @@ import Typography from "@mui/material/Typography";
 import { getInitials, proxyImageUrl } from "@openmapx/core";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { SIDEBAR_WIDTH } from "./AdminSidebar";
-
-export const TOPBAR_HEIGHT = 56;
+import { SIDEBAR_WIDTH, TOPBAR_HEIGHT } from "./layoutConstants";
 
 const SEGMENT_LABELS: Record<string, string> = {
   admin: "Admin",

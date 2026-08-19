@@ -28,9 +28,7 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { TOPBAR_HEIGHT } from "./AdminTopBar";
-
-export const SIDEBAR_WIDTH = 236;
+import { SIDEBAR_WIDTH, TOPBAR_HEIGHT } from "./layoutConstants";
 
 const SERVICES_SUB_ITEMS = [
   {

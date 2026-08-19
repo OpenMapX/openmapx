@@ -179,20 +179,22 @@ export function useNavCamera(): void {
     const map = mapRef?.current;
     if (!map || !mapReady || markerRef.current) return;
     let destroyed = false;
-    import("maplibre-gl").then((maplibregl) => {
-      if (destroyed || markerRef.current) return;
-      const el = document.createElement("div");
-      el.style.cssText = `width:${PUCK_PX}px;height:${PUCK_PX}px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));`;
-      el.innerHTML = CHEVRON_SVG;
-      markerRef.current = new maplibregl.Marker({
-        element: el,
-        anchor: "center",
-        rotationAlignment: "map",
-      }).setLngLat([0, 0]);
-      // The puck can arrive long after the loop started (or after it went back
-      // to sleep waiting for one): wake the frame that will attach it.
-      requestFrame();
-    });
+    void import("maplibre-gl")
+      .then((maplibregl) => {
+        if (destroyed || markerRef.current) return;
+        const el = document.createElement("div");
+        el.style.cssText = `width:${PUCK_PX}px;height:${PUCK_PX}px;display:flex;align-items:center;justify-content:center;filter:drop-shadow(0 1px 3px rgba(0,0,0,.45));`;
+        el.innerHTML = CHEVRON_SVG;
+        markerRef.current = new maplibregl.Marker({
+          element: el,
+          anchor: "center",
+          rotationAlignment: "map",
+        }).setLngLat([0, 0]);
+        // The puck can arrive long after the loop started (or after it went back
+        // to sleep waiting for one): wake the frame that will attach it.
+        requestFrame();
+      })
+      .catch(() => undefined);
     return () => {
       destroyed = true;
     };

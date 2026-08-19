@@ -141,14 +141,16 @@ export function useNavAlerts(incidentResource: NavIncidentResource): ActiveAlert
     if (isNewRoute) setRaw([]);
 
     const requestId = ++requestIdRef.current;
-    Promise.all(boxes.map((box) => fetchRoadAlerts(box))).then((results) => {
-      if (requestIdRef.current !== requestId) return; // superseded by a newer route/bucket
-      const byId = new Map<string, RawRoadAlert>();
-      for (const list of results) {
-        for (const a of list) byId.set(a.id, a);
-      }
-      setRaw([...byId.values()]);
-    });
+    void Promise.all(boxes.map((box) => fetchRoadAlerts(box)))
+      .then((results) => {
+        if (requestIdRef.current !== requestId) return; // superseded by a newer route/bucket
+        const byId = new Map<string, RawRoadAlert>();
+        for (const list of results) {
+          for (const a of list) byId.set(a.id, a);
+        }
+        setRaw([...byId.values()]);
+      })
+      .catch(() => undefined);
   }, [route, bucket, connectivity]);
 
   // The active route's snap index, rebuilt only when the route identity

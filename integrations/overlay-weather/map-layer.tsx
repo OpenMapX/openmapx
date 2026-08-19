@@ -305,7 +305,7 @@ export function WeatherLayer() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady || !layerVisible) return;
-    debouncedWeatherFetch();
+    void debouncedWeatherFetch();
     map.on("moveend", debouncedWeatherFetch);
     return () => {
       map.off("moveend", debouncedWeatherFetch);

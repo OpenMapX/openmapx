@@ -109,7 +109,7 @@ describe("SerialExecutor", () => {
   it("drains everything queued so far", async () => {
     const executor = new SerialExecutor();
     const log: string[] = [];
-    executor.run(async () => {
+    void executor.run(async () => {
       log.push("a");
     });
     executor
@@ -117,7 +117,7 @@ describe("SerialExecutor", () => {
         throw new Error("b failed");
       })
       .catch(() => undefined);
-    executor.run(async () => {
+    void executor.run(async () => {
       log.push("c");
     });
 

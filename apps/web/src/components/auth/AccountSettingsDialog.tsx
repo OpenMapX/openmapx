@@ -735,7 +735,7 @@ export function AccountSettingsDialog({
                         color="warning"
                         onClick={() => {
                           if (window.confirm(t("regenerateCodesConfirm"))) {
-                            handleRegenerateBackupCodes();
+                            void handleRegenerateBackupCodes();
                           }
                         }}
                         disabled={!twoFactorPassword}

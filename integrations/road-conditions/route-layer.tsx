@@ -241,8 +241,8 @@ export function RouteConditionsLayer() {
     const syncPolling = () => {
       if (map.getZoom() < minZoom) {
         if (timer === undefined) {
-          load();
-          timer = setInterval(load, REFRESH_MS);
+          void load();
+          timer = setInterval(() => void load(), REFRESH_MS);
         }
       } else {
         stopPolling();

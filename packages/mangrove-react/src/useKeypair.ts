@@ -104,7 +104,7 @@ export function useUserKeypair(): {
     if (!isAuthed || !isUnencrypted || keypair) return;
     if (envelope?.state !== "ready" || envelope.mode !== "unencrypted") return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       const kp = await jwkToKeypair({
         privateJwk: envelope.privateJwk,
         publicJwk: envelope.publicJwk,
@@ -113,7 +113,7 @@ export function useUserKeypair(): {
       const pem = await publicKeyToPem(kp.publicKey);
       if (cancelled) return;
       setKeypair(kp, pem, false, null);
-    })();
+    })().catch(() => undefined);
     return () => {
       cancelled = true;
     };
@@ -127,7 +127,7 @@ export function useUserKeypair(): {
     if (!isAuthed || publicPem) return;
     if (envelope?.state !== "ready") return;
     let cancelled = false;
-    (async () => {
+    void (async () => {
       try {
         const pub = await importPublicJwk(envelope.publicJwk);
         const pem = await publicKeyToPem(pub);

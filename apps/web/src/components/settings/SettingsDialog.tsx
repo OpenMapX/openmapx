@@ -102,7 +102,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               fullWidth
               value={locale}
               onChange={(e) => {
-                if (e.target.value !== locale) setLocaleAndReload(e.target.value);
+                if (e.target.value !== locale) void setLocaleAndReload(e.target.value);
               }}
             >
               {locales.map((l) => (
