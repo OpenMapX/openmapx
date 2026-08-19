@@ -46,6 +46,7 @@ overrides:
   # fast-uri 3.1.5 fixes the current host-confusion advisories in the
   # Docusaurus/AJV dependency tree.
   "fast-uri": "^3.1.5"
-  # >=3.4.9 closes GHSA-vxr8-fq34-vvx9 (low: a Trusted Types policy survives
-  # clearConfig()). Transitive via mermaid -> @docusaurus/theme-mermaid.
-  "dompurify": "^3.4.9"
+  # Security-patched transitive dependencies in the Docusaurus toolchain.
+  "dompurify": "^3.4.13"
+  "mermaid": "^11.16.1"
+  "nanoid@3": "^3.3.18"
