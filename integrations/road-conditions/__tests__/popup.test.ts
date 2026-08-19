@@ -127,11 +127,12 @@ describe("buildRoadConditionPopupHtml", () => {
 
   it("uses a localized label for a future incident start time", () => {
     const futureDisplayId = "group:future-roadworks";
+    const futureValidFrom = new Date(Date.now() + 86_400_000).toISOString();
     const futureEvent: RoadConditionEvent = {
       ...events[0],
       id: "source:future",
       groupId: "future-roadworks",
-      validFrom: "2026-08-14T00:00:00Z",
+      validFrom: futureValidFrom,
     };
     const result = buildRoadConditionPopupHtml({
       hits: [
@@ -148,7 +149,7 @@ describe("buildRoadConditionPopupHtml", () => {
     });
 
     expect(result.html).toContain(
-      'class="omx-overlay-popup__label">Starts at</span><span class="omx-overlay-popup__value">2026-08-14T00:00:00Z',
+      `class="omx-overlay-popup__label">Starts at</span><span class="omx-overlay-popup__value">${futureValidFrom}`,
     );
     expect(result.html).not.toContain('class="omx-overlay-popup__label">startsAt</span>');
   });
