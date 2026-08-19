@@ -22,7 +22,7 @@
     "@better-auth/core": "1.6.26",
     "@better-auth/expo": "1.6.26",
     "@better-auth/i18n": "1.6.26",
-    "@better-auth/oauth-provider": "1.6.26",
+    "@better-auth/oauth-provider": "1.7.0",
     "@better-auth/passkey": "1.6.26",
     "@fastify/cors": "^11.3.0",
     "@fastify/helmet": "^13.1.0",
