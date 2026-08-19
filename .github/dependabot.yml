@@ -7,6 +7,10 @@ updates:
       day: monday
       time: "06:00"
       timezone: Europe/Berlin
+    # Version updates wait long enough for ecosystem incidents to surface;
+    # Dependabot security updates are explicitly exempt from cooldowns.
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     versioning-strategy: increase-if-necessary
     labels: [dependencies]
@@ -68,6 +72,8 @@ updates:
       day: monday
       time: "06:00"
       timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 10
     versioning-strategy: increase-if-necessary
     labels: [dependencies, docs]
@@ -87,6 +93,8 @@ updates:
       day: monday
       time: "06:00"
       timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: [dependencies, ci]
     commit-message:
@@ -111,6 +119,8 @@ updates:
       day: monday
       time: "06:00"
       timezone: Europe/Berlin
+    cooldown:
+      default-days: 7
     open-pull-requests-limit: 5
     labels: [dependencies, docker]
     commit-message:

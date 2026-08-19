@@ -1,7 +1,7 @@
 name: PR Title
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] reads title only; never checks out PR code
     types: [opened, edited, synchronize, reopened]
 
 # Least-privilege default; the validate job escalates to what the action needs.

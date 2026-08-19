@@ -2,7 +2,7 @@ FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
 COPY package.json /tmp/package.json
-RUN corepack enable && corepack prepare $(node -e "console.log(require('/tmp/package.json').packageManager)") --activate
+RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate
 
 # Install all dependencies (for building)
 FROM base AS deps
@@ -58,6 +58,9 @@ COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY apps/api/package.json apps/api/
 COPY integrations/ integrations/
+# The install and targeted pnpm-store pruning intentionally share a layer;
+# changing WORKDIR here would make the unpruned dependencies part of the image.
+# hadolint ignore=DL3003
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
     cd node_modules/.pnpm && \
     rm -rf next@* @next+swc* prisma@* @prisma+* sharp@* @img+sharp* \

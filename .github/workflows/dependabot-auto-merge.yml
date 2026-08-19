@@ -9,8 +9,9 @@ permissions:
 
 jobs:
   auto-merge:
-    # Only act on Dependabot's own PRs.
-    if: github.actor == 'dependabot[bot]'
+    # PR authorship is immutable; github.actor can instead be the maintainer
+    # who re-ran or updated a workflow and is therefore not an identity check.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: write

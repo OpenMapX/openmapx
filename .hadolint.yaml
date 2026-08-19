@@ -1,0 +1,7 @@
+failure-threshold: warning
+ignored:
+  # Distribution package versions are intentionally resolved from the
+  # digest-pinned base image. Exact apt/apk pins are brittle across security
+  # rebuilds and would duplicate the base-image digest as a second lockfile.
+  - DL3008
+  - DL3018

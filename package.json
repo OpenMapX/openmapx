@@ -10,6 +10,7 @@
     "clean": "turbo clean && rm -rf node_modules",
     "check-types": "turbo run check-types",
     "check-dead-code": "knip --no-progress --reporter compact",
+    "check-infrastructure": "bash scripts/check-infrastructure.sh",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "OPENMAPX_SKIP_SLOW_CRYPTO=1 vitest run --coverage",

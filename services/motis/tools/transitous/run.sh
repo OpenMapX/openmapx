@@ -27,7 +27,7 @@ collect_region_globs() {
   for f in out/*.gtfs.zip out/*.netex.zip; do
     [ -f "$f" ] || continue
     fname=$(basename "$f")
-    cc=$(echo "$fname" | sed 's/[_-].*//')
+    cc=${fname%%[_-]*}
     if [ -n "$cc" ] && ! printf '%s\n' "${REGION_GLOBS[@]}" 2>/dev/null | grep -qx "${cc}*"; then
       REGION_GLOBS+=("${cc}*")
     fi

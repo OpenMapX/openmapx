@@ -3,7 +3,7 @@ name: CLA Assistant
 on:
   issue_comment:
     types: [created]
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] trusted base workflow; never checks out PR code
     types: [opened, closed, synchronize]
 
 # Least-privilege default: read-only at the top level. The cla job escalates to

@@ -27,7 +27,7 @@ FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
 COPY package.json /tmp/package.json
-RUN corepack enable && corepack prepare $(node -e "console.log(require('/tmp/package.json').packageManager)") --activate
+RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate
 
 FROM base AS deps
 WORKDIR /app
@@ -258,7 +258,7 @@ USER datamgr:datamgr
 
 WORKDIR /app/services/data-manager
 EXPOSE 4000
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD curl -fs http://localhost:4000/status || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["curl", "-fs", "http://localhost:4000/status"]
 # `--import tsx/esm` lets the compiled dist entry reach back into
 # @openmapx/db-schema's, @openmapx/hardlinks's, and
 # @openmapx/motis-feed-proxy-config's .ts source without a separate build step.
