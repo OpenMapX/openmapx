@@ -169,7 +169,7 @@ export function MountainShelterLayer() {
         // Source exists — trigger initial fetch
         if (!fetchedRef.current) {
           fetchedRef.current = true;
-          fetchShelters();
+          void fetchShelters();
         }
       } catch {
         // Style not ready yet — styledata will retry
@@ -189,7 +189,7 @@ export function MountainShelterLayer() {
   }, [mapReady, styleVersion, mapRef, layerVisible, fetchShelters]);
 
   // Refetch on pan/zoom
-  const debouncedFetch = useDebouncedCallback(() => fetchShelters(), 800);
+  const debouncedFetch = useDebouncedCallback(() => void fetchShelters(), 800);
 
   useEffect(() => {
     void styleVersion;

@@ -1,0 +1,36 @@
+name: Dead-code audit
+
+on:
+  schedule:
+    # Knip is deliberately periodic rather than a PR gate: this monorepo has
+    # convention-loaded integrations and generated entry points, so config
+    # changes deserve review instead of blocking unrelated pull requests.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+concurrency:
+  group: dead-code-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  knip:
+    name: unused files and dependencies
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v6
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Audit unused files and dependencies
+        run: pnpm check-dead-code

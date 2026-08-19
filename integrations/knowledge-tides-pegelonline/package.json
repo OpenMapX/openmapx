@@ -6,7 +6,6 @@
   "type": "module",
   "dependencies": {
     "@openmapx/core": "workspace:^",
-    "@openmapx/integration-framework": "workspace:^",
-    "@openmapx/place-ids": "workspace:^"
+    "@openmapx/integration-framework": "workspace:^"
   }
 }

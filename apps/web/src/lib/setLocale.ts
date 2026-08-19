@@ -2,7 +2,7 @@ import { appShellCacheNames } from "@/lib/swCaches";
 
 /**
  * Set the next-intl locale cookie and reload the page.
- * Shared between LanguageMenu and HamburgerMenu.
+ * Shared by the settings dialog and command palette.
  *
  * Pages are cached in the service worker's `pages` cache keyed by URL only;
  * the locale lives in a cookie, so cached HTML for the previous language

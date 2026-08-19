@@ -95,7 +95,6 @@
     "@better-auth/core": "1.6.26",
     "@better-auth/oauth-provider": "1.6.26",
     "@better-auth/passkey": "1.6.26",
-    "@openstreetmap/id-tagging-schema": "^7.1.0",
     "@tanstack/react-query": "^5.101.4",
     "@turf/helpers": "^7.4.0",
     "@turf/nearest-point-on-line": "^7.4.0",

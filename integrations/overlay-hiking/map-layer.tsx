@@ -6,6 +6,7 @@ import { useStyleSyncedLayer } from "@/components/map/layers/useStyleSyncedLayer
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { MountainShelterLayer } from "./shelter-layer";
 import { useHikingStore } from "./store";
 
 const RASTER_SOURCE_ID = "openmapx-hiking-trails-source";
@@ -52,4 +53,13 @@ export function HikingTrailsLayer() {
   });
 
   return null;
+}
+
+export default function HikingMapLayer() {
+  return (
+    <>
+      <HikingTrailsLayer />
+      <MountainShelterLayer />
+    </>
+  );
 }

@@ -1,0 +1,111 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "include": ["files", "dependencies"],
+  "ignoreWorkspaces": [
+    "integrations/__tests__",
+    "integrations/_placeholder",
+    "integrations/_template"
+  ],
+  "workspaces": {
+    ".": {
+      "entry": [
+        "scripts/check-dockerfile-workspace-sync.ts",
+        "scripts/check-credential-keys.ts",
+        "scripts/check-feed-ids.ts",
+        "scripts/check-legal-tables.ts",
+        "scripts/check-legal-updated.ts",
+        "scripts/check-legal-urls.ts",
+        "scripts/check-license-metadata.ts",
+        "scripts/check-toolchain-pins.ts",
+        "scripts/ev-vehicles/generate.ts"
+      ],
+      "ignoreFiles": ["docs/**"]
+    },
+    "apps/api": {
+      "entry": ["scripts/**/*.ts"],
+      "ignoreFiles": ["src/__tests__/fixtures/**"],
+      // Integration adapters are copied into the API image and discovered from
+      // their manifests at runtime, so their API-only packages have no static
+      // import path from this workspace.
+      "ignoreDependencies": [
+        "@openmapx/mobility-formats",
+        "cached-hafas-client",
+        "db-vendo-client",
+        "gtfs-realtime-bindings-transit",
+        "hafas-client"
+      ]
+    },
+    "apps/mobile": {
+      "entry": [
+        "modules/**/index.ts",
+        "compliance/**/*.mts",
+        "qa/**/*.mts",
+        "release/**/*.mts",
+        "scripts/**/*.mts",
+        "store/screenshots/**/*.mts"
+      ],
+      "ignoreFiles": [
+        // The production local-notification adapter is complete, but foreground
+        // navigation composition is not yet mounted by App.tsx. Keep this explicit
+        // so Knip does not turn unfinished product wiring into a deletion.
+        "src/notifications/ExpoNotificationScheduler.ts"
+      ]
+    },
+    "apps/web": {
+      "entry": ["src/sw.ts", "scripts/**/*.{mjs,ts}"],
+      "ignoreFiles": ["public/**"],
+      "paths": {
+        "@/*": ["src/*"],
+        "@integrations/*": ["../../integrations/*"]
+      }
+    },
+    "integrations/*": {
+      "entry": [
+        "{index,map-layer,legend,panel,ReportDialog,ReportFab,CrowdApproachPrompt}.{ts,tsx}"
+      ],
+      "paths": {
+        "@/*": ["../../apps/web/src/*"],
+        "@integrations/*": ["../*"]
+      }
+    },
+    "integrations/live-transit-siri-sx-ch": {
+      // The Swiss SIRI integration aliases the shared OTD implementation in its
+      // manifest; it does not import that implementation from TypeScript.
+      "ignoreDependencies": ["@openmapx/integration-transit-opentransportdata-ch"]
+    },
+    "packages/brands": {
+      // The package root is resolved as data with require.resolve().
+      "ignoreDependencies": ["name-suggestion-index"]
+    },
+    "packages/cli": {
+      // Root scripts invoke this workspace through `pnpm exec tsx`.
+      "ignoreDependencies": ["tsx"]
+    },
+    "packages/extension-cli": {
+      "ignoreFiles": ["templates/**"]
+    },
+    "packages/extension-sdk": {
+      // These packages are part of the public declaration/API Extractor surface
+      // even when their imports are erased from emitted JavaScript.
+      "ignoreDependencies": [
+        "@openmapx/core",
+        "@openmapx/place-ids",
+        "@openmapx/poi-source-registry"
+      ]
+    },
+    "packages/i18n": {
+      // Root locale scripts invoke this workspace through `pnpm exec tsx`.
+      "ignoreDependencies": ["tsx"]
+    },
+    "packages/presets": {
+      // The schema is loaded with a template-literal dynamic import.
+      "ignoreDependencies": ["@openstreetmap/id-tagging-schema"]
+    },
+    "services/data-manager": {
+      "entry": ["src/jobs/overture/eval/*.ts"],
+      // The glyph utility loads this CommonJS package through its compatibility
+      // loader because the dependency does not expose an ESM entry point.
+      "ignoreDependencies": ["@mapbox/glyph-pbf-composite"]
+    }
+  }
+}

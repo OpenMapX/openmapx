@@ -9,6 +9,7 @@
     "format": "biome format --write .",
     "clean": "turbo clean && rm -rf node_modules",
     "check-types": "turbo run check-types",
+    "check-dead-code": "knip --no-progress --reporter compact",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "OPENMAPX_SKIP_SLOW_CRYPTO=1 vitest run --coverage",
@@ -50,6 +51,7 @@
     "@commitlint/config-conventional": "^21.2.0",
     "@vitest/coverage-v8": "^4.1.10",
     "husky": "^9.1.7",
+    "knip": "^6.32.2",
     "turbo": "^2.10.9",
     "typescript": "^6.0.3",
     "vitest": "^4.1.10"
