@@ -34,7 +34,7 @@ import type { PoiIngestKind } from "./types.js";
 const METER_NAME = "openmapx-poi-ingest";
 
 class CollectablePoiMetricReader extends MetricReader {
-  selectAggregationTemporality(): AggregationTemporality {
+  override selectAggregationTemporality(): AggregationTemporality {
     return AggregationTemporality.CUMULATIVE;
   }
 

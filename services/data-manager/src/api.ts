@@ -884,6 +884,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       } finally {
         reply.raw.end();
       }
+      return undefined;
     },
   );
 

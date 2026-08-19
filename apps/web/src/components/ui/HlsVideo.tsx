@@ -41,6 +41,7 @@ export function HlsVideo({
 
     // Safari has native HLS support, or it's a regular video URL
     video.src = src;
+    return undefined;
   }, [src]);
 
   return (

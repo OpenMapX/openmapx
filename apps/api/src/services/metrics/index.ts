@@ -41,7 +41,7 @@ const METER_NAME = "openmapx-transit";
  * as the rest of the API so it inherits the existing helmet/cors stack.
  */
 class CollectableMetricReader extends MetricReader {
-  selectAggregationTemporality(): AggregationTemporality {
+  override selectAggregationTemporality(): AggregationTemporality {
     return AggregationTemporality.CUMULATIVE;
   }
 

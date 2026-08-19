@@ -95,6 +95,7 @@ export class RateLimiter {
       }
 
       bucket.tokens -= 1;
+      return undefined;
     };
   }
 
