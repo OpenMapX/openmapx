@@ -1,4 +1,3 @@
-import type { EvChargingStatus } from "@openmapx/mobility-core/ev-charging";
 import type { PoiLiveParseFn, PoiLiveState, PoiSourceLogger } from "@openmapx/poi-source-registry";
 import {
   DE_OCPDB_LOCATIONS_URL,
@@ -6,6 +5,7 @@ import {
   realtimeSourceUids,
   sourceUidUrl,
 } from "./de-ocpdb-client.js";
+import { summarizeEvseStatuses } from "./evse-status.js";
 import { deOcpdbLocationPoiId } from "./utils.js";
 
 // The OCPDB OCPI Locations feed carries `evses[].status` directly on each
@@ -21,35 +21,6 @@ interface OcpdbEvse {
 interface OcpdbLocation {
   id?: string;
   evses?: OcpdbEvse[];
-}
-
-function classifyEvseStatus(raw: string | undefined): EvChargingStatus | null {
-  const upper = raw?.toUpperCase() ?? "";
-  if (upper === "AVAILABLE" || upper === "CHARGING" || upper === "BLOCKED" || upper === "RESERVED")
-    return "operational";
-  if (upper === "PLANNED") return "planned";
-  if (upper === "INOPERATIVE" || upper === "OUTOFORDER" || upper === "REMOVED")
-    return "not-operational";
-  return null;
-}
-
-function aggregateStationStatus(perEvse: ReadonlyArray<EvChargingStatus | null>): EvChargingStatus {
-  let sawOperational = false;
-  let sawPlanned = false;
-  let sawNotOperational = false;
-  let sawKnown = false;
-  for (const s of perEvse) {
-    if (s === null) continue;
-    sawKnown = true;
-    if (s === "operational") sawOperational = true;
-    else if (s === "planned") sawPlanned = true;
-    else if (s === "not-operational") sawNotOperational = true;
-  }
-  if (!sawKnown) return "unknown";
-  if (sawOperational) return "operational";
-  if (sawPlanned) return "planned";
-  if (sawNotOperational) return "not-operational";
-  return "unknown";
 }
 
 async function parse(
@@ -95,24 +66,15 @@ async function parse(
     const poiId = deOcpdbLocationPoiId(location);
     if (!poiId) continue;
 
-    const statuses: Array<EvChargingStatus | null> = [];
-    let available = 0;
-    let total = 0;
-    for (const evse of location.evses ?? []) {
-      const status = (evse.status ?? "").toUpperCase();
-      if (status === "AVAILABLE") available += 1;
-      if (status !== "REMOVED") total += 1;
-      statuses.push(classifyEvseStatus(evse.status));
-    }
+    const summary = summarizeEvseStatuses((location.evses ?? []).map((evse) => evse.status));
 
     // Only attach counts when at least one EVSE resolved to a known status —
     // otherwise a station of all-"STATIC" EVSEs would render a misleading
     // "0 of N available" once merged.
-    const hasKnownStatus = statuses.some((status) => status !== null);
     out.set(poiId, {
       asOf,
-      status: aggregateStationStatus(statuses),
-      ...(hasKnownStatus ? { available, total } : {}),
+      status: summary.status,
+      ...(summary.hasKnownStatus ? { available: summary.available, total: summary.total } : {}),
     });
   }
   return out;

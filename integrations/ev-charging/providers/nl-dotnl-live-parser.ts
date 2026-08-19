@@ -1,5 +1,5 @@
-import type { EvChargingStatus } from "@openmapx/mobility-core/ev-charging";
 import type { PoiLiveParseFn, PoiLiveState } from "@openmapx/poi-source-registry";
+import { summarizeEvseStatuses } from "./evse-status.js";
 import { nlDotnlLocationPoiId } from "./utils.js";
 
 // Unlike the Swiss OICP feed (status keyed by EvseID in a separate feed, with
@@ -16,35 +16,6 @@ interface OcpiLocation {
   country_code?: string;
   party_id?: string;
   evses?: OcpiEvse[];
-}
-
-function classifyEvseStatus(raw: string | undefined): EvChargingStatus | null {
-  const upper = raw?.toUpperCase() ?? "";
-  if (upper === "AVAILABLE" || upper === "CHARGING" || upper === "BLOCKED" || upper === "RESERVED")
-    return "operational";
-  if (upper === "PLANNED") return "planned";
-  if (upper === "INOPERATIVE" || upper === "OUTOFORDER" || upper === "REMOVED")
-    return "not-operational";
-  return null;
-}
-
-function aggregateStationStatus(perEvse: ReadonlyArray<EvChargingStatus | null>): EvChargingStatus {
-  let sawOperational = false;
-  let sawPlanned = false;
-  let sawNotOperational = false;
-  let sawKnown = false;
-  for (const s of perEvse) {
-    if (s === null) continue;
-    sawKnown = true;
-    if (s === "operational") sawOperational = true;
-    else if (s === "planned") sawPlanned = true;
-    else if (s === "not-operational") sawNotOperational = true;
-  }
-  if (!sawKnown) return "unknown";
-  if (sawOperational) return "operational";
-  if (sawPlanned) return "planned";
-  if (sawNotOperational) return "not-operational";
-  return "unknown";
 }
 
 export const parseNlDotnlLive: PoiLiveParseFn = (buffer) => {
@@ -69,32 +40,23 @@ export const parseNlDotnlLive: PoiLiveParseFn = (buffer) => {
     const poiId = nlDotnlLocationPoiId(location);
     if (!poiId) continue;
 
-    const statuses: Array<EvChargingStatus | null> = [];
-    let available = 0;
     // Every EVSE on the location counts toward `total`, including ones whose
-    // status string `classifyEvseStatus` doesn't recognize — they're still a
+    // status string the shared summarizer doesn't recognize — they're still a
     // real physical EVSE (mirrors the fix already applied to the CH parser).
     // REMOVED means the EVSE is no longer part of the location, so it's
     // excluded from `total` (and thus `available`, which only counts
     // AVAILABLE anyway) — but it still feeds the aggregate station status.
-    let total = 0;
-    for (const evse of location.evses ?? []) {
-      const status = (evse.status ?? "").toUpperCase();
-      if (status === "AVAILABLE") available += 1;
-      if (status !== "REMOVED") total += 1;
-      statuses.push(classifyEvseStatus(evse.status));
-    }
+    const summary = summarizeEvseStatuses((location.evses ?? []).map((evse) => evse.status));
 
     // A station where every classifiable EVSE came back with an unrecognized
     // status (or there are no EVSEs at all) carries no meaningful
     // availability signal — emitting available:0/total:N here would render
     // as a misleading "0 of N available" once merged. Only attach the counts
     // when at least one EVSE resolved to a known status.
-    const hasKnownStatus = statuses.some((status) => status !== null);
     out.set(poiId, {
       asOf,
-      status: aggregateStationStatus(statuses),
-      ...(hasKnownStatus ? { available, total } : {}),
+      status: summary.status,
+      ...(summary.hasKnownStatus ? { available: summary.available, total: summary.total } : {}),
     });
   }
   return out;

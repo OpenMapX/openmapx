@@ -1,0 +1,25 @@
+{
+  "minLines": 15,
+  "minTokens": 100,
+  "mode": "mild",
+  "pattern": "**/*.{ts,tsx,js,jsx,mts,mjs}",
+  "ignore": [
+    "**/*.test.*",
+    "**/*.spec.*",
+    "**/__tests__/**",
+    "**/__fixtures__/**",
+    "**/fixtures/**",
+    "**/generated/**",
+    "**/_template/**",
+    "**/templates/**",
+    "**/node_modules/**",
+    "**/ios/**",
+    "**/android/**",
+    "**/store/screenshots/**",
+    "**/qa/results/**",
+    "**/dist*/**",
+    "**/build/**",
+    "apps/web/src/app/(legal)/**"
+  ],
+  "reporters": ["ai"]
+}

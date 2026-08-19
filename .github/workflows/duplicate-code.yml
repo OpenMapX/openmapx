@@ -1,0 +1,47 @@
+name: Duplicate-code audit
+
+on:
+  schedule:
+    # Start with a periodic, non-blocking baseline. Clone findings need human
+    # review because provider adapters and platform-specific code can be
+    # intentionally similar without benefiting from a shared abstraction.
+    - cron: "47 6 * * 3"
+  workflow_dispatch:
+
+concurrency:
+  group: duplicate-code-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  jscpd:
+    name: duplicated production code
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Audit duplicate production code
+        run: pnpm check-duplicates --reporters ai,html,markdown,json --output .jscpd-report
+
+      - name: Upload duplicate-code report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: duplicate-code-report
+          path: .jscpd-report
+          if-no-files-found: error
+          retention-days: 14
