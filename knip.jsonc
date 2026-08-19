@@ -54,6 +54,10 @@
     "apps/web": {
       "entry": ["src/sw.ts", "scripts/**/*.{mjs,ts}"],
       "ignoreFiles": ["public/**"],
+      // Keep the web app's auth runtime pinned alongside core and API. These
+      // direct dependencies are enforced by auth-oauth-provider.test.ts even
+      // though the imports live in the shared core workspace.
+      "ignoreDependencies": ["@better-auth/core", "@better-auth/passkey", "better-auth"],
       "paths": {
         "@/*": ["src/*"],
         "@integrations/*": ["../../integrations/*"]
