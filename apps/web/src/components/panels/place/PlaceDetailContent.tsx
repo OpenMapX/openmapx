@@ -85,7 +85,11 @@ function DockedActionBar({ place }: { place: Place }) {
   );
 }
 
-export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar = false }: Props) {
+export function PlaceDetailContent(props: Props) {
+  return <PlaceDetailContentInner key={props.place.id} {...props} />;
+}
+
+function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = false }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const locale = useLocale();
@@ -120,18 +124,12 @@ export function PlaceDetailContent({ place, isLoading, onClose, clearSearchBar =
     }
   }, [activeTripDep, selectedRoute]);
 
-  // Reset tab when a different place loads
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger
+  // This component is keyed by place id, so its local UI state resets by
+  // remounting. The selected trip lives in an external store and needs an
+  // explicit reset for the new detail session.
   useEffect(() => {
-    setTab(0);
-    setGalleryOpen(false);
-    setFailedHeroUrls(new Set());
-    setShowDepartures(false);
-    setDeparturesModeFilter(null);
-    setSelectedRoute(null);
-    setActiveStopBoard(null);
     setActiveTripDep(null);
-  }, [place.id]);
+  }, [setActiveTripDep]);
 
   // A Place represents a transit stop when the geocoder/synthetic builder
   // tagged it as such — makeSyntheticStopPlace + geocodeStopAsPlace always

@@ -7,6 +7,7 @@ import Snackbar from "@mui/material/Snackbar";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { shellFeatureBoundary } from "@/lib/mobile/mobileShellEnvironment";
+import { useHydrated } from "@/lib/useHydrated";
 
 interface SpeechRecognitionAlternativeLike {
   readonly transcript: string;
@@ -106,16 +107,11 @@ export function VoiceSearchButton({ onResult }: VoiceSearchButtonProps) {
   const t = useTranslations("search");
   const locale = useLocale();
 
-  const [speechCtor, setSpeechCtor] = useState<SpeechRecognitionCtor | undefined>(undefined);
-  useEffect(() => {
-    // The installed shell declares no microphone use, so asking for one there is
-    // a store rejection rather than a feature.
-    if (!shellFeatureBoundary().microphone) return;
-    // Updater form: the value we store IS a function (the constructor), which
-    // React would otherwise treat as a state updater and invoke (throws — the
-    // ctor needs `new`).
-    setSpeechCtor(() => getSpeechRecognition());
-  }, []);
+  // The installed shell declares no microphone use, so asking for one there is
+  // a store rejection rather than a feature. Defer the browser-only lookup
+  // until after hydration so the initial client render still matches SSR.
+  const speechCtor =
+    useHydrated() && shellFeatureBoundary().microphone ? getSpeechRecognition() : undefined;
 
   const [listening, setListening] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);

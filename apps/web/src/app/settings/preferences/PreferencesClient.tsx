@@ -8,23 +8,21 @@ import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { useNavigationStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { haptics, hapticsSupported, isHapticsEnabled, setHapticsEnabled } from "@/lib/haptics";
+import { useHydrated } from "@/lib/useHydrated";
 
 export function PreferencesClient() {
   const t = useTranslations("settings");
-  const [hapticsOn, setHapticsOn] = useState(true);
-  const [supported, setSupported] = useState(true);
+  const hydrated = useHydrated();
+  const [hapticsOverride, setHapticsOn] = useState<boolean | null>(null);
+  const hapticsOn = hapticsOverride ?? (hydrated ? isHapticsEnabled() : true);
+  const supported = hydrated ? hapticsSupported() : true;
 
   const voiceEnabled = useNavigationStore((s) => s.voiceEnabled);
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
   const toggleVoice = useNavigationStore((s) => s.toggleVoice);
   const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
-
-  useEffect(() => {
-    setHapticsOn(isHapticsEnabled());
-    setSupported(hapticsSupported());
-  }, []);
 
   const handleToggle = (next: boolean) => {
     setHapticsOn(next);

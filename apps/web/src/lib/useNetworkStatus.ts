@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useSyncExternalStore } from "react";
 
 /** Minimal shape of the (non-standard) Network Information API. */
 interface NetworkInformationLike {
@@ -62,27 +62,55 @@ function read(conn: NetworkInformationLike | null): NetworkStatus {
   };
 }
 
+const serverSnapshot: NetworkStatus = {
+  online: true,
+  supported: false,
+  saveData: false,
+  effectiveType: null,
+  connectionType: null,
+  metered: false,
+};
+
+const listeners = new Set<() => void>();
+let connection: NetworkInformationLike | null = null;
+let snapshot: NetworkStatus | undefined;
+
+function getSnapshot(): NetworkStatus {
+  snapshot ??= read(getConnection());
+  return snapshot;
+}
+
+function emitChange() {
+  snapshot = read(connection);
+  for (const listener of listeners) listener();
+}
+
+function subscribe(listener: () => void) {
+  if (listeners.size === 0) {
+    connection = getConnection();
+    snapshot = read(connection);
+    connection?.addEventListener?.("change", emitChange);
+    window.addEventListener("online", emitChange);
+    window.addEventListener("offline", emitChange);
+  }
+  listeners.add(listener);
+
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size > 0) return;
+    connection?.removeEventListener?.("change", emitChange);
+    window.removeEventListener("online", emitChange);
+    window.removeEventListener("offline", emitChange);
+    connection = null;
+    snapshot = undefined;
+  };
+}
+
 /**
  * Live view of the connection's metered/Save-Data status. Returns
  * `{ supported: false, metered: false }` where the API is absent (Firefox,
  * Safari) so callers can simply skip any "are you on cellular?" warning.
  */
 export function useNetworkStatus(): NetworkStatus {
-  const [status, setStatus] = useState<NetworkStatus>(() => read(getConnection()));
-
-  useEffect(() => {
-    const conn = getConnection();
-    const onChange = () => setStatus(read(conn));
-    onChange();
-    conn?.addEventListener?.("change", onChange);
-    window.addEventListener("online", onChange);
-    window.addEventListener("offline", onChange);
-    return () => {
-      conn?.removeEventListener?.("change", onChange);
-      window.removeEventListener("online", onChange);
-      window.removeEventListener("offline", onChange);
-    };
-  }, []);
-
-  return status;
+  return useSyncExternalStore(subscribe, getSnapshot, () => serverSnapshot);
 }

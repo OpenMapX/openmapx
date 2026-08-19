@@ -13,9 +13,9 @@ import {
   useIntegrationRegistry,
 } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
-import { type ComponentType, lazy, Suspense, useEffect, useMemo, useState } from "react";
+import { type ComponentType, lazy, Suspense, useMemo, useState } from "react";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
-import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
+import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 import { useAnyOverlayPanelOpen } from "./overlay/useOverlayStoreState";
 import { dedupeSharedMapLayers } from "./sharedIntegrationLayer";
@@ -98,13 +98,7 @@ export function LegendHost() {
   // behind it — same follow logic MapControls uses. Browsing panels and the
   // navigation swipe sheet all register their live height in the same registry,
   // so there is no per-context clearance to keep in sync. 0 on desktop.
-  const [vh, setVh] = useState(0);
-  useEffect(() => {
-    const update = () => setVh(window.innerHeight);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
+  const vh = useWindowHeight();
   const followHeight = useMobilePanelClearance(vh);
 
   // Declarative legends (manifest `frontend.overlay.legend` data) are rendered by

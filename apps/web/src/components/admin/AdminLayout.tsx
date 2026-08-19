@@ -1,7 +1,8 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
+import { useHydrated } from "@/lib/useHydrated";
 import { AdminSidebar } from "./AdminSidebar";
 import { AdminTopBar, TOPBAR_HEIGHT } from "./AdminTopBar";
 import { AdminThemeProvider } from "./shared/AdminThemeProvider";
@@ -21,15 +22,11 @@ interface AdminLayoutProps {
 }
 
 export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutProps) {
-  const [sidebarOpen, setSidebarOpen] = useState(true);
-
-  // Keep the navigation modal below the desktop breakpoint. SSR has no
-  // viewport information, so reconcile the initial state after mount.
-  useEffect(() => {
-    if (!window.matchMedia("(min-width:900px)").matches) setSidebarOpen(false);
-  }, []);
-
-  const toggleSidebar = useCallback(() => setSidebarOpen((v) => !v), []);
+  const hydrated = useHydrated();
+  const [sidebarOverride, setSidebarOpen] = useState<boolean | null>(null);
+  const sidebarOpen =
+    sidebarOverride ?? (!hydrated || window.matchMedia("(min-width:900px)").matches);
+  const toggleSidebar = useCallback(() => setSidebarOpen(!sidebarOpen), [sidebarOpen]);
 
   return (
     <AdminThemeProvider>

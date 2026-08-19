@@ -2,9 +2,10 @@
 
 import Box from "@mui/material/Box";
 import { useTranslations } from "next-intl";
-import { type ReactNode, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DetentConfig } from "@/components/panels/sheet/detents";
 import { MobileBottomSheet } from "@/components/panels/sheet/MobileBottomSheet";
+import { useWindowHeight } from "@/lib/mobilePanelHeight";
 
 // Cap the expanded sheet so the maneuver banner up top stays visible.
 const MAX_HEIGHT_FRACTION = 0.9;
@@ -52,11 +53,7 @@ export function NavSwipeSheet({
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [headerPx, setHeaderPx] = useState(0);
   const [menuPx, setMenuPx] = useState(0);
-  // Starts at 0, matching the server render, and is filled in by the mount
-  // effect below. Reading window.innerHeight up front (even as a lazy useState
-  // initializer) would make the client's first render diverge from the
-  // server-rendered markup and trip a hydration mismatch.
-  const [viewportH, setViewportH] = useState(0);
+  const viewportH = useWindowHeight();
 
   // Layout effects so the first paint already has the right numbers: an
   // ordinary effect only fills these in after the browser has already painted
@@ -79,13 +76,6 @@ export function NavSwipeSheet({
     const ro = new ResizeObserver(() => setMenuPx(el.offsetHeight));
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-
-  useEffect(() => {
-    const onResize = () => setViewportH(window.innerHeight);
-    onResize();
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
   }, []);
 
   // `headerPx` and `menuPx` are pure content measurements — no safe-area inset

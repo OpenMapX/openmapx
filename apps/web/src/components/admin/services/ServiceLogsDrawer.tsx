@@ -28,17 +28,24 @@ export function ServiceLogsDrawer({
   const env = useEnv();
   const apiUrl = env.apiUrl;
   const [lines, setLines] = useState<string[]>([]);
-  const [streaming, setStreaming] = useState(false);
+  const [streaming, setStreaming] = useState(open);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const streamKey = open ? serviceId : null;
+  const [previousStreamKey, setPreviousStreamKey] = useState(streamKey);
+
+  if (streamKey !== previousStreamKey) {
+    setPreviousStreamKey(streamKey);
+    if (open) {
+      setLines([]);
+      setError(null);
+      setStreaming(true);
+    }
+  }
 
   useEffect(() => {
     if (!open) return;
-
-    setLines([]);
-    setError(null);
-    setStreaming(true);
 
     const controller = new AbortController();
     abortRef.current = controller;

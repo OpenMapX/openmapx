@@ -31,7 +31,7 @@ import {
   useOpeningHoursStore,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { BRAND } from "@/lib/theme";
 import { BrandLogo } from "./BrandLogo";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
@@ -257,16 +257,6 @@ export function CategoryFilterBar() {
   const [pendingDay, setPendingDay] = useState<number | null>(openAtDay);
   const [pendingHour, setPendingHour] = useState<number | null>(openAtHour);
 
-  // Sync pending state from store when popover opens
-  // biome-ignore lint/correctness/useExhaustiveDependencies: intentional sync on open
-  useEffect(() => {
-    if (anchorEl) {
-      setPendingMode(openingHoursFilter);
-      setPendingDay(openAtDay);
-      setPendingHour(openAtHour);
-    }
-  }, [anchorEl]);
-
   // Fuel stations (data source): simple "Open now" toggle chip. No brand
   // chips here — selecting a data source calls clearCategory() first, so
   // rawResults (and therefore brandOpts) is always empty for this branch.
@@ -386,7 +376,12 @@ export function CategoryFilterBar() {
             />
           </Box>
         }
-        onClick={(e) => setAnchorEl(e.currentTarget)}
+        onClick={(e) => {
+          setPendingMode(openingHoursFilter);
+          setPendingDay(openAtDay);
+          setPendingHour(openAtHour);
+          setAnchorEl(e.currentTarget);
+        }}
         variant={isFiltered ? "filled" : "outlined"}
         sx={toggleChipSx(isFiltered)}
       />

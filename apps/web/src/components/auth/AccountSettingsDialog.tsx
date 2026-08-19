@@ -99,7 +99,9 @@ export function AccountSettingsDialog({
   const [showNewPassword, setShowNewPassword] = useState(false);
 
   // 2FA state
-  const [twoFactorEnabled, setTwoFactorEnabled] = useState(false);
+  const [twoFactorEnabled, setTwoFactorEnabled] = useState(
+    !!(user as Record<string, unknown>).twoFactorEnabled,
+  );
   const [totpSetupUri, setTotpSetupUri] = useState<string | null>(null);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [totpVerifyCode, setTotpVerifyCode] = useState("");
@@ -108,6 +110,38 @@ export function AccountSettingsDialog({
   const [showTwoFactorSetup, setShowTwoFactorSetup] = useState(false);
   const [showDisable2fa, setShowDisable2fa] = useState(false);
   const [showBackupCodes, setShowBackupCodes] = useState(false);
+  const sessionKey = open ? user.id : null;
+  const [previousSessionKey, setPreviousSessionKey] = useState(sessionKey);
+
+  if (sessionKey !== previousSessionKey) {
+    setPreviousSessionKey(sessionKey);
+    if (open) {
+      setName(user.name);
+      setMessage(null);
+      setPasskeys([]);
+      setLinkedAccounts([]);
+      setConfirmDelete(false);
+      setDeletePassword("");
+      setConfirmUnlinkProvider(null);
+      setChangingEmail(false);
+      setNewEmail("");
+      setEmailOtp("");
+      setEmailOtpSent(false);
+      setChangingPassword(false);
+      setCurrentPassword("");
+      setNewPassword("");
+      setShowCurrentPassword(false);
+      setShowNewPassword(false);
+      setShowTwoFactorSetup(false);
+      setShowDisable2fa(false);
+      setShowBackupCodes(false);
+      setTotpSetupUri(null);
+      setBackupCodes(null);
+      setTwoFactorPassword("");
+      setTotpVerifyCode("");
+      setTwoFactorEnabled(!!(user as Record<string, unknown>).twoFactorEnabled);
+    }
+  }
 
   useEffect(() => {
     if (!totpSetupUri) {
@@ -120,38 +154,17 @@ export function AccountSettingsDialog({
   }, [totpSetupUri]);
 
   useEffect(() => {
-    if (!open) return;
-    setName(user.name);
-    setMessage(null);
-    setConfirmDelete(false);
-    setDeletePassword("");
-    setConfirmUnlinkProvider(null);
-    setChangingEmail(false);
-    setNewEmail("");
-    setEmailOtp("");
-    setEmailOtpSent(false);
-    setChangingPassword(false);
-    setCurrentPassword("");
-    setNewPassword("");
-    setShowCurrentPassword(false);
-    setShowNewPassword(false);
-    setShowTwoFactorSetup(false);
-    setShowDisable2fa(false);
-    setShowBackupCodes(false);
-    setTotpSetupUri(null);
-    setBackupCodes(null);
-    setTwoFactorPassword("");
-    setTotpVerifyCode("");
-    setTwoFactorEnabled(!!(user as Record<string, unknown>).twoFactorEnabled);
+    if (!sessionKey) return;
+    let cancelled = false;
 
     // Load passkeys
     authClient.passkey.listUserPasskeys().then(({ data }) => {
-      if (data) setPasskeys(data);
+      if (!cancelled && data) setPasskeys(data);
     });
 
     // Load linked accounts
     authClient.listAccounts().then(({ data }) => {
-      if (data) {
+      if (!cancelled && data) {
         setLinkedAccounts(
           data.map((a: { providerId: string; accountId: string }) => ({
             providerId: a.providerId,
@@ -160,7 +173,10 @@ export function AccountSettingsDialog({
         );
       }
     });
-  }, [open, (user as Record<string, unknown>).twoFactorEnabled, user.name]); // eslint-disable-line react-hooks/exhaustive-deps -- reset only when dialog opens
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionKey]);
 
   const handleUpdateProfile = async () => {
     setSaving(true);

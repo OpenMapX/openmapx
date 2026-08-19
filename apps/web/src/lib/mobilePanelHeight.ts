@@ -73,6 +73,23 @@ const getServerSnapshot = () => 0;
 const getCapSnapshot = () => cachedCap;
 const getServerCapSnapshot = (): number | null => null;
 
+function subscribeWindowHeight(listener: () => void) {
+  window.addEventListener("resize", listener);
+  return () => window.removeEventListener("resize", listener);
+}
+
+const getWindowHeightSnapshot = () => window.innerHeight;
+const getServerWindowHeightSnapshot = () => 0;
+
+/** Hydration-safe live height of the browser's layout viewport. */
+export function useWindowHeight(): number {
+  return useSyncExternalStore(
+    subscribeWindowHeight,
+    getWindowHeightSnapshot,
+    getServerWindowHeightSnapshot,
+  );
+}
+
 /**
  * Tracks the rendered height of a bottom-anchored mobile panel so other UI
  * (like the right-side map controls) can sit just above its top edge.

@@ -15,6 +15,7 @@ import {
   markAutoReloaded,
   msSinceLastAutoReload,
 } from "@/lib/swAutoUpdate";
+import { useHydrated } from "@/lib/useHydrated";
 
 const BANNER_GRACE_MS = 30_000;
 
@@ -22,14 +23,12 @@ export function SwUpdateNotice() {
   const t = useTranslations("pwa");
   const queryClient = useQueryClient();
   const [updateReady, setUpdateReady] = useState(false);
-  const [visible, setVisible] = useState(true);
+  const hydrated = useHydrated();
+  const [visibleOverride, setVisible] = useState<boolean | null>(null);
+  const visible = visibleOverride ?? (hydrated ? document.visibilityState === "visible" : true);
   const [graceElapsed, setGraceElapsed] = useState(false);
   const swRef = useRef<Serwist | null>(null);
   const updateReadyRef = useRef(false);
-
-  useEffect(() => {
-    setVisible(document.visibilityState === "visible");
-  }, []);
 
   useEffect(() => {
     if (process.env.NODE_ENV !== "production") return;

@@ -6,7 +6,8 @@ import type { SxProps, Theme } from "@mui/material/styles";
 import Tooltip from "@mui/material/Tooltip";
 import { getInitials, proxyImageUrl, useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
+import { useHydrated } from "@/lib/useHydrated";
 import { useAccountSettingsStore } from "@/stores/accountSettingsStore";
 import { AccountMenu } from "./AccountMenu";
 import { AccountSettingsDialog } from "./AccountSettingsDialog";
@@ -38,8 +39,7 @@ export function AccountAvatarButton({ size = 36, sx }: Props) {
   // asynchronously; a session that lands between SSR and hydration would
   // otherwise change the avatar's session-derived styles (bgcolor/opacity) and
   // trip a hydration mismatch on its emotion-generated class.
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
+  const mounted = useHydrated();
 
   useLayoutEffect(() => {
     if (!mounted || isPending) return;

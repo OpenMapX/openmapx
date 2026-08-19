@@ -6,6 +6,7 @@ import {
   useMobilePanelClearance,
   useMobilePanelFollowCap,
   useMobilePanelHeightTracker,
+  useWindowHeight,
 } from "./mobilePanelHeight";
 
 // The tracker is mobile-only via useMediaQuery; the ref lets tests flip the
@@ -199,5 +200,21 @@ describe("mobilePanelHeight clearance", () => {
 
     act(() => publishMobilePanelHeight("nav-sheet", null));
     cap.unmount();
+  });
+});
+
+describe("window height", () => {
+  it("tracks layout viewport resizes", () => {
+    const height = renderHook(() => useWindowHeight());
+    const originalHeight = window.innerHeight;
+
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 720 });
+    act(() => window.dispatchEvent(new Event("resize")));
+    expect(height.result.current).toBe(720);
+
+    Object.defineProperty(window, "innerHeight", {
+      configurable: true,
+      value: originalHeight,
+    });
   });
 });

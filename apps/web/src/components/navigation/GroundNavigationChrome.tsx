@@ -16,7 +16,7 @@ import { NavigationSettingsDialog } from "@/components/settings/NavigationSettin
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMapOptional } from "@/lib/MapContext";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
-import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
+import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
 import { ArrivalCard } from "./ArrivalCard";
 import { FasterRouteBanner } from "./FasterRouteBanner";
@@ -71,13 +71,7 @@ export function GroundNavigationChrome({ coverage }: Props) {
   // this column's flow), so nothing here reserves space for it any more —
   // lift the speed limit badge by its live height, the same way MapControls
   // and LegendHost lift the map's own bottom-anchored chrome.
-  const [vh, setVh] = useState(0);
-  useEffect(() => {
-    const update = () => setVh(window.innerHeight);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
+  const vh = useWindowHeight();
   const sheetClearance = useMobilePanelClearance(vh);
 
   const rerouting = status === "rerouting";

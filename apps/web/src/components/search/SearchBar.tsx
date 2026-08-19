@@ -91,6 +91,7 @@ import {
 import { useMap } from "@/lib/MapContext";
 import { isConfidentPlaceMatch } from "@/lib/placeMatch";
 import { BRAND } from "@/lib/theme";
+import { useHydrated } from "@/lib/useHydrated";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { MobileSearchEmptyState } from "./MobileSearchEmptyState";
 import { NlpSearchCard } from "./NlpSearchCard";
@@ -129,7 +130,7 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
-  const [shortcutPlatform, setShortcutPlatform] = useState<ReturnType<typeof getPlatform>>("other");
+  const shortcutPlatform = useHydrated() ? getPlatform() : "other";
   const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
   const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
@@ -285,10 +286,6 @@ export function SearchBar() {
     return () => {
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     };
-  }, []);
-
-  useEffect(() => {
-    setShortcutPlatform(getPlatform());
   }, []);
 
   // Entering nearby mode (clicked "Nearby" on a place): clear the query and

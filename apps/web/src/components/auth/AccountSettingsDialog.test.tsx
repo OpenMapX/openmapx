@@ -107,6 +107,9 @@ describe("AccountSettingsDialog timeline targeting", () => {
     const view = render(
       <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />,
     );
+    const profileName = screen.getByLabelText("account.name");
+    await interaction.clear(profileName);
+    await interaction.type(profileName, "Private A Name");
     await interaction.type(screen.getByLabelText("timeline fixture API key"), "private-a-key");
     await interaction.type(
       screen.getByLabelText("timeline fixture instance URL"),
@@ -117,12 +120,13 @@ describe("AccountSettingsDialog timeline targeting", () => {
       <AccountSettingsDialog
         open
         onClose={vi.fn()}
-        user={{ ...user, id: "user-b" }}
+        user={{ ...user, id: "user-b", name: "Bob Timeline" }}
         initialSection="timeline"
       />,
     );
 
     expect(screen.getByText("user-b")).toBeInTheDocument();
+    expect(screen.getByLabelText("account.name")).toHaveValue("Bob Timeline");
     expect(screen.getByLabelText("timeline fixture API key")).toHaveValue("");
     expect(screen.getByLabelText("timeline fixture instance URL")).toHaveValue("");
   });

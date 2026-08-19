@@ -13,11 +13,11 @@ import Tooltip from "@mui/material/Tooltip";
 import { useMapStore, useNavigationStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
-import { Suspense, useEffect, useState } from "react";
+import { Suspense } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
 import { useMap } from "@/lib/MapContext";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
-import { useMobilePanelClearance } from "@/lib/mobilePanelHeight";
+import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
 import { Pegman } from "./Pegman";
 
@@ -43,13 +43,7 @@ export function MapControls() {
   const handleMyLocation = useMyLocation();
   const registry = useIntegrationRegistry();
   const crowdReportsEnabled = Boolean(registry.get("crowd-reports"));
-  const [vh, setVh] = useState(0);
-  useEffect(() => {
-    const update = () => setVh(window.innerHeight);
-    update();
-    window.addEventListener("resize", update);
-    return () => window.removeEventListener("resize", update);
-  }, []);
+  const vh = useWindowHeight();
   // Cap how far the controls follow the sheet — when the user drags above the
   // medium snap, the sheet covers the controls anyway, so freezing the offset
   // here keeps them in their last reachable position rather than scrolling

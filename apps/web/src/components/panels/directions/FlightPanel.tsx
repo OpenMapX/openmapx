@@ -397,10 +397,19 @@ export function FlightPanel() {
     if (!providerId && providersQuery.data) setProviderId(providersQuery.data.defaultProvider);
   }, [providerId, providersQuery.data]);
 
-  // Keep the return date at/after departure.
-  useEffect(() => {
-    if (roundTrip && returnDate < departDate) setReturnDate(departDate);
-  }, [roundTrip, returnDate, departDate]);
+  const handleRoundTripChange = (next: boolean) => {
+    setRoundTrip(next);
+    if (next && returnDate < departDate) setReturnDate(departDate);
+  };
+
+  const handleDepartDateChange = (next: string) => {
+    setDepartDate(next);
+    if (roundTrip && returnDate < next) setReturnDate(next);
+  };
+
+  const handleReturnDateChange = (next: string) => {
+    setReturnDate(next < departDate ? departDate : next);
+  };
 
   // Publish resolved airports to the map arc layer; clear on unmount.
   useEffect(() => {
@@ -490,7 +499,7 @@ export function FlightPanel() {
         ).map(([key, val]) => (
           <Box
             key={key}
-            onClick={() => setRoundTrip(val)}
+            onClick={() => handleRoundTripChange(val)}
             sx={{
               px: 1.5,
               py: 0.5,
@@ -526,7 +535,7 @@ export function FlightPanel() {
             type="date"
             min={todayStr}
             value={departDate}
-            onChange={(e: ChangeEvent<HTMLInputElement>) => setDepartDate(e.target.value)}
+            onChange={(e: ChangeEvent<HTMLInputElement>) => handleDepartDateChange(e.target.value)}
             sx={inputSx}
           />
         </Box>
@@ -538,7 +547,9 @@ export function FlightPanel() {
               type="date"
               min={departDate || todayStr}
               value={returnDate}
-              onChange={(e: ChangeEvent<HTMLInputElement>) => setReturnDate(e.target.value)}
+              onChange={(e: ChangeEvent<HTMLInputElement>) =>
+                handleReturnDateChange(e.target.value)
+              }
               sx={inputSx}
             />
           </Box>

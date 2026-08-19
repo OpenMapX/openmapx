@@ -16,6 +16,7 @@ vi.mock("next-intl", () => ({
 
 vi.mock("@/lib/mobilePanelHeight", () => ({
   useMobilePanelClearance: () => 0,
+  useWindowHeight: () => 800,
 }));
 
 const registry = new IntegrationRegistry([

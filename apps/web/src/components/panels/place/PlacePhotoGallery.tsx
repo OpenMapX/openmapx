@@ -38,7 +38,12 @@ interface Props {
   lng: number;
 }
 
-export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng }: Props) {
+export function PlacePhotoGallery(props: Props) {
+  const { open, placeId, lat, lng } = props;
+  return <PlacePhotoGalleryInner key={`${placeId}:${lat}:${lng}:${open}`} {...props} />;
+}
+
+function PlacePhotoGalleryInner({ open, onClose, placeName, placeId, lat, lng }: Props) {
   const tc = useTranslations("common");
   const tp = useTranslations("photoGallery");
   const fmt = useDateTimeFormat();
@@ -53,11 +58,6 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
     limit: 30,
     enabled: open,
   });
-
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on open
-  useEffect(() => {
-    if (open) setSelectedIdx(0);
-  }, [open, lat, lng]);
 
   const clampedIdx = Math.min(selectedIdx, Math.max(0, allPhotos.length - 1));
   const selectedPhoto = allPhotos[clampedIdx];
@@ -174,7 +174,9 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
               <Typography sx={{ color: "rgba(255,255,255,0.5)" }}>{tp("noPhotos")}</Typography>
             ) : (
               <>
-                {selectedPhoto && <MainImage photo={selectedPhoto} placeName={placeName} />}
+                {selectedPhoto && (
+                  <MainImage key={selectedPhoto.url} photo={selectedPhoto} placeName={placeName} />
+                )}
 
                 {clampedIdx > 0 && (
                   <IconButton
@@ -309,12 +311,6 @@ export function PlacePhotoGallery({ open, onClose, placeName, placeId, lat, lng 
 /** Main viewer image with fallback on error. */
 function MainImage({ photo, placeName }: { photo: PlacePhoto; placeName: string }) {
   const [failed, setFailed] = useState(false);
-
-  // Reset failed state when the photo URL changes
-  // biome-ignore lint/correctness/useExhaustiveDependencies: reset on url change
-  useEffect(() => {
-    setFailed(false);
-  }, [photo.url]);
 
   if (failed) {
     return (

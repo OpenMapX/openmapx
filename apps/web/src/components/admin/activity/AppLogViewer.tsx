@@ -17,7 +17,7 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -147,11 +147,11 @@ export function AppLogViewer() {
     refetchInterval: autoRefresh ? 5000 : false,
   });
 
-  useEffect(() => {
-    if (autoRefresh && bottomRef.current) {
-      bottomRef.current.scrollIntoView({ behavior: "smooth" });
-    }
-  }, [autoRefresh]);
+  const handleAutoRefreshToggle = () => {
+    const next = !autoRefresh;
+    setAutoRefresh(next);
+    if (next) bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
 
   const sources = data?.sources ?? [];
 
@@ -237,7 +237,7 @@ export function AppLogViewer() {
           <Chip label={`${data?.total ?? 0} entries`} size="small" variant="outlined" />
 
           <Tooltip title={autoRefresh ? "Pause auto-refresh" : "Resume auto-refresh"}>
-            <IconButton size="small" onClick={() => setAutoRefresh((v) => !v)}>
+            <IconButton size="small" onClick={handleAutoRefreshToggle}>
               {autoRefresh ? <PauseIcon fontSize="small" /> : <PlayArrowIcon fontSize="small" />}
             </IconButton>
           </Tooltip>

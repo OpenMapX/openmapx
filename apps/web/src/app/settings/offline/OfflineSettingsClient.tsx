@@ -62,6 +62,7 @@ import {
   setRecentMapDataCacheEnabled,
 } from "@/lib/recentMapDataCache";
 import { formatBytes } from "@/lib/storageFormat";
+import { useHydrated } from "@/lib/useHydrated";
 import { useNetworkStatus } from "@/lib/useNetworkStatus";
 import { AreaPickerMap } from "./AreaPickerMap";
 import { OfflineMapView } from "./OfflineMapView";
@@ -263,9 +264,10 @@ async function getDefaultResolverRefresh(): Promise<void> {
 
 function RecentDataOfflineToggle() {
   const t = useTranslations("settings");
-  const [enabled, setEnabled] = useState(false);
+  const hydrated = useHydrated();
+  const [enabledOverride, setEnabled] = useState<boolean | null>(null);
+  const enabled = enabledOverride ?? (hydrated ? isRecentMapDataCacheEnabled() : false);
   const [busy, setBusy] = useState(false);
-  useEffect(() => setEnabled(isRecentMapDataCacheEnabled()), []);
   const handleChange = async (next: boolean) => {
     setEnabled(next);
     setBusy(true);
