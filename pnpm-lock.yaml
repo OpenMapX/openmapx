@@ -233,7 +233,7 @@ importers:
         version: 57.0.2(expo@57.0.12)
       expo-build-properties:
         specifier: ~57.0.9
-        version: 57.0.9(expo@57.0.12)
+        version: 57.0.11(expo@57.0.12)
       expo-constants:
         specifier: ~57.0.9
         version: 57.0.9(expo@57.0.12)(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.8)(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(supports-color@8.1.1)
@@ -7585,8 +7585,8 @@ packages:
       react: '*'
       react-native: '*'
 
-  expo-build-properties@57.0.9:
-    resolution: {integrity: sha512-IX8Nz85yNDZyqBK7zbLEfn4ijMGaF6TmLjCY2KE0UKltUoV78DhgN6ksPZbDbPDvqLpU2fMY/5OD4CbYB7hHwg==}
+  expo-build-properties@57.0.11:
+    resolution: {integrity: sha512-+YlioKtW5rNVoGMGlw2t0pY198vjGYN/JcCQyc2sKhJYh3w2C4Lu72tkQAzNd/lLRIkUXTU7J0ICRQ8EaXTtbQ==}
     peerDependencies:
       expo: '*'
 
@@ -15372,7 +15372,7 @@ snapshots:
   ajv@8.18.0:
     dependencies:
       fast-deep-equal: 3.1.3
-      fast-uri: 4.1.2
+      fast-uri: 4.1.3
       json-schema-traverse: 1.0.0
       require-from-string: 2.0.2
 
@@ -16674,7 +16674,7 @@ snapshots:
       - supports-color
       - typescript
 
-  expo-build-properties@57.0.9(expo@57.0.12):
+  expo-build-properties@57.0.11(expo@57.0.12):
     dependencies:
       '@expo/schema-utils': 57.0.2
       expo: 57.0.12(@babel/core@7.29.7(supports-color@8.1.1))(@expo/dom-webview@57.0.1)(react-dom@19.2.8(react@19.2.8))(react-native-webview@13.16.1(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.8)(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8))(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.87.0(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.8)(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1))(react@19.2.8)(supports-color@8.1.1)(typescript@6.0.3)
