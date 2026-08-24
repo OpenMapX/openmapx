@@ -12,7 +12,7 @@
   },
   "dependencies": {
     "@mapbox/glyph-pbf-composite": "0.0.3",
-    "@motis-project/motis-client": "2.11.0",
+    "@motis-project/motis-client": "2.11.2",
     "@openmapx/cli": "workspace:*",
     "@openmapx/core": "workspace:^",
     "@openmapx/db-schema": "workspace:^",
