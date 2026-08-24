@@ -429,7 +429,7 @@ importers:
         version: 5.6.0
       hls.js:
         specifier: ^1.6.17
-        version: 1.6.17
+        version: 1.7.0
       maplibre-gl:
         specifier: ^6.2.0
         version: 6.2.0
@@ -8037,8 +8037,8 @@ packages:
   hermes-parser@0.36.1:
     resolution: {integrity: sha512-GApNk4zLHi2UWoWZZkx7LNCOSzLSc5lB55pZ/PhK7ycFeg7u5LcF88p/WbpIi1XUDtE0MpHE3uRR3u3KB7TjSQ==}
 
-  hls.js@1.6.17:
-    resolution: {integrity: sha512-NUplVGVuc1hSPwdB/9/cbRkUmLrYi75/hqiXKdA+l300pJNxDu96R7jRb2imDzWJqIUF4I5ThmAdp9GvOCXsuQ==}
+  hls.js@1.7.0:
+    resolution: {integrity: sha512-NnQpT6Z//+2IB2qovSUbKbrlXY1MOpi0JynZ9L2NNOuTJiNCyMSQj9k2laEj1v7CxU/Hb8oTWR98eT3mVpPQVQ==}
 
   hoist-non-react-statics@3.3.2:
     resolution: {integrity: sha512-/gGivxi8JPKWNm/W0jSmzcMPpfpPLc3dY/6GxhX2hQ9iGj3aDfklV4ET7NjKpSinLpJ5vafa9iiGIEZg10SfBw==}
@@ -17074,7 +17074,7 @@ snapshots:
     dependencies:
       hermes-estree: 0.36.1
 
-  hls.js@1.6.17: {}
+  hls.js@1.7.0: {}
 
   hoist-non-react-statics@3.3.2:
     dependencies:
