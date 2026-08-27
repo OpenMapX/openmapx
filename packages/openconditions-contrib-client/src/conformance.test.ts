@@ -54,6 +54,10 @@ describe("cross-repo conformance", () => {
   it("canonicalClaimBytes matches the pinned RFC 8785 hex", () => {
     expect(toHex(canonicalClaimBytes(FIXED_CLAIM))).toBe(PINNED_CLAIM_HEX);
   });
+
+  it("rejects invalid Unicode through the public TypeError contract", () => {
+    expect(() => canonicalClaimBytes({ note: "\ud800" })).toThrow(TypeError);
+  });
 });
 
 describe("round-trip signing", () => {
