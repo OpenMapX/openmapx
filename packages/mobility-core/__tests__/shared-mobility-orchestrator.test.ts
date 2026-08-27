@@ -204,12 +204,32 @@ describe("orchestrateSharedMobility", () => {
 
     const state = getSharedMobilityOperationsState();
     expect(state.rollbackCategories).toContain("bike");
-    expect(state.decisions.find((record) => record.category === "bike")?.decision).toMatchObject({
-      policy: "fanout",
-      calledAdapters: ["direct"],
+    expect(state.decisions.find((record) => record.category === "bike")).toEqual({
+      category: "bike",
+      decision: {
+        policy: "fanout",
+        local: "healthy",
+        served: "fanout",
+        calledAdapters: ["direct"],
+        skippedAdapters: [],
+        partial: false,
+      },
+      recordedAt: expect.any(String),
     });
-    expect(JSON.stringify(state)).not.toContain("10.5");
-    expect(JSON.stringify(state)).not.toContain("vehicle-native");
+    const boundedDecisionKeys = new Set([
+      "calledAdapters",
+      "local",
+      "partial",
+      "policy",
+      "served",
+      "skippedAdapters",
+      "stationDelta",
+      "vehicleDelta",
+    ]);
+    for (const record of state.decisions) {
+      expect(Object.keys(record).sort()).toEqual(["category", "decision", "recordedAt"]);
+      expect(Object.keys(record.decision).every((key) => boundedDecisionKeys.has(key))).toBe(true);
+    }
     setSharedMobilityRollback("bike", false);
   });
 });
