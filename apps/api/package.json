@@ -7,7 +7,7 @@
   "main": "index.js",
   "scripts": {
     "dev": "node --env-file=.env --watch --import tsx/esm src/server.ts",
-    "build": "tsc --noEmit && node esbuild.config.mjs",
+    "build": "tsc --noEmit -p tsconfig.build.json && node esbuild.config.mjs",
     "start": "node dist/server.js",
     "check-types": "tsc --noEmit && tsc --noEmit -p tsconfig.integrations.json",
     "db:generate": "drizzle-kit generate",
