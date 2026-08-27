@@ -26,6 +26,9 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     usePresetSuggest: () => ({ data: undefined }),
     useChipTranslations: () => ({ data: {} }),
     useLabeledPlaces: () => ({ data: undefined }),
+    // The mobile empty state only needs a signed-out session. Keep the real
+    // Better Auth client (and its delayed browser lifecycle) out of this test.
+    useSession: () => ({ data: null }),
   };
 });
 
