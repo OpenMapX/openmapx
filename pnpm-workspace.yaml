@@ -55,14 +55,8 @@ overrides:
   # js-yaml 5.2.x is a dual CJS/ESM package that addresses the merge-key DoS
   # (GHSA-h67p-54hq-rp68) structurally: load() defaults to CORE_SCHEMA (no
   # `!!merge`), plus the maxTotalMergeKeys/maxAliases caps added in 5.2.0.
-  # Pinned to keep one version workspace-wide — our compose-renderer and the
-  # @changesets/cli transitive both resolve to 5.2.x.
+  # Pinned to keep one version workspace-wide for every YAML consumer.
   "js-yaml": "^5.2.1"
-  # read-yaml-file@2.1.0 is a @changesets/cli transitive that does a CJS
-  # `require("js-yaml").load(...)`. It works with js-yaml 5's `require` entry
-  # (5.x is a dual package) and its `load`. 3.0.0 is ESM-only and breaks the
-  # CJS changesets requires, so stay on 2.1.0.
-  "read-yaml-file": "^2.1.0"
   # react-redux@9.2.0 and reselect@5.1.1 ship without provenance attestation
   # even though earlier and later versions have it; pin to the latest provenance-
   # signed releases so pnpm's `trustPolicy: no-downgrade` lets the install
