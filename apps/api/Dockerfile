@@ -122,7 +122,9 @@ WORKDIR /app
 # is the only component that holds the Docker socket. Shipping the CLI here
 # would hand a compromised API the tooling for host control the moment any
 # socket became reachable.
-RUN apk add --no-cache curl ca-certificates git && \
+# The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
+RUN apk upgrade --no-cache libcrypto3 libssl3 && \
+    apk add --no-cache curl ca-certificates git && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
 

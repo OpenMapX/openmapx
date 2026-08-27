@@ -85,7 +85,9 @@ WORKDIR /app
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
-RUN addgroup --system --gid 1001 nodejs && \
+# The pinned base predates Alpine's OpenSSL fix for CVE-2026-14456.
+RUN apk upgrade --no-cache libcrypto3 libssl3 && \
+    addgroup --system --gid 1001 nodejs && \
     adduser --system --uid 1001 nextjs && \
     rm -rf /usr/local/lib/node_modules/npm && \
     rm -f /usr/local/bin/npm /usr/local/bin/npx
