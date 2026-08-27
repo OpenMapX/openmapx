@@ -41,8 +41,8 @@
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
     "@openmapx/poi-source-registry": "workspace:^",
-    "impit": "^0.14.3",
-    "intl-messageformat": "^11.2.13",
+    "impit": "^0.14.4",
+    "intl-messageformat": "^11.2.14",
     "zod": "^4.4.3"
   },
   "peerDependencies": {
@@ -50,10 +50,10 @@
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.3.0",
     "@types/react": "^19.2.18",
     "react": "19.2.8",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

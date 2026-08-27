@@ -43,6 +43,15 @@ const BEARING_TAU = 0.35;
 const ZOOM_TAU = 1.6;
 const USER_CAM_SUSPEND_MS = 350;
 
+type CameraActivityEvent = maplibregl.MapMovementEvent | maplibregl.MapWheelEvent;
+
+function isProgrammaticCameraEvent(event: CameraActivityEvent): boolean {
+  // MapLibre merges the `eventData` argument from jumpTo/easeTo onto emitted
+  // events at runtime, but intentionally does not include application-owned
+  // fields in its event types.
+  return "programmatic" in event && event.programmatic === true;
+}
+
 /**
  * Target follow-zoom for a ground speed: close in when slow/stopped, pull back
  * at speed to show more road ahead. ~17 at a standstill → ~14 at motorway speed.
@@ -466,19 +475,19 @@ export function useNavCamera(): void {
       // the camera back, and nothing else would announce it.
       requestFrame();
     };
-    const onPanRotatePitch = (e?: { programmatic?: boolean }) => {
-      if (e?.programmatic) return;
+    const onPanRotatePitch = (event: maplibregl.MapMovementEvent) => {
+      if (isProgrammaticCameraEvent(event)) return;
       suspend();
       useNavigationStore.getState().setCameraMode("free");
     };
-    const onZoomStart = (e?: { programmatic?: boolean }) => {
-      if (e?.programmatic) return;
+    const onZoomStart = (event: maplibregl.MapMovementEvent) => {
+      if (isProgrammaticCameraEvent(event)) return;
       userZoomedRef.current = true;
       suspend();
     };
     // Continuous events keep the loop suspended for the whole gesture.
-    const onUserMove = (e?: { programmatic?: boolean }) => {
-      if (e?.programmatic) return;
+    const onUserMove = (event: CameraActivityEvent) => {
+      if (isProgrammaticCameraEvent(event)) return;
       suspend();
     };
     // Yield the moment a pointer goes down — before MapLibre has classified the
@@ -489,10 +498,10 @@ export function useNavCamera(): void {
       userInteractingRef.current = true;
       suspend();
     };
-    const onPointerUp = (e?: { originalEvent?: { touches?: ArrayLike<unknown> } }) => {
+    const onPointerUp = (event: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
       // A multi-touch gesture fires touchend as each finger lifts; only release
       // once none remain.
-      if ((e?.originalEvent?.touches?.length ?? 0) > 0) return;
+      if ("touches" in event.originalEvent && event.originalEvent.touches.length > 0) return;
       userInteractingRef.current = false;
       requestFrame();
     };

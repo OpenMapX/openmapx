@@ -20,10 +20,13 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/openconditions-contrib-client": "workspace:^",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   },
   "peerDependencies": {
     "@tanstack/react-query": "^5",
     "react": ">=19"
+  },
+  "devDependencies": {
+    "@tanstack/react-query": "^5.102.5"
   }
 }

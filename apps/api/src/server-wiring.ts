@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import type {
   FastifyBaseLogger,
   FastifyError,
@@ -102,28 +103,43 @@ export function registerControlledRequestLogging(
   });
 }
 
-// Trust proxy hops in front of the API. The default deployment terminates TLS
-// at Traefik (one hop) and forwards to this container, so `request.ip` must be
-// derived from the leftmost untrusted X-Forwarded-For entry rather than from
-// the socket peer (which would always be the proxy). Without this, IP-keyed
-// rate limits collapse to a single bucket per upstream proxy.
-//
-// SECURITY: never set this to `true` (trust everyone) on a public deployment
-// — that would let any client spoof their IP via X-Forwarded-For and bypass
-// rate limits, audit attribution, and the loopback admin short-circuit. Set
-// `TRUST_PROXY_HOPS` to the *exact* number of proxies between the public
-// internet and this process (default 1 = one Traefik hop). Set it to `0` for
-// direct exposure (development).
-export function trustProxyConfig(): number | boolean {
-  const raw = process.env.TRUST_PROXY_HOPS?.trim();
-  if (raw === undefined || raw === "") return 1; // default: assume one Traefik hop
-  const n = Number(raw);
-  if (!Number.isInteger(n) || n < 0) {
-    throw new Error(
-      `TRUST_PROXY_HOPS must be a non-negative integer (got "${raw}"). Use 0 for direct exposure, 1 for a single reverse proxy (default).`,
-    );
+const TRUST_PROXY_ALIASES = new Set(["loopback", "linklocal", "uniquelocal"]);
+
+function validateProxyRange(value: string): void {
+  if (TRUST_PROXY_ALIASES.has(value)) return;
+  const parts = value.split("/");
+  const address = parts[0] ?? "";
+  const family = isIP(address);
+  if (family === 0 || parts.length > 2) {
+    throw new Error(`TRUST_PROXY_RANGES contains an invalid IP or CIDR: "${value}"`);
   }
-  return n;
+  if (parts.length === 1) return;
+  const prefixText = parts[1] ?? "";
+  const prefix = Number(prefixText);
+  const maximum = family === 4 ? 32 : 128;
+  if (!/^\d+$/.test(prefixText) || !Number.isInteger(prefix) || prefix > maximum) {
+    throw new Error(`TRUST_PROXY_RANGES contains an invalid CIDR prefix: "${value}"`);
+  }
+  if (prefix === 0) {
+    throw new Error(`TRUST_PROXY_RANGES must not trust every address: "${value}"`);
+  }
+}
+
+// Forwarding headers are ignored unless the immediate socket peer belongs to
+// an explicitly trusted IP/CIDR range. The default container deployment sets
+// `uniquelocal`, which covers Docker's private IPv4 and ULA IPv6 networks; a
+// directly run development server leaves the variable unset and trusts none.
+// Address-based trust is essential: hop counts cannot distinguish the real
+// reverse proxy from a client that reaches the origin directly.
+export function trustProxyConfig(): false | string[] {
+  const raw = process.env.TRUST_PROXY_RANGES?.trim();
+  if (raw === undefined || raw === "") return false;
+  const ranges = raw.split(",").map((value) => value.trim());
+  if (ranges.some((value) => value.length === 0)) {
+    throw new Error("TRUST_PROXY_RANGES must be a comma-separated list without empty entries");
+  }
+  for (const range of ranges) validateProxyRange(range);
+  return ranges;
 }
 
 // Uniform error body. Throwing handlers/guards (requireAuth/requireAdmin throw

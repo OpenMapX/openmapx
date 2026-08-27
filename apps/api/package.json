@@ -25,7 +25,7 @@
     "@better-auth/oauth-provider": "1.6.26",
     "@better-auth/passkey": "1.6.26",
     "@fastify/cors": "^11.3.0",
-    "@fastify/helmet": "^13.1.0",
+    "@fastify/helmet": "^13.1.1",
     "@hey-api/client-fetch": "workspace:*",
     "@js-temporal/polyfill": "0.5.1",
     "@motis-project/motis-client": "^2.11.0",
@@ -46,12 +46,12 @@
     "cached-hafas-client": "^5.1.9",
     "db-vendo-client": "^6.11.1",
     "drizzle-orm": "^0.45.2",
-    "fast-xml-parser": "^5.10.1",
-    "fastify": "^5.11.3",
-    "gtfs-realtime-bindings-transit": "^1.10.0",
+    "fast-xml-parser": "^5.11.0",
+    "fastify": "^5.12.1",
+    "gtfs-realtime-bindings-transit": "^1.11.0",
     "hafas-client": "^6.3.6",
     "ioredis": "^6.0.0",
-    "lettermint": "^2.1.0",
+    "lettermint": "^2.3.0",
     "nodemailer": "^9.0.5",
     "opening_hours": "^3.14.0",
     "pino": "^10.3.1",
@@ -63,12 +63,12 @@
   "devDependencies": {
     "@fastify/swagger": "^9.8.1",
     "@testcontainers/postgresql": "^12.1.0",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.3.0",
     "@types/nodemailer": "^8.0.1",
-    "@vitest/coverage-v8": "^4.1.10",
+    "@vitest/coverage-v8": "^4.1.11",
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.28.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

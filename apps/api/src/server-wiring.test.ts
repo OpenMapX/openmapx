@@ -23,29 +23,38 @@ afterEach(() => {
 });
 
 describe("trustProxyConfig", () => {
-  it("defaults to 1 when unset", () => {
-    vi.stubEnv("TRUST_PROXY_HOPS", "");
-    expect(trustProxyConfig()).toBe(1);
+  it("trusts no forwarding headers when proxy ranges are unset", () => {
+    vi.stubEnv("TRUST_PROXY_RANGES", "");
+    expect(trustProxyConfig()).toBe(false);
   });
 
-  it("parses 0 for direct exposure", () => {
-    vi.stubEnv("TRUST_PROXY_HOPS", "0");
-    expect(trustProxyConfig()).toBe(0);
+  it("parses explicit IP, CIDR, and private-network aliases", () => {
+    vi.stubEnv("TRUST_PROXY_RANGES", " loopback, 172.16.0.0/12, fd4d:5058::/64, uniquelocal ");
+    expect(trustProxyConfig()).toEqual([
+      "loopback",
+      "172.16.0.0/12",
+      "fd4d:5058::/64",
+      "uniquelocal",
+    ]);
   });
 
-  it("parses a positive hop count", () => {
-    vi.stubEnv("TRUST_PROXY_HOPS", "3");
-    expect(trustProxyConfig()).toBe(3);
+  it.each([
+    "yes",
+    "127.0.0.1,",
+    "127.0.0.1/33",
+    "fd4d:5058::/129",
+    "10.0.0.1/nope",
+    "10.0.0.1/1e1",
+    "10.0.0.1/+8",
+    "10.0.0.1/8.5",
+  ])("rejects invalid proxy range %s", (value) => {
+    vi.stubEnv("TRUST_PROXY_RANGES", value);
+    expect(() => trustProxyConfig()).toThrow(/TRUST_PROXY_RANGES/);
   });
 
-  it("throws on a non-integer value", () => {
-    vi.stubEnv("TRUST_PROXY_HOPS", "yes");
-    expect(() => trustProxyConfig()).toThrow(/TRUST_PROXY_HOPS/);
-  });
-
-  it("throws on a negative value", () => {
-    vi.stubEnv("TRUST_PROXY_HOPS", "-1");
-    expect(() => trustProxyConfig()).toThrow(/TRUST_PROXY_HOPS/);
+  it.each(["0.0.0.0/0", "::/0"])("rejects trust-all proxy range %s", (value) => {
+    vi.stubEnv("TRUST_PROXY_RANGES", value);
+    expect(() => trustProxyConfig()).toThrow(/trust every address/i);
   });
 });
 

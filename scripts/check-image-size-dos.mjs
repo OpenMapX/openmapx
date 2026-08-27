@@ -223,15 +223,6 @@ function probesFor(packageRoot, version) {
     });
   };
 
-  if (version === "1.2.1") {
-    for (const fixture of fixtures) {
-      add("dist/index.js", "cjs", "root", fixture);
-      add("dist/types/index.js", "cjs", "types-index", fixture);
-      add(`dist/types/${fixture}.js`, "cjs", "type", fixture);
-    }
-    return probes;
-  }
-
   for (const fixture of fixtures) {
     for (const moduleKind of ["cjs", "esm"]) {
       const extension = moduleKind === "cjs" ? "cjs" : "mjs";
@@ -246,17 +237,12 @@ function probesFor(packageRoot, version) {
 }
 
 async function main() {
-  const rootPackage = packageDirectory(
-    join(REPOSITORY_ROOT, "node_modules/.pnpm"),
-    join(REPOSITORY_ROOT, "pnpm-lock.yaml"),
-    "1.2.1",
-  );
   const docsPackage = packageDirectory(
     join(REPOSITORY_ROOT, "docs/node_modules/.pnpm"),
     join(REPOSITORY_ROOT, "docs/pnpm-lock.yaml"),
     "2.0.2",
   );
-  const probes = [...probesFor(docsPackage, "2.0.2"), ...probesFor(rootPackage, "1.2.1")];
+  const probes = probesFor(docsPackage, "2.0.2");
 
   for (const probe of probes) {
     await runProbe(probe);

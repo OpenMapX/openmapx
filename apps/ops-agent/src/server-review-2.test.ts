@@ -598,7 +598,19 @@ describe("reviewed durable admission boundary", () => {
       payload: request(operation, "ops1_explicitRetry000", "opk1_explicitRetry000"),
     });
     expect(explicitRetry.statusCode).toBe(202);
-    expect(explicitRetry.json().result.operationId).not.toBe("job1_restoredOperation0");
+    const explicitOperationId = explicitRetry.json().result.operationId as string;
+    expect(explicitOperationId).not.toBe("job1_restoredOperation0");
+    let explicitState = explicitRetry.json().result.state as string;
+    for (let attempt = 0; attempt < 100 && explicitState !== "succeeded"; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 1));
+      const status = await app.inject({
+        method: "GET",
+        url: `/v1/operations/${explicitOperationId}`,
+        headers: { ...auth(), "x-ops-request-id": "ops1_explicitStatus000" },
+      });
+      explicitState = status.json().result.state as string;
+    }
+    expect(explicitState).toBe("succeeded");
     await app.close();
   });
 

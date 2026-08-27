@@ -13,6 +13,7 @@
     "environment": {
       "PORT": "3001",
       "HOST": "0.0.0.0",
+      "TRUST_PROXY_RANGES": "${TRUST_PROXY_RANGES:-uniquelocal}",
       "DOMAIN": "${DOMAIN:-localhost}",
       "OPENMAPX_ROOT_DIR": "/app",
       "OPENMAPX_CUSTOM_INTEGRATIONS_DIR": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",

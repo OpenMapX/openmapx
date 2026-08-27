@@ -37,6 +37,6 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
-    "@openstreetmap/id-tagging-schema": "^7.1.0"
+    "@openstreetmap/id-tagging-schema": "^7.1.1"
   }
 }

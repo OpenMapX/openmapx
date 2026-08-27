@@ -182,10 +182,12 @@ process is one container, but it wears several hats at once:
   store installs — and reports progress the admin UI can poll.
 
 A global `onRequest` hook applies tiered, IP-keyed rate limits before any route
-runs, and admin routes carry a `requireAdmin` preHandler on top. Fastify runs
-with `trustProxy` set for Traefik, so limiters and the audit log see the real
-client IP — while the loopback admin short-circuit deliberately reads the raw
-socket address, so a forged `X-Forwarded-For` can't bypass it.
+runs, and admin routes carry a `requireAdmin` preHandler on top. Fastify trusts
+forwarding headers only when the socket peer belongs to an explicitly configured
+proxy IP/CIDR range, so limiters and the audit log see the real client IP without
+accepting headers from a directly connected client. The loopback admin
+short-circuit deliberately reads the raw socket address, so a forged
+`X-Forwarded-For` can't bypass it.
 
 **The data plane behind the engines.** The `data-manager` service owns the
 `/data` tree. It downloads OSM extracts and map glyphs, and runs the

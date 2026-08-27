@@ -134,7 +134,7 @@ describe("managed OAuth provider policy", () => {
     });
   });
 
-  it("does not enable public registration or a trusted-client cache", async () => {
+  it("does not enable public registration, multiple audiences, or a trusted-client cache", async () => {
     const { managedOAuthProviderOptions } = await import("./managed-oauth-provider");
 
     expect(managedOAuthProviderOptions).not.toHaveProperty(
@@ -144,6 +144,10 @@ describe("managed OAuth provider policy", () => {
     expect(managedOAuthProviderOptions).not.toHaveProperty("cachedTrustedClients");
     expect(managedOAuthProviderOptions).not.toHaveProperty("disableJwtPlugin");
     expect(managedOAuthProviderOptions).not.toHaveProperty("storeClientSecret");
+    // Better Auth 1.6's resource-indicator implementation is safe from
+    // cross-audience escalation only with its single default audience.
+    expect(managedOAuthProviderOptions).not.toHaveProperty("validAudiences");
+    expect(managedOAuthProviderOptions).not.toHaveProperty("customAccessTokenClaims");
   });
 
   it("assigns the managed-services reference only to authenticated administrators", async () => {

@@ -99,13 +99,13 @@
   "license": "Apache-2.0",
   "devDependencies": {
     "@testing-library/react": "^16.3.2",
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.3.0",
     "@types/react": "^19.2.18",
-    "@types/react-dom": "^19.2.4",
+    "@types/react-dom": "^19.2.5",
     "esbuild": "^0.28.2",
     "react-dom": "19.2.8",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   },
   "peerDependencies": {
     "esbuild": "^0.28.0"
@@ -119,18 +119,18 @@
     "@better-auth/core": "1.6.26",
     "@better-auth/oauth-provider": "1.6.26",
     "@better-auth/passkey": "1.6.26",
-    "@tanstack/react-query": "^5.101.4",
+    "@tanstack/react-query": "^5.102.5",
     "@turf/helpers": "^7.4.0",
     "@turf/nearest-point-on-line": "^7.4.0",
     "@types/geojson": "^7946.0.16",
     "@types/tz-lookup": "^6.1.2",
     "better-auth": "1.6.26",
-    "js-yaml": "^5.2.3",
+    "js-yaml": "^5.4.0",
     "opening_hours": "^3.14.0",
     "react": "19.2.8",
     "tz-lookup": "^6.1.25",
     "undici": "8.9.0",
     "zod": "^4.4.3",
-    "zustand": "^5.0.14"
+    "zustand": "^5.0.15"
   }
 }

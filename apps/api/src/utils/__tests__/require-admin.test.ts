@@ -142,7 +142,7 @@ describe("requireAdmin loopback short-circuit", () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it("rejects a non-loopback request that spoofs X-Forwarded-For=127.0.0.1 under trustProxy", async () => {
+  it("rejects a request through a trusted proxy that spoofs X-Forwarded-For=127.0.0.1", async () => {
     // Simulate a deployment behind Traefik: the API trusts the immediate proxy
     // hop and resolves `request.ip` from XFF. A malicious public client sends
     // `X-Forwarded-For: 127.0.0.1` to try to claim the loopback short-circuit.
@@ -150,7 +150,7 @@ describe("requireAdmin loopback short-circuit", () => {
     // the forgery must be rejected.
     process.env.OPENMAPX_LOCAL_ADMIN_TOKEN = "s3cret";
     mockGetSession.mockResolvedValue(null);
-    const app = Fastify({ trustProxy: 1 });
+    const app = Fastify({ trustProxy: "uniquelocal" });
     app.get("/protected", async (request) => {
       const session = await requireAdmin(request);
       return { ok: true, userId: session.user.id };
@@ -158,7 +158,7 @@ describe("requireAdmin loopback short-circuit", () => {
     const res = await app.inject({
       method: "GET",
       url: "/protected",
-      remoteAddress: "203.0.113.7", // public attacker IP (TEST-NET-3)
+      remoteAddress: "10.0.0.5", // the private reverse proxy
       headers: {
         "x-forwarded-for": "127.0.0.1",
         "x-openmapx-local-admin": "s3cret",

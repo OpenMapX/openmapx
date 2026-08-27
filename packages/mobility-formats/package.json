@@ -12,13 +12,13 @@
   },
   "dependencies": {
     "csv-parse": "^7.0.2",
-    "fast-xml-parser": "^5.10.1",
+    "fast-xml-parser": "^5.11.0",
     "gbfs-typescript-types": "^1.0.15",
-    "gtfs-realtime-bindings-transit": "^1.10.0"
+    "gtfs-realtime-bindings-transit": "^1.11.0"
   },
   "devDependencies": {
-    "@types/node": "^26.2.0",
+    "@types/node": "^26.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.10"
+    "vitest": "^4.1.11"
   }
 }

@@ -106,6 +106,3 @@ overrides:
   # runtime drives a Jest 29 module mocker. The preset only subclasses the
   # environment's exported `TestEnvironment`, which is unchanged in 30.
   "@react-native/jest-preset>jest-environment-node": "^30.4.1"
-
-patchedDependencies:
-  image-size@1.2.1: patches/image-size@1.2.1.patch

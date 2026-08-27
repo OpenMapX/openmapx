@@ -9,6 +9,6 @@
     "tsx": "4.23.5"
   },
   "dependencies": {
-    "intl-messageformat": "^11.2.13"
+    "intl-messageformat": "^11.2.14"
   }
 }

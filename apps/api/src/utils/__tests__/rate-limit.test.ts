@@ -7,7 +7,7 @@ afterEach(() => {
   // because each test instantiates its own RateLimiter.
 });
 
-function buildApp(limiter: RateLimiter, opts: { trustProxy?: boolean | number } = {}) {
+function buildApp(limiter: RateLimiter, opts: { trustProxy?: boolean | string | string[] } = {}) {
   const app = Fastify({ trustProxy: opts.trustProxy ?? false });
   app.get("/ping", { preHandler: [limiter.preHandler()] }, async () => ({ ok: true }));
   return app;
@@ -52,13 +52,13 @@ describe("RateLimiter", () => {
     limiter.destroy();
   });
 
-  it("under trustProxy=1, the resolved client IP (not the proxy) is the bucket key", async () => {
+  it("uses the resolved client IP behind an explicitly trusted private proxy", async () => {
     // The bucket key is `req.ip`, which under `trustProxy` is the leftmost
     // X-Forwarded-For entry. Two real clients behind the same proxy must
     // therefore get separate buckets — otherwise rate limits collapse to a
     // single bucket per upstream proxy in deployment.
     const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
-    const app = buildApp(limiter, { trustProxy: 1 });
+    const app = buildApp(limiter, { trustProxy: "uniquelocal" });
 
     const a = await app.inject({
       method: "GET",

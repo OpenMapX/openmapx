@@ -17,15 +17,15 @@
     }
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.36",
-    "@ai-sdk/google": "^4.0.39",
-    "@ai-sdk/openai": "^4.0.36",
-    "@ai-sdk/openai-compatible": "^3.0.27",
+    "@ai-sdk/anthropic": "^4.0.42",
+    "@ai-sdk/google": "^4.0.51",
+    "@ai-sdk/openai": "^4.0.47",
+    "@ai-sdk/openai-compatible": "^3.0.37",
     "@openmapx/brands": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openrouter/ai-sdk-provider": "^3.0.0",
-    "ai": "^7.0.58",
+    "ai": "^7.0.79",
     "zod": "^4.4.3"
   }
 }
