@@ -18,18 +18,18 @@ import { createSubmissionGuard, type SubmissionGuardRedis } from "./submission-g
 const OSM_PROVIDER_ID = "openstreetmap";
 
 async function resolveToken(headers: Headers): Promise<OsmTokenResolution> {
-  let linked = false;
+  let accountId: string | undefined;
   try {
     const accounts = await auth.api.listUserAccounts({ headers });
-    linked = accounts.some((account) => account.providerId === OSM_PROVIDER_ID);
+    accountId = accounts.find((account) => account.providerId === OSM_PROVIDER_ID)?.id;
   } catch {
     return { status: "not_linked" };
   }
-  if (!linked) return { status: "not_linked" };
+  if (!accountId) return { status: "not_linked" };
 
   try {
     const result = await auth.api.getAccessToken({
-      body: { providerId: OSM_PROVIDER_ID },
+      body: { accountId },
       headers,
     });
     if (!result.accessToken) return { status: "reauthorization_required" };

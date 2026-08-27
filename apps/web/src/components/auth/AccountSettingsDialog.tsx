@@ -67,9 +67,7 @@ export function AccountSettingsDialog({
   const [passkeys, setPasskeys] = useState<
     { id: string; name?: string | null | undefined; createdAt?: Date | null | undefined }[]
   >([]);
-  const [linkedAccounts, setLinkedAccounts] = useState<{ providerId: string; accountId: string }[]>(
-    [],
-  );
+  const [linkedAccounts, setLinkedAccounts] = useState<{ id: string; providerId: string }[]>([]);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const [confirmUnlinkProvider, setConfirmUnlinkProvider] = useState<string | null>(null);
@@ -166,9 +164,9 @@ export function AccountSettingsDialog({
     authClient.listAccounts().then(({ data }) => {
       if (!cancelled && data) {
         setLinkedAccounts(
-          data.map((a: { providerId: string; accountId: string }) => ({
+          data.map((a: { id: string; providerId: string }) => ({
+            id: a.id,
             providerId: a.providerId,
-            accountId: a.accountId,
           })),
         );
       }
@@ -261,14 +259,17 @@ export function AccountSettingsDialog({
     try {
       const { data, error } = await authClient.twoFactor.enable({
         password: twoFactorPassword,
+        method: "totp",
       });
       if (error) {
         setMessage({ type: "error", text: String(error.message ?? t("failedEnable2FA")) });
         return;
       }
-      if (data) {
+      if (data?.method === "totp") {
         setTotpSetupUri(data.totpURI);
         setBackupCodes(data.backupCodes);
+      } else if (data) {
+        setMessage({ type: "error", text: t("failedEnable2FA") });
       }
     } catch {
       setMessage({ type: "error", text: t("failedEnable2FA") });
@@ -388,8 +389,8 @@ export function AccountSettingsDialog({
 
   const handleLinkProvider = async (providerId: string, providerName: string) => {
     try {
-      await authClient.oauth2.link({
-        providerId,
+      await authClient.linkSocial({
+        provider: providerId,
         callbackURL: window.location.origin,
       });
     } catch {
@@ -404,7 +405,7 @@ export function AccountSettingsDialog({
     try {
       const account = linkedAccounts.find((a) => a.providerId === providerId);
       if (!account) return;
-      await authClient.unlinkAccount({ providerId, accountId: account.accountId });
+      await authClient.unlinkAccount({ accountId: account.id });
       setLinkedAccounts((prev) => prev.filter((a) => a.providerId !== providerId));
       setConfirmUnlinkProvider(null);
       setMessage({ type: "success", text: t("accountUnlinked", { provider: providerName }) });

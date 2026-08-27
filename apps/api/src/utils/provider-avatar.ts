@@ -15,15 +15,15 @@ export type AvatarProvider = (typeof AVATAR_PROVIDERS)[number];
 
 export interface ProviderAvatarDeps {
   /** Resolve a usable (decrypted, refreshed) access token, or undefined. */
-  resolveAccessToken(providerId: string, userId: string): Promise<string | undefined>;
+  resolveAccessToken(accountId: string, userId: string): Promise<string | undefined>;
   fetchProviderImage(providerId: string, accessToken: string): Promise<string | undefined>;
   getCurrentImage(userId: string): Promise<string | null | undefined>;
   setUserImage(userId: string, image: string | null): Promise<void>;
 }
 
 export interface ProviderAvatarSync {
-  onAccountCreated(providerId: string, userId: string): Promise<void>;
-  onAccountUpdated(providerId: string, userId: string): Promise<void>;
+  onAccountCreated(accountId: string, providerId: string, userId: string): Promise<void>;
+  onAccountUpdated(accountId: string, providerId: string, userId: string): Promise<void>;
 }
 
 function isAvatarProvider(providerId: string): providerId is AvatarProvider {
@@ -59,30 +59,31 @@ export function createProviderAvatarSync(deps: ProviderAvatarDeps): ProviderAvat
    * existing avatar.
    */
   async function resolveImage(
+    accountId: string,
     providerId: string,
     userId: string,
   ): Promise<{ state: "unavailable" } | { state: "absent" } | { state: "found"; url: string }> {
-    const accessToken = await deps.resolveAccessToken(providerId, userId);
+    const accessToken = await deps.resolveAccessToken(accountId, userId);
     if (!accessToken) return { state: "unavailable" };
     const image = await deps.fetchProviderImage(providerId, accessToken);
     return image ? { state: "found", url: image } : { state: "absent" };
   }
 
   return {
-    async onAccountCreated(providerId, userId) {
+    async onAccountCreated(accountId, providerId, userId) {
       if (!isAvatarProvider(providerId)) return;
       await withGuard(providerId, userId, async () => {
         // A picture set during sign-up (or by a higher-priority provider) wins.
         if (await deps.getCurrentImage(userId)) return;
-        const image = await resolveImage(providerId, userId);
+        const image = await resolveImage(accountId, providerId, userId);
         if (image.state === "found") await deps.setUserImage(userId, image.url);
       });
     },
 
-    async onAccountUpdated(providerId, userId) {
+    async onAccountUpdated(accountId, providerId, userId) {
       if (!isAvatarProvider(providerId)) return;
       await withGuard(providerId, userId, async () => {
-        const image = await resolveImage(providerId, userId);
+        const image = await resolveImage(accountId, providerId, userId);
         if (image.state === "found") {
           await deps.setUserImage(userId, image.url);
         } else if (image.state === "absent" && providerId === "openstreetmap") {

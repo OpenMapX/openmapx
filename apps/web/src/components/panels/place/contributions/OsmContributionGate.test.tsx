@@ -8,7 +8,7 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 const link = vi.fn();
 vi.mock("@openmapx/core", async () => {
   const actual = await vi.importActual<typeof import("@openmapx/core")>("@openmapx/core");
-  return { ...actual, authClient: { oauth2: { link: (input: unknown) => link(input) } } };
+  return { ...actual, authClient: { linkSocial: (input: unknown) => link(input) } };
 });
 
 const { callbackUrlFor, linkScopesFor, OsmContributionGate } = await import(
@@ -50,39 +50,13 @@ beforeEach(() => {
 
 describe("linkScopesFor", () => {
   it("always carries base identity plus the intended action", () => {
-    expect(linkScopesFor({ canWriteApi: false, canWriteNotes: false }, "edit")).toEqual([
-      "openid",
-      "read_prefs",
-      "write_api",
-    ]);
-    expect(linkScopesFor({ canWriteApi: false, canWriteNotes: false }, "note")).toEqual([
-      "openid",
-      "read_prefs",
-      "write_notes",
-    ]);
-  });
-
-  it("preserves a write scope that is already effective", () => {
-    // Better Auth's link route replaces configured scopes with the supplied
-    // array, and one provider token is stored per account — so omitting an
-    // already-granted scope here would silently revoke it.
-    expect(linkScopesFor({ canWriteApi: false, canWriteNotes: true }, "edit")).toEqual([
-      "openid",
-      "read_prefs",
-      "write_api",
-      "write_notes",
-    ]);
-    expect(linkScopesFor({ canWriteApi: true, canWriteNotes: false }, "note")).toEqual([
-      "openid",
-      "read_prefs",
-      "write_api",
-      "write_notes",
-    ]);
+    expect(linkScopesFor("edit")).toEqual(["openid", "read_prefs", "write_api"]);
+    expect(linkScopesFor("note")).toEqual(["openid", "read_prefs", "write_notes"]);
   });
 
   it("is deterministic and de-duplicated", () => {
-    const scopes = linkScopesFor({ canWriteApi: true, canWriteNotes: true }, "edit");
-    expect(scopes).toEqual(["openid", "read_prefs", "write_api", "write_notes"]);
+    const scopes = linkScopesFor("edit");
+    expect(scopes).toEqual(["openid", "read_prefs", "write_api"]);
     expect(new Set(scopes).size).toBe(scopes.length);
   });
 });
@@ -118,18 +92,18 @@ describe("gate states", () => {
     await userEvent.click(screen.getByText("osmContributions.gateLinkAction"));
     expect(link).toHaveBeenCalledWith(
       expect.objectContaining({
-        providerId: "openstreetmap",
+        provider: "openstreetmap",
         scopes: ["openid", "read_prefs", "write_api"],
       }),
     );
   });
 
-  it("asks for the missing scope while preserving the other one", async () => {
+  it("asks for the missing action scope", async () => {
     renderGate({ ...BASE, canWriteApi: false });
     await userEvent.click(screen.getByText("osmContributions.gateScopeAction"));
     expect(link).toHaveBeenCalledWith(
       expect.objectContaining({
-        scopes: ["openid", "read_prefs", "write_api", "write_notes"],
+        scopes: ["openid", "read_prefs", "write_api"],
       }),
     );
   });

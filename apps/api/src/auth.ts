@@ -67,9 +67,9 @@ async function fetchProviderImage(
  * the sync's own guard absorbs that.
  */
 const providerAvatarSync = createProviderAvatarSync({
-  async resolveAccessToken(providerId, userId) {
+  async resolveAccessToken(accountId, userId) {
     try {
-      const result = await auth.api.getAccessToken({ body: { providerId, userId } });
+      const result = await auth.api.getAccessToken({ body: { accountId, userId } });
       return result.accessToken ?? undefined;
     } catch {
       // Revoked, unrefreshable, or undecryptable. The person simply relinks.
@@ -142,14 +142,14 @@ const authOptions = {
     account: {
       create: {
         after: async (account) => {
-          await providerAvatarSync.onAccountCreated(account.providerId, account.userId);
+          await providerAvatarSync.onAccountCreated(account.id, account.providerId, account.userId);
         },
       },
       update: {
         after: async (account) => {
           // Better Auth updates the account on each OAuth sign-in and token
           // refresh; re-read the picture so a changed provider avatar follows.
-          await providerAvatarSync.onAccountUpdated(account.providerId, account.userId);
+          await providerAvatarSync.onAccountUpdated(account.id, account.providerId, account.userId);
         },
       },
     },
@@ -251,6 +251,17 @@ const authOptions = {
         {
           providerId: "openstreetmap",
           discoveryUrl: getOsmConfig().discoveryUrl,
+          // Keep the account namespace and core OAuth endpoints available
+          // when OSM discovery is temporarily unreachable. These values come
+          // from the same deployment-validated OSM origin; profile identity is
+          // still proven by the access token against OSM's user-details API.
+          accountIssuer: new URL(getOsmConfig().webBase).origin,
+          authorizationUrl: getOsmConfig().webUrl("oauth2/authorize"),
+          tokenUrl: getOsmConfig().webUrl("oauth2/token"),
+          // The profile comes from OSM's authenticated user-details endpoint,
+          // not from Better Auth's local user mapping. Pin its immutable OSM
+          // numeric ID explicitly so the 1.7 account subject cannot drift.
+          accountSubject: ({ profile }) => String(profile.id),
           clientId: envString("OSM_CLIENT_ID", ""),
           clientSecret: envString("OSM_CLIENT_SECRET", ""),
           // Ordinary sign-in stays minimal. Contribution write scopes are

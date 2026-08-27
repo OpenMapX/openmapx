@@ -13,7 +13,7 @@ vi.mock("@openmapx/core", () => ({
     signIn: {
       email: signInEmail,
       passkey: vi.fn(),
-      oauth2: vi.fn(),
+      social: vi.fn(),
     },
     signUp: { email: vi.fn() },
     twoFactor: { verifyBackupCode: vi.fn(), verifyTotp: vi.fn() },

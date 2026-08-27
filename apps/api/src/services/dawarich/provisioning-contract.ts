@@ -30,9 +30,8 @@ export interface ManagedOAuthClient {
   require_pkce?: boolean;
   skip_consent?: boolean;
   enable_end_session?: boolean;
-  public?: boolean;
   disabled?: boolean;
-  type?: string;
+  application_type?: "web" | "native";
   client_secret_expires_at?: number | string;
 }
 
@@ -104,7 +103,7 @@ export function desiredClient(context: ProvisioningContext): Record<string, unkn
     skip_consent: true,
     enable_end_session: false,
     client_secret_expires_at: 0,
-    type: "web",
+    application_type: "web",
   };
 }
 
@@ -121,7 +120,6 @@ export function assertImmutableClientSecurity(client: ManagedOAuthClient): void 
     client.reference_id !== MANAGED_REFERENCE_ID ||
     client.token_endpoint_auth_method !== "client_secret_basic" ||
     client.require_pkce !== true ||
-    client.public === true ||
     client.disabled === true
   ) {
     throw new ManagedDawarichProvisioningError("DAWARICH_OAUTH_CLIENT_CONFLICT");
@@ -143,7 +141,7 @@ export function mutableClientUpdates(
     "skip_consent",
     "enable_end_session",
     "client_secret_expires_at",
-    "type",
+    "application_type",
   ] as const;
   for (const key of scalarKeys) {
     if (
