@@ -376,8 +376,27 @@ describe("trusted configuration retained-budget lock", () => {
 
   it("does not reclaim a live multiprocess holder beyond its original expiry", async () => {
     const root = directory();
-    const child = await liveHolder(root);
-    await delay(250);
+    const holderTtlMs = 1_000;
+    const child = await liveHolder(root, holderTtlMs);
+    const heartbeatPath = join(root, OPS_TRUSTED_CONFIG_QUEUE_LOCK_NAME, "heartbeat.json");
+    const initialHeartbeat = JSON.parse(readFileSync(heartbeatPath, "utf8")) as {
+      expiresAtMs: number;
+      sequence: number;
+    };
+    await expect
+      .poll(
+        () => {
+          const current = JSON.parse(readFileSync(heartbeatPath, "utf8")) as {
+            sequence: number;
+          };
+          return (
+            Date.now() > initialHeartbeat.expiresAtMs &&
+            current.sequence > initialHeartbeat.sequence
+          );
+        },
+        { interval: 25, timeout: 5_000 },
+      )
+      .toBe(true);
     expect(child.exitCode).toBeNull();
     let recovered: Awaited<ReturnType<typeof acquireTrustedConfigurationQueueLock>> | undefined;
     try {
