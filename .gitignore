@@ -82,6 +82,9 @@ docs/legal/
 plans/
 .superpowers/
 
+# Local Git worktrees used for isolated dependency and migration testing.
+.worktrees/
+
 # CLI generated outputs
 infra/docker/docker-compose.generated.yml
 infra/docker/docker-compose.generated.hardlinks.json
