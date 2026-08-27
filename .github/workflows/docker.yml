@@ -1,15 +1,10 @@
 name: Build, Scan & Publish Docker Images
 
 on:
-  # Publication is downstream of the complete required CI workflow. A direct
-  # push trigger would race CI and could publish a commit whose tests fail.
-  workflow_run:
-    workflows: ["CI"]
-    types: [completed]
-    branches: [main]
-  # Manual reruns are allowed only for the current main commit and only when
-  # that exact commit already has a successful trusted CI push run (gate job).
-  workflow_dispatch:
+  # CI calls this reusable workflow only after its aggregate gate succeeds.
+  # Keeping publication in the same trusted push run avoids workflow_run's
+  # privileged-trigger boundary while preserving the all-tests-first gate.
+  workflow_call:
 
 concurrency:
   group: docker-release
@@ -26,39 +21,25 @@ permissions:
 
 jobs:
   gate:
-    name: Verify trusted CI result
+    name: Verify current trusted main commit
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:
-      actions: read
       contents: read
     outputs:
       sha: ${{ steps.verify.outputs.sha }}
     steps:
-      - name: Require successful CI for the current trusted main commit
+      - name: Require the current trusted main commit
         id: verify
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            const expectedRepository = `${context.repo.owner}/${context.repo.repo}`;
-            const run = context.payload.workflow_run;
-            const candidate = run?.head_sha ?? context.sha;
-
-            if (run) {
-              if (run.conclusion !== "success") {
-                core.setFailed(`CI concluded ${run.conclusion}; refusing to publish`);
-                return;
-              }
-              if (
-                run.event !== "push" ||
-                run.head_branch !== "main" ||
-                run.head_repository?.full_name !== expectedRepository
-              ) {
-                core.setFailed("Refusing an untrusted or non-main workflow_run");
-                return;
-              }
+            if (context.eventName !== "push" || context.ref !== "refs/heads/main") {
+              core.setFailed("Refusing a release outside a trusted main push run");
+              return;
             }
 
+            const candidate = context.sha;
             const { data: main } = await github.rest.git.getRef({
               ...context.repo,
               ref: "heads/main",
@@ -67,25 +48,6 @@ jobs:
               core.setFailed(
                 `Candidate ${candidate} is not the current main commit ${main.object.sha}`,
               );
-              return;
-            }
-
-            const { data } = await github.rest.actions.listWorkflowRuns({
-              ...context.repo,
-              workflow_id: "ci.yml",
-              head_sha: candidate,
-              event: "push",
-              status: "success",
-              per_page: 100,
-            });
-            const trusted = data.workflow_runs.some(
-              (candidateRun) =>
-                candidateRun.conclusion === "success" &&
-                candidateRun.head_branch === "main" &&
-                candidateRun.head_repository?.full_name === expectedRepository,
-            );
-            if (!trusted) {
-              core.setFailed(`No successful trusted CI push run exists for ${candidate}`);
               return;
             }
 
@@ -148,7 +110,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
       # Push content-addressed candidate blobs only. No SHA or latest tag is
       # visible until all matrix legs have passed the mandatory scan below.
@@ -252,7 +214,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ github.token }}
 
       # SHA tags make each approved image independently addressable. The one
       # release-manifest pointer below is the atomic deployment contract.

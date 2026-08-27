@@ -51,4 +51,16 @@ describe("repository policy gate", () => {
     expect(docsInstall).toBeLessThan(policyGate);
     expect(preCommit).toContain("pnpm check:policy || exit 1");
   });
+
+  it("regenerates ignored native projects before auditing their release surface", () => {
+    const workflow = read(".github/workflows/ci.yml");
+    const prebuild = workflow.indexOf("run: pnpm mobile:prebuild:check");
+    const permissionAudit = workflow.indexOf(
+      "run: pnpm --filter @openmapx/mobile assert-permissions",
+    );
+
+    expect(prebuild).toBeGreaterThan(-1);
+    expect(permissionAudit).toBeGreaterThan(prebuild);
+    expect(workflow).not.toContain("run: pnpm --filter @openmapx/mobile assert-generated");
+  });
 });

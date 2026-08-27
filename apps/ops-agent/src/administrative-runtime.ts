@@ -377,7 +377,7 @@ export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.li
   }
   backups.sort(
     (left, right) =>
-      left.createdAt.localeCompare(right.createdAt) || left.backupId.localeCompare(right.backupId),
+      right.createdAt.localeCompare(left.createdAt) || left.backupId.localeCompare(right.backupId),
   );
   return { backups, warningCount };
 }

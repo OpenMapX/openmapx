@@ -195,8 +195,11 @@ jobs:
       - name: Verify the signed runtime boundary
         run: pnpm --filter @openmapx/mobile assert-boundary
 
-      - name: Verify generated native configuration
-        run: pnpm --filter @openmapx/mobile assert-generated
+      - name: Regenerate and verify deterministic native configuration
+        # Generated native projects are intentionally ignored. Rebuild them
+        # twice from committed config so this works in a clean checkout and
+        # leaves the second generation available to the permission audit.
+        run: pnpm mobile:prebuild:check
 
       - name: Verify generated permission surface
         run: pnpm --filter @openmapx/mobile assert-permissions
@@ -522,3 +525,13 @@ jobs:
 
       - name: All gate jobs succeeded
         run: echo "lint, types, tests, mobile, database, production build, and applicable Docker build all green"
+
+  release:
+    name: build, scan, and publish Docker release
+    needs: ci
+    if: needs.ci.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    uses: ./.github/workflows/docker.yml

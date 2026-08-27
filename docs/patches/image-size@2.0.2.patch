@@ -2466,7 +2466,7 @@ diff --git a/dist/types/utils.mjs b/dist/types/utils.mjs
 index 3f09dceb036e40be8538dbb5588d88c951339158..675a9fab1d55692f13acabbabe34457c66e8f0a2 100644
 --- a/dist/types/utils.mjs
 +++ b/dist/types/utils.mjs
-@@ -25,22 +25,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+@@ -25,21 +25,28 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
    const methodName = `readUInt${bits}${endian}`;
    return methods[methodName](input, offset);
  }

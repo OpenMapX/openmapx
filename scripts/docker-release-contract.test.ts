@@ -15,12 +15,18 @@ describe("Docker release trust gate", () => {
   const ci = read(".github/workflows/ci.yml");
 
   it("starts publication only after successful CI for the current trusted main commit", () => {
-    expect(release).toContain("workflow_run:");
-    expect(release).toContain('workflows: ["CI"]');
-    expect(release).toContain("context.payload.workflow_run");
-    expect(release).toContain('run.conclusion !== "success"');
-    expect(release).toContain("run.head_repository?.full_name");
-    expect(release).toContain('workflow_id: "ci.yml"');
+    expect(release).toContain("workflow_call:");
+    expect(release).not.toContain("workflow_run:");
+    expect(release).not.toContain("workflow_dispatch:");
+    expect(ci).toMatch(/^ {2}release:\n/m);
+    expect(ci).toContain("needs: ci");
+    expect(ci).toContain("needs.ci.result == 'success'");
+    expect(ci).toContain("github.event_name == 'push'");
+    expect(ci).toContain("github.ref == 'refs/heads/main'");
+    expect(ci).toContain("uses: ./.github/workflows/docker.yml");
+    expect(release).toContain('context.eventName !== "push"');
+    expect(release).toContain('context.ref !== "refs/heads/main"');
+    expect(release).toContain("const candidate = context.sha");
     expect(release).toContain("heads/main");
   });
 

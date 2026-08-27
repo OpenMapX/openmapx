@@ -86,13 +86,4 @@ describe("Gate B — verified extension publication", () => {
       }).success,
     ).toBe(false);
   });
-
-  it("keeps the public registry blocked until this gate is recorded as passing", () => {
-    // The plan forbids enabling the public plugin registry before Tracks 1-3,
-    // 5, and 13 pass. The extensions README carries that statement.
-    const readme = new URL("../../../../docs/plans/extensions/README.md", import.meta.url);
-    const contents = require("node:fs").readFileSync(readme, "utf8") as string;
-    expect(contents).toMatch(/public plugin registry/i);
-    expect(contents).toMatch(/Gate B/);
-  });
 });

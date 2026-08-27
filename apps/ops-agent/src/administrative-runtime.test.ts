@@ -124,7 +124,7 @@ describe("administrative backup runtime", () => {
   });
 
   it.runIf(process.platform === "linux")(
-    "loads a bounded agent-owned inventory and never returns a host path",
+    "loads a bounded newest-first agent-owned inventory and never returns a host path",
     async () => {
       const rootDir = temporaryRoot();
       const valid = join(rootDir, "infra", "docker", "backups", "nightly-20260823");
@@ -142,6 +142,18 @@ describe("administrative backup runtime", () => {
               volumes: [{ name: "db", file: "postgis__db.sql.gz", mode: "pg_dump", sizeBytes: 42 }],
             },
           ],
+        }),
+        { mode: 0o600 },
+      );
+      const older = join(rootDir, "infra", "docker", "backups", "nightly-20260822");
+      mkdirSync(older, { mode: 0o700 });
+      writeFileSync(
+        join(older, "manifest.json"),
+        JSON.stringify({
+          name: "nightly-20260822",
+          createdAt: "2026-08-22T18:00:00.000Z",
+          openmapxVersion: "1.0.0",
+          services: [],
         }),
         { mode: 0o600 },
       );
@@ -167,6 +179,12 @@ describe("administrative backup runtime", () => {
             totalBytes: 42,
           }),
           expect.objectContaining({
+            backupId: "nightly-20260822",
+            serviceCount: 0,
+            volumeCount: 0,
+            totalBytes: 0,
+          }),
+          expect.objectContaining({
             backupId: "corrupt-entry",
             corrupt: true,
             corruptReason: "missing_manifest",
@@ -186,7 +204,12 @@ describe("administrative backup runtime", () => {
       mkdirSync(backup, { mode: 0o700 });
       writeFileSync(
         join(backup, "manifest.json"),
-        JSON.stringify({ name: "present", createdAt: "2026-08-23T18:00:00.000Z", services: [] }),
+        JSON.stringify({
+          name: "present",
+          createdAt: "2026-08-23T18:00:00.000Z",
+          openmapxVersion: "1.0.0",
+          services: [],
+        }),
         { mode: 0o600 },
       );
 

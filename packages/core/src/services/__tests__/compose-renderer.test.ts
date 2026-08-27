@@ -27,6 +27,19 @@ function makeService(container: LoadedService["manifest"]["container"]): LoadedS
 }
 
 describe("renderServiceSnippet GPU support", () => {
+  it("renders a readable tag plus the immutable manifest digest", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const service = makeService({
+      image: "vendor/image",
+      tag: "1.2.3",
+      digest,
+    });
+
+    const snippet = renderServiceSnippet(service, { existsSync: () => true });
+
+    expect(snippet.image).toBe(`vendor/image:1.2.3@${digest}`);
+  });
+
   it("emits deploy.resources.reservations.devices for a container with gpu", () => {
     const service = makeService({
       image: "ollama/ollama",

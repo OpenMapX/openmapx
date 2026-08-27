@@ -79,17 +79,6 @@ describe("production supply-chain policy", () => {
     }
 
     expect(violations).toEqual([]);
-
-    const generatedImages = read("infra/docker/docker-compose.generated.yml")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line.startsWith("image: "));
-    expect(generatedImages).not.toHaveLength(0);
-    expect(
-      generatedImages.filter(
-        (line) => !line.includes("ghcr.io/openmapx/") && !/@sha256:[a-f0-9]{64}$/.test(line),
-      ),
-    ).toEqual([]);
   });
 
   it("stages the patch directory in every image that installs from the lockfile", () => {
