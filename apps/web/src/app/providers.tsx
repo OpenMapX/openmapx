@@ -4,6 +4,7 @@ import CssBaseline from "@mui/material/CssBaseline";
 import { createTheme, ThemeProvider } from "@mui/material/styles";
 import {
   configureStorage,
+  DEFAULT_QUERY_GC_TIME_MS,
   useDirectionsStore,
   useNavigationStore,
   useSettingsStore,
@@ -12,10 +13,6 @@ import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { useEffect, useState } from "react";
-// Side-effect import: populates globalThis.__OMX_RUNTIME__ so community bundles
-// resolve react/@openmapx/* to the host's singletons (must run before any
-// community bundle script is appended by IntegrationProvider).
-import "../lib/communityRuntime";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
 import { MobileRuntimeProvider } from "../lib/mobile/MobileRuntimeProvider";
@@ -24,6 +21,7 @@ import {
   removePersonalTimelineMutations,
   shouldDehydrateOpenMapXMutation,
 } from "../lib/personalTimelineCachePolicy";
+import { installHighCardinalityQueryCacheBudget } from "../lib/queryCacheBudget";
 import { createIdbPersister } from "../lib/queryPersister";
 import {
   enforceRecentMapDataCachePreference,
@@ -35,6 +33,7 @@ import { IntegrationProvider } from "../providers/IntegrationProvider";
 import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
 import { MangroveTransportProvider } from "../providers/MangroveTransportProvider";
 import { PersonalTimelineSessionGuard } from "../providers/PersonalTimelineSessionGuard";
+import { SessionAuthorityBoundary } from "../providers/SessionAuthorityBoundary";
 
 /**
  * Identifies this deployment to the installed shell during the handshake, so a
@@ -73,7 +72,7 @@ const theme = createTheme({
   },
   defaultColorScheme: "light",
   typography: {
-    fontFamily: '"Plus Jakarta Sans", Arial, sans-serif',
+    fontFamily: '"Plus Jakarta Sans Variable", Arial, sans-serif',
     fontSize: 14,
     button: {
       textTransform: "none",
@@ -116,9 +115,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
           queries: {
             staleTime: 60_000,
             retry: 1,
-            // Keep cached data in memory for 24h so stale results remain
-            // available when the user goes offline during a session.
-            gcTime: 24 * 60 * 60 * 1000,
+            // IndexedDB persistence separately preserves opted-in offline map
+            // data. In-memory inactive queries should not accumulate all day.
+            gcTime: DEFAULT_QUERY_GC_TIME_MS,
           },
         },
       }),
@@ -141,23 +140,32 @@ export function Providers({ children }: { children: React.ReactNode }) {
     useDirectionsStore.getState().hydrateRoutePrefs();
   }, []);
 
+  useEffect(() => installHighCardinalityQueryCacheBudget(queryClient), [queryClient]);
+
   const inner = (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <ImpersonationBanner />
-      <SavedPlacesMirror />
-      <MangroveTransportProvider>
-        <KeypairSessionGuard />
-        <PersonalTimelineSessionGuard />
-        {/*
-          Mounted outside `IntegrationProvider` on purpose: the installed shell
-          forbids executing administrator-installed frontend bundles, and that
-          guard has to be answerable before the provider that would append them.
-        */}
-        <MobileRuntimeProvider webBuildId={WEB_BUILD_ID}>
-          <IntegrationProvider>{children}</IntegrationProvider>
-        </MobileRuntimeProvider>
-      </MangroveTransportProvider>
+      {/*
+        These teardown-only guards must observe the raw session transition even
+        while the private tree is gated, so old in-memory keys and timeline
+        queries are cleared before the replacement authority is released.
+      */}
+      <KeypairSessionGuard />
+      <PersonalTimelineSessionGuard />
+      <SessionAuthorityBoundary>
+        <ImpersonationBanner />
+        <SavedPlacesMirror />
+        <MangroveTransportProvider>
+          {/*
+            Mounted outside `IntegrationProvider` on purpose: the installed shell
+            forbids executing administrator-installed frontend bundles, and that
+            guard has to be answerable before the provider that would append them.
+          */}
+          <MobileRuntimeProvider webBuildId={WEB_BUILD_ID}>
+            <IntegrationProvider>{children}</IntegrationProvider>
+          </MobileRuntimeProvider>
+        </MangroveTransportProvider>
+      </SessionAuthorityBoundary>
     </ThemeProvider>
   );
 

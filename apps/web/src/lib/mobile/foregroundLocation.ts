@@ -6,10 +6,9 @@
  * location producer, and a browser fix taken alongside a native session would be
  * a second answer to "where am I" from a second sensor subscription.
  *
- * A v1 shell cannot answer this at all. That is reported as unavailable rather
- * than quietly falling back to the browser — falling back would restore exactly
- * the second producer this exists to prevent, and would do so precisely on the
- * devices running the oldest binaries.
+ * A shell that cannot answer reports the request as unavailable rather than
+ * quietly falling back to the browser. Falling back would restore exactly the
+ * second producer this exists to prevent.
  */
 
 import type { BridgeClient } from "./bridgeClient";
@@ -24,13 +23,7 @@ export interface ForegroundFix {
   timestampMs: number;
 }
 
-export type ForegroundLocationStatus =
-  | "ok"
-  | "denied"
-  | "unavailable"
-  | "timeout"
-  /** The shell is too old to answer; the page must not fall back to the browser. */
-  | "unsupported";
+export type ForegroundLocationStatus = "ok" | "denied" | "unavailable" | "timeout";
 
 export type ForegroundLocationResult =
   | { status: "ok"; fix: ForegroundFix }
@@ -118,9 +111,6 @@ export async function nativeForegroundFix(
     if (payload.status === "timeout") return { status: "timeout" };
     return { status: "unavailable" };
   } catch (error) {
-    if (error instanceof BridgeError && error.code === "unsupported-capability") {
-      return { status: "unsupported" };
-    }
     if (error instanceof BridgeError && error.code === "timeout") return { status: "timeout" };
     return { status: "unavailable" };
   }

@@ -35,6 +35,7 @@ import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { useAdminToast } from "../shared/AdminToast";
 import { MetaRow } from "../shared/MetaRow";
@@ -551,7 +552,8 @@ function CredentialsTab({
       return res.json();
     },
     onSuccess: (_, key) => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void invalidateIntegrationRuntime(qc, apiUrl);
       showToast(`Credential "${key}" deleted`);
     },
     onError: (_, key) => showToast(`Failed to delete "${key}"`, "error"),
@@ -1104,8 +1106,9 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
       return res.json();
     },
     onSuccess: (_, enable) => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      qc.invalidateQueries({ queryKey: ["admin", "integrations", id] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations", id] });
+      void invalidateIntegrationRuntime(qc, apiUrl);
       showToast(`Integration ${enable ? "enabled" : "disabled"}`);
     },
     onError: (err) => showToast(err instanceof Error ? err.message : "Operation failed", "error"),

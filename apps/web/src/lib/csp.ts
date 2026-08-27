@@ -33,35 +33,15 @@ export function cspNonce(): string {
 export interface CspOptions {
   /** Development needs `unsafe-eval` for React Refresh; production must not. */
   development?: boolean;
-  /**
-   * Where community integration bundles are served from.
-   *
-   * These are self-hosted reviewed modules, not third-party scripts, and they
-   * are only ever loaded by the browser/PWA — the installed shell removes them
-   * before any of this matters.
-   */
-  apiOrigin?: string;
-}
-
-/** The API origin as a bare origin, or null when it is same-origin or unset. */
-function scriptOrigin(apiOrigin: string | undefined): string | null {
-  if (!apiOrigin) return null;
-  try {
-    return new URL(apiOrigin).origin;
-  } catch {
-    return null;
-  }
 }
 
 export function buildCsp(nonce: string, options: CspOptions = {}): string {
-  const extraScriptOrigin = scriptOrigin(options.apiOrigin);
   const scriptSrc = [
     "script-src 'self'",
     `'nonce-${nonce}'`,
     // Lets a nonced script load the chunks it needs without nonce-ing each one,
     // which is what makes this workable with a bundler at all.
     "'strict-dynamic'",
-    ...(extraScriptOrigin ? [extraScriptOrigin] : []),
     // React Refresh compiles components at runtime. Never in production.
     ...(options.development ? ["'unsafe-eval'"] : []),
   ].join(" ");

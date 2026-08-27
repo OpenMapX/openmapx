@@ -186,10 +186,13 @@ export class NativeNavigationCommands {
   /** Acknowledges rendered events so a reconnect does not replay them. */
   acknowledgeEvents(eventIds: readonly string[]): Promise<void> {
     if (eventIds.length === 0) return Promise.resolve();
-    return this.client.request("event.ack", { eventIds: [...eventIds] }, {}).then(
-      () => undefined,
-      () => undefined,
-    );
+    try {
+      this.client.send("event.ack", { eventIds: [...eventIds] }, {});
+    } catch {
+      // A reconnect replays unacknowledged events, so a failed acknowledgement
+      // is safe to abandon and must not create a request that can only time out.
+    }
+    return Promise.resolve();
   }
 
   /**

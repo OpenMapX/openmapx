@@ -77,8 +77,8 @@ export function useSystemAuth(): SystemAuthRuntime {
       // there is nothing to route.
       if (operation === "oauth" && platform === "ios") return "unavailable";
       if (canSystemAuth) return "system-browser";
-      // A v1 shell, or one that never negotiated. It cannot carry a session
-      // back, and saying otherwise would be a promise the shell cannot keep.
+      // An incompatible shell cannot carry a session back, and saying otherwise
+      // would be a promise the shell cannot keep.
       return "external-browser-only";
     },
     [runtime.browserAuthority, canSystemAuth, platform],

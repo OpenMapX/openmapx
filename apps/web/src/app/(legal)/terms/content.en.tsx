@@ -7,8 +7,8 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import type { Disclosure } from "@openmapx/core/server";
-import { legalConfig, sectionSlug } from "@openmapx/core/server";
+import { legalConfig, sectionSlug } from "@openmapx/core/legal";
+import type { Disclosure } from "@openmapx/core/server-api";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
 import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
 import { termsIds, termsTitles } from "./sections";
@@ -41,7 +41,7 @@ export default function TermsContent({
           mb: 4,
         }}
       >
-        Last updated: August 10, 2026
+        Last updated: August 27, 2026
       </Typography>
       <Section title={T.scope}>
         <Typography>

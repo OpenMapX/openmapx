@@ -94,10 +94,6 @@ export function DirectionsPanelContent() {
   const {
     isOpen,
     waypoints,
-    origin,
-    originLabel,
-    destination,
-    destinationLabel,
     mode,
     isEvMode,
     evSocStartPct,
@@ -125,7 +121,6 @@ export function DirectionsPanelContent() {
     removeWaypoint,
     reorderWaypoints,
     reverseWaypoints,
-    setOrigin,
     setMode,
     setEvMode,
     setEvForceNonExclusive,
@@ -135,6 +130,10 @@ export function DirectionsPanelContent() {
     setTransitDepartureTime,
     setTransitArrivalTime,
   } = useDirectionsStore();
+  const origin = waypoints[0]?.coords ?? null;
+  const originLabel = waypoints[0]?.label ?? "";
+  const destination = waypoints.at(-1)?.coords ?? null;
+  const destinationLabel = waypoints.at(-1)?.label ?? "";
   // Meaningful only when the origin and destination actually keep a
   // different wall clock. Two zones can differ by id (Europe/Berlin vs
   // Europe/Paris) yet share the same UTC offset, in which case the arrival
@@ -217,13 +216,13 @@ export function DirectionsPanelContent() {
       if (!useDirectionsStore.getState().isOpen) return;
       const location: LngLat = [result.fix.lng, result.fix.lat];
       useMapStore.getState().setUserLocation(location);
-      setOrigin(location, myLocationLabel);
+      setWaypoint(0, location, myLocationLabel);
     });
 
     return () => {
       active = false;
     };
-  }, [isOpen, myLocationLabel, setOrigin, requestFix]);
+  }, [isOpen, myLocationLabel, setWaypoint, requestFix]);
 
   const handleShare = async () => {
     const result = await shareCurrentUrl();
@@ -532,9 +531,9 @@ export function DirectionsPanelContent() {
 
   const handleUseMyLocation = useCallback(() => {
     if (userLocation) {
-      setOrigin(userLocation, t("myLocation"));
+      setWaypoint(0, userLocation, t("myLocation"));
     }
-  }, [userLocation, setOrigin, t]);
+  }, [userLocation, setWaypoint, t]);
 
   const handleWaypointBlur = useCallback(() => {
     setTimeout(() => setFocusedField(null), 150);

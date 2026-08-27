@@ -1,5 +1,6 @@
 import type { Route } from "@openmapx/core";
 import { setNavigationAuthority, useDirectionsStore, useNavigationStore } from "@openmapx/core";
+import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
 import { en } from "@openmapx/i18n";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
@@ -99,14 +100,14 @@ function renderInShell(reply: (type: string) => unknown | Promise<unknown>) {
           if (payload === undefined) return;
           handlers.get("openmapx:native")?.({
             detail: {
-              protocolVersion: 1,
+              protocolVersion: MOBILE_PROTOCOL_MAX,
               type: nativeReplyType(message.type),
               // The envelope schema is strict, so a reply carrying a field it
               // does not name is dropped rather than delivered.
               messageId: `n-${sent.length}`,
               channelNonce: NONCE,
               sentAtMs: 1_700_000_000_000,
-              payload,
+              payload: { ...(payload as Record<string, unknown>), forMessageId: message.messageId },
             },
           } as unknown as Event);
         });
@@ -150,9 +151,9 @@ function nativeReplyType(type: string): string {
 const HELLO_PAYLOAD = {
   shellVersion: "1.0.0",
   shellBuild: "1",
-  selectedProtocolVersion: 1,
-  minProtocolVersion: 1,
-  maxProtocolVersion: 1,
+  selectedProtocolVersion: MOBILE_PROTOCOL_MAX,
+  minProtocolVersion: MOBILE_PROTOCOL_MIN,
+  maxProtocolVersion: MOBILE_PROTOCOL_MAX,
   platform: "ios",
   capabilities: {
     groundNavigation: true,

@@ -17,6 +17,14 @@ interface LocationMinimapProps {
   sx?: SxProps<Theme>;
 }
 
+interface MinimapInstance {
+  map: {
+    flyTo: (opts: { center: [number, number]; zoom?: number; duration: number }) => void;
+    remove: () => void;
+  };
+  marker: { setLngLat: (coords: [number, number]) => unknown };
+}
+
 /**
  * Small non-interactive MapLibre map centered on a point, with a marker. Shared
  * by the photo gallery and the crowd-report dialog; callers control size and
@@ -28,29 +36,33 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
   const { mode, systemMode } = useColorScheme();
   const variant = (mode === "system" ? systemMode : mode) === "dark" ? "dark" : "light";
   const containerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<{ map: unknown; marker: unknown } | null>(null);
+  const mapRef = useRef<MinimapInstance | null>(null);
+  const cameraRef = useRef({ lng, lat, zoom });
+  cameraRef.current = { lng, lat, zoom };
 
-  // biome-ignore lint/correctness/useExhaustiveDependencies: map created once, coords updated by second effect
   useEffect(() => {
     const el = containerRef.current;
     if (!el) return;
 
     let cancelled = false;
+    let instance: MinimapInstance | null = null;
 
     (async () => {
       const [maplibregl, style] = await Promise.all([
         loadMapLibreRuntime(),
         env.styleProvider === "openmapx"
           ? loadOpenMapXStyle(env, variant)
-          : loadMaptilerStyle("bright-v2", env),
+          : loadMaptilerStyle(variant === "dark" ? "streets-v2-dark" : "bright-v2", env),
       ]);
       if (cancelled || !el) return;
+
+      const camera = cameraRef.current;
 
       const map = new maplibregl.Map({
         container: el,
         style: style as string | StyleSpecification,
-        center: [lng, lat],
-        zoom,
+        center: [camera.lng, camera.lat],
+        zoom: camera.zoom,
         interactive: false,
         // Credits are rendered by `<MapCredits>` below, matching the main map's
         // footer. MapLibre's own control renders EXPANDED on init on a
@@ -59,32 +71,38 @@ export function LocationMinimap({ lng, lat, zoom = 16, onClick, sx }: LocationMi
         attributionControl: false,
       });
 
-      const marker = new maplibregl.Marker({ color: "#e53935" }).setLngLat([lng, lat]).addTo(map);
+      let marker: InstanceType<typeof maplibregl.Marker>;
+      try {
+        marker = new maplibregl.Marker({ color: "#e53935" })
+          .setLngLat([camera.lng, camera.lat])
+          .addTo(map);
+      } catch (error) {
+        map.remove();
+        throw error;
+      }
 
-      mapRef.current = { map, marker };
+      instance = { map, marker };
+      mapRef.current = instance;
     })().catch(() => {
       // Style load or MapLibre import failed — leave the container empty.
     });
 
     return () => {
       cancelled = true;
-      if (mapRef.current) {
-        const { map } = mapRef.current as { map: { remove: () => void } };
-        map.remove();
-        mapRef.current = null;
+      if (instance) {
+        instance.map.remove();
+        if (mapRef.current === instance) mapRef.current = null;
+        instance = null;
       }
     };
-  }, []);
+  }, [env, variant]);
 
   useEffect(() => {
     if (!mapRef.current) return;
-    const { map, marker } = mapRef.current as {
-      map: { flyTo: (opts: { center: [number, number]; duration: number }) => void };
-      marker: { setLngLat: (coords: [number, number]) => void };
-    };
+    const { map, marker } = mapRef.current;
     marker.setLngLat([lng, lat]);
-    map.flyTo({ center: [lng, lat], duration: 300 });
-  }, [lng, lat]);
+    map.flyTo({ center: [lng, lat], zoom, duration: 300 });
+  }, [lng, lat, zoom]);
 
   // The caller's `sx` positions and sizes the minimap; the map canvas fills it
   // and the credits pin themselves to its bottom-right corner. `position` is

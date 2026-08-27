@@ -3,6 +3,7 @@
 @custom-variant dark (&:where(.dark, .dark *));
 
 :root {
+  --font-sans: "Plus Jakarta Sans Variable";
   /* Landing-page brand green (#43A047) at a higher saturation and lower
    * lightness so white-on-brand clears WCAG AA (5.2:1) and brand text on
    * --omx-brand-light clears it too (4.6:1). Saturation rather than lightness

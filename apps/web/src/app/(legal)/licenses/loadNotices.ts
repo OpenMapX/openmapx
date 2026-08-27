@@ -6,7 +6,8 @@
 
 import { type Dirent, existsSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { type LicenseNotice, repoPaths } from "@openmapx/core/server";
+import type { LicenseNotice } from "@openmapx/core/licenses";
+import { repoPaths } from "@openmapx/core/repo-paths";
 
 export interface LicenseGroup {
   /** `core` for web/api/data-manager/built-in deps, or the community integration id. */

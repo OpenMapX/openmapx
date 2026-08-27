@@ -9,7 +9,6 @@ import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge"
 import { DeepLinkManager } from "@/components/map/DeepLinkManager";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
 import { ExploreAnchorMarker } from "@/components/map/ExploreAnchorMarker";
-import { HostMapProvider } from "@/components/map/HostMapProvider";
 import { ImportedGeometryBanner } from "@/components/map/ImportedGeometryBanner";
 import { LegendHost } from "@/components/map/LegendHost";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
@@ -162,12 +161,8 @@ export default function HomePage() {
             <DataSourceLayer />
             <SavedPlacesLayer />
             <ImportedGeometryLayer />
-            {/* All overlay/tool layers loaded dynamically by MapLayerHost.
-                HostMapProvider exposes the curated map surface (useHostMap) to
-                community code overlays rendered within. */}
-            <HostMapProvider>
-              <MapLayerHost />
-            </HostMapProvider>
+            {/* Built-in overlay/tool layers loaded dynamically by MapLayerHost. */}
+            <MapLayerHost />
             <DataSourceDetailBridge />
             <MapClickHandler />
             <MapStylePoiClickHandler />

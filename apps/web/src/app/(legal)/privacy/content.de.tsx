@@ -7,8 +7,8 @@ import TableContainer from "@mui/material/TableContainer";
 import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
-import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server";
-import { legalConfig, sectionSlug } from "@openmapx/core/server";
+import { legalConfig, sectionSlug } from "@openmapx/core/legal";
+import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server-api";
 import { emailCountryName, emailTransferNote } from "../emailDisclosure";
 import { generatePrivacySectionsFromManifests } from "../generateLegalSections";
 import { privacyTitles } from "./sections";
@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 11. August 2026
+        Zuletzt aktualisiert: 27. August 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>

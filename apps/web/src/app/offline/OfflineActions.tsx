@@ -10,12 +10,9 @@ export function OfflineActions({
   retryLabel: string;
   openMapLabel: string;
 }) {
-  // We deliberately use full document navigations instead of next/navigation's
-  // router.push / router.refresh. Those trigger client-side App Router
-  // transitions that fetch an RSC payload — that request isn't a navigation
-  // (request.mode !== "navigate") so it bypasses the SW navigation handler
-  // that serves the precached `/` from app-shell-v1. Offline, the RSC fetch
-  // hangs and these buttons would be useless.
+  // Deliberately use full document navigations. The service worker retries the
+  // requested document from the network and, while still offline, returns only
+  // the distinct static `/offline` fallback; it never replays cached map HTML.
   return (
     <Stack
       direction={{ xs: "column", sm: "row" }}

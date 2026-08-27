@@ -1,4 +1,4 @@
-import { serverApiUrl } from "@openmapx/core/server";
+import { serverApiUrl } from "@openmapx/core/server-api";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";

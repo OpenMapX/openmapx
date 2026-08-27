@@ -102,8 +102,10 @@ describe("DirectionsPanelContent", () => {
       } as GeolocationPosition);
     });
 
-    expect(useDirectionsStore.getState().origin).toEqual([13.405, 52.52]);
-    expect(useDirectionsStore.getState().originLabel).toBe("directions.myLocation");
+    expect(useDirectionsStore.getState().waypoints[0]).toMatchObject({
+      coords: [13.405, 52.52],
+      label: "directions.myLocation",
+    });
     expect(useMapStore.getState().userLocation).toEqual([13.405, 52.52]);
   });
 

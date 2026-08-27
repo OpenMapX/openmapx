@@ -9,7 +9,7 @@ import SettingsIcon from "@mui/icons-material/Settings";
 import TrafficOutlinedIcon from "@mui/icons-material/TrafficOutlined";
 import Divider from "@mui/material/Divider";
 import List from "@mui/material/List";
-import { getRegisteredOverlayIds, useNavigationStore } from "@openmapx/core";
+import { OVERLAY_REGISTRY, useNavigationStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useSatelliteToggle } from "@/lib/navigation/satelliteToggle";
@@ -34,7 +34,7 @@ export function NavMenu({ onOpenDirections, onOverview, onOpenSettings }: NavMen
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
   const { toggleKeepScreenOn } = useNavigationMutations();
   const satellite = useSatelliteToggle();
-  const overlayIds = getRegisteredOverlayIds();
+  const overlayIds = OVERLAY_REGISTRY.map((entry) => entry.id);
 
   return (
     <List disablePadding>

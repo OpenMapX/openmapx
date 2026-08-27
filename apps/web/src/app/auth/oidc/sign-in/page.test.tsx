@@ -67,7 +67,7 @@ describe("OIDC sign-in continuation page", () => {
     render(<Page />);
 
     expect(oauthContinue).not.toHaveBeenCalled();
-    expect(screen.getByText("auth.oidcProvider.alreadySignedInTitle")).not.toBeNull();
+    expect(await screen.findByText("auth.oidcProvider.alreadySignedInTitle")).not.toBeNull();
     expect(
       screen.getByRole("link", { name: "auth.oidcProvider.backToOpenMapX" }).getAttribute("href"),
     ).toBe("/");

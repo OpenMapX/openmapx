@@ -1,5 +1,6 @@
 "use client";
 
+import { configureOfflineQueryRetention } from "@openmapx/core";
 import { idbDelete, idbGet } from "./idbStore";
 
 export const RECENT_MAP_DATA_CACHE_ENABLED_KEY = "openmapx-recent-map-data-cache-enabled";
@@ -75,6 +76,9 @@ export async function setRecentMapDataCacheEnabled(enabled: boolean): Promise<vo
     window.localStorage.removeItem(RECENT_MAP_DATA_CACHE_ENABLED_KEY);
   }
 
+  // Keep in-memory retention in step with persistence: queries GC'd by the
+  // short default policies can neither be persisted nor survive a restore.
+  configureOfflineQueryRetention(enabled);
   postRecentMapDataCachePreference(enabled);
 
   if (!enabled) {
@@ -84,6 +88,7 @@ export async function setRecentMapDataCacheEnabled(enabled: boolean): Promise<vo
 
 export async function enforceRecentMapDataCachePreference(): Promise<void> {
   const enabled = isRecentMapDataCacheEnabled();
+  configureOfflineQueryRetention(enabled);
   postRecentMapDataCachePreference(enabled);
 
   if (!enabled) {

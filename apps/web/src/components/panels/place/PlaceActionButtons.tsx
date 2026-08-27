@@ -86,14 +86,15 @@ export function PlaceActionButtons({ place }: Props) {
   const [snackbar, setSnackbar] = useState<string | null>(null);
   const [saveOpen, setSaveOpen] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
-  const { setDestination, open: openDirections } = useDirectionsStore();
+  const { setWaypoint, open: openDirections } = useDirectionsStore();
   const { setSelectedPlace } = usePlaceStore();
   const { data: session } = useSession();
   const { data: savedInListIds } = useIsSaved(session?.user ? place.id : null);
   const isSaved = savedInListIds && savedInListIds.length > 0;
 
   const handleDirections = () => {
-    setDestination(place.coordinates, place.name);
+    const destinationIndex = useDirectionsStore.getState().waypoints.length - 1;
+    setWaypoint(destinationIndex, place.coordinates, place.name);
     openDirections();
     setSelectedPlace(null);
     useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);

@@ -30,6 +30,7 @@ const mocks = (
     storage,
     downloadOfflinePackage: vi.fn(),
     requestPersistentStorage: vi.fn(),
+    session: { data: { user: { id: "user-a" } } as unknown, isPending: false },
   };
 });
 
@@ -40,6 +41,7 @@ vi.mock("@openmapx/core", () => ({
   useAutocomplete: () => ({ data: [], isFetching: false }),
   useDebounce: (value: string) => value,
   usePlaceDetails: () => ({ data: undefined }),
+  useSession: () => mocks.session,
 }));
 
 vi.mock("@/lib/EnvProvider", () => ({
@@ -98,6 +100,8 @@ function renderSettings() {
 describe("OfflineSettingsClient download dialog", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.session.data = { user: { id: "user-a" } };
+    mocks.session.isPending = false;
     mocks.storage.list.mockResolvedValue([]);
     mocks.api.capability.mockResolvedValue({
       available: true,
@@ -116,6 +120,41 @@ describe("OfflineSettingsClient download dialog", () => {
           );
         }),
     );
+  });
+
+  it("keeps local areas available but never opens remote preparation while signed out", async () => {
+    mocks.session.data = null;
+    renderSettings();
+
+    expect(await screen.findByText("No offline areas yet.")).not.toBeNull();
+    expect(screen.queryByRole("button", { name: "Download a new area" })).toBeNull();
+    expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+      "href",
+      "/auth/oidc/sign-in",
+    );
+    expect(mocks.api.prepare).not.toHaveBeenCalled();
+    expect(mocks.api.getJob).not.toHaveBeenCalled();
+  });
+
+  it("closes and aborts preparation immediately when the session becomes signed out", async () => {
+    const user = userEvent.setup();
+    const view = renderSettings();
+    await user.click(await screen.findByRole("button", { name: "Download a new area" }));
+    await user.click(screen.getByRole("button", { name: "Choose fixture area" }));
+    await user.click(screen.getByRole("button", { name: "Start download" }));
+    await waitFor(() => expect(mocks.api.prepare).toHaveBeenCalledTimes(1));
+    const signal = mocks.api.prepare.mock.calls[0]?.[1] as AbortSignal;
+
+    mocks.session.data = null;
+    view.rerender(
+      <NextIntlClientProvider locale="en" messages={en}>
+        <OfflineSettingsClient />
+      </NextIntlClientProvider>,
+    );
+
+    await waitFor(() => expect(signal.aborted).toBe(true));
+    expect(screen.queryByText("Preparing the offline package…")).toBeNull();
+    expect(screen.getByRole("link", { name: "Sign in" })).not.toBeNull();
   });
 
   it("replaces mutable selection controls with the submitted download summary", async () => {

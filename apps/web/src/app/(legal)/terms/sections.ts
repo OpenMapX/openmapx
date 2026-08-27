@@ -1,4 +1,4 @@
-import { sectionSlug } from "@openmapx/core/server";
+import { sectionSlug } from "@openmapx/core/legal";
 import type { LegalSection } from "@/components/legal/LegalPageShell";
 
 /**

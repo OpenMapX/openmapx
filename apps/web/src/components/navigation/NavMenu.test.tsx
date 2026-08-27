@@ -5,7 +5,7 @@ vi.mock("next-intl", () => ({
   useTranslations: () => (k: string) => k,
 }));
 vi.mock("@openmapx/core", () => ({
-  getRegisteredOverlayIds: () => [] as string[],
+  OVERLAY_REGISTRY: [],
   useNavigationStore: (sel: (s: unknown) => unknown) =>
     sel({ keepScreenOn: false, toggleKeepScreenOn: () => {} }),
   useLayerStore: (sel: (s: unknown) => unknown) =>

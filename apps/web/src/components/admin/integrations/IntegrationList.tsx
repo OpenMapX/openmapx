@@ -26,6 +26,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";
@@ -44,6 +45,8 @@ export interface IntegrationSummary {
   domains: string[];
   quality: "built-in" | "community-verified" | "community";
   isBuiltIn: boolean;
+  /** Community directory ships code the server refuses to execute. */
+  blockedCode?: boolean;
   enabled: boolean;
   configured: boolean;
   hasHealthCheck: boolean;
@@ -139,7 +142,8 @@ export function IntegrationList() {
         credentials: "include",
       });
       if (!res.ok) throw new Error(`Failed to ${action}`);
-      qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      void invalidateIntegrationRuntime(qc, apiUrl);
       showToast(`Integration ${enable ? "enabled" : "disabled"}`);
     } catch {
       showToast("Operation failed", "error");
@@ -161,9 +165,9 @@ export function IntegrationList() {
       if (!res.ok) throw new Error("Reload failed");
       return res.json();
     },
-    onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
-      showToast(`Reloaded ${data.reloaded} integrations (${data.enabled} enabled)`);
+    onSuccess: (data: { jobId: string }) => {
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      showToast(`Reload job queued (${data.jobId})`);
     },
     onError: () => showToast("Reload failed", "error"),
   });
@@ -531,7 +535,19 @@ export function IntegrationList() {
                     </Typography>
                   </TableCell>
                   <TableCell>
-                    <StatusBadge quality={integration.quality} />
+                    <Stack direction="row" sx={{ gap: 0.5, flexWrap: "wrap" }}>
+                      <StatusBadge quality={integration.quality} />
+                      {integration.blockedCode ? (
+                        <Tooltip title="This community integration ships backend or frontend code. OpenMapX does not execute community code inside the API or the browser; only its declarative manifest (attribution, data sources) is active. Move runtime behavior into an isolated service component.">
+                          <Chip
+                            label="Code not executed"
+                            size="small"
+                            color="warning"
+                            variant="outlined"
+                          />
+                        </Tooltip>
+                      ) : null}
+                    </Stack>
                   </TableCell>
                   <TableCell>
                     <HealthCell integration={integration} />

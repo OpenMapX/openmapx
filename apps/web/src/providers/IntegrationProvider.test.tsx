@@ -1,6 +1,8 @@
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, waitFor } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { CHANNEL_GLOBAL } from "@/lib/mobile/mobileShellEnvironment";
 import { IntegrationProvider } from "./IntegrationProvider";
 
@@ -14,15 +16,29 @@ const COMMUNITY_INTEGRATION = {
   frontend: { mapLayer: true },
 };
 
+const fetchMock = vi.fn();
+let runtimeMetadata: Record<string, unknown>;
+
+function MetadataProbe() {
+  const registry = useIntegrationRegistry();
+  return (
+    <span>{registry.get(COMMUNITY_INTEGRATION.id) ? "metadata-loaded" : "metadata-pending"}</span>
+  );
+}
+
 function renderProvider() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return render(
-    <QueryClientProvider client={client}>
-      <IntegrationProvider>
-        <span>child</span>
-      </IntegrationProvider>
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        <IntegrationProvider>
+          <span>child</span>
+          <MetadataProbe />
+        </IntegrationProvider>
+      </QueryClientProvider>,
+    ),
+  };
 }
 
 const bundleScripts = () =>
@@ -32,13 +48,15 @@ const bundleScripts = () =>
 
 describe("IntegrationProvider community bundle boundary", () => {
   beforeEach(() => {
-    vi.stubGlobal("fetch", async () =>
-      Response.json({
-        integrations: [COMMUNITY_INTEGRATION],
-        frameworkStrings: {},
-        disclosures: [],
-      }),
-    );
+    runtimeMetadata = {
+      revision: "default",
+      integrations: [COMMUNITY_INTEGRATION],
+      frameworkStrings: {},
+      disclosures: [],
+    };
+    fetchMock.mockReset();
+    fetchMock.mockImplementation(async () => Response.json(runtimeMetadata));
+    vi.stubGlobal("fetch", fetchMock);
   });
 
   afterEach(() => {
@@ -47,10 +65,25 @@ describe("IntegrationProvider community bundle boundary", () => {
     delete (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL];
   });
 
-  it("loads a community bundle in an ordinary browser", async () => {
-    renderProvider();
+  it("executes no community bundle in an ordinary browser", async () => {
+    const { findByText } = renderProvider();
+    await findByText("metadata-loaded");
+    await waitFor(() => expect(bundleScripts()).toEqual([]));
+  });
 
-    await waitFor(() => expect(bundleScripts()).toHaveLength(1));
+  it("replaces runtime metadata when an admin invalidates the shared query", async () => {
+    const { client, findByText } = renderProvider();
+    await findByText("metadata-loaded");
+
+    runtimeMetadata = {
+      revision: "second",
+      integrations: [],
+      frameworkStrings: {},
+      disclosures: [],
+    };
+    await act(() => invalidateIntegrationRuntime(client, "https://api.example.test"));
+
+    await findByText("metadata-pending");
   });
 
   it("executes no community bundle inside the installed shell", async () => {
@@ -59,7 +92,7 @@ describe("IntegrationProvider community bundle boundary", () => {
     (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce: "abc123" };
 
     const { findByText } = renderProvider();
-    await findByText("child");
+    await findByText("metadata-loaded");
     // Give the metadata query and its effect the chance the browser case took.
     await waitFor(() => expect(bundleScripts()).toEqual([]));
 
@@ -100,26 +133,26 @@ describe("IntegrationProvider across every native descriptor state", () => {
     (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce };
 
     const { findByText } = renderProvider();
-    await findByText("child");
+    await findByText("metadata-loaded");
     await waitFor(() => expect(bundleScripts()).toEqual([]));
 
     expect(bundleScripts()).toEqual([]);
   });
 
-  it("registers no community module in any of them", async () => {
+  it("loads no community module script in any of them", async () => {
     (globalThis as Record<string, unknown>)[CHANNEL_GLOBAL] = { nonce: "abc123" };
 
     const { findByText } = renderProvider();
-    await findByText("child");
+    await findByText("metadata-loaded");
 
     // Nothing appended means nothing to register: the module only exists once
     // its script has run.
     expect(bundleScripts()).toEqual([]);
   });
 
-  it("still loads the bundle for an ordinary PWA, unchanged", async () => {
-    renderProvider();
-
-    await waitFor(() => expect(bundleScripts()).toHaveLength(1));
+  it("also keeps an ordinary PWA free of same-origin community code", async () => {
+    const { findByText } = renderProvider();
+    await findByText("metadata-loaded");
+    await waitFor(() => expect(bundleScripts()).toEqual([]));
   });
 });

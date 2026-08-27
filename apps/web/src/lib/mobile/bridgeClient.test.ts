@@ -1,3 +1,4 @@
+import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { describe, expect, it } from "vitest";
 import {
   BridgeClient,
@@ -7,6 +8,7 @@ import {
   READ_TIMEOUT_MS,
 } from "./bridgeClient";
 import { CHANNEL_GLOBAL } from "./mobileShellEnvironment";
+import { NativeNavigationCommands } from "./navigationCommands";
 
 const NONCE = "nonce-abc";
 
@@ -74,9 +76,9 @@ function harness(options: { scope?: unknown } = {}) {
   return { client, ...shell, advance, timerCount: () => timers.size };
 }
 
-function helloReply(overrides: Record<string, unknown> = {}) {
+function helloReply(forMessageId: string, overrides: Record<string, unknown> = {}) {
   return {
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "native.hello",
     messageId: "n1",
     channelNonce: NONCE,
@@ -84,9 +86,9 @@ function helloReply(overrides: Record<string, unknown> = {}) {
     payload: {
       shellVersion: "1.0.0",
       shellBuild: "1",
-      selectedProtocolVersion: 1,
-      minProtocolVersion: 1,
-      maxProtocolVersion: 1,
+      selectedProtocolVersion: MOBILE_PROTOCOL_MAX,
+      minProtocolVersion: MOBILE_PROTOCOL_MAX,
+      maxProtocolVersion: MOBILE_PROTOCOL_MAX,
       platform: "ios",
       capabilities: {
         groundNavigation: true,
@@ -98,14 +100,23 @@ function helloReply(overrides: Record<string, unknown> = {}) {
       permission: "background",
       locationDriver: "expo",
       activeSession: null,
+      forMessageId,
       ...overrides,
     },
   };
 }
 
+function deliverHello(
+  context: ReturnType<typeof harness>,
+  overrides: Record<string, unknown> = {},
+) {
+  const forMessageId = JSON.parse(context.sent[0]).messageId as string;
+  context.deliver(helloReply(forMessageId, overrides));
+}
+
 function snapshotMessage(revision: number) {
   return {
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "snapshot.update",
     messageId: `n-snap-${revision}`,
     channelNonce: NONCE,
@@ -153,10 +164,10 @@ describe("BridgeClient.hello", () => {
     context.client.attach();
 
     const pending = context.client.hello();
-    context.deliver(helloReply());
+    deliverHello(context);
     const result = await pending;
 
-    expect(result.selectedProtocolVersion).toBe(1);
+    expect(result.selectedProtocolVersion).toBe(MOBILE_PROTOCOL_MAX);
     expect(result.capabilities.groundNavigation).toBe(true);
     expect(context.client.negotiated).toBe(result);
   });
@@ -166,7 +177,7 @@ describe("BridgeClient.hello", () => {
     context.client.attach();
 
     const pending = context.client.hello();
-    context.deliver(helloReply());
+    deliverHello(context);
     await pending;
 
     expect(JSON.parse(context.sent[0]).payload.webBuildId).toBe("web-build-1");
@@ -177,7 +188,7 @@ describe("BridgeClient.hello", () => {
     context.client.attach();
 
     const pending = context.client.hello();
-    context.deliver(helloReply());
+    deliverHello(context);
     await pending;
 
     expect(JSON.parse(context.sent[0]).channelNonce).toBe(NONCE);
@@ -199,7 +210,7 @@ describe("BridgeClient.request", () => {
     const context = harness();
     context.client.attach();
     const pending = context.client.hello();
-    context.deliver(helloReply());
+    deliverHello(context);
     await pending;
     context.sent.length = 0;
     return context;
@@ -214,12 +225,11 @@ describe("BridgeClient.request", () => {
     });
   });
 
-  it("refuses a command when the shell is too old to run navigation", async () => {
-    // An old binary is not an error to retry; the page has to say so.
+  it("refuses a command when the shell is incompatible", async () => {
     const context = harness();
     context.client.attach();
     const pending = context.client.hello();
-    context.deliver(helloReply({ selectedProtocolVersion: null }));
+    deliverHello(context, { selectedProtocolVersion: null });
     await pending;
 
     await expect(context.client.request("snapshot.request", {})).rejects.toMatchObject({
@@ -248,13 +258,14 @@ describe("BridgeClient.request", () => {
     const context = await negotiated();
 
     const pending = context.client.request("session.stop", {}, { sessionId: "s1" });
+    const forMessageId = JSON.parse(context.sent[0]).messageId as string;
     context.deliver({
-      protocolVersion: 1,
+      protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "session.stopped",
       messageId: "n2",
       channelNonce: NONCE,
       sentAtMs: 1_700_000_000_000,
-      payload: { sessionId: "s1", finalStatus: "stopped", revision: 4 },
+      payload: { sessionId: "s1", finalStatus: "stopped", revision: 4, forMessageId },
     });
 
     await expect(pending).resolves.toMatchObject({ type: "session.stopped" });
@@ -266,7 +277,7 @@ describe("BridgeClient.request", () => {
     const pending = context.client.request("session.stop", {}, { sessionId: "s1" });
     const messageId = JSON.parse(context.sent[0]).messageId;
     context.deliver({
-      protocolVersion: 1,
+      protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "native.error",
       messageId: "n3",
       channelNonce: NONCE,
@@ -275,6 +286,95 @@ describe("BridgeClient.request", () => {
     });
 
     await expect(pending).resolves.toMatchObject({ type: "native.error" });
+  });
+
+  it("matches concurrent replies by request id even when they arrive out of order", async () => {
+    const context = await negotiated();
+
+    const first = context.client.request("snapshot.request", {});
+    const second = context.client.request("snapshot.request", {});
+    const firstMessageId = JSON.parse(context.sent[0]).messageId as string;
+    const secondMessageId = JSON.parse(context.sent[1]).messageId as string;
+
+    context.deliver({
+      ...snapshotMessage(2),
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+      payload: { snapshot: { revision: 2 }, forMessageId: secondMessageId },
+    });
+
+    expect(context.client.pendingCount).toBe(1);
+    await expect(second).resolves.toMatchObject({ payload: { snapshot: { revision: 2 } } });
+
+    context.deliver({
+      ...snapshotMessage(1),
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+      payload: { snapshot: { revision: 1 }, forMessageId: firstMessageId },
+    });
+
+    await expect(first).resolves.toMatchObject({ payload: { snapshot: { revision: 1 } } });
+    expect(context.client.pendingCount).toBe(0);
+  });
+
+  it("delivers a correlated snapshot reply to state subscribers", async () => {
+    const context = await negotiated();
+    const seen: unknown[] = [];
+    context.client.subscribe((message) => seen.push(message));
+
+    const pending = context.client.request("snapshot.request", {});
+    const messageId = JSON.parse(context.sent[0]).messageId as string;
+    context.deliver({
+      ...snapshotMessage(7),
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+      payload: { snapshot: { revision: 7 }, forMessageId: messageId },
+    });
+
+    await expect(pending).resolves.toMatchObject({ type: "snapshot.update" });
+    expect(seen).toEqual([
+      expect.objectContaining({
+        type: "snapshot.update",
+        payload: expect.objectContaining({ snapshot: { revision: 7 } }),
+      }),
+    ]);
+  });
+
+  it("rejects a correlated reply whose type cannot answer the named command", async () => {
+    const context = await negotiated();
+    const pending = context.client.request("snapshot.request", {});
+    const messageId = JSON.parse(context.sent[0]).messageId as string;
+
+    context.deliver({
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+      type: "location.result",
+      messageId: "wrong-reply-type",
+      channelNonce: NONCE,
+      sentAtMs: 1_700_000_000_000,
+      payload: {
+        requestId: "location-1",
+        status: "timeout",
+        forMessageId: messageId,
+      },
+    });
+
+    await expect(pending).rejects.toMatchObject({ code: "invalid-response" });
+    expect(context.client.pendingCount).toBe(0);
+  });
+
+  it("does not retain a pending request for a fire-and-forget event acknowledgement", async () => {
+    const context = await negotiated();
+    const commands = new NativeNavigationCommands(context.client, () => ({
+      sessionId: "s1",
+      revision: 1,
+    }));
+
+    const acknowledgement = commands.acknowledgeEvents(["event-1"]);
+    await Promise.resolve();
+
+    expect(context.client.pendingCount).toBe(0);
+    expect(JSON.parse(context.sent[0])).toMatchObject({
+      type: "event.ack",
+      payload: { eventIds: ["event-1"] },
+    });
+    await acknowledgement;
   });
 
   it("times out a read-only command on the short deadline", async () => {
@@ -290,13 +390,14 @@ describe("BridgeClient.request", () => {
     const context = await negotiated();
 
     const pending = context.client.request("session.stop", {}, { sessionId: "s1" });
+    const forMessageId = JSON.parse(context.sent[0]).messageId as string;
     context.deliver({
-      protocolVersion: 1,
+      protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "session.stopped",
       messageId: "n4",
       channelNonce: NONCE,
       sentAtMs: 1_700_000_000_000,
-      payload: { sessionId: "s1", finalStatus: "stopped", revision: 1 },
+      payload: { sessionId: "s1", finalStatus: "stopped", revision: 1, forMessageId },
     });
     await pending;
 
@@ -344,7 +445,7 @@ describe("BridgeClient inbound messages", () => {
     const context = harness();
     context.client.attach();
     const pending = context.client.hello();
-    context.deliver(helloReply());
+    deliverHello(context);
     await pending;
     return context;
   }
@@ -400,51 +501,5 @@ describe("BridgeError", () => {
 
     expect(error.code).toBe("timeout");
     expect(error.name).toBe("BridgeError");
-  });
-});
-
-describe("BridgeClient protocol version gate", () => {
-  it("refuses a v2 command on a channel that negotiated v1", async () => {
-    const { client, sent, deliver } = harness();
-    client.attach();
-    const negotiating = client.hello();
-    deliver(helloReply({ selectedProtocolVersion: 1, maxProtocolVersion: 1 }));
-    await negotiating;
-
-    const code = await client
-      .request("location.request", {
-        requestId: "r1",
-        accuracy: "precise",
-        timeoutMs: 10_000,
-        maxAgeMs: 0,
-      })
-      .then(
-        () => "resolved",
-        (error: { code?: string }) => error.code,
-      );
-
-    // An old-but-working binary must not look like a broken bridge; the caller
-    // needs to offer its browser fallback instead.
-    expect(code).toBe("unsupported-capability");
-    expect(sent.some((raw) => JSON.parse(raw).type === "location.request")).toBe(false);
-  });
-
-  it("sends the same command once v2 is negotiated", async () => {
-    const { client, sent, deliver } = harness();
-    client.attach();
-    const negotiating = client.hello();
-    deliver(helloReply({ selectedProtocolVersion: 2, maxProtocolVersion: 2 }));
-    await negotiating;
-
-    void client
-      .request("location.request", {
-        requestId: "r1",
-        accuracy: "precise",
-        timeoutMs: 10_000,
-        maxAgeMs: 0,
-      })
-      .catch(() => undefined);
-
-    expect(sent.some((raw) => JSON.parse(raw).type === "location.request")).toBe(true);
   });
 });

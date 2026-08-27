@@ -8,6 +8,7 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRef } from "react";
 import { useComposePreview } from "@/hooks/useComposePreview";
 import { useEnv } from "@/lib/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
@@ -17,17 +18,24 @@ export function ComposePreview() {
   const queryClient = useQueryClient();
   const showToast = useAdminToast();
   const { data, isLoading, error } = useComposePreview();
+  const composeUpIntent = useRef<string | null>(null);
 
   const composeUp = useMutation({
     mutationFn: async () => {
+      const idempotencyKey = composeUpIntent.current ?? crypto.randomUUID();
+      composeUpIntent.current = idempotencyKey;
       const res = await fetch(`${apiUrl}/api/admin/compose/up`, {
         method: "POST",
         credentials: "include",
+        headers: {
+          "Idempotency-Key": idempotencyKey,
+        },
       });
       if (!res.ok) throw new Error("Compose up failed");
       return res.json() as Promise<{ ok: boolean }>;
     },
     onSuccess: () => {
+      composeUpIntent.current = null;
       showToast("Compose up completed");
       queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
       queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });

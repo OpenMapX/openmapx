@@ -48,5 +48,19 @@ The production build uses Next.js standalone output and then builds the service
 worker and copies static assets into the standalone tree. Start that output with
 `pnpm --filter web start`.
 
+## PWA cache boundary
+
+The service worker never stores navigation responses. Every document request is
+`NetworkOnly`; when the network is unavailable it may return only the separately
+installed, credential-free `/offline` page. It never looks up the requested URL
+in Cache Storage, including with query parameters ignored.
+
+Cache Storage remains available for immutable Next.js assets, map styles and
+tiles, versioned MapLibre runtime modules, explicitly enabled recent public map
+data, and offline-package glyphs. PMTiles archives remain in OPFS/IndexedDB.
+Private API responses and authenticated documents are network-only and are never
+written to Cache Storage, so authentication and locale transitions have no
+rollout cache to purge.
+
 See the root `README.md`, `CONTRIBUTING.md`, and `docs/docs/developer/` for the
 full architecture and contribution conventions.

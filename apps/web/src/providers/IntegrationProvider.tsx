@@ -1,25 +1,20 @@
 "use client";
 
 import { configureApiClient, initOverlayRegistry } from "@openmapx/core";
-import {
-  getCommunityModule,
-  IntegrationRegistry,
-  type IntegrationsResponse,
-  initCommunityIntegrationRegistry,
-} from "@openmapx/integration-framework";
+import { IntegrationRegistry, type IntegrationsResponse } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo } from "react";
 import { useEnv } from "@/lib/EnvProvider";
 import { FrameworkStringsProvider } from "@/lib/frameworkStringsContext";
 import { IntegrationDisclosuresProvider } from "@/lib/integrationDisclosuresContext";
-import { shellFeatureBoundary } from "@/lib/mobile/mobileShellEnvironment";
+import {
+  INTEGRATION_METADATA_REFRESH_MS,
+  integrationRuntimeQueryKey,
+} from "@/lib/integrationRuntimeQuery";
 
 export function IntegrationProvider({ children }: { children: React.ReactNode }) {
   const { apiUrl } = useEnv();
-  const initRef = useRef(false);
-  const loadingBundleIdsRef = useRef(new Set<string>());
-  const [, bumpCommunityModuleRevision] = useState(0);
   const apiBase = apiUrl.replace(/\/$/, "");
 
   configureApiClient({
@@ -28,21 +23,17 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
     credentials: "include",
   });
 
-  useEffect(() => {
-    if (!initRef.current) {
-      initCommunityIntegrationRegistry();
-      initRef.current = true;
-    }
-  }, []);
-
   const { data, isPending } = useQuery({
-    queryKey: ["integrations", apiBase],
+    queryKey: integrationRuntimeQueryKey(apiBase),
     queryFn: async () => {
       const res = await fetch(`${apiBase}/api/integrations`, { credentials: "include" });
       if (!res.ok) throw new Error("Failed to load integrations");
       return (await res.json()) as IntegrationsResponse;
     },
-    staleTime: Infinity,
+    staleTime: 10_000,
+    refetchInterval: INTEGRATION_METADATA_REFRESH_MS,
+    refetchOnWindowFocus: "always",
+    refetchOnReconnect: "always",
   });
   const integrations = data?.integrations;
   const frameworkStrings = data?.frameworkStrings;
@@ -51,47 +42,10 @@ export function IntegrationProvider({ children }: { children: React.ReactNode })
   // their non-cloud fallback paths continue instead of remaining disabled.
   const disclosures = isPending ? undefined : (data?.disclosures ?? []);
 
-  // Community integration bundles import `react`, `react/jsx-runtime`, and
-  // `@openmapx/core` as externals. The page's import map (apps/web/src/app/
-  // layout.tsx) resolves those specifiers to the prebuilt singletons under
-  // public/runtime/, so loading a community bundle is just appending a module
-  // <script>.
-  // Read straight from the injected descriptor rather than from the runtime
-  // context: this decides whether unreviewed code executes, and it has to be
-  // answerable before the bridge has said anything at all.
-  const communityBundlesAllowed = shellFeatureBoundary().communityFrontendBundles;
-
-  useEffect(() => {
-    if (!integrations) return;
-    if (!communityBundlesAllowed) return;
-    for (const integration of integrations) {
-      if (integration.isBuiltIn !== false) continue;
-      const fe = integration.frontend;
-      if (!fe?.mapLayer && !fe?.legend && !fe?.panel) continue;
-      if (getCommunityModule(integration.id)) continue;
-      if (loadingBundleIdsRef.current.has(integration.id)) continue;
-
-      loadingBundleIdsRef.current.add(integration.id);
-      const script = document.createElement("script");
-      script.src = `${apiBase}/api/integrations/${integration.id}/bundle/index.js`;
-      script.type = "module";
-      script.async = true;
-      script.onload = () => {
-        loadingBundleIdsRef.current.delete(integration.id);
-        bumpCommunityModuleRevision((revision) => revision + 1);
-      };
-      script.onerror = () => {
-        loadingBundleIdsRef.current.delete(integration.id);
-        console.error(`[IntegrationProvider] Failed to load bundle for ${integration.id}`);
-      };
-      document.head.appendChild(script);
-    }
-  }, [integrations, apiBase, communityBundlesAllowed]);
-
   const registry = useMemo(() => new IntegrationRegistry(integrations ?? []), [integrations]);
 
   useEffect(() => {
-    if (integrations?.length) {
+    if (integrations) {
       initOverlayRegistry(integrations);
     }
   }, [integrations]);

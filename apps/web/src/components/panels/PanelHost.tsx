@@ -1,7 +1,6 @@
 "use client";
 
 import { useSidebarStore } from "@openmapx/core";
-import { getCommunityModule } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { ComponentType } from "react";
 import { lazy, Suspense, useMemo } from "react";
@@ -39,18 +38,13 @@ function BuiltInPanel({ id }: { id: string }) {
   );
 }
 
-function CommunityPanel({ id }: { id: string }) {
-  const mod = getCommunityModule(id);
-  if (!mod?.panel) return null;
-  const Component = mod.panel;
-  return <Component />;
-}
-
 export function PanelHost() {
   const activeSidebarId = useSidebarStore((s) => s.activeSidebarId);
   const activeDetailId = useSidebarStore((s) => s.activeDetailId);
   const registry = useIntegrationRegistry();
-  const withPanel = registry.getWithPanel();
+  const withPanel = registry
+    .getWithPanel()
+    .filter((integration) => integration.isBuiltIn !== false);
 
   const sidebarEntry = activeSidebarId ? SIDEBAR_PANELS[activeSidebarId] : null;
   const DetailContent = activeDetailId ? DETAIL_PANELS[activeDetailId] : null;
@@ -83,14 +77,9 @@ export function PanelHost() {
           </DetailShell>
         )}
       </HideDuringNavigation>
-      {withPanel.map((integration) => {
-        const isCommunity = getCommunityModule(integration.id) !== undefined;
-        return isCommunity ? (
-          <CommunityPanel key={integration.id} id={integration.id} />
-        ) : (
-          <BuiltInPanel key={integration.id} id={integration.id} />
-        );
-      })}
+      {withPanel.map((integration) => (
+        <BuiltInPanel key={integration.id} id={integration.id} />
+      ))}
     </>
   );
 }

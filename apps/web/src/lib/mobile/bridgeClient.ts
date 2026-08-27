@@ -1,7 +1,6 @@
 import {
   MOBILE_PROTOCOL_MAX,
   MOBILE_PROTOCOL_MIN,
-  messageAllowedAtVersion,
   type NativeToWebMessage,
   nativeToWebSchema,
   type WebToNativeMessage,
@@ -23,7 +22,7 @@ import {
  *
  * The failure it exists to prevent is a promise that never settles. A page
  * waiting forever on a reply that the shell dropped — because the document
- * reloaded, because the shell is an older build, because the request timed out —
+ * reloaded, because the shell is incompatible, because the request timed out —
  * shows a spinner the user cannot escape. So every pending request has a
  * deadline, a reload cancels all of them, and the queue is bounded.
  */
@@ -43,8 +42,7 @@ export type BridgeFailure =
   | "channel-reset"
   | "too-many-pending"
   | "invalid-command"
-  | "invalid-response"
-  | "unsupported-capability";
+  | "invalid-response";
 
 export class BridgeError extends Error {
   readonly code: BridgeFailure;
@@ -84,6 +82,28 @@ type Pending = {
   resolve: (message: NativeToWebMessage) => void;
   reject: (error: BridgeError) => void;
   timer: unknown;
+  requestType: WebToNativeMessage["type"];
+};
+
+type RequestOptions = {
+  timeoutMs?: number;
+  sessionId?: string;
+  revision?: number;
+  requireHandshake?: boolean;
+};
+
+const EXPECTED_REPLY: Partial<Record<WebToNativeMessage["type"], NativeToWebMessage["type"]>> = {
+  "web.hello": "native.hello",
+  "session.prepare": "session.prepared",
+  "session.start": "session.started",
+  "session.replace": "session.replaced",
+  "settings.update": "snapshot.update",
+  "snapshot.request": "snapshot.update",
+  "session.stop": "session.stopped",
+  "session.complete": "session.stopped",
+  "location.request": "location.result",
+  "settings.open": "settings.result",
+  "auth.open": "auth.result",
 };
 
 /**
@@ -153,7 +173,7 @@ export class BridgeClient {
     this.detach = null;
   }
 
-  /** Subscribes to unsolicited messages — snapshots and navigation events. */
+  /** Subscribes to native state/event messages, including requested snapshots. */
   subscribe(listener: (message: NativeToWebMessage) => void): () => void {
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
@@ -177,7 +197,18 @@ export class BridgeClient {
     );
     if (reply.type !== "native.hello") throw new BridgeError("invalid-response");
 
-    this.handshake = reply.payload as unknown as HandshakeResult;
+    const hello = reply.payload;
+    if (
+      reply.protocolVersion !== MOBILE_PROTOCOL_MAX ||
+      (hello.selectedProtocolVersion !== null &&
+        (hello.selectedProtocolVersion !== MOBILE_PROTOCOL_MAX ||
+          hello.selectedProtocolVersion < hello.minProtocolVersion ||
+          hello.selectedProtocolVersion > hello.maxProtocolVersion))
+    ) {
+      throw new BridgeError("invalid-response");
+    }
+
+    this.handshake = hello as HandshakeResult;
     return this.handshake;
   }
 
@@ -190,12 +221,7 @@ export class BridgeClient {
   request(
     type: WebToNativeMessage["type"],
     payload: unknown,
-    options: {
-      timeoutMs?: number;
-      sessionId?: string;
-      revision?: number;
-      requireHandshake?: boolean;
-    } = {},
+    options: RequestOptions = {},
   ): Promise<NativeToWebMessage> {
     if (this.closed) return Promise.reject(new BridgeError("channel-reset"));
     if (!this.transport || !this.nonce) return Promise.reject(new BridgeError("no-transport"));
@@ -208,14 +234,6 @@ export class BridgeClient {
     if (this.pending.size >= MAX_PENDING) {
       return Promise.reject(new BridgeError("too-many-pending"));
     }
-    // A v1 shell has never heard of the v2 vocabulary. Sending one anyway makes
-    // an old-but-working binary look like a broken bridge, and the caller needs
-    // to offer its browser fallback instead.
-    const version = this.handshake?.selectedProtocolVersion ?? MOBILE_PROTOCOL_MAX;
-    if (!messageAllowedAtVersion(type, version)) {
-      return Promise.reject(new BridgeError("unsupported-capability"));
-    }
-
     this.messageCounter += 1;
     const messageId = `w${this.messageCounter}-${(this.options.now?.() ?? Date.now()).toString(36)}`;
     const envelope = {
@@ -240,7 +258,7 @@ export class BridgeClient {
         reject(new BridgeError("timeout"));
       }, options.timeoutMs ?? READ_TIMEOUT_MS);
 
-      this.pending.set(messageId, { resolve, reject, timer });
+      this.pending.set(messageId, { resolve, reject, timer, requestType: type });
       try {
         this.transport?.postMessage(JSON.stringify(validated.data));
       } catch {
@@ -249,6 +267,36 @@ export class BridgeClient {
         reject(new BridgeError("no-transport"));
       }
     });
+  }
+
+  /** Sends a command whose protocol contract intentionally has no direct reply. */
+  send(type: WebToNativeMessage["type"], payload: unknown, options: RequestOptions = {}): void {
+    if (this.closed) throw new BridgeError("channel-reset");
+    if (!this.transport || !this.nonce) throw new BridgeError("no-transport");
+    if (options.requireHandshake !== false) {
+      if (!this.handshake) throw new BridgeError("not-negotiated");
+      if (this.handshake.selectedProtocolVersion === null) throw new BridgeError("incompatible");
+    }
+    const version = this.handshake?.selectedProtocolVersion ?? MOBILE_PROTOCOL_MAX;
+
+    this.messageCounter += 1;
+    const envelope = {
+      protocolVersion: version,
+      type,
+      messageId: `w${this.messageCounter}-${(this.options.now?.() ?? Date.now()).toString(36)}`,
+      channelNonce: this.nonce,
+      ...(options.sessionId === undefined ? {} : { sessionId: options.sessionId }),
+      ...(options.revision === undefined ? {} : { revision: options.revision }),
+      sentAtMs: this.options.now?.() ?? Date.now(),
+      payload,
+    };
+    const validated = webToNativeSchema.safeParse(envelope);
+    if (!validated.success) throw new BridgeError("invalid-command");
+    try {
+      this.transport.postMessage(JSON.stringify(validated.data));
+    } catch {
+      throw new BridgeError("no-transport");
+    }
   }
 
   /**
@@ -267,37 +315,35 @@ export class BridgeClient {
     // for a page that no longer exists.
     if (this.nonce && message.channelNonce !== this.nonce) return;
 
-    const forMessageId =
-      message.type === "native.error"
-        ? (message.payload as { forMessageId?: string }).forMessageId
-        : undefined;
+    if (message.type !== "native.hello") {
+      const selected = this.handshake?.selectedProtocolVersion;
+      if (selected === null || selected === undefined || message.protocolVersion !== selected)
+        return;
+    }
 
-    // A reply carries no request id of its own, so the first pending request of
-    // a matching kind claims it — except errors, which name theirs.
-    const key = forMessageId ?? this.claimFor(message);
+    const forMessageId = (message.payload as { forMessageId?: string }).forMessageId;
+    const key = forMessageId ?? null;
     const entry = key ? this.pending.get(key) : undefined;
     if (entry && key) {
       this.pending.delete(key);
       this.options.clearTimeout?.(entry.timer);
+      const expectedType = EXPECTED_REPLY[entry.requestType];
+      if (message.type !== "native.error" && expectedType !== message.type) {
+        entry.reject(new BridgeError("invalid-response"));
+        return;
+      }
       entry.resolve(message);
+      // Snapshot replies have two consumers: the requesting command needs its
+      // promise settled, while the runtime subscriber owns the native read
+      // model and must apply the snapshot. Correlation must not turn that state
+      // update into a request-private message.
+      if (message.type === "snapshot.update") {
+        for (const listener of this.listeners) listener(message);
+      }
       return;
     }
 
     for (const listener of this.listeners) listener(message);
-  }
-
-  /** The oldest pending request this reply could plausibly answer. */
-  private claimFor(message: NativeToWebMessage): string | null {
-    const answering: Partial<Record<NativeToWebMessage["type"], boolean>> = {
-      "native.hello": true,
-      "session.prepared": true,
-      "session.started": true,
-      "session.replaced": true,
-      "session.stopped": true,
-    };
-    if (!answering[message.type]) return null;
-    const first = this.pending.keys().next();
-    return first.done ? null : first.value;
   }
 
   get pendingCount(): number {

@@ -18,19 +18,23 @@ import {
   NetworkFirst,
   type RouteHandlerCallback,
   type RouteHandlerCallbackOptions,
+  type RuntimeCaching,
   Serwist,
   StaleWhileRevalidate,
   type Strategy,
 } from "serwist";
+import { createNavigationRuntimeRoute } from "./lib/serviceWorkerNavigation";
 import {
-  isCredentialedApiPath,
   isMapLibreRuntimeAssetPath,
+  isNetworkOnlyApiPath,
   isOfflinePackageArchivePath,
   isOnlineStyleReachabilityProbe,
   isStalePrecacheName,
   MAPLIBRE_RUNTIME_CACHE,
+  navigationFirstRuntimeCaching,
   offlineGlyphCacheNameForVersion,
   offlineGlyphVersionFromPath,
+  STATIC_OFFLINE_FALLBACK_URL,
 } from "./lib/swCaches";
 
 declare const self: ServiceWorkerGlobalScope;
@@ -43,18 +47,15 @@ declare const self: ServiceWorkerGlobalScope;
 declare const __SW_BUILD_ID__: string;
 declare const __MAPLIBRE_VERSION__: string;
 
-const OFFLINE_URL = "/offline";
-const HOME_URL = "/";
+const OFFLINE_URL = STATIC_OFFLINE_FALLBACK_URL;
 const APP_SHELL_CACHE = `app-shell-${__SW_BUILD_ID__}`;
 // Map-style assets (style JSON / sprite / TileJSON) are versioned by build id
 // too, so a deploy that changes the self-hosted style serves the new one on the
 // next load instead of the worker's stale copy. Old style caches are pruned on
 // activate.
 const STYLE_CACHE = `style-assets-${__SW_BUILD_ID__}`;
-// `/` is precached so the app can still be opened after the runtime `pages`
-// cache has expired (24h / 20 entries).
-// Without this, the nav handler would fall through to /offline and the
-// downloaded tiles would be unreachable.
+// Only a distinct, credential-free offline document is retained. The requested
+// navigation (including `/`) is never stored or looked up in Cache Storage.
 const BUNDLED_MAP_ASSETS = [
   "/styles/openmapx-streets.json",
   "/styles/openmapx-dark.json",
@@ -66,7 +67,7 @@ const MAPLIBRE_RUNTIME_ASSETS = [
   `/runtime/maplibre-gl/${__MAPLIBRE_VERSION__}/maplibre-gl-shared.mjs`,
 ] as const;
 const OPTIONAL_BUNDLED_MAP_ASSETS = ["/styles/sprite@2x.json", "/styles/sprite@2x.png"] as const;
-const APP_SHELL_URLS = [HOME_URL, OFFLINE_URL, "/manifest.webmanifest", ...BUNDLED_MAP_ASSETS];
+const APP_SHELL_URLS = [OFFLINE_URL, "/manifest.webmanifest", ...BUNDLED_MAP_ASSETS];
 const RECENT_MAP_DATA_CACHE_NAMES = [
   "api-geodata",
   "api-category-search",
@@ -142,14 +143,6 @@ function withRecentMapDataCache(strategy: Strategy): RouteHandlerCallback {
   };
 }
 
-// Navigation handler: NetworkFirst with offline fallback.
-// If both network (within timeout) and cache miss, serve precached /offline.
-const navigationStrategy = new NetworkFirst({
-  cacheName: "pages",
-  networkTimeoutSeconds: 3,
-  plugins: [new ExpirationPlugin({ maxEntries: 20, maxAgeSeconds: 24 * 60 * 60 })],
-});
-
 const bundledStyleFallbackStrategy = new StaleWhileRevalidate({
   cacheName: STYLE_CACHE,
   plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 7 * 24 * 60 * 60 })],
@@ -182,190 +175,171 @@ const serwist = new Serwist({
   // offline parity on Firefox we forgo the preload optimization entirely.
   // See https://github.com/GoogleChrome/workbox/issues/3134.
   navigationPreload: false,
-  runtimeCaching: [
-    // PMTiles archives are streamed into OPFS/IndexedDB by the page. A full
-    // archive in Cache Storage would silently double offline-map disk use.
-    // Marked TileJSON probes must also bypass cached responses or they cannot
-    // distinguish current backend reachability from a stale runtime entry.
-    // Keep this before every cache-backed route and Serwist's default rules.
-    {
-      matcher: ({ url }: { url: URL }) =>
-        isOfflinePackageArchivePath(url.pathname) || isOnlineStyleReachabilityProbe(url),
-      handler: ({ request }: { request: Request }) => fetch(request),
-    },
-
-    // Credentialed API responses — never cached, always straight to network so
-    // failures surface to the UI. The keypair envelope carries the cleartext
-    // private JWK in unencrypted mode; sign-in state, the admin surface and
-    // saved places are per-user too. Serwist ignores `Cache-Control: no-store`
-    // (its default cacheWillUpdate accepts any 200), and `...defaultCache`
-    // below ends in a same-origin `/api/` NetworkFirst rule plus a
-    // cross-origin one — so the only way to keep these off disk is to match
-    // them first. The router returns the FIRST matching route, so this entry
-    // must stay at the top of the list. A function matcher rather than a
-    // RegExp: RegExp routes only match cross-origin URLs from index 0, and
-    // NEXT_PUBLIC_API_URL is a different origin in local dev.
-    {
-      matcher: ({ url }: { url: URL }) => isCredentialedApiPath(url.pathname),
-      handler: ({ request }: { request: Request }) => fetch(request),
-    },
-
-    // Next.js static assets — CacheFirst (immutable, build-hash versioned)
-    {
-      matcher: /^\/_next\/static\/.*/i,
-      handler: new CacheFirst({
-        cacheName: "static-assets",
-        plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 30 * 24 * 60 * 60 })],
-      }),
-    },
-
-    // MapLibre's ESM worker and its shared module are copied from the installed
-    // package under a versioned path. Match every valid version so an older
-    // client can keep using its retained pair after a new worker activates.
-    {
-      matcher: ({ url }: { url: URL }) =>
-        url.origin === self.location.origin && isMapLibreRuntimeAssetPath(url.pathname),
-      handler: maplibreRuntimeStrategy,
-    },
-
-    // Package font assets are small and explicitly versioned by the package.
-    // The archive itself is read by the page-side PMTiles protocol and never
-    // enters Cache Storage.
-    {
-      matcher: ({ url }: { url: URL }) =>
-        url.searchParams.has("offlineGlyphs") ||
-        offlineGlyphVersionFromPath(url.pathname) !== undefined,
-      handler: async ({ request }: { request: Request }) =>
-        (await matchOfflineGlyph(request)) ?? fetch(request),
-    },
-
-    // MapTiler tiles / style / sprite / glyphs via API proxy — runtime SWR.
-    {
-      matcher: /\/api\/maptiler\//i,
-      handler: new StaleWhileRevalidate({
-        cacheName: "map-tiles",
-        plugins: [new ExpirationPlugin({ maxEntries: 1000, maxAgeSeconds: 7 * 24 * 60 * 60 })],
-      }),
-    },
-
-    // Mapillary coverage tiles via API proxy — StaleWhileRevalidate
-    {
-      matcher: /\/api\/integrations\/street-level-imagery-[a-z0-9-]+\/tiles\//i,
-      handler: new StaleWhileRevalidate({
-        cacheName: "street-level-imagery-tiles",
-        plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 3 * 24 * 60 * 60 })],
-      }),
-    },
-
-    // Self-hosted map style assets — runtime SWR. Package font requests carry
-    // an `offlineGlyphs` query and are handled by the explicit route above.
-    {
-      matcher: ({ url }: { url: URL }) => /\/styles\//i.test(url.pathname),
-      handler: async (options) => {
-        const bundled = await (await caches.open(APP_SHELL_CACHE)).match(options.request, {
-          ignoreSearch: true,
-        });
-        if (bundled) return bundled;
-        return bundledStyleFallbackStrategy.handle(options);
+  runtimeCaching: navigationFirstRuntimeCaching<RuntimeCaching>(
+    // This must remain first: a navigation URL can syntactically resemble a
+    // style, PBF, or public API asset, but document authority always wins.
+    createNavigationRuntimeRoute({ appShellCacheName: APP_SHELL_CACHE }),
+    [
+      // PMTiles archives are streamed into OPFS/IndexedDB by the page. A full
+      // archive in Cache Storage would silently double offline-map disk use.
+      // Marked TileJSON probes must also bypass cached responses or they cannot
+      // distinguish current backend reachability from a stale runtime entry.
+      // Keep this after the navigation boundary and before every cache-backed
+      // subresource route and Serwist's default rules.
+      {
+        matcher: ({ url }: { url: URL }) =>
+          isOfflinePackageArchivePath(url.pathname) || isOnlineStyleReachabilityProbe(url),
+        handler: ({ request }: { request: Request }) => fetch(request),
       },
-    },
 
-    // API geodata — StaleWhileRevalidate
-    // Covers: /api/integrations/geocoding/geocode, /api/integrations/routing/directions, /api/places/:id
-    // Excludes: /api/places/search (category search embeds live fuel prices)
-    {
-      matcher: ({ url }: { url: URL }) =>
-        /\/api\/integrations\/(geocoding\/geocode|routing\/directions)/.test(url.pathname) ||
-        (/\/api\/places\//.test(url.pathname) && !url.pathname.includes("/places/search")),
-      handler: withRecentMapDataCache(
-        new StaleWhileRevalidate({
-          cacheName: "api-geodata",
-          plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
-        }),
-      ),
-    },
-
-    // Category search — NetworkFirst (contains live fuel prices)
-    {
-      matcher: /\/api\/places\/search/,
-      handler: withRecentMapDataCache(
-        new NetworkFirst({
-          cacheName: "api-category-search",
-          networkTimeoutSeconds: 5,
-          plugins: [new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 5 * 60 })],
-        }),
-      ),
-    },
-
-    // Autocomplete — NetworkFirst (fresh suggestions always preferred)
-    {
-      matcher: /\/api\/integrations\/geocoding\/autocomplete/,
-      handler: withRecentMapDataCache(
-        new NetworkFirst({
-          cacheName: "api-autocomplete",
-          networkTimeoutSeconds: 3,
-          plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 })],
-        }),
-      ),
-    },
-
-    // Weather — StaleWhileRevalidate (conditions change slowly)
-    {
-      matcher: /\/api\/integrations\/weather\//,
-      handler: withRecentMapDataCache(
-        new StaleWhileRevalidate({
-          cacheName: "api-weather",
-          plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * 60 })],
-        }),
-      ),
-    },
-
-    // Photos — StaleWhileRevalidate (photo results are stable)
-    {
-      matcher: /\/api\/integrations\/photos\//,
-      handler: withRecentMapDataCache(
-        new StaleWhileRevalidate({
-          cacheName: "api-photos",
-          plugins: [new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 })],
-        }),
-      ),
-    },
-
-    // Self-hosted vector tiles & font glyphs (.pbf) — online runtime cache.
-    {
-      matcher: /\.pbf(\?.*)?$/i,
-      handler: new CacheFirst({
-        cacheName: "vector-tiles",
-        plugins: [new ExpirationPlugin({ maxEntries: 5000, maxAgeSeconds: 30 * 24 * 60 * 60 })],
-      }),
-    },
-
-    // App shell HTML — NetworkFirst, with offline fallback in setCatchHandler.
-    {
-      matcher: ({ request }: { request: Request }) => request.mode === "navigate",
-      handler: async (options) => {
-        try {
-          const response = await navigationStrategy.handle(options);
-          if (response) return response;
-          throw new Error("Empty response from navigation strategy");
-        } catch (err) {
-          // Both network and runtime cache missed. Try the URL itself in the
-          // app-shell cache first (e.g. `/` was precached at install time, so
-          // a user with downloaded offline areas can still reach the map even
-          // after the runtime `pages` entry has expired). Only fall back to
-          // the offline page if the URL isn't in app-shell either.
-          const cache = await caches.open(APP_SHELL_CACHE);
-          const exact = await cache.match(options.request, { ignoreSearch: true });
-          if (exact) return exact;
-          const fallback = await cache.match(OFFLINE_URL);
-          if (fallback) return fallback;
-          throw err;
-        }
+      // API responses are network-only by default. Only the small public-data
+      // allowlist in swCaches may fall through to a cache-backed route below.
+      // This direction is intentional: a new session/admin/service route cannot
+      // become cacheable merely because someone forgot to update this worker.
+      // Serwist ignores `Cache-Control: no-store` (its default cacheWillUpdate
+      // accepts any 200), so classification must happen before `defaultCache`'s
+      // broad same- and cross-origin `/api/` NetworkFirst rules. Non-GET requests
+      // are never cache candidates even when their pathname shares a public GET.
+      {
+        matcher: ({ request, url }: { request: Request; url: URL }) =>
+          url.pathname.startsWith("/api/") &&
+          (request.method !== "GET" || isNetworkOnlyApiPath(url.pathname)),
+        handler: ({ request }: { request: Request }) => fetch(request),
       },
-    },
 
-    ...defaultCache,
-  ],
+      // Next.js static assets — CacheFirst (immutable, build-hash versioned)
+      {
+        matcher: /^\/_next\/static\/.*/i,
+        handler: new CacheFirst({
+          cacheName: "static-assets",
+          plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 30 * 24 * 60 * 60 })],
+        }),
+      },
+
+      // MapLibre's ESM worker and its shared module are copied from the installed
+      // package under a versioned path. Match every valid version so an older
+      // client can keep using its retained pair after a new worker activates.
+      {
+        matcher: ({ url }: { url: URL }) =>
+          url.origin === self.location.origin && isMapLibreRuntimeAssetPath(url.pathname),
+        handler: maplibreRuntimeStrategy,
+      },
+
+      // Package font assets are small and explicitly versioned by the package.
+      // The archive itself is read by the page-side PMTiles protocol and never
+      // enters Cache Storage.
+      {
+        matcher: ({ url }: { url: URL }) =>
+          url.searchParams.has("offlineGlyphs") ||
+          offlineGlyphVersionFromPath(url.pathname) !== undefined,
+        handler: async ({ request }: { request: Request }) =>
+          (await matchOfflineGlyph(request)) ?? fetch(request),
+      },
+
+      // MapTiler tiles / style / sprite / glyphs via API proxy — runtime SWR.
+      {
+        matcher: /\/api\/maptiler\//i,
+        handler: new StaleWhileRevalidate({
+          cacheName: "map-tiles",
+          plugins: [new ExpirationPlugin({ maxEntries: 1000, maxAgeSeconds: 7 * 24 * 60 * 60 })],
+        }),
+      },
+
+      // Mapillary coverage tiles via API proxy — StaleWhileRevalidate
+      {
+        matcher: /\/api\/integrations\/street-level-imagery-[a-z0-9-]+\/tiles\//i,
+        handler: new StaleWhileRevalidate({
+          cacheName: "street-level-imagery-tiles",
+          plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 3 * 24 * 60 * 60 })],
+        }),
+      },
+
+      // Self-hosted map style assets — runtime SWR. Package font requests carry
+      // an `offlineGlyphs` query and are handled by the explicit route above.
+      {
+        matcher: ({ url }: { url: URL }) => /\/styles\//i.test(url.pathname),
+        handler: async (options) => {
+          const bundled = await (await caches.open(APP_SHELL_CACHE)).match(options.request, {
+            ignoreSearch: true,
+          });
+          if (bundled) return bundled;
+          return bundledStyleFallbackStrategy.handle(options);
+        },
+      },
+
+      // API geodata — StaleWhileRevalidate
+      // Covers: /api/integrations/geocoding/geocode, /api/integrations/routing/directions, /api/places/:id
+      // Excludes: /api/places/search (category search embeds live fuel prices)
+      {
+        matcher: ({ url }: { url: URL }) =>
+          /\/api\/integrations\/(geocoding\/geocode|routing\/directions)/.test(url.pathname) ||
+          (/\/api\/places\//.test(url.pathname) && !url.pathname.includes("/places/search")),
+        handler: withRecentMapDataCache(
+          new StaleWhileRevalidate({
+            cacheName: "api-geodata",
+            plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
+          }),
+        ),
+      },
+
+      // Category search — NetworkFirst (contains live fuel prices)
+      {
+        matcher: /\/api\/places\/search/,
+        handler: withRecentMapDataCache(
+          new NetworkFirst({
+            cacheName: "api-category-search",
+            networkTimeoutSeconds: 5,
+            plugins: [new ExpirationPlugin({ maxEntries: 100, maxAgeSeconds: 5 * 60 })],
+          }),
+        ),
+      },
+
+      // Autocomplete — NetworkFirst (fresh suggestions always preferred)
+      {
+        matcher: /\/api\/integrations\/geocoding\/autocomplete/,
+        handler: withRecentMapDataCache(
+          new NetworkFirst({
+            cacheName: "api-autocomplete",
+            networkTimeoutSeconds: 3,
+            plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 60 * 60 })],
+          }),
+        ),
+      },
+
+      // Weather — StaleWhileRevalidate (conditions change slowly)
+      {
+        matcher: /\/api\/integrations\/weather\//,
+        handler: withRecentMapDataCache(
+          new StaleWhileRevalidate({
+            cacheName: "api-weather",
+            plugins: [new ExpirationPlugin({ maxEntries: 200, maxAgeSeconds: 30 * 60 })],
+          }),
+        ),
+      },
+
+      // Photos — StaleWhileRevalidate (photo results are stable)
+      {
+        matcher: /\/api\/integrations\/photos\//,
+        handler: withRecentMapDataCache(
+          new StaleWhileRevalidate({
+            cacheName: "api-photos",
+            plugins: [new ExpirationPlugin({ maxEntries: 300, maxAgeSeconds: 7 * 24 * 60 * 60 })],
+          }),
+        ),
+      },
+
+      // Self-hosted vector tiles & font glyphs (.pbf) — online runtime cache.
+      {
+        matcher: /\.pbf(\?.*)?$/i,
+        handler: new CacheFirst({
+          cacheName: "vector-tiles",
+          plugins: [new ExpirationPlugin({ maxEntries: 5000, maxAgeSeconds: 30 * 24 * 60 * 60 })],
+        }),
+      },
+
+      ...defaultCache,
+    ],
+  ),
 });
 
 // Precache the offline page + manifest at install time so a cold-start while
@@ -380,14 +354,14 @@ self.addEventListener("install", (event) => {
       caches.open(APP_SHELL_CACHE).then(async (cache) => {
         await Promise.all(
           APP_SHELL_URLS.map(async (url) => {
-            const response = await fetch(url, { cache: "reload" });
+            const response = await fetch(url, { cache: "reload", credentials: "omit" });
             if (!response.ok) throw new Error(`required app-shell asset unavailable: ${url}`);
             await cache.put(url, response);
           }),
         );
         await Promise.allSettled(
           OPTIONAL_BUNDLED_MAP_ASSETS.map(async (url) => {
-            const response = await fetch(url, { cache: "reload" });
+            const response = await fetch(url, { cache: "reload", credentials: "omit" });
             if (response.ok) await cache.put(url, response);
           }),
         );

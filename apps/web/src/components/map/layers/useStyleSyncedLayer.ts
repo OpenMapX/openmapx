@@ -4,6 +4,7 @@ import type * as maplibregl from "maplibre-gl";
 import { type DependencyList, useEffect } from "react";
 import type { MapContextValue } from "@/lib/MapContext";
 import { setLayerVisibility } from "./layerStyleUtils";
+import { subscribeStyleLoaded } from "./styleLoadedSync";
 
 /**
  * Shared "style-synced overlay layer" effect.
@@ -49,16 +50,7 @@ export function useStyleSyncedLayer(params: {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    let idleRetryScheduled = false;
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) {
-        if (idleRetryScheduled) map.off("idle", syncLayer);
-        idleRetryScheduled = true;
-        map.once("idle", syncLayer);
-        return;
-      }
-      idleRetryScheduled = false;
-
       if (visible && !map.getSource(sourceId)) {
         addSource(map);
       }
@@ -70,12 +62,7 @@ export function useStyleSyncedLayer(params: {
       setLayerVisibility(map, layerId, visible);
     };
 
-    syncLayer();
-    map.on("styledata", syncLayer);
-    return () => {
-      map.off("styledata", syncLayer);
-      if (idleRetryScheduled) map.off("idle", syncLayer);
-    };
+    return subscribeStyleLoaded(map, syncLayer);
     // biome-ignore lint/correctness/useExhaustiveDependencies: deps are supplied by the caller to mirror each overlay's original effect dependency array exactly
   }, deps);
 }

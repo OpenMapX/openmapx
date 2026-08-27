@@ -29,7 +29,7 @@ export function MapClickFloatingCard() {
   const { clickedLngLat, setClickedLngLat } = useMapClickStore();
   const { setSelectedPlace } = usePlaceStore();
   const { setQuery, setIsFocused } = useSearchStore();
-  const { setDestination, open: openDirections } = useDirectionsStore();
+  const { setWaypoint, open: openDirections } = useDirectionsStore();
   const { flyTo } = useMap();
 
   const { data: reverseGeo, isLoading } = useReverseGeocoding(clickedLngLat, locale);
@@ -58,7 +58,8 @@ export function MapClickFloatingCard() {
   };
 
   const handleDirections = () => {
-    setDestination(clickedLngLat, reverseGeo?.address ?? coordLabel);
+    const destinationIndex = useDirectionsStore.getState().waypoints.length - 1;
+    setWaypoint(destinationIndex, clickedLngLat, reverseGeo?.address ?? coordLabel);
     openDirections();
     useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
     setClickedLngLat(null);

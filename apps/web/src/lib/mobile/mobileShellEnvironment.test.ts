@@ -72,14 +72,13 @@ describe("isInstalledShell", () => {
 });
 
 describe("shellFeatureBoundary", () => {
-  it("changes nothing for an ordinary browser", () => {
+  it("keeps browser-owned capabilities enabled in an ordinary browser", () => {
     const boundary = shellFeatureBoundary(scopeWith());
 
     for (const value of Object.values(boundary)) expect(value).toBe(true);
   });
 
   it.each([
-    "communityFrontendBundles",
     "microphone",
     "browserGeolocationWatch",
     "browserSpeech",
@@ -95,12 +94,11 @@ describe("shellFeatureBoundary", () => {
     // unreviewed code had already run.
     const negotiating = scopeWith({ [CHANNEL_GLOBAL]: { nonce: "abc" } });
 
-    expect(shellFeatureBoundary(negotiating).communityFrontendBundles).toBe(false);
     expect(shellFeatureBoundary(negotiating).microphone).toBe(false);
   });
 
   it("keeps them removed when the bridge turns out to be incompatible", () => {
-    // An old shell that cannot run navigation is still an installed binary.
-    expect(shellFeatureBoundary(shell()).communityFrontendBundles).toBe(false);
+    // A shell that cannot run navigation is still an installed binary.
+    expect(shellFeatureBoundary(shell()).microphone).toBe(false);
   });
 });

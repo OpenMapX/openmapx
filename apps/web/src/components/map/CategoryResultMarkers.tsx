@@ -26,6 +26,7 @@ import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
 import { addLayerInSlot, unregisterLayerSlot } from "./layers/layerStack";
 import { upsertGeoJsonSource } from "./layers/layerStyleUtils";
+import { subscribeStyleLoaded } from "./layers/styleLoadedSync";
 
 const SOURCE_ID = "category-results-source";
 const LAYER_ID = "category-results-layer";
@@ -270,11 +271,6 @@ export function CategoryResultMarkers() {
     };
 
     const sync = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", sync);
-        return;
-      }
-
       const hasContext = mode === "text" ? Boolean(textQuery) : Boolean(activeCategory);
       if (!hasContext) {
         removeCategoryLayers();
@@ -435,11 +431,10 @@ export function CategoryResultMarkers() {
       }
     };
 
-    sync();
-    map.on("styledata", sync);
+    const unsubscribeStyle = subscribeStyleLoaded(map, sync);
     return () => {
       cancelled = true;
-      map.off("styledata", sync);
+      unsubscribeStyle();
     };
   }, [
     results,

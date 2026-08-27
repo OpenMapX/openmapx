@@ -1,4 +1,4 @@
-import { fetchCapabilities, fetchDisclosures, fetchIntegrations } from "@openmapx/core/server";
+import { fetchCapabilities, fetchDisclosures, fetchIntegrations } from "@openmapx/core/server-api";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell } from "@/components/legal/LegalPageShell";

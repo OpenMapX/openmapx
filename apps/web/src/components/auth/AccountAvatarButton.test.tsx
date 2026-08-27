@@ -12,29 +12,60 @@ vi.mock("@openmapx/core", () => ({
   proxyImageUrl: (url: string) => url,
 }));
 
-// The avatar's child dialogs pull in auth clients/stores we don't exercise
-// here; stub them so the test isolates the button itself.
 vi.mock("./AuthDialog", () => ({ AuthDialog: () => null }));
 vi.mock("./AccountMenu", () => ({
-  AccountMenu: ({ onOpenSettings }: { onOpenSettings: () => void }) => (
-    <button type="button" onClick={onOpenSettings}>
-      open account settings
-    </button>
+  AccountMenu: ({
+    onOpenSettings,
+    user,
+  }: {
+    onOpenSettings: () => void;
+    user: { id: string; name?: string | null };
+  }) => (
+    <div data-testid="private-account-menu" data-user-id={user.id}>
+      <span>{user.name}</span>
+      <button type="button" onClick={onOpenSettings}>
+        open account settings
+      </button>
+    </div>
   ),
 }));
 vi.mock("./AccountSettingsDialog", () => ({
   AccountSettingsDialog: ({
     open,
     initialSection,
+    user,
   }: {
     open: boolean;
     initialSection: string | null;
+    user: { id: string };
   }) =>
-    open ? <div data-testid="account-settings-dialog" data-section={initialSection ?? ""} /> : null,
+    open ? (
+      <div
+        data-testid="account-settings-dialog"
+        data-section={initialSection ?? ""}
+        data-user-id={user.id}
+      />
+    ) : null,
 }));
 vi.mock("./ResetPasswordDialog", () => ({ ResetPasswordDialog: () => null }));
 
-import { AccountAvatarButton } from "./AccountAvatarButton";
+const { AccountAvatarButton } = await import("./AccountAvatarButton");
+const { SessionAuthorityBoundary } = await import("@/providers/SessionAuthorityBoundary");
+
+function AuthorityBoundAvatar() {
+  return (
+    <SessionAuthorityBoundary>
+      <AccountAvatarButton />
+    </SessionAuthorityBoundary>
+  );
+}
+
+function signedInSession(userId: string, sessionId: string, name = `User ${userId}`) {
+  return {
+    user: { id: userId, name, email: `${userId}@example.test` },
+    session: { id: sessionId },
+  };
+}
 
 afterEach(() => {
   sessionState.current = { data: null, isPending: false };
@@ -43,10 +74,8 @@ afterEach(() => {
 
 describe("AccountAvatarButton", () => {
   it("renders an explicit non-submit button", () => {
-    render(<AccountAvatarButton />);
-    // A <button> with no type defaults to submit. Inside the mobile search
-    // <form> that fired handleSubmit (opening the search) instead of the
-    // account UI, so the type must be explicit.
+    render(<AuthorityBoundAvatar />);
+
     expect(screen.getByRole("button", { name: "map.account" }).getAttribute("type")).toBe("button");
   });
 
@@ -55,12 +84,12 @@ describe("AccountAvatarButton", () => {
     const onSubmit = vi.fn();
     render(
       <form
-        onSubmit={(e: FormEvent) => {
-          e.preventDefault();
+        onSubmit={(event: FormEvent) => {
+          event.preventDefault();
           onSubmit();
         }}
       >
-        <AccountAvatarButton />
+        <AuthorityBoundAvatar />
       </form>,
     );
 
@@ -68,26 +97,41 @@ describe("AccountAvatarButton", () => {
     expect(onSubmit).not.toHaveBeenCalled();
   });
 
+  it("renders the current signed-in account", async () => {
+    sessionState.current = {
+      data: signedInSession("user-a", "session-a", "Alice"),
+      isPending: false,
+    };
+
+    render(<AuthorityBoundAvatar />);
+
+    expect(await screen.findByTestId("private-account-menu")).toHaveAttribute(
+      "data-user-id",
+      "user-a",
+    );
+  });
+
   it("opens one account dialog from the signed-in account menu", async () => {
     sessionState.current = {
-      data: { user: { id: "user-a", name: "Alice", email: "alice@example.test" } },
+      data: signedInSession("user-a", "session-a", "Alice"),
       isPending: false,
     };
     const user = userEvent.setup();
-    render(<AccountAvatarButton />);
+    render(<AuthorityBoundAvatar />);
 
-    await user.click(screen.getByRole("button", { name: "open account settings" }));
+    await user.click(await screen.findByRole("button", { name: "open account settings" }));
 
     expect(screen.getAllByTestId("account-settings-dialog")).toHaveLength(1);
     expect(screen.getByTestId("account-settings-dialog")).toHaveAttribute("data-section", "");
   });
 
-  it("opens the same dialog targeted at Timeline from the shared store", () => {
+  it("opens the same dialog targeted at Timeline from the shared store", async () => {
     sessionState.current = {
-      data: { user: { id: "user-a", name: "Alice", email: "alice@example.test" } },
+      data: signedInSession("user-a", "session-a", "Alice"),
       isPending: false,
     };
-    render(<AccountAvatarButton />);
+    render(<AuthorityBoundAvatar />);
+    await screen.findByTestId("private-account-menu");
 
     act(() => useAccountSettingsStore.getState().show("timeline"));
 
@@ -98,22 +142,26 @@ describe("AccountAvatarButton", () => {
     );
   });
 
-  it("closes and resets shared settings state on an A-to-B identity replacement", () => {
+  it("closes account UI and renders a replacement identity immediately", async () => {
     sessionState.current = {
-      data: { user: { id: "user-a", name: "Same Name", email: "same@example.test" } },
+      data: signedInSession("user-a", "session-a", "Alice"),
       isPending: false,
     };
-    const view = render(<AccountAvatarButton />);
+    const view = render(<AuthorityBoundAvatar />);
+    await screen.findByTestId("private-account-menu");
     act(() => useAccountSettingsStore.getState().show("timeline"));
-    expect(screen.getByTestId("account-settings-dialog")).toBeInTheDocument();
 
     sessionState.current = {
-      data: { user: { id: "user-b", name: "Same Name", email: "same@example.test" } },
+      data: signedInSession("user-b", "session-b", "Bob"),
       isPending: false,
     };
-    view.rerender(<AccountAvatarButton />);
+    view.rerender(<AuthorityBoundAvatar />);
 
+    expect(await screen.findByTestId("private-account-menu")).toHaveAttribute(
+      "data-user-id",
+      "user-b",
+    );
+    expect(screen.queryByText("Alice")).toBeNull();
     expect(useAccountSettingsStore.getState()).toMatchObject({ open: false, section: null });
-    expect(screen.queryByTestId("account-settings-dialog")).toBeNull();
   });
 });

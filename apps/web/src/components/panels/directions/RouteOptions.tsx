@@ -148,8 +148,8 @@ const ACCESS_MODE_LABEL_KEYS: Record<TransitAccessMode, string> = {
 
 function TransitRouteOptions() {
   const t = useTranslations("directions");
-  const origin = useDirectionsStore((s) => s.origin);
-  const destination = useDirectionsStore((s) => s.destination);
+  const origin = useDirectionsStore((s) => s.waypoints[0]?.coords ?? null);
+  const destination = useDirectionsStore((s) => s.waypoints.at(-1)?.coords ?? null);
   const transitPreferredModes = useDirectionsStore((s) => s.transitPreferredModes);
   const toggleTransitPreferredMode = useDirectionsStore((s) => s.toggleTransitPreferredMode);
   const transitRoutePreference = useDirectionsStore((s) => s.transitRoutePreference);

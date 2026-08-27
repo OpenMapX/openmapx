@@ -47,6 +47,31 @@ const securityHeaders = [
   { key: "Cross-Origin-Opener-Policy", value: "same-origin" },
 ];
 
+// These documents either render cookie-derived identity/authorization state or
+// carry one-time authentication parameters. The service worker is NetworkOnly
+// for all navigations; this additionally prevents browser/shared HTTP caches
+// from retaining a private response if the worker is absent or bypassed.
+const privateNoStoreRouteSources = [
+  "/admin/:path*",
+  "/settings/:path*",
+  "/mobile-auth",
+  "/auth/:path*",
+  "/delete-account",
+] as const;
+const privateNoStoreHeaders = [{ key: "Cache-Control", value: "private, no-store" }];
+const privateRootResetCallbackRules = [
+  {
+    source: "/",
+    has: [{ type: "query" as const, key: "token" }],
+    headers: privateNoStoreHeaders,
+  },
+  {
+    source: "/",
+    has: [{ type: "query" as const, key: "error", value: "INVALID_TOKEN" }],
+    headers: privateNoStoreHeaders,
+  },
+];
+
 const nextConfig: NextConfig = {
   output: "standalone",
   // Inlined at build time on purpose; see resolveBuildId.
@@ -79,8 +104,29 @@ const nextConfig: NextConfig = {
   turbopack: {
     root: resolve(import.meta.dirname, "../.."),
   },
+  // Turbopack derives this context alias from the workspace root. Keep the
+  // equivalent webpack alias so the supported fallback compiler can validate
+  // production builds too (and so dynamic `@integrations/${id}/...` imports
+  // resolve to a real context instead of the nonexistent bare package).
+  webpack(config) {
+    const integrations = resolve(import.meta.dirname, "../../integrations");
+    if (Array.isArray(config.resolve?.alias)) {
+      config.resolve.alias.push({ name: "@integrations", alias: integrations });
+    } else {
+      config.resolve ??= {};
+      config.resolve.alias = { ...config.resolve.alias, "@integrations": integrations };
+    }
+    return config;
+  },
   async headers() {
-    return [{ source: "/:path*", headers: securityHeaders }];
+    return [
+      { source: "/:path*", headers: securityHeaders },
+      ...privateNoStoreRouteSources.map((source) => ({
+        source,
+        headers: privateNoStoreHeaders,
+      })),
+      ...privateRootResetCallbackRules,
+    ];
   },
 };
 

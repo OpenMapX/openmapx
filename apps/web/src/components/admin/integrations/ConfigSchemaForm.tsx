@@ -2,6 +2,7 @@
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useEnv } from "@/lib/EnvProvider";
+import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { type ConfigFieldSource, SchemaConfigForm } from "../shared/SchemaConfigForm";
 
 interface ConfigSchemaFormProps {
@@ -49,7 +50,8 @@ export function ConfigSchemaForm({
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void invalidateIntegrationRuntime(qc, apiUrl);
       onSaved?.();
     },
   });

@@ -76,26 +76,3 @@ describe("buildCsp in development", () => {
     expect(directive(buildCsp(NONCE), "script-src")).not.toContain("'unsafe-eval'");
   });
 });
-
-describe("buildCsp and the API origin", () => {
-  it("allows community bundles from a configured cross-origin API", () => {
-    const csp = buildCsp(NONCE, { apiOrigin: "https://api.openmapx.test" });
-
-    expect(directive(csp, "script-src")).toContain("https://api.openmapx.test");
-  });
-
-  it("reduces a URL with a path to its origin", () => {
-    const csp = buildCsp(NONCE, { apiOrigin: "https://api.openmapx.test/api/v1" });
-
-    expect(directive(csp, "script-src")).toContain("https://api.openmapx.test");
-    expect(directive(csp, "script-src")).not.toContain("/api/v1");
-  });
-
-  it("adds nothing for an unparseable value", () => {
-    const csp = buildCsp(NONCE, { apiOrigin: "not a url" });
-
-    expect(directive(csp, "script-src")).toBe(
-      `script-src 'self' 'nonce-${NONCE}' 'strict-dynamic'`,
-    );
-  });
-});

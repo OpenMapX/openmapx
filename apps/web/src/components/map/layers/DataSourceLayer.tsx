@@ -45,6 +45,7 @@ import {
 import { pickHoveredDataSourceItemId } from "./dataSourceHover";
 import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 import { upsertGeoJsonSource } from "./layerStyleUtils";
+import { subscribeStyleLoaded } from "./styleLoadedSync";
 
 function sourceId(dsId: string) {
   return `ds-${dsId}`;
@@ -420,11 +421,6 @@ export function DataSourceLayer() {
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
       if (!activeSource || !activeMeta) {
         if (activeSource) removeLayers(map, activeSource);
         return;
@@ -622,11 +618,7 @@ export function DataSourceLayer() {
       }
     };
 
-    syncLayer();
-    map.on("styledata", syncLayer);
-    return () => {
-      map.off("styledata", syncLayer);
-    };
+    return subscribeStyleLoaded(map, syncLayer);
   }, [
     activeSource,
     activeMeta,

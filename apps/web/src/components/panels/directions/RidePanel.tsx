@@ -162,8 +162,8 @@ function PaxStepper({
 export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
   const t = useTranslations("directions");
   const locale = useLocale();
-  const origin = useDirectionsStore((s) => s.origin);
-  const destination = useDirectionsStore((s) => s.destination);
+  const origin = useDirectionsStore((s) => s.waypoints[0]?.coords ?? null);
+  const destination = useDirectionsStore((s) => s.waypoints.at(-1)?.coords ?? null);
 
   const providerId = useRideStore((s) => s.providerId);
   const setProvider = useRideStore((s) => s.setProvider);

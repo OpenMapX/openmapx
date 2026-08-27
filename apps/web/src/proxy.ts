@@ -15,7 +15,6 @@ export function proxy(request: NextRequest) {
   const nonce = cspNonce();
   const csp = buildCsp(nonce, {
     development: process.env.NODE_ENV !== "production",
-    apiOrigin: process.env.NEXT_PUBLIC_API_URL,
   });
 
   // Next reads this to nonce the framework's own inline scripts. Set on the

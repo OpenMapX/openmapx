@@ -5,6 +5,7 @@ import { useOverlayExclusion, useStreetLevelStore } from "@openmapx/core";
 import type { FilterSpecification, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
+import { subscribeStyleLoaded } from "@/components/map/layers/styleLoadedSync";
 import { useEnv } from "@/lib/EnvProvider";
 import { useMap } from "@/lib/MapContext";
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
@@ -78,14 +79,7 @@ export function StreetLevelCoverageLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    let disposed = false;
-
     const syncLayers = () => {
-      // A deferred `once("idle")` callback can outlive this effect (toggle on
-      // while the style is busy, then toggle off). Without this guard it would
-      // re-add every source and layer with no handlers attached.
-      if (disposed) return;
-
       if (!layerVisible) {
         for (const provider of providers) {
           try {
@@ -101,11 +95,6 @@ export function StreetLevelCoverageLayer() {
             unregisterLayerSlot(layerId);
           }
         }
-        return;
-      }
-
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayers);
         return;
       }
 
@@ -209,19 +198,12 @@ export function StreetLevelCoverageLayer() {
       }
     };
 
-    syncLayers();
     if (!layerVisible) {
-      return () => {
-        disposed = true;
-      };
+      syncLayers();
+      return;
     }
 
-    map.on("styledata", syncLayers);
-    return () => {
-      disposed = true;
-      map.off("styledata", syncLayers);
-      map.off("idle", syncLayers);
-    };
+    return subscribeStyleLoaded(map, syncLayers);
   }, [mapReady, styleVersion, mapRef, layerVisible, providers, apiUrl]);
 
   useEffect(() => {
@@ -230,7 +212,7 @@ export function StreetLevelCoverageLayer() {
     if (!map || !mapReady || !layerVisible) return;
 
     // Bind unconditionally rather than filtering by `map.getLayer(id)` here:
-    // layer creation is deferred to `once("idle")` whenever the style is still
+    // layer creation is deferred until idle whenever the style is still
     // loading, so an existence check at effect time would attach nothing and
     // leave the dots permanently unclickable. MapLibre resolves the layer list
     // at event time and ignores ids that don't exist yet.

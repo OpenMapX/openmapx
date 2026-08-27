@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { useMap } from "@/lib/MapContext";
 import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
 import { removeLayerAndSource, upsertGeoJsonSource } from "./layerStyleUtils";
+import { subscribeStyleLoaded } from "./styleLoadedSync";
 
 const SOURCE = "imported-geometry-source";
 const FILL = "imported-geometry-fill";
@@ -41,10 +42,6 @@ export function ImportedGeometryLayer() {
     }
 
     const apply = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", apply);
-        return;
-      }
       upsertGeoJsonSource(map, SOURCE, imported.geojson);
       if (!map.getLayer(FILL)) {
         addLayerInSlot(
@@ -110,15 +107,9 @@ export function ImportedGeometryLayer() {
       }
     };
 
-    // Re-add after a style/theme swap (which wipes all sources): `styledata`
-    // re-fires on each style load and the in-apply `once("idle")` covers the
-    // mid-load case, whereas `once("load")` fires only once — so the overlay
-    // would silently disappear on a theme change.
-    apply();
-    map.on("styledata", apply);
-    return () => {
-      map.off("styledata", apply);
-    };
+    // Re-add after a style/theme swap (which wipes all sources). The shared
+    // subscription also retries once at idle when styledata fires mid-load.
+    return subscribeStyleLoaded(map, apply);
   }, [imported, mapReady, styleVersion, mapRef, fitBounds]);
 
   return null;

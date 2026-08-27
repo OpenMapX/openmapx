@@ -84,7 +84,7 @@ export function usePinMarker(
           "font-weight:700",
           "color:#B81C16",
           "text-shadow:0 1px 2px rgba(255,255,255,0.9),0 0 4px rgba(255,255,255,0.7)",
-          "font-family:'Plus Jakarta Sans',Arial,sans-serif",
+          "font-family:'Plus Jakarta Sans Variable',Arial,sans-serif",
         ].join(";");
 
         labelRef.current = labelSpan;

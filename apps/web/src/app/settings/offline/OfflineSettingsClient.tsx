@@ -37,6 +37,7 @@ import {
   useAutocomplete,
   useDebounce,
   usePlaceDetails,
+  useSession,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -135,7 +136,10 @@ async function waitForManifest(
 
 export function OfflineSettingsClient() {
   const t = useTranslations("settings");
+  const authT = useTranslations("auth");
   const env = useEnv();
+  const session = useSession();
+  const signedIn = !session.isPending && Boolean(session.data?.user?.id);
   const api = useMemo(() => createOfflinePackageApi(env.apiUrl), [env.apiUrl]);
   const [records, setRecords] = useState<OfflinePackageRecord[]>([]);
   const [capability, setCapability] = useState<OfflinePackageCapability | null>(null);
@@ -168,6 +172,12 @@ export function OfflineSettingsClient() {
       });
   }, [api, refresh]);
 
+  useEffect(() => {
+    if (session.isPending || signedIn) return;
+    setAdding(false);
+    setDownloadRecord(null);
+  }, [session.isPending, signedIn]);
+
   const deletePackage = async (record: OfflinePackageRecord) => {
     await storage.delete(record.id);
     await deleteOfflineGlyphCacheIfUnused(record.manifest, await storage.list());
@@ -189,18 +199,33 @@ export function OfflineSettingsClient() {
       {!capability?.available || env.styleProvider !== "openmapx" ? (
         <Alert severity="info">{t("offlineProviderUnavailable")}</Alert>
       ) : null}
-      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
-        <Button
-          variant="contained"
-          startIcon={<AddIcon />}
-          onClick={() => {
-            setDownloadRecord(null);
-            setAdding(true);
-          }}
-          disabled={!capability?.available || env.styleProvider !== "openmapx"}
+      {!session.isPending && !signedIn ? (
+        <Alert
+          severity="info"
+          action={
+            <Button color="inherit" href="/auth/oidc/sign-in">
+              {authT("signIn")}
+            </Button>
+          }
         >
-          {t("downloadNewArea")}
-        </Button>
+          Sign in to prepare a new offline map package. Downloaded areas stay available on this
+          device.
+        </Alert>
+      ) : null}
+      <Stack direction="row" spacing={1} sx={{ flexWrap: "wrap", gap: 1 }}>
+        {signedIn ? (
+          <Button
+            variant="contained"
+            startIcon={<AddIcon />}
+            onClick={() => {
+              setDownloadRecord(null);
+              setAdding(true);
+            }}
+            disabled={!capability?.available || env.styleProvider !== "openmapx"}
+          >
+            {t("downloadNewArea")}
+          </Button>
+        ) : null}
         {records.length > 0 ? (
           <Button
             variant="outlined"
@@ -215,12 +240,13 @@ export function OfflineSettingsClient() {
       <PackageList
         records={records}
         onOpenIncomplete={(record) => {
+          if (!signedIn) return;
           setDownloadRecord(record);
           setAdding(true);
         }}
         onDelete={deletePackage}
       />
-      {adding ? (
+      {adding && signedIn ? (
         <DownloadAreaDialog
           key={downloadRecord?.id ?? "new"}
           open={adding}
@@ -559,6 +585,13 @@ function DownloadAreaDialog({
       Math.min(current[1], maxZoomLimit),
     ]);
   }, [maxZoomLimit]);
+
+  useEffect(
+    () => () => {
+      abortRef.current?.abort();
+    },
+    [],
+  );
 
   const downloadManifest = async (
     manifest: OfflineMapPackageManifest,

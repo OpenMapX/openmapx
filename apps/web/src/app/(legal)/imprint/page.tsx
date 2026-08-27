@@ -1,4 +1,4 @@
-import { sectionSlug } from "@openmapx/core/server";
+import { sectionSlug } from "@openmapx/core/legal";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";

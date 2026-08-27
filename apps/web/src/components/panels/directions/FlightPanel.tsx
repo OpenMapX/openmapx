@@ -324,8 +324,8 @@ function SectionLabel({ children }: { children: ReactNode }) {
  */
 export function FlightPanel() {
   const t = useTranslations("directions");
-  const origin = useDirectionsStore((s) => s.origin);
-  const destination = useDirectionsStore((s) => s.destination);
+  const origin = useDirectionsStore((s) => s.waypoints[0]?.coords ?? null);
+  const destination = useDirectionsStore((s) => s.waypoints.at(-1)?.coords ?? null);
   const setFlightEndpoints = useFlightStore((s) => s.setEndpoints);
   const clearFlightEndpoints = useFlightStore((s) => s.clear);
   const cabinSelectId = useId();

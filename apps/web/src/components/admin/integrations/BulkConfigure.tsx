@@ -28,6 +28,7 @@ import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfigSchemaForm } from "./ConfigSchemaForm";
@@ -365,7 +366,8 @@ function CredentialsTable({
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void invalidateIntegrationRuntime(qc, apiUrl);
       showToast("Credential deleted");
     },
     onError: (e) => showToast(e instanceof Error ? e.message : "Delete failed", "error"),

@@ -34,8 +34,6 @@ import {
   createPlace,
   formatStreetLevelRef,
   getOverlayEntry,
-  getRegisteredOverlayIds,
-  getRegisteredOverlayStore,
   type IsochroneTravelMode,
   idsFromPrimaryOrCoords,
   type LngLat,
@@ -214,13 +212,11 @@ function fitBbox(map: maplibregl.Map, bbox: BoundingBox): void {
 }
 
 function overlayIds(): string[] {
-  return [
-    ...new Set([...OVERLAY_REGISTRY.map((entry) => entry.id), ...getRegisteredOverlayIds()]),
-  ].sort((a, b) => a.localeCompare(b));
+  return OVERLAY_REGISTRY.map((entry) => entry.id).sort((a, b) => a.localeCompare(b));
 }
 
 function getOverlayState(id: string) {
-  return getOverlayEntry(id)?.getState() ?? getRegisteredOverlayStore(id)?.getState();
+  return getOverlayEntry(id)?.getState();
 }
 
 // A deep link's `ov` param is the clearest possible expression of user
@@ -327,7 +323,7 @@ function applyOverlaySettings(parsed: ParsedDeepLink): void {
   if (environmentSensor) useEnvironmentStore.getState().setSensorType(environmentSensor);
 
   if (settings.sli) {
-    const ref = parseStreetLevelRef(settings.sli, "mapillary");
+    const ref = parseStreetLevelRef(settings.sli);
     if (ref) useStreetLevelStore.getState().requestImageLoad(ref);
   }
 

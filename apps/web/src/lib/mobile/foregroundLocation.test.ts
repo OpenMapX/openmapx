@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import type { BridgeClient } from "./bridgeClient";
-import { BridgeError } from "./bridgeClient";
 import { browserForegroundFix, nativeForegroundFix } from "./foregroundLocation";
 
 function geolocationThat(
@@ -134,14 +133,6 @@ describe("nativeForegroundFix", () => {
     const { client } = fakeClient(() => locationResult({ requestId: "r1", status }));
 
     expect(await nativeForegroundFix(client, "r1")).toEqual({ status });
-  });
-
-  it("reports a v1 shell as unsupported rather than falling back", async () => {
-    const { client } = fakeClient(() => new BridgeError("unsupported-capability"));
-
-    // Falling back to browser geolocation here would restore the second location
-    // producer, on exactly the devices running the oldest binaries.
-    expect(await nativeForegroundFix(client, "r1")).toEqual({ status: "unsupported" });
   });
 
   it("treats an unexpected reply as unavailable", async () => {

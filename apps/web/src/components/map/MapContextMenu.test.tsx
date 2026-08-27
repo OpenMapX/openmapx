@@ -559,7 +559,7 @@ describe("MapContextMenu keyboard behavior", () => {
     expect(second.event.defaultPrevented).toBe(true);
     expect(screen.getByText("52.520000, 13.405000")).toBeDefined();
     await userEvent.click(screen.getByRole("menuitem", { name: "mapContextMenu.fromHere" }));
-    expect(useDirectionsStore.getState().origin).toEqual([13.405, 52.52]);
+    expect(useDirectionsStore.getState().waypoints[0]?.coords).toEqual([13.405, 52.52]);
   });
 });
 

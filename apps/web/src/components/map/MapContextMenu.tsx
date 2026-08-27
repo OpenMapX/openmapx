@@ -290,8 +290,8 @@ export function MapContextMenu(): React.ReactNode {
   const chooseRouteEndpoint = (endpoint: "origin" | "destination") => {
     if (!target) return;
     const directions = useDirectionsStore.getState();
-    if (endpoint === "origin") directions.setOrigin(target.coordinates, actionLabel);
-    else directions.setDestination(target.coordinates, actionLabel);
+    const index = endpoint === "origin" ? 0 : directions.waypoints.length - 1;
+    directions.setWaypoint(index, target.coordinates, actionLabel);
     directions.open();
     useSidebarStore.getState().closeDetail();
     useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);

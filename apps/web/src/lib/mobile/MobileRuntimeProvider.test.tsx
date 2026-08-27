@@ -1,4 +1,5 @@
 import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
+import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
 import { render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { MobileRuntimeProvider } from "./MobileRuntimeProvider";
@@ -29,9 +30,9 @@ function shellScope(options: { transport?: boolean } = {}) {
   return { scope, sent, deliver, fire };
 }
 
-function helloReply(overrides: Record<string, unknown> = {}) {
+function helloReply(forMessageId: string, overrides: Record<string, unknown> = {}) {
   return {
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "native.hello",
     messageId: "n1",
     channelNonce: NONCE,
@@ -39,9 +40,9 @@ function helloReply(overrides: Record<string, unknown> = {}) {
     payload: {
       shellVersion: "1.0.0",
       shellBuild: "1",
-      selectedProtocolVersion: 1,
-      minProtocolVersion: 1,
-      maxProtocolVersion: 1,
+      selectedProtocolVersion: MOBILE_PROTOCOL_MAX,
+      minProtocolVersion: MOBILE_PROTOCOL_MIN,
+      maxProtocolVersion: MOBILE_PROTOCOL_MAX,
       platform: "ios",
       capabilities: {
         groundNavigation: true,
@@ -53,9 +54,18 @@ function helloReply(overrides: Record<string, unknown> = {}) {
       permission: "background",
       locationDriver: "expo",
       activeSession: null,
+      forMessageId,
       ...overrides,
     },
   };
+}
+
+function deliverHello(
+  shell: ReturnType<typeof shellScope>,
+  overrides: Record<string, unknown> = {},
+) {
+  const forMessageId = JSON.parse(shell.sent[0]).messageId as string;
+  shell.deliver(helloReply(forMessageId, overrides));
 }
 
 function Probe() {
@@ -67,7 +77,6 @@ function Probe() {
       <span data-testid="state">{runtime.state}</span>
       <span data-testid="browser-authority">{String(runtime.browserAuthority)}</span>
       <span data-testid="in-shell">{String(runtime.isInstalledShell)}</span>
-      <span data-testid="bundles">{String(runtime.features.communityFrontendBundles)}</span>
       <span data-testid="microphone">{String(runtime.features.microphone)}</span>
       <span data-testid="ground">{String(ground)}</span>
       <span data-testid="transit">{String(transit)}</span>
@@ -98,7 +107,6 @@ describe("MobileRuntimeProvider in an ordinary browser", () => {
   it("changes no browser capability", () => {
     mount({});
 
-    expect(text("bundles")).toBe("true");
     expect(text("microphone")).toBe("true");
   });
 
@@ -113,7 +121,7 @@ describe("MobileRuntimeProvider in an ordinary browser", () => {
 describe("MobileRuntimeProvider inside the shell", () => {
   it("starts negotiating rather than in browser authority", () => {
     // Even one frame of `browser` inside an installed app would let the browser
-    // engine and unreviewed bundles start.
+    // navigation engine start.
     mount(shellScope().scope);
 
     expect(text("state")).toBe("negotiating");
@@ -124,7 +132,6 @@ describe("MobileRuntimeProvider inside the shell", () => {
     mount(shellScope().scope);
 
     expect(text("in-shell")).toBe("true");
-    expect(text("bundles")).toBe("false");
     expect(text("microphone")).toBe("false");
   });
 
@@ -132,7 +139,7 @@ describe("MobileRuntimeProvider inside the shell", () => {
     const shell = shellScope();
     mount(shell.scope);
 
-    shell.deliver(helloReply());
+    deliverHello(shell);
 
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
     expect(text("browser-authority")).toBe("false");
@@ -142,7 +149,7 @@ describe("MobileRuntimeProvider inside the shell", () => {
     const shell = shellScope();
     mount(shell.scope);
 
-    shell.deliver(helloReply());
+    deliverHello(shell);
 
     await waitFor(() => expect(text("ground")).toBe("true"));
     // Claiming transit would strand the rider on a session nothing can advance.
@@ -153,7 +160,7 @@ describe("MobileRuntimeProvider inside the shell", () => {
     const shell = shellScope();
     mount(shell.scope);
 
-    shell.deliver(helloReply({ selectedProtocolVersion: null }));
+    deliverHello(shell, { selectedProtocolVersion: null });
 
     await waitFor(() => expect(text("state")).toBe("native-incompatible"));
     expect(text("browser-authority")).toBe("false");
@@ -165,7 +172,6 @@ describe("MobileRuntimeProvider inside the shell", () => {
 
     await waitFor(() => expect(text("state")).toBe("native-error"));
     expect(text("browser-authority")).toBe("false");
-    expect(text("bundles")).toBe("false");
   });
 
   it("sends the handshake as soon as it mounts", async () => {
@@ -181,14 +187,14 @@ describe("MobileRuntimeProvider read model", () => {
   async function negotiated() {
     const shell = shellScope();
     mount(shell.scope);
-    shell.deliver(helloReply());
+    deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
     shell.sent.length = 0;
     return shell;
   }
 
   const snapshot = (overrides: Record<string, unknown> = {}) => ({
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "snapshot.update",
     messageId: "n-snap",
     channelNonce: NONCE,
@@ -255,7 +261,9 @@ describe("MobileRuntimeProvider read model", () => {
     const shell = shellScope();
     mount(shell.scope);
 
-    shell.deliver(helloReply({ activeSession: { sessionId: "s1", revision: 12, kind: "ground" } }));
+    deliverHello(shell, {
+      activeSession: { sessionId: "s1", revision: 12, kind: "ground" },
+    });
 
     await waitFor(() => expect(shell.sent.length).toBeGreaterThan(1));
     expect(shell.sent.some((raw) => JSON.parse(raw).type === "snapshot.request")).toBe(true);
@@ -268,7 +276,7 @@ describe("MobileRuntimeProvider read model", () => {
     shell.sent.length = 0;
 
     shell.deliver({
-      protocolVersion: 1,
+      protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "navigation.event",
       messageId: "n-ev",
       channelNonce: NONCE,
@@ -289,7 +297,7 @@ describe("MobileRuntimeProvider store integration", () => {
   });
 
   const snapshot = (overrides: Record<string, unknown> = {}) => ({
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "snapshot.update",
     messageId: "n-snap",
     channelNonce: NONCE,
@@ -332,7 +340,7 @@ describe("MobileRuntimeProvider store integration", () => {
   it("projects a native snapshot into the fields the UI reads", async () => {
     const shell = shellScope();
     mount(shell.scope);
-    shell.deliver(helloReply());
+    deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
 
     shell.deliver(snapshot());
@@ -348,7 +356,7 @@ describe("MobileRuntimeProvider store integration", () => {
   it("advances the store by one revision on a delta", async () => {
     const shell = shellScope();
     mount(shell.scope);
-    shell.deliver(helloReply());
+    deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
     shell.deliver(snapshot());
     await waitFor(() => expect(useNavigationStore.getState().nativeRevision).toBe(4));
@@ -364,7 +372,7 @@ describe("MobileRuntimeProvider store integration", () => {
   it("reconciles once when the app returns to the foreground", async () => {
     const shell = shellScope();
     mount(shell.scope);
-    shell.deliver(helloReply());
+    deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
     shell.sent.length = 0;
 
@@ -377,7 +385,7 @@ describe("MobileRuntimeProvider store integration", () => {
   it("reconciles when connectivity returns", async () => {
     const shell = shellScope();
     mount(shell.scope);
-    shell.deliver(helloReply());
+    deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
     shell.sent.length = 0;
 
@@ -396,7 +404,7 @@ describe("MobileRuntimeProvider event deduplication", () => {
   });
 
   const event = (eventId: string) => ({
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "navigation.event",
     messageId: `n-${eventId}`,
     channelNonce: NONCE,
@@ -407,7 +415,7 @@ describe("MobileRuntimeProvider event deduplication", () => {
   it("acknowledges a replayed event only once", async () => {
     const shell = shellScope();
     mount(shell.scope);
-    shell.deliver(helloReply());
+    deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
     shell.sent.length = 0;
 

@@ -7,11 +7,7 @@ import KeyboardArrowUpIcon from "@mui/icons-material/KeyboardArrowUp";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import { integrationIdToOverlayId, useNavigationStore, useSidebarStore } from "@openmapx/core";
-import { getCommunityModule } from "@openmapx/integration-framework";
-import {
-  useCommunityModulesVersion,
-  useIntegrationRegistry,
-} from "@openmapx/integration-framework/react";
+import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { type ComponentType, lazy, Suspense, useMemo, useState } from "react";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
@@ -47,17 +43,8 @@ function BuiltInLegend({ id }: { id: string }) {
   );
 }
 
-function CommunityLegend({ id }: { id: string }) {
-  const mod = getCommunityModule(id);
-  if (!mod?.legend) return null;
-  const Component = mod.legend;
-  return <Component />;
-}
-
 export function LegendHost() {
   const registry = useIntegrationRegistry();
-  // Re-render when a community bundle registers its legend after first paint.
-  useCommunityModulesVersion();
   const t = useTranslations("map");
 
   const activeSidebarId = useSidebarStore((s) => s.activeSidebarId);
@@ -106,7 +93,7 @@ export function LegendHost() {
   const declarative = registry.getAll().filter((i) => i.enabled && i.frontend?.overlay?.legend);
   const declarativeIds = new Set(declarative.map((i) => i.id));
   const codeLegends = dedupeSharedMapLayers(
-    registry.getWithLegend().filter((i) => !declarativeIds.has(i.id)),
+    registry.getWithLegend().filter((i) => i.isBuiltIn !== false && !declarativeIds.has(i.id)),
   );
 
   // A normal legend integration being *enabled* (installed) doesn't mean its
@@ -173,15 +160,9 @@ export function LegendHost() {
           <DeclarativeLegend key={integration.id} integration={integration} />
         ))}
       {showLegends &&
-        codeLegends.map((integration) => {
-          const isCommunity =
-            integration.isBuiltIn === false || getCommunityModule(integration.id) !== undefined;
-          return isCommunity ? (
-            <CommunityLegend key={integration.id} id={integration.id} />
-          ) : (
-            <BuiltInLegend key={integration.id} id={integration.id} />
-          );
-        })}
+        codeLegends.map((integration) => (
+          <BuiltInLegend key={integration.id} id={integration.id} />
+        ))}
     </Box>
   );
 }

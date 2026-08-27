@@ -32,6 +32,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 
 interface ResolvedSetting {
@@ -562,7 +563,8 @@ function ExportImportSection({
       });
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { imported: number; skipped: string[] };
-      qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      void invalidateIntegrationRuntime(qc, env.apiUrl);
       const skippedCount = data.skipped?.length ?? 0;
       onMsg(
         `Imported ${data.imported} integration config(s)${skippedCount > 0 ? ` (${skippedCount} skipped)` : ""}`,

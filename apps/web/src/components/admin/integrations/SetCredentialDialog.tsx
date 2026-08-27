@@ -17,6 +17,7 @@ import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { useEnv } from "@/lib/EnvProvider";
+import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { CredentialSetupGuide } from "./CredentialSetupGuide";
 
 interface SetCredentialDialogProps {
@@ -61,7 +62,8 @@ export function SetCredentialDialog({
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void invalidateIntegrationRuntime(qc, apiUrl);
       setValue("");
       setShowValue(false);
       setError(null);

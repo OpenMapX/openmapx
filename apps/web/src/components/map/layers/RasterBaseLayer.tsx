@@ -9,6 +9,7 @@ import { useMap } from "@/lib/MapContext";
 import { useMapAttributions } from "@/lib/useMapAttributions";
 import { addLayerInSlot } from "./layerStack";
 import { setLayerVisibility } from "./layerStyleUtils";
+import { subscribeStyleLoaded } from "./styleLoadedSync";
 
 type RasterPaint = Extract<LayerSpecification, { type: "raster" }>["paint"];
 
@@ -50,14 +51,6 @@ export function RasterBaseLayer({
     if (!map || !mapReady) return;
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) {
-        // `styledata` fires during loading (always with isStyleLoaded()=false)
-        // but doesn't fire reliably once sources finish — register a one-shot
-        // `idle` retry so this layer attaches after the map settles.
-        map.once("idle", syncLayer);
-        return;
-      }
-
       if (tiles.length === 0) return;
 
       if (shouldShow && !map.getSource(sourceId)) {
@@ -86,11 +79,7 @@ export function RasterBaseLayer({
       setLayerVisibility(map, layerId, shouldShow);
     };
 
-    syncLayer();
-    map.on("styledata", syncLayer);
-    return () => {
-      map.off("styledata", syncLayer);
-    };
+    return subscribeStyleLoaded(map, syncLayer);
   }, [
     shouldShow,
     mapReady,

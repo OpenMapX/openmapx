@@ -55,6 +55,7 @@ export function ServiceLogsDrawer({
         const res = await fetch(`${apiUrl}/api/admin/services/${serviceId}/logs`, {
           credentials: "include",
           signal: controller.signal,
+          headers: { "Idempotency-Key": crypto.randomUUID() },
         });
         if (!res.ok) {
           setError(`HTTP ${res.status}: ${res.statusText}`);

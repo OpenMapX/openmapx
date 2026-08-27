@@ -47,7 +47,17 @@ vi.mock("@openmapx/core", async () => {
       refetch: vi.fn(),
     }),
     useDirectionsStore: (selector: (s: unknown) => unknown) =>
-      selector({ origin: [13.405, 52.52], destination: [13.377, 52.516] }),
+      selector({
+        waypoints: [
+          { id: "origin", coords: [13.405, 52.52], label: "Berlin", type: "origin" },
+          {
+            id: "destination",
+            coords: [13.377, 52.516],
+            label: "Brandenburg Gate",
+            type: "destination",
+          },
+        ],
+      }),
   };
 });
 

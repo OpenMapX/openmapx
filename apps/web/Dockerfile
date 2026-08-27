@@ -8,6 +8,9 @@ RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/pa
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# The lockfile references patched dependencies by file hash, so `pnpm install`
+# cannot resolve without the patch itself.
+COPY patches/ patches/
 COPY packages/command-palette/package.json packages/command-palette/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
@@ -56,6 +59,9 @@ COPY packages/brands/ packages/brands/
 COPY packages/transitous-core/ packages/transitous-core/
 COPY integrations/ integrations/
 COPY apps/web/ apps/web/
+# The service-worker cache contract is type-checked by Next and verifies its
+# public allowlist against the committed API authority document.
+COPY apps/api/openapi.json apps/api/openapi.json
 COPY tsconfig.base.json ./
 COPY turbo.json ./
 
@@ -83,7 +89,9 @@ ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup --system --gid 1001 nodejs && \
-    adduser --system --uid 1001 nextjs
+    adduser --system --uid 1001 nextjs && \
+    rm -rf /usr/local/lib/node_modules/npm && \
+    rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/apps/web/.next/static ./apps/web/.next/static
