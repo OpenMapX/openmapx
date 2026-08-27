@@ -38,7 +38,6 @@ export {
   type MirrorArchive,
   mirrorArchives,
   rewriteHostedFeedProxy,
-  rewriteRtUrls,
   TRANSITOUS_FEED_PROXY_URL,
 } from "./mirror.js";
 export {

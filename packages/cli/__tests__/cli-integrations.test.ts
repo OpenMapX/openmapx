@@ -13,12 +13,18 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { packageIntegration } from "@openmapx/integration-framework/installer";
+import {
+  backupInstalledIntegration,
+  packageIntegration,
+  restoreInstalledIntegration,
+} from "@openmapx/integration-framework/installer";
+import { Command } from "commander";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   formatIntegrationsTable,
   installIntegration,
   listIntegrations,
+  registerIntegrationsCommands,
   removeIntegration,
   validateIntegration,
 } from "../src/commands/integrations";
@@ -101,7 +107,7 @@ describe("listIntegrations", () => {
     expect(list.map((i) => i.id)).toEqual(["core-feature", "weather-radar"]);
   });
 
-  it("formats as a table with bundle status", () => {
+  it("formats installed declarative integrations as a table", () => {
     writeIntegration("custom_integrations", "weather-radar", {
       ...baseManifest,
       id: "weather-radar",
@@ -109,6 +115,21 @@ describe("listIntegrations", () => {
     const out = formatIntegrationsTable(listIntegrations({ rootDir: tmp }));
     expect(out).toContain("weather-radar");
     expect(out).toContain("community");
+  });
+});
+
+describe("integrations command policy", () => {
+  it("does not expose executable community build controls", () => {
+    const program = new Command();
+    registerIntegrationsCommands(program);
+    const integrations = program.commands.find((command) => command.name() === "integrations");
+    const commandNames = integrations?.commands.map((command) => command.name()) ?? [];
+    const install = integrations?.commands.find((command) => command.name() === "install");
+    const packageCommand = integrations?.commands.find((command) => command.name() === "package");
+
+    expect(commandNames).not.toContain("build");
+    expect(install?.options.map((option) => option.long)).not.toContain("--no-build");
+    expect(packageCommand?.options.map((option) => option.long)).not.toContain("--no-build");
   });
 });
 
@@ -175,13 +196,10 @@ describe("installIntegration (local source)", () => {
       JSON.stringify({ ...baseManifest, id: "ads-b" }),
       "utf-8",
     );
-    writeFileSync(join(src, "index.ts"), "// stub", "utf-8");
-
     const result = await installIntegration({ source: src, rootDir: tmp });
     expect(result.id).toBe("ads-b");
     expect(result.replaced).toBe(false);
     expect(existsSync(join(tmp, "custom_integrations", "ads-b", "manifest.json"))).toBe(true);
-    expect(existsSync(join(tmp, "custom_integrations", "ads-b", "index.ts"))).toBe(true);
   });
 
   it("copies a declared static preview without building frontend code", async () => {
@@ -200,8 +218,7 @@ describe("installIntegration (local source)", () => {
     );
     writeFileSync(join(src, "preview.svg"), '<svg xmlns="http://www.w3.org/2000/svg"/>');
 
-    const result = await installIntegration({ source: src, rootDir: tmp, buildFrontend: true });
-    expect(result.build).toMatchObject({ skipped: true });
+    await installIntegration({ source: src, rootDir: tmp });
     expect(
       readFileSync(join(tmp, "custom_integrations", "preview-demo", "preview.svg"), "utf-8"),
     ).toContain("<svg");
@@ -234,7 +251,7 @@ describe("installIntegration (local source)", () => {
     expect(readFileSync(join(installed, "keep.txt"), "utf-8")).toBe("existing");
   });
 
-  it("builds frontend bundles before installing when requested", async () => {
+  it("rejects same-origin community frontend source", async () => {
     const src = join(tmp, "frontend-int");
     mkdirSync(src, { recursive: true });
     writeFileSync(
@@ -248,40 +265,17 @@ describe("installIntegration (local source)", () => {
     );
     writeFileSync(
       join(src, "map-layer.tsx"),
-      [
-        'import { useMemo } from "react";',
-        'import { getCommunityModuleIds } from "@openmapx/core";',
-        "export default function MapLayer() {",
-        "  useMemo(() => getCommunityModuleIds(), []);",
-        "  return null;",
-        "}",
-      ].join("\n"),
+      "export default function MapLayer() { return null; }",
       "utf-8",
     );
 
-    const result = await installIntegration({ source: src, rootDir: tmp, buildFrontend: true });
-    const bundlePath = join(
-      tmp,
-      "custom_integrations",
-      "frontend-demo",
-      "dist",
-      "frontend",
-      "index.js",
+    await expect(installIntegration({ source: src, rootDir: tmp })).rejects.toThrow(
+      /Executable community integration code cannot be installed without an isolation boundary/,
     );
-    const bundle = readFileSync(bundlePath, "utf-8");
-
-    expect(result.build?.skipped).toBe(false);
-    expect(existsSync(bundlePath)).toBe(true);
-    expect(bundle).toContain("__openmapx_integrations");
-    // React and @openmapx/core are bare-spec externals — the host page's
-    // import map resolves them to singleton ESM modules at runtime, so the
-    // bundle keeps the imports rather than inlining the shim.
-    expect(bundle).toMatch(/from"react"|from "react"|import\("react"\)/);
-    expect(bundle).toMatch(/from"@openmapx\/core"|from "@openmapx\/core"/);
-    expect(bundle).not.toContain("__openmapx_runtime");
+    expect(existsSync(join(tmp, "custom_integrations", "frontend-demo"))).toBe(false);
   });
 
-  it("reports skipped frontend build when no frontend files are present", async () => {
+  it("installs a declarative integration without creating build output", async () => {
     const src = join(tmp, "backend-only");
     mkdirSync(src, { recursive: true });
     writeFileSync(
@@ -290,17 +284,11 @@ describe("installIntegration (local source)", () => {
       "utf-8",
     );
 
-    const result = await installIntegration({ source: src, rootDir: tmp, buildFrontend: true });
-
-    expect(result.build).toMatchObject({
-      bundlePath: null,
-      skipped: true,
-      reason: "no frontend components (map-layer/legend/panel)",
-    });
+    await installIntegration({ source: src, rootDir: tmp });
     expect(existsSync(join(tmp, "custom_integrations", "backend-only", "dist"))).toBe(false);
   });
 
-  it("builds backend bundles before installing when requested", async () => {
+  it("rejects community backend source instead of installing it into the API trust domain", async () => {
     const src = join(tmp, "backend-int");
     mkdirSync(src, { recursive: true });
     writeFileSync(
@@ -325,21 +313,30 @@ describe("installIntegration (local source)", () => {
     );
     writeFileSync(join(src, "message.ts"), 'export const message = "hello";', "utf-8");
 
-    const result = await installIntegration({ source: src, rootDir: tmp, buildBackend: true });
-    const bundlePath = join(
-      tmp,
-      "custom_integrations",
-      "backend-demo",
-      "dist",
-      "backend",
-      "index.mjs",
+    await expect(installIntegration({ source: src, rootDir: tmp })).rejects.toThrow(
+      /Executable community integration code cannot be installed.*isolated service/s,
     );
-    const bundle = readFileSync(bundlePath, "utf-8");
+    expect(existsSync(join(tmp, "custom_integrations", "backend-demo"))).toBe(false);
+  });
 
-    expect(result.backendBuild?.skipped).toBe(false);
-    expect(existsSync(bundlePath)).toBe(true);
-    expect(bundle).toContain("hello");
-    expect(bundle).not.toContain("./message.js");
+  it("rejects executable community POI declarations", async () => {
+    const src = join(tmp, "community-poi");
+    mkdirSync(src, { recursive: true });
+    writeFileSync(
+      join(src, "manifest.json"),
+      JSON.stringify({ ...baseManifest, id: "community-poi" }),
+      "utf-8",
+    );
+    writeFileSync(
+      join(src, "poi-sources.js"),
+      "export function declarePoiSources() { return []; }",
+      "utf-8",
+    );
+
+    await expect(installIntegration({ source: src, rootDir: tmp })).rejects.toThrow(
+      /Executable community integration code cannot be installed/,
+    );
+    expect(existsSync(join(tmp, "custom_integrations", "community-poi"))).toBe(false);
   });
 
   it("replaces an existing install", async () => {
@@ -398,7 +395,7 @@ describe("installIntegration (local source)", () => {
 });
 
 describe("installIntegration (artifact source)", () => {
-  it("installs a prebuilt .tar.gz artifact with a frontend bundle", async () => {
+  it("rejects a prebuilt same-origin frontend bundle", async () => {
     const src = join(tmp, "artifact-src");
     mkdirSync(join(src, "dist", "frontend"), { recursive: true });
     writeFileSync(
@@ -418,18 +415,15 @@ describe("installIntegration (artifact source)", () => {
     const artifact = join(tmp, "artifact-demo.tar.gz");
     writeTarGz(src, artifact);
 
-    const result = await installIntegration({
-      source: artifact,
-      sourceKind: "artifact",
-      artifactSha256: sha256(artifact),
-      rootDir: tmp,
-    });
-
-    expect(result.id).toBe("artifact-demo");
-    expect(result.artifact?.hasFrontendBundle).toBe(true);
-    expect(
-      existsSync(join(tmp, "custom_integrations", "artifact-demo", "dist", "frontend", "index.js")),
-    ).toBe(true);
+    await expect(
+      installIntegration({
+        source: artifact,
+        sourceKind: "artifact",
+        artifactSha256: sha256(artifact),
+        rootDir: tmp,
+      }),
+    ).rejects.toThrow(/Executable community integration code cannot be installed/);
+    expect(existsSync(join(tmp, "custom_integrations", "artifact-demo"))).toBe(false);
   });
 
   it("extracts artifact entries that use tar long-path metadata", async () => {
@@ -523,7 +517,7 @@ describe("installIntegration (artifact source)", () => {
     expect(existsSync(join(tmp, "custom_integrations", "oversized-artifact"))).toBe(false);
   });
 
-  it("rejects frontend artifacts that do not contain dist/frontend/index.js", async () => {
+  it("rejects manifests that advertise executable community presentation code", async () => {
     const src = join(tmp, "broken-artifact-src");
     mkdirSync(src, { recursive: true });
     writeFileSync(
@@ -540,11 +534,11 @@ describe("installIntegration (artifact source)", () => {
 
     await expect(
       installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
-    ).rejects.toThrow(/prebuilt dist\/frontend\/index\.js/);
+    ).rejects.toThrow(/Executable community integration code cannot be installed/);
     expect(existsSync(join(tmp, "custom_integrations", "broken-artifact"))).toBe(false);
   });
 
-  it("rejects backend artifacts that do not contain dist/backend/index.mjs", async () => {
+  it("rejects backend artifacts before they enter the privileged runtime mount", async () => {
     const src = join(tmp, "broken-backend-artifact-src");
     mkdirSync(src, { recursive: true });
     writeFileSync(
@@ -566,23 +560,25 @@ describe("installIntegration (artifact source)", () => {
 
     await expect(
       installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
-    ).rejects.toThrow(/prebuilt dist\/backend\/index\.mjs/);
+    ).rejects.toThrow(/Executable community integration code cannot be installed/);
     expect(existsSync(join(tmp, "custom_integrations", "broken-backend-artifact"))).toBe(false);
   });
 
-  it("rejects artifacts with bundle checksums that do not match metadata", async () => {
+  it("rejects obsolete executable-bundle metadata", async () => {
     const src = join(tmp, "bad-checksum-artifact-src");
-    mkdirSync(join(src, "dist", "frontend"), { recursive: true });
+    mkdirSync(src, { recursive: true });
     writeFileSync(
       join(src, "manifest.json"),
       JSON.stringify({
         ...baseManifest,
         id: "bad-checksum-artifact",
-        frontend: { legend: true },
+        frontend: {
+          layerSelector: { group: "map-details", labelKey: "example", preview: "preview.svg" },
+        },
       }),
       "utf-8",
     );
-    writeFileSync(join(src, "dist", "frontend", "index.js"), "window.x = 1;", "utf-8");
+    writeFileSync(join(src, "preview.svg"), '<svg xmlns="http://www.w3.org/2000/svg"/>', "utf-8");
     writeFileSync(
       join(src, "openmapx-artifact.json"),
       JSON.stringify({
@@ -591,8 +587,8 @@ describe("installIntegration (artifact source)", () => {
         platformVersion: "1.0.0",
         builtAt: new Date().toISOString(),
         bundles: {
-          frontend: {
-            path: "dist/frontend/index.js",
+          preview: {
+            path: "preview.svg",
             sha256: "0".repeat(64),
           },
         },
@@ -604,13 +600,13 @@ describe("installIntegration (artifact source)", () => {
 
     await expect(
       installIntegration({ source: artifact, sourceKind: "artifact", rootDir: tmp }),
-    ).rejects.toThrow(/checksum mismatch/);
+    ).rejects.toThrow(/invalid shape/);
     expect(existsSync(join(tmp, "custom_integrations", "bad-checksum-artifact"))).toBe(false);
   });
 });
 
 describe("packageIntegration", () => {
-  it("creates an artifact with frontend/backend bundles and metadata", async () => {
+  it("rejects packaging executable community presentation code", async () => {
     const src = join(tmp, "package-src");
     mkdirSync(src, { recursive: true });
     writeFileSync(
@@ -619,7 +615,6 @@ describe("packageIntegration", () => {
         ...baseManifest,
         id: "package-demo",
         frontend: { legend: true },
-        backend: { routes: true },
       }),
       "utf-8",
     );
@@ -628,51 +623,13 @@ describe("packageIntegration", () => {
       "export default function Legend() { return null; }",
       "utf-8",
     );
-    writeFileSync(
-      join(src, "index.ts"),
-      [
-        'import type { IntegrationContext } from "@openmapx/core";',
-        "export function setup(ctx: IntegrationContext) {",
-        '  ctx.registerRoute("GET", "/ping", (_req, reply) => reply.send({ ok: true }));',
-        "}",
-      ].join("\n"),
-      "utf-8",
-    );
-
-    const artifact = join(tmp, "package-demo.tar.gz");
-    const result = await packageIntegration({
-      rootDir: tmp,
-      source: src,
-      outFile: artifact,
-      buildFrontend: true,
-      buildBackend: true,
-    });
-
-    const metadata = JSON.parse(readFileSync(join(src, "openmapx-artifact.json"), "utf-8")) as {
-      bundles?: {
-        frontend?: { path: string; sha256: string };
-        backend?: { path: string; sha256: string };
-      };
-    };
-
-    expect(result.validation.hasFrontendBundle).toBe(true);
-    expect(result.validation.hasBackendBundle).toBe(true);
-    expect(metadata.bundles?.frontend?.path).toBe("dist/frontend/index.js");
-    expect(metadata.bundles?.backend?.path).toBe("dist/backend/index.mjs");
-    expect(existsSync(artifact)).toBe(true);
-
-    const installed = await installIntegration({
-      rootDir: tmp,
-      source: artifact,
-      sourceKind: "artifact",
-    });
-    expect(installed.id).toBe("package-demo");
-    expect(
-      existsSync(join(tmp, "custom_integrations", "package-demo", "dist", "frontend", "index.js")),
-    ).toBe(true);
-    expect(
-      existsSync(join(tmp, "custom_integrations", "package-demo", "dist", "backend", "index.mjs")),
-    ).toBe(true);
+    await expect(
+      packageIntegration({
+        rootDir: tmp,
+        source: src,
+        outFile: join(tmp, "package-demo.tar.gz"),
+      }),
+    ).rejects.toThrow(/Executable community integration code cannot be installed/);
   });
 
   it("preserves a static preview without creating a frontend bundle", async () => {
@@ -697,15 +654,35 @@ describe("packageIntegration", () => {
       rootDir: tmp,
       source: src,
       outFile: artifact,
-      buildFrontend: true,
     });
-    expect(result.validation.hasFrontendBundle).toBe(false);
+    expect(result.files).not.toContain("dist/frontend/index.js");
     expect(existsSync(join(src, "dist", "frontend", "index.js"))).toBe(false);
 
     await installIntegration({ rootDir: tmp, source: artifact, sourceKind: "artifact" });
     const installed = join(tmp, "custom_integrations", "package-preview");
     expect(readFileSync(join(installed, "preview.svg"), "utf-8")).toBe(svg);
     expect(existsSync(join(installed, "dist", "frontend", "index.js"))).toBe(false);
+  });
+});
+
+describe("integration rollback backups", () => {
+  it("restores the exact pre-update files", () => {
+    writeIntegration("custom_integrations", "weather-radar", {
+      ...baseManifest,
+      id: "weather-radar",
+    });
+    const target = join(tmp, "custom_integrations", "weather-radar");
+    writeFileSync(join(target, "version.txt"), "old", "utf8");
+    const backup = backupInstalledIntegration(tmp, "weather-radar");
+    expect(backup).not.toBeNull();
+
+    writeFileSync(join(target, "version.txt"), "new", "utf8");
+    writeFileSync(join(target, "new-only.txt"), "new", "utf8");
+    restoreInstalledIntegration(tmp, backup as NonNullable<typeof backup>);
+
+    expect(readFileSync(join(target, "version.txt"), "utf8")).toBe("old");
+    expect(existsSync(join(target, "new-only.txt"))).toBe(false);
+    expect(existsSync((backup as NonNullable<typeof backup>).backupDirectory)).toBe(false);
   });
 });
 
@@ -735,6 +712,16 @@ describe("removeIntegration", () => {
 });
 
 describe("installIntegration security", () => {
+  it("rejects a remote artifact without a SHA-256 pin before downloading", async () => {
+    await expect(
+      installIntegration({
+        source: "https://example.com/community.tar.gz",
+        sourceKind: "artifact",
+        rootDir: tmp,
+      }),
+    ).rejects.toThrow(/require an expected SHA-256 digest/);
+  });
+
   it("rejects a preview symlink that escapes the integration", async () => {
     const outside = join(tmp, "outside.svg");
     writeFileSync(outside, '<svg xmlns="http://www.w3.org/2000/svg"/>');
@@ -794,7 +781,7 @@ describe("installIntegration security", () => {
   it("rejects a Git URL on an off-allowlist host", async () => {
     await expect(
       installIntegration({ source: "https://random.example.com/repo.git", rootDir: tmp }),
-    ).rejects.toThrow(/not in the allowlist/);
+    ).rejects.toThrow(/not in the repository allowlist/);
   });
 
   it("accepts a github:user/repo spec at allowlist validation time", async () => {

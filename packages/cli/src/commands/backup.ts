@@ -51,15 +51,14 @@ export interface BackupVolumeEntry {
 
 export interface BackupServiceEntry {
   id: string;
-  /** Absent only when reading legacy manifests written before service versions existed. */
-  version?: string;
+  version: string;
   volumes: BackupVolumeEntry[];
 }
 
 export interface BackupManifest {
   name: string;
   createdAt: string;
-  openmapxVersion?: string;
+  openmapxVersion: string;
   services: BackupServiceEntry[];
 }
 
@@ -178,16 +177,13 @@ export function readBackupManifest(filePath: string): BackupManifest {
     !raw ||
     typeof raw.name !== "string" ||
     typeof raw.createdAt !== "string" ||
+    typeof raw.openmapxVersion !== "string" ||
     !Array.isArray(raw.services)
   ) {
     throw new Error(`Malformed backup manifest at ${filePath}`);
   }
   for (const s of raw.services) {
-    if (
-      typeof s.id !== "string" ||
-      (s.version !== undefined && typeof s.version !== "string") ||
-      !Array.isArray(s.volumes)
-    ) {
+    if (typeof s.id !== "string" || typeof s.version !== "string" || !Array.isArray(s.volumes)) {
       throw new Error(`Malformed service entry in ${filePath}`);
     }
     if (!SERVICE_ID_REGEX.test(s.id)) {
@@ -255,14 +251,15 @@ export async function discoverBackupableServices(
     const backupVolumes = (svc.manifest.volumes ?? []).filter((v) => v.backup === true);
     if (backupVolumes.length === 0) continue;
     const env = svc.manifest.container.environment ?? {};
-    const modes = backupVolumes.map(
-      (volume) => volume.backupMode ?? (svc.manifest.id === "postgis" ? "pg_dump" : "tar"),
-    );
-    const legacyPostgis =
-      svc.manifest.id === "postgis" &&
-      backupVolumes.every((volume) => volume.backupMode === undefined);
-    const postgresUser = env.POSTGRES_USER ?? (legacyPostgis ? "postgres" : undefined);
-    const postgresDb = env.POSTGRES_DB ?? (legacyPostgis ? "openmapx" : undefined);
+    const missingMode = backupVolumes.find((volume) => volume.backupMode === undefined);
+    if (missingMode) {
+      throw new Error(
+        `Service "${svc.manifest.id}" backup volume "${missingMode.name}" must declare backupMode`,
+      );
+    }
+    const modes = backupVolumes.map((volume) => volume.backupMode as BackupVolumeMode);
+    const postgresUser = env.POSTGRES_USER;
+    const postgresDb = env.POSTGRES_DB;
     if (
       modes.includes("pg_dump") &&
       (!isSafePostgresIdentifier(postgresUser) || !isSafePostgresIdentifier(postgresDb))
@@ -279,7 +276,7 @@ export async function discoverBackupableServices(
       volumes: backupVolumes.map((v) => ({
         serviceId: svc.manifest.id,
         volumeName: v.name,
-        mode: v.backupMode ?? (svc.manifest.id === "postgis" ? "pg_dump" : "tar"),
+        mode: v.backupMode as BackupVolumeMode,
       })),
     });
   }
@@ -755,17 +752,15 @@ export function preflightRestore(opts: RestoreOptions): RestorePreflight {
 
   let versionError: string | undefined;
   let versionWarning: string | undefined;
-  if (manifest.openmapxVersion) {
-    const cmp = isCompatiblePlatformVersion(manifest.openmapxVersion);
-    if (!cmp.compatible) {
-      versionError =
-        `Backup was created on platform ${manifest.openmapxVersion} ` +
-        `but current platform is ${PLATFORM_VERSION} — major-version mismatch, refusing to restore.`;
-    } else if (cmp.minorMismatch) {
-      versionWarning =
-        `Backup created on platform ${manifest.openmapxVersion}; current is ${PLATFORM_VERSION} ` +
-        `(minor mismatch — proceeding).`;
-    }
+  const cmp = isCompatiblePlatformVersion(manifest.openmapxVersion);
+  if (!cmp.compatible) {
+    versionError =
+      `Backup was created on platform ${manifest.openmapxVersion} ` +
+      `but current platform is ${PLATFORM_VERSION} — major-version mismatch, refusing to restore.`;
+  } else if (cmp.minorMismatch) {
+    versionWarning =
+      `Backup created on platform ${manifest.openmapxVersion}; current is ${PLATFORM_VERSION} ` +
+      `(minor mismatch — proceeding).`;
   }
 
   return {

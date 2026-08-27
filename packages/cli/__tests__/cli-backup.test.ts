@@ -40,10 +40,23 @@ function writeManifest(slug: string, body: Record<string, unknown>) {
   writeFileSync(join(dir, "service.json"), JSON.stringify(body), "utf-8");
 }
 
-function writeBackup(name: string, manifest: BackupManifest): string {
+function writeBackup(name: string, manifest: unknown): string {
   const dir = join(tmp, "infra", "docker", "backups", name);
   mkdirSync(dir, { recursive: true });
-  writeFileSync(join(dir, "manifest.json"), JSON.stringify(manifest, null, 2), "utf-8");
+  const raw = manifest as Record<string, unknown>;
+  const services = Array.isArray(raw.services)
+    ? raw.services.map((service) =>
+        service && typeof service === "object"
+          ? { version: "1.0.0", ...(service as Record<string, unknown>) }
+          : service,
+      )
+    : raw.services;
+  const normalized = {
+    openmapxVersion: "1.0.0",
+    ...raw,
+    ...(Array.isArray(raw.services) ? { services } : {}),
+  };
+  writeFileSync(join(dir, "manifest.json"), JSON.stringify(normalized, null, 2), "utf-8");
   return dir;
 }
 
@@ -174,21 +187,17 @@ describe("readBackupManifest", () => {
     expect(m.services).toHaveLength(1);
   });
 
-  it("reads versioned service metadata and remains compatible with legacy entries", () => {
+  it("requires versioned service metadata", () => {
     const dir = writeBackup("service-versions", {
       name: "service-versions",
       createdAt: "2026-04-19T00:00:00Z",
       services: [
         { id: "timeline", version: "2.3.4", volumes: [] },
-        { id: "legacy", volumes: [] },
+        { id: "missing-version", version: undefined, volumes: [] },
       ],
     });
 
-    const manifest = readBackupManifest(join(dir, "manifest.json"));
-    expect(manifest.services).toEqual([
-      { id: "timeline", version: "2.3.4", volumes: [] },
-      { id: "legacy", volumes: [] },
-    ]);
+    expect(() => readBackupManifest(join(dir, "manifest.json"))).toThrow(/Malformed service entry/);
   });
 
   it("preserves resolvedName + postgresUser/postgresDb on tar / pg_dump entries", () => {
@@ -403,9 +412,11 @@ describe("readBackupManifest", () => {
     const manifest: BackupManifest = {
       name: "complete",
       createdAt: "2026-04-19T00:00:00Z",
+      openmapxVersion: "1.0.0",
       services: [
         {
           id: "tileserver",
+          version: "1.0.0",
           volumes: [
             {
               name: "tiles",
@@ -447,7 +458,8 @@ describe("readBackupManifest", () => {
       JSON.stringify({
         name: "x",
         createdAt: "now",
-        services: [{ id: "no-volumes" }],
+        openmapxVersion: "1.0.0",
+        services: [{ id: "no-volumes", version: "1.0.0" }],
       }),
       "utf-8",
     );
@@ -459,9 +471,10 @@ describe("filterManifestServices", () => {
   const m: BackupManifest = {
     name: "t",
     createdAt: "now",
+    openmapxVersion: "1.0.0",
     services: [
-      { id: "postgis", volumes: [] },
-      { id: "tileserver", volumes: [] },
+      { id: "postgis", version: "1.0.0", volumes: [] },
+      { id: "tileserver", version: "1.0.0", volumes: [] },
     ],
   };
 
@@ -532,12 +545,19 @@ describe("discoverBackupableServices", () => {
         ...baseService.container,
         environment: { POSTGRES_USER: "postgres", POSTGRES_DB: "openmapx" },
       },
-      volumes: [{ name: "openmapx-pgdata", mountAt: "/var/lib/postgresql", backup: true }],
+      volumes: [
+        {
+          name: "openmapx-pgdata",
+          mountAt: "/var/lib/postgresql",
+          backup: true,
+          backupMode: "pg_dump",
+        },
+      ],
     });
     writeManifest("tileserver", {
       ...baseService,
       id: "tileserver",
-      volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true }],
+      volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true, backupMode: "tar" }],
     });
     writeManifest("redis", {
       ...baseService,
@@ -559,7 +579,7 @@ describe("discoverBackupableServices", () => {
     ]);
   });
 
-  it("uses declared per-volume modes for any service while preserving legacy postgis fallback", async () => {
+  it("uses declared per-volume modes for every service", async () => {
     writeManifest("timeline", {
       ...baseService,
       id: "timeline",
@@ -583,7 +603,7 @@ describe("discoverBackupableServices", () => {
         ...baseService.container,
         environment: { POSTGRES_USER: "postgres", POSTGRES_DB: "openmapx" },
       },
-      volumes: [{ name: "openmapx-pgdata", mountAt: "/db", backup: true }],
+      volumes: [{ name: "openmapx-pgdata", mountAt: "/db", backup: true, backupMode: "pg_dump" }],
     });
 
     process.env.OPENMAPX_ENABLED_SERVICES = "timeline,postgis";
@@ -608,12 +628,23 @@ describe("discoverBackupableServices", () => {
     writeManifest("postgis", {
       ...baseService,
       id: "postgis",
-      volumes: [{ name: "openmapx-pgdata", mountAt: "/var/lib/postgresql", backup: true }],
+      container: {
+        ...baseService.container,
+        environment: { POSTGRES_USER: "postgres", POSTGRES_DB: "openmapx" },
+      },
+      volumes: [
+        {
+          name: "openmapx-pgdata",
+          mountAt: "/var/lib/postgresql",
+          backup: true,
+          backupMode: "pg_dump",
+        },
+      ],
     });
     writeManifest("tileserver", {
       ...baseService,
       id: "tileserver",
-      volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true }],
+      volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true, backupMode: "tar" }],
     });
     const out = await discoverBackupableServices({ rootDir: tmp, serviceIds: ["postgis"] });
     expect(out.map((t) => t.id)).toEqual(["postgis"]);
@@ -623,12 +654,23 @@ describe("discoverBackupableServices", () => {
     writeManifest("postgis", {
       ...baseService,
       id: "postgis",
-      volumes: [{ name: "openmapx-pgdata", mountAt: "/var/lib/postgresql", backup: true }],
+      container: {
+        ...baseService.container,
+        environment: { POSTGRES_USER: "postgres", POSTGRES_DB: "openmapx" },
+      },
+      volumes: [
+        {
+          name: "openmapx-pgdata",
+          mountAt: "/var/lib/postgresql",
+          backup: true,
+          backupMode: "pg_dump",
+        },
+      ],
     });
     writeManifest("tileserver", {
       ...baseService,
       id: "tileserver",
-      volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true }],
+      volumes: [{ name: "openmapx-tiles", mountAt: "/data", backup: true, backupMode: "tar" }],
     });
     mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
     writeFileSync(
@@ -875,7 +917,7 @@ describe("preflightRestore", () => {
     expect(pre.versionWarning).toMatch(/minor mismatch/);
   });
 
-  it("ignores version checks when manifest has no openmapxVersion", () => {
+  it("accepts the current platform version", () => {
     writeBackup("snap4", { name: "snap4", createdAt: "now", services: [] });
     const pre = preflightRestore({ rootDir: tmp, name: "snap4" });
     expect(pre.versionError).toBeUndefined();

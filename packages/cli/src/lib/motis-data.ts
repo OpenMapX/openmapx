@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { basename, join, resolve } from "node:path";
+import { services as coreServices } from "@openmapx/core/server";
 import {
   FEED_PROXY_CONFIG_FILENAME,
   FEED_PROXY_CONFIG_SUBDIR,
@@ -50,11 +51,35 @@ export const MOTIS_CONFIG_FILENAME = "config.yml";
 export const MOTIS_LICENSE_FILENAME = "license.json";
 export const MOTIS_FEED_PROXY_CONFIG_FILENAME = FEED_PROXY_CONFIG_FILENAME;
 export { DEFAULT_TRANSITOUS_REPO_URL };
+
 // CI publishes a multi-arch transitous-tools image (.github/workflows/docker.yml).
 // Default to the registry image; ensureTransitousToolsImage falls back to a
 // local docker build when the registry pull fails (offline / private fork).
+const { transitousToolsImageFromReleaseCompose } = coreServices;
+
 export const DEFAULT_TRANSITOUS_TOOLS_IMAGE =
   process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE ?? "ghcr.io/openmapx/transitous-tools:latest";
+
+/**
+ * Resolve the helper image at call time: explicit env wins, then the digest
+ * pinned by an existing `docker-compose.release.yml` overlay (so host-side
+ * pipeline runs stay on the same release as the data-manager container), and
+ * only then the historical `:latest` tag.
+ */
+export function resolveTransitousToolsImage(rootDir?: string): string {
+  const fromEnv = process.env.OPENMAPX_TRANSITOUS_TOOLS_IMAGE;
+  if (fromEnv) return fromEnv;
+  try {
+    const overlayPath = repoPaths(rootDir).composeReleasePath;
+    if (existsSync(overlayPath)) {
+      const pinned = transitousToolsImageFromReleaseCompose(readFileSync(overlayPath, "utf-8"));
+      if (pinned) return pinned;
+    }
+  } catch {
+    // Fall through to the default; a missing repo root is not this helper's concern.
+  }
+  return DEFAULT_TRANSITOUS_TOOLS_IMAGE;
+}
 export const OPENMAPX_TRANSITOUS_FEED_PROXY_URL_ENV = "OPENMAPX_TRANSITOUS_FEED_PROXY_URL";
 export const DEFAULT_OPENMAPX_TRANSITOUS_FEED_PROXY_URL = "http://motis-feed-proxy";
 export const TRANSITOUS_FEED_PROXY_KEY_FILE_ENV = "TRANSITOUS_FEED_PROXY_KEY_FILE";
@@ -414,7 +439,7 @@ export async function buildMotisData(
   const sourcePbf = resolveOsmPbf(dataDir, opts.region, "MOTIS");
   const runner = opts.runner ?? defaultRunner;
   const transitousRepoUrl = opts.transitousRepoUrl ?? DEFAULT_TRANSITOUS_REPO_URL;
-  const image = opts.image ?? DEFAULT_TRANSITOUS_TOOLS_IMAGE;
+  const image = opts.image ?? resolveTransitousToolsImage(opts.rootDir);
   const source = opts.source ?? parseTransitSource();
   // `||` (not `??`): an empty-string env value (e.g. compose `${VAR:-}`) must
   // fall through to the default rather than being taken literally.
@@ -511,19 +536,18 @@ export async function buildMotisData(
   await pruneUnresolvableSources({
     catalogDir: transitousCatalogDir,
     countries,
-    runner: async (command, commandArgs) =>
-      runner(
+    runCheck: async (checkCountries) => {
+      await runner(
         "docker",
-        dockerExecArgs(
-          transitousCatalogDir,
-          gtfsDir,
-          transitousDownloadsDir,
-          image,
-          command,
-          commandArgs,
-        ),
+        dockerExecArgs(transitousCatalogDir, gtfsDir, transitousDownloadsDir, image, "python3", [
+          "./src/generate-motis-config.py",
+          "--import-only",
+          "--skip-missing-files",
+          ...checkCountries,
+        ]),
         { cwd: paths.root, stdio: "pipe" },
-      ),
+      );
+    },
     logger: cliLogger,
   });
 

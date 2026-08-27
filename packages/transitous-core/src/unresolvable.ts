@@ -1,6 +1,6 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import type { CommandRunner, TransitousLogger } from "./runner.js";
+import type { TransitousLogger } from "./runner.js";
 
 /** Upstream's exact fatal line when a Transitland / MDB source won't resolve. */
 const COULD_NOT_RESOLVE_RE = /Error: Could not resolve\s+(\S+)/g;
@@ -74,7 +74,13 @@ export interface PruneUnresolvableSourcesOptions {
   catalogDir: string;
   /** Region globs scoping the check; mirror gen-motis-config's own scope. */
   countries: string[];
-  runner: CommandRunner;
+  /**
+   * Runs upstream's import-only config generation over `countries` and rejects
+   * with its output. The caller owns HOW that happens — a private runner
+   * service for the daemon, the tools container for the CLI — so this module
+   * never assembles an argv or names an interpreter.
+   */
+  runCheck: (countries: string[]) => Promise<void>;
   logger: TransitousLogger;
   /** Backstop against an unexpected non-terminating loop. */
   maxIterations?: number;
@@ -100,7 +106,8 @@ export interface PruneUnresolvableSourcesOptions {
  * re-runs until the check passes (the script exits at the first unresolvable
  * source, so ids surface one batch at a time). Returns the skipped source ids.
  *
- * `runner` may execute the script directly (daemon) or inside a container (CLI).
+ * `runCheck` may dispatch to the private runner service (daemon) or run the
+ * script inside the tools container (CLI).
  */
 export async function pruneUnresolvableSources(
   opts: PruneUnresolvableSourcesOptions,
@@ -109,16 +116,7 @@ export async function pruneUnresolvableSources(
   const skipped: string[] = [];
   for (let i = 0; i < cap; i++) {
     try {
-      await opts.runner(
-        "python3",
-        [
-          "./src/generate-motis-config.py",
-          "--import-only",
-          "--skip-missing-files",
-          ...opts.countries,
-        ],
-        { cwd: opts.catalogDir, stdio: "pipe" },
-      );
+      await opts.runCheck(opts.countries);
       return skipped; // Everything resolves — fetch + config-gen are safe.
     } catch (err) {
       const ids = parseUnresolvableIds(resolveErrorText(err));

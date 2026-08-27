@@ -9,6 +9,7 @@
   "container": {
     "image": "ghcr.io/motis-project/motis",
     "tag": "2.11.0",
+    "digest": "sha256:b0dc7172b62f2a35c95b9fae2d33b7eb812e699d2293af231d680446e3a805b5",
     "containerName": "motis-staging",
     "expose": [8080],
     "user": "${UID:-1000}:${GID:-1000}",

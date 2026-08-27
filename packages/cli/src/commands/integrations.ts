@@ -9,8 +9,6 @@ import {
 } from "node:fs";
 import { join } from "node:path";
 import {
-  buildIntegration,
-  buildIntegrationBackend,
   listIntegrations as coreListIntegrations,
   type IntegrationSummary,
   installIntegration,
@@ -41,14 +39,12 @@ export function formatIntegrationsTable(rows: IntegrationSummary[]): string {
       { key: "version", header: "Version" },
       { key: "quality", header: "Quality" },
       { key: "name", header: "Name" },
-      { key: "bundle", header: "Bundle" },
     ],
     rows.map((r) => ({
       id: r.id,
       version: r.version,
       quality: r.quality,
       name: r.name,
-      bundle: r.hasBundle ? "built" : "—",
     })),
   );
 }
@@ -164,17 +160,15 @@ export function registerIntegrationsCommands(program: Command): void {
 
   integrations
     .command("install <source>")
-    .description("Install a community integration from source or a prebuilt .tar.gz artifact")
+    .description("Install a declarative community integration from source or a .tar.gz artifact")
     .option("--ref <ref>", "Branch or tag to clone (Git sources only)")
     .option("--artifact", "Treat source as a prebuilt OpenMapX integration artifact")
     .option("--sha256 <hash>", "Expected sha256 for an artifact install")
-    .option("--no-build", "Skip building frontend/backend bundle files during source install")
     .action(
       async (
         source: string,
         options: {
           ref?: string;
-          build?: boolean;
           artifact?: boolean;
           sha256?: string;
         },
@@ -187,28 +181,12 @@ export function registerIntegrationsCommands(program: Command): void {
             sourceKind: options.artifact ? "artifact" : "source",
             ref: options.ref,
             artifactSha256: options.sha256,
-            buildFrontend: !options.artifact && options.build !== false,
-            buildBackend: !options.artifact && options.build !== false,
             onLog: streamLog,
           });
           log.ok(
             `${result.replaced ? "Replaced" : "Installed"} integration ${kleur.bold(result.id)}`,
           );
           log.dim(result.directory);
-          if (result.build) {
-            if (result.build.skipped) {
-              log.dim(`Frontend bundle skipped: ${result.build.reason ?? "not needed"}`);
-            } else {
-              log.ok(`Frontend bundle written → ${result.build.bundlePath}`);
-            }
-          }
-          if (result.backendBuild) {
-            if (result.backendBuild.skipped) {
-              log.dim(`Backend bundle skipped: ${result.backendBuild.reason ?? "not needed"}`);
-            } else {
-              log.ok(`Backend bundle written → ${result.backendBuild.bundlePath}`);
-            }
-          }
           log.info("");
           log.info("Next steps:");
           log.dim("  • Restart app-api so the integration host picks up the new manifest:");
@@ -270,50 +248,16 @@ export function registerIntegrationsCommands(program: Command): void {
     });
 
   integrations
-    .command("build <id>")
-    .description("Build frontend and backend bundles for a community integration")
-    .action(async (id: string) => {
-      const paths = repoPaths();
-      try {
-        const frontend = await buildIntegration({ rootDir: paths.root, id, onLog: streamLog });
-        const backend = await buildIntegrationBackend({
-          rootDir: paths.root,
-          id,
-          onLog: streamLog,
-        });
-        if (frontend.skipped) {
-          log.info(`${id}: frontend ${frontend.reason ?? "skipped"}`);
-        } else {
-          log.ok(`${id}: frontend bundle written → ${frontend.bundlePath}`);
-        }
-        if (backend.skipped) {
-          log.info(`${id}: backend ${backend.reason ?? "skipped"}`);
-        } else {
-          log.ok(`${id}: backend bundle written → ${backend.bundlePath}`);
-        }
-      } catch (err) {
-        log.err(`build failed: ${(err as Error).message}`);
-        process.exit(1);
-      }
-    });
-
-  integrations
     .command("package <source>")
-    .description("Create a prebuilt .tar.gz artifact for admin/production installs")
+    .description("Create a declarative .tar.gz artifact for admin/production installs")
     .requiredOption("--out <file>", "Artifact output path")
-    .option(
-      "--no-build",
-      "Require existing dist/frontend/index.js and dist/backend/index.mjs instead of building",
-    )
-    .action(async (source: string, options: { out: string; build?: boolean }) => {
+    .action(async (source: string, options: { out: string }) => {
       const paths = repoPaths();
       try {
         const result = await packageIntegration({
           rootDir: paths.root,
           source,
           outFile: options.out,
-          buildFrontend: options.build !== false,
-          buildBackend: options.build !== false,
           onLog: streamLog,
         });
         log.ok(`Packaged integration ${kleur.bold(result.id)}`);

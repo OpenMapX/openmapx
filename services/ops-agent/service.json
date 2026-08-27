@@ -1,0 +1,69 @@
+{
+  "id": "ops-agent",
+  "name": "OpenMapX Operations Agent",
+  "version": "1.0.0",
+  "description": "Private typed broker for trusted Docker and host-repository operations.",
+  "license": "AGPL-3.0-or-later",
+  "quality": "built-in",
+  "container": {
+    "image": "ghcr.io/openmapx/ops-agent",
+    "tag": "latest",
+    "expose": [4300],
+    "user": "${UID:-1000}:${GID:-1000}",
+    "environment": {
+      "HOME": "/home/node",
+      "HOST": "0.0.0.0",
+      "PORT": "4300",
+      "OPENMAPX_ROOT_DIR": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
+      "OPENMAPX_ENABLED_SERVICES": "${OPENMAPX_ENABLED_SERVICES:-traefik,well-known,app-api,app-web,postgis,redis,data-manager}",
+      "OPENMAPX_REGION": "${OPENMAPX_REGION:-europe/germany}",
+      "OPENMAPX_ALLOWED_REGIONS": "${OPENMAPX_ALLOWED_REGIONS:-europe/germany}",
+      "OPENMAPX_ALLOWED_COUNTRIES": "${OPENMAPX_ALLOWED_COUNTRIES:-DE}",
+      "DOCKER_CONFIG": "/home/node/.docker",
+      "OPS_AGENT_API_TOKEN_FILE": "/run/secrets/ops-agent-api-token",
+      "OPS_AGENT_DATA_MANAGER_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
+      "OPS_TRUSTED_CONFIG_DIR": "/var/lib/openmapx/trusted-config"
+    },
+    "capDrop": ["ALL"],
+    "memory": "256m",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/health",
+      "port": 4300,
+      "interval": "15s",
+      "timeout": "3s",
+      "retries": 5,
+      "startPeriod": "10s"
+    }
+  },
+  "bindMounts": [
+    {
+      "source": "@infra:data/ops-agent/trusted-config",
+      "target": "/var/lib/openmapx/trusted-config",
+      "readOnly": false
+    },
+    {
+      "source": "@infra:secrets/ops-agent-api-token",
+      "target": "/run/secrets/ops-agent-api-token",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/ops-agent-data-manager-token",
+      "target": "/run/secrets/ops-agent-data-manager-token",
+      "readOnly": true
+    },
+    { "source": "@docker-socket", "target": "/var/run/docker.sock", "readOnly": false },
+    {
+      "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — ops-agent renders and applies trusted local stack configuration}",
+      "target": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}",
+      "readOnly": false
+    },
+    {
+      "source": "${OPENMAPX_DOCKER_CONFIG_DIR:-/root/.docker}",
+      "target": "/home/node/.docker",
+      "readOnly": true
+    }
+  ],
+  "ui": { "category": "infrastructure" }
+}

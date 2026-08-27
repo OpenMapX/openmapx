@@ -255,13 +255,3 @@ export function findHostedGbfsFeedIds(configText: string): string[] {
   }
   return [...ids].sort();
 }
-
-/** @deprecated Use {@link rewriteHostedFeedProxy}. */
-export function rewriteRtUrls(
-  configText: string,
-  feedProxyUrl: string,
-  feedIds?: ReadonlySet<string>,
-): { text: string; replaced: number } {
-  const result = rewriteHostedFeedProxy(configText, feedProxyUrl, feedIds);
-  return { text: result.text, replaced: result.counts.realtimeUrls };
-}

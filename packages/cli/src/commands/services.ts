@@ -6,6 +6,11 @@ import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import { expandPresets, UnknownPresetError } from "../lib/presets";
+import {
+  ensureReleaseOverlay,
+  touchesReleasePinnedServices,
+  unpinnedReleaseWarning,
+} from "../lib/release";
 import { buildServices } from "../lib/service-builds";
 import {
   applyServiceSelection,
@@ -380,6 +385,19 @@ export function registerServicesCommands(program: Command): void {
         log.err(`prepare/start failed: ${(err as Error).message}`);
         process.exit(1);
       }
+      if (touchesReleasePinnedServices(allIds)) {
+        const overlay = await ensureReleaseOverlay();
+        if (overlay.status === "resolved") {
+          log.ok(`Pinned release ${overlay.release} → ${overlay.path}`);
+        } else if (overlay.status === "unpinned") {
+          log.err(unpinnedReleaseWarning(overlay.reason));
+          process.exit(1);
+        } else if (overlay.status === "disabled") {
+          log.dim(
+            "Release pinning disabled (OPENMAPX_RELEASE_MANIFEST_IMAGE is empty); using manifest image tags.",
+          );
+        }
+      }
       const code = await dockerComposeStream(["up", "-d", ...allIds]);
       process.exit(code);
     });
@@ -417,7 +435,7 @@ export function registerServicesCommands(program: Command): void {
   services
     .command("update [ids...]")
     .description(
-      "Pull latest images and replace one or more services (render + hardlinks + docker compose up -d --force-recreate)",
+      "Pull selected release/local images and replace one or more services (render + hardlinks + docker compose up -d --force-recreate)",
     )
     .option("--preset <names>", "Comma/space-separated preset names")
     .action(async (ids: string[], options: { preset?: string }) => {
@@ -447,6 +465,22 @@ export function registerServicesCommands(program: Command): void {
       } catch (err) {
         log.err(`prepare/update failed: ${(err as Error).message}`);
         process.exit(1);
+      }
+
+      if (touchesReleasePinnedServices(allIds)) {
+        // An update of release services must move the set to one coherent
+        // digest-pinned release.
+        const overlay = await ensureReleaseOverlay();
+        if (overlay.status === "resolved") {
+          log.ok(`Pinned release ${overlay.release} → ${overlay.path}`);
+        } else if (overlay.status === "unpinned") {
+          log.err(unpinnedReleaseWarning(overlay.reason));
+          process.exit(1);
+        } else if (overlay.status === "disabled") {
+          log.warn(
+            "Release pinning is disabled (OPENMAPX_RELEASE_MANIFEST_IMAGE is empty); this update uses the manifest image tags instead of a digest-pinned release.",
+          );
+        }
       }
 
       const pullCode = await dockerComposeStream(["pull", ...allIds]);

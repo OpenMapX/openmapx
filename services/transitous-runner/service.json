@@ -1,0 +1,68 @@
+{
+  "id": "transitous-runner",
+  "name": "Transitous Runner",
+  "version": "1.0.0",
+  "description": "Private, unprivileged worker that executes the upstream Transitous catalog scripts under a fixed entrypoint.",
+  "license": "AGPL-3.0-or-later",
+  "quality": "built-in",
+  "container": {
+    "image": "ghcr.io/openmapx/transitous-runner",
+    "tag": "latest",
+    "expose": [4400],
+    "user": "${UID:-1000}:${GID:-1000}",
+    "environment": {
+      "HOME": "/staging",
+      "TRANSITOUS_RUNNER_PORT": "4400",
+      "TRANSITOUS_RUNNER_CATALOG_DIR": "/data/.transitous-catalog",
+      "TRANSITOUS_RUNNER_STAGING_DIR": "/staging",
+      "TRANSITOUS_RUNNER_CAPABILITY_KEY_FILE": "/run/secrets/transitous-runner-capability",
+      "TRANSITOUS_FEED_PROXY_KEY_FILE": "/secrets/transitous-feed-proxy.age"
+    },
+    "capDrop": ["ALL"],
+    "memory": "4g",
+    "restart": "unless-stopped",
+    "healthcheck": {
+      "type": "http",
+      "path": "/health",
+      "port": 4400,
+      "interval": "15s",
+      "timeout": "3s",
+      "retries": 5,
+      "startPeriod": "10s"
+    }
+  },
+  "bindMounts": [
+    {
+      "source": "@infra:data/.transitous-catalog",
+      "target": "/data/.transitous-catalog",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:data/gtfs",
+      "target": "/data/gtfs",
+      "readOnly": false
+    },
+    {
+      "source": "@infra:data/.transitous-downloads",
+      "target": "/data/.transitous-downloads",
+      "readOnly": false
+    },
+    {
+      "source": "@infra:data/transitous-runner/staging",
+      "target": "/staging",
+      "readOnly": false
+    },
+    {
+      "source": "@infra:secrets/transitous-runner-capability",
+      "target": "/run/secrets/transitous-runner-capability",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/transitous-feed-proxy.age",
+      "target": "/secrets/transitous-feed-proxy.age",
+      "readOnly": true,
+      "optional": true
+    }
+  ],
+  "ui": { "category": "infrastructure" }
+}

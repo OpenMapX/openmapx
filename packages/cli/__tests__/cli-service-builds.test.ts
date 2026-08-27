@@ -209,8 +209,8 @@ describe("buildServices", () => {
 });
 
 describe("resolveDataBuildServiceId", () => {
-  it("maps legacy build kinds onto canonical service ids", () => {
-    expect(resolveDataBuildServiceId("tiles")).toBe("tileserver");
+  it("accepts canonical service ids only", () => {
+    expect(resolveDataBuildServiceId("tiles")).toBeUndefined();
     expect(resolveDataBuildServiceId("tileserver")).toBe("tileserver");
     expect(resolveDataBuildServiceId("osrm")).toBe("osrm");
     expect(resolveDataBuildServiceId("unknown")).toBeUndefined();

@@ -1,6 +1,7 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
+import { assertCliDeploymentSecret } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
@@ -10,6 +11,19 @@ interface PsLine {
   Name?: string;
   State?: string;
   Health?: string;
+}
+
+type DockerComposeResult = Awaited<ReturnType<typeof dockerCompose>>;
+
+export async function dockerComposeAfterDeploymentSecretCheck(
+  args: string[],
+  dependencies: {
+    env?: NodeJS.ProcessEnv;
+    dockerCompose?: (args: string[]) => Promise<DockerComposeResult>;
+  } = {},
+): Promise<DockerComposeResult> {
+  assertCliDeploymentSecret(dependencies.env ?? process.env);
+  return (dependencies.dockerCompose ?? dockerCompose)(args);
 }
 
 /**
@@ -164,7 +178,7 @@ export function registerCheckCommand(program: Command): void {
       const permissionWarning = envFilePermissionWarning(envPath, envMode);
       if (permissionWarning) log.warn(permissionWarning);
 
-      const result = await dockerCompose(["ps", "--format", "json"]);
+      const result = await dockerComposeAfterDeploymentSecretCheck(["ps", "--format", "json"]);
       if (result.exitCode !== 0) {
         log.err(result.stderr || "docker compose ps failed");
         process.exit(result.exitCode);

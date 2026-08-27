@@ -1,7 +1,11 @@
 FROM docker.io/golang:1.27rc3@sha256:6a284ec7a8c67eff5882aaa53b07a57ee397553f8c85a92e5fc97c517f12201f AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
-RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 # snapshot-5
+WORKDIR /tmp/gtfsclean-build
+RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
+    GOPROXY=direct go get github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 && \
+    GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
+    GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
 FROM docker.io/debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
@@ -11,15 +15,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # `motis`/`motis-staging` services run and the `@motis-project/motis-client`
 # version in package.json.
 ARG MOTIS_VERSION=v2.11.0
-# Per-arch SHA256 of the corresponding motis-linux-<arch>.tar.bz2 release
-# asset. When non-empty for the target arch, the build fails if the
-# downloaded tarball's hash differs — protects against an in-flight retag /
-# yanked release silently pulling different bits. Empty defaults keep the
-# build working without operators having to chase hashes for each MOTIS bump;
-# CI should pass `--build-arg MOTIS_SHA256_<ARCH>=<hex>` for the arches it
-# publishes.
-ARG MOTIS_SHA256_AMD64=""
-ARG MOTIS_SHA256_ARM64=""
+# Reviewed per-architecture SHA256 values for the corresponding release assets.
+# A MOTIS bump must update both values; an unchecked build is never permitted.
+ARG MOTIS_SHA256_AMD64=508505d3f9cd2e872c763743c459cae4e0539fad14bf490e23251e013d3a6dfa
+ARG MOTIS_SHA256_ARM64=23aa8fd6568741e2bf35f92fb88b3c5c64baa1e05b3cb31f28ccdbe73ba6a110
 # `TARGETARCH` is auto-populated by BuildKit when building with buildx
 # (including for multi-platform manifests). Declaring it here makes it
 # available inside the RUN below.
@@ -33,7 +32,7 @@ RUN apt-get update -y \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
 
 COPY requirements.txt /tmp/requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/requirements.txt
+RUN pip3 install --no-cache-dir --require-hashes -r /tmp/requirements.txt
 
 COPY --from=build-gtfsclean /usr/local/bin/gtfsclean /usr/local/bin/gtfsclean
 
@@ -51,9 +50,7 @@ RUN mkdir -p /opt/motis \
        esac \
     && wget -qO /tmp/motis.tar.bz2 \
        "https://github.com/motis-project/motis/releases/download/${MOTIS_VERSION}/motis-linux-${MOTIS_ARCH}.tar.bz2" \
-    && if [ -n "$EXPECTED_SHA" ]; then \
-         echo "${EXPECTED_SHA}  /tmp/motis.tar.bz2" | sha256sum -c -; \
-       fi \
+    && echo "${EXPECTED_SHA}  /tmp/motis.tar.bz2" | sha256sum -c - \
     && tar tjf /tmp/motis.tar.bz2 > /dev/null \
     && tar -C /opt/motis -xjf /tmp/motis.tar.bz2 \
     && rm -f /tmp/motis.tar.bz2

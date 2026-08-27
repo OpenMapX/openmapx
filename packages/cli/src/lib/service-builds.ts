@@ -90,7 +90,7 @@ export interface BuildServicesOptions extends PlanServiceBuildsOptions {
 }
 
 function serviceImage(service: LoadedService): string {
-  return `${service.manifest.container.image}:${service.manifest.container.tag}`;
+  return coreServices.serviceContainerImageReference(service.manifest.container);
 }
 
 function requireService(registry: coreServices.ServiceRegistry, id: string): LoadedService {
@@ -167,7 +167,6 @@ export function getManifestBuildTarget(buildCommand: string | undefined): string
 
 export function resolveDataBuildServiceId(kind: string): string | undefined {
   const normalized = kind.trim().toLowerCase();
-  if (normalized === "tiles") return "tileserver";
   if (normalized in BUILT_IN_SERVICE_BUILD_HANDLERS) return normalized;
   return undefined;
 }

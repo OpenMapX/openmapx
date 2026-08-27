@@ -1,12 +1,40 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   buildProbeArgs,
   composeNetworkName,
   DEEP_PROBES,
+  dockerComposeAfterDeploymentSecretCheck,
   envFilePermissionWarning,
   PROBE_IMAGE,
   probeFailureDetail,
 } from "../src/commands/check";
+
+describe("check deployment-secret preflight", () => {
+  it("rejects before invoking Docker", async () => {
+    const docker = vi.fn();
+
+    await expect(
+      dockerComposeAfterDeploymentSecretCheck(["ps"], {
+        env: { POSTGRES_PASSWORD: "change-me" },
+        dockerCompose: docker,
+      }),
+    ).rejects.toThrow(/known-placeholder/);
+    expect(docker).not.toHaveBeenCalled();
+  });
+
+  it("continues to Docker for a valid fake deployment value", async () => {
+    const result = { stdout: "", stderr: "", exitCode: 0 };
+    const docker = vi.fn().mockResolvedValue(result);
+
+    await expect(
+      dockerComposeAfterDeploymentSecretCheck(["ps"], {
+        env: { POSTGRES_PASSWORD: "x".repeat(24), POSTGRES_USER: "postgres" },
+        dockerCompose: docker,
+      }),
+    ).resolves.toEqual(result);
+    expect(docker).toHaveBeenCalledOnce();
+  });
+});
 
 describe("buildProbeArgs", () => {
   it("builds args for a standalone `docker run` curl container on the compose network", () => {
