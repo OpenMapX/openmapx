@@ -1,7 +1,6 @@
 import type { LoadedIntegrationMeta } from "../types/integrationMeta";
 import {
   createOverlayStore,
-  getRegisteredOverlayIds,
   getRegisteredOverlayStore,
   type OverlayStoreBase,
   runInOverlayTransaction,
@@ -97,35 +96,6 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
         return current((s: OverlayStoreBase) => s.panelOpen && s.layerVisible);
       },
       excludes: overlay.excludes ?? [],
-    });
-  }
-
-  // Add overlays that have stores but may not have integration manifests yet
-  // (e.g., transit, tools) - these get basic entries with no exclusions
-  for (const id of getRegisteredOverlayIds()) {
-    if (overlayEntries.some((e) => e.id === id)) continue;
-    const storeId = id;
-    overlayEntries.push({
-      id: storeId,
-      getState: () => {
-        const current = getRegisteredOverlayStore(storeId) as StoreHook | undefined;
-        return current
-          ? current.getState()
-          : {
-              panelOpen: false,
-              layerVisible: false,
-              userRevision: 0,
-              openPanel: () => {},
-              closePanel: () => {},
-              setLayerVisible: () => {},
-            };
-      },
-      useActive: () => {
-        const current = getRegisteredOverlayStore(storeId) as StoreHook | undefined;
-        if (!current) return false;
-        return current((s: OverlayStoreBase) => s.panelOpen && s.layerVisible);
-      },
-      excludes: [],
     });
   }
 }

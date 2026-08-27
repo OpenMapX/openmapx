@@ -147,6 +147,7 @@ export function buildAppApiServiceEnv(
   enabledServices: LoadedService[],
   existingEnv: Record<string, unknown> = {},
   hostEnv: Record<string, string | undefined> = process.env,
+  trustedPassthroughKeys: Iterable<string> = [],
 ): Record<string, unknown> {
   const next: Record<string, unknown> = {
     ...existingEnv,
@@ -178,6 +179,14 @@ export function buildAppApiServiceEnv(
     if (APP_API_ENV_PASSTHROUGH_PREFIXES.some((prefix) => key.startsWith(prefix))) {
       next[key] = `\${${key}:-}`;
     }
+  }
+  // An ops-agent does not inherit the host's Compose `.env`, but it can derive
+  // the exact schema-backed variable names from its trusted registry. Emit
+  // placeholders for only those names; Compose resolves their values at stack
+  // application time without the snapshot carrying an environment map.
+  for (const key of trustedPassthroughKeys) {
+    if (!APP_API_ENV_PASSTHROUGH_PREFIXES.some((prefix) => key.startsWith(prefix))) continue;
+    next[key] = `\${${key}:-}`;
   }
 
   return next;

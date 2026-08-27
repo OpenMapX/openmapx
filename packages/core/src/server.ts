@@ -9,7 +9,7 @@
  * these symbols must import them from `@openmapx/core/server` instead:
  *
  *   ```ts
- *   import { repoPaths, services, gitShallowCloneAtomic } from "@openmapx/core/server";
+ *   import { repoPaths, services, gitShallowClone } from "@openmapx/core/server";
  *   ```
  */
 
@@ -25,20 +25,44 @@ export { fetchLegalConfig, type PublicLegalConfig } from "./api/legal-config";
 export { serverApiUrl } from "./api/server-url";
 // Git clone helpers (shared by community service repos + community integrations)
 export {
+  assertCloneWithinBudget,
+  assertGitTreeMetadataWithinBudget,
+  GIT_CLONE_MAX_ENTRIES,
+  GIT_CLONE_MAX_FILE_BYTES,
+  GIT_CLONE_MAX_PATH_BYTES,
+  GIT_CLONE_MAX_TOTAL_BYTES,
+  GIT_CLONE_TIMEOUT_MS,
+  GitCloneQuotaError,
   type GitShallowCloneOptions,
+  type GitShallowCloneResult,
   gitShallowClone,
-  gitShallowCloneAtomic,
+  gitShallowCloneSnapshot,
 } from "./git-clone";
 // Git URL validation (allow-list for community integration / service repo installs)
-export { ALLOWED_GIT_HOSTS, assertAllowedGitUrl, InvalidGitUrlError } from "./git-url";
-// Open-source license discovery (build-time generator + CLI packager)
-export { type LicenseNotice, type ScanLicensesOptions, scanLicenses } from "./licenses";
+export {
+  ALLOWED_GIT_HOSTS,
+  type AllowedGitUrl,
+  assertAllowedGitUrl,
+  canonicalGitUrl,
+  InvalidGitUrlError,
+} from "./git-url";
+export {
+  assertPosixProcessGroupsSupported,
+  monitorPosixProcessGroup,
+  type PosixProcessGroupChild,
+  type PosixProcessGroupExit,
+  type PosixProcessGroupLifecycle,
+} from "./posix-process-group";
 // Repo path resolution (shared by CLI + apps/api runtime code)
 export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
 // Service plugin system (manifest loader, compose renderer — all uses node:fs)
 export * as services from "./services";
 // Subprocess helper used by git-clone and the community-integration build step
-export { type SpawnWithBufferedLogsOptions, spawnWithBufferedLogs } from "./spawn";
+export {
+  redactProcessOutput,
+  type SpawnWithBufferedLogsOptions,
+  spawnWithBufferedLogs,
+} from "./spawn";
 export { categoryPlaceToPlace } from "./types/category";
 // Shared food-delivery wire contract (also re-exported from the client barrel).
 export type { DeliveryLinkKind, DeliveryProviderInfo } from "./types/delivery";
@@ -57,11 +81,25 @@ export {
   buildIntegrationAttribution,
   combineAttributions,
 } from "./utils/attribution";
+export {
+  type BoundedBinaryProxy,
+  type BoundedBinaryResponseOptions,
+  createBoundedBinaryProxyStream,
+  MAX_RASTER_TILE_BYTES,
+  MAX_VECTOR_TILE_BYTES,
+  RASTER_IMAGE_MEDIA_TYPES,
+  readBoundedBinaryResponse,
+  VECTOR_TILE_MEDIA_TYPES,
+} from "./utils/boundedBinaryResponse";
 export { applyHoursFilter } from "./utils/categoryFilter";
 export {
   DELIVERY_PROVIDER_HOSTS,
   deliveryProviderIdForHost,
 } from "./utils/deliveryProviderHosts";
+export {
+  createFatalProcessHandler,
+  type FatalProcessPorts,
+} from "./utils/fatalProcessPolicy";
 // Server-side geo helpers (great-circle distance, etc.).
 export { haversineKm } from "./utils/geo-server";
 export { bareDomain, toHttpUrl } from "./utils/httpUrl";
@@ -86,5 +124,6 @@ export {
   safeDownload,
   safeFetchJson,
   safeFetchJsonResponse,
+  safeFetchText,
 } from "./utils/safe-download";
 export { sectionSlug } from "./utils/sectionSlug";

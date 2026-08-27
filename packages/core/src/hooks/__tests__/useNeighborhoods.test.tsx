@@ -21,13 +21,11 @@ describe("useNeighborhoods", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(response);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.neighborhoods, {
-      west: "13.3",
-      south: "52.4",
-      east: "13.5",
-      north: "52.6",
-      lang: "en",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.neighborhoods,
+      { west: "13.3", south: "52.4", east: "13.5", north: "52.6", lang: "en" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("omits lang when not supplied", async () => {
@@ -41,6 +39,7 @@ describe("useNeighborhoods", () => {
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.neighborhoods,
       expect.not.objectContaining({ lang: expect.anything() }),
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
   });
 

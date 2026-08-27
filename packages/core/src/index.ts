@@ -14,7 +14,13 @@ export * from "./feed-id";
 // `node:fs` and would break the client bundle if re-exported here.
 // `repoPaths`, the `services` namespace, and `spawnWithBufferedLogs` use node:fs
 // / node:child_process — they live in `./server`, not this client-reachable barrel.
-export { ALLOWED_GIT_HOSTS, assertAllowedGitUrl, InvalidGitUrlError } from "./git-url";
+export {
+  ALLOWED_GIT_HOSTS,
+  type AllowedGitUrl,
+  assertAllowedGitUrl,
+  canonicalGitUrl,
+  InvalidGitUrlError,
+} from "./git-url";
 export * from "./hooks";
 export {
   type ActiveAlert,

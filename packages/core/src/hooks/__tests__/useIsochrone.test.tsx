@@ -22,12 +22,11 @@ describe("useIsochrone", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(isochrone);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.isochrone, {
-      lat: "52.5",
-      lng: "13.4",
-      mode: "driving",
-      contours: "5,10,15",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.isochrone,
+      { lat: "52.5", lng: "13.4", mode: "driving", contours: "5,10,15" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("does not fire when origin is null", () => {

@@ -28,26 +28,57 @@ export class InvalidGitUrlError extends Error {
   }
 }
 
+export interface AllowedGitUrl {
+  /** The parsed URL after normalization. */
+  url: URL;
+  /** Credential-, query- and fragment-free string safe to log, store, and hash. */
+  canonical: string;
+  /** Lowercased hostname, safe to include in an error. */
+  hostname: string;
+}
+
 /**
- * Validate that `url` is an https URL pointing at one of the allowlisted hosts.
- * Returns the parsed `URL` on success; throws `InvalidGitUrlError` otherwise.
+ * Validate that `url` is a credential-free https URL pointing at an allowlisted
+ * host, and return its canonical form.
+ *
+ * Errors deliberately state only the rule that failed plus — when it is already
+ * known safe — the normalized hostname. The raw input is never echoed: it may
+ * carry a token in userinfo, query, or fragment.
  */
-export function assertAllowedGitUrl(url: string): URL {
+export function assertAllowedGitUrl(url: string): AllowedGitUrl {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
-    throw new InvalidGitUrlError(`Not a valid URL: ${url}`);
+    throw new InvalidGitUrlError("Not a valid URL");
   }
   if (parsed.protocol !== "https:") {
-    throw new InvalidGitUrlError(
-      `Only https:// repository URLs are supported (got ${parsed.protocol})`,
-    );
+    throw new InvalidGitUrlError("Only https:// repository URLs are supported");
   }
-  if (!ALLOWED_GIT_HOSTS.has(parsed.host)) {
-    throw new InvalidGitUrlError(
-      `Host ${parsed.host} is not in the allowlist (${[...ALLOWED_GIT_HOSTS].join(", ")})`,
-    );
+  if (parsed.username !== "" || parsed.password !== "") {
+    throw new InvalidGitUrlError("Repository URL must not embed credentials");
   }
-  return parsed;
+  if (parsed.search !== "") {
+    throw new InvalidGitUrlError("Repository URL must not carry a query string");
+  }
+  if (parsed.hash !== "") {
+    throw new InvalidGitUrlError("Repository URL must not carry a fragment");
+  }
+  // `URL` already lowercases the hostname and drops the default :443, so
+  // `host` is the normalized authority. A non-default port is a different
+  // endpoint and is not allowlisted.
+  const hostname = parsed.hostname.toLowerCase();
+  if (parsed.port !== "") {
+    throw new InvalidGitUrlError(`Repository host ${hostname} must use the default https port`);
+  }
+  if (!ALLOWED_GIT_HOSTS.has(hostname)) {
+    throw new InvalidGitUrlError(`Host ${hostname} is not in the repository allowlist`);
+  }
+  const canonical = `https://${hostname}${parsed.pathname.replace(/\/{2,}/g, "/")}`;
+  return { url: new URL(canonical), canonical, hostname };
+}
+
+/** Convenience wrapper returning only the canonical string. */
+export function canonicalGitUrl(url: string): string {
+  return assertAllowedGitUrl(url).canonical;
 }

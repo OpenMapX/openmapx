@@ -25,7 +25,81 @@ function svc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedS
   };
 }
 
+function communitySvc(id: string, opts: Partial<LoadedService["manifest"]> = {}): LoadedService {
+  return {
+    ...svc(id, { ...opts, quality: "community" }),
+    isBuiltIn: false,
+  };
+}
+
 describe("renderServiceSnippet", () => {
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
+  it("escapes Compose interpolation in every community-controlled command and environment scalar", () => {
+    const snippet = renderServiceSnippet(
+      communitySvc("community-env", {
+        container: {
+          image: "t/community-env",
+          tag: "latest",
+          command: ["echo", "${POSTGRES_PASSWORD}", "$POSTGRES_PASSWORD"],
+          entrypoint: ["sh", "-c", "echo ${POSTGRES_PASSWORD} $POSTGRES_PASSWORD"],
+          environment: {
+            "${POSTGRES_PASSWORD}": "$POSTGRES_PASSWORD",
+            PLAIN_KEY: "prefix-${POSTGRES_PASSWORD}-$POSTGRES_PASSWORD",
+          },
+          healthcheck: {
+            type: "exec",
+            command: ["sh", "-c", "echo ${POSTGRES_PASSWORD} $POSTGRES_PASSWORD"],
+          },
+        },
+      }),
+      {
+        resolvedServiceConfigs: new Map([
+          ["community-env", { $OPERATOR_KEY: "${OPERATOR_VALUE} $OPERATOR_VALUE" }],
+        ]),
+      },
+    );
+
+    expect(snippet.command).toEqual(["echo", "$${POSTGRES_PASSWORD}", "$$POSTGRES_PASSWORD"]);
+    expect(snippet.entrypoint).toEqual([
+      "sh",
+      "-c",
+      "echo $${POSTGRES_PASSWORD} $$POSTGRES_PASSWORD",
+    ]);
+    expect(snippet.environment).toEqual({
+      "$${POSTGRES_PASSWORD}": "$$POSTGRES_PASSWORD",
+      PLAIN_KEY: "prefix-$${POSTGRES_PASSWORD}-$$POSTGRES_PASSWORD",
+      $$OPERATOR_KEY: "$${OPERATOR_VALUE} $$OPERATOR_VALUE",
+    });
+    expect(snippet.healthcheck?.test).toEqual([
+      "CMD",
+      "sh",
+      "-c",
+      "echo $${POSTGRES_PASSWORD} $$POSTGRES_PASSWORD",
+    ]);
+  });
+
+  it("preserves Compose interpolation for equivalent first-party command and environment scalars", () => {
+    const snippet = renderServiceSnippet(
+      svc("first-party-env", {
+        container: {
+          image: "t/first-party-env",
+          tag: "latest",
+          command: ["echo", "${NAME}"],
+          entrypoint: ["sh", "-c", "echo ${NAME}"],
+          environment: { "${NAME}": "${NAME}" },
+          healthcheck: { type: "exec", command: ["echo", "${NAME}"] },
+        },
+      }),
+      {},
+    );
+
+    expect(snippet.command).toEqual(["echo", "${NAME}"]);
+    expect(snippet.entrypoint).toEqual(["sh", "-c", "echo ${NAME}"]);
+    expect(snippet.environment).toEqual({ "${NAME}": "${NAME}" });
+    expect(snippet.healthcheck?.test).toEqual(["CMD", "echo", "${NAME}"]);
+  });
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
+
   it("routes a custom host by itself or with an explicit path and reuses it for additional routes", () => {
     const service = svc("timeline", {
       container: { image: "t/timeline", tag: "latest", expose: [3000] },
@@ -79,7 +153,7 @@ describe("renderServiceSnippet", () => {
     ).toThrow(/Invalid proxy hostname/);
   });
 
-  it("preserves legacy proxy rules byte-for-byte when no custom host is declared", () => {
+  it("renders the default path-based proxy rule when no custom host is declared", () => {
     const service = svc("alpha", { exposure: { proxy: { enabled: true } } });
     expect(resolveProxyHost(service.manifest, { domain: "example.com" })).toBeUndefined();
     expect(
@@ -136,6 +210,70 @@ describe("renderServiceSnippet", () => {
     expect(snippet.restart).toBe("unless-stopped");
     expect(snippet.networks).toEqual(["openmapx"]);
     expect(snippet.deploy?.resources?.limits?.memory).toBe("512m");
+  });
+
+  it("isolates each community service on one deterministic private network", () => {
+    const { composeYaml } = renderCompose(
+      [svc("redis"), communitySvc("weather-feed"), communitySvc("bike-share")],
+      {},
+    );
+    const doc = parseYaml(composeYaml) as {
+      services: Record<string, { networks: string[] }>;
+      networks: Record<string, unknown>;
+    };
+
+    expect(doc.services.redis.networks).toEqual(["openmapx"]);
+    expect(doc.services["weather-feed"].networks).toEqual(["openmapx-community-weather-feed"]);
+    expect(doc.services["bike-share"].networks).toEqual(["openmapx-community-bike-share"]);
+    expect(doc.networks).toHaveProperty("openmapx-community-weather-feed");
+    expect(doc.networks).toHaveProperty("openmapx-community-bike-share");
+    expect(doc.services["weather-feed"].networks).not.toContain("openmapx");
+    expect(doc.services["bike-share"].networks).not.toContain("openmapx");
+  });
+
+  it("lets only an audited built-in explicitly join a named community network", () => {
+    const extension = communitySvc("weather-feed");
+    const bridge = svc("audited-bridge", {
+      communityNetworkAccess: ["weather-feed"],
+    } as never);
+    const { composeYaml } = renderCompose([bridge, extension], {});
+    const doc = parseYaml(composeYaml) as {
+      services: Record<string, { networks: string[] }>;
+    };
+
+    expect(doc.services["audited-bridge"].networks).toEqual([
+      "openmapx",
+      "openmapx-community-weather-feed",
+    ]);
+    expect(doc.services["weather-feed"].networks).toEqual(["openmapx-community-weather-feed"]);
+  });
+
+  it("rejects an audited bridge target that is not enabled in the rendered stack", () => {
+    const extension = { ...communitySvc("weather-feed"), enabled: false };
+    const bridge = svc("audited-bridge", {
+      communityNetworkAccess: ["weather-feed"],
+    });
+    expect(() => renderCompose([bridge, extension], {})).toThrow(
+      /not an enabled community service/,
+    );
+  });
+
+  it("fails closed when different community ids normalize to the same network", () => {
+    expect(() =>
+      renderCompose([communitySvc("weather.feed"), communitySvc("weather-feed")], {}),
+    ).toThrow(/network.*collision/i);
+  });
+
+  it("renders an immutable image digest while retaining the human-readable tag", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    const snippet = renderServiceSnippet(
+      svc("alpha", {
+        container: { image: "t/alpha", tag: "1.2.3", digest },
+      }),
+      {},
+    );
+
+    expect(snippet.image).toBe(`t/alpha:1.2.3@${digest}`);
   });
 
   it("omits container_name by default and emits it when containerName is set", () => {
@@ -350,6 +488,19 @@ describe("renderServiceSnippet", () => {
       {},
     );
     expect(snippet.volumes).toEqual(["/repo/services/svc/config/file.json:/etc/file.json:ro"]);
+  });
+
+  it("keeps @infra authority rooted at infra when compose output lives in an atomic generation", () => {
+    const snippet = renderServiceSnippet(
+      svc("data-manager", {
+        bindMounts: [{ source: "@infra:data/osm", target: "/data/osm", readOnly: false }],
+      }),
+      {
+        composeOutDir: "/repo/infra/docker/.trusted-config-current",
+        infraDir: "/repo/infra/docker",
+      },
+    );
+    expect(snippet.volumes).toEqual(["../data/osm:/data/osm"]);
   });
 
   describe("optional bindMounts", () => {

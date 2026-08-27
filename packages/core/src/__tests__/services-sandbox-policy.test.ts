@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -53,18 +53,82 @@ function firstPartyService(
 
 // biome-ignore-start lint/suspicious/noTemplateCurlyInString: these are literal Docker Compose references under test
 describe("third-party static sandbox policy", () => {
-  it("rejects Compose-variable bind sources while preserving first-party host-path mounts", () => {
-    const external = validateExternal({
-      id: "evil",
-      name: "Evil",
+  it("rejects a community proxy request with a stable validation code", () => {
+    const result = validateExternal({
+      id: "community-proxy",
+      name: "Community Proxy",
+      version: "1.0.0",
+      quality: "community",
+      container: { image: "alpine", tag: "latest", expose: [8080] },
+      exposure: { proxy: { enabled: true } },
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "community_proxy_forbidden: exposure.proxy.enabled is not allowed for community services",
+    );
+  });
+
+  it("allows a community manifest without proxy exposure", () => {
+    const result = validateExternal({
+      id: "community-private",
+      name: "Community Private",
+      version: "1.0.0",
+      quality: "community",
+      container: { image: "alpine", tag: "latest", expose: [8080] },
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects writable community bind mounts with a stable validation code", () => {
+    const result = validateExternal({
+      id: "community-writable-bind",
+      name: "Community Writable Bind",
       version: "1.0.0",
       quality: "community",
       container: { image: "alpine", tag: "latest" },
-      bindMounts: [{ source: "${NOT_SET_ANYWHERE:-/}", target: "/hostfs", readOnly: false }],
+      bindMounts: [{ source: "runtime/state", target: "/state", readOnly: false }],
     });
-    expect(external.valid).toBe(false);
-    expect(external.errors.join(" ")).toMatch(/Compose-variable paths/);
 
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+    );
+  });
+
+  it("rejects read-only community bind mounts with a stable validation code", () => {
+    const result = validateExternal({
+      id: "community-readonly-bind",
+      name: "Community Readonly Bind",
+      version: "1.0.0",
+      quality: "community",
+      container: { image: "alpine", tag: "latest" },
+      bindMounts: [
+        { source: "config/settings.json", target: "/etc/settings.json", readOnly: true },
+      ],
+    });
+
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+    );
+  });
+
+  it("keeps namespaced community named volumes valid", () => {
+    const result = validateExternal({
+      id: "community-state",
+      name: "Community State",
+      version: "1.0.0",
+      quality: "community",
+      container: { image: "alpine", tag: "latest" },
+      volumes: [{ name: "openmapx-community-state-data", mountAt: "/state" }],
+    });
+
+    expect(result.valid).toBe(true);
+  });
+
+  it("preserves first-party host-path mounts", () => {
     const firstParty = validateFirstParty({
       id: "app-api",
       name: "App API",
@@ -128,14 +192,13 @@ describe("third-party static sandbox policy", () => {
 });
 
 describe("third-party render sandbox", () => {
-  it("rejects a bind source that escapes through a shipped symlink", () => {
+  it("rejects a hand-built community bind mount at the render boundary", () => {
     const directory = tempServiceDir();
-    symlinkSync("/", join(directory, "linkdir"));
     const service = externalService(directory.split("/").pop() ?? "evil", directory, {
-      bindMounts: [{ source: "linkdir/etc", target: "/hostetc" }],
+      bindMounts: [{ source: "runtime/state", target: "/state" }],
     });
 
-    expect(() => renderCompose([service], {})).toThrow(/escapes its service directory/);
+    expect(() => renderCompose([service], {})).toThrow(/community_bind_mount_forbidden/);
   });
 
   it("rejects aliases that squat on another service and allows the service's own id", () => {
@@ -169,6 +232,20 @@ describe("third-party render sandbox", () => {
       container: { image: "alpine", tag: "latest", privileged: true },
     });
     expect(() => renderServiceSnippet(service, {})).toThrow(/privileged/);
+  });
+
+  it("rejects hand-built community network access at the render boundary", () => {
+    const service = externalService("evil", tempServiceDir(), {
+      communityNetworkAccess: ["trusted-extension"],
+    } as never);
+    expect(() => renderServiceSnippet(service, {})).toThrow(/community_network_access_forbidden/);
+  });
+
+  it("rejects a hand-built empty community network declaration at the render boundary", () => {
+    const service = externalService("evil", tempServiceDir(), {
+      communityNetworkAccess: [],
+    });
+    expect(() => renderServiceSnippet(service, {})).toThrow(/community_network_access_forbidden/);
   });
 
   it("rejects the hostile manifest at validation and render boundaries", () => {

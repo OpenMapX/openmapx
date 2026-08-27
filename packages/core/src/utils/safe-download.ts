@@ -1,5 +1,9 @@
+import { randomBytes } from "node:crypto";
 import { lookup as dnsLookup } from "node:dns/promises";
 import { createWriteStream } from "node:fs";
+import { rename, rm } from "node:fs/promises";
+import { BlockList, isIP, SocketAddress } from "node:net";
+import { basename, dirname, isAbsolute, join } from "node:path";
 import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import {
@@ -15,76 +19,147 @@ import { assertHttpProtocol, validatePublicUrl } from "./validate-url";
 export { hostMatchesAllowlist } from "./fetchWithRedirects";
 
 export interface SafeDownloadOptions {
-  /** Absolute path of the file to write. */
-  destPath: string;
-  /** Maximum bytes to accept; aborts mid-stream once exceeded. Default: 2 GB. */
-  maxBytes?: number;
-  /** Per-request timeout forwarded to the initial and each redirect fetch. Default: 5 minutes. */
-  timeoutMs?: number;
-  /** Cap on redirect hops. Default: 5. */
-  maxRedirects?: number;
-  /** Optional allowlist for redirect targets (passed through to fetchWithRedirects). */
-  allowedRedirectHosts?: string[];
-  /** Extra headers (e.g. `User-Agent`) to send on the first request. */
-  headers?: Record<string, string>;
-  /** Follow non-standard 203+Location redirects (some transit APIs). Default: false. */
-  follow203Redirect?: boolean;
+  url: URL;
+  /** Absolute final path. Bytes are published with a same-directory atomic rename. */
+  destination: string;
+  headers?: Readonly<Record<string, string>>;
+  /** Total wall-clock deadline across DNS, redirects, and body streaming. */
+  timeoutMs: number;
+  maxBytes: number;
+  /** Empty means defer media validation to the downstream parser. */
+  allowedContentTypes: readonly string[];
+  credentialPolicy: "none" | "same-origin";
+  signal?: AbortSignal;
 }
 
 export interface SafeDownloadResult {
   bytesWritten: number;
-  finalUrl: string;
+  finalUrl: URL;
   contentType: string | null;
 }
 
-async function cancelResponseBody(response: Response): Promise<boolean> {
+const SAFE_DOWNLOAD_CLEANUP_ATTEMPTS = 3;
+const SAFE_DOWNLOAD_CLEANUP_ATTEMPT_MS = 250;
+const SAFE_DOWNLOAD_CLEANUP_TOTAL_MS = 1_500;
+
+async function boundedSafeCleanupAttempt<T>(
+  operation: () => Promise<T>,
+  deadlineAt: number,
+): Promise<T> {
+  const operationPromise = Promise.resolve().then(operation);
+  const remainingMs = Math.min(
+    SAFE_DOWNLOAD_CLEANUP_ATTEMPT_MS,
+    Math.max(0, deadlineAt - Date.now()),
+  );
+  if (remainingMs === 0) {
+    void operationPromise.catch(() => {});
+    throw new Error("safeDownload cleanup deadline exceeded");
+  }
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(
+      () => reject(new Error("safeDownload cleanup attempt timed out")),
+      remainingMs,
+    );
+    timer.unref();
+  });
   try {
-    await response.body?.cancel();
+    return await Promise.race([operationPromise, timeout]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
+
+async function cancelResponseBody(
+  response: Response,
+  deadlineAt = Date.now() + SAFE_DOWNLOAD_CLEANUP_TOTAL_MS,
+): Promise<boolean> {
+  try {
+    await boundedSafeCleanupAttempt(async () => {
+      await response.body?.cancel();
+    }, deadlineAt);
     return true;
   } catch {
     return false;
   }
 }
 
-const PRIVATE_IPV4_RANGES: Array<[number, number]> = [
-  [0, 0xffffff], // 0.0.0.0/8
-  [0x0a000000, 0x0affffff], // 10.0.0.0/8
-  [0x7f000000, 0x7fffffff], // 127.0.0.0/8
-  [0xa9fe0000, 0xa9feffff], // 169.254.0.0/16 link-local
-  [0xac100000, 0xac1fffff], // 172.16.0.0/12
-  [0xc0a80000, 0xc0a8ffff], // 192.168.0.0/16
-  [0xe0000000, 0xffffffff], // 224.0.0.0/4 + 240.0.0.0/4 (multicast, reserved)
-  [0x64400000, 0x647fffff], // 100.64.0.0/10 (CGNAT)
-];
-
-function ipv4ToInt(ip: string): number | null {
-  const parts = ip.split(".");
-  if (parts.length !== 4) return null;
-  let out = 0;
-  for (const part of parts) {
-    const n = Number(part);
-    if (!Number.isInteger(n) || n < 0 || n > 255) return null;
-    out = out * 256 + n;
-  }
-  return out >>> 0;
+function blockList(
+  ranges: ReadonlyArray<readonly [address: string, prefix: number]>,
+  family: "ipv4" | "ipv6",
+): BlockList {
+  const list = new BlockList();
+  for (const [address, prefix] of ranges) list.addSubnet(address, prefix, family);
+  return list;
 }
 
-function isPrivateIpv4(address: number): boolean {
-  return PRIVATE_IPV4_RANGES.some(([lo, hi]) => address >= lo && address <= hi);
-}
+// IANA special-purpose IPv4 ranges that are not ordinary public unicast
+// destinations. Deliberately reject an entire special block even when it has
+// a narrow anycast exception: ingestion needs general Internet endpoints, not
+// protocol-assignment addresses.
+const NON_PUBLIC_IPV4 = blockList(
+  [
+    ["0.0.0.0", 8],
+    ["10.0.0.0", 8],
+    ["100.64.0.0", 10],
+    ["127.0.0.0", 8],
+    ["169.254.0.0", 16],
+    ["172.16.0.0", 12],
+    ["192.0.0.0", 24],
+    ["192.0.2.0", 24],
+    ["192.88.99.0", 24],
+    ["192.168.0.0", 16],
+    ["198.18.0.0", 15],
+    ["198.51.100.0", 24],
+    ["203.0.113.0", 24],
+    ["224.0.0.0", 4],
+    ["240.0.0.0", 4],
+  ],
+  "ipv4",
+);
 
-function isPrivateIpv6(address: string): boolean {
-  const lower = address.toLowerCase();
-  if (lower === "::1" || lower === "::") return true;
-  if (lower.startsWith("fe80:") || lower.startsWith("fe8") || lower.startsWith("fe9")) return true;
-  if (lower.startsWith("fc") || lower.startsWith("fd")) return true;
-  // IPv4-mapped form `::ffff:127.0.0.1`
-  const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) {
-    const ip = ipv4ToInt(mapped[1]);
-    if (ip !== null && isPrivateIpv4(ip)) return true;
+// IPv6 is fail-closed: only global-unicast 2000::/3 is eligible, with the
+// special-purpose subranges inside it removed. IPv4-mapped forms are
+// canonicalized by SocketAddress and classified by the IPv4 policy instead.
+const GLOBAL_UNICAST_IPV6 = blockList([["2000::", 3]], "ipv6");
+const NON_PUBLIC_IPV6_INSIDE_GLOBAL_UNICAST = blockList(
+  [
+    ["2001::", 23],
+    ["2001:db8::", 32],
+    ["2002::", 16],
+    ["3ffe::", 16],
+    ["3fff::", 20],
+  ],
+  "ipv6",
+);
+
+function normalizeGloballyRoutableAddress(
+  address: string,
+  expectedFamily: 4 | 6,
+): FetchConnectionAddress | undefined {
+  const parsedFamily = isIP(address);
+  if (parsedFamily !== expectedFamily) return undefined;
+  const family = parsedFamily === 4 ? "ipv4" : "ipv6";
+  let canonical: string;
+  try {
+    canonical = new SocketAddress({ address, family }).address;
+  } catch {
+    return undefined;
   }
-  return false;
+
+  if (parsedFamily === 4) {
+    if (NON_PUBLIC_IPV4.check(canonical, "ipv4")) return undefined;
+    return { address: canonical, family: 4 };
+  }
+
+  const mapped = canonical.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/i);
+  if (mapped?.[1]) {
+    if (NON_PUBLIC_IPV4.check(mapped[1], "ipv4")) return undefined;
+    return { address: canonical, family: 6 };
+  }
+  if (!GLOBAL_UNICAST_IPV6.check(canonical, "ipv6")) return undefined;
+  if (NON_PUBLIC_IPV6_INSIDE_GLOBAL_UNICAST.check(canonical, "ipv6")) return undefined;
+  return { address: canonical, family: 6 };
 }
 
 /**
@@ -103,23 +178,148 @@ async function resolveHostname(hostname: string): Promise<FetchConnectionAddress
 
 async function resolvePublicAddresses(hostname: string): Promise<FetchConnectionAddress[]> {
   const addresses = await resolveHostname(hostname);
+  const normalized: FetchConnectionAddress[] = [];
   for (const { address, family } of addresses) {
-    if (family === 4) {
-      const int = ipv4ToInt(address);
-      if (int === null || isPrivateIpv4(int)) {
-        throw new Error(`Hostname ${hostname} resolves to private IP ${address}`);
-      }
-    } else if (family === 6) {
-      if (isPrivateIpv6(address)) {
-        throw new Error(`Hostname ${hostname} resolves to private IP ${address}`);
-      }
+    const approved = normalizeGloballyRoutableAddress(address, family);
+    if (!approved) {
+      throw new Error(`Hostname ${hostname} resolves to private IP/non-public address`);
     }
+    normalized.push(approved);
   }
-  return addresses;
+  return normalized;
 }
 
 export async function assertResolvesToPublicIp(hostname: string): Promise<void> {
   await resolvePublicAddresses(hostname);
+}
+
+const SAFE_DOWNLOAD_MAX_REDIRECTS = 5;
+const CREDENTIAL_HEADER_NAMES = new Set([
+  "authorization",
+  "cookie",
+  "proxy-authorization",
+  "x-api-key",
+]);
+const UNAUTHENTICATED_HEADER_ALLOWLIST = new Set(["accept", "user-agent"]);
+
+function throwIfAborted(signal: AbortSignal | undefined): void {
+  if (!signal?.aborted) return;
+  if (signal.reason instanceof Error) throw signal.reason;
+  throw new Error("Download aborted");
+}
+
+async function abortable<T>(operation: Promise<T>, signal: AbortSignal): Promise<T> {
+  throwIfAborted(signal);
+  let onAbort: (() => void) | undefined;
+  const aborted = new Promise<never>((_resolve, reject) => {
+    onAbort = () => {
+      try {
+        throwIfAborted(signal);
+      } catch (error) {
+        reject(error);
+      }
+    };
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+  try {
+    return await Promise.race([operation, aborted]);
+  } finally {
+    if (onAbort) signal.removeEventListener("abort", onAbort);
+  }
+}
+
+function assertAllowedDownloadUrl(url: URL): void {
+  validatePublicUrl(url.toString());
+  const defaultPort = url.protocol === "https:" ? "443" : "80";
+  if (url.port && url.port !== defaultPort) {
+    throw new Error(`URL host "${url.hostname}" uses a disallowed port`);
+  }
+}
+
+function normalizedContentType(response: Response): string | null {
+  return response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase() ?? null;
+}
+
+function headersForPolicy(
+  headers: Readonly<Record<string, string>> | undefined,
+  policy: SafeDownloadOptions["credentialPolicy"],
+): Headers | undefined {
+  if (!headers) return undefined;
+  const normalized = new Headers(headers);
+  if (policy === "none") {
+    for (const name of [...normalized.keys()]) {
+      if (CREDENTIAL_HEADER_NAMES.has(name) || !UNAUTHENTICATED_HEADER_ALLOWLIST.has(name)) {
+        normalized.delete(name);
+      }
+    }
+  }
+  return normalized;
+}
+
+function temporaryDestination(destination: string): string {
+  const token = `${process.pid}-${randomBytes(16).toString("hex")}`;
+  return join(dirname(destination), `.${basename(destination)}.part-${token}`);
+}
+
+const pendingSafeDownloadCleanup = new Set<string>();
+
+async function cleanupTemporaryFile(
+  path: string,
+  deadlineAt = Date.now() + SAFE_DOWNLOAD_CLEANUP_TOTAL_MS,
+): Promise<void> {
+  pendingSafeDownloadCleanup.add(path);
+  let lastError: unknown;
+  for (let attempt = 0; attempt < SAFE_DOWNLOAD_CLEANUP_ATTEMPTS; attempt += 1) {
+    try {
+      const removal = Promise.resolve()
+        .then(() => rm(path, { force: true }))
+        .then(() => {
+          pendingSafeDownloadCleanup.delete(path);
+        });
+      await boundedSafeCleanupAttempt(() => removal, deadlineAt);
+      return;
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw new Error("safeDownload temporary-file cleanup failed", { cause: lastError });
+}
+
+async function scavengePendingSafeDownloadFiles(
+  deadlineAt = Date.now() + SAFE_DOWNLOAD_CLEANUP_TOTAL_MS,
+): Promise<void> {
+  const failures: unknown[] = [];
+  for (const path of [...pendingSafeDownloadCleanup]) {
+    try {
+      await cleanupTemporaryFile(path, deadlineAt);
+    } catch (error) {
+      failures.push(error);
+    }
+  }
+  if (failures.length > 0) {
+    throw new Error("safeDownload temporary-file scavenging failed", { cause: failures[0] });
+  }
+}
+
+interface NormalizedSafeDownload {
+  url: URL;
+  destination: string;
+  headers?: Headers;
+  timeoutMs: number;
+  maxBytes: number;
+  maxRedirects: number;
+  allowedContentTypes: readonly string[];
+  credentialPolicy: SafeDownloadOptions["credentialPolicy"];
+  signal?: AbortSignal;
+}
+
+function normalizeSafeDownloadOptions(input: SafeDownloadOptions): NormalizedSafeDownload {
+  return {
+    ...input,
+    url: new URL(input.url.toString()),
+    headers: headersForPolicy(input.headers, input.credentialPolicy),
+    maxRedirects: SAFE_DOWNLOAD_MAX_REDIRECTS,
+  };
 }
 
 /**
@@ -128,105 +328,199 @@ export async function assertResolvesToPublicIp(hostname: string): Promise<void> 
  * through `fetchWithRedirects` so every `Location` is re-validated, and aborts
  * the stream when `maxBytes` is exceeded.
  */
-export async function safeDownload(
-  url: string,
-  opts: SafeDownloadOptions,
-): Promise<SafeDownloadResult> {
-  const maxBytes = opts.maxBytes ?? 2 * 1024 * 1024 * 1024;
-  const timeoutMs = opts.timeoutMs ?? 5 * 60_000;
-  const maxRedirects = opts.maxRedirects ?? 5;
+export async function safeDownload(options: SafeDownloadOptions): Promise<SafeDownloadResult> {
+  const opts = normalizeSafeDownloadOptions(options);
+  if (!Number.isSafeInteger(opts.maxBytes) || opts.maxBytes <= 0) {
+    throw new Error("safeDownload maxBytes must be a positive safe integer");
+  }
+  if (!Number.isSafeInteger(opts.timeoutMs) || opts.timeoutMs <= 0) {
+    throw new Error("safeDownload timeoutMs must be a positive safe integer");
+  }
+  if (!isAbsolute(opts.destination)) {
+    throw new Error("safeDownload destination must be an absolute path");
+  }
+  const operationDeadlineAt = Date.now() + opts.timeoutMs;
+  await scavengePendingSafeDownloadFiles(
+    Math.min(operationDeadlineAt, Date.now() + SAFE_DOWNLOAD_CLEANUP_TOTAL_MS),
+  );
+  throwIfAborted(opts.signal);
 
-  validatePublicUrl(url);
-  const { hostname } = new URL(url);
-  await resolvePublicAddresses(hostname);
+  if (opts.credentialPolicy === "none") {
+    opts.url.username = "";
+    opts.url.password = "";
+  }
+  assertAllowedDownloadUrl(opts.url);
+  const initialOrigin = opts.url.origin;
+  const remainingOperationMs = Math.max(1, operationDeadlineAt - Date.now());
+  const timeoutSignal = AbortSignal.timeout(remainingOperationMs);
+  const signal = opts.signal ? AbortSignal.any([opts.signal, timeoutSignal]) : timeoutSignal;
+  await abortable(resolvePublicHostOrThrow(opts.url.hostname), signal);
   const pinnedTransport = createPinnedFetchTransport();
 
   const fetchOpts: FetchWithRedirectsOptions = {
     headers: opts.headers,
-    maxRedirects,
-    timeoutMs,
-    follow203Redirect: opts.follow203Redirect,
-    allowedRedirectHosts: opts.allowedRedirectHosts,
+    maxRedirects: opts.maxRedirects,
+    signal,
+    cleanupDeadlineAt: operationDeadlineAt,
+    ...(opts.credentialPolicy === "same-origin" ? { allowedRedirectOrigin: initialOrigin } : {}),
     validateRedirectUrl: (nextUrl) => {
-      // Re-validate every redirect target against public-URL rules. DNS for the
-      // redirected hostname is re-checked below on whichever response the loop
-      // actually lands on.
-      validatePublicUrl(nextUrl.toString());
+      assertAllowedDownloadUrl(nextUrl);
       return true;
     },
     resolveConnectionAddresses: async (nextUrl) => {
-      validatePublicUrl(nextUrl.toString());
-      return resolvePublicAddresses(nextUrl.hostname);
+      throwIfAborted(signal);
+      assertAllowedDownloadUrl(nextUrl);
+      return abortable(resolvePublicHostOrThrow(nextUrl.hostname), signal);
     },
     pinnedFetchImplementation: pinnedTransport.fetch,
-    releaseResponse: pinnedTransport.releaseResponse,
+    releaseResponse: (response, options) =>
+      pinnedTransport.releaseResponse(response, {
+        ...options,
+        cleanupDeadlineAt: operationDeadlineAt,
+      }),
   };
 
   let response: Response | undefined;
+  let temporary: string | undefined;
   let bodyConsumed = false;
   let bodyCancellationAttempted = false;
   let forceDestroy = false;
-  const cancelUnconsumedBody = async (): Promise<void> => {
+  let responseReleased = false;
+  let transportDisposed = false;
+  const cancelUnconsumedBody = async (cleanupDeadlineAt: number): Promise<void> => {
     if (!response || bodyConsumed || bodyCancellationAttempted) return;
     bodyCancellationAttempted = true;
-    if (!(await cancelResponseBody(response))) forceDestroy = true;
+    if (!(await cancelResponseBody(response, cleanupDeadlineAt))) forceDestroy = true;
   };
+  const releaseResponse = async (cleanupDeadlineAt: number): Promise<void> => {
+    if (!response || responseReleased) return;
+    await pinnedTransport.releaseResponse(response, { force: forceDestroy, cleanupDeadlineAt });
+    responseReleased = true;
+  };
+  const disposeTransport = async (cleanupDeadlineAt: number): Promise<void> => {
+    if (transportDisposed) return;
+    await pinnedTransport.dispose({ cleanupDeadlineAt });
+    transportDisposed = true;
+  };
+  const cleanupResources = async (): Promise<unknown[]> => {
+    const cleanupDeadlineAt = Date.now() + SAFE_DOWNLOAD_CLEANUP_TOTAL_MS;
+    const transportCleanup = async (): Promise<void> => {
+      const transportErrors: unknown[] = [];
+      try {
+        await cancelUnconsumedBody(cleanupDeadlineAt);
+      } catch (error) {
+        transportErrors.push(error);
+      }
+      try {
+        await releaseResponse(cleanupDeadlineAt);
+      } catch (error) {
+        transportErrors.push(error);
+      }
+      try {
+        await disposeTransport(cleanupDeadlineAt);
+      } catch (error) {
+        transportErrors.push(error);
+      }
+      if (transportErrors.length > 0) {
+        throw new Error("safeDownload transport cleanup failed", {
+          cause: transportErrors[0],
+        });
+      }
+    };
+    const results = await Promise.allSettled([
+      transportCleanup(),
+      ...(temporary ? [cleanupTemporaryFile(temporary, cleanupDeadlineAt)] : []),
+    ]);
+    const cleanupErrors = results.flatMap((cleanup) =>
+      cleanup.status === "rejected" ? [cleanup.reason] : [],
+    );
+    return cleanupErrors;
+  };
+  let result: SafeDownloadResult;
   try {
-    response = await fetchWithRedirects(url, fetchOpts);
+    response = await fetchWithRedirects(opts.url, fetchOpts);
 
     if (!response.ok) {
-      await cancelUnconsumedBody();
-      throw new Error(`Download failed: ${response.status} ${response.statusText} for ${url}`);
+      await cancelUnconsumedBody(operationDeadlineAt);
+      throw new Error(
+        `Download failed: HTTP ${response.status} ${response.statusText} from ${opts.url.hostname}`,
+      );
     }
 
-    const finalUrl = response.url || url;
-    // Re-check DNS for the final host — it may differ from the initial hostname
-    // after redirects.
-    const finalHostname = new URL(finalUrl).hostname;
-    if (finalHostname !== hostname) {
-      await resolvePublicAddresses(finalHostname);
-    }
+    const finalUrl = new URL(response.url || opts.url.toString());
 
     const contentLengthHeader = response.headers.get("content-length");
     if (contentLengthHeader) {
       const declared = Number(contentLengthHeader);
-      if (Number.isFinite(declared) && declared > maxBytes) {
-        await cancelUnconsumedBody();
+      if (Number.isFinite(declared) && declared > opts.maxBytes) {
+        await cancelUnconsumedBody(operationDeadlineAt);
         throw new Error(
-          `Declared Content-Length ${declared} exceeds max ${maxBytes} for ${finalUrl}`,
+          `Declared Content-Length ${declared} exceeds max ${opts.maxBytes} bytes from ${finalUrl.hostname}`,
         );
       }
     }
 
+    const contentType = normalizedContentType(response);
+    const accepted = opts.allowedContentTypes.map((value) => value.trim().toLowerCase());
+    if (accepted.length > 0 && (!contentType || !accepted.includes(contentType))) {
+      await cancelUnconsumedBody(operationDeadlineAt);
+      throw new Error(`Unexpected response content type from ${finalUrl.hostname}`);
+    }
+
     if (!response.body) {
-      throw new Error(`Empty response body for ${finalUrl}`);
+      throw new Error(`Empty response body from ${finalUrl.hostname}`);
     }
 
     let bytesWritten = 0;
-    const fileStream = createWriteStream(opts.destPath);
+    temporary = temporaryDestination(opts.destination);
+    const fileStream = createWriteStream(temporary, { flags: "wx", mode: 0o600 });
     const nodeStream = Readable.fromWeb(
       response.body as unknown as import("node:stream/web").ReadableStream<Uint8Array>,
     );
     nodeStream.on("data", (chunk: Buffer) => {
       bytesWritten += chunk.length;
-      if (bytesWritten > maxBytes) {
-        nodeStream.destroy(new Error(`Download exceeded max size of ${maxBytes} bytes`));
+      if (bytesWritten > opts.maxBytes) {
+        nodeStream.destroy(new Error(`Download exceeded max size of ${opts.maxBytes} bytes`));
       }
     });
 
     await pipeline(nodeStream, fileStream);
     bodyConsumed = true;
+    throwIfAborted(signal);
+    // Do not publish bytes until the socket-owning transport has settled. A
+    // cleanup failure is a failed acquisition, not a usable stale download.
+    const publicationCleanupDeadlineAt = Date.now() + SAFE_DOWNLOAD_CLEANUP_TOTAL_MS;
+    await releaseResponse(publicationCleanupDeadlineAt);
+    await disposeTransport(publicationCleanupDeadlineAt);
+    await rename(temporary, opts.destination);
+    temporary = undefined;
 
-    return {
-      bytesWritten,
-      finalUrl,
-      contentType: response.headers.get("content-type"),
-    };
-  } finally {
-    await cancelUnconsumedBody();
-    if (response) await pinnedTransport.releaseResponse(response, { force: forceDestroy });
-    await pinnedTransport.dispose();
+    result = { bytesWritten, finalUrl, contentType };
+  } catch (error) {
+    const cleanupErrors = await cleanupResources();
+    if (cleanupErrors.length > 0 && error instanceof Error) {
+      const existingCause = error.cause;
+      Object.defineProperty(error, "cause", {
+        configurable: true,
+        value: new AggregateError(
+          existingCause === undefined ? cleanupErrors : [existingCause, ...cleanupErrors],
+          "safeDownload cleanup failed",
+        ),
+      });
+    }
+    if (cleanupErrors.length > 0 && !(error instanceof Error)) {
+      throw new AggregateError(
+        [error, ...cleanupErrors],
+        "safeDownload operation and cleanup failed",
+      );
+    }
+    throw error;
   }
+  const cleanupErrors = await cleanupResources();
+  if (cleanupErrors.length > 0) {
+    throw new Error("safeDownload resource cleanup failed", { cause: cleanupErrors[0] });
+  }
+  return result;
 }
 
 export interface SafeFetchJsonOptions {
@@ -234,10 +528,17 @@ export interface SafeFetchJsonOptions {
   maxBytes?: number;
   /** Per-request timeout forwarded to the initial and each redirect fetch. Default: 15s. */
   timeoutMs?: number;
+  /** Caller cancellation, combined with the request's total timeout. */
+  signal?: AbortSignal;
   /** Cap on redirect hops. Default: 5. */
   maxRedirects?: number;
   /** Extra headers (e.g. `User-Agent`) to send on the first request. */
   headers?: Record<string, string>;
+  /**
+   * Return the decoded body without parsing it. Use when an untrusted body must
+   * have its digest verified before it is allowed to reach `JSON.parse`.
+   */
+  parseJson?: boolean;
   /**
    * Hostnames (exact or "*.suffix") permitted to resolve to a private address.
    * Defaults to `privateFeedHostAllowlist()` when omitted.
@@ -262,6 +563,11 @@ export interface SafeFetchJsonOptions {
 
 export interface SafeJsonResponse<T> {
   data: T;
+  /**
+   * The exact decoded response body. A caller verifying a content digest must
+   * hash these bytes rather than a re-serialization of `data`.
+   */
+  text: string;
   status: number;
   headers: Headers;
   finalUrl: string;
@@ -325,13 +631,18 @@ function isDeclaredPrivateHost(hostname: string, allowPrivateHosts: string[]): b
 async function assertFetchTargetAllowed(
   url: string,
   allowPrivateHosts: string[],
+  signal?: AbortSignal,
 ): Promise<FetchConnectionAddress[]> {
+  signal?.throwIfAborted();
   const parsed = assertHttpProtocol(url);
+  let resolution: Promise<FetchConnectionAddress[]>;
   if (isDeclaredPrivateHost(parsed.hostname, allowPrivateHosts)) {
-    return resolveHostname(parsed.hostname);
+    resolution = resolveHostname(parsed.hostname);
+  } else {
+    validatePublicUrl(url);
+    resolution = resolvePublicHostOrThrow(parsed.hostname);
   }
-  validatePublicUrl(url);
-  return resolvePublicHostOrThrow(parsed.hostname);
+  return signal ? abortable(resolution, signal) : resolution;
 }
 
 /**
@@ -362,18 +673,76 @@ export async function safeFetchJsonResponse<T = unknown>(
   const timeoutMs = opts.timeoutMs ?? 15_000;
   const maxRedirects = opts.maxRedirects ?? 5;
   const allowPrivateHosts = opts.allowPrivateHosts ?? privateFeedHostAllowlist();
+  const operationDeadlineAt = Date.now() + timeoutMs;
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const operationSignal = opts.signal
+    ? AbortSignal.any([opts.signal, timeoutSignal])
+    : timeoutSignal;
 
-  await assertFetchTargetAllowed(url, allowPrivateHosts);
+  await assertFetchTargetAllowed(url, allowPrivateHosts, operationSignal);
   const { hostname } = new URL(url);
   const pinnedTransport = createPinnedFetchTransport();
   let response: Response | undefined;
+  let reader: ReadableStreamDefaultReader<Uint8Array> | undefined;
   let bodyConsumed = false;
   let bodyCancellationAttempted = false;
   let forceDestroy = false;
-  const cancelUnconsumedBody = async (): Promise<void> => {
+  let responseReleased = false;
+  let transportDisposed = false;
+  let result: SafeJsonResponse<T> | undefined;
+  let requestFailed = false;
+  let primaryError: unknown;
+  const cancelUnconsumedBody = async (cleanupDeadlineAt: number): Promise<void> => {
     if (!response || bodyConsumed || bodyCancellationAttempted) return;
     bodyCancellationAttempted = true;
-    if (!(await cancelResponseBody(response))) forceDestroy = true;
+    if (reader) {
+      try {
+        await boundedSafeCleanupAttempt(
+          () => reader?.cancel() ?? Promise.resolve(),
+          cleanupDeadlineAt,
+        );
+      } catch {
+        forceDestroy = true;
+      } finally {
+        reader.releaseLock?.();
+        reader = undefined;
+      }
+      return;
+    }
+    if (!(await cancelResponseBody(response, cleanupDeadlineAt))) forceDestroy = true;
+  };
+  const releaseResponse = async (cleanupDeadlineAt: number): Promise<void> => {
+    if (!response || responseReleased) return;
+    await pinnedTransport.releaseResponse(response, {
+      force: forceDestroy,
+      cleanupDeadlineAt,
+    });
+    responseReleased = true;
+  };
+  const disposeTransport = async (cleanupDeadlineAt: number): Promise<void> => {
+    if (transportDisposed) return;
+    await pinnedTransport.dispose({ cleanupDeadlineAt });
+    transportDisposed = true;
+  };
+  const cleanupResources = async (): Promise<unknown[]> => {
+    const cleanupDeadlineAt = Date.now() + SAFE_DOWNLOAD_CLEANUP_TOTAL_MS;
+    const cleanupErrors: unknown[] = [];
+    try {
+      await cancelUnconsumedBody(cleanupDeadlineAt);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    try {
+      await releaseResponse(cleanupDeadlineAt);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    try {
+      await disposeTransport(cleanupDeadlineAt);
+    } catch (error) {
+      cleanupErrors.push(error);
+    }
+    return cleanupErrors;
   };
 
   try {
@@ -381,13 +750,19 @@ export async function safeFetchJsonResponse<T = unknown>(
     response = await fetchWithRedirects(url, {
       headers: opts.headers,
       maxRedirects,
-      timeoutMs,
+      timeoutMs: Math.max(1, operationDeadlineAt - Date.now()),
+      signal: operationSignal,
+      cleanupDeadlineAt: operationDeadlineAt,
       allowedRedirectHosts: opts.allowedRedirectHosts,
       allowedRedirectOrigin: opts.allowedRedirectOrigin,
       pinnedFetchImplementation: fetchImplementation
         ? (input, _addresses, init) => fetchImplementation(input, init)
         : pinnedTransport.fetch,
-      releaseResponse: pinnedTransport.releaseResponse,
+      releaseResponse: (redirectResponse, options) =>
+        pinnedTransport.releaseResponse(redirectResponse, {
+          ...options,
+          cleanupDeadlineAt: operationDeadlineAt,
+        }),
       validateRedirectUrl: (nextUrl) => {
         const next = nextUrl.hostname;
         if (!isDeclaredPrivateHost(next, allowPrivateHosts)) {
@@ -398,27 +773,25 @@ export async function safeFetchJsonResponse<T = unknown>(
         return true;
       },
       resolveConnectionAddresses: (nextUrl) =>
-        assertFetchTargetAllowed(nextUrl.toString(), allowPrivateHosts),
+        assertFetchTargetAllowed(nextUrl.toString(), allowPrivateHosts, operationSignal),
     });
 
     const finalUrl = response.url || url;
 
     if (!response.ok) {
-      await cancelUnconsumedBody();
       const retryAfterSeconds = parseRetryAfterSeconds(response.headers.get("retry-after"));
       throw new SafeFetchHttpError(response.status, finalUrl, retryAfterSeconds);
     }
 
     const finalHostname = new URL(finalUrl).hostname;
     if (finalHostname !== hostname) {
-      await assertFetchTargetAllowed(finalUrl, allowPrivateHosts);
+      await assertFetchTargetAllowed(finalUrl, allowPrivateHosts, operationSignal);
     }
 
     const contentLengthHeader = response.headers.get("content-length");
     if (contentLengthHeader) {
       const declared = Number(contentLengthHeader);
       if (Number.isFinite(declared) && declared > maxBytes) {
-        await cancelUnconsumedBody();
         throw new Error(`Response too large (declared ${declared} > ${maxBytes} bytes)`);
       }
     }
@@ -431,7 +804,6 @@ export async function safeFetchJsonResponse<T = unknown>(
         .toLowerCase();
       const accepted = opts.acceptedContentTypes.map((value) => value.toLowerCase());
       if (!contentType || !accepted.includes(contentType)) {
-        await cancelUnconsumedBody();
         throw new Error(`Unexpected response content type for ${finalUrl}`);
       }
     }
@@ -440,46 +812,72 @@ export async function safeFetchJsonResponse<T = unknown>(
       throw new Error(`Empty response body for ${finalUrl}`);
     }
 
-    const reader = response.body.getReader();
+    reader = response.body.getReader();
     const chunks: Uint8Array[] = [];
     let total = 0;
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        total += value.byteLength;
-        if (total > maxBytes) {
-          bodyCancellationAttempted = true;
-          try {
-            await reader.cancel();
-          } catch {
-            forceDestroy = true;
-          }
-          throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
-        }
-        chunks.push(value);
+    for (;;) {
+      const { done, value } = await abortable(reader.read(), operationSignal);
+      if (done) break;
+      total += value.byteLength;
+      if (total > maxBytes) {
+        throw new Error(`Response too large (exceeded ${maxBytes} bytes)`);
       }
-    } finally {
-      reader.releaseLock?.();
+      chunks.push(value);
     }
     bodyConsumed = true;
+    reader.releaseLock?.();
+    reader = undefined;
 
     const text = Buffer.concat(chunks.map((c) => Buffer.from(c))).toString("utf8");
-    try {
-      return {
-        data: JSON.parse(text) as T,
+    if (opts.parseJson === false) {
+      // The caller verifies a digest over these exact bytes before deciding
+      // whether they may be parsed at all.
+      result = {
+        data: undefined as T,
+        text,
         status: response.status,
         headers: response.headers,
         finalUrl,
       };
-    } catch {
-      throw new Error(`Invalid JSON response from ${finalUrl}`);
+    } else {
+      try {
+        result = {
+          data: JSON.parse(text) as T,
+          text,
+          status: response.status,
+          headers: response.headers,
+          finalUrl,
+        };
+      } catch {
+        throw new Error(`Invalid JSON response from ${finalUrl}`);
+      }
     }
-  } finally {
-    await cancelUnconsumedBody();
-    if (response) await pinnedTransport.releaseResponse(response, { force: forceDestroy });
-    await pinnedTransport.dispose();
+  } catch (error) {
+    requestFailed = true;
+    primaryError = error;
   }
+
+  const cleanupErrors = await cleanupResources();
+  if (requestFailed) {
+    if (cleanupErrors.length > 0 && primaryError instanceof Error) {
+      Object.defineProperty(primaryError, "cause", {
+        configurable: true,
+        value: new AggregateError(cleanupErrors, "safeFetchJson cleanup failed"),
+      });
+    }
+    if (cleanupErrors.length > 0 && !(primaryError instanceof Error)) {
+      throw new AggregateError(
+        [primaryError, ...cleanupErrors],
+        "safeFetchJson request and cleanup failed",
+      );
+    }
+    throw primaryError;
+  }
+  if (cleanupErrors.length > 0) {
+    throw new Error("safeFetchJson resource cleanup failed", { cause: cleanupErrors[0] });
+  }
+  if (!result) throw new Error("safeFetchJson response unavailable");
+  return result;
 }
 
 // A full day bounds automatic retries while covering ordinary rate-limit windows.
@@ -489,6 +887,18 @@ function parseRetryAfterSeconds(value: string | null): number | null {
   if (!value || !/^\d+$/.test(value)) return null;
   const seconds = Number(value);
   return Number.isSafeInteger(seconds) && seconds <= MAX_RETRY_AFTER_SECONDS ? seconds : null;
+}
+
+/**
+ * Fetch a URL through the same SSRF protection as `safeFetchJson` and return the
+ * exact decoded body without parsing it. For content that must be digest-verified
+ * before it is trusted enough to parse.
+ */
+export async function safeFetchText(
+  url: string,
+  opts: Omit<SafeFetchJsonOptions, "parseJson"> = {},
+): Promise<string> {
+  return (await safeFetchJsonResponse<unknown>(url, { ...opts, parseJson: false })).text;
 }
 
 /** Compatibility wrapper for callers that need only parsed JSON data. */

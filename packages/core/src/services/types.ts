@@ -162,6 +162,8 @@ export interface ServiceBindMount {
 export interface ServiceContainer {
   image: string;
   tag: string;
+  /** Immutable OCI/Docker manifest digest. Keep `tag` for readable provenance. */
+  digest?: string;
   /**
    * Pin the compose container to a fixed name (rendered as `container_name`)
    * instead of the compose-derived `<project>-<service>-<n>`. Required for
@@ -208,6 +210,11 @@ export interface ServiceContainer {
   healthcheck?: ServiceHealthCheck;
   dependsOn?: Array<{ service: string; condition?: "service_started" | "service_healthy" }>;
   logging?: { driver: string; options?: Record<string, string> };
+}
+
+export function serviceContainerImageReference(container: ServiceContainer): string {
+  const tagged = `${container.image}:${container.tag}`;
+  return container.digest ? `${tagged}@${container.digest}` : tagged;
 }
 
 export interface ServiceUI {
@@ -285,6 +292,8 @@ export interface ServiceManifest {
   consumes?: ServiceConsumes[];
   produces?: ServiceProduces[];
   selectionDependencies?: string[];
+  /** Audited first-party bridge access to explicitly named community networks. */
+  communityNetworkAccess?: string[];
 
   configSchema?: Record<string, unknown>;
   envVars?: Array<{ name: string; required?: boolean; description?: string; default?: string }>;

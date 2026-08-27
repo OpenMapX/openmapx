@@ -14,6 +14,30 @@
       "types": "./src/server.ts",
       "default": "./src/server.ts"
     },
+    "./deployment-secret-policy": {
+      "types": "./src/deployment-secret-policy.ts",
+      "default": "./src/deployment-secret-policy.ts"
+    },
+    "./server-api": {
+      "types": "./src/api/server.ts",
+      "default": "./src/api/server.ts"
+    },
+    "./repo-paths": {
+      "types": "./src/repo-paths.ts",
+      "default": "./src/repo-paths.ts"
+    },
+    "./legal": {
+      "types": "./src/legal.ts",
+      "default": "./src/legal.ts"
+    },
+    "./ops": {
+      "types": "./src/ops/index.ts",
+      "default": "./src/ops/index.ts"
+    },
+    "./transitous-runner": {
+      "types": "./src/transitous-runner/index.ts",
+      "default": "./src/transitous-runner/index.ts"
+    },
     "./navigation": {
       "types": "./src/navigation/index.ts",
       "default": "./src/navigation/index.ts"

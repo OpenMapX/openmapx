@@ -24,7 +24,7 @@ describe("service manifest ownsSchema field", () => {
     expect(result.errors.some((e) => e.includes("Postgres identifier"))).toBe(true);
   });
 
-  it("validates a manifest without ownsSchema (backward compatibility)", () => {
+  it("accepts a service that does not own a PostgreSQL schema", () => {
     const result = validateServiceManifest({ ...minimalManifest }, { firstParty: false });
     expect(result.valid).toBe(true);
     expect(result.errors).toHaveLength(0);
@@ -37,6 +37,7 @@ describe("service manifest secret field names", () => {
       {
         ...minimalManifest,
         configSchema: {
+          type: "object",
           properties: {
             NY_511_API_KEY: { type: "string", "x-openmapx-secret": true },
           },
@@ -53,6 +54,7 @@ describe("service manifest secret field names", () => {
       {
         ...minimalManifest,
         configSchema: {
+          type: "object",
           properties: {
             "../../evil": { type: "string", "x-openmapx-secret": true },
           },
@@ -69,6 +71,7 @@ describe("service manifest secret field names", () => {
       {
         ...minimalManifest,
         configSchema: {
+          type: "object",
           properties: {
             "a/b": { type: "string", "x-openmapx-secret": true },
           },
@@ -83,14 +86,14 @@ describe("service manifest secret field names", () => {
     const result = validateServiceManifest(
       {
         ...minimalManifest,
-        configSchema: { properties: { "weird.key": { type: "string" } } },
+        configSchema: { type: "object", properties: { "weird.key": { type: "string" } } },
       },
       { firstParty: false },
     );
     expect(result.valid).toBe(true);
   });
 
-  it("accepts the un-wrapped configSchema form", () => {
+  it("rejects a flat non-JSON-Schema config declaration", () => {
     const result = validateServiceManifest(
       {
         ...minimalManifest,
@@ -98,10 +101,10 @@ describe("service manifest secret field names", () => {
       },
       { firstParty: false },
     );
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
   });
 
-  it("validates a manifest without configSchema for backward compatibility", () => {
+  it("accepts a service with no operator configuration", () => {
     const result = validateServiceManifest({ ...minimalManifest }, { firstParty: false });
     expect(result.valid).toBe(true);
   });

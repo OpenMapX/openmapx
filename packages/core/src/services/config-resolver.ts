@@ -31,21 +31,18 @@ export function serviceConfigEnvPrefix(serviceId: string): string {
 }
 
 /**
- * Extract the set of known config keys from a manifest's `configSchema`. The
- * schema may be wrapped under `properties` (standard JSON Schema) or declared
- * flat at the top level; we accept both.
+ * Extract the set of known config keys from a manifest's JSON `configSchema`.
  */
 export function configSchemaKeys(
   configSchema: Record<string, unknown> | undefined,
 ): Array<{ key: string; default?: unknown }> {
   if (!configSchema) return [];
-  const props = (configSchema.properties ?? configSchema) as Record<
-    string,
-    { default?: unknown; "x-openmapx-secret"?: unknown }
-  >;
+  const props = configSchema.properties as
+    | Record<string, { default?: unknown; "x-openmapx-secret"?: unknown }>
+    | undefined;
+  if (!props || typeof props !== "object") return [];
   const out: Array<{ key: string; default?: unknown }> = [];
   for (const [key, def] of Object.entries(props)) {
-    if (key === "type" || key === "properties") continue;
     // Secret fields are delivered to the container as mounted files (Docker
     // `secrets:`), never through the env map this function feeds — so skip them
     // here to guarantee a secret value can't be baked into the rendered YAML.

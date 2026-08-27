@@ -1,4 +1,10 @@
+import { readBoundedJsonResponse } from "../utils/fetchJson";
 import type { DatasetMetadata } from "./types";
+
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
+const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 5 * 60_000;
+const DEFAULT_JSON_MAX_BYTES = 8 * 1024 * 1024;
+const DEFAULT_STREAM_MAX_BYTES = 8 * 1024 * 1024;
 
 export interface DataManagerClientOptions {
   baseUrl: string;
@@ -10,6 +16,12 @@ export interface DataManagerClientOptions {
    * mutation call.
    */
   authToken?: string;
+  /** Cancels every request and stream made by this client. */
+  signal?: AbortSignal;
+  requestTimeoutMs?: number;
+  streamIdleTimeoutMs?: number;
+  maxJsonBytes?: number;
+  maxStreamBytes?: number;
 }
 
 export type TransitSourceLifecycle =
@@ -82,14 +94,84 @@ export class DataManagerHttpError extends Error {
   }
 }
 
+/** Operator-extended list of hostnames allowed to reach the data-manager over plain HTTP. */
+export const DATA_MANAGER_PLAINTEXT_HOSTS_ENV = "DATA_MANAGER_PLAINTEXT_HOSTS";
+
+function configuredPlaintextHosts(): string[] {
+  const raw = typeof process !== "undefined" ? process.env?.[DATA_MANAGER_PLAINTEXT_HOSTS_ENV] : "";
+  return (raw ?? "")
+    .split(",")
+    .map((host) => host.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+/**
+ * Accept TLS endpoints, or the deliberately narrow plaintext set used by the
+ * local process and the Compose service network. Credentials, path prefixes,
+ * queries and fragments are forbidden because callers append trusted routes.
+ * Deployments that legitimately reach the data-manager over plain HTTP on
+ * another host (a LAN address, a differently named Compose service) list those
+ * hostnames in `DATA_MANAGER_PLAINTEXT_HOSTS` or pass `allowPlaintextHosts`.
+ */
+export function validateDataManagerBaseUrl(
+  value: string,
+  options: { allowPlaintextHosts?: readonly string[] } = {},
+): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(value);
+  } catch {
+    throw new Error("Invalid data-manager base URL");
+  }
+  if (
+    parsed.username ||
+    parsed.password ||
+    (parsed.pathname !== "/" && parsed.pathname !== "") ||
+    parsed.search ||
+    parsed.hash
+  ) {
+    throw new Error("Invalid data-manager base URL: credentials and URL suffixes are not allowed");
+  }
+  const hostname = parsed.hostname.toLowerCase();
+  const localPlaintextHosts = new Set([
+    "localhost",
+    "127.0.0.1",
+    "[::1]",
+    "::1",
+    "data-manager",
+    ...(options.allowPlaintextHosts ?? configuredPlaintextHosts()).map((host) =>
+      host.toLowerCase(),
+    ),
+  ]);
+  if (
+    parsed.protocol !== "https:" &&
+    !(parsed.protocol === "http:" && localPlaintextHosts.has(hostname))
+  ) {
+    throw new Error(
+      `Data-manager destination must use HTTPS or an approved loopback/Compose hostname (extend with ${DATA_MANAGER_PLAINTEXT_HOSTS_ENV})`,
+    );
+  }
+  return parsed.origin;
+}
+
 export class DataManagerClient {
   private baseUrl: string;
   private fetchImpl: typeof globalThis.fetch;
   private authToken: string | undefined;
+  private requestSignal: AbortSignal | undefined;
+  private requestTimeoutMs: number;
+  private streamIdleTimeoutMs: number;
+  private maxJsonBytes: number;
+  private maxStreamBytes: number;
 
   constructor(opts: DataManagerClientOptions) {
-    this.baseUrl = opts.baseUrl.replace(/\/+$/, "");
+    this.baseUrl = validateDataManagerBaseUrl(opts.baseUrl);
     this.fetchImpl = opts.fetch ?? globalThis.fetch;
+    this.requestSignal = opts.signal;
+    this.requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
+    this.streamIdleTimeoutMs = opts.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS;
+    this.maxJsonBytes = opts.maxJsonBytes ?? DEFAULT_JSON_MAX_BYTES;
+    this.maxStreamBytes = opts.maxStreamBytes ?? DEFAULT_STREAM_MAX_BYTES;
     this.authToken =
       opts.authToken ??
       (typeof process !== "undefined"
@@ -107,31 +189,69 @@ export class DataManagerClient {
     return { ...init, headers };
   }
 
+  private async request(
+    input: string,
+    init: RequestInit = {},
+    streaming = false,
+  ): Promise<Response> {
+    const timeoutController = streaming ? new AbortController() : undefined;
+    const timeoutSignal = timeoutController?.signal ?? AbortSignal.timeout(this.requestTimeoutMs);
+    const signals = [timeoutSignal, this.requestSignal, init.signal].filter(
+      (signal): signal is AbortSignal => signal !== undefined && signal !== null,
+    );
+    const timeoutId = timeoutController
+      ? setTimeout(
+          () => timeoutController.abort(new Error("data-manager response timed out")),
+          this.requestTimeoutMs,
+        )
+      : undefined;
+    try {
+      return await this.fetchImpl(input, {
+        ...init,
+        redirect: "error",
+        signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
+      });
+    } finally {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+    }
+  }
+
+  private readJson<T>(response: Response, label: string): Promise<T> {
+    return readBoundedJsonResponse<T>(response, { maxBytes: this.maxJsonBytes, label });
+  }
+
+  private streamLimits(): StreamReadLimits {
+    return { maxBytes: this.maxStreamBytes, idleTimeoutMs: this.streamIdleTimeoutMs };
+  }
+
   statusUrl(): string {
     return `${this.baseUrl}/status`;
   }
 
   async status(): Promise<{ ok: boolean; uptime: number; dataDir: string }> {
     // /status intentionally skips auth so container health probes work.
-    const res = await this.fetchImpl(this.statusUrl());
+    const res = await this.request(this.statusUrl());
     if (!res.ok) throw new Error(`status failed: HTTP ${res.status}`);
-    return (await res.json()) as { ok: boolean; uptime: number; dataDir: string };
+    return this.readJson(res, "data-manager status response");
   }
 
   async datasets(): Promise<DatasetMetadata[]> {
-    const res = await this.fetchImpl(`${this.baseUrl}/datasets`, this.authed());
+    const res = await this.request(`${this.baseUrl}/datasets`, this.authed());
     if (!res.ok) throw new Error(`datasets failed: HTTP ${res.status}`);
-    const body = (await res.json()) as { datasets: DatasetMetadata[] };
+    const body = await this.readJson<{ datasets: DatasetMetadata[] }>(res, "datasets response");
     return body.datasets;
   }
 
   async reloadDatasets(): Promise<{ ok: boolean; datasets: number }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/datasets/reload`,
       this.authed({ method: "POST" }),
     );
     if (!res.ok) throw new Error(`datasets/reload failed: HTTP ${res.status}`);
-    const body = (await res.json()) as Partial<{ ok: boolean; datasets: number }>;
+    const body = await this.readJson<Partial<{ ok: boolean; datasets: number }>>(
+      res,
+      "datasets/reload response",
+    );
     return {
       ok: body.ok ?? true,
       datasets: body.datasets ?? 0,
@@ -142,15 +262,16 @@ export class DataManagerClient {
     region: string,
     opts: { onProgress?: (bytesDownloaded: number, totalBytes?: number) => void } = {},
   ): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/download/osm`,
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region }),
       }),
+      true,
     );
-    return readProgressStream(res, "download/osm", opts.onProgress);
+    return readProgressStream(res, "download/osm", opts.onProgress, {}, this.streamLimits());
   }
 
   async convertOverpass(
@@ -160,23 +281,30 @@ export class DataManagerClient {
     } = {},
   ): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
     const body = opts.region ? { region: opts.region } : {};
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/convert/overpass`,
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       }),
+      true,
     );
-    return readProgressStream(res, "convert/overpass", opts.onProgress, {
-      pathField: "targetBz2",
-    });
+    return readProgressStream(
+      res,
+      "convert/overpass",
+      opts.onProgress,
+      {
+        pathField: "targetBz2",
+      },
+      this.streamLimits(),
+    );
   }
 
   async syncTransit(
     input: { countries?: string[]; idempotencyKey?: string; triggeredBy?: string } = {},
   ): Promise<{ jobId: string; status: "started" }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/transit/sync`,
       this.authed({
         method: "POST",
@@ -184,12 +312,12 @@ export class DataManagerClient {
         body: JSON.stringify(input),
       }),
     );
-    const parsed = (await res.json()) as {
+    const parsed = await this.readJson<{
       jobId?: string;
       status?: "started";
       error?: string;
       reason?: string;
-    };
+    }>(res, "transit/sync response");
     if (!res.ok || !parsed.jobId) {
       throw new Error(parsed.error ?? parsed.reason ?? `transit/sync failed: HTTP ${res.status}`);
     }
@@ -212,14 +340,14 @@ export class DataManagerClient {
     if (query.limit !== undefined) params.set("limit", String(query.limit));
     if (query.offset !== undefined) params.set("offset", String(query.offset));
     const suffix = params.size > 0 ? `?${params}` : "";
-    const res = await this.fetchImpl(`${this.baseUrl}/transit/sources${suffix}`, this.authed());
+    const res = await this.request(`${this.baseUrl}/transit/sources${suffix}`, this.authed());
     if (!res.ok) throw new Error(`transit/sources failed: HTTP ${res.status}`);
-    return (await res.json()) as {
+    return this.readJson<{
       sources: TransitSourceRow[];
       total: number;
       limit: number;
       offset: number;
-    };
+    }>(res, "transit/sources response");
   }
 
   async addTransitSource(input: {
@@ -265,7 +393,7 @@ export class DataManagerClient {
     method: "POST" | "DELETE",
     body: unknown,
   ): Promise<TransitSourceMutationResult> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}${path}`,
       this.authed({
         method,
@@ -273,10 +401,12 @@ export class DataManagerClient {
         body: JSON.stringify(body),
       }),
     );
-    const parsed = (await res.json()) as TransitSourceMutationResult & {
-      error?: string;
-      reason?: string;
-    };
+    const parsed = await this.readJson<
+      TransitSourceMutationResult & {
+        error?: string;
+        reason?: string;
+      }
+    >(res, `${method} ${path} response`);
     if (!res.ok) {
       throw new Error(
         parsed.error ?? parsed.reason ?? `${method} ${path} failed: HTTP ${res.status}`,
@@ -286,12 +416,12 @@ export class DataManagerClient {
   }
 
   async downloadFonts(): Promise<{ ok: boolean }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/download/fonts`,
       this.authed({ method: "POST" }),
     );
     if (!res.ok) throw new Error(`download/fonts failed: HTTP ${res.status}`);
-    return (await res.json()) as { ok: boolean };
+    return this.readJson(res, "download/fonts response");
   }
 
   async link(
@@ -304,7 +434,7 @@ export class DataManagerClient {
     }>,
     opts: { prune?: boolean } = {},
   ): Promise<{ linked: number; skipped: number; pruned: number }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/link`,
       this.authed({
         method: "POST",
@@ -313,11 +443,13 @@ export class DataManagerClient {
       }),
     );
     if (!res.ok) throw new Error(`link failed: HTTP ${res.status}`);
-    const parsed = (await res.json()) as Partial<{
-      linked: number;
-      skipped: number;
-      pruned: number;
-    }>;
+    const parsed = await this.readJson<
+      Partial<{
+        linked: number;
+        skipped: number;
+        pruned: number;
+      }>
+    >(res, "link response");
     return {
       linked: parsed.linked ?? 0,
       skipped: parsed.skipped ?? 0,
@@ -329,21 +461,22 @@ export class DataManagerClient {
     region: string,
     opts: { onProgress?: (msg: string) => void } = {},
   ): Promise<{ ok: boolean; message?: string }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/overture/pull`,
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region }),
       }),
+      true,
     );
-    return readNdjsonOperationStream(res, "overture/pull", opts.onProgress);
+    return readNdjsonOperationStream(res, "overture/pull", opts.onProgress, this.streamLimits());
   }
 
   async overtureStatus(): Promise<Record<string, unknown>> {
-    const res = await this.fetchImpl(`${this.baseUrl}/overture/status`, this.authed());
+    const res = await this.request(`${this.baseUrl}/overture/status`, this.authed());
     if (!res.ok) throw new Error(`overture/status failed: HTTP ${res.status}`);
-    return (await res.json()) as Record<string, unknown>;
+    return this.readJson(res, "overture/status response");
   }
 
   async syncOverture(
@@ -357,15 +490,21 @@ export class DataManagerClient {
     conflation?: string;
     conflationError?: string;
   }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/overture/sync`,
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region }),
       }),
+      true,
     );
-    return readNdjsonOperationStream(res, "overture/sync", opts.onProgress) as Promise<{
+    return readNdjsonOperationStream(
+      res,
+      "overture/sync",
+      opts.onProgress,
+      this.streamLimits(),
+    ) as Promise<{
       ok: boolean;
       message?: string;
       release?: string;
@@ -379,30 +518,32 @@ export class DataManagerClient {
     region: string,
     opts: { onProgress?: (msg: string) => void } = {},
   ): Promise<{ ok: boolean; message?: string }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/overture/ingest`,
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region }),
       }),
+      true,
     );
-    return readNdjsonOperationStream(res, "overture/ingest", opts.onProgress);
+    return readNdjsonOperationStream(res, "overture/ingest", opts.onProgress, this.streamLimits());
   }
 
   async extractOverture(
     region: string,
     opts: { onProgress?: (msg: string) => void } = {},
   ): Promise<{ ok: boolean; message?: string }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/overture/extract`,
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region }),
       }),
+      true,
     );
-    return readNdjsonOperationStream(res, "overture/extract", opts.onProgress);
+    return readNdjsonOperationStream(res, "overture/extract", opts.onProgress, this.streamLimits());
   }
 
   async conflateOverture(
@@ -416,15 +557,21 @@ export class DataManagerClient {
     status?: string;
     message?: string;
   }> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/overture/conflate`,
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region, restart: opts.restart === true }),
       }),
+      true,
     );
-    return readNdjsonOperationStream(res, "overture/conflate", opts.onProgress) as Promise<{
+    return readNdjsonOperationStream(
+      res,
+      "overture/conflate",
+      opts.onProgress,
+      this.streamLimits(),
+    ) as Promise<{
       ok: boolean;
       linked?: number;
       extracted?: number;
@@ -439,9 +586,9 @@ export class DataManagerClient {
   // expanding (drift guard, etc.) and CLI callers don't need strict types.
 
   async poiIngestState(): Promise<Record<string, unknown>> {
-    const res = await this.fetchImpl(`${this.baseUrl}/poi-ingest/state`, this.authed());
+    const res = await this.request(`${this.baseUrl}/poi-ingest/state`, this.authed());
     if (!res.ok) throw new Error(`poi-ingest/state failed: HTTP ${res.status}`);
-    return (await res.json()) as Record<string, unknown>;
+    return this.readJson(res, "poi-ingest/state response");
   }
 
   async poiIngestSources(filter?: {
@@ -452,23 +599,26 @@ export class DataManagerClient {
     if (filter?.domain) params.set("domain", filter.domain);
     if (filter?.status) params.set("status", filter.status);
     const qs = params.toString();
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/poi-ingest/sources${qs ? `?${qs}` : ""}`,
       this.authed(),
     );
     if (!res.ok) throw new Error(`poi-ingest/sources failed: HTTP ${res.status}`);
-    const body = (await res.json()) as { sources?: Array<Record<string, unknown>> };
+    const body = await this.readJson<{ sources?: Array<Record<string, unknown>> }>(
+      res,
+      "poi-ingest/sources response",
+    );
     return body.sources ?? [];
   }
 
   async poiIngestSource(id: string): Promise<Record<string, unknown>> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/poi-ingest/sources/${encodeURIComponent(id)}`,
       this.authed(),
     );
     if (res.status === 404) throw new Error(`poi-ingest source "${id}" not found`);
     if (!res.ok) throw new Error(`poi-ingest/sources/${id} failed: HTTP ${res.status}`);
-    return (await res.json()) as Record<string, unknown>;
+    return this.readJson(res, `poi-ingest/sources/${id} response`);
   }
 
   async poiIngestSync(
@@ -476,7 +626,7 @@ export class DataManagerClient {
     opts: { liveOnly?: boolean; idempotencyKey?: string; triggeredBy?: string } = {},
   ): Promise<Record<string, unknown>> {
     const route = opts.liveOnly ? "sync-live" : "sync";
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/poi-ingest/sources/${encodeURIComponent(id)}/${route}`,
       this.authed({
         method: "POST",
@@ -487,7 +637,15 @@ export class DataManagerClient {
         }),
       }),
     );
-    const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
+    let body: Record<string, unknown> = {};
+    try {
+      body = await this.readJson<Record<string, unknown>>(res, "poi-ingest sync response");
+    } catch (error) {
+      // Some older error responses have an empty/non-JSON body. Preserve their
+      // status-specific diagnostics, but never hide a malformed or oversized
+      // successful response.
+      if (res.ok) throw error;
+    }
     if (res.status === 404) throw new Error(`poi-ingest source "${id}" not found`);
     if (res.status === 409) {
       throw new Error(
@@ -505,27 +663,58 @@ export class DataManagerClient {
     region: string,
     onProgress?: (message: string) => void,
   ): Promise<SearchIndexBuildResult> {
-    const res = await this.fetchImpl(
+    const res = await this.request(
       `${this.baseUrl}/search-index/build`,
       this.authed({
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ region }),
       }),
+      true,
     );
     return readNdjsonOperationStream(
       res,
       "search-index/build",
       onProgress,
+      this.streamLimits(),
     ) as Promise<SearchIndexBuildResult>;
   }
 
   async searchIndexStatus(): Promise<SearchIndexStatus> {
-    const res = await this.fetchImpl(`${this.baseUrl}/search-index/status`, this.authed());
+    const res = await this.request(`${this.baseUrl}/search-index/status`, this.authed());
     if (!res.ok) {
       throw new DataManagerHttpError(`search-index/status failed: HTTP ${res.status}`, res.status);
     }
-    return (await res.json()) as SearchIndexStatus;
+    return this.readJson(res, "search-index/status response");
+  }
+}
+
+interface StreamReadLimits {
+  maxBytes: number;
+  idleTimeoutMs: number;
+}
+
+async function readStreamChunk(
+  reader: ReadableStreamDefaultReader<Uint8Array>,
+  label: string,
+  idleTimeoutMs: number,
+): Promise<ReadableStreamReadResult<Uint8Array>> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      reader.read(),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(
+          () => reject(new Error(`${label}: stream idle timeout`)),
+          idleTimeoutMs,
+        );
+      }),
+    ]);
+  } catch (error) {
+    await reader.cancel().catch(() => {});
+    throw error;
+  } finally {
+    if (timeoutId !== undefined) clearTimeout(timeoutId);
   }
 }
 
@@ -540,6 +729,10 @@ async function readNdjsonOperationStream(
   res: { ok: boolean; body: ReadableStream<Uint8Array> | null; status?: number },
   label: string,
   onProgress?: (msg: string) => void,
+  limits: StreamReadLimits = {
+    maxBytes: DEFAULT_STREAM_MAX_BYTES,
+    idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  },
 ): Promise<{ ok: boolean; [key: string]: unknown }> {
   if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status ?? "?"}`);
   if (!res.body) throw new Error(`${label}: server returned no body stream`);
@@ -547,6 +740,7 @@ async function readNdjsonOperationStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let totalBytes = 0;
   let final: { ok: boolean; [key: string]: unknown } | null = null;
 
   const handleLine = (line: string) => {
@@ -567,8 +761,13 @@ async function readNdjsonOperationStream(
   };
 
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readStreamChunk(reader, label, limits.idleTimeoutMs);
     if (done) break;
+    totalBytes += value.byteLength;
+    if (totalBytes > limits.maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`${label}: response too large (exceeded ${limits.maxBytes} bytes)`);
+    }
     buffer += decoder.decode(value, { stream: true });
     while (true) {
       const newlineIdx = buffer.indexOf("\n");
@@ -600,6 +799,10 @@ async function readProgressStream(
   label: string,
   onProgress?: (bytes: number, totalBytes?: number) => void,
   opts: { pathField?: string } = {},
+  limits: StreamReadLimits = {
+    maxBytes: DEFAULT_STREAM_MAX_BYTES,
+    idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
+  },
 ): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
   if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status ?? "?"}`);
   if (!res.body) throw new Error(`${label}: server returned no body stream`);
@@ -607,6 +810,7 @@ async function readProgressStream(
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";
+  let responseBytes = 0;
   let final: { ok: boolean; path: string; sizeBytes: number } | null = null;
 
   const pathField = opts.pathField ?? "path";
@@ -636,8 +840,13 @@ async function readProgressStream(
   };
 
   while (true) {
-    const { done, value } = await reader.read();
+    const { done, value } = await readStreamChunk(reader, label, limits.idleTimeoutMs);
     if (done) break;
+    responseBytes += value.byteLength;
+    if (responseBytes > limits.maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new Error(`${label}: response too large (exceeded ${limits.maxBytes} bytes)`);
+    }
     buffer += decoder.decode(value, { stream: true });
     while (true) {
       const newlineIdx = buffer.indexOf("\n");

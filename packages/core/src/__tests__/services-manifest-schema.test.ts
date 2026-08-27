@@ -43,7 +43,10 @@ describe("validateServiceManifest", () => {
   it("accepts a typed proxy hostname and rejects unsafe hostname syntax", () => {
     const validTemplate = validateFirstParty({
       ...validMinimal,
-      configSchema: { properties: { APPLICATION_HOSTS: { type: "string" } } },
+      configSchema: {
+        type: "object",
+        properties: { APPLICATION_HOSTS: { type: "string" } },
+      },
       exposure: {
         proxy: {
           enabled: true,
@@ -90,6 +93,7 @@ describe("validateServiceManifest", () => {
     const secret = validateFirstParty({
       ...validMinimal,
       configSchema: {
+        type: "object",
         properties: { APPLICATION_HOSTS: { type: "string", "x-openmapx-secret": true } },
       },
       exposure: {
@@ -219,6 +223,23 @@ describe("validateServiceManifest", () => {
     expect(result.errors.join(" ")).toMatch(/image/);
   });
 
+  it("accepts an immutable image digest and rejects malformed digests", () => {
+    const digest = `sha256:${"a".repeat(64)}`;
+    expect(
+      validateFirstParty({
+        ...validMinimal,
+        container: { ...validMinimal.container, digest },
+      }).valid,
+    ).toBe(true);
+
+    const malformed = validateFirstParty({
+      ...validMinimal,
+      container: { ...validMinimal.container, digest: "sha256:not-a-digest" },
+    });
+    expect(malformed.valid).toBe(false);
+    expect(malformed.errors.join(" ")).toMatch(/digest/i);
+  });
+
   it("rejects image with uppercase characters", () => {
     const result = validateFirstParty({
       ...validMinimal,
@@ -327,6 +348,38 @@ describe("validateServiceManifest", () => {
     expect(result.valid).toBe(true);
   });
 
+  it("accepts explicit community network access only for first-party provenance", () => {
+    const firstParty = validateFirstParty({
+      ...validMinimal,
+      communityNetworkAccess: ["weather-feed"],
+    });
+    expect(firstParty.valid).toBe(true);
+
+    for (const quality of ["community", "community-verified", "built-in"] as const) {
+      const external = validateExternal({
+        ...validMinimal,
+        quality,
+        communityNetworkAccess: ["weather-feed"],
+      });
+      expect(external.valid).toBe(false);
+      expect(external.errors).toContain(
+        "community_network_access_forbidden: communityNetworkAccess is reserved for audited first-party services",
+      );
+    }
+  });
+
+  it("rejects even an empty communityNetworkAccess declaration from community provenance", () => {
+    const result = validateExternal({
+      ...validMinimal,
+      quality: "community",
+      communityNetworkAccess: [],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "community_network_access_forbidden: communityNetworkAccess is reserved for audited first-party services",
+    );
+  });
+
   it("rejects exposure.proxy.pathPrefix without leading slash", () => {
     const result = validateFirstParty({
       ...validMinimal,
@@ -402,22 +455,45 @@ describe("validateServiceManifest", () => {
   });
   // biome-ignore-end lint/suspicious/noTemplateCurlyInString: strings are literal compose-substitution syntax, not JS template placeholders
 
-  it("accepts relative-path bindMounts for community services (ship own configs)", () => {
+  it("rejects relative-path bindMounts for community services", () => {
     const result = validateExternal({
       ...validMinimal,
       quality: "community",
       bindMounts: [{ source: "config/file.json", target: "/etc/file.json" }],
     });
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+    );
   });
 
-  it("accepts relative-path bindMounts for community-verified services", () => {
+  it.each(["/forbidden-path", "../outside", "@unknown-special"])(
+    "adds the stable policy code for a malformed community bind source %s",
+    (source) => {
+      const result = validateExternal({
+        ...validMinimal,
+        quality: "community",
+        bindMounts: [{ source, target: "/container-path" }],
+      });
+
+      expect(result.valid).toBe(false);
+      expect(result.errors).toContain(
+        "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+      );
+      expect(result.errors.join(" ")).not.toContain(source);
+    },
+  );
+
+  it("rejects relative-path bindMounts for community-verified services", () => {
     const result = validateExternal({
       ...validMinimal,
       quality: "community-verified",
       bindMounts: [{ source: "config/settings.yml", target: "/app/settings.yml" }],
     });
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBe(false);
+    expect(result.errors).toContain(
+      "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+    );
   });
 
   it("rejects @docker-socket bindMount source for community services", () => {
@@ -427,7 +503,9 @@ describe("validateServiceManifest", () => {
       bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
     });
     expect(result.valid).toBe(false);
-    expect(result.errors.join(" ")).toMatch(/built-in/);
+    expect(result.errors).toContain(
+      "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+    );
   });
 
   it("rejects @docker-socket bindMount source for community-verified services", () => {
@@ -741,7 +819,7 @@ describe("validateServiceManifest", () => {
         name: "docker socket",
         container: {},
         bindMounts: [{ source: "@docker-socket", target: "/var/run/docker.sock" }],
-        error: /@docker-socket/,
+        error: /community_bind_mount_forbidden/,
       },
     ] as const;
 
@@ -841,7 +919,9 @@ describe("validateServiceManifest", () => {
       };
       const result = validateExternal(manifest);
       expect(result.valid).toBe(false);
-      expect(result.errors.join(" ")).toMatch(/@docker-socket/);
+      expect(result.errors).toContain(
+        "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+      );
     });
 
     it("still accepts an honest community manifest without elevated privileges", () => {

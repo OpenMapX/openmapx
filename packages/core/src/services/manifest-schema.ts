@@ -6,6 +6,7 @@ import type { ManifestProvenance, ServiceManifest } from "./types";
 
 const IMAGE_REGEX = /^[a-z0-9]([a-z0-9._\-/])*$/;
 const TAG_REGEX = /^[a-zA-Z0-9._-]+$/;
+const IMAGE_DIGEST_REGEX = /^sha256:[a-f0-9]{64}$/;
 // Docker's container-name grammar: `[a-zA-Z0-9][a-zA-Z0-9_.-]*` (single-char
 // names are legal, hence `*` not `+` after the leading char).
 const CONTAINER_NAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/;
@@ -270,6 +271,7 @@ const dependsOnSchema = z.object({
 const containerSchema = z.object({
   image: z.string().regex(IMAGE_REGEX, "must be lowercase, no tag suffix (use 'tag' field)"),
   tag: z.string().regex(TAG_REGEX),
+  digest: z.string().regex(IMAGE_DIGEST_REGEX, "must be a sha256 OCI manifest digest").optional(),
   containerName: z
     .string()
     .regex(CONTAINER_NAME_REGEX, "must be a valid docker container name")
@@ -349,6 +351,15 @@ const providesEntrySchema = z.union([
   }),
 ]);
 
+const configSchema = z
+  .object({
+    type: z.literal("object"),
+    properties: z.record(z.string(), z.unknown()),
+    required: z.array(z.string()).optional(),
+    additionalProperties: z.boolean().optional(),
+  })
+  .passthrough();
+
 export const serviceManifestSchema = z.object({
   id: z.string().min(1).regex(SERVICE_ID_REGEX, "must be lowercase, hyphen-separated"),
   name: z.string().min(1),
@@ -370,8 +381,12 @@ export const serviceManifestSchema = z.object({
     .array(z.string().regex(SERVICE_ID_REGEX, "must be a service id"))
     .refine((ids) => new Set(ids).size === ids.length, "must not contain duplicates")
     .optional(),
+  communityNetworkAccess: z
+    .array(z.string().regex(SERVICE_ID_REGEX, "must be a service id"))
+    .refine((ids) => new Set(ids).size === ids.length, "must not contain duplicates")
+    .optional(),
 
-  configSchema: z.record(z.string(), z.unknown()).optional(),
+  configSchema: configSchema.optional(),
   envVars: z.array(envVarSchema).optional(),
 
   // Postgres schema this service owns and migrates itself, idempotently, on boot
@@ -403,15 +418,29 @@ export interface ManifestValidationResult {
   warnings?: CapabilityWarning[];
 }
 
+function hasCommunityBindMountEntries(raw: unknown, provenance: ManifestProvenance): boolean {
+  if (provenance.firstParty || !raw || typeof raw !== "object" || Array.isArray(raw)) {
+    return false;
+  }
+  const bindMounts = (raw as Record<string, unknown>).bindMounts;
+  return Array.isArray(bindMounts) && bindMounts.length > 0;
+}
+
 export function validateServiceManifest(
   raw: unknown,
   provenance: ManifestProvenance,
 ): ManifestValidationResult {
   const result = serviceManifestSchema.safeParse(raw);
   if (!result.success) {
+    const errors = result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`);
+    if (hasCommunityBindMountEntries(raw, provenance)) {
+      errors.unshift(
+        "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+      );
+    }
     return {
       valid: false,
-      errors: result.error.issues.map((issue) => `${issue.path.join(".")}: ${issue.message}`),
+      errors,
     };
   }
   const m = result.data as ServiceManifest;
@@ -424,9 +453,7 @@ export function validateServiceManifest(
 
   const proxyHost = m.exposure?.proxy?.host;
   if (proxyHost?.configKey) {
-    const properties = m.configSchema
-      ? ((m.configSchema.properties ?? m.configSchema) as Record<string, unknown>)
-      : {};
+    const properties = m.configSchema ? (m.configSchema.properties as Record<string, unknown>) : {};
     const field = properties[proxyHost.configKey];
     if (
       !field ||
@@ -441,6 +468,9 @@ export function validateServiceManifest(
   }
 
   for (const volume of m.volumes ?? []) {
+    if (volume.backup === true && !volume.backupMode) {
+      errors.push(`volumes: backup: true requires backupMode on "${volume.name}"`);
+    }
     if (volume.backupMode && volume.backup !== true) {
       errors.push(`volumes: backupMode requires backup: true on "${volume.name}"`);
     }
@@ -460,11 +490,8 @@ export function validateServiceManifest(
   // time. Manifests can be third-party, so a path-shaped or otherwise unsafe
   // key must never load — rejecting here keeps every downstream consumer from
   // having to re-derive the rule.
-  const configProps = m.configSchema
-    ? ((m.configSchema.properties ?? m.configSchema) as Record<string, unknown>)
-    : {};
+  const configProps = m.configSchema ? (m.configSchema.properties as Record<string, unknown>) : {};
   for (const [key, def] of Object.entries(configProps)) {
-    if (key === "type" || key === "properties") continue;
     if (!def || typeof def !== "object") continue;
     if ((def as Record<string, unknown>)["x-openmapx-secret"] !== true) continue;
     if (!isValidSecretKey(key)) {
@@ -492,9 +519,8 @@ export function validateServiceManifest(
     seenProduces.add(key);
   }
 
-  // Capability + data-type advisories. Non-blocking; surface these to the
-  // operator so community plugins migrate toward namespaced names without
-  // breaking existing manifests.
+  // Capability + data-type advisories are non-blocking and surface namespace
+  // mistakes to the operator.
   const warnings = collectCapabilityWarnings(m);
 
   return {

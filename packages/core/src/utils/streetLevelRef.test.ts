@@ -22,14 +22,7 @@ describe("streetLevelRef", () => {
     });
   });
 
-  it("treats a bare id as the fallback provider (legacy ?sv= links)", () => {
-    expect(parseStreetLevelRef("1234567890", "mapillary")).toEqual({
-      providerId: "mapillary",
-      imageId: "1234567890",
-    });
-  });
-
-  it("returns null for a bare id with no fallback", () => {
+  it("returns null for a bare id", () => {
     expect(parseStreetLevelRef("1234567890")).toBeNull();
   });
 

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { apiQueryRequestOptions, MAP_QUERY_POLICY } from "../api/queryPolicy";
 import type { CategorySearchResponse } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import { normalizeFilter, type OverpassFilter, type TagPredicate } from "../utils/overpassFilter";
@@ -18,7 +19,7 @@ export function useFilterSearch(
       bbox,
       lang,
     ],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.post<CategorySearchResponse & { relaxed?: TagPredicate[] }>(
         API_ENDPOINTS.poiFilter,
         {
@@ -29,9 +30,11 @@ export function useFilterSearch(
           east: bbox?.east,
           ...(lang && { lang }),
         },
+        apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
       ),
     enabled: filter !== null && filter.selectors.length > 0 && bbox !== null,
     staleTime: 30_000,
+    gcTime: MAP_QUERY_POLICY.gcTime,
     retry: (_count, error) => !isAreaTooLarge(error),
   });
 }

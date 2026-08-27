@@ -1,6 +1,7 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { apiQueryRequestOptions, RAPID_QUERY_POLICY } from "../api/queryPolicy";
 import type { LngLat } from "../types/geometry";
 import type { SearchSuggestionsResponse } from "../types/searchSuggestion";
 import { normalizeSearchTerm } from "../utils/searchSuggestion";
@@ -23,18 +24,23 @@ export function useSearchSuggestions(
 
   return useQuery<SearchSuggestionsResponse>({
     queryKey: ["search-suggestions", normalizedQuery, lang, roundedProximity, limit],
-    queryFn: () =>
-      apiClient.get<SearchSuggestionsResponse>(API_ENDPOINTS.searchSuggestions, {
-        q: query.trim(),
-        lang,
-        ...(roundedProximity && {
-          lng: roundedCoordinate(roundedProximity[0]),
-          lat: roundedCoordinate(roundedProximity[1]),
-        }),
-        limit: String(limit),
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<SearchSuggestionsResponse>(
+        API_ENDPOINTS.searchSuggestions,
+        {
+          q: query.trim(),
+          lang,
+          ...(roundedProximity && {
+            lng: roundedCoordinate(roundedProximity[0]),
+            lat: roundedCoordinate(roundedProximity[1]),
+          }),
+          limit: String(limit),
+        },
+        apiQueryRequestOptions(signal, RAPID_QUERY_POLICY),
+      ),
     enabled: searchableLength >= 2,
     staleTime: 5 * 60_000,
+    gcTime: RAPID_QUERY_POLICY.gcTime,
     placeholderData: keepPreviousData,
   });
 }

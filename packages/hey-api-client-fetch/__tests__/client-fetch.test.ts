@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import { createClient } from "../index.js";
 
-describe("@hey-api/client-fetch compatibility layer", () => {
+describe("@hey-api/client-fetch workspace runtime", () => {
   it("serializes path and query params and parses JSON responses", async () => {
     const fetchMock = vi.fn(async (request: Request) => {
       expect(request.url).toBe("https://example.test/stops/central?ids=1&ids=2&meta[lang]=en");

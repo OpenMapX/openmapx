@@ -2,9 +2,7 @@
 // contributes these types to the inferred client shape, but they live in an
 // internal chunk file that TypeScript cannot name when it writes a declaration
 // (TS2883). Importing them from the package root — where they are publicly
-// exported — gives the emitter a nameable path. Without this,
-// `@openmapx/extension-sdk`'s declaration rollup fails, because its program
-// pulls this file in through the `@openmapx/core` barrel.
+// exported — gives the emitter a nameable path for `@openmapx/core` itself.
 import type {
   AuthServerMetadata,
   OAuthClient,

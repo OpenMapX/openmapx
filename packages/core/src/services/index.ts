@@ -17,6 +17,7 @@ export {
   readServiceSecretKeysFromDisk,
   renderCompose,
   renderServiceSnippet,
+  resolveProxyHost,
 } from "./compose-renderer";
 export {
   type ConfigSource,
@@ -27,11 +28,13 @@ export {
   serviceConfigEnvPrefix,
 } from "./config-resolver";
 export {
+  DATA_MANAGER_PLAINTEXT_HOSTS_ENV,
   DataManagerClient,
   type DataManagerClientOptions,
   DataManagerHttpError,
   type SearchIndexBuildResult,
   type SearchIndexStatus,
+  validateDataManagerBaseUrl,
 } from "./data-manager-client";
 export {
   type ExtensionComponentRef,
@@ -40,7 +43,9 @@ export {
   type ExtensionServiceComponent,
   extensionComponentSummary,
   extensionManifestSchema,
+  type VerifiedCatalogEntry,
   validateExtensionManifest,
+  verifiedCatalogEntrySchema,
 } from "./extension-schema";
 export { findServiceManifestDirs } from "./manifest-discovery";
 export {
@@ -51,6 +56,29 @@ export {
   validateServiceManifest,
 } from "./manifest-schema";
 export { ServiceRegistry, type ServiceRegistryOptions } from "./registry";
+export {
+  captureReleaseServiceAuthority,
+  RELEASE_BUILT_IN_SERVICE_IDS,
+  RELEASE_NEVER_MANAGE_SERVICE_IDS,
+  type ReleaseServiceAuthorityCapture,
+  type ReleaseServiceAuthorityCaptureHooks,
+  validateReleaseServiceAuthority,
+} from "./release-authority-inventory";
+export {
+  DEFAULT_RELEASE_MANIFEST_IMAGE,
+  parseReleaseManifest,
+  RELEASE_MANIFEST_CONTAINER_PATH,
+  RELEASE_MANIFEST_IMAGE_ENV,
+  RELEASE_PINNED_SERVICE_IDS,
+  type ReleaseChannel,
+  ReleaseChannelDisabledError,
+  type ReleaseManifest,
+  releaseChannel,
+  releaseManifestImage,
+  renderReleaseCompose,
+  TRANSITOUS_TOOLS_IMAGE_ENV,
+  transitousToolsImageFromReleaseCompose,
+} from "./release-manifest";
 export {
   detectConsumesCycle,
   findByCapability,
@@ -76,4 +104,11 @@ export {
   parseServiceIdList,
   SERVICE_SELECTION_ENV,
 } from "./selection";
+export {
+  renderTraefikDynamicConfiguration,
+  renderTraefikDynamicYaml,
+  renderTraefikServiceConfiguration,
+  type TraefikDynamicConfiguration,
+  type TraefikRenderContext,
+} from "./traefik-renderer";
 export * from "./types";

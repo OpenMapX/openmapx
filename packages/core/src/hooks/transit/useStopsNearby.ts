@@ -3,6 +3,7 @@ import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
+import { apiQueryRequestOptions, MAP_QUERY_POLICY } from "../../api/queryPolicy";
 import type { LngLat } from "../../types/geometry";
 import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
 
@@ -13,7 +14,7 @@ export function useStopsNearby(
 ): MobilityEnvelopeQueryResult<TransitStop[]> {
   const query = useQuery({
     queryKey: ["transit-stops-nearby", location, radiusMeters, modes],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params: Record<string, string> = {
         lat: String(location?.[1]),
         lng: String(location?.[0]),
@@ -23,10 +24,12 @@ export function useStopsNearby(
       return apiClient.get<MobilityEnvelope<TransitStop[]>>(
         API_ENDPOINTS.transitStopsNearby,
         params,
+        apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
       );
     },
     enabled: location !== null,
     staleTime: 300_000,
+    gcTime: MAP_QUERY_POLICY.gcTime,
   });
   return wrapMobilityEnvelope(query);
 }

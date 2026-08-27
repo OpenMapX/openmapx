@@ -259,17 +259,6 @@ function safeJsonParse(raw: string): unknown {
   }
 }
 
-/**
- * Migration dispatch.
- *
- * Version 1 is the first schema, so there is no invented v0 path. An unknown or
- * newer version is reported rather than guessed, so the coordinator can
- * quarantine the record instead of misreading it.
- */
-export function migrateMobileSession(value: unknown): SessionParseResult {
-  return parseMobileSession(value);
-}
-
 export function isMobileSessionExpired(session: MobileNavigationSession, nowMs: number): boolean {
   return nowMs >= session.expiresAtMs;
 }

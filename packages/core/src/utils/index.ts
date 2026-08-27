@@ -65,10 +65,14 @@ export {
 } from "./elevation";
 export { ConfigurationError } from "./errors";
 export {
+  DEFAULT_FETCH_ERROR_MAX_BYTES,
   DEFAULT_FETCH_JSON_MAX_BYTES,
   DEFAULT_FETCH_TIMEOUT_MS,
   type FetchJsonOptions,
   fetchJson,
+  isJsonMediaType,
+  readBoundedJsonResponse,
+  readBoundedResponseText,
 } from "./fetchJson";
 export {
   type FetchWithRedirectsOptions,

@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { apiQueryRequestOptions, RAPID_QUERY_POLICY } from "../api/queryPolicy";
 import type { BoundingBox } from "../types/geometry";
 import type { SearchIntent } from "../types/search";
 
@@ -34,16 +35,14 @@ export function useNlpSearch(
 
   return useQuery<NlpParseResponse>({
     queryKey: ["nlp-search", query, lang, centerKey, cloudAccess],
-    queryFn: () =>
-      apiClient.post<NlpParseResponse>(API_ENDPOINTS.nlpParse, {
-        query,
-        mapCenter,
-        mapBbox,
-        lang,
-        cloudAccess,
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.post<NlpParseResponse>(
+        API_ENDPOINTS.nlpParse,
+        { query, mapCenter, mapBbox, lang, cloudAccess },
+        apiQueryRequestOptions(signal, RAPID_QUERY_POLICY),
+      ),
     enabled: enabled && query.trim().length >= 4 && !!mapCenter && !!mapBbox,
     staleTime: 60_000,
-    gcTime: 600_000,
+    gcTime: RAPID_QUERY_POLICY.gcTime,
   });
 }

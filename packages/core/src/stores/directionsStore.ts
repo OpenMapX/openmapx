@@ -35,17 +35,6 @@ function makeEmptyWaypoint(): Waypoint {
   return { id: newWaypointId(), coords: null, label: "", type: "waypoint" };
 }
 
-/** Compute backward-compat derived fields from waypoints. */
-function derived(wps: Waypoint[]) {
-  const last = wps.length - 1;
-  return {
-    origin: wps[0]?.coords ?? null,
-    originLabel: wps[0]?.label ?? "",
-    destination: wps[last]?.coords ?? null,
-    destinationLabel: wps[last]?.label ?? "",
-  };
-}
-
 const MAX_WAYPOINTS = 10;
 
 export interface DirectionsState {
@@ -104,12 +93,6 @@ export interface DirectionsState {
   /** Germany-only: restrict transit to Deutschlandticket-covered services. */
   deutschlandticketOnly: boolean;
 
-  // Derived from waypoints (kept in sync for backward compat)
-  origin: LngLat | null;
-  originLabel: string;
-  destination: LngLat | null;
-  destinationLabel: string;
-
   // Actions
   open: () => void;
   close: () => void;
@@ -118,9 +101,6 @@ export interface DirectionsState {
   removeWaypoint: (index: number) => void;
   reorderWaypoints: (fromIndex: number, toIndex: number) => void;
   reverseWaypoints: () => void;
-  setOrigin: (coords: LngLat | null, label: string) => void;
-  setDestination: (coords: LngLat | null, label: string) => void;
-  swapOriginDestination: () => void;
   setMode: (mode: TravelMode) => void;
   /** Toggle EV trip-planning mode. Turning it on forces `mode` back to `"driving"`. */
   setEvMode: (on: boolean) => void;
@@ -160,7 +140,6 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
   return {
     isOpen: false,
     waypoints: initWps,
-    ...derived(initWps),
     mode: "driving",
     isEvMode: false,
     evSocStartPct: 80,
@@ -190,7 +169,6 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       set({
         isOpen: false,
         waypoints: wps,
-        ...derived(wps),
         activeRouteIndex: 0,
         isEvMode: false,
         evSocStartPct: 80,
@@ -216,7 +194,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const wps = [...get().waypoints];
       if (index < 0 || index >= wps.length) return;
       wps[index] = { ...wps[index], coords, label };
-      set({ waypoints: wps, ...derived(wps), activeRouteIndex: 0 });
+      set({ waypoints: wps, activeRouteIndex: 0 });
     },
 
     addWaypoint: (afterIndex) => {
@@ -225,7 +203,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const newWp = makeEmptyWaypoint();
       wps.splice(afterIndex + 1, 0, newWp);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, ...derived(typed), activeRouteIndex: 0 });
+      set({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     removeWaypoint: (index) => {
@@ -233,7 +211,7 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       if (wps.length <= 2) return;
       wps.splice(index, 1);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, ...derived(typed), activeRouteIndex: 0 });
+      set({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     reorderWaypoints: (fromIndex, toIndex) => {
@@ -241,30 +219,13 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const [moved] = wps.splice(fromIndex, 1);
       wps.splice(toIndex, 0, moved);
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, ...derived(typed), activeRouteIndex: 0 });
+      set({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     reverseWaypoints: () => {
       const wps = [...get().waypoints].reverse();
       const typed = deriveTypes(wps);
-      set({ waypoints: typed, ...derived(typed), activeRouteIndex: 0 });
-    },
-
-    setOrigin: (coords, label) => {
-      const wps = [...get().waypoints];
-      wps[0] = { ...wps[0], coords, label };
-      set({ waypoints: wps, ...derived(wps), activeRouteIndex: 0 });
-    },
-
-    setDestination: (coords, label) => {
-      const wps = [...get().waypoints];
-      const last = wps.length - 1;
-      wps[last] = { ...wps[last], coords, label };
-      set({ waypoints: wps, ...derived(wps), activeRouteIndex: 0 });
-    },
-
-    swapOriginDestination: () => {
-      get().reverseWaypoints();
+      set({ waypoints: typed, activeRouteIndex: 0 });
     },
 
     setMode: (mode) => set({ mode, activeRouteIndex: 0, isEvMode: false }),
@@ -280,7 +241,6 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
       const trimmed = last > 1 ? deriveTypes([wps[0], wps[last]]) : wps;
       set({
         waypoints: trimmed,
-        ...derived(trimmed),
         isEvMode,
         mode: "driving",
         activeRouteIndex: 0,

@@ -20,6 +20,7 @@ describe("configSchemaKeys", () => {
 
   it("reads keys + defaults from a `properties` wrapper", () => {
     const result = configSchemaKeys({
+      type: "object",
       properties: {
         memory_limit: { type: "string", default: "1g" },
         verbose: { type: "boolean", default: false },
@@ -33,12 +34,8 @@ describe("configSchemaKeys", () => {
     ]);
   });
 
-  it("accepts a flat schema (no `properties` wrapper)", () => {
-    const result = configSchemaKeys({ foo: { default: "x" }, bar: {} });
-    expect(result).toEqual([
-      { key: "foo", default: "x" },
-      { key: "bar", default: undefined },
-    ]);
+  it("does not interpret a flat object as a config schema", () => {
+    expect(configSchemaKeys({ foo: { default: "x" }, bar: {} })).toEqual([]);
   });
 
   it("skips reserved `type` and `properties` keys at the outer level", () => {
@@ -65,7 +62,10 @@ describe("resolveServiceConfigFromEnv", () => {
     const r = resolveServiceConfigFromEnv(
       {
         id: "valhalla",
-        configSchema: { properties: { memory: { type: "string", default: "1g" } } },
+        configSchema: {
+          type: "object",
+          properties: { memory: { type: "string", default: "1g" } },
+        },
       },
       {},
     );
@@ -76,7 +76,10 @@ describe("resolveServiceConfigFromEnv", () => {
     const r = resolveServiceConfigFromEnv(
       {
         id: "valhalla",
-        configSchema: { properties: { memory: { type: "string", default: "1g" } } },
+        configSchema: {
+          type: "object",
+          properties: { memory: { type: "string", default: "1g" } },
+        },
       },
       { SERVICE_VALHALLA_MEMORY: "4g" },
     );
@@ -87,7 +90,10 @@ describe("resolveServiceConfigFromEnv", () => {
     const r = resolveServiceConfigFromEnv(
       {
         id: "data-manager",
-        configSchema: { properties: { data_dir: { type: "string", default: "/data" } } },
+        configSchema: {
+          type: "object",
+          properties: { data_dir: { type: "string", default: "/data" } },
+        },
       },
       { SERVICE_DATA_MANAGER_DATA_DIR: "/srv/data" },
     );
@@ -96,7 +102,7 @@ describe("resolveServiceConfigFromEnv", () => {
 
   it("matches env key lookup case-insensitively against the schema key", () => {
     const r = resolveServiceConfigFromEnv(
-      { id: "svc", configSchema: { properties: { camelKey: {} } } },
+      { id: "svc", configSchema: { type: "object", properties: { camelKey: {} } } },
       { SERVICE_SVC_CAMELKEY: "x" },
     );
     expect(r.camelKey).toEqual({ value: "x", source: "env" });
@@ -104,7 +110,10 @@ describe("resolveServiceConfigFromEnv", () => {
 
   it("ignores env vars that don't match any schema key", () => {
     const r = resolveServiceConfigFromEnv(
-      { id: "svc", configSchema: { properties: { foo: { default: "d" } } } },
+      {
+        id: "svc",
+        configSchema: { type: "object", properties: { foo: { default: "d" } } },
+      },
       { SERVICE_SVC_BAR: "nope" },
     );
     expect(r).toEqual({ foo: { value: "d", source: "default" } });
@@ -116,7 +125,7 @@ describe("resolveServiceConfigFromEnv", () => {
 
   it("omits keys with neither a default nor an env override", () => {
     const r = resolveServiceConfigFromEnv(
-      { id: "svc", configSchema: { properties: { foo: {} } } },
+      { id: "svc", configSchema: { type: "object", properties: { foo: {} } } },
       {},
     );
     expect(r).toEqual({});
@@ -131,6 +140,7 @@ describe("resolveServiceConfigFromEnv", () => {
       {
         id: "valhalla",
         configSchema: {
+          type: "object",
           properties: {
             build_elevation: { type: "boolean", default: true },
             extra_key: { type: "string", default: "seed" },
@@ -149,6 +159,7 @@ describe("resolveServiceConfigFromEnv", () => {
       {
         id: "valhalla",
         configSchema: {
+          type: "object",
           properties: { build_elevation: { type: "boolean", default: true } },
         },
         container: { environment: { build_elevation: "True" } },

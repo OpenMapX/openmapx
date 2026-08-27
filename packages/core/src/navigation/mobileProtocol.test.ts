@@ -5,7 +5,6 @@ import {
   MAX_TOTAL_STEPS,
   MOBILE_PROTOCOL_MAX,
   MOBILE_PROTOCOL_MIN,
-  messageAllowedAtVersion,
   NATIVE_TO_WEB_TYPES,
   nativeToWebSchema,
   negotiateMobileProtocol,
@@ -68,7 +67,7 @@ function transitPackage() {
 
 function message(overrides: Record<string, unknown> = {}) {
   return {
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type: "session.prepare",
     messageId: "m-1",
     channelNonce: NONCE,
@@ -87,11 +86,11 @@ const errorCodeOf = (result: ReturnType<typeof parse>) =>
 
 describe("negotiateMobileProtocol", () => {
   it.each([
-    [{ min: 1, max: 1 }, { min: 1, max: 1 }, 1],
-    [{ min: 1, max: 2 }, { min: 2, max: 3 }, 2],
-    [{ min: 1, max: 3 }, { min: 1, max: 2 }, 2],
-    [{ min: 1, max: 1 }, { min: 2, max: 2 }, null],
-    [{ min: 3, max: 4 }, { min: 1, max: 2 }, null],
+    [{ min: 3, max: 3 }, { min: 3, max: 3 }, 3],
+    [{ min: 3, max: 4 }, { min: 4, max: 5 }, 4],
+    [{ min: 3, max: 5 }, { min: 3, max: 4 }, 4],
+    [{ min: 2, max: 2 }, { min: 3, max: 3 }, null],
+    [{ min: 4, max: 5 }, { min: 2, max: 3 }, null],
   ] as const)("negotiates the highest overlap", (web, native, expected) => {
     expect(negotiateMobileProtocol(web, native)).toBe(expected);
   });
@@ -223,7 +222,7 @@ describe("rejection", () => {
   });
 
   it.each(["__proto__", "constructor", "prototype"])("rejects the polluting key %s", (key) => {
-    const raw = `{"protocolVersion":1,"type":"snapshot.request","messageId":"m","channelNonce":"${NONCE}","sentAtMs":${NOW},"payload":{"${key}":{"polluted":true}}}`;
+    const raw = `{"protocolVersion":${MOBILE_PROTOCOL_MAX},"type":"snapshot.request","messageId":"m","channelNonce":"${NONCE}","sentAtMs":${NOW},"payload":{"${key}":{"polluted":true}}}`;
     expect(parseMobileBridgeMessage(raw, { expectedNonce: NONCE, nowMs: NOW })).toEqual({
       ok: false,
       error: { code: "prototype-pollution" },
@@ -269,9 +268,9 @@ describe("native messages", () => {
       payload: {
         shellVersion: "1.0.0",
         shellBuild: "1",
-        selectedProtocolVersion: 1,
-        minProtocolVersion: 1,
-        maxProtocolVersion: 1,
+        selectedProtocolVersion: MOBILE_PROTOCOL_MAX,
+        minProtocolVersion: MOBILE_PROTOCOL_MIN,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
         platform: "ios",
         capabilities: {
           groundNavigation: false,
@@ -283,6 +282,7 @@ describe("native messages", () => {
         permission: "not-determined",
         locationDriver: "expo",
         activeSession: null,
+        forMessageId: "web-hello-1",
       },
     });
     expect(parse(hello).ok).toBe(true);
@@ -297,51 +297,14 @@ describe("native messages", () => {
   });
 });
 
-describe("protocol v2 is additive", () => {
-  const envelope = (type: string, payload: unknown, protocolVersion = 2) => ({
-    protocolVersion,
+describe("current protocol vocabulary", () => {
+  const envelope = (type: string, payload: unknown) => ({
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type,
     messageId: "w1",
     channelNonce: "nonce",
     sentAtMs: 1_700_000_000_000,
     payload,
-  });
-
-  it("still negotiates v1 with a v1 shell", () => {
-    expect(negotiateMobileProtocol({ min: 1, max: 2 }, { min: 1, max: 1 })).toBe(1);
-  });
-
-  it("negotiates v2 when both sides have it", () => {
-    expect(negotiateMobileProtocol({ min: 1, max: 2 }, { min: 1, max: 2 })).toBe(2);
-  });
-
-  it.each([
-    "web.hello",
-    "session.prepare",
-    "session.start",
-    "session.replace",
-    "settings.update",
-    "snapshot.request",
-    "session.stop",
-    "session.complete",
-    "event.ack",
-  ])("keeps %s available at v1", (type) => {
-    expect(messageAllowedAtVersion(type, 1)).toBe(true);
-  });
-
-  it.each([
-    "location.request",
-    "settings.open",
-    "auth.open",
-    "location.result",
-    "settings.result",
-    "deep-link.open",
-    "auth.result",
-  ])("withholds %s from a v1 shell", (type) => {
-    // A v1 binary has never heard of these. Sending one is asking a shell to
-    // fail in a way the page cannot distinguish from a broken bridge.
-    expect(messageAllowedAtVersion(type, 1)).toBe(false);
-    expect(messageAllowedAtVersion(type, 2)).toBe(true);
   });
 
   it("accepts a bounded location request", () => {
@@ -441,5 +404,33 @@ describe("protocol v2 is additive", () => {
     );
 
     expect(parsed.success).toBe(false);
+  });
+});
+
+describe("reply correlation", () => {
+  it("accepts a bounded request id on a snapshot response", () => {
+    expect(
+      nativeToWebSchema.safeParse({
+        protocolVersion: MOBILE_PROTOCOL_MAX,
+        type: "snapshot.update",
+        messageId: "native-1",
+        channelNonce: "nonce",
+        sentAtMs: 1_700_000_000_000,
+        payload: { snapshot: {}, forMessageId: "web-1" },
+      }).success,
+    ).toBe(true);
+  });
+
+  it("requires correlation on a direct response", () => {
+    expect(
+      nativeToWebSchema.safeParse({
+        protocolVersion: MOBILE_PROTOCOL_MAX,
+        type: "location.result",
+        messageId: "native-1",
+        channelNonce: "nonce",
+        sentAtMs: NOW,
+        payload: { requestId: "location-1", status: "timeout" },
+      }).success,
+    ).toBe(false);
   });
 });

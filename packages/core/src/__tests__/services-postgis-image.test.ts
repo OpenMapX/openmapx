@@ -11,7 +11,7 @@ const provenancePath = join(serviceDir, "image-provenance.json");
 
 type ServiceManifest = {
   id: string;
-  container: { image: string; tag: string };
+  container: { image: string; tag: string; digest: string };
   volumes: Array<{ name: string; mountAt: string; backup: boolean; backupMode: string }>;
 };
 
@@ -41,6 +41,9 @@ describe("platform PostGIS image contract", () => {
     expect(manifest.id).toBe("postgis");
     expect(`${manifest.container.image}:${manifest.container.tag}`).toBe(
       "ghcr.io/baosystems/postgis:18-3.6",
+    );
+    expect(manifest.container.digest).toBe(
+      "sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6",
     );
     expect(manifest.volumes).toContainEqual({
       name: "openmapx-pgdata",

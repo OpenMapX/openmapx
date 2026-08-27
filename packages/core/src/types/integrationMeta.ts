@@ -28,7 +28,14 @@ export interface CacheClient {
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
-  withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T>;
+  /** Loader signal belongs to the shared cache fill, not any one request. */
+  withCache<T>(
+    key: string,
+    ttlSeconds: number,
+    fn: (operationSignal: AbortSignal) => Promise<T>,
+    callerSignal?: AbortSignal,
+    shouldCache?: (value: T) => boolean,
+  ): Promise<T>;
 }
 
 export type IntegrationStrings = Record<string, Record<string, unknown>>;

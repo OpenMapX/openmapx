@@ -2,6 +2,7 @@ import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { apiQueryRequestOptions, DETAIL_QUERY_POLICY, MAP_QUERY_POLICY } from "../api/queryPolicy";
 import type { DataSourceDetail, DataSourceResult } from "../types/dataSource";
 import type { Place } from "../types/place";
 import { haversineDistance } from "../utils/coordinates";
@@ -79,7 +80,7 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
   // Search for nearby data source items
   const { data: nearbyEnvelope } = useQuery({
     queryKey: ["ds-match-search", sourceId, lat, lng],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       const params: Record<string, string> = {
         south: String(lat - SEARCH_DELTA),
         west: String(lng - SEARCH_DELTA),
@@ -89,10 +90,12 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
       return apiClient.get<MobilityEnvelope<DataSourceResult[]>>(
         `${API_ENDPOINTS.dataSourceSearch}/${sourceId}/search`,
         params,
+        apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
       );
     },
     enabled: sourceId !== null && place !== null,
     staleTime: 5 * 60 * 1000,
+    gcTime: MAP_QUERY_POLICY.gcTime,
   });
   const nearbyResults = nearbyEnvelope?.data;
 
@@ -116,12 +119,15 @@ export function useDataSourceMatch(place: Place | null): DataSourceDetail | null
   // Fetch detail for the closest match
   const { data: detailEnvelope } = useQuery({
     queryKey: ["ds-match-detail", sourceId, bestMatch?.id],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.get<MobilityEnvelope<DataSourceDetail>>(
         `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/detail/${bestMatch?.id}`,
+        undefined,
+        apiQueryRequestOptions(signal, DETAIL_QUERY_POLICY),
       ),
     enabled: sourceId !== null && bestMatch !== null,
     staleTime: 5 * 60 * 1000,
+    gcTime: DETAIL_QUERY_POLICY.gcTime,
   });
   const detail = detailEnvelope?.data;
 

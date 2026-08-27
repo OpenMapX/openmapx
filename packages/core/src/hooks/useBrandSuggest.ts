@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { apiQueryRequestOptions, RAPID_QUERY_POLICY } from "../api/queryPolicy";
 import type { BrandSuggestResponse } from "../types/brand";
 
 /**
@@ -11,14 +12,16 @@ import type { BrandSuggestResponse } from "../types/brand";
 export function useBrandSuggest(query: string, country?: string, enabled = true) {
   return useQuery<BrandSuggestResponse>({
     queryKey: ["brand-suggest", query, country],
-    queryFn: () =>
-      apiClient.get<BrandSuggestResponse>(API_ENDPOINTS.brandSuggest, {
-        q: query,
-        ...(country && { country }),
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<BrandSuggestResponse>(
+        API_ENDPOINTS.brandSuggest,
+        { q: query, ...(country && { country }) },
+        apiQueryRequestOptions(signal, RAPID_QUERY_POLICY),
+      ),
     enabled: enabled && query.trim().length >= 2,
     // The catalog only changes when the artifact is regenerated, so results are
     // effectively immutable for the life of a session.
     staleTime: 60 * 60 * 1000,
+    gcTime: RAPID_QUERY_POLICY.gcTime,
   });
 }

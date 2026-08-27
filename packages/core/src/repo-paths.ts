@@ -34,7 +34,10 @@ export function findRepoRoot(start?: string): string {
   const fromEnv = process.env.OPENMAPX_ROOT_DIR;
   if (fromEnv) return resolve(fromEnv);
 
-  let dir = resolve(start ?? process.cwd());
+  // This walk is intentionally a runtime lookup for CLI/API deployments and
+  // the web's externally mounted custom-integrations directory. It is not a
+  // request for Next/Turbopack to trace the entire build workspace.
+  let dir = resolve(/* turbopackIgnore: true */ start ?? process.cwd());
   while (dir !== dirname(dir)) {
     if (isRepoRoot(dir)) return dir;
     dir = dirname(dir);
@@ -53,6 +56,7 @@ export interface RepoPaths {
   customIntegrationsDir: string;
   infraDir: string;
   composeOutPath: string;
+  composeReleasePath: string;
 }
 
 export function repoPaths(start?: string): RepoPaths {
@@ -65,5 +69,6 @@ export function repoPaths(start?: string): RepoPaths {
     customIntegrationsDir: join(root, "custom_integrations"),
     infraDir: join(root, "infra", "docker"),
     composeOutPath: join(root, "infra", "docker", "docker-compose.generated.yml"),
+    composeReleasePath: join(root, "infra", "docker", "docker-compose.release.yml"),
   };
 }

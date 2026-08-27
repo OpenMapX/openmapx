@@ -22,13 +22,17 @@ describe("useNlpSearch", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(response);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.nlpParse, {
-      query: "coffee near me",
-      mapCenter: center,
-      mapBbox: bbox,
-      lang: "en",
-      cloudAccess: "deny",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.nlpParse,
+      {
+        query: "coffee near me",
+        mapCenter: center,
+        mapBbox: bbox,
+        lang: "en",
+        cloudAccess: "deny",
+      },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 8_000 }),
+    );
   });
 
   it("includes explicit consent in the body when granted", async () => {
@@ -45,6 +49,7 @@ describe("useNlpSearch", () => {
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.nlpParse,
       expect.objectContaining({ cloudAccess: "consented" }),
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 8_000 }),
     );
   });
 

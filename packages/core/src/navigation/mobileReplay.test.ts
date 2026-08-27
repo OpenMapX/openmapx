@@ -2,8 +2,13 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import type { TransitLegCapture } from "./mobileProtocol";
-import { MAX_TOTAL_COORDINATES, MAX_TOTAL_STEPS, parseMobileBridgeMessage } from "./mobileProtocol";
+import {
+  MAX_TOTAL_COORDINATES,
+  MAX_TOTAL_STEPS,
+  MOBILE_PROTOCOL_MAX,
+  parseMobileBridgeMessage,
+  type TransitLegCapture,
+} from "./mobileProtocol";
 import {
   DEFAULT_TRANSIT_TICK_OPTIONS,
   freshTransitTickState,
@@ -203,7 +208,7 @@ describe("maximum realistic payloads", () => {
 
   function packageWith(coordinates: number, steps: number) {
     return {
-      protocolVersion: 1,
+      protocolVersion: MOBILE_PROTOCOL_MAX,
       type: "session.prepare",
       messageId: "m-1",
       channelNonce: nonce,

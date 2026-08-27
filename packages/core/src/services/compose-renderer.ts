@@ -1,4 +1,4 @@
-import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { dump as yamlDump, load as yamlLoad } from "js-yaml";
 import { detectConsumesCycle } from "./resolver";
@@ -12,6 +12,7 @@ import type {
   ServiceManifest,
   ServiceProduces,
 } from "./types";
+import { serviceContainerImageReference } from "./types";
 
 /**
  * Producer index keyed by `<type>` for default/single-instance producers and
@@ -30,6 +31,37 @@ type ProducerIndex = {
   /** type → all entries (default + instanced) for fall-back lookup. */
   byType: Map<string, ProducerEntry[]>;
 };
+
+function communityNetworkName(serviceId: string): string {
+  const normalized = serviceId
+    .normalize("NFKD")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+  if (!normalized) {
+    throw new Error(`Community service "${serviceId}" does not produce a valid network name`);
+  }
+  const name = `openmapx-community-${normalized}`;
+  if (name.length > 255) {
+    throw new Error(`Community service "${serviceId}" produces an overlong network name`);
+  }
+  return name;
+}
+
+function assertUniqueCommunityNetworkNames(services: LoadedService[]): void {
+  const owners = new Map<string, string>();
+  for (const service of services) {
+    if (service.isBuiltIn) continue;
+    const network = communityNetworkName(service.manifest.id);
+    const existing = owners.get(network);
+    if (existing && existing !== service.manifest.id) {
+      throw new Error(
+        `Community network normalization collision: services "${existing}" and "${service.manifest.id}" both resolve to "${network}"`,
+      );
+    }
+    owners.set(network, service.manifest.id);
+  }
+}
 
 function buildProducerIndex(services: LoadedService[]): ProducerIndex {
   const index: ProducerIndex = {
@@ -130,6 +162,13 @@ export interface RenderContext {
    */
   composeOutDir?: string;
   /**
+   * Absolute path to the durable infra root. This is normally identical to
+   * `composeOutDir`, but differs when compose is rendered through a stable
+   * generation pointer. `@infra:` sources and generated data-consumer mounts
+   * must remain rooted here rather than following the generation directory.
+   */
+  infraDir?: string;
+  /**
    * Full list of services in the registry. Required for resolving
    * `@service:<slug>:<path>` bind-mount sources (the renderer needs to know
    * the target service's directory). When absent, the consuming service is
@@ -171,12 +210,6 @@ export interface RenderContext {
    * callers should leave it unset.
    */
   existsSync?: (path: string) => boolean;
-  /**
-   * Optional canonical-path check used by third-party bind-mount containment.
-   * Defaults to `node:fs`'s `realpathSync`; tests can inject a fake alongside
-   * `existsSync` when they need a virtual filesystem.
-   */
-  realpathSync?: (path: string) => string;
   /**
    * Per-render advisory sink. The renderer appends one entry per skipped
    * optional bind mount (host source missing). When omitted, advisories are
@@ -230,6 +263,7 @@ function resolveBindSource(
   service: LoadedService,
   allServices: LoadedService[],
   composeOutDir: string | undefined,
+  infraDir: string | undefined,
 ): ResolvedBindSource {
   // Compose-variable pass-through. Sources that start with `$` — including
   // `${VAR}`, `${VAR:-default}`, and `$VAR` — are emitted verbatim so the
@@ -256,7 +290,7 @@ function resolveBindSource(
       // callers can still introspect the source.
       return { src: `./${relPath}`, absoluteHostPath: null };
     }
-    const absolute = resolve(composeOutDir, relPath);
+    const absolute = resolve(infraDir ?? composeOutDir, relPath);
     return { src: toComposePath(absolute, composeOutDir), absoluteHostPath: absolute };
   }
 
@@ -326,6 +360,35 @@ export interface ComposeServiceSnippet {
       };
     };
   };
+}
+
+export function escapeComposeInterpolation(value: string): string {
+  return value.replaceAll("$", () => "$$");
+}
+
+function escapeComposeScalar(value: string | string[]): string | string[] {
+  return Array.isArray(value)
+    ? value.map(escapeComposeInterpolation)
+    : escapeComposeInterpolation(value);
+}
+
+function escapeCommunityComposeInterpolation(snippet: ComposeServiceSnippet): void {
+  if (snippet.command !== undefined) snippet.command = escapeComposeScalar(snippet.command);
+  if (snippet.entrypoint !== undefined)
+    snippet.entrypoint = escapeComposeScalar(snippet.entrypoint);
+  if (snippet.environment) {
+    snippet.environment = Object.fromEntries(
+      Object.entries(snippet.environment).map(([key, value]) => [
+        escapeComposeInterpolation(key),
+        escapeComposeInterpolation(value),
+      ]),
+    );
+  }
+  const healthcheck = snippet.healthcheck;
+  const test = healthcheck?.test;
+  if (healthcheck && (typeof test === "string" || Array.isArray(test))) {
+    healthcheck.test = escapeComposeScalar(test as string | string[]);
+  }
 }
 
 /** Top-level Docker secret name for a service's vault key (namespaced per service). */
@@ -446,15 +509,12 @@ export function renderServiceSnippet(
   service: LoadedService,
   ctx: RenderContext,
 ): ComposeServiceSnippet {
-  assertRenderSandbox(service, ctx.allServices ?? [service], {
-    existsSync: ctx.existsSync ?? existsSync,
-    realpathSync: ctx.realpathSync ?? realpathSync,
-  });
+  assertRenderSandbox(service, ctx.allServices ?? [service]);
 
   const m = service.manifest;
   const c = m.container;
   const snippet: ComposeServiceSnippet = {
-    image: `${c.image}:${c.tag}`,
+    image: serviceContainerImageReference(c),
   };
 
   // Pin the container name when the manifest opts in — see ServiceContainer.
@@ -512,8 +572,37 @@ export function renderServiceSnippet(
   if (c.devices?.length) snippet.devices = c.devices;
   if (c.privileged) snippet.privileged = true;
 
+  const communityNetworkAccess = m.communityNetworkAccess;
   if (c.networkMode === "host") {
+    if (communityNetworkAccess?.length) {
+      throw new Error(
+        `Service "${m.id}" cannot combine networkMode "host" with communityNetworkAccess`,
+      );
+    }
     snippet.network_mode = "host";
+  } else if (!service.isBuiltIn) {
+    const network = communityNetworkName(m.id);
+    snippet.networks = c.networkAliases?.length
+      ? { [network]: { aliases: [...c.networkAliases] } }
+      : [network];
+  } else if (communityNetworkAccess?.length) {
+    const networks = ["openmapx"];
+    const allServices = ctx.allServices ?? [service];
+    for (const targetId of communityNetworkAccess) {
+      const target = allServices.find((candidate) => candidate.manifest.id === targetId);
+      if (!target || target.isBuiltIn || !target.enabled) {
+        throw new Error(
+          `Service "${m.id}" communityNetworkAccess target "${targetId}" is not an enabled community service`,
+        );
+      }
+      networks.push(communityNetworkName(targetId));
+    }
+    snippet.networks = c.networkAliases?.length
+      ? Object.fromEntries([
+          ["openmapx", { aliases: [...c.networkAliases] }],
+          ...networks.slice(1).map((network) => [network, {}]),
+        ])
+      : networks;
   } else if (c.networkAliases?.length) {
     // Docker Compose long-form: `networks: { openmapx: { aliases: [...] } }`.
     // Other containers on the openmapx network can address this service via
@@ -540,6 +629,7 @@ export function renderServiceSnippet(
       service,
       ctx.allServices ?? [service],
       ctx.composeOutDir,
+      ctx.infraDir,
     );
     // `optional: true` + resolvable host path + path missing → skip the mount
     // and surface an advisory. If the host path can't be resolved (only true
@@ -588,6 +678,10 @@ export function renderServiceSnippet(
 
   if (c.healthcheck) {
     snippet.healthcheck = renderHealthcheck(c.healthcheck, c);
+  }
+
+  if (!service.isBuiltIn) {
+    escapeCommunityComposeInterpolation(snippet);
   }
 
   if (c.dependsOn?.length) {
@@ -778,6 +872,7 @@ function topologicalOrder(services: LoadedService[]): LoadedService[] {
 }
 
 export function renderCompose(services: LoadedService[], ctx: RenderContext): RenderResult {
+  assertUniqueCommunityNetworkNames(services);
   const cycle = detectConsumesCycle(services);
   if (cycle) {
     throw new Error(
@@ -811,7 +906,11 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
         ...(c.targetFilename ? { targetFilename: c.targetFilename } : {}),
       });
       const paths = resolvedConsumesPathsByService.get(s.manifest.id) ?? new Map<string, string>();
-      paths.set(consumesKey(c), `./${target}`);
+      const absoluteTarget = resolve(ctx.infraDir ?? ctx.composeOutDir ?? "", target);
+      paths.set(
+        consumesKey(c),
+        ctx.composeOutDir ? toComposePath(absoluteTarget, ctx.composeOutDir) : `./${target}`,
+      );
       resolvedConsumesPathsByService.set(s.manifest.id, paths);
     }
   }
@@ -882,6 +981,11 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
     }
   }
 
+  const communityNetworks = Object.fromEntries(
+    services
+      .filter((service) => service.enabled && !service.isBuiltIn)
+      .map((service) => [communityNetworkName(service.manifest.id), { driver: "bridge" }]),
+  );
   const composeDoc = {
     services: composeServices,
     networks: {
@@ -897,6 +1001,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
         enable_ipv6: true,
         ipam: { config: [{ subnet: "fd4d:5058::/64" }] },
       },
+      ...communityNetworks,
     },
     ...(Object.keys(namedVolumes).length ? { volumes: namedVolumes } : {}),
     ...(Object.keys(composeSecrets).length ? { secrets: composeSecrets } : {}),

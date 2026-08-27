@@ -17,13 +17,17 @@ describe("useSearchSuggestions", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(get).toHaveBeenCalledWith(API_ENDPOINTS.searchSuggestions, {
-      q: "UNCC",
-      lang: "en",
-      lng: "-80.73",
-      lat: "35.31",
-      limit: "8",
-    });
+    expect(get).toHaveBeenCalledWith(
+      API_ENDPOINTS.searchSuggestions,
+      {
+        q: "UNCC",
+        lang: "en",
+        lng: "-80.73",
+        lat: "35.31",
+        limit: "8",
+      },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 8_000 }),
+    );
   });
 
   it("shares cached results across equivalent normalized queries", async () => {

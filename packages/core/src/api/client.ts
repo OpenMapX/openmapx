@@ -109,7 +109,7 @@ function discardBody(res: Response): void {
 async function readBoundedBody(res: Response): Promise<string | null> {
   const body = res.body;
   if (!body || typeof body.getReader !== "function") {
-    // Mocked/legacy responses without a stream: fall back to a length-capped read.
+    // Responses without a readable stream still use a length-capped read.
     const text = await res.text().catch(() => null);
     if (text === null) return null;
     return text.length > MAX_ERROR_BODY_BYTES ? null : text;

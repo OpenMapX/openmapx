@@ -2,6 +2,7 @@ import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { apiQueryRequestOptions, DETAIL_QUERY_POLICY, MAP_QUERY_POLICY } from "../api/queryPolicy";
 import type {
   DataSourceDetail,
   DataSourceFilterDef,
@@ -28,7 +29,12 @@ interface DataSourcesResponse {
 export function useDataSources() {
   return useQuery({
     queryKey: ["data-sources"],
-    queryFn: () => apiClient.get<DataSourcesResponse>(API_ENDPOINTS.dataSources),
+    queryFn: ({ signal }) =>
+      apiClient.get<DataSourcesResponse>(
+        API_ENDPOINTS.dataSources,
+        undefined,
+        apiQueryRequestOptions(signal, DETAIL_QUERY_POLICY),
+      ),
     staleTime: 60 * 60 * 1000,
   });
 }
@@ -40,7 +46,7 @@ export function useDataSourceSearch(
 ): MobilityEnvelopeQueryResult<DataSourceResult[]> {
   const query = useQuery({
     queryKey: ["data-source-search", sourceId, bbox, filters],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!bbox) throw new Error("bbox is required");
       const params: Record<string, string> = {
         south: String(bbox.south),
@@ -60,10 +66,12 @@ export function useDataSourceSearch(
       return apiClient.get<MobilityEnvelope<DataSourceResult[]>>(
         `${API_ENDPOINTS.dataSourceSearch}/${sourceId}/search`,
         params,
+        apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
       );
     },
     enabled: sourceId !== null && bbox !== null,
     staleTime: 30_000,
+    gcTime: MAP_QUERY_POLICY.gcTime,
   });
   return wrapMobilityEnvelope(query);
 }
@@ -74,12 +82,15 @@ export function useDataSourceDetail(
 ): MobilityEnvelopeQueryResult<DataSourceDetail> {
   const query = useQuery({
     queryKey: ["data-source-detail", sourceId, itemId],
-    queryFn: () =>
+    queryFn: ({ signal }) =>
       apiClient.get<MobilityEnvelope<DataSourceDetail>>(
         `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/detail/${itemId}`,
+        undefined,
+        apiQueryRequestOptions(signal, DETAIL_QUERY_POLICY),
       ),
     enabled: sourceId !== null && itemId !== null,
     staleTime: 5 * 60 * 1000,
+    gcTime: DETAIL_QUERY_POLICY.gcTime,
   });
   return wrapMobilityEnvelope(query);
 }
@@ -92,7 +103,7 @@ export function useDataSourceMapContext(
 ): MobilityEnvelopeQueryResult<DataSourceMapContext | null> {
   const query = useQuery({
     queryKey: ["data-source-map-context", sourceId, bbox, filters, options],
-    queryFn: () => {
+    queryFn: ({ signal }) => {
       if (!bbox) throw new Error("bbox is required");
       const params: Record<string, string> = {
         south: String(bbox.south),
@@ -121,10 +132,12 @@ export function useDataSourceMapContext(
       return apiClient.get<MobilityEnvelope<DataSourceMapContext | null>>(
         `${API_ENDPOINTS.dataSourceDetail}/${sourceId}/map-context`,
         params,
+        apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
       );
     },
     enabled: sourceId !== null && bbox !== null,
     staleTime: 30_000,
+    gcTime: MAP_QUERY_POLICY.gcTime,
   });
   return wrapMobilityEnvelope(query);
 }

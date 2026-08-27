@@ -21,14 +21,18 @@ describe("useCategorySearch", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(response);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.categorySearch, {
-      category: "restaurant",
-      south: "52.4",
-      west: "13.3",
-      north: "52.6",
-      east: "13.5",
-      lang: "en",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.categorySearch,
+      {
+        category: "restaurant",
+        south: "52.4",
+        west: "13.3",
+        north: "52.6",
+        east: "13.5",
+        lang: "en",
+      },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("omits lang when not supplied", async () => {
@@ -44,6 +48,7 @@ describe("useCategorySearch", () => {
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.categorySearch,
       expect.not.objectContaining({ lang: expect.anything() }),
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
   });
 

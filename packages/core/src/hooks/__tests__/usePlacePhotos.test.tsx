@@ -19,13 +19,11 @@ describe("usePlacePhotos", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(photos);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.photos, {
-      lat: "52.5",
-      lng: "13.4",
-      name: "Cafe",
-      placeId: "p1",
-      limit: "5",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.photos,
+      { lat: "52.5", lng: "13.4", name: "Cafe", placeId: "p1", limit: "5" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("sends only lat/lng when no options are provided", async () => {
@@ -36,7 +34,11 @@ describe("usePlacePhotos", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.photos, { lat: "52.5", lng: "13.4" });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.photos,
+      { lat: "52.5", lng: "13.4" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("does not fire when coordinates are missing", () => {

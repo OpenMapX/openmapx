@@ -47,8 +47,8 @@ const serviceComponentSchema = z.object({
 const integrationComponentSchema = z.object({
   // Prebuilt `.tar.gz` artifact (immutable). HTTPS only.
   artifact: z.string().refine(isHttpsUrl, "must be an https artifact URL"),
-  // Optional but recommended checksum, verified before extraction.
-  sha256: z.string().regex(SHA256_REGEX, "must be a 64-char hex sha256").optional(),
+  // Mandatory content pin, verified before extraction.
+  sha256: z.string().regex(SHA256_REGEX, "must be a 64-char hex sha256"),
   // The integration id (manifest id) this artifact installs.
   id: z.string().regex(ID_REGEX, "must be a valid integration id"),
 });
@@ -69,6 +69,34 @@ const readinessSchema = z.object({
   integrationHealth: z.string().regex(ID_REGEX).optional(),
 });
 
+/**
+ * A verified catalog entry. Verified trust comes from immutable content, never
+ * from where the entry was fetched: the entry names an exact manifest and the
+ * exact SHA-256 of its bytes, and carries no field that could raise its own
+ * trust. Anything else is community trust.
+ */
+export const verifiedCatalogEntrySchema = z
+  .object({
+    id: z.string().min(1).regex(ID_REGEX, "must be lowercase, hyphen-separated"),
+    version: z.string().min(1),
+    manifest: z.string().refine(isHttpsUrl, "must be an https manifest URL"),
+    manifestSha256: z.string().regex(SHA256_REGEX, "must be a 64-char hex sha256"),
+    platform: z.string().optional(),
+  })
+  .strict();
+
+export type VerifiedCatalogEntry = z.infer<typeof verifiedCatalogEntrySchema>;
+
+function declaredComponents(m: {
+  services?: Array<{ service: string }>;
+  integrations?: Array<{ id: string }>;
+}): { services: Set<string>; integrations: Set<string> } {
+  return {
+    services: new Set((m.services ?? []).map((s) => s.service)),
+    integrations: new Set((m.integrations ?? []).map((i) => i.id)),
+  };
+}
+
 export const extensionManifestSchema = z
   .object({
     id: z.string().min(1).regex(ID_REGEX, "must be lowercase, hyphen-separated"),
@@ -87,10 +115,36 @@ export const extensionManifestSchema = z
     config: z.array(configEntrySchema).optional(),
     readiness: readinessSchema.optional(),
   })
+  .strict()
   .refine(
     (m) => (m.services?.length ?? 0) + (m.integrations?.length ?? 0) >= 1,
     "an extension must declare at least one component (a service or an integration)",
-  );
+  )
+  // One installed component must belong to exactly one extension, so a manifest
+  // may not name the same component twice — including once as a service and
+  // once as an integration.
+  .refine((m) => {
+    const ids = [
+      ...(m.services ?? []).map((s) => s.service),
+      ...(m.integrations ?? []).map((i) => i.id),
+    ];
+    return new Set(ids).size === ids.length;
+  }, "component ids must be unique within a manifest")
+  // A config or readiness entry that names a component the manifest never
+  // declares would be resolved against something outside this bundle.
+  .refine((m) => {
+    const declared = declaredComponents(m);
+    const names = (target: string): boolean => {
+      const [kind, id] = target.split(":", 2) as ["service" | "integration", string];
+      return kind === "service" ? declared.services.has(id) : declared.integrations.has(id);
+    };
+    return (
+      (m.config ?? []).every((entry) => names(entry.target)) &&
+      (m.readiness?.requires ?? []).every(names) &&
+      (m.readiness?.integrationHealth === undefined ||
+        declared.integrations.has(m.readiness.integrationHealth))
+    );
+  }, "config and readiness must reference a declared component");
 
 export type ExtensionManifest = z.infer<typeof extensionManifestSchema>;
 export type ExtensionServiceComponent = z.infer<typeof serviceComponentSchema>;

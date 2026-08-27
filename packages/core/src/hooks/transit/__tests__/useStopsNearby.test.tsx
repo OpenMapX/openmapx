@@ -26,12 +26,11 @@ describe("useStopsNearby", () => {
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(envelope.data);
     expect(result.current.attributions).toEqual(envelope.attributions);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.transitStopsNearby, {
-      lat: "52.5",
-      lng: "13.4",
-      radius: "800",
-      modes: "bus,tram",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.transitStopsNearby,
+      { lat: "52.5", lng: "13.4", radius: "800", modes: "bus,tram" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("defaults the radius to 500 and omits modes when none are given", async () => {
@@ -44,11 +43,11 @@ describe("useStopsNearby", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.transitStopsNearby, {
-      lat: "52.5",
-      lng: "13.4",
-      radius: "500",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.transitStopsNearby,
+      { lat: "52.5", lng: "13.4", radius: "500" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("does not fire when the location is null", () => {

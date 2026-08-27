@@ -23,6 +23,23 @@ export {
   PersonalTimelineApiError,
   testTimelineConnection,
 } from "./personalTimeline";
+export {
+  buildPlaceDetailsRequest,
+  type PlaceDetailsIdentity,
+  type PlaceDetailsRequest,
+  type PlaceDetailsRequestInput,
+} from "./placeDetails";
+export {
+  type ApiQueryPolicy,
+  apiQueryRequestOptions,
+  configureOfflineQueryRetention,
+  DEFAULT_QUERY_GC_TIME_MS,
+  DETAIL_QUERY_POLICY,
+  isOfflineQueryRetentionEnabled,
+  MAP_QUERY_POLICY,
+  OFFLINE_RETENTION_GC_TIME_MS,
+  RAPID_QUERY_POLICY,
+} from "./queryPolicy";
 export { type AlertBBox, fetchRoadAlerts, type RawRoadAlert } from "./roadAlerts";
 export {
   type FetchRoadConditionsOptions,

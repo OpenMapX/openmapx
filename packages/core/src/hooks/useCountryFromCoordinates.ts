@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { apiQueryRequestOptions, MAP_QUERY_POLICY } from "../api/queryPolicy";
 import type { LngLat } from "../types/geometry";
 
 interface CountryResponse {
@@ -18,15 +19,17 @@ export function useCountryFromCoordinates(coordinates: LngLat | null, enabled = 
   const lat = coordinates?.[1];
   return useQuery<string | null>({
     queryKey: ["country-from-coords", lat, lng],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       if (typeof lat !== "number" || typeof lng !== "number") return null;
-      const res = await apiClient.get<CountryResponse>(API_ENDPOINTS.geocodeCountry, {
-        lat: String(lat),
-        lng: String(lng),
-      });
+      const res = await apiClient.get<CountryResponse>(
+        API_ENDPOINTS.geocodeCountry,
+        { lat: String(lat), lng: String(lng) },
+        apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
+      );
       return res.countryCode;
     },
     enabled: enabled && typeof lat === "number" && typeof lng === "number",
     staleTime: 24 * 60 * 60 * 1000,
+    gcTime: MAP_QUERY_POLICY.gcTime,
   });
 }

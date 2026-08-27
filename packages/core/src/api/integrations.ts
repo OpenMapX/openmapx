@@ -40,6 +40,7 @@ export interface EmailDisclosure {
 export type Disclosure = AiSearchDisclosure | EmailDisclosure;
 
 interface IntegrationsApiResponse {
+  revision: string;
   integrations: LoadedIntegrationMeta[];
   frameworkStrings: Record<string, Record<string, unknown>>;
   disclosures?: Disclosure[];

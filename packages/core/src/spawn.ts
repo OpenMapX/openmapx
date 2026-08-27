@@ -6,9 +6,9 @@
 //   2. AbortSignal cancellation that SIGTERMs the child.
 //   3. A clean rejection with the exit code on non-zero exit.
 //
-// Used by the git-clone helper and the integration build step (which spawns
-// `npx esbuild`). Anything else in core that needs to shell out should use
-// this rather than rolling another `spawn(...)` plus chunk handling.
+// Used by the bounded git-clone helper. Anything else in core that needs to
+// shell out should use this rather than rolling another `spawn(...)` plus
+// chunk handling.
 
 import { spawn } from "node:child_process";
 
@@ -17,6 +17,26 @@ export interface SpawnWithBufferedLogsOptions {
   env?: NodeJS.ProcessEnv;
   signal?: AbortSignal;
   onLog?: (line: string, stream: "stdout" | "stderr") => void;
+  /**
+   * What to name this process in a failure message. argv can carry a repository
+   * URL with userinfo, a token, or a query string, so the default error text
+   * never reproduces it.
+   */
+  displayCommand?: string;
+}
+
+// Anything that looks like a URL with embedded credentials, or a bare token in
+// a query string. Child stderr (notably git's) echoes the remote it was given.
+const CREDENTIALED_URL = /\b[a-z][a-z0-9+.-]*:\/\/[^\s/@]*@[^\s]*/giu;
+const URL_WITH_QUERY = /\b[a-z][a-z0-9+.-]*:\/\/[^\s]*[?#][^\s]*/giu;
+
+/**
+ * Remove credentials and query/fragment data from a line that will be logged or
+ * put in an error. Ordinary, non-sensitive compiler and tool output is left
+ * intact so real failures stay diagnosable.
+ */
+export function redactProcessOutput(line: string): string {
+  return line.replace(CREDENTIALED_URL, "[redacted-url]").replace(URL_WITH_QUERY, "[redacted-url]");
 }
 
 export function spawnWithBufferedLogs(
@@ -38,11 +58,13 @@ export function spawnWithBufferedLogs(
     const stderrBuf = { current: "" };
     if (opts.onLog) {
       const onLog = opts.onLog;
+      const safeLog = (line: string, stream: "stdout" | "stderr") =>
+        onLog(redactProcessOutput(line), stream);
       proc.stdout?.on("data", (chunk: Buffer) =>
-        emitLineBuffered(stdoutBuf, chunk, "stdout", onLog),
+        emitLineBuffered(stdoutBuf, chunk, "stdout", safeLog),
       );
       proc.stderr?.on("data", (chunk: Buffer) =>
-        emitLineBuffered(stderrBuf, chunk, "stderr", onLog),
+        emitLineBuffered(stderrBuf, chunk, "stderr", safeLog),
       );
     }
     const onAbort = () => proc.kill("SIGTERM");
@@ -50,12 +72,18 @@ export function spawnWithBufferedLogs(
     proc.on("close", (code) => {
       opts.signal?.removeEventListener("abort", onAbort);
       if (opts.onLog) {
-        flushLineBuffer(stdoutBuf, "stdout", opts.onLog);
-        flushLineBuffer(stderrBuf, "stderr", opts.onLog);
+        const onLog = opts.onLog;
+        const safeLog = (line: string, stream: "stdout" | "stderr") =>
+          onLog(redactProcessOutput(line), stream);
+        flushLineBuffer(stdoutBuf, "stdout", safeLog);
+        flushLineBuffer(stderrBuf, "stderr", safeLog);
       }
       if (opts.signal?.aborted) reject(new DOMException("Aborted", "AbortError"));
       else if (code === 0) resolvePromise();
-      else reject(new Error(`${cmd} ${args.join(" ")} exited with code ${code}`));
+      else {
+        const display = opts.displayCommand ?? redactProcessOutput(`${cmd} ${args.join(" ")}`);
+        reject(new Error(`${display} exited with code ${code}`));
+      }
     });
     proc.on("error", reject);
   });

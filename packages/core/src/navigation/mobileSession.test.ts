@@ -4,7 +4,6 @@ import {
   isMobileSessionExpired,
   MOBILE_NAVIGATION_SESSION_MAX_AGE_MS,
   MOBILE_SESSION_LEDGER_LIMIT,
-  migrateMobileSession,
   parseMobileSession,
   redactSessionForDiagnostics,
 } from "./mobileSession";
@@ -223,19 +222,6 @@ describe("corrupt and inconsistent records", () => {
 
   it.each([null, undefined, 42, "not json", "{}", []])("rejects %p", (value) => {
     expect(parseMobileSession(value).ok).toBe(false);
-  });
-});
-
-describe("migrateMobileSession", () => {
-  it("passes a current record through", () => {
-    expect(migrateMobileSession(groundSession()).ok).toBe(true);
-  });
-
-  it("refuses a newer schema rather than guessing", () => {
-    expect(migrateMobileSession(groundSession({ schemaVersion: 99 }))).toEqual({
-      ok: false,
-      code: "unsupported-schema",
-    });
   });
 });
 

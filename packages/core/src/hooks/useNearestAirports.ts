@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
+import { apiQueryRequestOptions, MAP_QUERY_POLICY } from "../api/queryPolicy";
 import type { LngLat } from "../types/geometry";
 import type { AirportSearchHit } from "./useAirportSearch";
 
@@ -21,14 +22,19 @@ interface NearestAirportsResponse {
 export function useNearestAirports(coords: LngLat | null, limit = 5) {
   return useQuery<NearestAirportsResponse>({
     queryKey: ["airport-nearest", coords?.[0], coords?.[1], limit],
-    queryFn: () =>
-      apiClient.get<NearestAirportsResponse>(API_ENDPOINTS.airportNearest, {
-        // coords are [lng, lat]
-        lng: String(coords?.[0]),
-        lat: String(coords?.[1]),
-        limit: String(limit),
-      }),
+    queryFn: ({ signal }) =>
+      apiClient.get<NearestAirportsResponse>(
+        API_ENDPOINTS.airportNearest,
+        {
+          // coords are [lng, lat]
+          lng: String(coords?.[0]),
+          lat: String(coords?.[1]),
+          limit: String(limit),
+        },
+        apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
+      ),
     enabled: coords !== null,
     staleTime: 60 * 60 * 1000,
+    gcTime: MAP_QUERY_POLICY.gcTime,
   });
 }

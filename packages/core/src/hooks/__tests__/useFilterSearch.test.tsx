@@ -31,14 +31,18 @@ describe("useFilterSearch", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(response);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.poiFilter, {
-      filter: validFilter,
-      south: bbox.south,
-      west: bbox.west,
-      north: bbox.north,
-      east: bbox.east,
-      lang: "en",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.poiFilter,
+      {
+        filter: validFilter,
+        south: bbox.south,
+        west: bbox.west,
+        north: bbox.north,
+        east: bbox.east,
+        lang: "en",
+      },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("omits lang when not supplied", async () => {
@@ -54,6 +58,7 @@ describe("useFilterSearch", () => {
     expect(spy).toHaveBeenCalledWith(
       API_ENDPOINTS.poiFilter,
       expect.not.objectContaining({ lang: expect.anything() }),
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
   });
 

@@ -39,31 +39,8 @@ const MAX_TEXT_LENGTH = 512;
 
 // Versions.
 
-export const MOBILE_PROTOCOL_MIN = 1;
-export const MOBILE_PROTOCOL_MAX = 2;
-
-/**
- * The version each message type first appeared in.
- *
- * V2 is purely additive: every v1 message means exactly what it always did, and
- * a v1 shell must keep working against a deployed v2 web app. That only holds if
- * "which version introduced this" is data rather than a comment, so a message
- * cannot be sent to a shell that has never heard of it.
- */
-export const MESSAGE_MIN_VERSION: Readonly<Record<string, number>> = {
-  "location.request": 2,
-  "settings.open": 2,
-  "auth.open": 2,
-  "location.result": 2,
-  "settings.result": 2,
-  "deep-link.open": 2,
-  "auth.result": 2,
-};
-
-/** Whether `type` may be sent over a channel that negotiated `version`. */
-export function messageAllowedAtVersion(type: string, version: number): boolean {
-  return version >= (MESSAGE_MIN_VERSION[type] ?? 1);
-}
+export const MOBILE_PROTOCOL_MIN = 3;
+export const MOBILE_PROTOCOL_MAX = 3;
 
 export interface ProtocolRange {
   min: number;
@@ -93,7 +70,6 @@ export const WEB_TO_NATIVE_TYPES = [
   "session.stop",
   "session.complete",
   "event.ack",
-  // Protocol v2. Additive: a v1 shell never receives these.
   "location.request",
   "settings.open",
   "auth.open",
@@ -109,7 +85,6 @@ export const NATIVE_TO_WEB_TYPES = [
   "snapshot.update",
   "navigation.event",
   "native.error",
-  // Protocol v2.
   "location.result",
   "settings.result",
   "deep-link.open",
@@ -385,13 +360,41 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
           })
           .strict()
           .nullable(),
+        forMessageId: boundedId,
       })
       .strict(),
   ),
   envelope("permission.state", z.object({ permission: permissionStateSchema }).strict()),
-  envelope("session.prepared", z.object({ sessionId: boundedId, revision: safeInteger }).strict()),
-  envelope("session.started", z.object({ sessionId: boundedId, revision: safeInteger }).strict()),
-  envelope("session.replaced", z.object({ sessionId: boundedId, revision: safeInteger }).strict()),
+  envelope(
+    "session.prepared",
+    z
+      .object({
+        sessionId: boundedId,
+        revision: safeInteger,
+        forMessageId: boundedId,
+      })
+      .strict(),
+  ),
+  envelope(
+    "session.started",
+    z
+      .object({
+        sessionId: boundedId,
+        revision: safeInteger,
+        forMessageId: boundedId,
+      })
+      .strict(),
+  ),
+  envelope(
+    "session.replaced",
+    z
+      .object({
+        sessionId: boundedId,
+        revision: safeInteger,
+        forMessageId: boundedId,
+      })
+      .strict(),
+  ),
   envelope(
     "session.stopped",
     z
@@ -399,16 +402,26 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
         sessionId: boundedId,
         finalStatus: z.enum(["arrived", "stopped", "expired", "error"]),
         revision: safeInteger,
+        forMessageId: boundedId.optional(),
       })
       .strict(),
   ),
-  envelope("snapshot.update", z.object({ snapshot: z.record(z.string(), z.unknown()) }).strict()),
+  envelope(
+    "snapshot.update",
+    z
+      .object({
+        snapshot: z.record(z.string(), z.unknown()),
+        forMessageId: boundedId.optional(),
+      })
+      .strict(),
+  ),
   envelope(
     "location.result",
     z
       .object({
         requestId: boundedId,
         status: z.enum(["ok", "denied", "unavailable", "timeout"]),
+        forMessageId: boundedId,
         fix: z
           .object({
             lat: z.number().finite().min(-90).max(90),
@@ -429,6 +442,7 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
       .object({
         target: z.enum(["location", "notifications", "application"]),
         status: z.enum(["opened", "unavailable", "cancelled"]),
+        forMessageId: boundedId,
       })
       .strict(),
   ),
@@ -458,6 +472,7 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
          * and neither is a credential on its own.
          */
         codeVerifier: boundedId.optional(),
+        forMessageId: boundedId,
       })
       .strict(),
   ),
@@ -470,10 +485,7 @@ export const nativeToWebSchema = z.discriminatedUnion("type", [
       })
       .strict(),
   ),
-  envelope(
-    "native.error",
-    z.object({ code: boundedText, forMessageId: boundedId.optional() }).strict(),
-  ),
+  envelope("native.error", z.object({ code: boundedText, forMessageId: boundedId }).strict()),
 ]);
 
 export const mobileBridgeMessageSchema = z.union([webToNativeSchema, nativeToWebSchema]);

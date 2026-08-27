@@ -18,7 +18,11 @@ describe("useGeocoding", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(results);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.geocode, { q: "Berlin", lang: "en" });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.geocode,
+      { q: "Berlin", lang: "en" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 8_000 }),
+    );
   });
 
   it("omits lang from the request when not provided", async () => {
@@ -29,7 +33,11 @@ describe("useGeocoding", () => {
     });
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.geocode, { q: "Berlin" });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.geocode,
+      { q: "Berlin" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 8_000 }),
+    );
   });
 
   it("does not fire for a query shorter than 3 characters", () => {

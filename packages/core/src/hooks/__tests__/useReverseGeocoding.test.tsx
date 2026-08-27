@@ -21,11 +21,11 @@ describe("useReverseGeocoding", () => {
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
     expect(result.current.data).toEqual(place);
-    expect(spy).toHaveBeenCalledWith(API_ENDPOINTS.geocodeReverse, {
-      lat: "52.5",
-      lng: "13.4",
-      lang: "en",
-    });
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.geocodeReverse,
+      { lat: "52.5", lng: "13.4", lang: "en" },
+      expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
+    );
   });
 
   it("does not fire when coordinates are null", () => {

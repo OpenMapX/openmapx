@@ -1,5 +1,3 @@
-import { existsSync as fsExistsSync, realpathSync as fsRealpathSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative } from "node:path";
 import type { LoadedService, ManifestProvenance, ServiceManifest } from "./types";
 
 // Compose-variable references are resolved from the deployment environment when
@@ -34,6 +32,7 @@ export const COMMUNITY_SAFE_CAPS = new Set([
  */
 export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestProvenance): string[] {
   const errors: string[] = [];
+  const communityNetworkAccess = m.communityNetworkAccess;
 
   // The built-in tier and first-party provenance must agree. Enforcing both
   // directions means the tier is a pure function of where the manifest came
@@ -53,6 +52,11 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
   if (!hostPrivilegesAllowed && m.container.networkMode === "host") {
     errors.push("container.networkMode: 'host' is not allowed for community services");
   }
+  if (!hostPrivilegesAllowed && communityNetworkAccess !== undefined) {
+    errors.push(
+      "community_network_access_forbidden: communityNetworkAccess is reserved for audited first-party services",
+    );
+  }
   if (!hostPrivilegesAllowed && m.container.privileged) {
     errors.push("container.privileged is not allowed for community services");
   }
@@ -65,6 +69,11 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
     if (m.container.devices?.length) {
       errors.push("container.devices are not allowed for community services");
     }
+    if (m.exposure?.proxy?.enabled) {
+      errors.push(
+        "community_proxy_forbidden: exposure.proxy.enabled is not allowed for community services",
+      );
+    }
   }
   if (m.exposure?.proxy?.enabled && !m.container.expose?.length) {
     errors.push(
@@ -73,19 +82,10 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
   }
 
   if (!hostPrivilegesAllowed) {
-    // Third-party services may only bind paths from their own snapshot. Special
-    // sources and Compose-variable paths can name platform-owned resources.
-    for (const bm of m.bindMounts ?? []) {
-      if (bm.source.startsWith("@")) {
-        errors.push(
-          `bindMounts: special source "${bm.source}" is only allowed for built-in services`,
-        );
-      }
-      if (isComposeVarReference(bm.source) || isComposeVarReference(bm.target)) {
-        errors.push(
-          `bindMounts: Compose-variable paths ("${bm.source}") are not allowed for third-party services — the value is substituted from the deployment environment at stack-up time and can resolve to any host path`,
-        );
-      }
+    if (m.bindMounts?.length) {
+      errors.push(
+        "community_bind_mount_forbidden: bindMounts are not allowed for community services",
+      );
     }
 
     if (m.container.envFile?.length) {
@@ -106,39 +106,12 @@ export function checkManifestSandbox(m: ServiceManifest, provenance: ManifestPro
   return errors;
 }
 
-interface RenderFsHooks {
-  existsSync: (path: string) => boolean;
-  realpathSync: (path: string) => string;
-}
-
-/**
- * Resolve the longest existing ancestor through symlinks, then append the
- * non-existing tail lexically. This catches symlink escapes without requiring
- * the bind source itself to exist yet.
- */
-function canonicalise(absPath: string, fs: RenderFsHooks): string {
-  let head = absPath;
-  const tail: string[] = [];
-  while (!fs.existsSync(head)) {
-    const parent = dirname(head);
-    if (parent === head) return absPath;
-    tail.unshift(basename(head));
-    head = parent;
-  }
-  const resolvedHead = fs.realpathSync(head);
-  return tail.length ? join(resolvedHead, ...tail) : resolvedHead;
-}
-
 /**
  * Cross-service and on-disk rules that need the whole registry and a real
  * filesystem. Throws on violation. Called by the renderer, which is the last
  * gate before a compose file is written.
  */
-export function assertRenderSandbox(
-  service: LoadedService,
-  allServices: LoadedService[],
-  fs?: RenderFsHooks,
-): void {
+export function assertRenderSandbox(service: LoadedService, allServices: LoadedService[]): void {
   const staticErrors = checkManifestSandbox(service.manifest, {
     firstParty: service.isBuiltIn,
   });
@@ -149,26 +122,6 @@ export function assertRenderSandbox(
   }
 
   if (service.isBuiltIn) return;
-
-  const fsHooks = fs ?? {
-    existsSync: fsExistsSync,
-    realpathSync: fsRealpathSync,
-  };
-  const serviceDir = canonicalise(service.directory, fsHooks);
-
-  // This is checked at render time, so a symlink swapped between render and
-  // `docker compose up` still wins. Making the community snapshot read-only is
-  // deferred until the snapshot lifecycle is redesigned.
-  for (const bm of service.manifest.bindMounts ?? []) {
-    if (bm.source.startsWith("@") || isComposeVarReference(bm.source)) continue;
-    const source = canonicalise(join(service.directory, bm.source), fsHooks);
-    const fromService = relative(serviceDir, source);
-    if (fromService.startsWith("..") || isAbsolute(fromService)) {
-      throw new Error(
-        `bindMount source "${bm.source}" on third-party service "${service.manifest.id}" escapes its service directory`,
-      );
-    }
-  }
 
   const taken = new Map<string, string>();
   for (const other of allServices) {
