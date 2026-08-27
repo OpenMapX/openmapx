@@ -234,6 +234,9 @@ describe("direct MBTiles to PMTiles area extraction", () => {
     }
   });
 
+  // The 50,000-row fixture must exceed PMTiles' 16 KiB compressed root
+  // directory limit. SQLite setup can cross the global 15 s timeout when
+  // the complete suite is concurrently exercising other disk-heavy tests.
   it("reads tiles through PMTiles leaf directories", async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-pmtiles-"));
     try {
@@ -258,5 +261,5 @@ describe("direct MBTiles to PMTiles area extraction", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
-  });
+  }, 60_000);
 });

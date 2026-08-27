@@ -1004,6 +1004,7 @@ describe("OperatorFeedRelayStore", () => {
   });
 
   it("keeps the total deadline active after a small payload is fully buffered", async () => {
+    vi.useFakeTimers();
     let destination: string | undefined;
     const relay = new OperatorFeedRelayStore({
       maxEntries: 1,
@@ -1024,12 +1025,15 @@ describe("OperatorFeedRelayStore", () => {
       runId: "run-buffered-total",
     });
     payload.stream.on("error", () => {});
+    if (payload.stream.readableLength === 0) {
+      await new Promise<void>((resolve) => payload.stream.once("readable", resolve));
+    }
+    expect(payload.stream.readableLength).toBe(Buffer.byteLength("small archive"));
+    const closed = waitForClose(payload.stream);
 
-    const outcome = await Promise.race([
-      waitForClose(payload.stream).then(() => "closed" as const),
-      new Promise<"still-open">((resolve) => setTimeout(() => resolve("still-open"), 100)),
-    ]);
-    expect(outcome).toBe("closed");
+    await vi.advanceTimersByTimeAsync(21);
+    await closed;
+    vi.useRealTimers();
     await vi.waitFor(() => {
       expect(destination && existsSync(destination)).toBe(false);
     });
