@@ -65,6 +65,11 @@ export interface FeedOverlayApplyResult {
   unmatched: FeedOverlayPatch[];
 }
 
+export interface MaterializeFeedOverlayForRunOptions {
+  runId: string;
+  register(source: { runId: string; sourceId: string; remoteUrl: URL }): URL;
+}
+
 interface FeedSource {
   name?: string;
   url?: string;
@@ -132,6 +137,32 @@ function validateSafeName(value: unknown, label: string): string {
 
 export function operatorSourceId(region: string, name: string): string {
   return `operator:${region}:${name}`;
+}
+
+/**
+ * Build the only overlay that may enter the upstream catalog. Persistent
+ * desired state remains unchanged; every operator URL is replaced with a
+ * short-lived one-run relay capability first.
+ */
+export function materializeFeedOverlayForRun(
+  overlay: FeedOverlay,
+  options: MaterializeFeedOverlayForRunOptions,
+): FeedOverlay {
+  return {
+    ...overlay,
+    sources: overlay.sources.map((source) => {
+      if (source.spec !== "gtfs") return structuredClone(source);
+      const sourceId = operatorSourceId(source.region, source.name);
+      const relayUrl = options.register({
+        runId: options.runId,
+        sourceId,
+        remoteUrl: new URL(source.url),
+      });
+      return { ...structuredClone(source), url: relayUrl.toString() };
+    }),
+    patches: structuredClone(overlay.patches),
+    quarantine: structuredClone(overlay.quarantine),
+  };
 }
 
 export function catalogSourceId(region: string, name: string): string {

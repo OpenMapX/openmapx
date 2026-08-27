@@ -6,7 +6,7 @@ import {
   pruneUnresolvableSources,
   scheduleSourcesForFeed,
 } from "../../src/jobs/transitous/internal.js";
-import type { CommandRunner, JobLogger } from "../../src/jobs/transitous/types.js";
+import type { JobLogger } from "../../src/jobs/transitous/types.js";
 
 let tmp: string | undefined;
 
@@ -37,18 +37,18 @@ function readSources(catalogDir: string): FeedSource[] {
 
 /** A runner that plays out a scripted sequence of behaviours per invocation. */
 function makeRunner(behaviours: Array<"ok" | string>): {
-  runner: CommandRunner;
+  runCheck: (countries: string[]) => Promise<void>;
   state: { calls: number };
 } {
   const state = { calls: 0 };
-  const runner: CommandRunner = async () => {
+  const runCheck = async () => {
     const behaviour = behaviours[Math.min(state.calls, behaviours.length - 1)] ?? "ok";
     state.calls += 1;
     if (behaviour !== "ok") {
       throw Object.assign(new Error(behaviour), { stderr: behaviour });
     }
   };
-  return { runner, state };
+  return { runCheck, state };
 }
 
 function silentLogger(): JobLogger & { warnings: string[] } {
@@ -136,12 +136,12 @@ describe("pruneUnresolvableSources", () => {
     const catalogDir = makeCatalog([
       { name: "MBTA", type: "transitland-atlas", "transitland-atlas-id": "f-mbta" },
     ]);
-    const { runner, state } = makeRunner(["ok"]);
+    const { runCheck, state } = makeRunner(["ok"]);
 
     const skipped = await pruneUnresolvableSources({
       catalogDir,
       countries: ["us"],
-      runner,
+      runCheck,
       logger: silentLogger(),
     });
 
@@ -155,12 +155,12 @@ describe("pruneUnresolvableSources", () => {
       { name: "Metra", type: "transitland-atlas", "transitland-atlas-id": "f-metra" },
       { name: "MBTA", type: "transitland-atlas", "transitland-atlas-id": "f-mbta" },
     ]);
-    const { runner, state } = makeRunner(["Error: Could not resolve f-metra", "ok"]);
+    const { runCheck, state } = makeRunner(["Error: Could not resolve f-metra", "ok"]);
 
     const skipped = await pruneUnresolvableSources({
       catalogDir,
       countries: ["us"],
-      runner,
+      runCheck,
       logger: silentLogger(),
     });
 
@@ -177,12 +177,12 @@ describe("pruneUnresolvableSources", () => {
     const catalogDir = makeCatalog([
       { name: "Foo", type: "mobility-database", "mdb-id": "mdb-42" },
     ]);
-    const { runner } = makeRunner(["Error: Could not resolve mdb-42", "ok"]);
+    const { runCheck } = makeRunner(["Error: Could not resolve mdb-42", "ok"]);
 
     const skipped = await pruneUnresolvableSources({
       catalogDir,
       countries: [],
-      runner,
+      runCheck,
       logger: silentLogger(),
     });
 
@@ -194,13 +194,13 @@ describe("pruneUnresolvableSources", () => {
     const catalogDir = makeCatalog([
       { name: "MBTA", type: "transitland-atlas", "transitland-atlas-id": "f-mbta" },
     ]);
-    const { runner, state } = makeRunner(["Error: Could not resolve f-ghost"]);
+    const { runCheck, state } = makeRunner(["Error: Could not resolve f-ghost"]);
     const logger = silentLogger();
 
     const skipped = await pruneUnresolvableSources({
       catalogDir,
       countries: ["us"],
-      runner,
+      runCheck,
       logger,
     });
 
@@ -214,14 +214,14 @@ describe("pruneUnresolvableSources", () => {
     const catalogDir = makeCatalog([
       { name: "MBTA", type: "transitland-atlas", "transitland-atlas-id": "f-mbta" },
     ]);
-    const { runner, state } = makeRunner([
+    const { runCheck, state } = makeRunner([
       "Traceback: ConnectionError downloading mobilitydatabase.csv",
     ]);
 
     const skipped = await pruneUnresolvableSources({
       catalogDir,
       countries: ["us"],
-      runner,
+      runCheck,
       logger: silentLogger(),
     });
 

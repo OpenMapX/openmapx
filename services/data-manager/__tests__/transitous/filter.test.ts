@@ -3,8 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { run as filterRun } from "../../src/jobs/transitous/filter.js";
+import { OperatorFeedRelayStore } from "../../src/jobs/transitous/operator-feed-relay.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
-import type { CommandRunner } from "../../src/jobs/transitous/types.js";
+import type { TransitousScriptRunner } from "../../src/jobs/transitous/script-runner.js";
 import { StateStore } from "../../src/state.js";
 
 type FeedSource = { name?: string; skip?: boolean; "api-key"?: string };
@@ -28,18 +29,21 @@ function readSources(feedPath: string): FeedSource[] {
   return (JSON.parse(readFileSync(feedPath, "utf-8")) as { sources: FeedSource[] }).sources;
 }
 
-/** Runner that plays out a scripted behaviour per `generate-motis-config.py` run. */
+/**
+ * Script runner that plays out a scripted behaviour per
+ * `generate-motis-config.py` dispatch.
+ */
 function makeRunner(behaviours: Array<"ok" | string>): {
-  runner: CommandRunner;
+  runScript: TransitousScriptRunner;
   state: { calls: number };
 } {
   const state = { calls: 0 };
-  const runner: CommandRunner = async () => {
+  const runScript: TransitousScriptRunner = async () => {
     const behaviour = behaviours[Math.min(state.calls, behaviours.length - 1)] ?? "ok";
     state.calls += 1;
     if (behaviour !== "ok") throw Object.assign(new Error(behaviour), { stderr: behaviour });
   };
-  return { runner, state };
+  return { runScript, state };
 }
 
 describe("filter stage", () => {
@@ -62,6 +66,7 @@ describe("filter stage", () => {
       countries: ["de"],
       apiKeysPath,
       runner: async () => {},
+      runScript: async () => {},
       now: () => "2026-05-01T00:00:00.000Z",
     });
     ctx.state.catalogDir = catalogDir;
@@ -92,6 +97,7 @@ describe("filter stage", () => {
       countries: ["de"],
       apiKeysPath,
       runner: async () => {},
+      runScript: async () => {},
       now: () => "2026-05-01T00:00:00.000Z",
     });
     ctx.state.catalogDir = catalogDir;
@@ -118,6 +124,7 @@ describe("filter stage", () => {
       store: new StateStore(tmp),
       countries: ["de"],
       runner: async () => {},
+      runScript: async () => {},
       now: () => "2026-05-01T00:00:00.000Z",
     });
     ctx.state.catalogDir = catalogDir;
@@ -147,6 +154,7 @@ describe("filter stage", () => {
       store: new StateStore(tmp),
       countries: ["zz"],
       runner: async () => {},
+      runScript: async () => {},
       now: () => "2026-05-01T00:00:00.000Z",
     });
     ctx.state.catalogDir = catalogDir;
@@ -172,12 +180,13 @@ describe("filter stage", () => {
 
     // The resolution pre-check fails once citing Metra, then passes after it's
     // skipped — exactly how the real generate-motis-config.py behaves.
-    const { runner, state } = makeRunner(["Error: Could not resolve f-metra", "ok"]);
+    const { runScript, state } = makeRunner(["Error: Could not resolve f-metra", "ok"]);
     const ctx = buildJobContext({
       dataDir: tmp,
       store: new StateStore(tmp),
       countries: ["us"],
-      runner,
+      runner: async () => {},
+      runScript,
       now: () => "2026-05-01T00:00:00.000Z",
     });
     ctx.state.catalogDir = catalogDir;
@@ -242,6 +251,7 @@ describe("filter stage", () => {
       countries: ["de"],
       feedsOverlayPath: overlayPath,
       runner: async () => {},
+      runScript: async () => {},
       now: () => "2026-05-01T00:00:00.000Z",
       logger: {
         info: (msg) => infos.push(msg),
@@ -264,5 +274,53 @@ describe("filter stage", () => {
     });
     expect(statSync(deFeedPath).mode & 0o777).toBe(0o600);
     expect(infos.some((m) => m.includes("applying 1 feeds-overlay patch"))).toBe(true);
+  });
+
+  it("writes only run-bound relay URLs for operator sources into the upstream catalog", async () => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-filter-operator-relay-"));
+    const catalogDir = makeCatalog(tmp);
+    const deFeedPath = join(catalogDir, "feeds", "de.json");
+    writeFileSync(deFeedPath, JSON.stringify({ sources: [{ name: "BVG" }] }));
+    const overlayPath = join(tmp, "feeds-overlay.json");
+    writeFileSync(
+      overlayPath,
+      JSON.stringify({
+        version: 3,
+        sources: [
+          {
+            spec: "gtfs",
+            type: "http",
+            region: "de",
+            name: "operator-feed",
+            url: "https://operator.example/private/feed.zip?fixture=secret",
+            origin: "operator",
+            license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
+          },
+        ],
+        patches: [],
+        quarantine: [],
+      }),
+    );
+    const relay = new OperatorFeedRelayStore();
+    const ctx = buildJobContext({
+      dataDir: tmp,
+      store: new StateStore(tmp),
+      countries: ["de"],
+      feedsOverlayPath: overlayPath,
+      runner: async () => {},
+      runScript: async () => {},
+      jobId: "run-filter",
+      operatorFeedRelay: relay,
+    });
+    ctx.state.catalogDir = catalogDir;
+
+    const result = await filterRun(ctx);
+
+    expect(result.status).toBe("ok");
+    const catalogText = readFileSync(deFeedPath, "utf-8");
+    expect(catalogText).toContain("http://127.0.0.1:4000/internal/transit/operator-feed/");
+    expect(catalogText).not.toContain("operator.example");
+    expect(catalogText).not.toContain("fixture=secret");
+    await relay.endRun("run-filter");
   });
 });

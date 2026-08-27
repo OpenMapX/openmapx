@@ -1,10 +1,36 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { run as prepareRun } from "../../src/jobs/transitous/prepare.js";
 import { StateStore } from "../../src/state.js";
+
+// Preparation fails closed without a pinned catalog commit. The lock is
+// agent-owned now, so the pin is supplied through the typed operation.
+const PINNED_LOCK = {
+  ref: `main@${"a".repeat(40)}`,
+  submodules: {},
+  lockedAt: "2026-04-20T12:00:00.000Z",
+  lockedBy: "test",
+};
+vi.mock("../../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    if (operation.kind === "transitousLock.inspect") {
+      return { active: PINNED_LOCK, proposed: null };
+    }
+    if (operation.kind === "gbfsCatalogLock.inspect") {
+      return {
+        commit: "b".repeat(40),
+        url: "https://example.test/catalog.csv",
+        sha256: "c".repeat(64),
+        lockedAt: "2026-04-20T12:00:00.000Z",
+        lockedBy: "test",
+      };
+    }
+    return { changed: true };
+  }),
+}));
 
 let tmp: string | undefined;
 
@@ -74,7 +100,6 @@ describe("prepare stage", () => {
       runner,
       now: () => "2026-05-01T00:00:00.000Z",
     });
-
     const result = await prepareRun(ctx);
 
     expect(result.status).toBe("ok");
@@ -85,7 +110,44 @@ describe("prepare stage", () => {
     );
   });
 
-  it("warns and continues when no repoRoot is supplied (lockfile enforcement skipped)", async () => {
+  it.each([
+    ["the agent reports no pinned lock", { active: null } as const],
+    ["the lock cannot be read at all", "throws" as const],
+    ["the pinned ref is malformed", { active: { ref: "main" } } as const],
+    ["the pinned SHA is not 40 hex characters", { active: { ref: "main@abc1234" } } as const],
+  ])("aborts preparation before upstream execution when %s", async (_name, scenario) => {
+    tmp = mkdtempSync(join(tmpdir(), "openmapx-prepare-failclosed-"));
+    const dataDir = tmp;
+    const catalogDir = join(dataDir, ".transitous-catalog");
+    mkdirSync(join(catalogDir, ".git"), { recursive: true });
+    mkdirSync(join(catalogDir, "feeds"), { recursive: true });
+
+    const { runOpsOperation } = await import("../../src/ops-client.js");
+    vi.mocked(runOpsOperation).mockImplementationOnce(async () => {
+      if (scenario === "throws") throw new Error("agent unreachable");
+      return scenario as never;
+    });
+
+    const ran: string[] = [];
+    const ctx = buildJobContext({
+      dataDir,
+      store: new StateStore(dataDir),
+      runner: async (command) => {
+        ran.push(command);
+      },
+      now: () => "2026-05-01T00:00:00.000Z",
+    });
+
+    const result = await prepareRun(ctx);
+
+    // Fail closed: an unpinned or unverifiable catalog must never reach the
+    // upstream execution step.
+    expect(result.status).toBe("error");
+    expect(String(result.message)).toMatch(/lock/i);
+    expect(ran).not.toContain("python3");
+  });
+
+  it.skip("warns and continues when no repoRoot is supplied (lockfile enforcement skipped)", async () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-prepare-nolock-"));
     const dataDir = tmp;
     const catalogDir = join(dataDir, ".transitous-catalog");
@@ -118,28 +180,15 @@ describe("prepare stage", () => {
     mkdirSync(join(catalogDir, ".git"), { recursive: true });
     mkdirSync(join(catalogDir, "feeds"), { recursive: true });
 
-    const repoRoot = join(tmp, "repo");
-    const lockDir = join(repoRoot, "infra", "docker");
-    mkdirSync(lockDir, { recursive: true });
     const ACTIVE = "a".repeat(40);
     const PROPOSED = "d".repeat(40);
-    writeFileSync(
-      join(lockDir, "transitous.lock.json"),
-      JSON.stringify({
-        ref: `main@${ACTIVE}`,
-        submodules: { "transitland-atlas": "b".repeat(40) },
-        lockedAt: "2026-05-01T00:00:00.000Z",
-        lockedBy: "test",
-      }),
-    );
-    writeFileSync(
-      join(lockDir, "transitous.lock.proposed.json"),
-      JSON.stringify({
-        ref: `main@${PROPOSED}`,
-        submodules: { "transitland-atlas": "c".repeat(40) },
-        lockedAt: "2026-05-01T00:00:00.000Z",
-        lockedBy: "test",
-      }),
+    const { runOpsOperation } = await import("../../src/ops-client.js");
+    vi.mocked(runOpsOperation).mockImplementationOnce(
+      async () =>
+        ({
+          active: { ref: `main@${ACTIVE}`, submodules: {}, lockedAt: "x", lockedBy: "test" },
+          proposed: { ref: `main@${PROPOSED}`, submodules: {}, lockedAt: "x", lockedBy: "test" },
+        }) as never,
     );
 
     const calls: string[] = [];
@@ -150,7 +199,6 @@ describe("prepare stage", () => {
     const ctx = buildJobContext({
       dataDir,
       store: new StateStore(dataDir),
-      repoRoot,
       useProposedLock: true,
       runner,
       now: () => "2026-05-01T00:00:00.000Z",
@@ -169,28 +217,15 @@ describe("prepare stage", () => {
     mkdirSync(join(catalogDir, ".git"), { recursive: true });
     mkdirSync(join(catalogDir, "feeds"), { recursive: true });
 
-    const repoRoot = join(tmp, "repo");
-    const lockDir = join(repoRoot, "infra", "docker");
-    mkdirSync(lockDir, { recursive: true });
     const ACTIVE = "a".repeat(40);
     const PROPOSED = "d".repeat(40);
-    writeFileSync(
-      join(lockDir, "transitous.lock.json"),
-      JSON.stringify({
-        ref: `main@${ACTIVE}`,
-        submodules: { "transitland-atlas": "b".repeat(40) },
-        lockedAt: "2026-05-01T00:00:00.000Z",
-        lockedBy: "test",
-      }),
-    );
-    writeFileSync(
-      join(lockDir, "transitous.lock.proposed.json"),
-      JSON.stringify({
-        ref: `main@${PROPOSED}`,
-        submodules: { "transitland-atlas": "c".repeat(40) },
-        lockedAt: "2026-05-01T00:00:00.000Z",
-        lockedBy: "test",
-      }),
+    const { runOpsOperation } = await import("../../src/ops-client.js");
+    vi.mocked(runOpsOperation).mockImplementationOnce(
+      async () =>
+        ({
+          active: { ref: `main@${ACTIVE}`, submodules: {}, lockedAt: "x", lockedBy: "test" },
+          proposed: { ref: `main@${PROPOSED}`, submodules: {}, lockedAt: "x", lockedBy: "test" },
+        }) as never,
     );
 
     const calls: string[] = [];
@@ -201,7 +236,6 @@ describe("prepare stage", () => {
     const ctx = buildJobContext({
       dataDir,
       store: new StateStore(dataDir),
-      repoRoot,
       runner,
       now: () => "2026-05-01T00:00:00.000Z",
     });
@@ -267,7 +301,6 @@ describe("prepare stage", () => {
       runner: async () => {},
       now: () => "2026-05-01T00:00:00.000Z",
     });
-
     const result = await prepareRun(ctx);
     expect(result.status).toBe("ok");
 

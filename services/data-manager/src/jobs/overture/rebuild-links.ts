@@ -1,6 +1,7 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { sql } from "../../db/index.js";
+import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { osmPbfName } from "../download-osm.js";
 import { assertOverturePostgresCapacity, estimateOvertureConflationBytes } from "./capacity.js";
 import {
@@ -578,7 +579,7 @@ export async function rebuildOvertureLinksUnlocked(
       phaseDurationsMs: state.phaseDurationsMs,
     };
   } catch (error) {
-    const message = (error as Error).message;
+    const message = scrubSecrets((error as Error).message);
     await sql.unsafe(
       `UPDATE "${schema}".conflation_state
        SET ${ACCUMULATE_PHASE_DURATION}, status = 'failed', last_error = LEFT($1, 4000),

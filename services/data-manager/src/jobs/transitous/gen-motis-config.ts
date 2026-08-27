@@ -36,11 +36,12 @@ export const run: StageFn = async (ctx) => {
     // countries → no region arg → all regions (a global deployment).
     // `--skip-missing-files` drops feeds whose GTFS didn't fetch this cycle so a
     // single feed failure degrades the build instead of breaking the MOTIS import.
-    await ctx.runner(
-      "python3",
-      ["./src/generate-motis-config.py", "--import-only", "--skip-missing-files", ...ctx.countries],
-      { cwd: catalogDir, stdio: "pipe" },
-    );
+    await ctx.runScript({
+      script: "generate-motis-config",
+      importOnly: true,
+      feedProxy: false,
+      countries: ctx.countries,
+    });
     const configPath = join(catalogDir, "out", "config.yml");
     const overrides = applyConfigOverrides(configPath, ctx.logger);
     return {

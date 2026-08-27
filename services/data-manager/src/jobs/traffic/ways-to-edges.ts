@@ -1,14 +1,8 @@
-import { spawn } from "node:child_process";
+import { createReadStream } from "node:fs";
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
-import { execa } from "execa";
-import {
-  DEFAULT_VALHALLA_CONFIG_PATH,
-  type DockerRunner,
-  resolveContainer,
-  TILE_DIR_PATH,
-} from "./ensure-extract.js";
+import { runOpsOperation } from "../../ops-client.js";
 
 /** Hard-coded output filename of `valhalla_ways_to_edges` — no output flag exists. */
 const WAY_EDGES_FILENAME = "way_edges.txt";
@@ -37,17 +31,15 @@ interface TrafficLogger {
 }
 
 export interface RefreshWaysToEdgesDeps {
-  runDocker?: DockerRunner;
-  container?: string;
-  configPath?: string;
   /**
-   * Test seam: yields `way_edges.txt` lines without shelling out to docker.
-   * Production callers omit this and get a real `docker exec <container> cat
-   * <path>` stream.
+   * Test seam: yields `way_edges.txt` lines without reading the shared mount.
+   * Production callers omit this and stream the real file.
    */
-  readWayEdgesLines?: (container: string, path: string) => AsyncIterable<string>;
+  readWayEdgesLines?: (path: string) => AsyncIterable<string>;
   /** Where to write the filtered JSON map. Defaults under `DATA_DIR`. */
   outputPath?: string;
+  /** Test seam: where `valhalla_ways_to_edges` left its output. */
+  wayEdgesPath?: string;
   logger?: TrafficLogger;
 }
 
@@ -56,34 +48,22 @@ export interface RefreshWaysToEdgesResult {
   edgeCount: number;
 }
 
-async function defaultRunDocker(args: string[]) {
-  const result = await execa("docker", args, { stdio: "pipe", reject: false });
-  return { exitCode: result.exitCode ?? 1, stdout: result.stdout ?? "" };
+/**
+ * `valhalla_ways_to_edges` writes `<tile_dir>/way_edges.txt` inside the Valhalla
+ * container, but that tile directory is the shared OSM producer mount, so the
+ * file is readable here directly. Streaming it line-by-line matters: on a planet
+ * graph it covers every routable way and is far too large to hold as a string.
+ */
+export function defaultWayEdgesPath(): string {
+  return join(process.env.DATA_DIR ?? "/data", "osm", "valhalla_tiles", WAY_EDGES_FILENAME);
 }
 
-/**
- * Streams `docker exec <container> cat <path>` line-by-line via `readline`
- * over the child's stdout pipe — never buffers the full file in memory. This
- * matters because on a planet graph `way_edges.txt` covers every routable way
- * and can be far too large to hold as a string or array.
- */
-async function* defaultReadWayEdgesLines(container: string, path: string): AsyncGenerator<string> {
-  const child = spawn("docker", ["exec", container, "cat", path], {
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-  const rl = createInterface({ input: child.stdout });
+async function* defaultReadWayEdgesLines(path: string): AsyncGenerator<string> {
+  const rl = createInterface({ input: createReadStream(path, "utf8") });
   try {
-    for await (const line of rl) {
-      yield line;
-    }
+    for await (const line of rl) yield line;
   } finally {
     rl.close();
-  }
-  const exitCode: number = await new Promise((resolve) => {
-    child.on("close", (code) => resolve(code ?? 1));
-  });
-  if (exitCode !== 0) {
-    throw new Error(`ways-to-edges: "docker exec ${container} cat ${path}" exited ${exitCode}`);
   }
 }
 
@@ -134,23 +114,16 @@ export async function refreshWaysToEdges(
   coveredWayIds: Set<number>,
   deps: RefreshWaysToEdgesDeps = {},
 ): Promise<RefreshWaysToEdgesResult> {
-  const run = deps.runDocker ?? defaultRunDocker;
-  const container = resolveContainer(deps);
-  const configPath = deps.configPath ?? DEFAULT_VALHALLA_CONFIG_PATH;
+  // Producing `way_edges.txt` is host authority and belongs to the agent; the
+  // covered-way filter below is data-manager's own concern and stays here.
+  await runOpsOperation({ kind: "valhalla.traffic.refreshWaysToEdges" });
 
-  const build = await run(["exec", container, "valhalla_ways_to_edges", "-c", configPath]);
-  if (build.exitCode !== 0) {
-    throw new Error(
-      `ways-to-edges: valhalla_ways_to_edges exited ${build.exitCode} on container "${container}"`,
-    );
-  }
-
-  const wayEdgesPath = `${TILE_DIR_PATH}/${WAY_EDGES_FILENAME}`;
+  const wayEdgesPath = deps.wayEdgesPath ?? defaultWayEdgesPath();
   const readLines = deps.readWayEdgesLines ?? defaultReadWayEdgesLines;
 
   const result: Record<number, WayEdge[]> = {};
   let edgeCount = 0;
-  for await (const line of readLines(container, wayEdgesPath)) {
+  for await (const line of readLines(wayEdgesPath)) {
     const parsed = parseWayEdgesLine(line, coveredWayIds);
     if (!parsed) continue;
     result[parsed.wayId] = parsed.edges;

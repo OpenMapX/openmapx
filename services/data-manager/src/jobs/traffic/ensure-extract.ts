@@ -1,4 +1,4 @@
-import { execa } from "execa";
+import { runOpsOperation } from "../../ops-client.js";
 
 /**
  * Default Valhalla container name under the default docker-compose project
@@ -13,8 +13,6 @@ import { execa } from "execa";
 // values that would silently drift.
 export const DEFAULT_VALHALLA_CONTAINER = "docker-valhalla-1";
 export const DEFAULT_VALHALLA_CONFIG_PATH = "/custom_files/valhalla.json";
-/** Must match `mjolnir.traffic_extract` in services/valhalla/config/valhalla.json. */
-const TRAFFIC_TAR_PATH = "/custom_files/traffic.tar";
 /** Must match `mjolnir.tile_dir` in services/valhalla/config/valhalla.json. */
 export const TILE_DIR_PATH = "/custom_files/valhalla_tiles";
 
@@ -24,7 +22,8 @@ export interface DockerRunResult {
 }
 
 /**
- * Test seam: invoked instead of `execa("docker", [...])` so the unit suite
+ * Retained shape for callers/tests; the effect itself is a typed agent
+ * operation, so the unit suite
  * never shells out to docker. One shape covers `exec`, `restart`, and the
  * `stat`-based mtime probes used by the staleness check — the first arg
  * (`args[0]`) distinguishes them, mirroring `cron.ts`'s `reloadFeedProxy` seam.
@@ -50,11 +49,6 @@ export interface EnsureTrafficExtractDeps {
 
 export interface EnsureTrafficExtractResult {
   built: boolean;
-}
-
-async function defaultRunDocker(args: string[]): Promise<DockerRunResult> {
-  const result = await execa("docker", args, { stdio: "pipe", reject: false });
-  return { exitCode: result.exitCode ?? 1, stdout: result.stdout ?? "" };
 }
 
 /**
@@ -86,100 +80,16 @@ export function resolveContainer(deps: { container?: string }): string {
 export async function ensureTrafficExtract(
   deps: EnsureTrafficExtractDeps = {},
 ): Promise<EnsureTrafficExtractResult> {
-  const run = deps.runDocker ?? defaultRunDocker;
-  const container = resolveContainer(deps);
-  const configPath = deps.configPath ?? DEFAULT_VALHALLA_CONFIG_PATH;
-
-  if (!deps.force) {
-    const presence = await run(["exec", container, "test", "-f", TRAFFIC_TAR_PATH]);
-    if (presence.exitCode === 0) {
-      deps.logger?.info("traffic-extract: already present", { container });
-      return { built: false };
-    }
+  // The whole build/validate/chown/restart sequence is host authority and lives
+  // in the operations agent. Data-manager holds no Docker socket and names no
+  // container, config path, or argv.
+  if (!deps.force && !(await isTrafficExtractStale(deps))) {
+    deps.logger?.info("traffic-extract: already present");
+    return { built: false };
   }
-
-  deps.logger?.info("traffic-extract: building", { container });
-  // `valhalla_build_extract -t`/`--with-traffic` writes the `mjolnir.traffic_extract`
-  // (traffic.tar) skeleton the live writer mmaps, built from the tiles in
-  // `mjolnir.tile_dir` (plus a `mjolnir.tile_extract` tar where one is configured).
-  // `-O`/`--overwrite` is required on any rebuild: the force/guard path runs with
-  // traffic.tar (and any tile_extract) already present, and without `-O` the tool
-  // aborts with "File exists. Specify --overwrite". The restart below re-mmaps the
-  // fresh tar.
-  const build = await run([
-    "exec",
-    container,
-    "valhalla_build_extract",
-    "-c",
-    configPath,
-    "-t",
-    "-O",
-  ]);
-  if (build.exitCode !== 0) {
-    // Don't restart the container or claim success on a failed build — that
-    // would mask the failure until the next daily guard sweep and bounce
-    // Valhalla for nothing. Surface it now so the caller logs it immediately.
-    throw new Error(
-      `traffic-extract: valhalla_build_extract exited ${build.exitCode} on container "${container}"`,
-    );
-  }
-  // Guard against a successful-but-degenerate rebuild: the tool can exit 0 yet
-  // emit an extract with no tiles (an empty `tile_dir`, or a fire mid graph
-  // rebuild), and restarting Valhalla onto it silently disables ALL live traffic
-  // — the same invisible signature as the header-corruption bug. index.bin holds
-  // one 16-byte entry per tile, so an empty index.bin means an empty extract.
-  // A definitively-empty result is fatal; an inconclusive probe is logged, not blocking.
-  const probe = await run([
-    "exec",
-    container,
-    "sh",
-    "-c",
-    `tar xOf ${TRAFFIC_TAR_PATH} index.bin 2>/dev/null | wc -c`,
-  ]);
-  const indexBytesRaw = probe.stdout.trim();
-  const indexBytes = Number(indexBytesRaw);
-  // Only a definitive "0" from `wc -c` (index.bin present but empty) is fatal;
-  // an empty/failed probe is inconclusive and must not block a legitimate build.
-  if (
-    probe.exitCode === 0 &&
-    indexBytesRaw !== "" &&
-    Number.isFinite(indexBytes) &&
-    indexBytes === 0
-  ) {
-    throw new Error(
-      `traffic-extract: built ${TRAFFIC_TAR_PATH} has an empty index.bin — refusing to ` +
-        `restart Valhalla onto a degenerate extract (empty tile_dir?)`,
-    );
-  }
-  deps.logger?.info("traffic-extract: build validated", {
-    tiles: Number.isFinite(indexBytes) && indexBytesRaw !== "" ? indexBytes / 16 : null,
-  });
-  // valhalla_build_extract runs as the Valhalla container's user (root), so the
-  // fresh traffic.tar is root-owned — but the live-speed writer runs as the
-  // data-manager process's own (non-root) uid and opens that SAME file for
-  // in-place mmap writes through the shared data mount. Chown it to that uid/gid
-  // so the writer isn't locked out with EACCES.
-  const uid = process.getuid?.() ?? 1000;
-  const gid = process.getgid?.() ?? 1000;
-  const chown = await run(["exec", container, "chown", `${uid}:${gid}`, TRAFFIC_TAR_PATH]);
-  if (chown.exitCode !== 0) {
-    throw new Error(
-      `traffic-extract: chown traffic.tar exited ${chown.exitCode} on container "${container}"`,
-    );
-  }
-  await run(["restart", container]);
-  return { built: true };
-}
-
-async function getMtimeSeconds(
-  run: DockerRunner,
-  container: string,
-  path: string,
-): Promise<number | null> {
-  const result = await run(["exec", container, "stat", "-c", "%Y", path]);
-  if (result.exitCode !== 0) return null;
-  const parsed = Number(result.stdout.trim());
-  return Number.isFinite(parsed) ? parsed : null;
+  deps.logger?.info("traffic-extract: building");
+  const result = await runOpsOperation({ kind: "valhalla.traffic.rebuild" });
+  return { built: result.changed };
 }
 
 /**
@@ -188,15 +98,12 @@ async function getMtimeSeconds(
  * the edge-count-sized extract). Used by the slow guard cron in `cron.ts` —
  * see the ordering-constraint note on `ensureTrafficExtract`.
  */
-export async function isTrafficExtractStale(deps: EnsureTrafficExtractDeps = {}): Promise<boolean> {
-  const run = deps.runDocker ?? defaultRunDocker;
-  const container = resolveContainer(deps);
-
-  const [tileMtime, tarMtime] = await Promise.all([
-    getMtimeSeconds(run, container, TILE_DIR_PATH),
-    getMtimeSeconds(run, container, TRAFFIC_TAR_PATH),
-  ]);
-  if (tarMtime === null) return true;
-  if (tileMtime === null) return false;
-  return tileMtime > tarMtime;
+export async function isTrafficExtractStale(
+  _deps: EnsureTrafficExtractDeps = {},
+): Promise<boolean> {
+  const result = await runOpsOperation({ kind: "valhalla.traffic.inspect" });
+  // `unknown` means the agent could not read the tile directory while an
+  // extract exists. Treat that as not-stale so an inconclusive probe never
+  // triggers a needless rebuild-and-restart of Valhalla.
+  return result.state === "not_ready";
 }

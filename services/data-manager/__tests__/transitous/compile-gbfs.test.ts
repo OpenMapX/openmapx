@@ -19,6 +19,19 @@ import { run, validateGbfsAddition } from "../../src/jobs/transitous/compile-gbf
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
 
+// The GBFS catalog lock lives under the repository's `infra/docker/`, which is
+// agent-owned. Tests hand the same pinned record through the typed operation.
+const gbfsLock: { value: Record<string, unknown> | null } = { value: null };
+vi.mock("../../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    if (operation.kind === "gbfsCatalogLock.inspect") {
+      if (!gbfsLock.value) throw new Error("GBFS catalog lock is missing");
+      return gbfsLock.value;
+    }
+    return { changed: true };
+  }),
+}));
+
 const originalFetch = globalThis.fetch;
 const originalEnabled = process.env.MOTIS_GBFS_CATALOG_ENABLED;
 const lookupMock = dnsLookup as unknown as ReturnType<typeof vi.fn>;
@@ -122,18 +135,20 @@ describe("bounded GBFS candidate validation", () => {
     const csv =
       "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,Demo,Berlin,demo,https://example.test,https://example.test/gbfs.json,2.3,\n";
     const commit = "b".repeat(40);
-    writeFileSync(
-      join(tmp, "infra", "docker", "gbfs-catalog.lock.json"),
-      JSON.stringify({
-        schemaVersion: 1,
-        source: "mobilitydata-gbfs",
-        commit,
-        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
-        sha256: createHash("sha256").update(csv).digest("hex"),
-        lockedAt: "2026-01-01T00:00:00Z",
-        lockedBy: "test",
-      }),
-    );
+    // The lock is served through the agent operation; the on-disk copy is no
+    // longer read by data-manager.
+    const writeGbfsLock = (lock: Record<string, unknown>) => {
+      gbfsLock.value = lock;
+    };
+    writeGbfsLock({
+      schemaVersion: 1,
+      source: "mobilitydata-gbfs",
+      commit,
+      url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
+      sha256: createHash("sha256").update(csv).digest("hex"),
+      lockedAt: "2026-01-01T00:00:00Z",
+      lockedBy: "test",
+    });
     globalThis.fetch = vi.fn(async (input: unknown) =>
       String(input).includes("raw.githubusercontent.com")
         ? new Response(csv)
@@ -182,18 +197,15 @@ describe("bounded GBFS candidate validation", () => {
       const csv =
         "Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\nDE,Demo,Berlin,demo,https://example.test,https://example.test/gbfs.json,2.3,\n";
       const commit = "a".repeat(40);
-      writeFileSync(
-        join(tmp, "infra", "docker", "gbfs-catalog.lock.json"),
-        JSON.stringify({
-          schemaVersion: 1,
-          source: "mobilitydata-gbfs",
-          commit,
-          url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
-          sha256: createHash("sha256").update(csv).digest("hex"),
-          lockedAt: "2026-01-01T00:00:00Z",
-          lockedBy: "test",
-        }),
-      );
+      gbfsLock.value = {
+        schemaVersion: 1,
+        source: "mobilitydata-gbfs",
+        commit,
+        url: `https://raw.githubusercontent.com/MobilityData/gbfs/${commit}/systems.csv`,
+        sha256: createHash("sha256").update(csv).digest("hex"),
+        lockedAt: "2026-01-01T00:00:00Z",
+        lockedBy: "test",
+      };
       globalThis.fetch = vi.fn(async (input: unknown) => {
         const url = String(input);
         if (url.includes("raw.githubusercontent.com")) return new Response(csv);

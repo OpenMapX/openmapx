@@ -1,9 +1,35 @@
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { scrubSecrets, scrubSecretsOptional } from "../../utils/scrub-secrets.js";
 import { feedKeyForSource, recordFetchOutcome } from "./feed-state-writer.js";
-import { runFetchPipeline } from "./internal.js";
+import { operatorFeedScript, runFetchPipeline } from "./internal.js";
 import { finalizeTransitSourceManifest } from "./source-manifest.js";
 import type { FeedDownloadFailure, FeedFileEntry, StageFn } from "./types.js";
+
+const RELAY_CAPABILITY_PATTERN = /\/internal\/transit\/operator-feed\/[a-f0-9]{64}/gi;
+
+function redactRelayCapability(value: string): string {
+  return scrubSecrets(value).replace(
+    RELAY_CAPABILITY_PATTERN,
+    "/internal/transit/operator-feed/[redacted]",
+  );
+}
+
+function safeFailureHostname(value: string): string {
+  try {
+    return new URL(value).hostname;
+  } catch {
+    return "[invalid-host]";
+  }
+}
+
+function redactFailures(failures: FeedDownloadFailure[]): FeedDownloadFailure[] {
+  return failures.map((failure) => ({
+    ...failure,
+    url: safeFailureHostname(failure.url),
+    message: redactRelayCapability(failure.message),
+  }));
+}
 
 function materializeOperatorMetadata(ctx: Parameters<StageFn>[0]): FeedFileEntry[] {
   // One fixed directory reused per run — a per-job directory would accumulate
@@ -70,15 +96,11 @@ export const run: StageFn = async (ctx) => {
   const start = Date.now();
   try {
     const operatorFeeds = materializeOperatorMetadata(ctx);
-    const failures =
+    const failures = redactFailures(
       operatorFeeds.length === 0
         ? []
-        : await runFetchPipeline(
-            ctx.state.catalogDir ?? ctx.catalogDir,
-            operatorFeeds,
-            ctx.runner,
-            ctx.logger,
-          );
+        : await runFetchPipeline(operatorFeeds, ctx.runScript, ctx.logger, operatorFeedScript),
+    );
     ctx.state.fetchFailures = [...(ctx.state.fetchFailures ?? []), ...failures];
     await persistOutcomes(operatorFeeds, failures, ctx);
     const allFailures = ctx.state.fetchFailures ?? [];
@@ -110,14 +132,19 @@ export const run: StageFn = async (ctx) => {
     };
   } catch (error) {
     const err = error as Error;
+    const message = redactRelayCapability(err.message);
+    const stack = scrubSecretsOptional(err.stack)?.replace(
+      RELAY_CAPABILITY_PATTERN,
+      "/internal/transit/operator-feed/[redacted]",
+    );
     return {
       stage: "fetch-operator",
       status: "error",
       startedAt,
       finishedAt: ctx.now(),
       durationMs: Date.now() - start,
-      message: err.message,
-      error: { message: err.message, stack: err.stack },
+      message,
+      error: { message, stack },
     };
   }
 };

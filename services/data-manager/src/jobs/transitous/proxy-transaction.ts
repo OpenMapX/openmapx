@@ -1,4 +1,12 @@
-import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { applyHardlinkPlan, type HardlinkEntry } from "@openmapx/hardlinks";
 import {
@@ -6,12 +14,12 @@ import {
   normalizeFeedProxyVars,
   renderFeedProxyNginxConfig,
 } from "@openmapx/motis-feed-proxy-config";
+import { runOpsOperation } from "../../ops-client.js";
 import {
   CANDIDATE_MANIFEST_FILENAME,
   CANDIDATE_PROXY_DIRNAME,
   verifyCandidateManifest,
 } from "./candidate.js";
-import { FEED_PROXY_CONTAINER } from "./motis-containers.js";
 import type { JobContext, ProxyTransactionState, StageFn, StageResult } from "./types.js";
 
 export const ACTIVE_PROXY_ROOT_DIRNAME = "motis-feed-proxy";
@@ -103,13 +111,13 @@ async function validateAndReload(ctx: JobContext): Promise<void> {
   // Propagate the just-written config into the container's mounted copy before
   // asking nginx to validate/reload it.
   relinkFeedProxyConfig(ctx);
-  await ctx.runner("docker", ["exec", FEED_PROXY_CONTAINER, "nginx", "-t"], {
-    cwd: ctx.dataDir,
-    stdio: "pipe",
-  });
-  await ctx.runner("docker", ["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], {
-    cwd: ctx.dataDir,
-    stdio: "pipe",
+  // The agent validates the configuration and only then reloads, so a bad
+  // candidate can never take the proxy down.
+  await runOpsOperation({
+    kind: "feedProxy.validateAndReload",
+    // The mtime of the config just written identifies the candidate being
+    // activated; the agent needs only that opaque id.
+    candidateId: `feedproxy-${Math.trunc(statSync(join(ctx.dataDir, ACTIVE_PROXY_ROOT_DIRNAME, CONFIG_RELATIVE_PATH)).mtimeMs)}`,
   });
 }
 

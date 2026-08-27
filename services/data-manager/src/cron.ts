@@ -1,4 +1,4 @@
-import { existsSync, rmSync, statSync } from "node:fs";
+import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { feedState } from "@openmapx/db-schema";
 import {
@@ -8,7 +8,6 @@ import {
 import { parseTransitSource } from "@openmapx/transitous-core";
 import { Cron } from "croner";
 import { and, eq } from "drizzle-orm";
-import { execa } from "execa";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "./db/index.js";
 import { discoverLatestOvertureRelease } from "./jobs/overture/pull.js";
@@ -51,7 +50,6 @@ import {
   type RunPipelineResult,
   runTransitousPipeline,
 } from "./jobs/transitous/index.js";
-import { FEED_PROXY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import { fetchWithTimeout } from "./jobs/transitous/motis-probe.js";
 import type { MotisOperationsPolicy } from "./jobs/transitous/operations-profile.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
@@ -64,13 +62,8 @@ import {
   type GithubIssueSink,
 } from "./jobs/transitous/staleness-alerts.js";
 import { asJobLogger, jobChildLogger } from "./logger.js";
+import { runOpsOperation } from "./ops-client.js";
 import type { StateStore } from "./state.js";
-import {
-  readTransitousLock,
-  TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH,
-  writeTransitousLock,
-  writeTransitousLockProposal,
-} from "./transitous-lock.js";
 import { envString } from "./utils/env.js";
 
 /**
@@ -129,9 +122,6 @@ const DISABLED_SENTINELS = new Set(["disabled", "off", "false"]);
 
 const AUTO_BUMP_PROPOSAL_COMMENT =
   "Candidate Transitous pin under auto-bump canary validation (services/data-manager).";
-const AUTO_BUMP_ACTIVATED_COMMENT =
-  "Auto-bumped Transitous pin, activated after the staging-slot canary passed.";
-
 export interface CronLogger {
   info: (msg: string, extra?: Record<string, unknown>) => void;
   warn: (msg: string, extra?: Record<string, unknown>) => void;
@@ -152,10 +142,10 @@ export interface CronSetupOptions {
    */
   runPipeline?: (jobId: string) => Promise<RunPipelineResult>;
   /**
-   * Test seam: invoked instead of `execa("docker", ["exec", ...])` so the
+   * Test seam: invoked instead of the typed agent operation so the
    * unit suite never shells out to docker.
    */
-  reloadFeedProxy?: () => Promise<void>;
+  reloadFeedProxy?: (candidateId: string) => Promise<void>;
   /** Override default schedule strings (e.g. for tests). */
   syncCronExpression?: string;
   feedProxyReloadCronExpression?: string;
@@ -629,11 +619,6 @@ export function setupCron(options: CronSetupOptions): CronHandles {
    * untouched, the proposal is retained for review, and a failure alert fires.
    */
   const runAutoBump = async (): Promise<void> => {
-    const repoRoot = options.repoRoot;
-    if (!repoRoot) {
-      log.warn("transitous-auto-bump: no repoRoot configured; skipping");
-      return;
-    }
     const start = await options.singleFlight.tryStartSync({
       trigger: "cron",
       triggeredBy: "data-manager-auto-bump",
@@ -651,7 +636,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     let ranPipeline = false;
     try {
       const candidate = await resolveBumpCandidate({ catalogDir, branch: "main" });
-      const active = readTransitousLock(repoRoot);
+      const { active } = await runOpsOperation({ kind: "transitousLock.inspect" });
       if (candidateMatchesLock(candidate, active)) {
         log.info("transitous-auto-bump: already at upstream tip; nothing to do", {
           ref: candidate.ref,
@@ -662,21 +647,28 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         ref: candidate.ref,
         previousRef: active?.ref ?? null,
       });
-      writeTransitousLockProposal(
-        repoRoot,
-        lockFromCandidate(candidate, "auto-bump", AUTO_BUMP_PROPOSAL_COMMENT),
-      );
+      const proposal = lockFromCandidate(candidate, "auto-bump", AUTO_BUMP_PROPOSAL_COMMENT);
+      // Agent-owned write: the auto-bump proposes, it never activates.
+      await runOpsOperation({
+        kind: "transitousLock.propose",
+        ref: proposal.ref,
+        submodules: proposal.submodules,
+        lockedBy: proposal.lockedBy,
+        comment: AUTO_BUMP_PROPOSAL_COMMENT,
+      });
 
       ranPipeline = true;
       pipelineResult = await runBumpPipeline(start.jobId);
       finalStatus = pipelineResult.finalStatus;
 
       if (finalStatus === "ok") {
-        writeTransitousLock(
-          repoRoot,
-          lockFromCandidate(candidate, "auto-bump", AUTO_BUMP_ACTIVATED_COMMENT),
-        );
-        rmSync(join(repoRoot, TRANSITOUS_PROPOSED_LOCK_RELATIVE_PATH), { force: true });
+        // Only a passing canary activates, and the agent re-matches the exact
+        // ref it is activating.
+        await runOpsOperation({
+          kind: "transitousLock.approve",
+          ref: candidate.ref,
+          approvedBy: "auto-bump",
+        });
         log.info("transitous-auto-bump: canary passed; activated new catalog pin", {
           ref: candidate.ref,
         });
@@ -727,10 +719,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
   };
 
-  const defaultReload = async (): Promise<void> => {
-    await execa("docker", ["exec", FEED_PROXY_CONTAINER, "nginx", "-s", "reload"], {
-      stdio: "pipe",
-    });
+  const defaultReload = async (candidateId: string): Promise<void> => {
+    // The agent validates the configuration before reloading and owns the
+    // container name; data-manager only names the candidate.
+    await runOpsOperation({ kind: "feedProxy.validateAndReload", candidateId });
   };
 
   const runFeedProxyReload = async (): Promise<void> => {
@@ -753,7 +745,8 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     }
     try {
       const reload = options.reloadFeedProxy ?? defaultReload;
-      await reload();
+      // The config file's mtime identifies the candidate being activated.
+      await reload(`feedproxy-${Math.trunc(mtimeMs)}`);
       lastFeedProxyReloadAt = mtimeMs;
       log.info("transitous-cron: feed-proxy reloaded", { mtimeMs });
     } catch (err) {

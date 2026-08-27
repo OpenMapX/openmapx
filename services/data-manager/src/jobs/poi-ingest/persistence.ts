@@ -1,6 +1,7 @@
 import { jobStages, jobs, poiFeedState } from "@openmapx/db-schema";
 import { sql as drizzleSql, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
+import { scrubDiagnosticValue, scrubSecrets } from "../../utils/scrub-secrets.js";
 import type {
   PoiIngestKind,
   PoiIngestResult,
@@ -51,6 +52,15 @@ export function makePoiPersistingOnStageComplete(
 ): (result: PoiIngestStageResult) => Promise<void> {
   return async (result) => {
     try {
+      const diagnostics = scrubDiagnosticValue({
+        message: result.message ?? null,
+        error: result.error ?? null,
+        artifacts: result.artifacts ?? null,
+      }) as {
+        message: string | null;
+        error: PoiIngestStageResult["error"] | null;
+        artifacts: Record<string, unknown> | null;
+      };
       await db.insert(jobStages).values({
         jobId,
         stage: result.stage,
@@ -58,13 +68,15 @@ export function makePoiPersistingOnStageComplete(
         startedAt: new Date(result.startedAt),
         finishedAt: new Date(result.finishedAt),
         durationMs: result.durationMs,
-        message: result.message ?? null,
-        error: result.error ?? null,
-        artifacts: result.artifacts ?? null,
+        message: diagnostics.message,
+        error: diagnostics.error,
+        artifacts: diagnostics.artifacts,
       });
     } catch (err) {
       logger.warn(
-        `poi-ingest: failed to persist stage result for ${result.stage}: ${(err as Error).message}`,
+        scrubSecrets(
+          `poi-ingest: failed to persist stage result for ${result.stage}: ${(err as Error).message}`,
+        ),
       );
     }
   };
@@ -179,16 +191,16 @@ export async function upsertPoiFeedState(opts: UpsertPoiFeedStateOptions): Promi
 function buildLastError(result: PoiIngestResult): { message: string; stack?: string } | null {
   if (result.error) {
     return result.error.stack
-      ? { message: result.error.message, stack: result.error.stack }
-      : { message: result.error.message };
+      ? { message: scrubSecrets(result.error.message), stack: scrubSecrets(result.error.stack) }
+      : { message: scrubSecrets(result.error.message) };
   }
   // Fall back to the last failing stage's error payload.
   for (let i = result.stages.length - 1; i >= 0; i--) {
     const stage = result.stages[i];
     if (stage?.status === "error" && stage.error) {
       return stage.error.stack
-        ? { message: stage.error.message, stack: stage.error.stack }
-        : { message: stage.error.message };
+        ? { message: scrubSecrets(stage.error.message), stack: scrubSecrets(stage.error.stack) }
+        : { message: scrubSecrets(stage.error.message) };
     }
   }
   return null;

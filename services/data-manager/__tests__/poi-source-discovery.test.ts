@@ -132,37 +132,6 @@ describe("discoverPoiSources", () => {
     );
   });
 
-  it("isolates errors per integration when the failure is a community integration", async () => {
-    writeIntegration("ev-charging", VALID_SOURCE_DECL_JS);
-    const customRoot = mkdtempSync(join(tmpdir(), "poi-discovery-custom-"));
-    try {
-      const brokenCommunityDir = join(customRoot, "broken-community");
-      mkdirSync(brokenCommunityDir, { recursive: true });
-      writeFileSync(join(brokenCommunityDir, "poi-sources.js"), BROKEN_DECL_JS);
-      const logger = makeLogger();
-
-      const result = await discoverPoiSources({
-        rootDir: tmpRoot,
-        customIntegrationsDir: customRoot,
-        logger,
-      });
-
-      expect(result.scanned).toBe(2);
-      expect(result.withSources).toBe(1);
-      expect(result.registered).toBe(1);
-      expect(result.errors).toHaveLength(1);
-      expect(result.errors[0]?.integration).toBe("broken-community");
-      expect(getAllPoiSources().map((s) => s.id)).toEqual(["fixture-ev-1"]);
-      expect(logger.warn).toHaveBeenCalledWith(
-        "poi-source-discovery: failed to load integration poi-sources",
-        expect.objectContaining({ integration: "broken-community" }),
-      );
-      expect(logger.error).not.toHaveBeenCalled();
-    } finally {
-      rmSync(customRoot, { recursive: true, force: true });
-    }
-  });
-
   it("skips integrations without a poi-sources file (silent)", async () => {
     writeIntegration("no-poi", null);
     writeIntegration("with-poi", VALID_SOURCE_DECL_JS);
@@ -209,32 +178,27 @@ describe("discoverPoiSources", () => {
     );
   });
 
-  it("scans built-in + custom integration dirs both", async () => {
+  it("never imports POI declarations from the untrusted community directory", async () => {
     writeIntegration("builtin-1", VALID_SOURCE_DECL_JS);
-    const customRoot = mkdtempSync(join(tmpdir(), "poi-discovery-custom-"));
+    const customRoot = join(tmpRoot, "custom_integrations");
     try {
       const communityDir = join(customRoot, "community-source");
       mkdirSync(communityDir, { recursive: true });
       writeFileSync(
         join(communityDir, "poi-sources.js"),
-        VALID_SOURCE_DECL_JS.replace("fixture-ev-1", "community-ev-1"),
+        `globalThis.__untrustedPoiExecuted = true;\n${VALID_SOURCE_DECL_JS.replace("fixture-ev-1", "community-ev-1")}`,
       );
       const logger = makeLogger();
+      const g = globalThis as Record<string, unknown>;
 
-      const result = await discoverPoiSources({
-        rootDir: tmpRoot,
-        customIntegrationsDir: customRoot,
-        logger,
-      });
+      const result = await discoverPoiSources({ rootDir: tmpRoot, logger });
 
-      expect(result.scanned).toBe(2);
-      expect(result.registered).toBe(2);
-      expect(
-        getAllPoiSources()
-          .map((s) => s.id)
-          .sort(),
-      ).toEqual(["community-ev-1", "fixture-ev-1"]);
+      expect(result.scanned).toBe(1);
+      expect(result.registered).toBe(1);
+      expect(getAllPoiSources().map((s) => s.id)).toEqual(["fixture-ev-1"]);
+      expect(g.__untrustedPoiExecuted).toBeUndefined();
     } finally {
+      delete (globalThis as Record<string, unknown>).__untrustedPoiExecuted;
       rmSync(customRoot, { recursive: true, force: true });
     }
   });

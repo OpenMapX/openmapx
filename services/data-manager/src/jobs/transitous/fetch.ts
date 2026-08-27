@@ -22,7 +22,6 @@ export const run: StageFn = async (ctx) => {
   const startedAt = ctx.now();
   const start = Date.now();
   try {
-    const catalogDir = ctx.state.catalogDir ?? ctx.catalogDir;
     const gtfsDir = ctx.state.gtfsDir ?? ctx.outDir;
     const selectedFeedFiles = ctx.state.selectedFeedFiles ?? [];
 
@@ -44,12 +43,7 @@ export const run: StageFn = async (ctx) => {
     );
     const runnableFeedFiles = selectedFeedFiles.filter((feed) => !feed.parseFailure);
 
-    const fetchFailures = await runFetchPipeline(
-      catalogDir,
-      runnableFeedFiles,
-      ctx.runner,
-      ctx.logger,
-    );
+    const fetchFailures = await runFetchPipeline(runnableFeedFiles, ctx.runScript, ctx.logger);
     const failures: FeedDownloadFailure[] = [...parseFailures, ...fetchFailures];
     ctx.state.fetchFailures = failures;
 

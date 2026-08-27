@@ -1,12 +1,4 @@
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  readFileSync,
-  rmSync,
-  utimesSync,
-  writeFileSync,
-} from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { scheduledJobs } from "croner";
@@ -17,6 +9,40 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 // real `postgres-js` pool there is no server in the unit env, so the query
 // never resolves and the test hangs to the 15s timeout. Mock the db module to
 // a chainable thenable that resolves immediately — no query ever executes.
+// The catalog lock is agent-owned. This models the agent's slot behaviour so
+// the cron's propose/approve sequence can be asserted without a repo mount.
+const lockSlots: {
+  active: Record<string, unknown> | null;
+  proposed: Record<string, unknown> | null;
+} = { active: null, proposed: null };
+vi.mock("../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: Record<string, unknown>) => {
+    switch (operation.kind) {
+      case "transitousLock.inspect":
+        return { active: lockSlots.active, proposed: lockSlots.proposed };
+      case "transitousLock.propose":
+        lockSlots.proposed = {
+          ref: operation.ref,
+          submodules: operation.submodules,
+          lockedAt: "2026-05-01T00:00:00.000Z",
+          lockedBy: operation.lockedBy,
+        };
+        return { ref: operation.ref, proposed: true };
+      case "transitousLock.approve": {
+        if (!lockSlots.proposed) throw new Error("No Transitous lock proposal to approve");
+        if (lockSlots.proposed.ref !== operation.ref) {
+          throw new Error("Transitous lock proposal does not match the approved ref");
+        }
+        lockSlots.active = { ...lockSlots.proposed, lockedBy: operation.approvedBy };
+        lockSlots.proposed = null;
+        return { ref: operation.ref, lockedAt: "2026-05-01T00:00:00.000Z" };
+      }
+      default:
+        return { changed: true };
+    }
+  }),
+}));
+
 vi.mock("../src/db/index.js", () => {
   const makeChain = (result: unknown[] = []) => {
     const chain: Record<string, unknown> = {
@@ -290,13 +316,19 @@ describe("setupCron", () => {
           lockedBy: "seed",
         }),
       );
+      lockSlots.active = {
+        ref: `main@${ACTIVE}`,
+        submodules: { "transitland-atlas": ATLAS_OLD },
+        lockedAt: "2026-05-01T00:00:00.000Z",
+        lockedBy: "seed",
+      };
+      lockSlots.proposed = null;
       return repoRoot;
     }
 
-    const activeLock = (repoRoot: string) =>
-      JSON.parse(readFileSync(join(repoRoot, "infra/docker/transitous.lock.json"), "utf-8"));
-    const proposalExists = (repoRoot: string) =>
-      existsSync(join(repoRoot, "infra/docker/transitous.lock.proposed.json"));
+    const activeLock = (_repoRoot: string) =>
+      lockSlots.active as { ref: string; submodules: Record<string, string> };
+    const proposalExists = (_repoRoot: string) => lockSlots.proposed !== null;
 
     it("is opt-in — an unset schedule leaves the cron disabled", () => {
       const handles = setupCron({

@@ -1,7 +1,16 @@
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const opsCalls: unknown[] = [];
+vi.mock("../ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: unknown) => {
+    opsCalls.push(operation);
+    return { changed: true };
+  }),
+}));
+
 import {
   decodeGraphId,
   loadWaysToEdges,
@@ -48,26 +57,21 @@ describe("refreshWaysToEdges / loadWaysToEdges", () => {
   });
 
   it("runs valhalla_ways_to_edges, then keeps only covered way ids with decoded f/b edges", async () => {
-    const calls: string[][] = [];
+    opsCalls.length = 0;
     const sampleLines = ["123,1,73160266,0,110268746", "999,1,555"];
 
     const result = await refreshWaysToEdges(new Set([123]), {
-      container: "docker-valhalla-1",
-      runDocker: async (args) => {
-        calls.push(args);
-        return { exitCode: 0, stdout: "" };
-      },
-      readWayEdgesLines: async function* (container, path) {
-        expect(container).toBe("docker-valhalla-1");
-        expect(path).toBe("/custom_files/valhalla_tiles/way_edges.txt");
+      wayEdgesPath: "/data/osm/valhalla_tiles/way_edges.txt",
+      readWayEdgesLines: async function* (path) {
+        // Read from the shared mount, not out of the container.
+        expect(path).toBe("/data/osm/valhalla_tiles/way_edges.txt");
         yield* linesOf(sampleLines);
       },
       outputPath,
     });
 
-    expect(calls).toEqual([
-      ["exec", "docker-valhalla-1", "valhalla_ways_to_edges", "-c", "/custom_files/valhalla.json"],
-    ]);
+    // Producing the file is a typed agent operation, not a docker exec here.
+    expect(opsCalls).toEqual([{ kind: "valhalla.traffic.refreshWaysToEdges" }]);
     expect(result).toEqual({ wayCount: 1, edgeCount: 2 });
 
     const written = JSON.parse(await readFile(outputPath, "utf8"));
@@ -95,21 +99,21 @@ describe("refreshWaysToEdges / loadWaysToEdges", () => {
     expect(loaded.has(999)).toBe(false);
   });
 
-  it("throws when valhalla_ways_to_edges exits non-zero", async () => {
+  it("propagates a failed agent operation instead of writing a map", async () => {
+    const { runOpsOperation } = await import("../ops-client.js");
+    vi.mocked(runOpsOperation).mockRejectedValueOnce(
+      new Error("Operation valhalla.traffic.refreshWaysToEdges did not succeed (runtime)"),
+    );
     await expect(
       refreshWaysToEdges(new Set([123]), {
-        container: "docker-valhalla-1",
-        runDocker: async () => ({ exitCode: 1, stdout: "" }),
         readWayEdgesLines: async function* () {},
         outputPath,
       }),
-    ).rejects.toThrow(/valhalla_ways_to_edges exited 1/);
+    ).rejects.toThrow(/did not succeed/);
   });
 
   it("writes an empty map when coveredWayIds matches nothing", async () => {
     const result = await refreshWaysToEdges(new Set([1]), {
-      container: "docker-valhalla-1",
-      runDocker: async () => ({ exitCode: 0, stdout: "" }),
       readWayEdgesLines: async function* () {
         yield* linesOf(["999,1,555"]);
       },

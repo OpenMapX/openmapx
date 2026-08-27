@@ -1,6 +1,11 @@
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { applyFeedOverlay, type FeedFile, readFeedOverlay } from "../transitous-feeds-overlay.js";
+import {
+  applyFeedOverlay,
+  type FeedFile,
+  materializeFeedOverlayForRun,
+  readFeedOverlay,
+} from "../transitous-feeds-overlay.js";
 import {
   applyApiKeysOverlay,
   DEFAULT_TRANSITOUS_API_KEYS_PATH,
@@ -28,7 +33,12 @@ export const run: StageFn = async (ctx) => {
     applyApiKeysOverlay(catalogDir, apiKeysPath);
 
     const feedsOverlayPath = resolveFeedsOverlayPath(ctx);
-    const overlayPatchCount = applyFeedsOverlayToCatalog(catalogDir, feedsOverlayPath, ctx.logger);
+    const overlayPatchCount = applyFeedsOverlayToCatalog(
+      catalogDir,
+      feedsOverlayPath,
+      ctx,
+      ctx.logger,
+    );
 
     // Pre-skip anything upstream can't resolve by RUNNING its own resolver and
     // acting on the "Could not resolve" verdict (see pruneUnresolvableSources)
@@ -38,7 +48,13 @@ export const run: StageFn = async (ctx) => {
     const prunedUnresolvable = await pruneUnresolvableSources({
       catalogDir,
       countries: ctx.countries,
-      runner: ctx.runner,
+      runCheck: (countries) =>
+        ctx.runScript({
+          script: "generate-motis-config",
+          importOnly: true,
+          feedProxy: false,
+          countries,
+        }),
       logger: ctx.logger,
     });
 
@@ -150,6 +166,7 @@ function resolveFeedsOverlayPath(ctx: JobContext): string | undefined {
 function applyFeedsOverlayToCatalog(
   catalogDir: string,
   overlayPath: string | undefined,
+  ctx: JobContext,
   logger: JobLogger,
 ): number {
   if (!overlayPath) return 0;
@@ -162,20 +179,27 @@ function applyFeedsOverlayToCatalog(
     );
   }
   if (!overlay || (overlay.patches.length === 0 && overlay.sources.length === 0)) return 0;
+  const materializedOverlay = materializeFeedOverlayForRun(overlay, {
+    runId: ctx.jobId,
+    register: (source) =>
+      ctx.operatorFeedRelay.register({
+        ...source,
+      }).url,
+  });
   logger.info(
     `transitous-pipeline: applying ${overlay.patches.length} feeds-overlay patch(es) and ${overlay.sources.length} source(s) from ${overlayPath}`,
   );
 
   const regionsToPatch = new Set([
-    ...overlay.patches.map((entry) => entry.sourceId.split(":")[1]).filter(Boolean),
-    ...overlay.sources.map((entry) => entry.region),
+    ...materializedOverlay.patches.map((entry) => entry.sourceId.split(":")[1]).filter(Boolean),
+    ...materializedOverlay.sources.map((entry) => entry.region),
   ]);
   const feedFiles: FeedFile[] = [];
   const feedPaths = new Map<string, string>();
   for (const region of regionsToPatch) {
     const feedPath = join(catalogDir, "feeds", `${region}.json`);
     if (!existsSync(feedPath)) {
-      if (overlay.sources.some((entry) => entry.region === region)) {
+      if (materializedOverlay.sources.some((entry) => entry.region === region)) {
         feedFiles.push({ region, sources: [] });
         feedPaths.set(region, feedPath);
       } else {
@@ -196,7 +220,7 @@ function applyFeedsOverlayToCatalog(
     }
   }
 
-  const result = applyFeedOverlay(feedFiles, overlay);
+  const result = applyFeedOverlay(feedFiles, materializedOverlay);
   for (const feed of feedFiles) {
     const feedPath = feedPaths.get(feed.region);
     if (!feedPath) continue;
@@ -214,5 +238,5 @@ function applyFeedsOverlayToCatalog(
       `transitous-pipeline: feeds-overlay patch for ${unmatched.sourceId} had no matching source`,
     );
   }
-  return overlay.patches.length + overlay.sources.length;
+  return materializedOverlay.patches.length + materializedOverlay.sources.length;
 }

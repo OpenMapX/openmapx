@@ -6,6 +6,7 @@ import type {
   OfflinePackageRequest,
   OfflinePackageSourceDescriptor,
 } from "@openmapx/core";
+import type { OfflinePackageAccountingStore } from "./accounting.js";
 
 export interface OfflinePackageSourceCatalog {
   descriptor: OfflinePackageSourceDescriptor;
@@ -30,11 +31,21 @@ export interface OfflinePackageGeneratorOptions {
   extractor?: OfflinePackageExtractor;
   clock?: () => Date;
   maxConcurrent?: number;
+  /** Maximum waiting jobs; running workers are counted separately. */
+  maxQueuedJobs?: number;
+  /** Hard ceiling for all in-memory job metadata, including terminal diagnostics. */
+  maxTrackedJobs?: number;
+  /** How long terminal job diagnostics remain addressable by job id. */
+  terminalJobRetentionMs?: number;
   maxPackageBytes?: number;
   maxPackageCount?: number;
   maxPackageBytesTotal?: number;
   minFreeBytes?: number;
   logger?: OfflinePackageLogger;
+  /** Durable authoritative ownership/quota/lease state. Production supplies PostgreSQL. */
+  accounting?: OfflinePackageAccountingStore;
+  workerId?: string;
+  leaseMs?: number;
 }
 
 export interface OfflinePackageLogger {

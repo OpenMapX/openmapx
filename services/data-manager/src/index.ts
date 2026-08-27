@@ -1,7 +1,10 @@
+// Replace the bundled undici before any module captures global fetch
+// (see undici-fetch.ts).
+import "./undici-fetch.js";
 import { accessSync, constants } from "node:fs";
 import { join } from "node:path";
+import { createFatalProcessHandler } from "@openmapx/core/server";
 import Fastify from "fastify";
-import { Redis } from "ioredis";
 import { registerApi } from "./api.js";
 import { registerAuth, resolveAuthToken } from "./auth.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
@@ -24,13 +27,18 @@ import { resolveOperationsProfileFromEnv } from "./jobs/transitous/operations-pr
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import { rootLogger } from "./logger.js";
 import { OfflinePackageGenerator } from "./offline-packages/generator.js";
+import { PostgresOfflinePackageAccountingStore } from "./offline-packages/postgres-accounting.js";
 import { createOpenMapxPackageSourceFactory } from "./offline-packages/source-catalog.js";
 import { OfflinePackageStorage } from "./offline-packages/storage.js";
 import { discoverPoiSources } from "./poi-source-discovery.js";
+import { DataManagerReadiness } from "./readiness.js";
+import { createDataManagerRedisClient } from "./redis.js";
+import { initializeRequiredSubsystems } from "./startup.js";
 import { StateStore } from "./state.js";
 
 const app = Fastify({ loggerInstance: rootLogger });
 registerAuth(app, resolveAuthToken(app));
+const readiness = new DataManagerReadiness();
 
 const dataDir = process.env.DATA_DIR ?? "/data";
 const offlinePackageStorage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
@@ -38,6 +46,7 @@ const offlinePackageSource = createOpenMapxPackageSourceFactory(dataDir);
 const offlinePackages = new OfflinePackageGenerator({
   source: offlinePackageSource,
   storage: offlinePackageStorage,
+  accounting: new PostgresOfflinePackageAccountingStore(sql),
   logger: {
     info: (message, fields) => app.log.info(fields, message),
     warn: (message, fields) => app.log.warn(fields, message),
@@ -69,6 +78,7 @@ registerApi(app, {
   repoRoot,
   singleFlight,
   operationsPolicy,
+  readiness: () => readiness.snapshot(),
   ...(openConditionsUrl && {
     bakePredicted: () =>
       bakePredicted({
@@ -110,19 +120,18 @@ const host = process.env.HOST ?? "127.0.0.1";
 let cronHandles: CronHandles | null = null;
 let poiHandles: PoiSchedulerHandles | null = null;
 
-// Single shared Redis client for the POI ingest pipeline. Defined at module
+// Single authenticated Redis client for the POI ingest pipeline. Defined at module
 // scope so `shutdown()` can disconnect it explicitly — otherwise SIGTERM
 // hangs on the open socket. `lazyConnect: true` defers the first TCP attempt
-// until a command actually runs, so a misconfigured REDIS_URL surfaces at the
-// callsite that depends on it instead of flooding the log with retries at
-// boot.
-const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
-const redis = new Redis(redisUrl, { lazyConnect: true, maxRetriesPerRequest: 3 });
+// until the mandatory startup ping. Both connection coordinates and the
+// deployment-owned password file must be explicit; production never falls
+// back to an unauthenticated localhost client.
+const redis = await createDataManagerRedisClient();
 
 // POI ingest singleFlight + metricsSink + drift guard are constructed BEFORE
 // `app.listen()` so the HTTP routes can be registered against them — Fastify
-// disallows `app.get(...)` calls after listen. setupPoiIngestCron (after
-// listen) takes the same instances via opts so the cron + HTTP triggers
+// disallows `app.get(...)` calls after listen. setupPoiIngestCron takes the
+// same instances via opts so the cron + HTTP triggers
 // share the same lock + metrics writer.
 const poiAdapter = {
   info: (m: string, e?: Record<string, unknown>) => (e ? app.log.info(e, m) : app.log.info(m)),
@@ -162,117 +171,96 @@ app.get("/internal/metrics", async (_request, reply) => {
   reply.header("Content-Type", "text/plain; version=0.0.4; charset=utf-8").send(text);
 });
 
-app
-  .listen({ port, host })
-  .then(async (addr) => {
-    app.log.info(`data-manager listening on ${addr}`);
-
-    try {
+async function start(): Promise<void> {
+  const store = new StateStore(dataDir);
+  const countries = operationsPolicy.countries;
+  const initialized = await initializeRequiredSubsystems({
+    readiness,
+    initializeOfflineStorage: async () => {
       await offlinePackages.initialize();
       app.log.info("offline package storage reconciled");
-    } catch (err) {
-      app.log.error({ err }, "offline package storage initialization failed");
-    }
-
-    // Reconcile zombie jobs BEFORE wiring cron / accepting work: the
-    // single-flight lock is in-memory, so on a fresh boot nothing is genuinely
-    // running — any job still `running` in the DB was orphaned by a previous
-    // process that died mid-run (restart / redeploy / OOM). Left alone they
-    // pin the admin "Sync in progress" banner to a phantom job forever.
-    try {
-      const interrupted = await reconcileOrphanedJobs();
-      if (interrupted.length > 0) {
-        app.log.warn(
-          { count: interrupted.length, jobIds: interrupted },
-          "data-manager: marked orphaned running jobs as interrupted on startup",
-        );
-      }
-    } catch (err) {
-      app.log.error({ err }, "data-manager: failed to reconcile orphaned running jobs");
-    }
-
-    // Wire cron _after_ listen so an early Fastify failure doesn't leave
-    // dangling cron timers and so the in-process singleFlight controller is
-    // fully ready before the first scheduled fire.
-    const store = new StateStore(dataDir);
-    const countries = operationsPolicy.countries;
-    // The way→edge refresh restricts `valhalla_ways_to_edges` to the ways the
-    // live-traffic writer can update. Its covered-way-id source is the same
-    // OpenConditions speed feed the writer consumes, so it's only wired when
-    // OpenConditions is configured; otherwise the refresh (and the whole
-    // live-traffic chain) stays disabled.
-    cronHandles = setupCron({
-      dataDir,
-      repoRoot,
-      countries,
-      operationsPolicy,
-      store,
-      singleFlight,
-      logger: app.log,
-      // Pass the trimmed URL as the single source of truth so the getCoveredWayIds
-      // gate here and the live/predicted crons inside setupCron can't diverge on
-      // whitespace (a padded value would otherwise enable one and break the other).
-      openConditionsUrl,
-      getCoveredWayIds: openConditionsUrl ? () => fetchCoveredWayIds(openConditionsUrl) : undefined,
-    });
-
-    // Ensure the Valhalla traffic.tar extract exists before any job that
-    // depends on it (the future live-speed writer) could try to mmap it.
-    // Fire-and-forget: `runTrafficExtractStartupNow` never rejects (errors
-    // are logged internally), and a slow first-time extract build shouldn't
-    // block the rest of startup.
-    void cronHandles.runTrafficExtractStartupNow();
-    if ((process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true") {
-      // Recover an expired conflation lease immediately after a restart rather
-      // than waiting for the next retry tick. The handler contains/logs errors.
-      void cronHandles.runOvertureConflationRetryNow();
-    }
-
-    // Discover POI sources from each integration's poi-sources.{js,ts} file
-    // BEFORE setupPoiIngestCron — the scheduler reads the registry snapshot
-    // at boot, so anything that hasn't been registered yet won't get a cron.
-    const customIntegrationsDir = process.env.OPENMAPX_CUSTOM_INTEGRATIONS_DIR;
-    if (integrationsRootDir) {
-      await discoverPoiSources({
-        rootDir: integrationsRootDir,
-        customIntegrationsDir,
-        logger: poiAdapter,
-      });
-    } else {
-      app.log.warn(
-        "no integrations root resolved (OPENMAPX_INTEGRATIONS_DIR unset and import.meta.dirname unavailable) — skipping POI source discovery (data-manager will see an empty registry)",
-      );
-    }
-
-    poiHandles = setupPoiIngestCron({
-      sql,
-      redis,
-      logger: poiAdapter,
-      singleFlight: poiSingleFlight,
-      metricsSink: poiMetricsSink,
-    });
-
-    // Optional first-deploy bootstrap: kicks off an ingest for any source
-    // whose feed-state row shows it has never been ingested. Runs in the
-    // background so the HTTP listener stays responsive — the regular cron
-    // continues firing while bootstrap is still working through the list.
-    if (process.env.POI_INGEST_BOOTSTRAP === "true") {
-      app.log.info("poi-ingest-bootstrap: starting");
-      void runBootstrap({
+    },
+    verifyRedis: async () => {
+      await redis.ping();
+    },
+    reconcileJobs: reconcileOrphanedJobs,
+    discoverPoiSources: async () => {
+      if (!integrationsRootDir) throw new Error("no integrations root resolved");
+      await discoverPoiSources({ rootDir: integrationsRootDir, logger: poiAdapter });
+    },
+    setupCronSchedulers: () =>
+      setupCron({
+        dataDir,
+        repoRoot,
+        countries,
+        operationsPolicy,
+        store,
+        singleFlight,
+        logger: app.log,
+        openConditionsUrl,
+        getCoveredWayIds: openConditionsUrl
+          ? () => fetchCoveredWayIds(openConditionsUrl)
+          : undefined,
+      }),
+    setupPoiScheduler: () =>
+      setupPoiIngestCron({
         sql,
         redis,
+        logger: poiAdapter,
         singleFlight: poiSingleFlight,
         metricsSink: poiMetricsSink,
-        logger: poiAdapter,
-      })
-        .then((result) => app.log.info(result, "poi-ingest-bootstrap: complete"))
-        .catch((err) => app.log.error({ err }, "poi-ingest-bootstrap: threw"));
-    }
-  })
-  .catch((err) => {
-    app.log.error(err);
-    process.exit(1);
+      }),
   });
+  cronHandles = initialized.cronHandles;
+  poiHandles = initialized.poiHandles;
+  if (initialized.interruptedJobIds.length > 0) {
+    app.log.warn(
+      {
+        count: initialized.interruptedJobIds.length,
+        jobIds: initialized.interruptedJobIds,
+      },
+      "data-manager: marked orphaned running jobs as interrupted on startup",
+    );
+  }
+
+  const addr = await app.listen({ port, host });
+  readiness.markReady();
+  app.log.info(`data-manager listening on ${addr}`);
+
+  // These maintenance operations already contain/log their own failures and
+  // do not affect whether the registered HTTP and scheduled work is safe.
+  void cronHandles.runTrafficExtractStartupNow();
+  if ((process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true") {
+    void cronHandles.runOvertureConflationRetryNow();
+  }
+
+  if (process.env.POI_INGEST_BOOTSTRAP === "true") {
+    app.log.info("poi-ingest-bootstrap: starting");
+    void runBootstrap({
+      sql,
+      redis,
+      singleFlight: poiSingleFlight,
+      metricsSink: poiMetricsSink,
+      logger: poiAdapter,
+    })
+      .then((result) => app.log.info(result, "poi-ingest-bootstrap: complete"))
+      .catch((err) => app.log.error({ err }, "poi-ingest-bootstrap: threw"));
+  }
+}
+
+void start().catch(async (err) => {
+  readiness.markFailed();
+  app.log.error({ err, readiness: readiness.snapshot() }, "data-manager startup failed");
+  cronHandles?.stop();
+  poiHandles?.stop();
+  try {
+    redis.disconnect();
+  } catch {
+    // The failed mandatory Redis probe may already have closed the client.
+  }
+  await app.close().catch(() => {});
+  process.exit(1);
+});
 
 // Graceful shutdown — stop new cron fires, wait for any in-flight sync
 // (bounded), then exit. Production-side this gives operators a clean SIGTERM
@@ -308,29 +296,12 @@ for (const sig of ["SIGTERM", "SIGINT"] as const) {
   });
 }
 
-process.on("uncaughtException", (err) => {
-  const e = err as { code?: string; stack?: string; message?: string };
-  // undici (Node's global `fetch`) asserts `false == true` in
-  // Parser.finish / onHttpSocketEnd when an upstream abruptly closes a socket
-  // (a truncated or keep-alive-reset response). During a Transitous sync this
-  // fires when the pipeline probes MOTIS while it is being recreated in the
-  // promote step — a transient network fault, not a bug in our code. It is
-  // emitted asynchronously on the socket, so a try/catch around the fetch can't
-  // reach it; only this handler can. Swallowing it keeps the process (and the
-  // in-flight sync) alive; probe/poll callers already retry on the resulting
-  // fetch failure. Re-raise anything else so genuine faults still fail fast and
-  // the container restart policy recovers.
-  const isUndiciSocketAssert =
-    e?.code === "ERR_ASSERTION" && /undici|Parser\.finish|onHttpSocketEnd/.test(e?.stack ?? "");
-  if (isUndiciSocketAssert) {
-    process.stderr.write(
-      `data-manager: ignored transient undici socket assertion (${e?.message ?? "?"})\n`,
-    );
-    return;
-  }
-  process.stderr.write(`data-manager: fatal uncaughtException ${e?.stack ?? String(err)}\n`);
-  process.exit(1);
+const onFatal = createFatalProcessHandler({
+  fatal: (fields, message) => {
+    process.stderr.write("data-manager: fatal uncaught error — exiting\n");
+    rootLogger.fatal(fields, message);
+  },
+  exit: (code) => process.exit(code),
 });
-process.on("unhandledRejection", (reason) => {
-  process.stderr.write(`data-manager: unhandledRejection ${String(reason)}\n`);
-});
+process.on("uncaughtException", onFatal);
+process.on("unhandledRejection", onFatal);

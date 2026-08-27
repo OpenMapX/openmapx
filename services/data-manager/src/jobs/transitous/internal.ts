@@ -9,7 +9,8 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
+import type { TransitousRunnerScript } from "@openmapx/core/transitous-runner";
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
   isSafeFeedSourceName,
@@ -23,7 +24,8 @@ import {
   type TransitousFeedSource,
 } from "@openmapx/transitous-core";
 import { execa } from "execa";
-import type { CommandRunner, FeedDownloadFailure, FeedFileEntry, JobLogger } from "./types.js";
+import type { TransitousScriptRunner } from "./script-runner.js";
+import type { FeedDownloadFailure, FeedFileEntry, JobLogger } from "./types.js";
 
 export type { PruneUnresolvableSourcesOptions, TransitousFeedFile, TransitousFeedSource };
 // Shared Transitous helpers now live in @openmapx/transitous-core; re-export the
@@ -427,11 +429,28 @@ export function failedSourceIdsFromPipelineError(feed: FeedFileEntry, message: s
   return [feed.id];
 }
 
+/**
+ * Dispatch one feed's acquisition. Catalog feeds name a catalog-relative feed
+ * file; operator feeds name a file in the platform's own metadata staging
+ * directory. Neither form lets a caller supply a path of its own.
+ */
+export type FeedScriptFactory = (feed: FeedFileEntry) => TransitousRunnerScript;
+
+export const catalogFeedScript: FeedScriptFactory = (feed) => ({
+  script: "fetch",
+  feedPath: feed.path,
+});
+
+export const operatorFeedScript: FeedScriptFactory = (feed) => ({
+  script: "fetch-operator",
+  metadataName: basename(feed.path),
+});
+
 export async function runFetchPipeline(
-  catalogDir: string,
   feeds: FeedFileEntry[],
-  runner: CommandRunner,
+  runScript: TransitousScriptRunner,
   logger: JobLogger,
+  toScript: FeedScriptFactory = catalogFeedScript,
 ): Promise<FeedDownloadFailure[]> {
   const feedProxyKeyFile = process.env.TRANSITOUS_FEED_PROXY_KEY_FILE;
   if (feedProxyKeyFile && !existsSync(feedProxyKeyFile)) {
@@ -442,7 +461,7 @@ export async function runFetchPipeline(
   const failures: FeedDownloadFailure[] = [];
   for (const feed of feeds) {
     try {
-      await runner("python3", ["./src/fetch.py", feed.path], { cwd: catalogDir, stdio: "pipe" });
+      await runScript(toScript(feed));
     } catch (error) {
       const message = (error as Error).message;
       for (const id of failedSourceIdsFromPipelineError(feed, message)) {
@@ -460,15 +479,12 @@ export async function runFetchPipeline(
 
 export async function garbageCollectTransitousOutputs(
   catalogDir: string,
-  runner: CommandRunner,
+  runScript: TransitousScriptRunner,
 ): Promise<void> {
   const gcScript = join(catalogDir, "src", "garbage-collect.py");
   if (!existsSync(gcScript)) return;
   try {
-    await runner("python3", ["./src/garbage-collect.py", "--non-interactive"], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
+    await runScript({ script: "garbage-collect" });
   } catch {
     // Best effort only.
   }

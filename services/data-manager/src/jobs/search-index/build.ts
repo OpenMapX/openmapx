@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type postgres from "postgres";
 import type { StateStore } from "../../state.js";
+import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { extractSearchPlaces, type SearchPlaceRecord } from "./extract.js";
 import { createSearchIndexOperationLock, type SearchIndexOperationLock } from "./operation-lock.js";
 import { buildSearchIndexIndexesDDL, buildSearchIndexSchemaDDL } from "./schema.js";
@@ -228,7 +229,7 @@ export async function buildOsmSearchIndex(
       progress("complete", `Published ${placeCount} places and ${termCount} terms`);
       return { region: opts.region, epoch, sourceFingerprint, placeCount, termCount };
     } catch (error) {
-      const message = `[${stage}] ${(error as Error).message}`;
+      const message = scrubSecrets(`[${stage}] ${(error as Error).message}`);
       try {
         await opts.sql.unsafe(`DROP SCHEMA IF EXISTS osm_search__staging CASCADE`);
       } catch {

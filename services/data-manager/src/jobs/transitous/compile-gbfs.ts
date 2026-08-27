@@ -16,7 +16,7 @@ import {
   type GbfsSourceIndexEntry,
   parseMobilityDataGbfsCsv,
 } from "@openmapx/transitous-core";
-import { readGbfsCatalogLock } from "../../gbfs-catalog-lock.js";
+import { runOpsOperation } from "../../ops-client.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
 import type { StageFn, StageResult } from "./types.js";
@@ -312,8 +312,9 @@ export const run: StageFn = async (ctx) => {
     return finish("skipped", "pinned MobilityData GBFS compiler is disabled");
   }
   try {
-    if (!ctx.repoRoot) throw new Error("repoRoot is required for the pinned GBFS catalog lock");
-    const lock = readGbfsCatalogLock(ctx.repoRoot);
+    // The catalog lock lives under the repository's `infra/docker/`, which only
+    // the operations agent may read on this service's behalf.
+    const lock = await runOpsOperation({ kind: "gbfsCatalogLock.inspect" });
     const response = await fetch(lock.url, { headers: { "User-Agent": "openmapx-gbfs-compiler" } });
     if (!response.ok) throw new Error(`GBFS registry download failed: HTTP ${response.status}`);
     const csv = await response.text();

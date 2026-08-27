@@ -1,9 +1,8 @@
-import { createReadStream, rmSync } from "node:fs";
+import { createReadStream } from "node:fs";
 import { join } from "node:path";
 import { type OfflinePackageRequest, parseOfflinePackageRequest } from "@openmapx/core";
 import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
-import { execa } from "execa";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type postgres from "postgres";
 import { db, sql } from "./db/index.js";
@@ -37,19 +36,33 @@ import {
   resolveCatalogBumpCandidate,
 } from "./jobs/transitous/catalog-bump.js";
 import { buildJobContext, runTransitousPipeline } from "./jobs/transitous/index.js";
-import { PRIMARY_CONTAINER } from "./jobs/transitous/motis-containers.js";
 import {
   type MotisOperationsPolicy,
   publicOperationsPolicy,
   resolveOperationsProfileFromEnv,
 } from "./jobs/transitous/operations-profile.js";
+import {
+  getOperatorFeedRelayStore,
+  OPERATOR_FEED_RELAY_PATH,
+  OperatorFeedRelayCapabilityError,
+  type OperatorFeedRelayStore,
+} from "./jobs/transitous/operator-feed-relay.js";
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import { runMotisPreflight } from "./jobs/transitous/preflight.js";
 import { getSingleFlightController } from "./jobs/transitous/runtime.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import { asJobLogger, jobChildLogger } from "./logger.js";
-import type { OfflinePackageGenerator } from "./offline-packages/generator.js";
+import {
+  OFFLINE_PACKAGE_PRINCIPAL_PATTERN,
+  OfflinePackagePrincipalQuotaError,
+} from "./offline-packages/accounting.js";
+import {
+  OfflinePackageCapacityError,
+  type OfflinePackageGenerator,
+} from "./offline-packages/generator.js";
 import { isContentAddressedPackageId } from "./offline-packages/storage.js";
+import { runOpsOperation } from "./ops-client.js";
+import type { DataManagerReadinessSnapshot } from "./readiness.js";
 import { StateStore } from "./state.js";
 import {
   listPinnedTransitCatalog,
@@ -62,13 +75,6 @@ import {
   TransitSourceError,
   type TransitSourceLifecycle,
 } from "./transit-sources.js";
-import {
-  readTransitousLock,
-  readTransitousLockProposal,
-  type TransitousLock,
-  writeTransitousLock,
-  writeTransitousLockProposal,
-} from "./transitous-lock.js";
 
 export interface ApiOptions {
   dataDir?: string;
@@ -94,6 +100,10 @@ export interface ApiOptions {
   searchIndexSql?: postgres.Sql;
   /** Test seam for the country-scale OSM search-index build. */
   buildSearchIndex?: (opts: BuildOsmSearchIndexOptions) => Promise<SearchIndexBuildResult>;
+  /** Process startup readiness; omitted by isolated route tests, which are ready immediately. */
+  readiness?: () => DataManagerReadinessSnapshot;
+  /** Process-wide one-run relay shared with the Transitous pipeline. */
+  operatorFeedRelay?: OperatorFeedRelayStore;
 }
 
 const startedAt = Date.now();
@@ -231,11 +241,38 @@ function registerOfflinePackageRoutes(
   app: FastifyInstance,
   generator: OfflinePackageGenerator,
 ): void {
+  const principal = (request: FastifyRequest): string | undefined => {
+    const rawValues: string[] = [];
+    for (let index = 0; index < request.raw.rawHeaders.length; index += 2) {
+      if (request.raw.rawHeaders[index]?.toLowerCase() === "x-offline-package-principal") {
+        rawValues.push(request.raw.rawHeaders[index + 1] ?? "");
+      }
+    }
+    const value = request.headers["x-offline-package-principal"];
+    if (
+      rawValues.length !== 1 ||
+      typeof value !== "string" ||
+      value.includes(",") ||
+      !OFFLINE_PACKAGE_PRINCIPAL_PATTERN.test(value)
+    ) {
+      return undefined;
+    }
+    return value;
+  };
+
   app.get("/offline/packages/capability", async (_request, reply) => {
     return reply.send(await generator.getCapability());
   });
 
   app.post<{ Body: OfflinePackageRequest }>("/offline/packages/prepare", async (request, reply) => {
+    const owner = principal(request);
+    if (!owner) {
+      return reply.code(400).send({
+        ok: false,
+        errorCode: "invalid-principal",
+        errorMessage: "Exactly one valid offline package principal is required",
+      });
+    }
     let body: OfflinePackageRequest;
     try {
       body = parseOfflinePackageRequest(request.body);
@@ -247,12 +284,29 @@ function registerOfflinePackageRoutes(
       });
     }
     try {
-      const result = await generator.prepare(body);
+      const result = await generator.prepare(owner, body);
       if (result.status === "ready-to-download") return reply.code(200).send(result);
       if (result.status === "preparing") return reply.code(202).send(result);
       const status = result.errorCode === "capacity" ? 409 : 400;
       return reply.code(status).send(result);
     } catch (error) {
+      if (error instanceof OfflinePackageCapacityError) {
+        reply.header("Retry-After", "30");
+        return reply.code(429).send({
+          ok: false,
+          errorCode: error.errorCode,
+          errorMessage: error.message,
+        });
+      }
+      if (error instanceof OfflinePackagePrincipalQuotaError) {
+        reply.header("Retry-After", "30");
+        return reply.code(429).send({
+          ok: false,
+          errorCode: error.errorCode,
+          errorMessage: error.message,
+          retryAfterSeconds: 30,
+        });
+      }
       return reply.code(503).send({
         ok: false,
         errorCode: "source-unavailable",
@@ -264,7 +318,15 @@ function registerOfflinePackageRoutes(
   app.get<{ Params: { jobId: string } }>(
     "/offline/packages/jobs/:jobId",
     async (request, reply) => {
-      const result = generator.getJob(request.params.jobId);
+      const owner = principal(request);
+      if (!owner) {
+        return reply.code(400).send({
+          ok: false,
+          errorCode: "invalid-principal",
+          errorMessage: "Exactly one valid offline package principal is required",
+        });
+      }
+      const result = await generator.getJob(owner, request.params.jobId);
       if (!result)
         return reply.code(404).send({ ok: false, error: "offline package job not found" });
       return reply.send(result);
@@ -401,6 +463,12 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     resolveOperationsProfileFromEnv(process.env, { allowEmptyRegional: true });
   const catalogDir = join(dataDir, ".transitous-catalog");
   const overlayPath = resolveTransitOverlayPath(dataDir);
+  const operatorFeedRelay = opts.operatorFeedRelay ?? getOperatorFeedRelayStore();
+  if (!opts.operatorFeedRelay) {
+    operatorFeedRelay.setAuditSink((event) => {
+      app.log.info(event, "transitous-operator-feed: safe remote acquisition");
+    });
+  }
 
   if (opts.offlinePackages) registerOfflinePackageRoutes(app, opts.offlinePackages);
 
@@ -424,6 +492,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
           logger: jobLog,
           onStageComplete: persistingHook,
           feedsOverlayPath: overlayPath,
+          operatorFeedRelay,
         });
         const result = await runTransitousPipeline(ctx);
         await finalizeJobRow(jobId, result.finalStatus);
@@ -490,11 +559,49 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return { ok: true, jobId: start.jobId };
   }
 
-  app.get("/status", async () => ({
-    ok: true,
-    uptime: Math.floor((Date.now() - startedAt) / 1000),
-    dataDir,
-  }));
+  app.get("/live", async () => ({ ok: true }));
+
+  app.get<{ Params: { handle: string } }>(
+    `${OPERATOR_FEED_RELAY_PATH}/:handle`,
+    async (req, reply) => {
+      reply.header("Cache-Control", "no-store");
+      reply.header("Pragma", "no-cache");
+      reply.header("Referrer-Policy", "no-referrer");
+      const requestAbort = new AbortController();
+      const abortDisconnectedClient = (): void => {
+        requestAbort.abort(new Error("Relay client disconnected"));
+      };
+      req.raw.once("aborted", abortDisconnectedClient);
+      reply.raw.once("close", () => {
+        if (!reply.raw.writableEnded) abortDisconnectedClient();
+      });
+      try {
+        const payload = await operatorFeedRelay.consume({
+          handle: req.params.handle,
+          signal: requestAbort.signal,
+        });
+        reply.header("Content-Type", payload.contentType ?? "application/zip");
+        reply.header("Content-Length", String(payload.bytes));
+        return reply.send(payload.stream);
+      } catch (error) {
+        const status = error instanceof OperatorFeedRelayCapabilityError ? 410 : 502;
+        return reply.code(status).send({ error: "operator feed relay unavailable" });
+      }
+    },
+  );
+
+  app.get("/status", async (_req, reply) => {
+    const readiness = opts.readiness?.() ?? { status: "ready", phase: "complete" };
+    const body = {
+      ok: readiness.status === "ready",
+      status: readiness.status,
+      phase: readiness.phase,
+      uptime: Math.floor((Date.now() - startedAt) / 1000),
+      dataDir,
+    };
+    if (!body.ok) return reply.code(503).send(body);
+    return body;
+  });
 
   app.get("/datasets", async () => ({ datasets: store.getAll() }));
 
@@ -1123,17 +1230,19 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   // reloads the pipeline already performs.
   app.post("/transit/restart-motis", async (_req, reply) => {
     try {
-      await execa("docker", ["restart", PRIMARY_CONTAINER], { stdio: "pipe", timeout: 60_000 });
+      // Data-manager holds no Docker socket: the restart is a typed operation
+      // the agent performs against its own fixed container.
+      await runOpsOperation({ kind: "motis.primary.restart" });
       return { ok: true, status: "restart-initiated" };
     } catch (err) {
-      // The most common failure mode is "data-manager container has no
-      // docker socket mounted" (Batch C concern). Surface a 503 so the
-      // operator sees an actionable error.
-      app.log.warn({ err }, "transitous-api: docker restart motis failed");
+      // The most common failure mode is that the operations agent is
+      // unreachable or has not been configured. Surface a 503 so the operator
+      // sees an actionable error.
+      app.log.warn({ err }, "transitous-api: motis restart operation failed");
       reply.code(503);
       return {
         ok: false,
-        error: "docker-unavailable",
+        error: "ops-agent-unavailable",
         message: (err as Error).message,
       };
     }
@@ -1151,15 +1260,6 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         ok: false,
         error: "invalid-branch",
         message: `branch "${branch}" is not a valid git ref name`,
-      };
-    }
-
-    if (!repoRoot) {
-      reply.code(503);
-      return {
-        ok: false,
-        error: "repo-root-not-configured",
-        message: "OPENMAPX_ROOT_DIR is not set; data-manager cannot locate the lockfile",
       };
     }
 
@@ -1181,7 +1281,7 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       throw err;
     }
 
-    const existing = readTransitousLock(repoRoot);
+    const { active: existing } = await runOpsOperation({ kind: "transitousLock.inspect" });
     if (candidateMatchesLock(candidate, existing) && !force) {
       return {
         ok: true,
@@ -1196,7 +1296,15 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       lockedBy,
       "Pinned commit of public-transport/transitous consumed by services/data-manager. Bumped via POST /transit/bump.",
     );
-    writeTransitousLockProposal(repoRoot, lock);
+    // The proposal file lives under the repository's `infra/docker/`, which only
+    // the operations agent may write.
+    await runOpsOperation({
+      kind: "transitousLock.propose",
+      ref: lock.ref,
+      submodules: lock.submodules,
+      lockedBy: lock.lockedBy,
+      ...(lock.comment ? { comment: lock.comment } : {}),
+    });
 
     return {
       ok: true,
@@ -1213,23 +1321,22 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   app.post<{ Body?: { approveRef?: string; approvedBy?: string } }>(
     "/transit/bump/approve",
     async (req, reply) => {
-      const proposal = readTransitousLockProposal(repoRoot);
-      if (!proposal) return reply.code(404).send({ ok: false, error: "no-proposal" });
-      if (req.body?.approveRef !== proposal.ref) {
+      const { proposed } = await runOpsOperation({ kind: "transitousLock.inspect" });
+      if (!proposed) return reply.code(404).send({ ok: false, error: "no-proposal" });
+      if (req.body?.approveRef !== proposed.ref) {
         return reply.code(422).send({
           ok: false,
           error: "typed-confirmation-mismatch",
-          expected: proposal.ref,
+          expected: proposed.ref,
         });
       }
-      const approved: TransitousLock = {
-        ...proposal,
-        lockedAt: new Date().toISOString(),
-        lockedBy: req.body?.approvedBy?.trim() || "api-approval",
-        comment: "Approved after compatibility review and inactive-slot validation.",
-      };
-      writeTransitousLock(repoRoot, approved);
-      rmSync(join(repoRoot, "infra/docker/transitous.lock.proposed.json"), { force: true });
+      // The agent re-matches the ref under its own read, so an approval cannot
+      // land on a proposal that changed after this check.
+      const approved = await runOpsOperation({
+        kind: "transitousLock.approve",
+        ref: proposed.ref,
+        approvedBy: req.body?.approvedBy?.trim() || "api-approval",
+      });
       return { ok: true, activated: true, ref: approved.ref, lockedAt: approved.lockedAt };
     },
   );

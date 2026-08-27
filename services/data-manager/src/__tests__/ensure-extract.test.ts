@@ -1,269 +1,91 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import {
-  type DockerRunner,
-  ensureTrafficExtract,
-  isTrafficExtractStale,
-} from "../jobs/traffic/ensure-extract.js";
+
+// The build/validate/chown/restart sequence moved into the operations agent
+// (see apps/ops-agent/src/docker-runtime.test.ts, which owns those cases).
+// What data-manager still owns is the decision to ask for a rebuild at all, so
+// that is what this suite covers.
+const runOpsOperation = vi.fn();
+vi.mock("../ops-client.js", () => ({
+  runOpsOperation: (operation: unknown) => runOpsOperation(operation),
+}));
+
+const { ensureTrafficExtract, isTrafficExtractStale } = await import(
+  "../jobs/traffic/ensure-extract.js"
+);
 
 describe("ensureTrafficExtract", () => {
-  const originalContainerEnv = process.env.VALHALLA_CONTAINER;
-  // The build chowns traffic.tar to the data-manager process's own uid/gid.
-  const CHOWN_ID = `${process.getuid?.() ?? 1000}:${process.getgid?.() ?? 1000}`;
-  // Post-build sanity probe: reads index.bin's byte size to reject an empty extract.
-  const PROBE_CALL = [
-    "exec",
-    "docker-valhalla-1",
-    "sh",
-    "-c",
-    "tar xOf /custom_files/traffic.tar index.bin 2>/dev/null | wc -c",
-  ];
-
   beforeEach(() => {
-    if (originalContainerEnv === undefined) delete process.env.VALHALLA_CONTAINER;
-    else process.env.VALHALLA_CONTAINER = originalContainerEnv;
+    runOpsOperation.mockReset();
   });
 
-  it("builds the extract and restarts the container when the tar is absent", async () => {
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      if (args[0] === "exec" && args[2] === "test") {
-        return { exitCode: 1, stdout: "" };
-      }
-      return { exitCode: 0, stdout: "" };
-    });
+  it("inspects first and rebuilds only when the extract is not ready", async () => {
+    runOpsOperation
+      .mockResolvedValueOnce({ state: "not_ready" })
+      .mockResolvedValueOnce({ changed: true });
 
-    const result = await ensureTrafficExtract({ runDocker, container: "docker-valhalla-1" });
-
-    expect(result).toEqual({ built: true });
-    expect(calls).toEqual([
-      ["exec", "docker-valhalla-1", "test", "-f", "/custom_files/traffic.tar"],
-      [
-        "exec",
-        "docker-valhalla-1",
-        "valhalla_build_extract",
-        "-c",
-        "/custom_files/valhalla.json",
-        "-t",
-        "-O",
-      ],
-      PROBE_CALL,
-      ["exec", "docker-valhalla-1", "chown", CHOWN_ID, "/custom_files/traffic.tar"],
-      ["restart", "docker-valhalla-1"],
+    await expect(ensureTrafficExtract()).resolves.toEqual({ built: true });
+    expect(runOpsOperation.mock.calls.map(([operation]) => operation)).toEqual([
+      { kind: "valhalla.traffic.inspect" },
+      { kind: "valhalla.traffic.rebuild" },
     ]);
   });
 
-  it("no-ops when the tar is already present", async () => {
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      return { exitCode: 0, stdout: "" };
-    });
+  it("does not rebuild when the extract is already ready", async () => {
+    runOpsOperation.mockResolvedValueOnce({ state: "ready" });
 
-    const result = await ensureTrafficExtract({ runDocker, container: "docker-valhalla-1" });
+    await expect(ensureTrafficExtract()).resolves.toEqual({ built: false });
+    expect(runOpsOperation).toHaveBeenCalledTimes(1);
+  });
 
-    expect(result).toEqual({ built: false });
-    expect(calls).toEqual([
-      ["exec", "docker-valhalla-1", "test", "-f", "/custom_files/traffic.tar"],
+  it("skips the readiness check entirely when force is set", async () => {
+    runOpsOperation.mockResolvedValueOnce({ changed: true });
+
+    await expect(ensureTrafficExtract({ force: true })).resolves.toEqual({ built: true });
+    expect(runOpsOperation.mock.calls.map(([operation]) => operation)).toEqual([
+      { kind: "valhalla.traffic.rebuild" },
     ]);
   });
 
-  it("skips the presence check and always rebuilds when force is set", async () => {
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      return { exitCode: 0, stdout: "" };
-    });
+  it("propagates a failed rebuild rather than reporting success", async () => {
+    runOpsOperation
+      .mockResolvedValueOnce({ state: "not_ready" })
+      .mockRejectedValueOnce(new Error("Operation valhalla.traffic.rebuild did not succeed"));
 
-    const result = await ensureTrafficExtract({
-      runDocker,
-      container: "docker-valhalla-1",
-      force: true,
-    });
-
-    expect(result).toEqual({ built: true });
-    expect(calls).toEqual([
-      [
-        "exec",
-        "docker-valhalla-1",
-        "valhalla_build_extract",
-        "-c",
-        "/custom_files/valhalla.json",
-        "-t",
-        "-O",
-      ],
-      PROBE_CALL,
-      ["exec", "docker-valhalla-1", "chown", CHOWN_ID, "/custom_files/traffic.tar"],
-      ["restart", "docker-valhalla-1"],
-    ]);
+    await expect(ensureTrafficExtract()).rejects.toThrow(/did not succeed/);
   });
 
-  it("refuses to chown or restart when the built extract has an empty index.bin", async () => {
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      if (args[0] === "exec" && args[2] === "test") return { exitCode: 1, stdout: "" };
-      // The post-build probe reports a zero-byte index.bin (degenerate extract).
-      if (args[2] === "sh") return { exitCode: 0, stdout: "0\n" };
-      return { exitCode: 0, stdout: "" };
-    });
+  it("names no container, config path, or argv in any request", async () => {
+    runOpsOperation
+      .mockResolvedValueOnce({ state: "not_ready" })
+      .mockResolvedValueOnce({ changed: true });
 
-    await expect(
-      ensureTrafficExtract({ runDocker, container: "docker-valhalla-1" }),
-    ).rejects.toThrow(/empty index\.bin/);
-    // Neither chown nor restart runs once the extract is judged degenerate.
-    expect(calls.some((c) => c[2] === "chown" || c[0] === "restart")).toBe(false);
-  });
-
-  it("does not restart when the post-build chown fails", async () => {
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      if (args[0] === "exec" && args[2] === "test") return { exitCode: 1, stdout: "" };
-      if (args[2] === "chown") return { exitCode: 1, stdout: "" };
-      return { exitCode: 0, stdout: "" };
-    });
-
-    await expect(
-      ensureTrafficExtract({ runDocker, container: "docker-valhalla-1" }),
-    ).rejects.toThrow(/chown traffic\.tar exited 1/);
-    expect(calls.some((c) => c[0] === "restart")).toBe(false);
-  });
-
-  it("does not restart or report success when the build exec fails", async () => {
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      if (args[0] === "exec" && args[2] === "test") return { exitCode: 1, stdout: "" };
-      // The build itself fails with a non-zero exit code.
-      if (args[2] === "valhalla_build_extract") return { exitCode: 2, stdout: "" };
-      return { exitCode: 0, stdout: "" };
-    });
-
-    await expect(
-      ensureTrafficExtract({ runDocker, container: "docker-valhalla-1" }),
-    ).rejects.toThrow(/valhalla_build_extract exited 2/);
-
-    // No `docker restart` was issued after the failed build.
-    expect(calls.some((c) => c[0] === "restart")).toBe(false);
-    expect(calls).toEqual([
-      ["exec", "docker-valhalla-1", "test", "-f", "/custom_files/traffic.tar"],
-      [
-        "exec",
-        "docker-valhalla-1",
-        "valhalla_build_extract",
-        "-c",
-        "/custom_files/valhalla.json",
-        "-t",
-        "-O",
-      ],
-    ]);
-  });
-
-  it("propagates a rejecting runner from the build exec without restarting", async () => {
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      if (args[0] === "exec" && args[2] === "test") return { exitCode: 1, stdout: "" };
-      if (args[2] === "valhalla_build_extract") throw new Error("docker daemon unreachable");
-      return { exitCode: 0, stdout: "" };
-    });
-
-    await expect(
-      ensureTrafficExtract({ runDocker, container: "docker-valhalla-1" }),
-    ).rejects.toThrow(/docker daemon unreachable/);
-    expect(calls.some((c) => c[0] === "restart")).toBe(false);
-  });
-
-  it("falls back to VALHALLA_CONTAINER env var, then the docker-compose default", async () => {
-    process.env.VALHALLA_CONTAINER = "my-valhalla";
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      return { exitCode: 0, stdout: "" };
-    });
-
-    await ensureTrafficExtract({ runDocker });
-
-    expect(calls[0]?.[1]).toBe("my-valhalla");
-
-    delete process.env.VALHALLA_CONTAINER;
-    calls.length = 0;
-    await ensureTrafficExtract({ runDocker });
-    expect(calls[0]?.[1]).toBe("docker-valhalla-1");
-  });
-
-  it("uses a custom config path when provided", async () => {
-    const calls: string[][] = [];
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      calls.push(args);
-      if (args[0] === "exec" && args[2] === "test") return { exitCode: 1, stdout: "" };
-      return { exitCode: 0, stdout: "" };
-    });
-
-    await ensureTrafficExtract({
-      runDocker,
-      container: "docker-valhalla-1",
-      configPath: "/custom_files/valhalla-override.json",
-    });
-
-    expect(calls[1]).toEqual([
-      "exec",
-      "docker-valhalla-1",
-      "valhalla_build_extract",
-      "-c",
-      "/custom_files/valhalla-override.json",
-      "-t",
-      "-O",
-    ]);
+    await ensureTrafficExtract();
+    const serialized = JSON.stringify(runOpsOperation.mock.calls);
+    for (const forbidden of ["docker-valhalla-1", "/custom_files", "valhalla_build_extract"]) {
+      expect(serialized).not.toContain(forbidden);
+    }
   });
 });
 
 describe("isTrafficExtractStale", () => {
-  it("is stale when the traffic.tar is missing outright", async () => {
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      if (args.includes("/custom_files/traffic.tar")) return { exitCode: 1, stdout: "" };
-      return { exitCode: 0, stdout: "1000" };
-    });
-
-    await expect(
-      isTrafficExtractStale({ runDocker, container: "docker-valhalla-1" }),
-    ).resolves.toBe(true);
+  beforeEach(() => {
+    runOpsOperation.mockReset();
   });
 
-  it("is stale when the tile directory is newer than the traffic.tar", async () => {
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      if (args.includes("/custom_files/valhalla_tiles")) return { exitCode: 0, stdout: "2000" };
-      if (args.includes("/custom_files/traffic.tar")) return { exitCode: 0, stdout: "1000" };
-      return { exitCode: 1, stdout: "" };
-    });
-
-    await expect(
-      isTrafficExtractStale({ runDocker, container: "docker-valhalla-1" }),
-    ).resolves.toBe(true);
+  it("is stale when the agent reports the extract is not ready", async () => {
+    runOpsOperation.mockResolvedValueOnce({ state: "not_ready" });
+    await expect(isTrafficExtractStale()).resolves.toBe(true);
   });
 
-  it("is not stale when the traffic.tar is newer than the tile directory", async () => {
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      if (args.includes("/custom_files/valhalla_tiles")) return { exitCode: 0, stdout: "1000" };
-      if (args.includes("/custom_files/traffic.tar")) return { exitCode: 0, stdout: "2000" };
-      return { exitCode: 1, stdout: "" };
-    });
-
-    await expect(
-      isTrafficExtractStale({ runDocker, container: "docker-valhalla-1" }),
-    ).resolves.toBe(false);
+  it("is not stale when the agent reports it ready", async () => {
+    runOpsOperation.mockResolvedValueOnce({ state: "ready" });
+    await expect(isTrafficExtractStale()).resolves.toBe(false);
   });
 
-  it("does not force a rebuild when the tile directory mtime is unreadable", async () => {
-    const runDocker: DockerRunner = vi.fn(async (args: string[]) => {
-      if (args.includes("/custom_files/valhalla_tiles")) return { exitCode: 1, stdout: "" };
-      if (args.includes("/custom_files/traffic.tar")) return { exitCode: 0, stdout: "2000" };
-      return { exitCode: 1, stdout: "" };
-    });
-
-    await expect(
-      isTrafficExtractStale({ runDocker, container: "docker-valhalla-1" }),
-    ).resolves.toBe(false);
+  it("does not force a rebuild on an inconclusive observation", async () => {
+    // `unknown` means the agent could not read the tile directory while an
+    // extract exists. Rebuilding on that would bounce Valhalla for nothing.
+    runOpsOperation.mockResolvedValueOnce({ state: "unknown" });
+    await expect(isTrafficExtractStale()).resolves.toBe(false);
   });
 });

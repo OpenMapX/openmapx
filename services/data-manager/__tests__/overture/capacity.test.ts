@@ -8,7 +8,6 @@ import {
   estimateOvertureIngestBytes,
   estimateOverturePullBytes,
   POSTGIS_CONTAINER,
-  parsePosixDfAvailableBytes,
 } from "../../src/jobs/overture/capacity.js";
 
 describe("Overture capacity preflight", () => {
@@ -49,14 +48,6 @@ describe("Overture capacity preflight", () => {
   it("budgets for the larger of parquet expansion and active-schema replacement", () => {
     expect(estimateOvertureIngestBytes(3_000_000_000, 2_000_000_000)).toBe(12_000_000_000);
     expect(estimateOvertureIngestBytes(1_000_000_000, 8_000_000_000)).toBe(12_000_000_000);
-  });
-
-  it("parses POSIX df output from the PostgreSQL container in bytes", () => {
-    expect(
-      parsePosixDfAvailableBytes(
-        "Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/vdb 100000 20000 80000 20% /var/lib/postgresql",
-      ),
-    ).toBe(81_920_000);
   });
 
   it("pins the PostGIS container name used by the capacity probe", () => {

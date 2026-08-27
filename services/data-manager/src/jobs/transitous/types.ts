@@ -1,6 +1,8 @@
 import type { TransitSource } from "@openmapx/transitous-core";
 import type { DatasetMetadata, StateStore } from "../../state.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
+import type { OperatorFeedRelayStore } from "./operator-feed-relay.js";
+import type { TransitousScriptRunner } from "./script-runner.js";
 import type { MotisSlotLayout } from "./slot-state.js";
 
 export type { TransitSource };
@@ -175,11 +177,19 @@ export interface JobContext {
   onStageComplete: (result: StageResult) => Promise<void>;
   /** Runtime knobs used by the stages but not visible to callers. */
   runner: CommandRunner;
+  /**
+   * Dispatches one upstream Transitous script to the private runner. Kept
+   * separate from `runner` because third-party Python must never execute in
+   * this process: `runner` covers first-party commands only.
+   */
+  runScript: TransitousScriptRunner;
   now: () => string;
   store: StateStore;
   transitousRepoUrl?: string;
   apiKeysPath?: string;
   feedsOverlayPath?: string;
+  /** Process-local one-run acquisition relay; Track 4 may inject a private-network base URL. */
+  operatorFeedRelay: OperatorFeedRelayStore;
   /**
    * Build from `transitous.lock.proposed.json` instead of the active
    * `transitous.lock.json`. Used by the auto-bump cron to validate a candidate

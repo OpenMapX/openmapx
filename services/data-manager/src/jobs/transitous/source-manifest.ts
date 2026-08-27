@@ -92,7 +92,9 @@ export function writeTransitSourceManifest(ctx: JobContext): string {
       name: source.name,
       format: source.format,
       origin: source.origin,
-      ...(source.originUrl ? { originUrl: safeOriginUrl(source.originUrl) } : {}),
+      ...(source.origin === "catalog" && source.originUrl
+        ? { originUrl: safeOriginUrl(source.originUrl) }
+        : {}),
       license: structuredClone(source.license ?? {}),
       transformations: ["transitous-fetch.py", "transitous-cleaning", "motis-config"],
     });

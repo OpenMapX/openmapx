@@ -1,4 +1,16 @@
-import { integer, jsonb, pgSchema, text, timestamp, uuid } from "drizzle-orm/pg-core";
+import { sql } from "drizzle-orm";
+import {
+  bigint,
+  index,
+  integer,
+  jsonb,
+  pgSchema,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 /**
  * `data_manager` Postgres schema — owned by the `services/data-manager`
@@ -86,3 +98,61 @@ export const poiFeedState = dataManager.table("poi_feed_state", {
   consecutiveFailures: integer("consecutive_failures").notNull().default(0),
   lastError: jsonb("last_error"),
 });
+
+/** Durable physical offline-package work. Opaque principals live only in the owner table. */
+export const offlinePackageJobs = dataManager.table(
+  "offline_package_jobs",
+  {
+    id: uuid("id").primaryKey(),
+    requestKey: text("request_key").notNull(),
+    packageId: text("package_id").notNull(),
+    request: jsonb("request").notNull(),
+    status: text("status").notNull(),
+    manifest: jsonb("manifest"),
+    errorCode: text("error_code"),
+    errorMessage: text("error_message"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull(),
+    leaseOwner: text("lease_owner"),
+    leaseExpiresAt: timestamp("lease_expires_at", { withTimezone: true }),
+  },
+  (table) => [
+    uniqueIndex("offline_package_jobs_live_request_key_uq")
+      .on(table.requestKey)
+      .where(sql`${table.status} IN ('preparing', 'ready-to-download')`),
+    index("offline_package_jobs_status_created_idx").on(table.status, table.createdAt),
+    index("offline_package_jobs_package_id_idx").on(table.packageId),
+  ],
+);
+
+/** Many opaque principals may independently own/account for one deduplicated physical job. */
+export const offlinePackageJobOwners = dataManager.table(
+  "offline_package_job_owners",
+  {
+    jobId: uuid("job_id")
+      .notNull()
+      .references(() => offlinePackageJobs.id, { onDelete: "cascade" }),
+    principal: text("principal").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.jobId, table.principal] }),
+    index("offline_package_job_owners_principal_idx").on(table.principal),
+  ],
+);
+
+/** Logical retention is charged once per principal/reference even when bytes are shared. */
+export const offlinePackageArtifactReferences = dataManager.table(
+  "offline_package_artifact_references",
+  {
+    principal: text("principal").notNull(),
+    packageId: text("package_id").notNull(),
+    byteLength: bigint("byte_length", { mode: "number" }).notNull(),
+    retainedAt: timestamp("retained_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.principal, table.packageId] }),
+    index("offline_package_artifact_refs_package_idx").on(table.packageId),
+    index("offline_package_artifact_refs_principal_age_idx").on(table.principal, table.retainedAt),
+  ],
+);

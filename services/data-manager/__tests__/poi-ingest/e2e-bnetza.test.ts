@@ -1,8 +1,6 @@
-// Requires Docker (testcontainers spins up a postgis container). Skip
-// with `SKIP_TESTCONTAINERS=1` for runs without — CI is also skipped via
-// the same flag so we don't have to wire docker-in-docker into the
-// pipeline yet.
-import { readFileSync } from "node:fs";
+// Requires Docker (Testcontainers spins up PostGIS). The dedicated database
+// gate opts in explicitly; once opted in, missing infrastructure is fatal.
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { parseDeBnetzaCsv } from "@integrations/ev-charging/providers/de-bnetza-parser.js";
 import { createPayloadStationMapper } from "@integrations/ev-charging/providers/payload-station.js";
@@ -18,9 +16,10 @@ import type { RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import { describe, expect, it } from "vitest";
 import { buildPoiJobContext, runStaticIngest } from "../../src/jobs/poi-ingest/pipeline.js";
+import type { PoiSafeDownloader } from "../../src/jobs/poi-ingest/types.js";
 import { startPostgis } from "./_testcontainer.js";
 
-const skipE2e = process.env.CI === "true" || process.env.SKIP_TESTCONTAINERS === "1";
+const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
 const FIXTURE_PATH = join(
   __dirname,
@@ -43,12 +42,11 @@ function makeFakeRedis(): Redis {
   return { multi: () => undefined } as unknown as Redis;
 }
 
-function makeFixtureFetch(buffer: Buffer): typeof fetch {
-  return (async () =>
-    new Response(buffer as unknown as BodyInit, {
-      status: 200,
-      statusText: "OK",
-    })) as unknown as typeof fetch;
+function makeFixtureDownload(buffer: Buffer): PoiSafeDownloader {
+  return async (options) => {
+    writeFileSync(options.destination, buffer);
+    return { bytesWritten: buffer.byteLength, contentType: "text/csv", finalUrl: options.url };
+  };
 }
 
 function buildIntegrationCtx(sqlExecute: DatabaseClient["execute"]): IntegrationContext {
@@ -56,7 +54,7 @@ function buildIntegrationCtx(sqlExecute: DatabaseClient["execute"]): Integration
     get: async () => null,
     set: async () => undefined,
     del: async () => undefined,
-    withCache: async (_k, _t, fn) => fn(),
+    withCache: async (_k, _t, fn) => fn(new AbortController().signal),
   };
   const liveStore: LiveStoreClient = {
     hmget: async (_k, fields) => fields.map(() => null),
@@ -126,7 +124,7 @@ describe.skipIf(skipE2e)("e2e: bnetza ingest → SQL → reader → mapper round
         kind: "static",
         sql: pg.sql,
         redis: makeFakeRedis(),
-        fetch: makeFixtureFetch(fixture),
+        download: makeFixtureDownload(fixture),
         jobId: "test-job",
       });
       const result = await runStaticIngest(ctx);

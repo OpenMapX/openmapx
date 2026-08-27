@@ -1,6 +1,7 @@
 import { feedState } from "@openmapx/db-schema";
 import { and, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
+import { scrubSecretsOptional } from "../../utils/scrub-secrets.js";
 import type { FeedFileEntry } from "./types.js";
 
 /**
@@ -123,6 +124,7 @@ export async function recordFetchOutcome(outcome: FetchOutcome): Promise<void> {
  * pipelines never lose a count.
  */
 export async function recordValidateOutcome(outcome: ValidateOutcome): Promise<void> {
+  const validationMessage = scrubSecretsOptional(outcome.message) ?? null;
   if (outcome.ok) {
     await withTimeout(
       upsertFeedState({
@@ -130,7 +132,7 @@ export async function recordValidateOutcome(outcome: ValidateOutcome): Promise<v
         name: outcome.name,
         values: {
           validationStatus: "ok",
-          validationMessage: outcome.message ?? null,
+          validationMessage,
           consecutiveFailures: 0,
           status: "active",
         },
@@ -157,7 +159,7 @@ export async function recordValidateOutcome(outcome: ValidateOutcome): Promise<v
           .update(feedState)
           .set({
             validationStatus: "error",
-            validationMessage: outcome.message ?? null,
+            validationMessage,
             status: "failed",
             consecutiveFailures: existing[0].consecutiveFailures + 1,
           })
@@ -168,7 +170,7 @@ export async function recordValidateOutcome(outcome: ValidateOutcome): Promise<v
         region: outcome.region,
         name: outcome.name,
         validationStatus: "error",
-        validationMessage: outcome.message ?? null,
+        validationMessage,
         status: "failed",
         consecutiveFailures: 1,
       });

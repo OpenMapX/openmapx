@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, statfsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { execa } from "execa";
 import { sql } from "../../db/index.js";
+import { runOpsOperation } from "../../ops-client.js";
 import { assertValidOvertureSchema } from "./schema.js";
 
 const GIB = 1024 ** 3;
@@ -40,32 +40,13 @@ export function assertOvertureDiskCapacity(input: {
   }
 }
 
-export function parsePosixDfAvailableBytes(output: string): number {
-  const lines = output
-    .trim()
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const fields = lines.at(-1)?.split(/\s+/) ?? [];
-  const availableBlocks = Number(fields[3]);
-  if (!Number.isSafeInteger(availableBlocks) || availableBlocks < 0) {
-    throw new Error("Could not parse available PostgreSQL filesystem blocks from df -Pk");
-  }
-  const availableBytes = availableBlocks * 1024;
-  if (!Number.isSafeInteger(availableBytes)) {
-    throw new Error("PostgreSQL filesystem capacity exceeds JavaScript's safe integer range");
-  }
-  return availableBytes;
-}
-
-export async function freeBytesInPostgresContainer(
-  dataDirectory: string,
-  container = POSTGIS_CONTAINER,
-): Promise<number> {
-  const { stdout } = await execa("docker", ["exec", container, "df", "-Pk", dataDirectory], {
-    timeout: 15_000,
-  });
-  return parsePosixDfAvailableBytes(stdout);
+/**
+ * Capacity is reported by the operations agent, which owns the container and
+ * the data path. Data-manager holds no Docker socket and names no path.
+ */
+export async function freeBytesInPostgresContainer(): Promise<number> {
+  const result = await runOpsOperation({ kind: "postgis.capacity.inspect" });
+  return result.availableBytes;
 }
 
 export async function postgresOvertureSchemaBytes(schema: string): Promise<number> {
@@ -85,14 +66,7 @@ export async function postgresOvertureSchemaBytes(schema: string): Promise<numbe
 }
 
 export async function postgresFreeBytes(): Promise<number> {
-  const [row] = await sql.unsafe<{ data_directory: string }[]>(
-    `SELECT current_setting('data_directory') AS data_directory`,
-    [],
-  );
-  if (!row?.data_directory) {
-    throw new Error("PostgreSQL did not report its data_directory");
-  }
-  return freeBytesInPostgresContainer(row.data_directory);
+  return freeBytesInPostgresContainer();
 }
 
 export async function assertOverturePostgresCapacity(input: {

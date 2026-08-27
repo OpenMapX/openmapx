@@ -33,7 +33,7 @@ export const run: StageFn = async (ctx) => {
 
     if (failures.length === 0) {
       const before = scanGtfsArchives(gtfsDir).map((archive) => archive.path);
-      await garbageCollectTransitousOutputs(catalogDir, ctx.runner);
+      await garbageCollectTransitousOutputs(catalogDir, ctx.runScript);
       pruneFeedsNotInCatalog(gtfsDir, ctx.countries, expectedFeedIds);
       pruneFeedsOutsideCountryFilter(gtfsDir, ctx.countries);
 

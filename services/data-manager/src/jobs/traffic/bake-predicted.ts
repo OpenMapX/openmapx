@@ -1,15 +1,11 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { execa } from "execa";
+import { runOpsOperation } from "../../ops-client.js";
 import { envString } from "../../utils/env.js";
 import { fetchCoveredWayIds } from "./covered-ways.js";
 import {
-  DEFAULT_VALHALLA_CONFIG_PATH,
-  type DockerRunner,
-  type DockerRunResult,
   type EnsureTrafficExtractResult,
   ensureTrafficExtract as ensureTrafficExtractDefault,
-  resolveContainer,
 } from "./ensure-extract.js";
 import { encodePredictedSpeeds, expandHourlyToBuckets } from "./predicted-encode.js";
 import {
@@ -39,9 +35,6 @@ import {
 
 /** Hard-coded compile-time hierarchy tile sizes (degrees) Valhalla ships with. */
 const TILE_SIZE_DEGREES_BY_LEVEL: Record<number, number> = { 0: 4, 1: 1, 2: 0.25 };
-
-/** Container-visible directory `valhalla_add_predicted_traffic` reads the per-tile CSVs from. */
-const PREDICTED_CSV_CONTAINER_DIR = "/custom_files/predicted-csv";
 
 function tileCountForLevel(level: number): number {
   const size = TILE_SIZE_DEGREES_BY_LEVEL[level];
@@ -99,8 +92,6 @@ export interface BakePredictedDeps {
   getCoveredWayIds?: () => Promise<Set<number>>;
   /** Test seam: invoked instead of the real `loadWaysToEdges`. */
   loadWaysToEdges?: () => Promise<Map<number, WayEdge[]>>;
-  /** Test seam: invoked instead of `execa("docker", [...])`. */
-  runDocker?: DockerRunner;
   /** Test seam: invoked instead of the real `ensureTrafficExtract`. */
   ensureTrafficExtract?: (deps: {
     force?: boolean;
@@ -166,11 +157,6 @@ function defaultCsvDir(): string {
   );
 }
 
-async function defaultRunDocker(args: string[]): Promise<DockerRunResult> {
-  const result = await execa("docker", args, { stdio: "pipe", reject: false });
-  return { exitCode: result.exitCode ?? 1, stdout: result.stdout ?? "" };
-}
-
 async function defaultFetchProfiles(openConditionsUrl: string): Promise<ProfileSegment[]> {
   const res = await fetch(`${openConditionsUrl}/segments/profiles.json`);
   if (!res.ok) {
@@ -231,11 +217,7 @@ interface TileGroup {
  * separate restart is issued here.
  */
 export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredictedResult> {
-  const container = resolveContainer(deps);
-  const configPath = deps.configPath ?? DEFAULT_VALHALLA_CONFIG_PATH;
-  const run = deps.runDocker ?? defaultRunDocker;
   const csvDir = deps.csvDir ?? defaultCsvDir();
-  const containerCsvDir = deps.containerCsvDir ?? PREDICTED_CSV_CONTAINER_DIR;
 
   const fetchProfiles = deps.fetchProfiles ?? (() => defaultFetchProfiles(deps.openConditionsUrl));
   const resolveCoveredWayIds =
@@ -348,19 +330,9 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
     await writeFile(filePath, `${group.lines.join("\n")}\n`, "utf8");
   }
 
-  const bake = await run([
-    "exec",
-    container,
-    "valhalla_add_predicted_traffic",
-    "-c",
-    configPath,
-    containerCsvDir,
-  ]);
-  if (bake.exitCode !== 0) {
-    throw new Error(
-      `bake-predicted: valhalla_add_predicted_traffic exited ${bake.exitCode} on container "${container}"`,
-    );
-  }
+  // Baking is host authority and belongs to the agent, which owns the container,
+  // the config path, and the CSV directory it reads from the shared mount.
+  await runOpsOperation({ kind: "valhalla.traffic.applyPredicted" });
 
   // Rebuild chain: the bake above rewrote the loose tiles in place, so the
   // edge-count-sized traffic.tar is stale now. ensureTrafficExtract({ force:

@@ -19,7 +19,7 @@ afterEach(() => {
 });
 
 describe("transit acquisition manifest", () => {
-  it("is produced for every profile, redacts URL values, and hashes each desired artifact", () => {
+  it("is produced for every profile, omits operator relay URLs, and hashes each artifact", () => {
     tmp = mkdtempSync(join(tmpdir(), "openmapx-transit-manifest-"));
     mkdirSync(join(tmp, "gtfs"), { recursive: true });
     const ctx = buildJobContext({
@@ -64,11 +64,11 @@ describe("transit acquisition manifest", () => {
     expect(text).not.toContain("secret");
     const manifest = JSON.parse(text) as {
       sources: Array<{
-        originUrl: string;
+        originUrl?: string;
         artifact: { relativePath: string; sha256: string; sizeBytes: number };
       }>;
     };
-    expect(manifest.sources[0]?.originUrl).toContain("api_key=%5Bredacted%5D");
+    expect(manifest.sources[0]?.originUrl).toBeUndefined();
     expect(manifest.sources[0]?.artifact.relativePath).toBe("de_bvg.gtfs.zip");
     expect(manifest.sources[0]?.artifact.sha256).toMatch(/^[0-9a-f]{64}$/);
     expect(manifest.sources[0]?.artifact.sizeBytes).toBe(17);

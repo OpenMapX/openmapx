@@ -1,10 +1,12 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
 import Fastify from "fastify";
 import { describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
 import { resolveOperationsProfile } from "../src/jobs/transitous/operations-profile.js";
+import { OperatorFeedRelayStore } from "../src/jobs/transitous/operator-feed-relay.js";
 import type { SingleFlightController } from "../src/jobs/transitous/single-flight.js";
 
 const mockDownloadOsm = vi.hoisted(() =>
@@ -49,6 +51,73 @@ describe("data-manager API", () => {
     expect(body.ok).toBe(true);
     expect(body.uptime).toBeGreaterThanOrEqual(0);
     await app.close();
+  });
+
+  it("GET /status returns 503 until mandatory startup has completed", async () => {
+    const app = Fastify();
+    registerApi(app, {
+      dataDir: "/tmp/openmapx-dm-test-starting",
+      readiness: () => ({ status: "starting", phase: "poi-source-discovery" }),
+    });
+
+    const res = await app.inject({ method: "GET", url: "/status" });
+
+    expect(res.statusCode).toBe(503);
+    expect(res.json()).toMatchObject({
+      ok: false,
+      status: "starting",
+      phase: "poi-source-discovery",
+    });
+    await app.close();
+  });
+
+  it("GET /live remains a liveness-only probe while readiness is false", async () => {
+    const app = Fastify();
+    registerApi(app, {
+      dataDir: "/tmp/openmapx-dm-test-live",
+      readiness: () => ({ status: "failed", phase: "redis" }),
+    });
+
+    const res = await app.inject({ method: "GET", url: "/live" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ ok: true });
+    await app.close();
+  });
+
+  it("streams a relay capability once with private response headers", async () => {
+    const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-relay-route-"));
+    const relay = new OperatorFeedRelayStore({
+      download: async (options: SafeDownloadOptions) => {
+        writeFileSync(options.destination, "operator archive");
+        return {
+          bytesWritten: 16,
+          contentType: "application/zip",
+          finalUrl: options.url,
+        };
+      },
+    });
+    const registration = relay.register({
+      runId: "run-route",
+      sourceId: "operator:de:route",
+      remoteUrl: new URL("https://operator.example/feed.zip"),
+    });
+    const app = Fastify();
+    registerApi(app, { dataDir, operatorFeedRelay: relay });
+
+    const first = await app.inject({ method: "GET", url: registration.url.pathname });
+    const second = await app.inject({ method: "GET", url: registration.url.pathname });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.body).toBe("operator archive");
+    expect(first.headers["cache-control"]).toBe("no-store");
+    expect(first.headers.pragma).toBe("no-cache");
+    expect(first.headers["referrer-policy"]).toBe("no-referrer");
+    expect(second.statusCode).toBe(410);
+    expect(second.body).not.toContain("operator.example");
+    await relay.endRun("run-route");
+    await app.close();
+    rmSync(dataDir, { recursive: true, force: true });
   });
 
   it("GET /search-index/status returns 404 when no snapshot is published", async () => {

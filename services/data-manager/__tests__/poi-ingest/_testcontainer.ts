@@ -8,12 +8,14 @@ export interface PostgisFixture {
   stop: () => Promise<void>;
 }
 
-// Why `postgis/postgis:16-3.4`: the reader/swap stages depend on the `geom`
+// Why this image: the reader/swap stages depend on the `geom`
 // column being `geography(POINT, 4326)` and on `ST_MakeEnvelope` /
-// `ST_Intersects`, none of which the vanilla `postgres` image ships. Pinning
-// the image keeps test runs reproducible across machines.
+// `ST_Intersects`, none of which the vanilla `postgres` image ships. Use the
+// same reviewed PostGIS release and immutable manifest as production.
 export async function startPostgis(): Promise<PostgisFixture> {
-  const container = await new PostgreSqlContainer("postgis/postgis:16-3.4")
+  const container = await new PostgreSqlContainer(
+    "ghcr.io/baosystems/postgis:18-3.6@sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6",
+  )
     .withDatabase("openmapx_test")
     .withUsername("postgres")
     .withPassword("postgres")

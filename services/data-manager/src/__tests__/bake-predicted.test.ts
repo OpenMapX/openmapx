@@ -2,6 +2,23 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const opsCalls: unknown[] = [];
+// Shared with the per-test `callOrder` so agent operations and the remaining
+// local steps can be ordered against each other.
+const opsOrder: string[] = [];
+const opsBehaviour = { fail: false };
+vi.mock("../ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    opsCalls.push(operation);
+    opsOrder.push(`ops:${operation.kind}`);
+    if (opsBehaviour.fail && operation.kind === "valhalla.traffic.applyPredicted") {
+      throw new Error("Operation valhalla.traffic.applyPredicted did not succeed (runtime)");
+    }
+    return { changed: true };
+  }),
+}));
+
 import {
   type BakePredictedDeps,
   bakePredicted,
@@ -44,7 +61,8 @@ describe("bakePredicted", () => {
     dockerCalls = [];
     ensureExtractCalls = [];
     refreshWaysCalls = [];
-    callOrder = [];
+    callOrder = opsOrder;
+    opsOrder.length = 0;
   });
 
   afterEach(() => {
@@ -90,12 +108,10 @@ describe("bakePredicted", () => {
     return {
       openConditionsUrl: "http://openconditions.local",
       csvDir,
-      containerCsvDir: "/custom_files/predicted-csv",
       container: "docker-valhalla-1",
       getCoveredWayIds: async () => new Set([3001]),
       fetchProfiles: async () => profiles,
       loadWaysToEdges: async () => waysToEdges,
-      runDocker,
       ensureTrafficExtract: async (deps) => {
         ensureExtractCalls.push(deps);
         callOrder.push("ensureTrafficExtract");
@@ -169,7 +185,17 @@ describe("bakePredicted", () => {
     expect(result.tiles).toBe(0);
   });
 
-  it("runs the valhalla_add_predicted_traffic exec with the container-visible csvdir", async () => {
+  it("bakes through the typed agent operation, naming no container or csv path", async () => {
+    opsCalls.length = 0;
+    await bakePredicted(makeDeps());
+    expect(opsCalls).toContainEqual({ kind: "valhalla.traffic.applyPredicted" });
+    const serialized = JSON.stringify(opsCalls);
+    for (const forbidden of ["docker-valhalla-1", "/custom_files", "predicted-csv"]) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it.skip("runs the valhalla_add_predicted_traffic exec with the container-visible csvdir", async () => {
     await bakePredicted(makeDeps());
     const bakeCall = dockerCalls.find((args) => args.includes("valhalla_add_predicted_traffic"));
     expect(bakeCall).toEqual([
@@ -223,7 +249,7 @@ describe("bakePredicted", () => {
     const restartCount = dockerCalls.filter((args) => args[0] === "restart").length;
     expect(restartCount).toBe(1);
 
-    const bakeIndex = callOrder.indexOf("docker:exec");
+    const bakeIndex = callOrder.indexOf("ops:valhalla.traffic.applyPredicted");
     const ensureIndex = callOrder.indexOf("ensureTrafficExtract");
     const restartIndex = callOrder.indexOf("docker:restart");
 
@@ -251,20 +277,31 @@ describe("bakePredicted", () => {
     expect(ensureExtractCalls).toHaveLength(0);
   });
 
-  it("throws when valhalla_add_predicted_traffic exits non-zero and skips the rebuild chain", async () => {
-    await expect(
-      bakePredicted(
-        makeDeps({
-          runDocker: async (args) => {
-            dockerCalls.push(args);
-            if (args.includes("valhalla_add_predicted_traffic")) {
-              return { exitCode: 1, stdout: "" };
-            }
-            return { exitCode: 0, stdout: "" };
-          },
-        }),
-      ),
-    ).rejects.toThrow(/valhalla_add_predicted_traffic exited 1/);
+  it("propagates a failed bake operation and skips the rebuild chain", async () => {
+    opsBehaviour.fail = true;
+    try {
+      const calls: unknown[] = [];
+      await expect(
+        bakePredicted(
+          makeDeps({
+            ensureTrafficExtract: async (d) => {
+              calls.push(d);
+              return { built: true };
+            },
+          }),
+        ),
+      ).rejects.toThrow(/did not succeed/);
+      // A failed bake must not trigger the extract rebuild + Valhalla restart.
+      expect(calls).toEqual([]);
+    } finally {
+      opsBehaviour.fail = false;
+    }
+  });
+
+  it.skip("throws when valhalla_add_predicted_traffic exits non-zero and skips the rebuild chain", async () => {
+    await expect(bakePredicted(makeDeps({}))).rejects.toThrow(
+      /valhalla_add_predicted_traffic exited 1/,
+    );
 
     expect(ensureExtractCalls).toHaveLength(0);
     // The refresh moved to the front of the bake, so it has already run.

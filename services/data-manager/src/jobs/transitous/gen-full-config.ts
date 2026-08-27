@@ -35,30 +35,6 @@ function assertSovereignRuntimeConfig(config: string): void {
   }
 }
 
-// Mirrors services/motis/tools/transitous/run.sh: merge the `--feed-proxy`
-// output (/tmp/feed-proxy-vars.yml) with the catalog's curated feed-whitelist
-// and write JSON the nginx renderer consumes. Run with cwd = catalog dir; uses
-// ruamel.yaml, which ships in the data-manager image (transitous requirements).
-const FEED_PROXY_VARS_TO_JSON_PY = `import json
-from pathlib import Path
-from ruamel.yaml import YAML
-
-yaml = YAML(typ="safe")
-feed_vars: dict = {}
-for path in (
-    Path("/tmp/feed-proxy-vars.yml"),
-    Path("ansible/roles/feed-proxy/vars/feed-whitelist.yml"),
-):
-    if not path.exists():
-        continue
-    loaded = yaml.load(path.read_text()) or {}
-    if isinstance(loaded, dict):
-        feed_vars.update(loaded)
-out = Path("out")
-out.mkdir(parents=True, exist_ok=True)
-(out / "feed-proxy-vars.json").write_text(json.dumps(feed_vars, indent=2, sort_keys=True) + "\\n")
-`;
-
 export async function generateFeedProxyConfig(
   ctx: JobContext,
   catalogDir: string,
@@ -76,20 +52,18 @@ export async function generateFeedProxyConfig(
   // `--feed-proxy` flag is set. We run a second invocation so the import
   // config stays clean of GBFS pass-through entries.
   try {
-    await ctx.runner(
-      "python3",
-      ["./src/generate-motis-config.py", "--feed-proxy", "--skip-missing-files", ...ctx.countries],
-      { cwd: catalogDir, stdio: "pipe" },
-    );
+    await ctx.runScript({
+      script: "generate-motis-config",
+      importOnly: false,
+      feedProxy: true,
+      countries: ctx.countries,
+    });
     // `--feed-proxy` writes the RT/GBFS endpoints to `/tmp/feed-proxy-vars.yml`
     // (YAML), NOT `out/`. Mirror the upstream `run.sh` consumer: merge that file
     // with the catalog's feed-whitelist and emit JSON to `out/feed-proxy-vars.json`,
     // which we read below. (The old code read a path the script never writes, so
     // the feed-proxy config was silently never rendered.)
-    await ctx.runner("python3", ["-c", FEED_PROXY_VARS_TO_JSON_PY], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
+    await ctx.runScript({ script: "feed-proxy-vars-to-json" });
   } catch (error) {
     ctx.logger.warn(
       `transitous-pipeline: feed-proxy config generation failed: ${(error as Error).message}`,
@@ -167,11 +141,12 @@ export const run: StageFn = async (ctx) => {
     // Scope to the build's countries + skip un-fetched feeds (see
     // gen-motis-config.ts) — without region args the upstream script globs every
     // feed file and fails.
-    await ctx.runner(
-      "python3",
-      ["./src/generate-motis-config.py", "--skip-missing-files", ...ctx.countries],
-      { cwd: catalogDir, stdio: "pipe" },
-    );
+    await ctx.runScript({
+      script: "generate-motis-config",
+      importOnly: false,
+      feedProxy: false,
+      countries: ctx.countries,
+    });
     const configPath = join(catalogDir, "out", "config.yml");
     if (!existsSync(configPath)) {
       throw new Error(`generate-motis-config.py did not produce ${configPath}`);

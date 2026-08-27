@@ -1,11 +1,37 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildJobContext, runTransitousPipeline } from "../../src/jobs/transitous/pipeline.js";
 import type { StageName, StageResult } from "../../src/jobs/transitous/types.js";
 import { StateStore } from "../../src/state.js";
 import { writeFixtureGtfsArchive } from "../helpers/gtfs-fixture.js";
+
+// Preparation fails closed without a pinned catalog commit. The lock is
+// agent-owned now, so the pin is supplied through the typed operation.
+const PINNED_LOCK = {
+  ref: `main@${"a".repeat(40)}`,
+  submodules: {},
+  lockedAt: "2026-04-20T12:00:00.000Z",
+  lockedBy: "test",
+};
+vi.mock("../../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    if (operation.kind === "transitousLock.inspect") {
+      return { active: PINNED_LOCK, proposed: null };
+    }
+    if (operation.kind === "gbfsCatalogLock.inspect") {
+      return {
+        commit: "b".repeat(40),
+        url: "https://example.test/catalog.csv",
+        sha256: "c".repeat(64),
+        lockedAt: "2026-04-20T12:00:00.000Z",
+        lockedBy: "test",
+      };
+    }
+    return { changed: true };
+  }),
+}));
 
 let tmp: string | undefined;
 
@@ -45,7 +71,7 @@ describe("runTransitousPipeline orchestrator", () => {
       join(catalogDir, "feeds", "de.json"),
       JSON.stringify({ sources: [{ name: "BVG" }] }, null, 2),
     );
-    // Stub Transitous python scripts so gen-* stages run their python3 line.
+    // Stub Transitous python scripts so the gen-* stages dispatch their run.
     writeFileSync(join(catalogDir, "src", "generate-motis-config.py"), "#!/usr/bin/env python3\n");
     writeFileSync(join(catalogDir, "src", "generate-attribution.py"), "#!/usr/bin/env python3\n");
     writeFileSync(join(catalogDir, "src", "garbage-collect.py"), "#!/usr/bin/env python3\n");
@@ -56,21 +82,18 @@ describe("runTransitousPipeline orchestrator", () => {
       dataDir,
       store: new StateStore(dataDir),
       countries: ["de"],
-      runner: async (command, args) => {
-        if (command === "python3" && args[0] === "./src/fetch.py") {
+      runner: async () => {},
+      runScript: async (run) => {
+        if (run.script === "fetch") {
           writeFixtureGtfsArchive(join(gtfsDir, "de_bvg.gtfs.zip"));
-        } else if (
-          command === "python3" &&
-          args[0] === "./src/generate-motis-config.py" &&
-          !args.includes("--feed-proxy")
-        ) {
+        } else if (run.script === "generate-motis-config" && !run.feedProxy) {
           writeFileSync(
             join(catalogDir, "out", "config.yml"),
             "timetable:\n  datasets:\n    de_bvg:\n      path: de_bvg.gtfs.zip\n",
           );
-        } else if (command === "python3" && args.includes("-c")) {
+        } else if (run.script === "feed-proxy-vars-to-json") {
           writeFileSync(join(catalogDir, "out", "feed-proxy-vars.json"), "{}");
-        } else if (command === "python3" && args[0] === "./src/generate-attribution.py") {
+        } else if (run.script === "generate-attribution") {
           // Simulate the upstream script writing its manifest (gen-attribution
           // now asserts the file exists).
           writeFileSync(join(catalogDir, "out", "license.json"), "[]");
@@ -122,6 +145,7 @@ describe("runTransitousPipeline orchestrator", () => {
       store: new StateStore(dataDir),
       countries: ["zz"],
       runner: async () => {},
+      runScript: async () => {},
       now: () => "2026-05-01T00:00:00.000Z",
       onStageComplete: async (result) => {
         persisted.push(result);
@@ -169,13 +193,14 @@ describe("runTransitousPipeline orchestrator", () => {
       dataDir,
       store: new StateStore(dataDir),
       countries: ["de", "ch"],
-      runner: async (command, args) => {
-        if (command === "python3" && args[0] === "./src/fetch.py") {
+      runner: async () => {},
+      runScript: async (run) => {
+        if (run.script === "fetch") {
           mkdirSync(gtfsDir, { recursive: true });
           writeFixtureGtfsArchive(join(gtfsDir, "de_bvg.gtfs.zip"));
           writeFixtureGtfsArchive(join(gtfsDir, "de_delfi.gtfs.zip"));
           writeFixtureGtfsArchive(join(gtfsDir, "ch_sbb.gtfs.zip"));
-        } else if (command === "python3" && args[0] === "./src/generate-attribution.py") {
+        } else if (run.script === "generate-attribution") {
           writeFileSync(join(catalogDir, "out", "license.json"), "[]");
         }
       },
@@ -213,8 +238,9 @@ describe("runTransitousPipeline orchestrator", () => {
       dataDir,
       store: new StateStore(dataDir),
       countries: ["de"],
-      runner: async (command, args) => {
-        if (command === "python3" && args[0] === "./src/fetch.py") {
+      runner: async () => {},
+      runScript: async (run) => {
+        if (run.script === "fetch") {
           // Partial fetch: write A, then error attributable to B.
           mkdirSync(gtfsDir, { recursive: true });
           writeFixtureGtfsArchive(join(gtfsDir, "de_a.gtfs.zip"));

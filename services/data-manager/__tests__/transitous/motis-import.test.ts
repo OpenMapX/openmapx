@@ -1,7 +1,18 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+const opsCalls: { kind: string }[] = [];
+const opsBehaviour: { fail: boolean } = { fail: false };
+vi.mock("../../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    opsCalls.push(operation);
+    if (opsBehaviour.fail) throw new Error("No such container: motis-staging");
+    return { changed: true };
+  }),
+}));
+
 import {
   CANDIDATE_PROXY_DIRNAME,
   createCandidateManifest,
@@ -99,7 +110,9 @@ describe("motis-import stage", () => {
     // A single, clean import via the container entrypoint — `docker restart`
     // covers running / stopped / waiting-for-config, with no concurrent
     // `docker exec /motis import` and no `docker compose` (no plugin in the image).
-    expect(calls).toEqual([{ command: "docker", args: ["restart", "motis-staging"] }]);
+    // The restart is a typed agent operation; data-manager names no container.
+    expect(opsCalls).toEqual([{ kind: "motis.staging.restart" }]);
+    expect(calls).toEqual([]);
     expect(result.artifacts).toMatchObject({
       action: "restarted",
       container: "motis-staging",
@@ -124,11 +137,12 @@ describe("motis-import stage", () => {
 
     const ctx = makeCtx({
       dataDir: tmp,
-      runner: async (command) => {
-        if (command === "docker") throw new Error("No such container: motis-staging");
-      },
+      runner: async () => undefined,
     });
-    const result = await motisImportRun(ctx);
+    opsBehaviour.fail = true;
+    const result = await motisImportRun(ctx).finally(() => {
+      opsBehaviour.fail = false;
+    });
     expect(result.status).toBe("error");
     expect(result.message).toMatch(/failed to \(re\)start motis-staging/);
   });

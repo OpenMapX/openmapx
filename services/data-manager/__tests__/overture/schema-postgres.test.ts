@@ -1,10 +1,10 @@
-// Requires Docker. It is part of CI and can be explicitly disabled only for a
-// local environment without a container runtime.
+// Requires Docker. The dedicated database gate opts in explicitly; once opted
+// in, missing infrastructure is fatal.
 import { describe, expect, it } from "vitest";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import { startPostgis } from "../poi-ingest/_testcontainer.js";
 
-const skipE2e = process.env.SKIP_TESTCONTAINERS === "1";
+const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
 describe.skipIf(skipE2e)("Overture schema in PostGIS", () => {
   it("creates the scalable conflation tables and enforces one release-local state row", async () => {

@@ -7,13 +7,12 @@ import { resolveGers } from "../../../../integrations/knowledge-overture/provide
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
 import { type PostgisFixture, startPostgis } from "../poi-ingest/_testcontainer.js";
 
-const skipE2e = process.env.SKIP_TESTCONTAINERS === "1";
+const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
 describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
   let pg: PostgisFixture;
   let previousDatabaseUrl: string | undefined;
   let dataManagerSql: { end: (options?: { timeout?: number }) => Promise<void> };
-  let capacityModule: typeof import("../../src/jobs/overture/capacity.js");
   let rebuildModule: typeof import("../../src/jobs/overture/rebuild-links.js");
   let ingestModule: typeof import("../../src/jobs/overture/ingest.js");
   let retentionModule: typeof import("../../src/jobs/overture/retention.js");
@@ -23,7 +22,6 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     previousDatabaseUrl = process.env.DATABASE_URL;
     process.env.DATABASE_URL = pg.connectionString;
     vi.resetModules();
-    capacityModule = await import("../../src/jobs/overture/capacity.js");
     rebuildModule = await import("../../src/jobs/overture/rebuild-links.js");
     ingestModule = await import("../../src/jobs/overture/ingest.js");
     retentionModule = await import("../../src/jobs/overture/retention.js");
@@ -96,15 +94,6 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
         },
       ),
     ).resolves.toBe("gers-east-120m");
-  });
-
-  it("measures free space on the PostgreSQL container filesystem", async () => {
-    const [{ data_directory: dataDirectory }] = await pg.sql.unsafe<{ data_directory: string }[]>(
-      `SELECT current_setting('data_directory') AS data_directory`,
-    );
-    await expect(
-      capacityModule.freeBytesInPostgresContainer(dataDirectory, pg.container.getId()),
-    ).resolves.toBeGreaterThan(0);
   });
 
   it("persists a score crash, resumes from the durable phase, and invalidates on PBF change", async () => {

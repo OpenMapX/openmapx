@@ -13,6 +13,21 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+const opsCalls: { kind: string }[] = [];
+const opsBehaviour: { failPromote: boolean } = { failPromote: false };
+vi.mock("../../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    opsCalls.push(operation);
+    if (opsBehaviour.failPromote && operation.kind === "motis.primary.promote") {
+      throw new Error("recreate failed");
+    }
+    return operation.kind === "motis.primary.promote"
+      ? { activeRunId: "slot-a" }
+      : { changed: true };
+  }),
+}));
+
 import {
   CANDIDATE_MANIFEST_FILENAME,
   CANDIDATE_PROXY_DIRNAME,
@@ -257,11 +272,14 @@ describe("promote stage", () => {
 
     // The primary is stopped before the swap, then restarted against the
     // freshly-promoted data.
-    expect(runnerCalls).toEqual([
-      { command: "docker", args: ["stop", "motis"] },
-      { command: "docker", args: ["stop", "motis-staging"] },
-      { command: "docker", args: ["restart", "motis"] },
+    // Stops and the post-swap recreate are typed agent operations now; the
+    // ordering guarantee (stop before swap, promote after) is unchanged.
+    expect(opsCalls.map((call) => call.kind)).toEqual([
+      "motis.staging.stop",
+      "motis.staging.stop",
+      "motis.primary.promote",
     ]);
+    expect(runnerCalls).toEqual([]);
 
     const artifacts = result.artifacts as { rollback?: boolean; previousDir?: string };
     expect(artifacts.rollback).toBe(false);
@@ -421,13 +439,12 @@ describe("promote stage", () => {
     const result = await promoteRun(ctx);
     expect(result.status).toBe("ok");
 
-    const recreate = runnerCalls.find((call) => call.args.includes("up"));
-    expect(recreate).toBeDefined();
-    // Must scope the recreate to MOTIS only — otherwise compose recreates the
-    // feed-proxy dependency and cascades into a second MOTIS recreate.
-    expect(recreate?.args).toContain("--no-deps");
-    expect(recreate?.args).toContain("--force-recreate");
-    expect(recreate?.args.at(-1)).toBe("motis");
+    // The `--force-recreate --no-deps` scoping now lives in the agent (see
+    // apps/ops-agent/src/docker-runtime.test.ts). What this asserts is that the
+    // promote is requested as one typed operation and no docker argv is built
+    // here at all.
+    expect(opsCalls.map((call) => call.kind)).toContain("motis.primary.promote");
+    expect(runnerCalls).toEqual([]);
 
     rmSync(repoRoot, { recursive: true, force: true });
   });
@@ -439,19 +456,15 @@ describe("promote stage", () => {
       return jsonResponse(successfulBody(url));
     }) as unknown as typeof fetch;
 
-    let restartCalls = 0;
-    const ctx = makeCtx({
-      dataDir: fx.dataDir,
-      runner: async (_command, args) => {
-        if (args[0] === "restart") {
-          restartCalls++;
-          throw new Error("docker daemon unavailable");
-        }
-      },
+    opsBehaviour.failPromote = true;
+    opsCalls.length = 0;
+    const ctx = makeCtx({ dataDir: fx.dataDir, runner: async () => undefined });
+    const result = await promoteRun(ctx).finally(() => {
+      opsBehaviour.failPromote = false;
     });
-    const result = await promoteRun(ctx);
     expect(result.status).toBe("error");
-    expect(restartCalls).toBe(2); // initial + rollback restart
+    // initial promote + rollback promote
+    expect(opsCalls.filter((call) => call.kind === "motis.primary.promote")).toHaveLength(2);
     // After successful rollback the previous data is back in `currentDir`,
     // and staging holds the (now-stale) new data.
     expect(existsSync(fx.currentDir)).toBe(true);
@@ -468,15 +481,19 @@ describe("promote stage", () => {
       return jsonResponse(successfulBody(url));
     }) as unknown as typeof fetch;
 
-    let restartCalls = 0;
-    const ctx = makeCtx({
-      dataDir: fx.dataDir,
-      runner: async (_command, args) => {
-        if (args[0] !== "compose") return;
-        restartCalls++;
-        if (restartCalls === 1) throw new Error("injected activation failure");
-      },
+    // Fail only the first activation so the rollback promote still succeeds.
+    let promoteCalls = 0;
+    const { runOpsOperation } = await import("../../src/ops-client.js");
+    vi.mocked(runOpsOperation).mockImplementation(async (operation: { kind: string }) => {
+      opsCalls.push(operation);
+      if (operation.kind === "motis.primary.promote") {
+        promoteCalls += 1;
+        if (promoteCalls === 1) throw new Error("injected activation failure");
+        return { activeRunId: "slot-a" };
+      }
+      return { changed: true };
     });
+    const ctx = makeCtx({ dataDir: fx.dataDir, runner: async () => undefined });
     ctx.repoRoot = fx.dataDir;
     mkdirSync(join(ctx.repoRoot, "infra", "docker"), { recursive: true });
     writeFileSync(
@@ -491,7 +508,7 @@ describe("promote stage", () => {
 
     expect(result.status).toBe("error");
     expect(result.message).toMatch(/slot B restart failed.*rollback ok/);
-    expect(restartCalls).toBe(2);
+    expect(promoteCalls).toBe(2);
     expect(aliasSlot(ctx.slotLayout, "live")).toBe("A");
     expect(aliasSlot(ctx.slotLayout, "staging")).toBe("B");
     expect(ctx.slotLayout.record.activeSlot).toBe("A");

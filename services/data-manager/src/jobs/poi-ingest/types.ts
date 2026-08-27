@@ -1,3 +1,4 @@
+import type { SafeDownloadOptions, SafeDownloadResult } from "@openmapx/core/utils/safe-download";
 import type { PoiLiveState, PoiRow, RegisteredPoiSource } from "@openmapx/poi-source-registry";
 
 export type PoiIngestKind = "static" | "live" | "bundled";
@@ -45,6 +46,9 @@ export interface PoiJobState {
   skippedStaticSwap?: boolean;
 }
 
+/** Test/runner seam for the same canonical downloader used in production. */
+export type PoiSafeDownloader = (options: SafeDownloadOptions) => Promise<SafeDownloadResult>;
+
 /**
  * Persisted run envelope. The DB upsert into `data_manager.poi_feed_state`
  * is owned by B3 — this layer just returns the structured result.
@@ -81,8 +85,8 @@ export interface PoiJobContext {
   sql: import("postgres").Sql;
   /** Redis client used by write-live. `null` = skip live writes (test seam). */
   redis: import("ioredis").Redis | null;
-  /** Test seam — replaces global fetch. */
-  fetch?: typeof fetch;
+  /** Test/runner seam that preserves the production safe-download contract. */
+  download?: PoiSafeDownloader;
   /** Wallclock override for tests. */
   now?: () => string;
   /** Previous static hash for bundled change-key short-circuit. */

@@ -1,5 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { runOpsOperation } from "../../ops-client.js";
 import {
   CANDIDATE_MANIFEST_FILENAME,
   type MotisCandidateManifest,
@@ -160,45 +161,25 @@ async function waitForPrimaryHealthy(deadline: number): Promise<string | null> {
  * not-running / not-yet-created container makes `docker stop` fail, which is
  * fine — there's nothing to protect.
  */
-async function stopContainer(ctx: JobContext, container: string): Promise<void> {
+async function stopContainer(_ctx: JobContext, _container: string): Promise<void> {
   try {
-    await ctx.runner("docker", ["stop", container], {
-      cwd: ctx.dataDir,
-      stdio: "pipe",
-    });
+    await runOpsOperation({ kind: "motis.staging.stop" });
   } catch {
-    // Not running / doesn't exist — nothing to stop.
+    // Not running / doesn't exist — nothing to protect.
   }
 }
 
 async function restartPrimary(ctx: JobContext): Promise<string | null> {
   try {
-    const composeFile = ctx.repoRoot
-      ? join(ctx.repoRoot, "infra", "docker", "docker-compose.generated.yml")
-      : "";
-    const args =
-      composeFile && existsSync(composeFile)
-        ? [
-            "compose",
-            "-f",
-            composeFile,
-            "up",
-            "-d",
-            "--force-recreate",
-            // Only recreate MOTIS. Without --no-deps, compose also recreates its
-            // dependencies (e.g. motis-feed-proxy), and that cascade re-recreates
-            // MOTIS a second time — so the post-swap health probe races a
-            // still-restarting container and gets HTTP 400, failing the promote.
-            "--no-deps",
-            PRIMARY_CONTAINER,
-          ]
-        : ["restart", PRIMARY_CONTAINER];
-    // Recreate in production: Docker resolves a bind-mount symlink when the
-    // container is created, so restart alone can keep the old A/B target.
-    await ctx.runner("docker", args, {
-      cwd: ctx.dataDir,
-      stdio: "pipe",
-    });
+    // The data swap already happened here; recreating the primary against the
+    // new A/B target is host authority and belongs to the agent, which owns the
+    // compose file, the container name, and the `--force-recreate --no-deps`
+    // semantics that keep the post-swap health probe from racing a cascade.
+    // The slot now aliased live is the run being activated.
+    const preparedRunId = ctx.slotLayout
+      ? (aliasSlot(ctx.slotLayout, "live") ?? "motis-primary")
+      : "motis-primary";
+    await runOpsOperation({ kind: "motis.primary.promote", preparedRunId });
     return null;
   } catch (error) {
     return (error as Error).message;

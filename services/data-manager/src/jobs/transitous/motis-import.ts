@@ -1,5 +1,6 @@
 import { existsSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { runOpsOperation } from "../../ops-client.js";
 import { verifyCandidateManifest } from "./candidate.js";
 import { IMPORT_MARKER_FILE } from "./internal.js";
 import { STAGING_CONTAINER as STAGING_CONTAINER_NAME } from "./motis-containers.js";
@@ -73,10 +74,8 @@ export const run: StageFn = async (ctx) => {
     // ships only a static docker CLI (no compose plugin), so that path can't run
     // here anyway.
     try {
-      await ctx.runner("docker", ["restart", STAGING_CONTAINER_NAME], {
-        cwd: ctx.dataDir,
-        stdio: "pipe",
-      });
+      // Restarting a container is host authority; the agent owns the name.
+      await runOpsOperation({ kind: "motis.staging.restart" });
     } catch (error) {
       const err = error as Error;
       return {

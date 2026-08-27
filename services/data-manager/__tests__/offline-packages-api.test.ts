@@ -6,10 +6,14 @@ import type { OfflineMapPackageManifest, OfflinePackageRequest } from "@openmapx
 import Fastify from "fastify";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerApi } from "../src/api.js";
-import { OfflinePackageGenerator } from "../src/offline-packages/generator.js";
+import {
+  OfflinePackageCapacityError,
+  OfflinePackageGenerator,
+} from "../src/offline-packages/generator.js";
 import { OfflinePackageStorage } from "../src/offline-packages/storage.js";
 
 const roots: string[] = [];
+const principal = "a".repeat(64);
 const archiveBytes = "offline-pmtiles-fixture";
 const archiveSha256 = createHash("sha256").update(archiveBytes).digest("hex");
 const source = {
@@ -129,6 +133,32 @@ async function createGenerator(root: string): Promise<{
 }
 
 describe("data-manager offline package API", () => {
+  it("returns an explicit retryable response when job admission is at capacity", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-capacity-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    vi.spyOn(generator, "prepare").mockRejectedValue(
+      new OfflinePackageCapacityError("preparation queue is full (64 waiting jobs)"),
+    );
+    const app = Fastify();
+    registerApi(app, { dataDir: root, offlinePackages: generator });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/offline/packages/prepare",
+      headers: { "x-offline-package-principal": principal },
+      payload: request,
+    });
+
+    expect(response.statusCode).toBe(429);
+    expect(response.json()).toEqual({
+      ok: false,
+      errorCode: "capacity",
+      errorMessage: "offline package capacity: preparation queue is full (64 waiting jobs)",
+    });
+    await app.close();
+  });
+
   it("exposes capability, preparation, manifest, and range-safe archive responses", async () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-offline-api-"));
     roots.push(root);
@@ -155,10 +185,26 @@ describe("data-manager offline package API", () => {
     const prepare = await app.inject({
       method: "POST",
       url: "/offline/packages/prepare",
+      headers: { "x-offline-package-principal": principal },
       payload: request,
     });
     expect(prepare.statusCode).toBe(202);
     expect(prepare.json().status).toBe("preparing");
+
+    const owned = await app.inject({
+      method: "GET",
+      url: `/offline/packages/jobs/${prepare.json().jobId}`,
+      headers: { "x-offline-package-principal": principal },
+    });
+    expect(owned.statusCode).toBe(200);
+    expect(owned.body).not.toContain(principal);
+    expect(owned.json()).not.toHaveProperty("principal");
+    const otherPrincipal = await app.inject({
+      method: "GET",
+      url: `/offline/packages/jobs/${prepare.json().jobId}`,
+      headers: { "x-offline-package-principal": "b".repeat(64) },
+    });
+    expect(otherPrincipal.statusCode).toBe(404);
 
     const packageId = `omp2-${"a".repeat(64)}`;
     const manifest = await app.inject({
@@ -243,6 +289,32 @@ describe("data-manager offline package API", () => {
       url: "/offline/packages/not-a-package/manifest",
     });
     expect(traversal.statusCode).toBe(400);
+    await app.close();
+  });
+
+  it("rejects missing, duplicate/comma, and malformed principals before allocating work", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-principal-api-"));
+    roots.push(root);
+    const { generator } = await createGenerator(root);
+    const prepare = vi.spyOn(generator, "prepare");
+    const app = Fastify();
+    registerApi(app, { dataDir: root, offlinePackages: generator });
+
+    for (const headers of [
+      undefined,
+      { "x-offline-package-principal": "not-a-principal" },
+      { "x-offline-package-principal": `${principal},${principal}` },
+    ]) {
+      const response = await app.inject({
+        method: "POST",
+        url: "/offline/packages/prepare",
+        ...(headers ? { headers } : {}),
+        payload: request,
+      });
+      expect(response.statusCode).toBe(400);
+      expect(response.json().errorCode).toBe("invalid-principal");
+    }
+    expect(prepare).not.toHaveBeenCalled();
     await app.close();
   });
 

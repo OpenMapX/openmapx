@@ -214,14 +214,20 @@ describe("rebuildOvertureLinks", () => {
 
   it("records the failed phase and leaves earlier work retryable", async () => {
     const deps = dependencies();
-    deps.score.mockRejectedValueOnce(new Error("candidate generation failed"));
+    deps.score.mockRejectedValueOnce(
+      new Error(
+        "candidate generation at https://score-user:SCORE-PASSWORD@example.org/run?token=SCORE-TOKEN failed",
+      ),
+    );
     const result = await rebuildOvertureLinksUnlocked(OPTIONS, deps as never);
     expect(result).toEqual({
       status: "failed",
       linked: 0,
       phase: "score",
-      error: "candidate generation failed",
+      error: "candidate generation at https://example.org/run failed",
     });
+    expect(state.last_error).toBe("candidate generation at https://example.org/run failed");
+    expect(JSON.stringify({ result, state })).not.toMatch(/SCORE-PASSWORD|SCORE-TOKEN|score-user/);
     expect(deps.assign).not.toHaveBeenCalled();
     expect(deps.publish).not.toHaveBeenCalled();
   });

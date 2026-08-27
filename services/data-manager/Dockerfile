@@ -20,7 +20,11 @@
 FROM docker.io/golang:1.27rc3@sha256:6a284ec7a8c67eff5882aaa53b07a57ee397553f8c85a92e5fc97c517f12201f AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
-RUN GOPROXY=direct GOBIN=/usr/local/bin/ go install github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 # snapshot-5
+WORKDIR /tmp/gtfsclean-build
+RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
+    GOPROXY=direct go get github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 && \
+    GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
+    GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
 FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS base
 
@@ -34,6 +38,9 @@ WORKDIR /app
 ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# The lockfile references patched dependencies by file hash, so `pnpm install`
+# cannot resolve without the patch itself.
+COPY patches/ patches/
 COPY services/data-manager/package.json services/data-manager/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
@@ -64,6 +71,9 @@ WORKDIR /app
 ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# The lockfile references patched dependencies by file hash, so `pnpm install`
+# cannot resolve without the patch itself.
+COPY patches/ patches/
 COPY services/data-manager/package.json services/data-manager/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
@@ -87,7 +97,11 @@ COPY packages/presets/package.json packages/presets/
 COPY packages/brands/package.json packages/brands/
 COPY integrations/ integrations/
 
-RUN pnpm install --frozen-lockfile --prod --ignore-scripts
+RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
+    rm -rf node_modules/.pnpm/image-size@*
+# image-size belongs to Metro's mobile build toolchain, not the data-manager
+# runtime. Do not copy that unused, currently vulnerable package into the
+# production image merely because pnpm uses a shared workspace virtual store.
 
 FROM deps AS builder
 WORKDIR /app
@@ -110,6 +124,7 @@ RUN pnpm build
 
 FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS runner
 WORKDIR /app
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
@@ -124,15 +139,18 @@ RUN apt-get update \
 # the daemon, systemd units, or third-party apt repos. Pin to a recent stable
 # release; the CLI is forward/backward-compatible with daemons within a few
 # minor versions.
-ARG DOCKER_CLI_VERSION=27.5.1
+ARG DOCKER_CLI_VERSION=29.7.2
+ARG DOCKER_CLI_SHA256_AMD64=803d433f226db4776e1768fd319fc6c6e4935a456acf84fcc0080818b854bc8f
+ARG DOCKER_CLI_SHA256_ARM64=43d143448adf2c2787704e7d7704fd6d62d367a54c5edaef0a3f75509cb0938d
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
-      x86_64) docker_arch=x86_64 ;; \
-      aarch64|arm64) docker_arch=aarch64 ;; \
+      x86_64) docker_arch=x86_64; expected_sha="$DOCKER_CLI_SHA256_AMD64" ;; \
+      aarch64|arm64) docker_arch=aarch64; expected_sha="$DOCKER_CLI_SHA256_ARM64" ;; \
       *) echo "Unsupported arch $arch for Docker CLI install" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://download.docker.com/linux/static/stable/${docker_arch}/docker-${DOCKER_CLI_VERSION}.tgz" -o /tmp/docker.tgz; \
+    echo "${expected_sha}  /tmp/docker.tgz" | sha256sum -c -; \
     tar -xzf /tmp/docker.tgz -C /tmp; \
     mv /tmp/docker/docker /usr/local/bin/docker; \
     chmod +x /usr/local/bin/docker; \
@@ -142,28 +160,34 @@ RUN set -eux; \
 # with `docker compose up -d --force-recreate` (a plain `docker restart` keeps
 # the pre-swap bind-mount target), so the plugin — not just the base CLI — must
 # be present, else promote fails with "unknown shorthand flag: 'f'".
-ARG DOCKER_COMPOSE_VERSION=2.32.4
+ARG DOCKER_COMPOSE_VERSION=5.5.0
+ARG DOCKER_COMPOSE_SHA256_AMD64=c57ab918abd5b05ca7e7d0f275875dd1330a695074f309dc9eab1b49efafcd4b
+ARG DOCKER_COMPOSE_SHA256_ARM64=ff42489f5a9b879d5d117c5ffea6defc27390b3286da8ad52cbc9c6ab5df590e
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
-      x86_64) compose_arch=x86_64 ;; \
-      aarch64|arm64) compose_arch=aarch64 ;; \
+      x86_64) compose_arch=x86_64; expected_sha="$DOCKER_COMPOSE_SHA256_AMD64" ;; \
+      aarch64|arm64) compose_arch=aarch64; expected_sha="$DOCKER_COMPOSE_SHA256_ARM64" ;; \
       *) echo "Unsupported arch $arch for Docker Compose install" >&2; exit 1 ;; \
     esac; \
     mkdir -p /usr/local/lib/docker/cli-plugins; \
     curl -fsSL "https://github.com/docker/compose/releases/download/v${DOCKER_COMPOSE_VERSION}/docker-compose-linux-${compose_arch}" \
       -o /usr/local/lib/docker/cli-plugins/docker-compose; \
+    echo "${expected_sha}  /usr/local/lib/docker/cli-plugins/docker-compose" | sha256sum -c -; \
     chmod +x /usr/local/lib/docker/cli-plugins/docker-compose; \
     docker compose version
 ARG DUCKDB_VERSION=1.3.1
+ARG DUCKDB_SHA256_AMD64=a43e0156c9799496089dd265605113471df5a30a7db26e1c662484eb1d31fc08
+ARG DUCKDB_SHA256_ARM64=93ddf7bc61d148273b821abbca911053dec3ba5e004d5fa981b4732b7e608905
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
-      x86_64)          duckdb_arch=linux-amd64 ;; \
-      aarch64|arm64)   duckdb_arch=linux-arm64 ;; \
+      x86_64) duckdb_arch=linux-amd64; expected_sha="$DUCKDB_SHA256_AMD64" ;; \
+      aarch64|arm64) duckdb_arch=linux-arm64; expected_sha="$DUCKDB_SHA256_ARM64" ;; \
       *) echo "Unsupported arch $arch for DuckDB CLI install" >&2; exit 1 ;; \
     esac; \
     curl -fsSL "https://github.com/duckdb/duckdb/releases/download/v${DUCKDB_VERSION}/duckdb_cli-${duckdb_arch}.zip" -o /tmp/duckdb.zip; \
+    echo "${expected_sha}  /tmp/duckdb.zip" | sha256sum -c -; \
     unzip /tmp/duckdb.zip -d /tmp/duckdb-bin; \
     mv /tmp/duckdb-bin/duckdb /usr/local/bin/duckdb; \
     chmod +x /usr/local/bin/duckdb; \
@@ -171,7 +195,7 @@ RUN set -eux; \
     duckdb --version
 RUN rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
 COPY services/motis/tools/transitous/requirements.txt /tmp/transitous-requirements.txt
-RUN pip3 install --no-cache-dir -r /tmp/transitous-requirements.txt
+RUN pip3 install --no-cache-dir --require-hashes -r /tmp/transitous-requirements.txt
 COPY --from=build-gtfsclean /usr/local/bin/gtfsclean /usr/local/bin/gtfsclean
 
 ENV NODE_ENV=production
@@ -252,6 +276,8 @@ COPY tsconfig.base.json ./
 # service images and avoids colliding with host user IDs.
 RUN groupadd --system --gid 1001 datamgr \
     && useradd --system --uid 1001 --gid datamgr --create-home --home-dir /home/datamgr datamgr \
+    && rm -rf /usr/local/lib/node_modules/npm \
+    && rm -f /usr/local/bin/npm /usr/local/bin/npx \
     && chown -R datamgr:datamgr /app /home/datamgr
 
 USER datamgr:datamgr

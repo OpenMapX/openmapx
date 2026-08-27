@@ -7,10 +7,12 @@ const TOKEN = "test-secret-token";
 async function buildApp(): Promise<FastifyInstance> {
   const app = Fastify();
   registerAuth(app, TOKEN);
-  // A protected route plus the two health routes the hook must let through.
+  // A protected route plus the health routes the hook must let through.
   app.get("/protected", async () => ({ ok: true }));
+  app.get("/live", async () => ({ ok: true }));
   app.get("/status", async () => ({ ok: true }));
   app.get("/internal/metrics", async () => ({ ok: true }));
+  app.get("/internal/transit/operator-feed/:handle", async () => ({ ok: true }));
   await app.ready();
   return app;
 }
@@ -68,10 +70,39 @@ describe("registerAuth", () => {
     await app.close();
   });
 
+  it("lets /live through without a token", async () => {
+    const app = await buildApp();
+    const res = await app.inject({ method: "GET", url: "/live" });
+    expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
   it("lets /internal/metrics through without a token", async () => {
     const app = await buildApp();
     const res = await app.inject({ method: "GET", url: "/internal/metrics" });
     expect(res.statusCode).toBe(200);
+    await app.close();
+  });
+
+  it("lets only a well-formed one-use relay GET capability through without the bearer token", async () => {
+    const app = await buildApp();
+    const handle = "a".repeat(64);
+    const allowed = await app.inject({
+      method: "GET",
+      url: `/internal/transit/operator-feed/${handle}`,
+    });
+    const malformed = await app.inject({
+      method: "GET",
+      url: "/internal/transit/operator-feed/not-a-capability",
+    });
+    const wrongMethod = await app.inject({
+      method: "POST",
+      url: `/internal/transit/operator-feed/${handle}`,
+    });
+
+    expect(allowed.statusCode).toBe(200);
+    expect(malformed.statusCode).toBe(401);
+    expect(wrongMethod.statusCode).toBe(401);
     await app.close();
   });
 

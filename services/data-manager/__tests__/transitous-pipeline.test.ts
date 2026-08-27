@@ -1,10 +1,37 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import type { TransitousRunnerScript } from "@openmapx/core/transitous-runner";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildJobContext, runTransitousPipeline } from "../src/jobs/transitous/index.js";
 import { StateStore } from "../src/state.js";
 import { writeFixtureGtfsArchive } from "./helpers/gtfs-fixture.js";
+
+// Preparation fails closed without a pinned catalog commit. The lock is
+// agent-owned now, so the pin is supplied through the typed operation.
+const PINNED_LOCK = {
+  ref: `main@${"a".repeat(40)}`,
+  submodules: {},
+  lockedAt: "2026-04-20T12:00:00.000Z",
+  lockedBy: "test",
+};
+vi.mock("../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    if (operation.kind === "transitousLock.inspect") {
+      return { active: PINNED_LOCK, proposed: null };
+    }
+    if (operation.kind === "gbfsCatalogLock.inspect") {
+      return {
+        commit: "b".repeat(40),
+        url: "https://example.test/catalog.csv",
+        sha256: "c".repeat(64),
+        lockedAt: "2026-04-20T12:00:00.000Z",
+        lockedBy: "test",
+      };
+    }
+    return { changed: true };
+  }),
+}));
 
 let tmp: string | undefined;
 
@@ -62,6 +89,7 @@ describe("runTransitousPipeline (integration)", () => {
     writeFileSync(apiKeysPath, JSON.stringify({ "de/BVG": "secret-key" }, null, 2));
 
     const calls: Array<{ command: string; args: string[]; cwd?: string }> = [];
+    const scriptCalls: TransitousRunnerScript[] = [];
     let fetchSawApiKey = false;
     const runner = async (
       command: string,
@@ -73,14 +101,16 @@ describe("runTransitousPipeline (integration)", () => {
         writeFileSync(deFeedPath, originalDeFeed);
         return;
       }
-      if (command === "python3" && args[0] === "./src/fetch.py" && args[1] === "feeds/de.json") {
+    };
+    const runScript = async (run: TransitousRunnerScript) => {
+      scriptCalls.push(run);
+      if (run.script === "fetch" && run.feedPath === "feeds/de.json") {
         const feed = JSON.parse(readFileSync(deFeedPath, "utf-8")) as {
           sources: Array<Record<string, unknown>>;
         };
         fetchSawApiKey = feed.sources[0]?.["api-key"] === "secret-key";
         writeFixtureGtfsArchive(join(gtfsDir, "de_bvg.gtfs.zip"));
         writeFixtureGtfsArchive(join(gtfsDir, "de_vbb.gtfs.zip"));
-        return;
       }
     };
 
@@ -90,6 +120,7 @@ describe("runTransitousPipeline (integration)", () => {
       store: new StateStore(dataDir),
       apiKeysPath,
       runner,
+      runScript,
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await runTransitousPipeline(ctx);
@@ -123,8 +154,11 @@ describe("runTransitousPipeline (integration)", () => {
     expect(callSignatures).toContain(
       `git ${safeDir} -C ${catalogDir} submodule update --init --checkout --depth 1`,
     );
-    expect(callSignatures).toContain("python3 ./src/fetch.py feeds/de.json");
-    expect(callSignatures).toContain("python3 ./src/garbage-collect.py --non-interactive");
+    // Upstream Python is dispatched as a typed script, never as argv this
+    // service assembles.
+    expect(scriptCalls).toContainEqual({ script: "fetch", feedPath: "feeds/de.json" });
+    expect(scriptCalls).toContainEqual({ script: "garbage-collect" });
+    expect(calls.map((call) => call.command)).not.toContain("python3");
   });
 
   it("creates the data directory before cloning the Transitous catalog", async () => {
@@ -146,11 +180,6 @@ describe("runTransitousPipeline (integration)", () => {
           join(catalogDir, "feeds", "de.json"),
           JSON.stringify({ sources: [{ name: "Demo" }] }, null, 2),
         );
-        return;
-      }
-
-      if (command === "python3" && args[0] === "./src/fetch.py") {
-        writeFixtureGtfsArchive(join(dataDir, "gtfs", "de_demo.gtfs.zip"));
       }
     };
 
@@ -160,6 +189,11 @@ describe("runTransitousPipeline (integration)", () => {
       store: new StateStore(dataDir),
       transitousRepoUrl: "/tmp/fake-transitous.git",
       runner,
+      runScript: async (run) => {
+        if (run.script === "fetch") {
+          writeFixtureGtfsArchive(join(dataDir, "gtfs", "de_demo.gtfs.zip"));
+        }
+      },
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await runTransitousPipeline(ctx);
@@ -188,8 +222,9 @@ describe("runTransitousPipeline (integration)", () => {
       countries: ["no"],
       dataDir,
       store: new StateStore(dataDir),
-      runner: async (command, args) => {
-        if (command === "python3" && args[0] === "./src/fetch.py" && args[1] === "feeds/no.json") {
+      runner: async () => {},
+      runScript: async (run) => {
+        if (run.script === "fetch" && run.feedPath === "feeds/no.json") {
           writeFixtureGtfsArchive(join(dataDir, "gtfs", "no_entur.netex.zip"));
         }
       },
@@ -262,8 +297,9 @@ describe("runTransitousPipeline (integration)", () => {
       countries: ["de", "us"],
       dataDir,
       store: new StateStore(dataDir),
-      runner: async (command, args) => {
-        if (command === "python3" && args[0] === "./src/fetch.py" && args[1] === "feeds/us.json") {
+      runner: async () => {},
+      runScript: async (run) => {
+        if (run.script === "fetch" && run.feedPath === "feeds/us.json") {
           writeFixtureGtfsArchive(join(dataDir, "gtfs", "us_mbta.gtfs.zip"));
         }
       },
@@ -314,9 +350,6 @@ describe("runTransitousPipeline (integration)", () => {
       args: string[],
       _opts: { cwd?: string; stdio?: "inherit" | "pipe" },
     ) => {
-      if (command === "python3" && args[0] === "./src/fetch.py") {
-        throw new Error("HTTP 503");
-      }
       if (command === "git" && args.includes("reset") && args.includes("--hard")) {
         return;
       }
@@ -327,6 +360,9 @@ describe("runTransitousPipeline (integration)", () => {
       dataDir,
       store,
       runner,
+      runScript: async (run) => {
+        if (run.script === "fetch") throw new Error("HTTP 503");
+      },
       now: () => "2026-04-20T12:00:00.000Z",
     });
     await expect(runTransitousPipeline(ctx)).rejects.toThrow(/Fetched 0\/1 feed source/);
@@ -407,8 +443,9 @@ describe("runTransitousPipeline (integration)", () => {
       countries: ["de"],
       dataDir,
       store: new StateStore(dataDir),
-      runner: async (command, args) => {
-        if (command === "python3" && args[0] === "./src/fetch.py" && args[1] === "feeds/de.json") {
+      runner: async () => {},
+      runScript: async (run) => {
+        if (run.script === "fetch" && run.feedPath === "feeds/de.json") {
           writeFixtureGtfsArchive(join(dataDir, "gtfs", "de_transitgtfs.gtfs.zip"));
           writeFixtureGtfsArchive(join(dataDir, "gtfs", "de_httpgtfs.gtfs.zip"));
         }
@@ -448,8 +485,9 @@ describe("runTransitousPipeline (integration)", () => {
       countries: ["de"],
       dataDir,
       store: new StateStore(dataDir),
-      runner: async (command, args) => {
-        if (command === "python3" && args[0] === "./src/fetch.py") {
+      runner: async () => {},
+      runScript: async (run) => {
+        if (run.script === "fetch") {
           throw new Error(
             [
               "Error: Could not fetch de-A: HTTP 500",

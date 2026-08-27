@@ -35,6 +35,7 @@ import {
 } from "../src/offline-packages/storage.js";
 
 const roots: string[] = [];
+const principal = "a".repeat(64);
 const fixtureArchiveSha256 = createHash("sha256").update("12345678").digest("hex");
 const generatedArchiveSha256 = createHash("sha256").update("pmtiles").digest("hex");
 
@@ -229,6 +230,25 @@ describe("offline package storage", () => {
     ).rejects.toThrow();
     expect(existsSync(join(storage.packageDirectory(packageId), "manifest.json"))).toBe(true);
   });
+
+  it("never evicts physical bytes while an archive stream owns them", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-storage-"));
+    roots.push(root);
+    const storage = new OfflinePackageStorage(root);
+    const packageId = `omp2-${"e".repeat(64)}`;
+    const archivePart = storage.temporaryArchivePath("job-streaming");
+    writeFileSync(archivePart, "12345678");
+    await storage.publishPackage({ archivePath: archivePart, manifest: manifest(packageId) });
+
+    const archive = await storage.openPublishedArchive(packageId);
+    expect(archive).toBeDefined();
+    await expect(storage.removePackage(packageId)).resolves.toBe(false);
+    expect(await storage.readPublishedManifest(packageId)).toMatchObject({ packageId });
+
+    archive?.release();
+    await expect(storage.removePackage(packageId)).resolves.toBe(true);
+    expect(await storage.readPublishedManifest(packageId)).toBeUndefined();
+  });
 });
 
 describe("offline package generation", () => {
@@ -251,9 +271,13 @@ describe("offline package generation", () => {
       extractor: extract,
     });
 
-    const job = await generator.prepare(request);
-    await vi.waitFor(() => expect(generator.getJob(job.jobId)?.status).toBe("failed"));
-    expect(generator.getJob(job.jobId)?.errorMessage).toContain("source changed");
+    const job = await generator.prepare(principal, request);
+    await vi.waitFor(async () =>
+      expect((await generator.getJob(principal, job.jobId))?.status).toBe("failed"),
+    );
+    expect((await generator.getJob(principal, job.jobId))?.errorMessage).toContain(
+      "source changed",
+    );
     expect(extract).not.toHaveBeenCalled();
   });
 
@@ -291,15 +315,15 @@ describe("offline package generation", () => {
       maxConcurrent: 1,
     });
 
-    const first = await generator.prepare(request);
-    const second = await generator.prepare({ ...request, bbox: { ...request.bbox } });
+    const first = await generator.prepare(principal, request);
+    const second = await generator.prepare(principal, { ...request, bbox: { ...request.bbox } });
     expect(second.jobId).toBe(first.jobId);
     expect(extract).toHaveBeenCalledTimes(1);
 
-    await vi.waitFor(() => {
-      expect(generator.getJob(first.jobId)?.status).toBe("ready-to-download");
+    await vi.waitFor(async () => {
+      expect((await generator.getJob(principal, first.jobId))?.status).toBe("ready-to-download");
     });
-    const ready = generator.getJob(first.jobId);
+    const ready = await generator.getJob(principal, first.jobId);
     expect(ready?.manifest?.archive.byteLength).toBe(7);
     expect(ready?.manifest?.archive.sha256).toBe(generatedArchiveSha256);
     expect(ready?.packageId).toBe(
@@ -325,7 +349,7 @@ describe("offline package generation", () => {
       maxConcurrent: 1,
     });
 
-    const invalid = await generator.prepare({
+    const invalid = await generator.prepare(principal, {
       ...request,
       bbox: { west: -1, south: 1, east: 2, north: 2 },
     });
@@ -333,12 +357,12 @@ describe("offline package generation", () => {
     expect(invalid.errorCode).toBe("invalid-request");
     expect(extract).not.toHaveBeenCalled();
 
-    const first = await generator.prepare(request);
-    const second = await generator.prepare({ ...request, maxZoom: 11 });
+    const first = await generator.prepare(principal, request);
+    const second = await generator.prepare(principal, { ...request, maxZoom: 11 });
     expect(second.jobId).not.toBe(first.jobId);
-    await vi.waitFor(() => {
-      expect(generator.getJob(first.jobId)?.status).toBe("failed");
-      expect(generator.getJob(second.jobId)?.status).toBe("failed");
+    await vi.waitFor(async () => {
+      expect((await generator.getJob(principal, first.jobId))?.status).toBe("failed");
+      expect((await generator.getJob(principal, second.jobId))?.status).toBe("failed");
     });
     expect((await storage.listPublishedPackages()).length).toBe(0);
   });
@@ -377,12 +401,16 @@ describe("offline package generation", () => {
       maxConcurrent: 1,
     });
 
-    const failed = await generator.prepare(request);
-    await vi.waitFor(() => expect(generator.getJob(failed.jobId)?.status).toBe("failed"));
-    const retry = await generator.prepare(request);
+    const failed = await generator.prepare(principal, request);
+    await vi.waitFor(async () =>
+      expect((await generator.getJob(principal, failed.jobId))?.status).toBe("failed"),
+    );
+    const retry = await generator.prepare(principal, request);
 
     expect(retry.jobId).not.toBe(failed.jobId);
-    await vi.waitFor(() => expect(generator.getJob(retry.jobId)?.status).toBe("ready-to-download"));
+    await vi.waitFor(async () =>
+      expect((await generator.getJob(principal, retry.jobId))?.status).toBe("ready-to-download"),
+    );
     expect(extract).toHaveBeenCalledTimes(2);
   });
 
@@ -425,16 +453,200 @@ describe("offline package generation", () => {
       maxConcurrent: 1,
     });
     await Promise.all([
-      generator.prepare(request),
-      generator.prepare({ ...request, bbox: { west: 2, south: 2, east: 3, north: 3 } }),
-      generator.prepare({ ...request, bbox: { west: 3, south: 3, east: 4, north: 4 } }),
+      generator.prepare(principal, request),
+      generator.prepare("b".repeat(64), {
+        ...request,
+        bbox: { west: 2, south: 2, east: 3, north: 3 },
+      }),
+      generator.prepare("c".repeat(64), {
+        ...request,
+        bbox: { west: 3, south: 3, east: 4, north: 4 },
+      }),
     ]);
-    await vi.waitFor(() =>
+    await vi.waitFor(async () =>
       expect((generator as { pendingCount(): number }).pendingCount()).toBe(0),
     );
     expect(peak).toBe(1);
     expect(existsSync(join(dataDir, "offline-packages", "tiles.pmtiles"))).toBe(false);
     expect(statSync(join(dataDir, "tile-mbtiles", "tiles.mbtiles")).size).toBeGreaterThan(0);
     expect(readFileSync(join(dataDir, "tile-mbtiles", "tiles.mbtiles")).length).toBeGreaterThan(0);
+  });
+
+  it("keeps invalid-request metadata cardinality bounded under sustained unique input", async () => {
+    const dataDir = createDataDir();
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: sourceDescriptor,
+        mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage: new OfflinePackageStorage(join(dataDir, "offline-packages")),
+      maxTrackedJobs: 25,
+    });
+    const ids: string[] = [];
+
+    for (let index = 0; index < 500; index++) {
+      const result = await generator.prepare(principal, {
+        ...request,
+        bbox: { west: -10 - index, south: 1, east: 2, north: 2 },
+      });
+      ids.push(result.jobId);
+    }
+
+    const retained = await Promise.all(ids.map((id) => generator.getJob(principal, id)));
+    expect(retained.filter((job) => job !== undefined)).toHaveLength(25);
+    expect(await generator.getJob(principal, ids[0] ?? "")).toBeUndefined();
+    expect(await generator.getJob(principal, ids.at(-1) ?? "")).toMatchObject({
+      status: "failed",
+      errorCode: "invalid-request",
+    });
+  });
+
+  it("rejects excess queued work without allocating another tracked job", async () => {
+    const dataDir = createDataDir();
+    let releaseExtraction: (() => void) | undefined;
+    const extractionGate = new Promise<void>((resolve) => {
+      releaseExtraction = resolve;
+    });
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: sourceDescriptor,
+        mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage: new OfflinePackageStorage(join(dataDir, "offline-packages")),
+      extractor: async () => {
+        await extractionGate;
+        throw new Error("test extraction released");
+      },
+      maxConcurrent: 1,
+      maxQueuedJobs: 1,
+      maxTrackedJobs: 10,
+    });
+
+    const first = await generator.prepare(principal, request);
+    const second = await generator.prepare(principal, {
+      ...request,
+      bbox: { west: 2, south: 2, east: 3, north: 3 },
+    });
+    await expect(
+      generator.prepare(principal, { ...request, bbox: { west: 3, south: 3, east: 4, north: 4 } }),
+    ).rejects.toThrow(/queue.*full/i);
+    expect(await generator.getJob(principal, first.jobId)).toBeDefined();
+    expect(await generator.getJob(principal, second.jobId)).toBeDefined();
+
+    releaseExtraction?.();
+    await vi.waitFor(async () => expect(generator.pendingCount()).toBe(0));
+  });
+
+  it("rejects admission at the total metadata ceiling when no terminal job is evictable", async () => {
+    const dataDir = createDataDir();
+    let releaseExtraction: (() => void) | undefined;
+    const extractionGate = new Promise<void>((resolve) => {
+      releaseExtraction = resolve;
+    });
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: sourceDescriptor,
+        mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage: new OfflinePackageStorage(join(dataDir, "offline-packages")),
+      extractor: async () => {
+        await extractionGate;
+        throw new Error("test extraction released");
+      },
+      maxConcurrent: 1,
+      maxQueuedJobs: 10,
+      maxTrackedJobs: 2,
+    });
+
+    await generator.prepare(principal, request);
+    await generator.prepare(principal, {
+      ...request,
+      bbox: { west: 2, south: 2, east: 3, north: 3 },
+    });
+    await expect(
+      generator.prepare(principal, { ...request, bbox: { west: 3, south: 3, east: 4, north: 4 } }),
+    ).rejects.toThrow(/metadata limit.*2/i);
+
+    releaseExtraction?.();
+    await vi.waitFor(async () => expect(generator.pendingCount()).toBe(0));
+  });
+
+  it("does not re-enqueue a job already running in the same worker", async () => {
+    const dataDir = createDataDir();
+    let releaseExtraction: (() => void) | undefined;
+    const extractionGate = new Promise<void>((resolve) => {
+      releaseExtraction = resolve;
+    });
+    let extractionCount = 0;
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: sourceDescriptor,
+        mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage: new OfflinePackageStorage(join(dataDir, "offline-packages")),
+      extractor: async () => {
+        extractionCount += 1;
+        await extractionGate;
+        throw new Error("test extraction released");
+      },
+      maxConcurrent: 2,
+    });
+
+    await generator.prepare(principal, request);
+    await generator.prepare(principal, {
+      ...request,
+      bbox: { west: 2, south: 2, east: 3, north: 3 },
+    });
+    await vi.waitFor(() => expect(extractionCount).toBe(1));
+    await new Promise((resolve) => setTimeout(resolve, 1_200));
+    expect(extractionCount).toBe(1);
+
+    releaseExtraction?.();
+    await vi.waitFor(() => expect(extractionCount).toBe(2), { timeout: 4_000 });
+    await vi.waitFor(() => expect(generator.pendingCount()).toBe(0), { timeout: 4_000 });
+  });
+
+  it("evicts terminal diagnostics after retention but keeps the published manifest", async () => {
+    const dataDir = createDataDir();
+    const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
+    const canonical = canonicalizeOfflinePackageRequest(request, sourceDescriptor);
+    const packageId = offlinePackageIdForRequest(canonical);
+    const archivePart = storage.temporaryArchivePath("retained-package");
+    writeFileSync(archivePart, "12345678");
+    await storage.publishPackage({
+      archivePath: archivePart,
+      manifest: manifest(packageId, { requestKey: canonical.requestKey }),
+    });
+    let nowMs = Date.parse("2026-08-20T00:00:00.000Z");
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: sourceDescriptor,
+        mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage,
+      clock: () => new Date(nowMs),
+      terminalJobRetentionMs: 1_000,
+    });
+    await generator.initialize();
+    const recovered = await generator.prepare(principal, request);
+    expect(await generator.getJob(principal, recovered.jobId)).toMatchObject({
+      status: "ready-to-download",
+      packageId,
+    });
+
+    nowMs += 1_001;
+
+    expect(await generator.getJob(principal, recovered.jobId)).toBeUndefined();
+    await expect(generator.getManifest(packageId)).resolves.toMatchObject({ packageId });
   });
 });

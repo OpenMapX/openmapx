@@ -13,6 +13,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   applyFeedOverlay,
   type FeedFile,
+  materializeFeedOverlayForRun,
   parseFeedOverlay,
   readFeedOverlay,
   writeFeedOverlayAtomic,
@@ -105,6 +106,31 @@ describe("version 3 feed overlay", () => {
 });
 
 describe("applyFeedOverlay", () => {
+  it("materializes operator sources as run-bound relay URLs before touching the catalog", () => {
+    const registrations: Array<Record<string, unknown>> = [];
+    const overlay = parseFeedOverlay(validOverlay());
+    const materialized = materializeFeedOverlayForRun(overlay, {
+      runId: "run-a",
+      register: (source) => {
+        registrations.push(source);
+        return new URL("http://127.0.0.1:4000/internal/transit/operator-feed/fixture-handle");
+      },
+    });
+
+    expect(registrations).toEqual([
+      expect.objectContaining({
+        runId: "run-a",
+        sourceId: "operator:de:operator-feed",
+        remoteUrl: new URL("https://operator.example/feed.zip"),
+      }),
+    ]);
+    expect(materialized.sources[0]).toMatchObject({
+      url: "http://127.0.0.1:4000/internal/transit/operator-feed/fixture-handle",
+    });
+    expect(JSON.stringify(materialized)).not.toContain("operator.example");
+    expect(overlay.sources[0]?.url).toBe("https://operator.example/feed.zip");
+  });
+
   it("adds an operator source and disables a catalog source by canonical identity", () => {
     const feeds: FeedFile[] = [
       {

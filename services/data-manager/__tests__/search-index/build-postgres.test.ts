@@ -6,7 +6,7 @@ import { buildOsmSearchIndex } from "../../src/jobs/search-index/build.js";
 import { StateStore } from "../../src/state.js";
 import { startPostgis } from "../poi-ingest/_testcontainer.js";
 
-const skipE2e = process.env.OPENMAPX_RUN_POSTGRES_TESTS !== "1";
+const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
 describe.skipIf(skipE2e)("atomic search-index publication", () => {
   it("publishes a complete snapshot and preserves it after a later failure", async () => {

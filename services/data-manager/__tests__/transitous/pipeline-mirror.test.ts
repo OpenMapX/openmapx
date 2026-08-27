@@ -1,7 +1,10 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { transitousRunnerArgv } from "@openmapx/core/transitous-runner";
+import type { SafeDownloadOptions } from "@openmapx/core/utils/safe-download";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { OperatorFeedRelayStore } from "../../src/jobs/transitous/operator-feed-relay.js";
 import {
   buildJobContext,
   runTransitousPipeline,
@@ -9,6 +12,32 @@ import {
   stagesFor,
 } from "../../src/jobs/transitous/pipeline.js";
 import { StateStore } from "../../src/state.js";
+
+// Preparation fails closed without a pinned catalog commit. The lock is
+// agent-owned now, so the pin is supplied through the typed operation.
+const PINNED_LOCK = {
+  ref: `main@${"a".repeat(40)}`,
+  submodules: {},
+  lockedAt: "2026-04-20T12:00:00.000Z",
+  lockedBy: "test",
+};
+vi.mock("../../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string }) => {
+    if (operation.kind === "transitousLock.inspect") {
+      return { active: PINNED_LOCK, proposed: null };
+    }
+    if (operation.kind === "gbfsCatalogLock.inspect") {
+      return {
+        commit: "b".repeat(40),
+        url: "https://example.test/catalog.csv",
+        sha256: "c".repeat(64),
+        lockedAt: "2026-04-20T12:00:00.000Z",
+        lockedBy: "test",
+      };
+    }
+    return { changed: true };
+  }),
+}));
 
 let tmp: string | undefined;
 
@@ -100,6 +129,7 @@ describe("mirror-mode pipeline", () => {
       source: "mirror",
       // filter's resolution pre-check shells out to python3; everything else no-op.
       runner: async () => {},
+      runScript: async () => {},
       artifactDownloader: async (url, dest) => {
         downloadUrls.push(url);
         mkdirSync(dirname(dest), { recursive: true });
@@ -136,6 +166,7 @@ describe("mirror-mode pipeline", () => {
       countries: ["de"],
       source: "mirror",
       runner: async () => {},
+      runScript: async () => {},
       artifactDownloader: async (url, dest) => {
         downloadUrls.push(url);
         downloadTargets.push(dest);
@@ -180,18 +211,52 @@ describe("mirror-mode pipeline", () => {
       }),
     );
     const fetchMetadata: string[] = [];
+    const processArguments: string[][] = [];
+    const remoteDownloads: SafeDownloadOptions[] = [];
+    const relay = new OperatorFeedRelayStore({
+      download: async (options) => {
+        remoteDownloads.push(options);
+        writeFileSync(options.destination, "OPERATOR");
+        return {
+          bytesWritten: 8,
+          contentType: "application/zip",
+          finalUrl: options.url,
+        };
+      },
+    });
+    const endRun = vi.spyOn(relay, "endRun");
     const ctx = buildJobContext({
       dataDir: fx.dataDir,
       store: new StateStore(fx.dataDir),
       countries: ["de"],
       source: "mirror",
+      jobId: "run-operator-relay",
       feedsOverlayPath: overlayPath,
       runner: async (command, args) => {
-        if (command === "python3" && args[0] === "./src/fetch.py") {
-          fetchMetadata.push(args[1] ?? "");
-          writeFileSync(join(fx.gtfsDir, "de_operator-feed.gtfs.zip"), "OPERATOR");
+        processArguments.push([command, ...args]);
+      },
+      runScript: async (run) => {
+        processArguments.push(["python3", ...transitousRunnerArgv(run)]);
+        if (run.script === "fetch-operator") {
+          const metadataPath = join(
+            fx.dataDir,
+            ".transitous-downloads",
+            "operator-metadata",
+            run.metadataName,
+          );
+          fetchMetadata.push(metadataPath);
+          const metadataText = readFileSync(metadataPath, "utf-8");
+          const metadata = JSON.parse(metadataText) as { sources: Array<{ url: string }> };
+          const relayUrl = new URL(metadata.sources[0]?.url ?? "");
+          const handle = relayUrl.pathname.split("/").at(-1) ?? "";
+          const payload = await relay.consume({ handle, runId: "run-operator-relay" });
+          const chunks: Buffer[] = [];
+          for await (const chunk of payload.stream) chunks.push(Buffer.from(chunk));
+          writeFileSync(join(fx.gtfsDir, "de_operator-feed.gtfs.zip"), Buffer.concat(chunks));
+          await payload.release();
         }
       },
+      operatorFeedRelay: relay,
       artifactDownloader: async (url, dest) => {
         expect(url).toContain("de_BVG.gtfs.zip");
         mkdirSync(dirname(dest), { recursive: true });
@@ -212,11 +277,23 @@ describe("mirror-mode pipeline", () => {
     expect(metadata.maintainers).toHaveLength(1);
     expect(metadata.sources[0]).toMatchObject({
       type: "http",
+      url: expect.stringMatching(
+        /^http:\/\/127\.0\.0\.1:4000\/internal\/transit\/operator-feed\/[a-f0-9]{64}$/,
+      ),
       license: {
         "spdx-identifier": "CC-BY-4.0",
         "attribution-text": "Operator authority",
       },
     });
+    expect(JSON.stringify(metadata)).not.toContain("operator.example");
+    expect(JSON.stringify(processArguments)).not.toContain("operator.example");
+    expect(remoteDownloads).toHaveLength(1);
+    expect(remoteDownloads[0]).toMatchObject({
+      url: new URL("https://operator.example/feed.zip"),
+      maxBytes: 512 * 1024 * 1024,
+      credentialPolicy: "none",
+    });
+    expect(endRun).toHaveBeenCalledWith("run-operator-relay");
     const manifest = JSON.parse(
       readFileSync(join(fx.gtfsDir, "transit-source-manifest.json"), "utf-8"),
     ) as { sources: Array<{ sourceId: string }> };
@@ -224,6 +301,89 @@ describe("mirror-mode pipeline", () => {
       "catalog:de:BVG",
       "operator:de:operator-feed",
     ]);
+    expect(JSON.stringify(manifest)).not.toContain("/internal/transit/operator-feed/");
+  });
+
+  it("blocks upstream preparation when relay acquisition fails without exposing a fallback URL", async () => {
+    const fx = setupCatalog([{ name: "BVG" }]);
+    const overlayPath = join(fx.dataDir, "feeds-overlay.json");
+    writeFileSync(
+      overlayPath,
+      JSON.stringify({
+        version: 3,
+        sources: [
+          {
+            spec: "gtfs",
+            type: "http",
+            region: "de",
+            name: "operator-feed",
+            url: "https://operator.example/private/feed.zip?fixture=secret",
+            origin: "operator",
+            license: { spdxIdentifier: "CC-BY-4.0", attribution: "Operator" },
+          },
+        ],
+        patches: [],
+        quarantine: [],
+      }),
+    );
+    const relay = new OperatorFeedRelayStore({
+      download: async () => {
+        throw new Error("redirect target is private");
+      },
+    });
+    const completed: string[] = [];
+    const persistedResults: unknown[] = [];
+    const ctx = buildJobContext({
+      dataDir: fx.dataDir,
+      store: new StateStore(fx.dataDir),
+      countries: ["de"],
+      source: "mirror",
+      jobId: "run-relay-failure",
+      feedsOverlayPath: overlayPath,
+      operatorFeedRelay: relay,
+      runner: async () => {},
+      runScript: async (run) => {
+        if (run.script !== "fetch-operator") return;
+        const metadataPath = join(
+          fx.dataDir,
+          ".transitous-downloads",
+          "operator-metadata",
+          run.metadataName,
+        );
+        const metadata = JSON.parse(readFileSync(metadataPath, "utf-8")) as {
+          sources: Array<{ url: string }>;
+        };
+        const relayUrl = new URL(metadata.sources[0]?.url ?? "");
+        const handle = relayUrl.pathname.split("/").at(-1) ?? "";
+        try {
+          await relay.consume({ handle, runId: "run-relay-failure" });
+        } catch {
+          throw new Error(`fetch failed for ${relayUrl.toString()}`);
+        }
+      },
+      artifactDownloader: async (_url, destination) => {
+        mkdirSync(dirname(destination), { recursive: true });
+        writeFileSync(destination, "CATALOG");
+      },
+      onStageComplete: async (result) => {
+        completed.push(`${result.stage}:${result.status}`);
+        persistedResults.push(result);
+      },
+    });
+
+    await expect(runTransitousPipeline(ctx, { stopAt: "fetch-operator" })).rejects.toThrow(
+      /Failed to acquire 1 desired transit source/,
+    );
+    expect(completed).toContain("fetch-operator:error");
+    expect(completed.some((entry) => entry.startsWith("validate:"))).toBe(false);
+    expect(existsSync(join(fx.gtfsDir, "de_operator-feed.gtfs.zip"))).toBe(false);
+    const failedResult = completed.join("\n");
+    expect(failedResult).not.toContain("operator.example");
+    expect(failedResult).not.toContain("fixture=secret");
+    const persistedJson = JSON.stringify(persistedResults);
+    expect(persistedJson).not.toContain("operator.example");
+    expect(persistedJson).not.toContain("fixture=secret");
+    expect(persistedJson).not.toMatch(/operator-feed\/[a-f0-9]{64}/);
   });
 
   it("falls back from gtfs to netex when the gtfs archive 404s", async () => {
@@ -235,6 +395,7 @@ describe("mirror-mode pipeline", () => {
       countries: ["de"],
       source: "mirror",
       runner: async () => {},
+      runScript: async () => {},
       artifactDownloader: async (url, dest) => {
         tried.push(url);
         if (url.endsWith(".gtfs.zip")) throw new Error("404");
@@ -261,6 +422,7 @@ describe("mirror-mode pipeline", () => {
       countries: ["de"],
       source: "mirror",
       runner: async () => {},
+      runScript: async () => {},
       // Every archive download fails (e.g. the published feed is gone).
       artifactDownloader: async () => {
         throw new Error("404");

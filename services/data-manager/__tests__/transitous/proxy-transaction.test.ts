@@ -1,7 +1,20 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+
+// nginx validate+reload is one typed agent operation now; a failure of either
+// half surfaces as a rejected operation.
+const opsCalls: { kind: string }[] = [];
+const opsBehaviour: { fail: boolean } = { fail: false };
+vi.mock("../../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(async (operation: { kind: string; candidateId?: string }) => {
+    opsCalls.push(operation);
+    if (opsBehaviour.fail) throw new Error("feed proxy validate/reload failed");
+    return { candidateId: operation.candidateId, reloaded: true };
+  }),
+}));
+
 import {
   CANDIDATE_PROXY_DIRNAME,
   createCandidateManifest,
@@ -42,13 +55,11 @@ function setup(candidateVars: Record<string, unknown>, currentVars: Record<strin
 }
 
 function ctx(dataDir: string, failAt?: "test" | "reload") {
+  opsBehaviour.fail = failAt !== undefined;
   return buildJobContext({
     dataDir,
     store: new StateStore(dataDir),
-    runner: async (_command, args) => {
-      if (failAt === "test" && args.includes("-t")) throw new Error("invalid nginx");
-      if (failAt === "reload" && args.includes("reload")) throw new Error("reload failed");
-    },
+    runner: async () => undefined,
     now: () => "2026-01-01T00:00:00Z",
   });
 }

@@ -31,10 +31,7 @@ export const run: StageFn = async (ctx) => {
           : `generate-attribution.py not present at ${scriptPath}; no candidate config was generated`,
       } satisfies StageResult;
     }
-    await ctx.runner("python3", ["./src/generate-attribution.py"], {
-      cwd: catalogDir,
-      stdio: "pipe",
-    });
+    await ctx.runScript({ script: "generate-attribution" });
 
     const attributionFilePath = join(catalogDir, "out", "license.json");
     if (!existsSync(attributionFilePath)) {

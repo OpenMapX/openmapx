@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto";
+import { existsSync, writeFileSync } from "node:fs";
 import type { PoiLiveState, PoiRow, RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
@@ -8,7 +10,7 @@ import {
   runLiveIngest,
   runStaticIngest,
 } from "../../src/jobs/poi-ingest/pipeline.js";
-import type { PoiIngestStageName } from "../../src/jobs/poi-ingest/types.js";
+import type { PoiIngestStageName, PoiSafeDownloader } from "../../src/jobs/poi-ingest/types.js";
 
 interface FakeSqlRecorder {
   sql: Sql;
@@ -73,17 +75,27 @@ function makeFakeRedis(): FakeRedisRecorder {
   return { redis, ops };
 }
 
-function makeFetch(body: string): typeof fetch {
-  return (async () =>
-    new Response(body, { status: 200, statusText: "OK" })) as unknown as typeof fetch;
+function makeDownload(body: string): PoiSafeDownloader {
+  return async (options) => {
+    const bytesWritten = Buffer.byteLength(body);
+    if (bytesWritten > options.maxBytes) {
+      throw new Error(
+        `fetch ${options.url.hostname} exceeded max ${options.maxBytes} bytes (${bytesWritten})`,
+      );
+    }
+    writeFileSync(options.destination, body);
+    return {
+      bytesWritten,
+      contentType: null,
+      finalUrl: options.url,
+    };
+  };
 }
 
-function makeFailFetch(): typeof fetch {
-  return (async () =>
-    new Response("nope", {
-      status: 500,
-      statusText: "Internal Server Error",
-    })) as unknown as typeof fetch;
+function makeFailDownload(): PoiSafeDownloader {
+  return async (options) => {
+    throw new Error(`fetch ${options.url.hostname} failed: HTTP 500 Internal Server Error`);
+  };
 }
 
 const sampleRows: PoiRow[] = [
@@ -114,7 +126,7 @@ function staticSourceWithBadParser(): RegisteredPoiSource {
     name: "Broken",
     static: {
       cron: "0 4 * * *",
-      fetch: { type: "http", url: "x" },
+      fetch: { type: "http", url: "https://example.com/x" },
       parse: () => {
         throw new Error("parser exploded");
       },
@@ -172,7 +184,7 @@ describe("pipeline (static)", () => {
       kind: "static",
       sql: sqlRec.sql,
       redis: null,
-      fetch: makeFetch("hello"),
+      download: makeDownload("hello"),
       now: () => "2026-05-01T00:00:00.000Z",
     });
     const result = await runStaticIngest(ctx);
@@ -196,7 +208,7 @@ describe("pipeline (static)", () => {
       kind: "static",
       sql: sqlRec.sql,
       redis: null,
-      fetch: makeFetch("anything"),
+      download: makeDownload("anything"),
     });
     const result = await runStaticIngest(ctx);
     expect(result.status).toBe("error");
@@ -211,18 +223,19 @@ describe("pipeline (static)", () => {
     const sqlRec = makeFakeSql();
     const controller = new AbortController();
     let calls = 0;
-    const fetchImpl: typeof fetch = (async () => {
+    const download: PoiSafeDownloader = async (options) => {
       calls++;
       // Abort right after the first (fetch) stage completes.
       controller.abort();
-      return new Response("hello", { status: 200 });
-    }) as unknown as typeof fetch;
+      writeFileSync(options.destination, "hello");
+      return { bytesWritten: 5, contentType: null, finalUrl: options.url };
+    };
     const ctx = buildPoiJobContext({
       source: staticSource(),
       kind: "static",
       sql: sqlRec.sql,
       redis: null,
-      fetch: fetchImpl,
+      download,
       abortSignal: controller.signal,
     });
     const result = await runStaticIngest(ctx);
@@ -240,12 +253,183 @@ describe("pipeline (static)", () => {
       kind: "static",
       sql: sqlRec.sql,
       redis: null,
-      fetch: makeFailFetch(),
+      download: makeFailDownload(),
     });
     const result = await runStaticIngest(ctx);
     expect(result.status).toBe("error");
     expect(result.stages[0]?.stage).toBe("fetch");
     expect(sqlRec.beginCount).toBe(0);
+  });
+
+  it.each(["static", "dynamic"] as const)(
+    "routes a %s POI URL through the shared streaming downloader",
+    async (urlKind) => {
+      const sqlRec = makeFakeSql();
+      const source = staticSource();
+      if (!source.static) throw new Error("test source must have a static spec");
+      if (urlKind === "dynamic") {
+        source.static.resolveUrl = async () => "https://dynamic.example/feed.csv";
+      }
+      let seen:
+        | {
+            url: URL;
+            destination: string;
+            maxBytes: number;
+            credentialPolicy: string;
+          }
+        | undefined;
+      const ctx = buildPoiJobContext({
+        source,
+        kind: "static",
+        sql: sqlRec.sql,
+        redis: null,
+        download: async (options) => {
+          seen = options;
+          writeFileSync(options.destination, "hello");
+          return {
+            bytesWritten: 5,
+            contentType: "text/csv",
+            finalUrl: options.url,
+          };
+        },
+      });
+
+      const result = await runStaticIngest(ctx);
+
+      expect(result.status).toBe("ok");
+      expect(seen?.url.toString()).toBe(
+        urlKind === "dynamic" ? "https://dynamic.example/feed.csv" : "https://example.com/x.csv",
+      );
+      expect(seen).toMatchObject({
+        maxBytes: 256 * 1024 * 1024,
+        credentialPolicy: "none",
+      });
+      expect(seen?.destination).toMatch(/openmapx-poi-download-/);
+    },
+  );
+
+  it("uses exact-origin redirect policy whenever a source configures headers", async () => {
+    const sqlRec = makeFakeSql();
+    const source = staticSource();
+    if (!source.static) throw new Error("test source must have a static spec");
+    source.static.fetch.headers = { Authorization: "Bearer fixture-credential" };
+    let credentialPolicy: string | undefined;
+    const ctx = buildPoiJobContext({
+      source,
+      kind: "static",
+      sql: sqlRec.sql,
+      redis: null,
+      download: async (options) => {
+        credentialPolicy = options.credentialPolicy;
+        writeFileSync(options.destination, "hello");
+        return { bytesWritten: 5, contentType: null, finalUrl: options.url };
+      },
+    });
+
+    const result = await runStaticIngest(ctx);
+
+    expect(result.status).toBe("ok");
+    expect(credentialPolicy).toBe("same-origin");
+  });
+
+  it("rejects a source compressed-byte override above the 2 GiB hard maximum", async () => {
+    const sqlRec = makeFakeSql();
+    const source = staticSource();
+    if (!source.static) throw new Error("test source must have a static spec");
+    source.static.fetch.maxBytes = 2 * 1024 * 1024 * 1024 + 1;
+    let downloadCalls = 0;
+    const ctx = buildPoiJobContext({
+      source,
+      kind: "static",
+      sql: sqlRec.sql,
+      redis: null,
+      download: async (options) => {
+        downloadCalls += 1;
+        writeFileSync(options.destination, "never");
+        return { bytesWritten: 5, contentType: null, finalUrl: options.url };
+      },
+    });
+
+    const result = await runStaticIngest(ctx);
+
+    expect(result.status).toBe("error");
+    expect(result.stages[0]?.message).toMatch(/2 GiB hard maximum/);
+    expect(downloadCalls).toBe(0);
+  });
+
+  it("removes a partial destination when the downloader fails", async () => {
+    const sqlRec = makeFakeSql();
+    let partialPath: string | undefined;
+    const ctx = buildPoiJobContext({
+      source: staticSource(),
+      kind: "static",
+      sql: sqlRec.sql,
+      redis: null,
+      download: async (options) => {
+        partialPath = options.destination;
+        writeFileSync(options.destination, "partial");
+        throw new Error("fixture download failed");
+      },
+    });
+
+    const result = await runStaticIngest(ctx);
+
+    expect(result.status).toBe("error");
+    expect(result.stages[0]?.message).toContain("fixture download failed");
+    expect(partialPath).toBeDefined();
+    expect(existsSync(partialPath as string)).toBe(false);
+  });
+
+  it("persists only structured, credential-free endpoint diagnostics after a successful fetch", async () => {
+    const sqlRec = makeFakeSql();
+    const source = staticSource();
+    if (!source.static) throw new Error("test source must have a static spec");
+    source.static.fetch.url =
+      "https://feed-user:FEED-PASSWORD@feeds.example.org/private/token/PATH-TOKEN/feed.csv?api-key=QUERY-TOKEN#debug";
+    const ctx = buildPoiJobContext({
+      source,
+      kind: "static",
+      sql: sqlRec.sql,
+      redis: null,
+      download: makeDownload("hello"),
+    });
+
+    const result = await runStaticIngest(ctx);
+
+    expect(result.status).toBe("ok");
+    expect(result.stages[0]?.artifacts).toMatchObject({
+      sourceKind: "poi",
+      hostname: "feeds.example.org",
+      bytes: 5,
+      sha256: createHash("sha256").update("hello").digest("hex"),
+    });
+    expect(JSON.stringify(result.stages[0])).not.toMatch(
+      /FEED-PASSWORD|PATH-TOKEN|QUERY-TOKEN|feed-user/,
+    );
+  });
+
+  it("returns credential-free structured diagnostics when an HTTP fetch fails", async () => {
+    const sqlRec = makeFakeSql();
+    const source = staticSource();
+    if (!source.static) throw new Error("test source must have a static spec");
+    source.static.fetch.url =
+      "https://feed-user:FEED-PASSWORD@feeds.example.org/private/token/PATH-TOKEN/feed.csv?api-key=QUERY-TOKEN#debug";
+    const ctx = buildPoiJobContext({
+      source,
+      kind: "static",
+      sql: sqlRec.sql,
+      redis: null,
+      download: makeFailDownload(),
+    });
+
+    const result = await runStaticIngest(ctx);
+
+    expect(result.status).toBe("error");
+    expect(result.stages[0]?.message).toContain("HTTP 500 Internal Server Error");
+    expect(result.stages[0]?.message).toContain("feeds.example.org");
+    expect(JSON.stringify(result.stages[0])).not.toMatch(
+      /FEED-PASSWORD|PATH-TOKEN|QUERY-TOKEN|feed-user/,
+    );
   });
 
   it("returns a fetch-stage error when a response exceeds its byte cap", async () => {
@@ -258,7 +442,7 @@ describe("pipeline (static)", () => {
       kind: "static",
       sql: sqlRec.sql,
       redis: null,
-      fetch: makeFetch("x".repeat(100)),
+      download: makeDownload("x".repeat(100)),
     });
     const result = await runStaticIngest(ctx);
     expect(result.status).toBe("error");
@@ -277,7 +461,7 @@ describe("pipeline (live)", () => {
       kind: "live",
       sql: sqlRec.sql,
       redis: redisRec.redis,
-      fetch: makeFetch("{}"),
+      download: makeDownload("{}"),
     });
     const result = await runLiveIngest(ctx);
     expect(result.status).toBe("ok");
@@ -300,7 +484,7 @@ describe("pipeline (bundled)", () => {
       kind: "bundled",
       sql: sqlRec.sql,
       redis: redisRec.redis,
-      fetch: makeFetch("anything"),
+      download: makeDownload("anything"),
     });
     const result = await runBundledIngest(ctx);
     expect(result.status).toBe("ok");
@@ -326,7 +510,7 @@ describe("pipeline (bundled)", () => {
       kind: "bundled",
       sql: sqlRec.sql,
       redis: redisRec.redis,
-      fetch: makeFetch("anything"),
+      download: makeDownload("anything"),
       lastStaticHash: "HASH-XYZ",
     });
     const result = await runBundledIngest(ctx);
@@ -349,10 +533,11 @@ describe("pipeline fetch — resolveHeaders", () => {
     const sqlRec = makeFakeSql();
     let capturedHeaders: Record<string, string> | undefined;
     let loggerSeen: unknown;
-    const fetchImpl: typeof fetch = (async (_url: string, init?: RequestInit) => {
-      capturedHeaders = init?.headers as Record<string, string> | undefined;
-      return new Response("payload", { status: 200 });
-    }) as unknown as typeof fetch;
+    const download: PoiSafeDownloader = async (options) => {
+      capturedHeaders = options.headers as Record<string, string> | undefined;
+      writeFileSync(options.destination, "payload");
+      return { bytesWritten: 7, contentType: null, finalUrl: options.url };
+    };
 
     const source: RegisteredPoiSource = {
       id: "demo-headers",
@@ -380,7 +565,7 @@ describe("pipeline fetch — resolveHeaders", () => {
       kind: "static",
       sql: sqlRec.sql,
       redis: null,
-      fetch: fetchImpl,
+      download,
     });
     const result = await runStaticIngest(ctx);
 
@@ -395,9 +580,6 @@ describe("pipeline fetch — resolveHeaders", () => {
 
   it("returns fetch-stage error when resolveHeaders throws", async () => {
     const sqlRec = makeFakeSql();
-    const fetchImpl: typeof fetch = (async () =>
-      new Response("never", { status: 200 })) as unknown as typeof fetch;
-
     const source: RegisteredPoiSource = {
       id: "demo-headers-fail",
       stationIdPrefix: "demo-headers-fail:",
@@ -421,7 +603,7 @@ describe("pipeline fetch — resolveHeaders", () => {
       kind: "static",
       sql: sqlRec.sql,
       redis: null,
-      fetch: fetchImpl,
+      download: makeFailDownload(),
     });
     const result = await runStaticIngest(ctx);
 
@@ -441,7 +623,7 @@ describe("pipeline persistence hook", () => {
       kind: "static",
       sql: sqlRec.sql,
       redis: null,
-      fetch: makeFetch("hello"),
+      download: makeDownload("hello"),
       onStageComplete: async (r) => {
         seen.push(r.stage);
         if (r.stage === "parse") throw new Error("hook boom");

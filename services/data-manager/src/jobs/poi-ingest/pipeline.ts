@@ -15,6 +15,7 @@ import type {
   PoiIngestStageStatus,
   PoiJobContext,
   PoiJobLogger,
+  PoiSafeDownloader,
   PoiStageFn,
 } from "./types.js";
 
@@ -229,7 +230,7 @@ export interface BuildPoiJobContextOptions {
   abortSignal?: AbortSignal;
   lastStaticHash?: string;
   onStageComplete?: (r: PoiIngestStageResult) => Promise<void>;
-  fetch?: typeof fetch;
+  download?: PoiSafeDownloader;
   now?: () => string;
 }
 
@@ -243,7 +244,7 @@ export function buildPoiJobContext(opts: BuildPoiJobContextOptions): PoiJobConte
     onStageComplete: opts.onStageComplete,
     sql: opts.sql,
     redis: opts.redis,
-    fetch: opts.fetch,
+    download: opts.download,
     now: opts.now,
     lastStaticHash: opts.lastStaticHash,
     state: {},

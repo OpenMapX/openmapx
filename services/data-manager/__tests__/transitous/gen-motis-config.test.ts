@@ -1,6 +1,10 @@
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  type TransitousRunnerScript,
+  transitousRunnerArgv,
+} from "@openmapx/core/transitous-runner";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { run as genMotisConfigRun } from "../../src/jobs/transitous/gen-motis-config.js";
 import { buildJobContext } from "../../src/jobs/transitous/pipeline.js";
@@ -48,7 +52,7 @@ function setupCatalog(initialConfigYaml: string): {
   mkdirSync(join(catalogDir, "src"), { recursive: true });
   mkdirSync(outDir, { recursive: true });
   // The stage looks for `src/generate-motis-config.py` to decide whether to
-  // run. The runner is a stub, so the file body doesn't matter.
+  // run. The script runner is a stub, so the file body doesn't matter.
   writeFileSync(join(catalogDir, "src", "generate-motis-config.py"), "");
   const configPath = join(outDir, "config.yml");
   writeFileSync(configPath, initialConfigYaml, "utf-8");
@@ -59,7 +63,7 @@ function ctxFor(dataDir: string, catalogDir: string) {
   const ctx = buildJobContext({
     dataDir,
     store: new StateStore(dataDir),
-    runner: async () => {
+    runScript: async () => {
       /* stub: the stage already wrote config.yml in our test setup */
     },
     now: () => "2026-05-01T00:00:00.000Z",
@@ -164,20 +168,28 @@ describe("gen-motis-config elevators override", () => {
 describe("gen-motis-config region scoping", () => {
   it("passes the configured countries as region args to the generator", async () => {
     const fx = setupCatalog(TEMPLATE_WITH_OSM);
-    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const calls: TransitousRunnerScript[] = [];
     const ctx = buildJobContext({
       dataDir: fx.dataDir,
       store: new StateStore(fx.dataDir),
       countries: ["de", "ch"],
-      runner: async (cmd, args) => {
-        calls.push({ cmd, args });
+      runScript: async (run) => {
+        calls.push(run);
       },
       now: () => "2026-05-01T00:00:00.000Z",
     });
     ctx.state.catalogDir = fx.catalogDir;
     await genMotisConfigRun(ctx);
-    const py = calls.find((c) => c.cmd === "python3");
-    expect(py?.args).toEqual([
+    expect(calls).toEqual([
+      {
+        script: "generate-motis-config",
+        importOnly: true,
+        feedProxy: false,
+        countries: ["de", "ch"],
+      },
+    ]);
+    // The runner derives the argv; the stage never assembles one.
+    expect(transitousRunnerArgv(calls[0])).toEqual([
       "./src/generate-motis-config.py",
       "--import-only",
       "--skip-missing-files",
@@ -188,20 +200,22 @@ describe("gen-motis-config region scoping", () => {
 
   it("passes no region arg when countries is empty (global build)", async () => {
     const fx = setupCatalog(TEMPLATE_WITH_OSM);
-    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const calls: TransitousRunnerScript[] = [];
     const ctx = buildJobContext({
       dataDir: fx.dataDir,
       store: new StateStore(fx.dataDir),
       countries: [],
-      runner: async (cmd, args) => {
-        calls.push({ cmd, args });
+      runScript: async (run) => {
+        calls.push(run);
       },
       now: () => "2026-05-01T00:00:00.000Z",
     });
     ctx.state.catalogDir = fx.catalogDir;
     await genMotisConfigRun(ctx);
-    const py = calls.find((c) => c.cmd === "python3");
-    expect(py?.args).toEqual([
+    expect(calls).toEqual([
+      { script: "generate-motis-config", importOnly: true, feedProxy: false, countries: [] },
+    ]);
+    expect(transitousRunnerArgv(calls[0])).toEqual([
       "./src/generate-motis-config.py",
       "--import-only",
       "--skip-missing-files",

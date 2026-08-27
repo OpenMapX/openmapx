@@ -9,13 +9,18 @@ import {
 import {
   type CanonicalOfflinePackageRequest,
   canonicalizeOfflinePackageRequest,
-  OFFLINE_PACKAGE_ALGORITHM_VERSION,
   type OfflineMapPackageManifest,
   type OfflinePackageCapability,
   type OfflinePackageJob,
   type OfflinePackageRequest,
   validateOfflineMapPackageManifest,
 } from "@openmapx/core";
+import {
+  assertOfflinePackagePrincipal,
+  MemoryOfflinePackageAccountingStore,
+  type OfflinePackageAccountingStore,
+  OfflinePackagePrincipalQuotaError,
+} from "./accounting.js";
 import { OfflinePackageSourceError } from "./source-catalog.js";
 import type {
   OfflinePackageExtractor,
@@ -28,6 +33,9 @@ import type {
 import { asOfflinePackageJob } from "./types.js";
 
 const DEFAULT_MAX_CONCURRENT = 1;
+const DEFAULT_MAX_QUEUED_JOBS = 64;
+const DEFAULT_MAX_TRACKED_JOBS = 1_024;
+const DEFAULT_TERMINAL_JOB_RETENTION_MS = 24 * 60 * 60 * 1_000;
 const DEFAULT_MAX_PACKAGE_BYTES = 2_000_000_000;
 const DEFAULT_MAX_PACKAGE_COUNT = 32;
 const DEFAULT_MAX_PACKAGE_BYTES_TOTAL = 20_000_000_000;
@@ -38,8 +46,18 @@ const combineGlyphPbf = loadCommonJs("@mapbox/glyph-pbf-composite") as {
   combine(buffers: Buffer[], fontstack?: string): Buffer | undefined;
 };
 
+export class OfflinePackageCapacityError extends Error {
+  readonly errorCode = "capacity" as const;
+
+  constructor(message: string) {
+    super(`offline package capacity: ${message}`);
+    this.name = "OfflinePackageCapacityError";
+  }
+}
+
 function packageErrorCode(error: unknown): OfflinePackageJob["errorCode"] {
   if (error instanceof OfflinePackageSourceError) return "generation-failed";
+  if (error instanceof OfflinePackagePrincipalQuotaError) return "capacity";
   if (error instanceof Error && error.message.startsWith("offline package capacity:")) {
     return "capacity";
   }
@@ -71,35 +89,9 @@ function envPositiveInt(name: string, fallback: number): number {
   return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
-function sourceRequestFromManifest(
-  manifest: OfflineMapPackageManifest,
-): CanonicalOfflinePackageRequest {
-  const source = {
-    datasetId: manifest.dataset.id,
-    datasetVersion: manifest.dataset.version,
-    sourceMaxZoom: manifest.dataset.sourceMaxZoom,
-    sourceBounds: manifest.coverage.bbox,
-    tileSchema: manifest.dataset.tileSchema,
-    glyphsVersion: manifest.glyphs.version,
-    packageAlgorithmVersion: OFFLINE_PACKAGE_ALGORITHM_VERSION,
-    attribution: manifest.attribution,
-  } as const;
-  const request: OfflinePackageRequest = {
-    bbox: manifest.coverage.bbox,
-    minZoom: manifest.coverage.minZoom,
-    maxZoom: manifest.coverage.maxZoom,
-    provider: "openmapx",
-  };
-  return {
-    request,
-    effective: {
-      bbox: manifest.coverage.bbox,
-      minZoom: manifest.coverage.minZoom,
-      maxZoom: manifest.coverage.maxZoom,
-    },
-    source,
-    requestKey: manifest.requestKey,
-  };
+function positiveInt(value: number | undefined, envName: string, fallback: number): number {
+  if (value === undefined) return envPositiveInt(envName, fallback);
+  return Number.isFinite(value) && value > 0 ? Math.floor(value) : fallback;
 }
 
 function sameSourceDescriptor(
@@ -125,15 +117,22 @@ export class OfflinePackageGenerator {
   private readonly extractor: OfflinePackageExtractor;
   private readonly clock: () => Date;
   private readonly maxConcurrent: number;
+  private readonly maxQueuedJobs: number;
+  private readonly maxTrackedJobs: number;
+  private readonly terminalJobRetentionMs: number;
   private readonly maxPackageBytes: number;
   private readonly maxPackageCount: number;
   private readonly maxPackageBytesTotal: number;
   private readonly minFreeBytes: number;
   private readonly logger: OfflinePackageLogger | undefined;
+  private readonly accounting: OfflinePackageAccountingStore;
+  private readonly workerId: string;
+  private readonly leaseMs: number;
   private readonly jobs = new Map<string, OfflinePackageJobRecord>();
-  private readonly requestJobs = new Map<string, string>();
   private readonly pending: OfflinePackageJobRecord[] = [];
+  private readonly inFlightJobIds = new Set<string>();
   private active = 0;
+  private retryTimer: ReturnType<typeof setTimeout> | undefined;
   private initialized = false;
   private initializing: Promise<void> | undefined;
 
@@ -148,6 +147,21 @@ export class OfflinePackageGenerator {
         options.maxConcurrent ?? envPositiveInt("OFFLINE_PACKAGE_WORKERS", DEFAULT_MAX_CONCURRENT),
       ),
     );
+    this.maxQueuedJobs = positiveInt(
+      options.maxQueuedJobs,
+      "OFFLINE_PACKAGE_MAX_QUEUED_JOBS",
+      DEFAULT_MAX_QUEUED_JOBS,
+    );
+    this.maxTrackedJobs = positiveInt(
+      options.maxTrackedJobs,
+      "OFFLINE_PACKAGE_MAX_TRACKED_JOBS",
+      DEFAULT_MAX_TRACKED_JOBS,
+    );
+    this.terminalJobRetentionMs = positiveInt(
+      options.terminalJobRetentionMs,
+      "OFFLINE_PACKAGE_JOB_RETENTION_MS",
+      DEFAULT_TERMINAL_JOB_RETENTION_MS,
+    );
     this.maxPackageBytes =
       options.maxPackageBytes ??
       envPositiveInt("OFFLINE_PACKAGE_MAX_BYTES", DEFAULT_MAX_PACKAGE_BYTES);
@@ -161,6 +175,9 @@ export class OfflinePackageGenerator {
       options.minFreeBytes ??
       envPositiveInt("OFFLINE_PACKAGE_MIN_FREE_BYTES", DEFAULT_MIN_FREE_BYTES);
     this.logger = options.logger;
+    this.accounting = options.accounting ?? new MemoryOfflinePackageAccountingStore();
+    this.workerId = options.workerId ?? randomUUID();
+    this.leaseMs = Math.max(10_000, options.leaseMs ?? 60_000);
   }
 
   async initialize(): Promise<void> {
@@ -168,32 +185,26 @@ export class OfflinePackageGenerator {
     if (this.initializing) return await this.initializing;
     this.initializing = (async () => {
       await this.storage.reconcileOfflinePackageStorage();
-      const packages = await this.storage.listPublishedPackages();
-      for (const item of packages) {
-        const request = sourceRequestFromManifest(item.manifest);
-        const jobId = `recovered-${createHash("sha256").update(item.manifest.packageId).digest("hex").slice(0, 24)}`;
-        const now = this.clock().getTime();
-        const job: OfflinePackageJobRecord = {
-          jobId,
-          request,
-          status: "ready-to-download",
-          packageId: item.manifest.packageId,
-          manifest: item.manifest,
-          createdAtMs: now,
-          updatedAtMs: now,
-        };
-        this.jobs.set(jobId, job);
-        this.requestJobs.set(request.requestKey, jobId);
+      for (const job of await this.accounting.loadRunnable()) {
+        await this.ensureTrackingCapacity(job.createdAtMs);
+        this.jobs.set(job.jobId, job);
+        this.pending.push(job);
       }
       this.initialized = true;
+      this.drain();
     })().finally(() => {
       this.initializing = undefined;
     });
     return await this.initializing;
   }
 
-  async prepare(request: OfflinePackageRequest): Promise<OfflinePackagePreparation> {
+  async prepare(
+    principal: string,
+    request: OfflinePackageRequest,
+  ): Promise<OfflinePackagePreparation> {
+    assertOfflinePackagePrincipal(principal);
     await this.initialize();
+    await this.pruneTerminalJobs(this.clock().getTime());
     const source = await this.sourceFactory();
     let canonical: CanonicalOfflinePackageRequest;
     try {
@@ -218,19 +229,10 @@ export class OfflinePackageGenerator {
         createdAtMs: this.clock().getTime(),
         updatedAtMs: this.clock().getTime(),
       };
+      await this.ensureTrackingCapacity(job.createdAtMs);
+      await this.accounting.admit(principal, job);
       this.jobs.set(job.jobId, job);
       return asOfflinePackageJob(job);
-    }
-
-    const existingJobId = this.requestJobs.get(canonical.requestKey);
-    if (existingJobId) {
-      const existing = this.jobs.get(existingJobId);
-      if (existing && existing.status !== "failed" && existing.status !== "expired") {
-        return asOfflinePackageJob(existing);
-      }
-      // Failed/expired jobs remain addressable by their job ID for diagnostics,
-      // but a new preparation request must be able to retry the immutable key.
-      this.requestJobs.delete(canonical.requestKey);
     }
 
     const packageId = offlinePackageIdForRequest(canonical);
@@ -238,7 +240,7 @@ export class OfflinePackageGenerator {
     if (existingManifest) {
       const now = this.clock().getTime();
       const recovered: OfflinePackageJobRecord = {
-        jobId: `recovered-${packageId.slice(-24)}`,
+        jobId: randomUUID(),
         request: canonical,
         status: "ready-to-download",
         packageId,
@@ -246,35 +248,51 @@ export class OfflinePackageGenerator {
         createdAtMs: now,
         updatedAtMs: now,
       };
-      this.jobs.set(recovered.jobId, recovered);
-      this.requestJobs.set(canonical.requestKey, recovered.jobId);
-      return asOfflinePackageJob(recovered);
+      await this.ensureTrackingCapacity(now);
+      const admission = await this.accounting.admitReady(principal, recovered, existingManifest);
+      for (const evictedPackageId of admission.unreferencedPackageIds) {
+        await this.storage.removePackage(evictedPackageId);
+      }
+      this.jobs.set(admission.record.jobId, admission.record);
+      return asOfflinePackageJob(admission.record);
     }
 
+    if (this.pending.length >= this.maxQueuedJobs) {
+      throw new OfflinePackageCapacityError(
+        `preparation queue is full (${this.maxQueuedJobs} waiting jobs)`,
+      );
+    }
+    const now = this.clock().getTime();
+    await this.ensureTrackingCapacity(now);
     const job: OfflinePackageJobRecord = {
       jobId: randomUUID(),
       request: canonical,
       status: "preparing",
       packageId,
-      createdAtMs: this.clock().getTime(),
-      updatedAtMs: this.clock().getTime(),
+      createdAtMs: now,
+      updatedAtMs: now,
     };
-    this.jobs.set(job.jobId, job);
-    this.requestJobs.set(canonical.requestKey, job.jobId);
-    this.pending.push(job);
+    const admission = await this.accounting.admit(principal, job);
+    for (const evictedPackageId of admission.unreferencedPackageIds) {
+      await this.storage.removePackage(evictedPackageId);
+    }
+    this.jobs.set(admission.record.jobId, admission.record);
+    if (admission.createdJob) this.pending.push(admission.record);
     this.logger?.info("offline-package.prepare", {
-      jobId: job.jobId,
-      packageId: job.packageId,
-      status: job.status,
+      jobId: admission.record.jobId,
+      packageId: admission.record.packageId,
+      status: admission.record.status,
       datasetVersion: canonical.source.datasetVersion,
       glyphsVersion: canonical.source.glyphsVersion,
     });
     this.drain();
-    return asOfflinePackageJob(job);
+    return asOfflinePackageJob(admission.record);
   }
 
-  getJob(jobId: string): OfflinePackagePreparation | undefined {
-    const job = this.jobs.get(jobId);
+  async getJob(principal: string, jobId: string): Promise<OfflinePackagePreparation | undefined> {
+    assertOfflinePackagePrincipal(principal);
+    await this.pruneTerminalJobs(this.clock().getTime());
+    const job = await this.accounting.getOwnedJob(principal, jobId);
     return job ? asOfflinePackageJob(job) : undefined;
   }
 
@@ -399,10 +417,54 @@ export class OfflinePackageGenerator {
         job.errorCode = "expired";
         job.errorMessage = "offline package preparation expired";
         job.updatedAtMs = nowMs;
+        await this.accounting.expire(job.jobId, nowMs);
         expired++;
       }
     }
+    for (let index = this.pending.length - 1; index >= 0; index--) {
+      if (this.pending[index]?.status !== "preparing") this.pending.splice(index, 1);
+    }
+    await this.pruneTerminalJobs(nowMs);
     return expired;
+  }
+
+  private async removeTrackedJob(job: OfflinePackageJobRecord): Promise<void> {
+    await this.accounting.removeTerminal(job.jobId);
+    this.jobs.delete(job.jobId);
+  }
+
+  private terminalJobsOldestFirst(): OfflinePackageJobRecord[] {
+    return [...this.jobs.values()]
+      .filter((job) => job.status !== "preparing")
+      .sort(
+        (left, right) =>
+          left.updatedAtMs - right.updatedAtMs ||
+          left.createdAtMs - right.createdAtMs ||
+          left.jobId.localeCompare(right.jobId),
+      );
+  }
+
+  private async pruneTerminalJobs(nowMs: number): Promise<void> {
+    for (const job of this.terminalJobsOldestFirst()) {
+      if (nowMs - job.updatedAtMs > this.terminalJobRetentionMs) {
+        await this.removeTrackedJob(job);
+      }
+    }
+  }
+
+  private async ensureTrackingCapacity(nowMs: number): Promise<void> {
+    await this.pruneTerminalJobs(nowMs);
+    if (this.jobs.size < this.maxTrackedJobs) return;
+
+    // Under sustained invalid input, retain as much of the diagnostic window
+    // as the hard ceiling permits. Never evict running/queued work.
+    for (const job of this.terminalJobsOldestFirst()) {
+      await this.removeTrackedJob(job);
+      if (this.jobs.size < this.maxTrackedJobs) return;
+    }
+    throw new OfflinePackageCapacityError(
+      `job metadata limit is full (${this.maxTrackedJobs} active or queued jobs)`,
+    );
   }
 
   private drain(): void {
@@ -410,10 +472,56 @@ export class OfflinePackageGenerator {
       const job = this.pending.shift();
       if (job?.status !== "preparing") continue;
       this.active++;
-      void this.run(job).finally(() => {
-        this.active--;
-        this.drain();
+      this.inFlightJobIds.add(job.jobId);
+      void this.accounting
+        .claim(job.jobId, this.workerId, this.maxConcurrent, this.leaseMs)
+        .then(async (claimed) => {
+          if (claimed) await this.run(job);
+          else this.scheduleDrainRetry();
+        })
+        .catch((error) => {
+          this.logger?.warn("offline-package.worker.failed", {
+            jobId: job.jobId,
+            error: packageErrorMessage(error),
+          });
+          this.scheduleDrainRetry();
+        })
+        .finally(() => {
+          this.inFlightJobIds.delete(job.jobId);
+          this.active--;
+          this.drain();
+        });
+    }
+  }
+
+  private scheduleDrainRetry(): void {
+    if (this.retryTimer) return;
+    this.retryTimer = setTimeout(
+      () => {
+        this.retryTimer = undefined;
+        void this.reloadRunnableJobs();
+      },
+      Math.min(1_000, Math.max(100, Math.floor(this.leaseMs / 4))),
+    );
+    this.retryTimer.unref();
+  }
+
+  private async reloadRunnableJobs(): Promise<void> {
+    try {
+      const records = await this.accounting.loadRunnable();
+      const scheduled = new Set([
+        ...this.pending.map((item) => item.jobId),
+        ...this.inFlightJobIds,
+      ]);
+      for (const record of records) {
+        if (!scheduled.has(record.jobId)) this.pending.push(record);
+      }
+      this.drain();
+    } catch (error) {
+      this.logger?.warn("offline-package.queue-reload.failed", {
+        error: packageErrorMessage(error),
       });
+      this.scheduleDrainRetry();
     }
   }
 
@@ -449,6 +557,7 @@ export class OfflinePackageGenerator {
       if (!candidate) {
         throw new Error("offline package capacity: configured package budget is full");
       }
+      if (await this.accounting.hasArtifactReference(candidate.manifest.packageId)) continue;
       if (!(await this.storage.removePackage(candidate.manifest.packageId))) continue;
       usage = {
         packageCount: usage.packageCount - 1,
@@ -464,6 +573,25 @@ export class OfflinePackageGenerator {
 
   private async run(job: OfflinePackageJobRecord): Promise<void> {
     let temporaryPath: string | undefined;
+    let leaseLost = false;
+    const renewTimer = setInterval(
+      () => {
+        void this.accounting
+          .renew(job.jobId, this.workerId, this.leaseMs)
+          .then((renewed) => {
+            if (!renewed) leaseLost = true;
+          })
+          .catch((error) => {
+            leaseLost = true;
+            this.logger?.warn("offline-package.lease-renewal.failed", {
+              jobId: job.jobId,
+              error: packageErrorMessage(error),
+            });
+          });
+      },
+      Math.max(1_000, Math.floor(this.leaseMs / 3)),
+    );
+    renewTimer.unref();
     const startedAtMs = this.clock().getTime();
     this.logger?.info("offline-package.generation.started", {
       jobId: job.jobId,
@@ -527,8 +655,15 @@ export class OfflinePackageGenerator {
         },
         attribution: job.request.source.attribution,
       });
+      if (leaseLost || !(await this.accounting.renew(job.jobId, this.workerId, this.leaseMs))) {
+        throw new Error("offline package durable generation lease was lost");
+      }
       await this.storage.publishPackage({ archivePath: temporaryPath, manifest });
       temporaryPath = undefined;
+      const completion = await this.accounting.complete(job.jobId, this.workerId, manifest);
+      for (const evictedPackageId of completion.unreferencedPackageIds) {
+        await this.storage.removePackage(evictedPackageId);
+      }
       job.manifest = manifest;
       job.status = "ready-to-download";
       job.updatedAtMs = this.clock().getTime();
@@ -543,10 +678,24 @@ export class OfflinePackageGenerator {
       });
     } catch (error) {
       if (temporaryPath) rmSync(temporaryPath, { force: true });
-      job.status = "failed";
-      job.errorCode = packageErrorCode(error);
-      job.errorMessage = packageErrorMessage(error);
-      job.updatedAtMs = this.clock().getTime();
+      if (error instanceof OfflinePackagePrincipalQuotaError && job.packageId) {
+        if (!(await this.accounting.hasArtifactReference(job.packageId))) {
+          await this.storage.removePackage(job.packageId);
+        }
+      }
+      if (job.status === "preparing") {
+        job.status = "failed";
+        job.errorCode = packageErrorCode(error);
+        job.errorMessage = packageErrorMessage(error);
+        job.updatedAtMs = this.clock().getTime();
+        await this.accounting.fail(
+          job.jobId,
+          this.workerId,
+          job.errorCode,
+          job.errorMessage,
+          job.updatedAtMs,
+        );
+      }
       this.logger?.warn("offline-package.generation.failed", {
         jobId: job.jobId,
         packageId: job.packageId,
@@ -556,6 +705,8 @@ export class OfflinePackageGenerator {
         errorCode: job.errorCode,
         durationMs: Math.max(0, job.updatedAtMs - startedAtMs),
       });
+    } finally {
+      clearInterval(renewTimer);
     }
   }
 }

@@ -1,6 +1,10 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import {
+  type TransitousRunnerScript,
+  transitousRunnerArgv,
+} from "@openmapx/core/transitous-runner";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { run as genFullConfigRun } from "../../src/jobs/transitous/gen-full-config.js";
 import { resolveOperationsProfile } from "../../src/jobs/transitous/operations-profile.js";
@@ -61,8 +65,8 @@ function ctxFor(dataDir: string, catalogDir: string, countries: string[] = []) {
     countries,
     // Stub: the stage already wrote config.yml in setup. The feed-proxy
     // sub-step's vars JSON is intentionally absent → it warns and no-ops.
-    runner: async (command, args) => {
-      if (command === "python3" && args.includes("-c")) {
+    runScript: async (run) => {
+      if (run.script === "feed-proxy-vars-to-json") {
         writeFileSync(join(catalogDir, "out", "feed-proxy-vars.json"), "{}");
       }
     },
@@ -141,20 +145,28 @@ describe("gen-full-config tiles disable (promote-config parity)", () => {
 describe("gen-full-config region scoping", () => {
   it("passes the configured countries (without --import-only) to the generator", async () => {
     const fx = setupCatalog(TEMPLATE_WITH_OSM);
-    const calls: Array<{ cmd: string; args: string[] }> = [];
+    const calls: TransitousRunnerScript[] = [];
     const ctx = buildJobContext({
       dataDir: fx.dataDir,
       store: new StateStore(fx.dataDir),
       countries: ["de", "ch"],
-      runner: async (cmd, args) => {
-        calls.push({ cmd, args });
+      runScript: async (run) => {
+        calls.push(run);
       },
       now: () => "2026-05-01T00:00:00.000Z",
     });
     ctx.state.catalogDir = fx.catalogDir;
     await genFullConfigRun(ctx);
-    const py = calls.find((c) => c.cmd === "python3" && !c.args.includes("--feed-proxy"));
-    expect(py?.args).toEqual([
+    const runtimeConfig = calls.find(
+      (run) => run.script === "generate-motis-config" && !run.feedProxy,
+    );
+    expect(runtimeConfig).toEqual({
+      script: "generate-motis-config",
+      importOnly: false,
+      feedProxy: false,
+      countries: ["de", "ch"],
+    });
+    expect(transitousRunnerArgv(runtimeConfig as TransitousRunnerScript)).toEqual([
       "./src/generate-motis-config.py",
       "--skip-missing-files",
       "de",
@@ -174,16 +186,16 @@ timetable:
         - url: https://rt.triptix.tech/feed/de-vbb-0
 `;
 
-  // A ctx whose runner simulates the --feed-proxy run producing feed-proxy
-  // vars (the keys = the feeds our proxy serves), so the selective RT rewrite
-  // has a feed-id set to act on.
+  // A ctx whose script runner simulates the --feed-proxy run producing
+  // feed-proxy vars (the keys = the feeds our proxy serves), so the selective
+  // RT rewrite has a feed-id set to act on.
   function ctxWithProxyVars(catalogDir: string, dataDir: string, proxyKeys: string[]) {
     const ctx = buildJobContext({
       dataDir,
       store: new StateStore(dataDir),
       countries: ["de"],
-      runner: async (cmd, args) => {
-        if (cmd === "python3" && args.includes("-c")) {
+      runScript: async (run) => {
+        if (run.script === "feed-proxy-vars-to-json") {
           const vars = Object.fromEntries(
             proxyKeys.map((k) => [k, { url: `https://origin.example/gtfsrt/${k}` }]),
           );

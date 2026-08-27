@@ -1,6 +1,7 @@
 import { jobStages, jobs } from "@openmapx/db-schema";
 import { eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
+import { scrubDiagnosticValue, scrubSecrets } from "../../utils/scrub-secrets.js";
 import type { JobLogger, StageResult, StageStatus } from "./types.js";
 
 export interface CreateJobOptions {
@@ -42,6 +43,15 @@ export function makePersistingOnStageComplete(
 ): (result: StageResult) => Promise<void> {
   return async (result) => {
     try {
+      const diagnostics = scrubDiagnosticValue({
+        message: result.message ?? null,
+        error: result.error ?? null,
+        artifacts: result.artifacts ?? null,
+      }) as {
+        message: string | null;
+        error: StageResult["error"] | null;
+        artifacts: Record<string, unknown> | null;
+      };
       await db.insert(jobStages).values({
         jobId,
         stage: result.stage,
@@ -49,13 +59,15 @@ export function makePersistingOnStageComplete(
         startedAt: new Date(result.startedAt),
         finishedAt: new Date(result.finishedAt),
         durationMs: result.durationMs,
-        message: result.message ?? null,
-        error: result.error ?? null,
-        artifacts: result.artifacts ?? null,
+        message: diagnostics.message,
+        error: diagnostics.error,
+        artifacts: diagnostics.artifacts,
       });
     } catch (err) {
       logger.warn(
-        `transitous-pipeline: failed to persist stage result for ${result.stage}: ${(err as Error).message}`,
+        scrubSecrets(
+          `transitous-pipeline: failed to persist stage result for ${result.stage}: ${(err as Error).message}`,
+        ),
       );
     }
   };

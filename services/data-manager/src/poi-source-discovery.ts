@@ -15,15 +15,13 @@ export interface DiscoveryLogger {
 export interface DiscoveryOptions {
   /** Repo root — typically OPENMAPX_ROOT_DIR. Required. */
   rootDir: string;
-  /** Optional community integrations dir — typically OPENMAPX_CUSTOM_INTEGRATIONS_DIR. */
-  customIntegrationsDir?: string;
   logger: DiscoveryLogger;
   /** Test seam: inject a custom dynamic-importer (default: native import()). */
   importModule?: (url: string) => Promise<unknown>;
 }
 
 export interface DiscoveryResult {
-  /** Total integration dirs scanned across both roots. */
+  /** Total trusted built-in integration dirs scanned. */
   scanned: number;
   /** Integrations whose poi-sources module was importable. */
   withSources: number;
@@ -80,17 +78,15 @@ function isPoiSourceArray(value: unknown): value is PoiSource[] {
 }
 
 /**
- * Walks integration dirs under rootDir + optional customIntegrationsDir,
- * dynamically imports each `poi-sources.{js,ts}` module, calls
+ * Walks trusted built-in integration dirs under rootDir, dynamically imports
+ * each `poi-sources.{js,ts}` module, calls
  * `declarePoiSources()`, and feeds the result into the shared registry.
  *
- * Builtin (rootDir/integrations/*) failures are FATAL: they mean the image's
- * own baked integration code is broken, so this throws after the full scan
- * (collecting every builtin failure first) rather than silently registering
- * an incomplete source list. Community (customIntegrationsDir/*) failures
- * stay isolated per integration — one broken community module does not
- * crash the data-manager. The drift guard (A-bis.4) surfaces persistent
- * cross-process discrepancies.
+ * Failures are FATAL: they mean the image's own baked integration code is
+ * broken, so this throws after the full scan rather than silently registering
+ * an incomplete source list. Community POI modules are never inspected or
+ * imported here: this process holds database, Docker, and host-filesystem
+ * authority and therefore is not a JavaScript sandbox.
  *
  * Prod note: data-manager runs `tsx` in dev (.ts imports work) and node in
  * prod (.js only). For .ts files to load in prod, the runtime must include
@@ -100,9 +96,8 @@ function isPoiSourceArray(value: unknown): value is PoiSource[] {
 export async function discoverPoiSources(opts: DiscoveryOptions): Promise<DiscoveryResult> {
   const importFn = opts.importModule ?? ((url: string) => import(url));
   const builtin = listIntegrationDirs(resolve(opts.rootDir, "integrations"));
-  const community = listIntegrationDirs(opts.customIntegrationsDir);
   const builtinDirs = new Set(builtin);
-  const dirs = [...builtin, ...community];
+  const dirs = builtin;
 
   const result: DiscoveryResult = {
     scanned: dirs.length,

@@ -1,10 +1,7 @@
 import { existsSync, mkdirSync } from "node:fs";
 import { ensureCatalog } from "@openmapx/transitous-core";
-import {
-  parseRefShaPair,
-  readTransitousLock,
-  readTransitousLockProposal,
-} from "../../transitous-lock.js";
+import { runOpsOperation } from "../../ops-client.js";
+import { parseRefShaPair } from "../../transitous-lock.js";
 import {
   DEFAULT_TRANSITOUS_REPO_URL,
   ensureTransitousWorkdirs,
@@ -39,13 +36,7 @@ export const run: StageFn = async (ctx) => {
       reset: true,
     });
 
-    await enforceTransitousLock(
-      catalogDir,
-      ctx.repoRoot,
-      ctx.runner,
-      ctx.logger,
-      ctx.useProposedLock ?? false,
-    );
+    await enforceTransitousLock(catalogDir, ctx.runner, ctx.logger, ctx.useProposedLock ?? false);
     ensureTransitousWorkdirs(catalogDir, ctx.outDir, ctx.downloadsDir);
     pruneOrphanedGtfsDatasets(ctx);
 
@@ -100,47 +91,61 @@ function pruneOrphanedGtfsDatasets(ctx: JobContext): void {
   }
 }
 
+/** A pinned catalog commit is an exact 40-character object id, nothing shorter. */
+const FULL_COMMIT_SHA = /^[0-9a-f]{40}$/;
+
 /**
- * If a lockfile exists at `<repoRoot>/infra/docker/transitous.lock.json`,
- * hard-reset the catalog to the pinned SHA before running the pipeline.
- * When no lockfile exists, log a warning and continue.
+ * Hard-reset the catalog to the SHA pinned in
+ * the agent-owned `infra/docker/transitous.lock.json` before running the pipeline.
+ *
+ * This fails CLOSED. A missing repo root, a missing, unreadable, or malformed
+ * lockfile, or a ref whose SHA is not an exact 40-hex commit all abort
+ * preparation. Continuing would run upstream Transitous code against whatever
+ * the catalog's remote HEAD happens to be — code that was never reviewed and is
+ * not what any operator pinned.
  */
 async function enforceTransitousLock(
   catalogDir: string,
-  repoRoot: string | undefined,
   runner: JobContext["runner"],
   logger: JobLogger,
   useProposedLock: boolean,
 ): Promise<void> {
-  if (!repoRoot) {
-    logger.warn(
-      "transitous-pipeline: no repoRoot supplied; skipping lockfile enforcement (run `pnpm openmapx transitous bump` to pin)",
-    );
-    return;
-  }
-  let lock: ReturnType<typeof readTransitousLock>;
+  let lock: { ref: string } | null;
   try {
-    // The auto-bump canary validates the proposed ref in the staging slot
-    // before it is activated; every other run enforces the active lock.
-    lock = useProposedLock
-      ? (readTransitousLockProposal(repoRoot) ?? readTransitousLock(repoRoot))
-      : readTransitousLock(repoRoot);
+    // The lock is agent-owned; data-manager reads it through the typed
+    // operation rather than bind-mounting the host checkout. The auto-bump
+    // canary validates the proposed ref in the staging slot before it is
+    // activated; every other run enforces the active lock.
+    const slots = await runOpsOperation({ kind: "transitousLock.inspect" });
+    lock = useProposedLock ? (slots.proposed ?? slots.active) : slots.active;
   } catch (error) {
-    logger.warn(
-      `transitous-pipeline: failed to read lockfile (${(error as Error).message}); continuing without pin`,
+    throw new Error(
+      `transitous-pipeline: refusing to run — the catalog lock could not be read (${(error as Error).message})`,
     );
-    return;
   }
   if (!lock) {
-    logger.warn(
-      "transitous-pipeline: no infra/docker/transitous.lock.json found; running against catalog HEAD (run `pnpm openmapx transitous bump` to pin)",
+    throw new Error(
+      "transitous-pipeline: refusing to run — no infra/docker/transitous.lock.json is pinned (run `pnpm openmapx transitous bump`)",
     );
-    return;
   }
   if (useProposedLock) {
     logger.info(`transitous-pipeline: enforcing PROPOSED lock ${lock.ref} (auto-bump canary)`);
   }
-  const { sha } = parseRefShaPair(lock.ref);
+  let sha: string;
+  try {
+    ({ sha } = parseRefShaPair(lock.ref));
+  } catch (error) {
+    throw new Error(
+      `transitous-pipeline: refusing to run — the catalog lock ref is malformed (${(error as Error).message})`,
+    );
+  }
+  if (!FULL_COMMIT_SHA.test(sha)) {
+    // An abbreviated SHA is ambiguous and a symbolic ref is mutable; neither
+    // identifies exactly one reviewed commit.
+    throw new Error(
+      "transitous-pipeline: refusing to run — the catalog lock must pin an exact 40-character commit",
+    );
+  }
   const safeArgs = safeDirArgs(catalogDir);
   const currentSha = await readGitHeadSha(catalogDir);
   if (currentSha === sha) return;

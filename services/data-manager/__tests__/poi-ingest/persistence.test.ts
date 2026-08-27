@@ -263,6 +263,57 @@ describe("makePoiPersistingOnStageComplete", () => {
     expect(logger.warns[0]?.[0]).toContain("connection refused");
   });
 
+  it("scrubs all persisted diagnostic fields without mutating the stage result", async () => {
+    const { makePoiPersistingOnStageComplete } = await import(
+      "../../src/jobs/poi-ingest/persistence.js"
+    );
+    const logger = makeLogger();
+    const hook = makePoiPersistingOnStageComplete("job-abc", logger);
+    const result: PoiIngestStageResult = {
+      stage: "fetch",
+      status: "error",
+      startedAt: "2026-05-24T00:00:00.000Z",
+      finishedAt: "2026-05-24T00:00:01.000Z",
+      durationMs: 1000,
+      message: "GET https://user:MESSAGE-PASSWORD@example.org/feed?token=MESSAGE-TOKEN failed",
+      error: {
+        message: "Authorization: Bearer ERROR-BEARER-TOKEN",
+        stack: "at GET (https://example.org/feed?key=STACK-TOKEN)",
+      },
+      artifacts: {
+        request: { url: "https://user:ARTIFACT-PASSWORD@example.org/feed?key=ARTIFACT-TOKEN" },
+      },
+    };
+
+    await hook(result);
+
+    const persisted = insertCalls[0]?.values as Record<string, unknown>;
+    const serialized = JSON.stringify(persisted);
+    expect(serialized).not.toMatch(
+      /MESSAGE-PASSWORD|MESSAGE-TOKEN|ERROR-BEARER-TOKEN|STACK-TOKEN|ARTIFACT-PASSWORD|ARTIFACT-TOKEN/,
+    );
+    expect(serialized).toContain("example.org");
+    expect(serialized).toContain("[redacted]");
+    expect(result.message).toContain("MESSAGE-TOKEN");
+    expect(result.error?.stack).toContain("STACK-TOKEN");
+  });
+
+  it("scrubs a database error before passing it to a non-Pino logger", async () => {
+    const { makePoiPersistingOnStageComplete } = await import(
+      "../../src/jobs/poi-ingest/persistence.js"
+    );
+    const logger = makeLogger();
+    insertShouldThrow = new Error(
+      "connection https://db-user:DB-PASSWORD@db.example.org/openmapx?token=DB-TOKEN refused",
+    );
+    const hook = makePoiPersistingOnStageComplete("job-abc", logger);
+
+    await hook(stageResult);
+
+    expect(logger.warns[0]?.[0]).toContain("db.example.org");
+    expect(logger.warns[0]?.[0]).not.toMatch(/DB-PASSWORD|DB-TOKEN|db-user/);
+  });
+
   it("normalises missing optional fields to null", async () => {
     const { makePoiPersistingOnStageComplete } = await import(
       "../../src/jobs/poi-ingest/persistence.js"
@@ -344,6 +395,27 @@ describe("upsertPoiFeedState", () => {
     expect(update.lastError).toEqual({ message: "fetch failed", stack: "stack-trace" });
     // Should be a SQL fragment for `consecutive_failures + 1`, not a literal.
     expect(typeof update.consecutiveFailures).toBe("object");
+  });
+
+  it("scrubs the error message and stack stored in feed state", async () => {
+    const { upsertPoiFeedState } = await import("../../src/jobs/poi-ingest/persistence.js");
+    const sourceError = {
+      message: "fetch https://user:STATE-PASSWORD@example.org/feed?token=STATE-TOKEN failed",
+      stack: "at fetch (https://example.org/feed?key=STACK-STATE-TOKEN)",
+    };
+
+    await upsertPoiFeedState({
+      sourceId: "bnetza-ev",
+      domain: "ev-charging",
+      result: baseResult({ kind: "static", status: "error", error: sourceError }),
+    });
+
+    const persisted = (insertCalls[0]?.values as Record<string, unknown>).lastError;
+    expect(JSON.stringify(persisted)).not.toMatch(
+      /STATE-PASSWORD|STATE-TOKEN|STACK-STATE-TOKEN|user/,
+    );
+    expect(JSON.stringify(persisted)).toContain("example.org");
+    expect(sourceError.message).toContain("STATE-TOKEN");
   });
 
   it("falls back to the last failing stage's error when result.error is absent", async () => {

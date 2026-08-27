@@ -5,7 +5,7 @@ import {
 } from "../../src/jobs/search-index/schema.js";
 import { startPostgis } from "../poi-ingest/_testcontainer.js";
 
-const skipE2e = process.env.OPENMAPX_RUN_POSTGRES_TESTS !== "1";
+const skipE2e = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
 describe.skipIf(skipE2e)("search-index schema in PostGIS", () => {
   it("creates constrained tables and usable term/proximity indexes", async () => {

@@ -1,4 +1,8 @@
-import { assertFeedUrlAllowed, privateFeedHostAllowlist } from "@openmapx/core/utils/safe-download";
+import { createHash } from "node:crypto";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { safeDownload } from "@openmapx/core/utils/safe-download";
 import type {
   BundledPoiSpec,
   LivePoiSpec,
@@ -6,6 +10,7 @@ import type {
   RegisteredPoiSource,
   StaticPoiSpec,
 } from "@openmapx/poi-source-registry";
+import { scrubSecrets, scrubSecretsOptional } from "../../../utils/scrub-secrets.js";
 import type { PoiIngestKind, PoiIngestStageResult, PoiJobContext } from "../types.js";
 
 type FetchableSpec = StaticPoiSpec | LivePoiSpec | BundledPoiSpec;
@@ -17,32 +22,7 @@ type FetchableSpec = StaticPoiSpec | LivePoiSpec | BundledPoiSpec;
  * Raise it for a specific source with `fetch.maxBytes` rather than globally.
  */
 const DEFAULT_MAX_FETCH_BYTES = 256 * 1024 * 1024;
-
-async function readBounded(response: Response, maxBytes: number, url: string): Promise<Buffer> {
-  if (!response.body) {
-    // Test doubles and some runtimes hand back a bodyless Response; fall back
-    // to the buffered read, still bounded by the check above.
-    const fallback = Buffer.from(await response.arrayBuffer());
-    if (fallback.byteLength > maxBytes) {
-      throw new Error(`fetch ${url} exceeded max ${maxBytes} bytes`);
-    }
-    return fallback;
-  }
-  const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
-  let total = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    total += value.byteLength;
-    if (total > maxBytes) {
-      await reader.cancel().catch(() => {});
-      throw new Error(`fetch ${url} exceeded max ${maxBytes} bytes`);
-    }
-    chunks.push(value);
-  }
-  return Buffer.concat(chunks.map((chunk) => Buffer.from(chunk)));
-}
+const HARD_MAX_FETCH_BYTES = 2 * 1024 * 1024 * 1024;
 
 /**
  * Pick the spec for the given pipeline kind. Throws (synchronously) for
@@ -76,11 +56,6 @@ async function resolveUrl(spec: FetchableSpec, ctx: PoiJobContext): Promise<stri
   if (spec.resolveUrl) {
     const dynamic = await spec.resolveUrl(ctx.logger);
     if (dynamic) {
-      // A dynamic URL is scraped from a remote page or read out of a remote
-      // API response, so the target host is chosen by third-party content.
-      // Static `fetch.url` values are constants in this repository and are
-      // deliberately left alone.
-      await assertFeedUrlAllowed(dynamic, privateFeedHostAllowlist());
       return dynamic;
     }
   }
@@ -94,16 +69,12 @@ async function resolveUrl(spec: FetchableSpec, ctx: PoiJobContext): Promise<stri
 export async function run(ctx: PoiJobContext): Promise<PoiIngestStageResult> {
   const startedAt = nowIso(ctx);
   const startMs = Date.now();
+  let downloadDirectory: string | undefined;
 
   try {
     const spec = getSpec(ctx.source, ctx.kind);
     const fetchSpec = spec.fetch;
     const url = await resolveUrl(spec, ctx);
-    const fetchImpl = ctx.fetch ?? globalThis.fetch;
-    if (!fetchImpl) {
-      throw new Error("no fetch implementation available (globalThis.fetch is undefined)");
-    }
-
     // Static `headers` first, then async `resolveHeaders` — letting the
     // resolved values win on conflict so per-source env-based auth (UTMC
     // Basic, DB BahnPark, NSW) can override a placeholder declared in the
@@ -115,51 +86,55 @@ export async function run(ctx: PoiJobContext): Promise<PoiIngestStageResult> {
       Object.assign(headers, resolved);
     }
 
-    const timeoutMs = fetchSpec.timeoutMs ?? 60_000;
-    // Compose timeout with the caller's abort signal so an external cancel
-    // also tears down the in-flight HTTP request.
-    const timeoutSignal = AbortSignal.timeout(timeoutMs);
-    const composed =
-      typeof AbortSignal.any === "function"
-        ? AbortSignal.any([ctx.abortSignal, timeoutSignal])
-        : ctx.abortSignal.aborted
-          ? ctx.abortSignal
-          : timeoutSignal;
-
-    const response = await fetchImpl(url, {
-      headers,
-      signal: composed,
-    });
-
-    if (!response.ok) {
-      throw new Error(`fetch ${url} failed: HTTP ${response.status} ${response.statusText}`);
-    }
-
     const maxBytes = fetchSpec.maxBytes ?? DEFAULT_MAX_FETCH_BYTES;
-    const declaredLength = Number(response.headers.get("content-length"));
-    if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    if (!Number.isSafeInteger(maxBytes) || maxBytes <= 0) {
+      throw new Error(`source "${ctx.source.id}": compressed-byte limit must be positive`);
+    }
+    if (maxBytes > HARD_MAX_FETCH_BYTES) {
       throw new Error(
-        `fetch ${url} refused: declared Content-Length ${declaredLength} exceeds max ${maxBytes} bytes`,
+        `source "${ctx.source.id}": compressed-byte limit exceeds 2 GiB hard maximum`,
       );
     }
-    const buffer = await readBounded(response, maxBytes, url);
+
+    const timeoutMs = fetchSpec.timeoutMs ?? 60_000;
+    downloadDirectory = await mkdtemp(join(tmpdir(), "openmapx-poi-download-"));
+    const destination = join(downloadDirectory, "payload");
+    const downloader = ctx.download ?? safeDownload;
+    const result = await downloader({
+      url: new URL(url),
+      destination,
+      headers,
+      timeoutMs,
+      maxBytes,
+      allowedContentTypes: [],
+      credentialPolicy: Object.keys(headers).length > 0 ? "same-origin" : "none",
+      signal: ctx.abortSignal,
+    });
+    const buffer = await readFile(destination);
     ctx.state.fetched = buffer;
 
     const finishedAt = nowIso(ctx);
+    const durationMs = Date.now() - startMs;
+    const audit = {
+      sourceKind: "poi",
+      hostname: result.finalUrl.hostname,
+      bytes: result.bytesWritten,
+      durationMs,
+      sha256: createHash("sha256").update(buffer).digest("hex"),
+    };
+    ctx.logger.info("poi-ingest: safe remote acquisition complete", audit);
     return {
       stage: "fetch",
       status: "ok",
       startedAt,
       finishedAt,
-      durationMs: Date.now() - startMs,
-      artifacts: {
-        bytes: buffer.byteLength,
-        statusCode: response.status,
-        url,
-      },
+      durationMs,
+      artifacts: audit,
     };
   } catch (err) {
     const error = err as Error;
+    const message = scrubSecrets(error.message);
+    const stack = scrubSecretsOptional(error.stack);
     const finishedAt = nowIso(ctx);
     return {
       stage: "fetch",
@@ -167,8 +142,12 @@ export async function run(ctx: PoiJobContext): Promise<PoiIngestStageResult> {
       startedAt,
       finishedAt,
       durationMs: Date.now() - startMs,
-      message: error.message,
-      error: { message: error.message, stack: error.stack },
+      message,
+      error: stack ? { message, stack } : { message },
     };
+  } finally {
+    if (downloadDirectory) {
+      await rm(downloadDirectory, { recursive: true, force: true });
+    }
   }
 }

@@ -21,10 +21,15 @@ import * as mirrorStage from "./mirror.js";
 import * as motisHealthStage from "./motis-health.js";
 import * as motisImportStage from "./motis-import.js";
 import { type MotisOperationsPolicy, resolveOperationsProfile } from "./operations-profile.js";
+import { getOperatorFeedRelayStore, type OperatorFeedRelayStore } from "./operator-feed-relay.js";
 import * as preflightStage from "./preflight.js";
 import * as prepareStage from "./prepare.js";
 import * as promoteStage from "./promote.js";
 import * as proxyTransactionStage from "./proxy-transaction.js";
+import {
+  createDefaultTransitousScriptRunner,
+  type TransitousScriptRunner,
+} from "./script-runner.js";
 import { ensureMotisSlotLayout } from "./slot-state.js";
 import type {
   CommandRunner,
@@ -177,6 +182,17 @@ export async function runTransitousPipeline(
     } catch {
       // Best effort only.
     }
+    try {
+      await ctx.operatorFeedRelay.endRun(ctx.jobId);
+    } catch (error) {
+      ctx.logger.error(
+        `transitous-pipeline: operator feed relay cleanup failed: ${(error as Error).message}`,
+      );
+      const cleanupError = new Error("Operator feed relay cleanup failed");
+      hardStopError = hardStopError
+        ? new Error(`${hardStopError.message}; ${cleanupError.message}`)
+        : cleanupError;
+    }
   }
 
   if (hardStopError) throw hardStopError;
@@ -205,7 +221,9 @@ export interface BuildJobContextOptions {
   transitousRepoUrl?: string;
   apiKeysPath?: string;
   feedsOverlayPath?: string;
+  operatorFeedRelay?: OperatorFeedRelayStore;
   runner?: CommandRunner;
+  runScript?: TransitousScriptRunner;
   now?: () => string;
   logger?: JobLogger;
   abortSignal?: AbortSignal;
@@ -271,11 +289,13 @@ export function buildJobContext(opts: BuildJobContextOptions): JobContext {
     abortSignal: opts.abortSignal ?? new AbortController().signal,
     onStageComplete: opts.onStageComplete ?? (async () => {}),
     runner: opts.runner ?? defaultRunner,
+    runScript: opts.runScript ?? createDefaultTransitousScriptRunner(),
     now: opts.now ?? (() => new Date().toISOString()),
     store: opts.store,
     transitousRepoUrl: opts.transitousRepoUrl,
     apiKeysPath: opts.apiKeysPath,
     feedsOverlayPath: opts.feedsOverlayPath,
+    operatorFeedRelay: opts.operatorFeedRelay ?? getOperatorFeedRelayStore(),
     useProposedLock: opts.useProposedLock,
     state: {},
   };
