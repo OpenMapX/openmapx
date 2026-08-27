@@ -15,8 +15,8 @@ const encoder = new TextEncoder();
  * `canonicalize` package (the JCS reference implementation, EXACT version
  * @openconditions/contrib-core uses); nothing here is hand-rolled.
  *
- * @throws TypeError when the value contains a non-finite number, is nested too
- *   deeply to canonicalize, or is not JSON-serializable at all
+ * @throws TypeError when the value contains a non-finite number or lone
+ *   surrogate, is nested too deeply to canonicalize, or is not JSON-serializable at all
  *   (undefined, function, symbol); Error on a circular reference.
  */
 export function canonicalClaimBytes(claim: unknown): Uint8Array<ArrayBuffer> {
@@ -29,6 +29,9 @@ export function canonicalClaimBytes(claim: unknown): Uint8Array<ArrayBuffer> {
     }
     if (err instanceof Error && /NaN|Infinity/.test(err.message)) {
       throw new TypeError("canonicalClaimBytes: non-finite number in value");
+    }
+    if (err instanceof Error && /Lone surrogate/.test(err.message)) {
+      throw new TypeError("canonicalClaimBytes: lone surrogate in value");
     }
     throw err;
   }
