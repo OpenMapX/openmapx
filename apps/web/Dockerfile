@@ -8,9 +8,6 @@ RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/pa
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# The lockfile references patched dependencies by file hash, so `pnpm install`
-# cannot resolve without the patch itself.
-COPY patches/ patches/
 COPY packages/command-palette/package.json packages/command-palette/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/

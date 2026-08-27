@@ -81,11 +81,12 @@ describe("production supply-chain policy", () => {
     expect(violations).toEqual([]);
   });
 
-  it("stages the patch directory in every image that installs from the lockfile", () => {
+  it("stages patches exactly when an image's workspace lockfile requires them", () => {
     // `patchedDependencies` makes the lockfile reference each patch by file
     // hash, so a `pnpm install --frozen-lockfile` that cannot read the patch
-    // fails outright. Every image that installs must therefore copy the
-    // patches its own workspace root declares.
+    // fails outright. Conversely, Docker rejects a COPY when that workspace's
+    // patch directory no longer exists. Keep each install stage in exact sync
+    // with the patches its own workspace root declares.
     for (const [workspaceRoot, dockerfiles] of [
       [
         ".",
@@ -102,12 +103,14 @@ describe("production supply-chain policy", () => {
       const workspace = read(
         `${workspaceRoot === "." ? "" : `${workspaceRoot}/`}pnpm-workspace.yaml`,
       );
-      if (!workspace.includes("patchedDependencies:")) continue;
+      const hasPatchedDependencies = workspace.includes("patchedDependencies:");
       for (const dockerfile of dockerfiles) {
         const contents = read(dockerfile);
         const installs = contents.match(/pnpm install --frozen-lockfile/g)?.length ?? 0;
         expect(installs, dockerfile).toBeGreaterThan(0);
-        expect(contents.match(/COPY patches\/ patches\//g)?.length ?? 0, dockerfile).toBe(installs);
+        expect(contents.match(/COPY patches\/ patches\//g)?.length ?? 0, dockerfile).toBe(
+          hasPatchedDependencies ? installs : 0,
+        );
       }
     }
   });

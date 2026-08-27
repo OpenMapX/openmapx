@@ -8,9 +8,6 @@ RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/pa
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# The lockfile references patched dependencies by file hash, so `pnpm install`
-# cannot resolve without the patch itself.
-COPY patches/ patches/
 COPY packages/core/package.json packages/core/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
@@ -39,9 +36,6 @@ RUN pnpm install --frozen-lockfile
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# The lockfile references patched dependencies by file hash, so `pnpm install`
-# cannot resolve without the patch itself.
-COPY patches/ patches/
 COPY packages/core/package.json packages/core/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/

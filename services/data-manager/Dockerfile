@@ -38,9 +38,6 @@ WORKDIR /app
 ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-# The lockfile references patched dependencies by file hash, so `pnpm install`
-# cannot resolve without the patch itself.
-COPY patches/ patches/
 COPY services/data-manager/package.json services/data-manager/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
@@ -71,9 +68,6 @@ WORKDIR /app
 ENV HUSKY=0
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
-# The lockfile references patched dependencies by file hash, so `pnpm install`
-# cannot resolve without the patch itself.
-COPY patches/ patches/
 COPY services/data-manager/package.json services/data-manager/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/

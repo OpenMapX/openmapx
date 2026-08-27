@@ -33,9 +33,6 @@ FROM base AS deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# The lockfile references patched dependencies by file hash, so `pnpm install`
-# cannot resolve without the patch itself.
-COPY patches/ patches/
 COPY packages/ packages/
 COPY apps/transitous-runner/package.json apps/transitous-runner/
 RUN pnpm install --frozen-lockfile
@@ -44,9 +41,6 @@ FROM base AS prod-deps
 WORKDIR /app
 ENV HUSKY=0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
-# The lockfile references patched dependencies by file hash, so `pnpm install`
-# cannot resolve without the patch itself.
-COPY patches/ patches/
 COPY packages/ packages/
 COPY apps/transitous-runner/package.json apps/transitous-runner/
 RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
