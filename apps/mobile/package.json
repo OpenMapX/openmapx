@@ -55,8 +55,8 @@
     "jest": "^30.4.2",
     "jest-expo": "^57.0.4",
     "test-renderer": "^1.2.0",
-    "tsx": "4.23.11",
-    "typescript": "^6.0.3"
+    "tsx": "4.23.12",
+    "typescript": "^7.0.2"
   },
   "expo": {
     "install": {
