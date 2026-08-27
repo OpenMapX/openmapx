@@ -17,7 +17,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "canonicalize": "3.0.0"
+    "canonicalize": "4.0.0"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",
