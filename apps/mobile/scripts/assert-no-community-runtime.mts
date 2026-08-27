@@ -2,24 +2,18 @@
 /**
  * Fails when the shell could execute code a reviewer never saw.
  *
- * Community integration bundles are same-origin arbitrary JavaScript with full
- * access to the page's globals. That is a reasonable thing for a self-hosted web
- * app whose operator chose to install them. It is not a reasonable thing for a
- * signed store binary: it is remote code execution by design, it crosses the
- * native bridge's trust boundary, and it is precisely what app review exists to
- * prevent.
+ * Community integration bundles are arbitrary JavaScript with full access to
+ * the page's globals and authenticated origin. Until OpenMapX has a separate
+ * presentation isolation boundary, neither the browser nor a signed shell may
+ * load them.
  *
- * The guard is structural rather than behavioural. Rather than run a browser and
- * watch for a request, it reads the committed source and asserts that the only
- * place a bundle script can be created is gated on the synchronous shell
- * descriptor, and that nothing anywhere offers a way to turn that gate off.
- *
- * It deliberately does *not* fail because the separately deployed PWA bundle
- * still contains the integration framework. That framework is a browser feature
- * and stays one; what matters is that the installed shell never reaches it.
+ * The guard is structural rather than behavioural. Browser tests exercise the
+ * provider, while this release check makes the stronger source-level assertion
+ * that the production provider contains no bundle script creation, bundle URL,
+ * or community registry initialization path at all.
  */
 
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const repoRoot = resolve(import.meta.dirname, "../../..");
@@ -51,32 +45,40 @@ function withoutComments(source: string): string {
   return source.replace(/\/\*[\s\S]*?\*\//g, "").replace(/\/\/.*$/gm, "");
 }
 
-/** The one place a community bundle script is created. */
+/** The production provider must contain no executable community loading path. */
 const PROVIDER = "apps/web/src/providers/IntegrationProvider.tsx";
 const provider = read(PROVIDER);
 
 if (provider) {
-  if (!provider.includes("shellFeatureBoundary")) {
-    findings.push({
-      file: PROVIDER,
-      problem: "does not consult the shell feature boundary before loading bundles",
-    });
+  const forbiddenLoaderFragments = [
+    'document.createElement("script")',
+    "/bundle/index.js",
+    "initCommunityIntegrationRegistry",
+    "communityBundlesAllowed",
+  ];
+  for (const fragment of forbiddenLoaderFragments) {
+    if (provider.includes(fragment)) {
+      findings.push({
+        file: PROVIDER,
+        problem: `contains disabled bundle loader path: ${fragment}`,
+      });
+    }
   }
-  if (!provider.includes("communityBundlesAllowed")) {
-    findings.push({
-      file: PROVIDER,
-      problem: "has no explicit gate on community bundle loading",
-    });
-  }
-  // The gate has to precede the loop that appends scripts, not sit inside a
-  // branch the loop can skip.
-  const gateIndex = provider.indexOf("if (!communityBundlesAllowed) return;");
-  const createIndex = provider.indexOf('document.createElement("script")');
-  if (gateIndex < 0 || (createIndex >= 0 && gateIndex > createIndex)) {
-    findings.push({
-      file: PROVIDER,
-      problem: "the bundle gate does not run before a script element is created",
-    });
+}
+
+/** Deleted loaders and generated runtime artifacts must stay deleted. */
+for (const file of [
+  "apps/web/src/lib/communityRuntime.ts",
+  "apps/web/src/components/map/HostMapProvider.tsx",
+  "apps/web/scripts/build-runtime-modules.mjs",
+  "apps/web/public/runtime/importmap.json",
+  "apps/web/public/runtime/openmapx-core.js",
+  "apps/web/public/runtime/openmapx-integration-sdk.js",
+  "apps/web/public/runtime/react-dom-client.js",
+  "apps/web/public/runtime/react.js",
+]) {
+  if (existsSync(resolve(repoRoot, file))) {
+    findings.push({ file, problem: "obsolete executable community runtime artifact still exists" });
   }
 }
 
@@ -85,12 +87,6 @@ const BOUNDARY = "apps/web/src/lib/mobile/mobileShellEnvironment.ts";
 const boundary = read(BOUNDARY);
 
 if (boundary) {
-  if (!/communityFrontendBundles:\s*false/.test(boundary)) {
-    findings.push({
-      file: BOUNDARY,
-      problem: "the shell boundary does not disable community frontend bundles",
-    });
-  }
   if (!/microphone:\s*false/.test(boundary)) {
     findings.push({
       file: BOUNDARY,

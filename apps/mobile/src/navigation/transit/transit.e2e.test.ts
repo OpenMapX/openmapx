@@ -1,4 +1,8 @@
-import type { TransitMobileSession, WebToNativeMessage } from "@openmapx/core/navigation";
+import {
+  MOBILE_PROTOCOL_MAX,
+  type TransitMobileSession,
+  type WebToNativeMessage,
+} from "@openmapx/core/navigation";
 import type { RawLocation } from "../../location/sanitiseFixes";
 import type { Database } from "../../storage/database";
 import { migrateSessionSchema } from "../../storage/migrations";
@@ -137,7 +141,7 @@ function cmd(
 ): WebToNativeMessage {
   messageCounter += 1;
   return {
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type,
     messageId: extra.messageId ?? `t-e2e-${messageCounter}`,
     channelNonce: "nonce",

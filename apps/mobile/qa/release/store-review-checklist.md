@@ -47,4 +47,4 @@ The things a reviewer actually checks, in the order they usually check them.
 - [ ] The uploaded artifact's SHA-256 matches the one in the release manifest.
 - [ ] The reviewed web build is frozen for the duration of review — a deploy
       mid-review changes what the reviewer sees.
-- [ ] Old protocol support is retained through rollout.
+- [ ] The reviewed shell and frozen web build both advertise protocol v3 only.

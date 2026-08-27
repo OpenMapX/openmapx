@@ -5,9 +5,9 @@
   "androidVersionCode": 1,
   "androidVersionName": "1.0.0",
   "protocol": {
-    "$comment": "What this binary can negotiate. The minimum stays at 1 for as long as any deployed web build might still be speaking it.",
-    "min": 1,
-    "max": 2
+    "$comment": "The protocol implemented by this first release. Future releases may widen this range once a deployed version actually exists.",
+    "min": 3,
+    "max": 3
   },
   "minimumWebBuild": null,
   "channel": "beta"

@@ -1,3 +1,4 @@
+import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import {
   CHANNEL_NONCE_BYTES,
   ChannelRegistry,
@@ -86,7 +87,10 @@ describe("ChannelRegistry", () => {
   it("drops handshake and dedupe state on reload", () => {
     const registry = new ChannelRegistry(countingRandom());
     const first = registry.beginDocumentLoad(1_000);
-    registry.completeHandshake(first.nonce, { webBuildId: "build-a", protocolVersion: 1 });
+    registry.completeHandshake(first.nonce, {
+      webBuildId: "build-a",
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+    });
     registry.rememberMessage(first.nonce, "m1");
 
     registry.beginDocumentLoad(2_000);
@@ -99,11 +103,17 @@ describe("ChannelRegistry", () => {
   it("keeps the channel when no document load occurs", () => {
     const registry = new ChannelRegistry(countingRandom());
     const channel = registry.beginDocumentLoad(1_000);
-    registry.completeHandshake(channel.nonce, { webBuildId: "build-a", protocolVersion: 1 });
+    registry.completeHandshake(channel.nonce, {
+      webBuildId: "build-a",
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+    });
 
     // An in-document history navigation never reaches `beginDocumentLoad`, so
     // the page keeps talking on the channel it already negotiated.
-    expect(registry.handshake()).toEqual({ webBuildId: "build-a", protocolVersion: 1 });
+    expect(registry.handshake()).toEqual({
+      webBuildId: "build-a",
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+    });
     expect(registry.isCurrent(channel.nonce)).toBe(true);
   });
 
@@ -123,20 +133,26 @@ describe("ChannelRegistry", () => {
     const stale = registry.beginDocumentLoad(1_000);
     registry.beginDocumentLoad(2_000);
 
-    expect(registry.completeHandshake(stale.nonce, { webBuildId: "b", protocolVersion: 1 })).toBe(
-      false,
-    );
+    expect(
+      registry.completeHandshake(stale.nonce, {
+        webBuildId: "b",
+        protocolVersion: MOBILE_PROTOCOL_MAX,
+      }),
+    ).toBe(false);
     expect(registry.handshake()).toBeNull();
   });
 
   it("refuses a second handshake on the same document", () => {
     const registry = new ChannelRegistry(countingRandom());
     const channel = registry.beginDocumentLoad(1_000);
-    registry.completeHandshake(channel.nonce, { webBuildId: "first", protocolVersion: 1 });
+    registry.completeHandshake(channel.nonce, {
+      webBuildId: "first",
+      protocolVersion: MOBILE_PROTOCOL_MAX,
+    });
 
     const again = registry.completeHandshake(channel.nonce, {
       webBuildId: "second",
-      protocolVersion: 1,
+      protocolVersion: MOBILE_PROTOCOL_MAX,
     });
 
     expect(again).toBe(false);

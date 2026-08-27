@@ -14,8 +14,8 @@ import { createShellBridge } from "./bridge/createShellBridge";
 import { buildChannelBootstrapScript } from "./bridge/outboundScript";
 import { getRuntimeConfig, type MobileRuntimeConfig } from "./config/runtimeConfig";
 import { useConnectivity } from "./connectivity/useConnectivity";
+import { createNavigationRecoveryController } from "./lifecycle/createNavigationRecoveryController";
 import { useAppVisibility } from "./lifecycle/useAppLifecycle";
-import { registeredModes } from "./navigation/createCoordinator";
 import { FeasibilityOverlay } from "./shell/FeasibilityOverlay";
 import { NativeRecoveryOverlay } from "./shell/NativeRecoveryOverlay";
 import { classifyNavigation } from "./shell/originPolicy";
@@ -43,6 +43,8 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
   // before any document existed; `reload()` on a blank view is a no-op.
   const [loadAttempt, setLoadAttempt] = useState(0);
   const visibility = useAppVisibility();
+  const visibilityRef = useRef(visibility);
+  visibilityRef.current = visibility;
   const connectivity = useConnectivity();
 
   const webViewRef = useRef<WebView>(null);
@@ -51,14 +53,21 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
       createShellBridge({
         webOrigin: config.webOrigin,
         inject: (script) => webViewRef.current?.injectJavaScript(script),
-        // Reported from what is genuinely registered. Claiming transit here
-        // would strand a user mid-journey on a session nothing can advance.
-        capabilities: () => ({
-          groundNavigation: registeredModes().includes("ground"),
-          transitNavigation: registeredModes().includes("transit"),
-        }),
+        // Native navigation is deliberately unavailable until the foreground
+        // coordinator, permissions and effect ports are composed here. The web
+        // app then keeps using its complete browser fallbacks instead of acting
+        // on a capability this shell cannot yet fulfil.
       }),
     [config.webOrigin],
+  );
+  const recovery = useMemo(
+    () =>
+      config.feasibilityMode
+        ? null
+        : createNavigationRecoveryController({
+            isAppActive: () => visibilityRef.current === "active",
+          }),
+    [config.feasibilityMode],
   );
 
   /**
@@ -97,7 +106,7 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     (event: { nativeEvent: { url?: string; data?: string } }) => {
       // Rejections are silent by design: an error reply to an unauthenticated
       // sender is itself an oracle, and every rejection path is side-effect free.
-      void shell.bridge.receive(event.nativeEvent);
+      void shell.bridge.receive(event.nativeEvent).catch(() => undefined);
     },
     [shell],
   );
@@ -125,6 +134,23 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     dispatchShell({ type: "connectivity-changed", online: connectivity.displayed !== "offline" });
   }, [connectivity.displayed]);
 
+  // Durable session state and the operating-system driver are the authority.
+  // Reconcile on process creation and every visibility transition; never infer
+  // navigation from what the WebView happened to render.
+  useEffect(() => {
+    if (!recovery) return undefined;
+    let disposed = false;
+    void recovery
+      .then((controller) => controller.reconcile(visibility))
+      .then((event) => {
+        if (!disposed) dispatchShell({ type: event });
+      })
+      .catch(() => undefined);
+    return () => {
+      disposed = true;
+    };
+  }, [recovery, visibility]);
+
   /**
    * Keep-awake, narrowly.
    *
@@ -144,26 +170,37 @@ function ProductShell({ config }: { config: MobileRuntimeConfig }): ReactElement
     };
   }, [visibility, shellState.context.navigating]);
 
-  const handleShellAction = useCallback((action: ShellAction) => {
-    switch (action) {
-      case "retry":
-        setLoadAttempt((attempt) => attempt + 1);
-        dispatchShell({ type: "document-load-started" });
-        return;
-      case "open-network-settings":
-      case "open-app-settings":
-        void Linking.openSettings().catch(() => undefined);
-        return;
-      case "resume":
-        dispatchShell({ type: "resume-accepted" });
-        return;
-      case "end":
-        dispatchShell({ type: "session-ended" });
-        return;
-      case "dismiss":
-        dispatchShell({ type: "dismissed" });
-    }
-  }, []);
+  const handleShellAction = useCallback(
+    (action: ShellAction) => {
+      switch (action) {
+        case "retry":
+          setLoadAttempt((attempt) => attempt + 1);
+          dispatchShell({ type: "document-load-started" });
+          return;
+        case "open-network-settings":
+        case "open-app-settings":
+          void Linking.openSettings().catch(() => undefined);
+          return;
+        case "resume":
+          if (!recovery) return;
+          void recovery
+            .then((controller) => controller.resume())
+            .then((event) => dispatchShell({ type: event }))
+            .catch(() => undefined);
+          return;
+        case "end":
+          if (!recovery) return;
+          void recovery
+            .then((controller) => controller.end())
+            .then((event) => dispatchShell({ type: event }))
+            .catch(() => undefined);
+          return;
+        case "dismiss":
+          dispatchShell({ type: "dismissed" });
+      }
+    },
+    [recovery],
+  );
 
   return (
     <View style={styles.root}>

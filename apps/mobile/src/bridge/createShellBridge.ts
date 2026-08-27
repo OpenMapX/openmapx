@@ -19,16 +19,13 @@ export interface ShellBridgeOptions {
   /**
    * Handles a fully validated command.
    *
-   * Optional so the transport can stand alone; a shell without it accepts and
-   * discards commands, which is the correct behaviour while it also reports
-   * every navigation capability as false.
+   * Optional so the transport can stand alone; a shell without it rejects
+   * commands with a correlated `unsupported-capability` response while it also
+   * reports every capability as false.
    */
   dispatch?: (message: WebToNativeMessage) => Promise<unknown>;
   /** Reports what the shell can actually run right now. */
-  capabilities?: () => Pick<
-    ShellDescription["capabilities"],
-    "groundNavigation" | "transitNavigation"
-  >;
+  capabilities?: () => ShellDescription["capabilities"];
   permission?: () => Promise<ShellDescription["permission"]>;
   activeSession?: () => Promise<ShellDescription["activeSession"]>;
 }
@@ -46,17 +43,18 @@ export interface ShellBridge {
  * constant. Until a processor exists the page keeps planning in the browser.
  */
 export async function describeShell(options: ShellBridgeOptions): Promise<ShellDescription> {
-  const modes = options.capabilities?.() ?? { groundNavigation: false, transitNavigation: false };
+  const capabilities = options.capabilities?.() ?? {
+    groundNavigation: false,
+    transitNavigation: false,
+    backgroundLocation: false,
+    localNotifications: false,
+    speech: false,
+  };
   return {
     shellVersion: nativeApplicationVersion ?? "0.0.0",
     shellBuild: nativeBuildVersion ?? "0",
     platform: Platform.OS === "android" ? "android" : "ios",
-    capabilities: {
-      ...modes,
-      backgroundLocation: true,
-      localNotifications: true,
-      speech: true,
-    },
+    capabilities,
     permission: (await options.permission?.()) ?? "not-determined",
     locationDriver: "expo",
     activeSession: (await options.activeSession?.()) ?? null,
@@ -67,7 +65,8 @@ export function createShellBridge(options: ShellBridgeOptions): ShellBridge {
   const registry = new ChannelRegistry();
   let messageCounter = 0;
 
-  const bridge = new NativeBridge({
+  let bridge: NativeBridge;
+  bridge = new NativeBridge({
     webOrigin: options.webOrigin,
     registry,
     now: () => Date.now(),
@@ -79,7 +78,20 @@ export function createShellBridge(options: ShellBridgeOptions): ShellBridge {
     },
     inject: options.inject,
     dispatch: async (message) => {
-      await options.dispatch?.(message);
+      if (options.dispatch) {
+        await options.dispatch(message);
+        return;
+      }
+      // A command from a stale or unexpected page must get an explicit answer.
+      // Silently accepting it leaves the caller waiting for a timeout and makes
+      // an uncomposed capability look like a broken implementation.
+      if (message.type !== "event.ack") {
+        bridge.send(
+          "native.error",
+          { code: "unsupported-capability", forMessageId: message.messageId },
+          { forMessageId: message.messageId },
+        );
+      }
     },
     describeShell: () => describeShell(options),
   });

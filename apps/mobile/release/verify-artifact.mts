@@ -11,7 +11,7 @@
  * of anything that would let the binary change after review.
  */
 
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawn } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import {
@@ -59,6 +59,74 @@ const FORBIDDEN_STRINGS = [
   "expo.dev/--/api",
 ];
 
+// This is a release-time safety check, so scan the decompressed payload rather
+// than trusting entry names. Keep only the overlap needed to match a marker
+// split across stdout chunks; the artifact itself is never held in memory or
+// written to disk.
+const MAX_INSPECTED_BYTES = 2 * 1024 * 1024 * 1024;
+const FORBIDDEN_ENCODINGS = FORBIDDEN_STRINGS.flatMap((value) => [
+  { value, bytes: Buffer.from(value, "utf8") },
+  { value, bytes: Buffer.from(value, "utf16le") },
+]);
+const MAX_FORBIDDEN_BYTES = Math.max(...FORBIDDEN_ENCODINGS.map(({ bytes }) => bytes.length));
+
+async function findForbiddenArchiveContent(archive: string): Promise<string | null> {
+  return await new Promise((resolvePromise, reject) => {
+    const unzip = spawn("unzip", ["-p", archive], {
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let inspectedBytes = 0;
+    let overlap: Buffer<ArrayBufferLike> = Buffer.alloc(0);
+    let stderr = "";
+    let finding: string | null = null;
+    let settled = false;
+
+    const finish = (error: Error | null, value: string | null): void => {
+      if (settled) return;
+      settled = true;
+      if (error) reject(error);
+      else resolvePromise(value);
+    };
+
+    unzip.stderr.setEncoding("utf8");
+    unzip.stderr.on("data", (chunk: string) => {
+      if (stderr.length < 4096) stderr += chunk;
+    });
+    unzip.stdout.on("data", (chunk: Buffer) => {
+      if (finding !== null) return;
+      inspectedBytes += chunk.length;
+      if (inspectedBytes > MAX_INSPECTED_BYTES) {
+        unzip.kill();
+        finish(
+          new Error(`decompressed payload exceeds ${MAX_INSPECTED_BYTES} inspection bytes`),
+          null,
+        );
+        return;
+      }
+
+      const searchable = overlap.length === 0 ? chunk : Buffer.concat([overlap, chunk]);
+      for (const encoded of FORBIDDEN_ENCODINGS) {
+        if (searchable.includes(encoded.bytes)) {
+          finding = encoded.value;
+          unzip.kill();
+          return;
+        }
+      }
+      overlap = searchable.subarray(Math.max(0, searchable.length - MAX_FORBIDDEN_BYTES + 1));
+    });
+    unzip.on("error", (error) => finish(error, null));
+    unzip.on("close", (code) => {
+      if (finding !== null) {
+        finish(null, finding);
+      } else if (code === 0) {
+        finish(null, null);
+      } else {
+        finish(new Error(stderr.trim() || `unzip exited with status ${String(code)}`), null);
+      }
+    });
+  });
+}
+
 for (const artifact of artifacts) {
   const absolute = resolve(repoRoot, artifact.path);
   let listing = "";
@@ -74,14 +142,34 @@ for (const artifact of artifacts) {
     continue;
   }
 
-  if (listing.includes("EXUpdates") || listing.includes("expo-updates")) {
-    failures.push(`${artifact.path} contains an over-the-air update component`);
+  const forbiddenEntry = ["EXUpdates", ...FORBIDDEN_STRINGS].find((value) =>
+    listing.includes(value),
+  );
+  if (forbiddenEntry !== undefined) {
+    failures.push(
+      `${artifact.path} contains forbidden archive entry marker ${JSON.stringify(forbiddenEntry)}`,
+    );
   }
   const debugSymbols = listing.split("\n").filter((entry) => entry.endsWith(".dSYM/"));
   if (debugSymbols.length > 0) {
     // Symbols belong beside the archive in offline storage, not inside the
     // payload a user downloads.
     failures.push(`${artifact.path} carries ${debugSymbols.length} dSYM bundle(s) in the payload`);
+  }
+
+  try {
+    const forbidden = await findForbiddenArchiveContent(absolute);
+    if (forbidden !== null) {
+      failures.push(
+        `${artifact.path} contains forbidden release marker ${JSON.stringify(forbidden)}`,
+      );
+    }
+  } catch (error) {
+    failures.push(
+      `${artifact.path} payload could not be inspected: ${
+        error instanceof Error ? error.message : String(error)
+      }`,
+    );
   }
 }
 

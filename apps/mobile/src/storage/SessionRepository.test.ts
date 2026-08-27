@@ -296,6 +296,15 @@ describe("SessionRepository", () => {
       await database.closeAsync();
     });
 
+    it("distinguishes a record quarantined by this read from an empty store", async () => {
+      const { database, repository } = await withCorruptRow("{not json");
+
+      await expect(repository.inspectActive(NOW)).resolves.toEqual({ kind: "quarantined" });
+      await expect(repository.inspectActive(NOW)).resolves.toEqual({ kind: "none" });
+
+      await database.closeAsync();
+    });
+
     it("quarantines an unsupported schema version separately", async () => {
       const { database, repository } = await withCorruptRow(
         JSON.stringify({ ...groundSessionFixture(), schemaVersion: 99 }),

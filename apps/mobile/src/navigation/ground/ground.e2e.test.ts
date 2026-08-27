@@ -1,4 +1,4 @@
-import type { WebToNativeMessage } from "@openmapx/core/navigation";
+import { MOBILE_PROTOCOL_MAX, type WebToNativeMessage } from "@openmapx/core/navigation";
 import type { ApiClient } from "@openmapx/core/navigation/api";
 import type { RawLocation } from "../../location/sanitiseFixes";
 import type { Database } from "../../storage/database";
@@ -229,7 +229,7 @@ function cmd(
 ): WebToNativeMessage {
   messageCounter += 1;
   return {
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type,
     messageId: extra.messageId ?? `e2e-${messageCounter}`,
     channelNonce: "nonce",

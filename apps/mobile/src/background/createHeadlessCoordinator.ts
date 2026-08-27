@@ -82,10 +82,10 @@ function ports(repository: SessionRepository): EffectPorts {
 }
 
 /**
- * Builds — or reuses — the process-wide coordinator.
+ * Builds a headless-bound coordinator over the process-wide durable authority.
  *
- * `createCoordinator` memoises, so a callback arriving while the UI is starting
- * joins the existing authority instead of creating a second one.
+ * `createCoordinator` shares the repository and executor with the foreground,
+ * but keeps these headless-only adapters on this instance.
  */
 export async function getHeadlessCoordinator(): Promise<NavigationCoordinator> {
   const repository = new SessionRepository(await getDatabase());

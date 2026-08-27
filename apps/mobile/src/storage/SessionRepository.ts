@@ -111,6 +111,11 @@ export interface QuarantineRecord {
   schemaVersion: number | null;
 }
 
+export type ActiveSessionInspection =
+  | { kind: "none" }
+  | { kind: "quarantined" }
+  | { kind: "active"; session: MobileNavigationSession };
+
 export interface DiagnosticRow {
   id: number;
   createdAtMs: number;
@@ -148,14 +153,25 @@ export class SessionRepository {
    * startup by failing identically on every background wake.
    */
   async loadActive(nowMs: number): Promise<MobileNavigationSession | null> {
+    const inspected = await this.inspectActive(nowMs);
+    return inspected.kind === "active" ? inspected.session : null;
+  }
+
+  /**
+   * Reads the current authority while preserving whether this read had to
+   * quarantine it. The ordinary `loadActive` API intentionally collapses both
+   * empty outcomes; recovery UI needs the distinction exactly once so it can
+   * explain why tracking stopped without replaying old quarantine history.
+   */
+  async inspectActive(nowMs: number): Promise<ActiveSessionInspection> {
     const row = await this.database.getFirstAsync<ActiveRow>(SELECT_ACTIVE);
-    if (!row) return null;
+    if (!row) return { kind: "none" };
 
     const parsed = parseMobileSession(row.session_json);
-    if (parsed.ok) return parsed.session;
+    if (parsed.ok) return { kind: "active", session: parsed.session };
 
     await this.quarantineCorruptSession(row.session_id, parsed.code, nowMs);
-    return null;
+    return { kind: "quarantined" };
   }
 
   async readTerminalAck(sessionId: string): Promise<MobileTerminalAck | null> {

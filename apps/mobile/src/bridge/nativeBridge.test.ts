@@ -31,7 +31,11 @@ const SHELL: ShellDescription = {
   activeSession: null,
 };
 
-function harness() {
+function harness(
+  overrides: Partial<
+    Pick<ConstructorParameters<typeof NativeBridge>[0], "dispatch" | "describeShell">
+  > = {},
+) {
   // Deterministic but distinct per load, so a stale nonce is genuinely stale.
   let nonceSeed = 0;
   const registry = new ChannelRegistry((byteLength) => {
@@ -51,10 +55,12 @@ function harness() {
       return `native-${messageCounter}`;
     },
     inject: (script) => injected.push(script),
-    dispatch: async (message) => {
-      dispatched.push(message);
-    },
-    describeShell: () => SHELL,
+    dispatch:
+      overrides.dispatch ??
+      (async (message) => {
+        dispatched.push(message);
+      }),
+    describeShell: overrides.describeShell ?? (() => SHELL),
   });
 
   return { registry, bridge, injected, dispatched };
@@ -222,6 +228,59 @@ describe("NativeBridge.receive", () => {
   });
 
   describe("protocol", () => {
+    it("contains a rejecting shell description without completing the handshake", async () => {
+      const context = harness({
+        describeShell: async () => {
+          throw new Error("secret provider response");
+        },
+      });
+      const channel = context.registry.beginDocumentLoad(NOW);
+
+      const outcome = await context.bridge.receive({
+        url: `${WEB_ORIGIN}/`,
+        data: hello(channel.nonce),
+      });
+
+      expect(outcome).toEqual({ status: "failed", code: "internal-error", type: "web.hello" });
+      expect(context.registry.handshake()).toBeNull();
+      expect(decodePayload(context.injected[0])).toMatchObject({
+        type: "native.error",
+        payload: { code: "internal-error", forMessageId: "hello-1" },
+      });
+      expect(context.injected.join("\n")).not.toContain("secret provider response");
+    });
+
+    it("discards a shell description that resolves after the document changed", async () => {
+      let resolveDescription: ((shell: ShellDescription) => void) | undefined;
+      const context = harness({
+        describeShell: () =>
+          new Promise<ShellDescription>((resolve) => {
+            resolveDescription = resolve;
+          }),
+      });
+      const first = context.registry.beginDocumentLoad(NOW);
+      const receiving = context.bridge.receive({
+        url: `${WEB_ORIGIN}/`,
+        data: hello(first.nonce),
+      });
+      context.registry.beginDocumentLoad(NOW + 1);
+
+      resolveDescription?.(SHELL);
+
+      await expect(receiving).resolves.toEqual({ status: "rejected", code: "wrong-channel" });
+      expect(context.registry.handshake()).toBeNull();
+      expect(context.injected).toEqual([]);
+    });
+
+    it("correlates the current handshake reply to the hello command", async () => {
+      const { bridge, registry, injected } = harness();
+      const channel = registry.beginDocumentLoad(NOW);
+
+      await bridge.receive({ url: `${WEB_ORIGIN}/`, data: hello(channel.nonce) });
+
+      expect(decodePayload(injected[0]).payload.forMessageId).toBe("hello-1");
+    });
+
     it("rejects a command sent before the handshake", async () => {
       const { bridge, registry, dispatched } = harness();
       const channel = registry.beginDocumentLoad(NOW);
@@ -281,6 +340,32 @@ describe("NativeBridge.receive", () => {
     });
   });
 
+  it("contains a rejecting authenticated dispatcher and emits one redacted correlated error", async () => {
+    const context = harness({
+      dispatch: async () => {
+        throw new Error("secret database detail");
+      },
+    });
+    const channel = context.registry.beginDocumentLoad(NOW);
+    await context.bridge.receive({ url: `${WEB_ORIGIN}/`, data: hello(channel.nonce) });
+
+    const outcome = await context.bridge.receive({
+      url: `${WEB_ORIGIN}/`,
+      data: command(channel.nonce, { messageId: "rejecting-command" }),
+    });
+
+    expect(outcome).toEqual({
+      status: "failed",
+      code: "internal-error",
+      type: "snapshot.request",
+    });
+    expect(decodePayload(context.injected[1])).toMatchObject({
+      type: "native.error",
+      payload: { code: "internal-error", forMessageId: "rejecting-command" },
+    });
+    expect(context.injected.join("\n")).not.toContain("secret database detail");
+  });
+
   describe("payload", () => {
     it.each([
       ["an unknown type", { type: "session.selfDestruct" }],
@@ -311,7 +396,7 @@ describe("NativeBridge.receive", () => {
 
     it("rejects a prototype-polluting key", async () => {
       const { bridge, dispatched, nonce } = await handshaken();
-      const polluted = `{"protocolVersion":1,"type":"snapshot.request","messageId":"p","channelNonce":"${nonce}","sentAtMs":${NOW},"payload":{"__proto__":{"polluted":true}}}`;
+      const polluted = `{"protocolVersion":${MOBILE_PROTOCOL_MAX},"type":"snapshot.request","messageId":"p","channelNonce":"${nonce}","sentAtMs":${NOW},"payload":{"__proto__":{"polluted":true}}}`;
 
       const outcome = await bridge.receive({ url: `${WEB_ORIGIN}/`, data: polluted });
 
@@ -408,6 +493,24 @@ describe("NativeBridge.send", () => {
 
     expect(bridge.send("permission.state", { permission: "background" })).toBe("sent");
     expect(decodePayload(injected[1]).type).toBe("permission.state");
+  });
+
+  it("adds exact correlation to a current direct reply", async () => {
+    const { bridge, injected } = await handshaken();
+
+    expect(
+      bridge.send(
+        "location.result",
+        { requestId: "location-1", status: "timeout" },
+        { forMessageId: "location-command" },
+      ),
+    ).toBe("sent");
+
+    expect(decodePayload(injected[1]).payload).toMatchObject({
+      requestId: "location-1",
+      status: "timeout",
+      forMessageId: "location-command",
+    });
   });
 
   it("refuses a payload that does not match the protocol", async () => {

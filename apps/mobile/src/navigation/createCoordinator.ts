@@ -10,6 +10,7 @@ import {
   type PermissionPort,
 } from "./NavigationCoordinator";
 import { type AnyNavigationProcessor, ProcessorRegistry } from "./processor";
+import { SerialExecutor } from "./serialExecutor";
 import { TransitNavigationProcessor } from "./transit/TransitNavigationProcessor";
 
 /**
@@ -45,49 +46,64 @@ function randomSessionId(): string {
   return Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
-let composition: Promise<CoordinatorComposition> | null = null;
+export interface SharedCoordinatorCore {
+  repository: SessionRepository;
+  processors: ProcessorRegistry;
+  executor: SerialExecutor;
+}
 
-/**
- * One coordinator per process, created on first use.
- *
- * Memoised on the promise rather than the value, so a location callback arriving
- * while the UI is still starting cannot produce a second authority over the same
- * database.
- */
-export function createCoordinator(
-  overrides: CoordinatorOverrides,
-): Promise<CoordinatorComposition> {
-  composition ??= (async () => {
+let sharedCore: Promise<SharedCoordinatorCore> | null = null;
+
+export function getSharedCoordinatorCore(): Promise<SharedCoordinatorCore> {
+  sharedCore ??= (async () => {
     const repository = new SessionRepository(await getDatabase());
     const processors = new ProcessorRegistry();
     for (const mode of registeredModes()) {
       const factory = PROCESSOR_FACTORIES[mode];
       if (factory) processors.register(factory());
     }
-
-    const deps: CoordinatorDeps = {
-      repository,
-      processors,
-      effects: new EffectRunner(overrides.ports),
-      bridge: overrides.bridge,
-      permissions: overrides.permissions,
-      driver: overrides.driver,
-      diagnostics: overrides.ports.diagnostics,
-      clock: overrides.clock ?? (() => Date.now()),
-      newSessionId: overrides.newSessionId ?? randomSessionId,
-    };
-
-    return { coordinator: new NavigationCoordinator(deps), repository, processors };
+    return { repository, processors, executor: new SerialExecutor() };
   })().catch((error) => {
-    composition = null;
+    sharedCore = null;
     throw error;
   });
-  return composition;
+  return sharedCore;
 }
 
-/** Test seam: drops the memoised coordinator so a suite can supply its own. */
+/**
+ * One durable authority per process, with one coordinator per environment.
+ *
+ * The repository, processors and executor are shared so foreground commands and
+ * headless callbacks cannot interleave mutations. Bridge, permission, driver and
+ * effect ports remain attached to the environment that supplied them; whichever
+ * environment initializes first therefore cannot capture the other one's I/O.
+ */
+export async function createCoordinator(
+  overrides: CoordinatorOverrides,
+): Promise<CoordinatorComposition> {
+  const { repository, processors, executor } = await getSharedCoordinatorCore();
+  const deps: CoordinatorDeps = {
+    repository,
+    processors,
+    effects: new EffectRunner(overrides.ports),
+    bridge: overrides.bridge,
+    permissions: overrides.permissions,
+    driver: overrides.driver,
+    diagnostics: overrides.ports.diagnostics,
+    clock: overrides.clock ?? (() => Date.now()),
+    newSessionId: overrides.newSessionId ?? randomSessionId,
+  };
+
+  return {
+    coordinator: new NavigationCoordinator(deps, executor),
+    repository,
+    processors,
+  };
+}
+
+/** Test seam: drops the memoised durable authority so a suite can supply its own. */
 export function resetCoordinatorCache(): void {
-  composition = null;
+  sharedCore = null;
 }
 
 /**

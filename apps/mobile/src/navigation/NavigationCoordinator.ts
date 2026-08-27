@@ -34,7 +34,7 @@ export interface BridgePort {
   send(
     type: NativeToWebMessage["type"],
     payload: unknown,
-    options?: { sessionId?: string; revision?: number },
+    options?: { sessionId?: string; revision?: number; forMessageId?: string },
   ): unknown;
 }
 
@@ -62,17 +62,17 @@ export interface CoordinatorDeps {
   clock: () => number;
   newSessionId: () => string;
   /**
-   * Handles the protocol-v2 commands that are not about a navigation session —
+   * Handles commands that are not about a navigation session —
    * a one-off location fix, opening OS settings, a system-browser sign-in.
    *
-   * Optional so a v1-only build, and every session test, needs no stand-in. When
-   * absent the command is refused rather than dropped: a page waiting on a reply
-   * that never comes cannot tell "unsupported" from "broken".
+   * Optional so focused session tests need no stand-in. When absent the command
+   * is refused rather than dropped: a page waiting on a reply that never comes
+   * cannot tell "unsupported" from "broken".
    */
   auxiliary?: AuxiliaryCommandHandler;
 }
 
-/** Answers a v2 command the coordinator does not own, or declines it. */
+/** Answers an auxiliary command the coordinator does not own, or declines it. */
 export type AuxiliaryCommandHandler = (
   command: WebToNativeMessage,
 ) => Promise<CommandResponse | null>;
@@ -95,9 +95,10 @@ function errorResponse(code: string, forMessageId?: string): CommandResponse {
 }
 
 export class NavigationCoordinator {
-  private readonly queue = new SerialExecutor();
-
-  constructor(private readonly deps: CoordinatorDeps) {}
+  constructor(
+    private readonly deps: CoordinatorDeps,
+    private readonly queue = new SerialExecutor(),
+  ) {}
 
   // Commands from the page.
 
@@ -116,7 +117,7 @@ export class NavigationCoordinator {
       const cached = await repository.lookupCommand(command.messageId, now);
       if (cached) {
         const response = cached as CommandResponse;
-        this.reply(response);
+        this.reply(response, command.messageId);
         return response;
       }
     }
@@ -137,14 +138,15 @@ export class NavigationCoordinator {
         now,
       );
     }
-    if (response) this.reply(response);
+    if (response) this.reply(response, command.messageId);
     return response;
   }
 
-  private reply(response: CommandResponse): void {
+  private reply(response: CommandResponse, forMessageId: string): void {
     this.deps.bridge.send(response.type, response.payload, {
       ...(response.sessionId === undefined ? {} : { sessionId: response.sessionId }),
       ...(response.revision === undefined ? {} : { revision: response.revision }),
+      forMessageId,
     });
   }
 

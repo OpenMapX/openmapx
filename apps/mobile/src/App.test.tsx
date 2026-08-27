@@ -1,19 +1,30 @@
+import { MOBILE_PROTOCOL_MAX } from "@openmapx/core/navigation";
 import { act, fireEvent, render } from "@testing-library/react-native";
 import { Linking } from "react-native";
 import { App } from "./App";
 import { resetRuntimeConfigCache } from "./config/runtimeConfig";
+import { groundSessionFixture } from "./storage/testing/sessionFixture";
 
 /** Props of the most recently rendered WebView, captured by the mock below. */
 let mockWebViewProps: Record<string, unknown> = {};
+let mockInjectedScripts: string[] = [];
+const mockRecoveryController = {
+  reconcile: jest.fn(),
+  resume: jest.fn(),
+  end: jest.fn(),
+};
 
 jest.mock("react-native-webview", () => {
   const React = require("react") as typeof import("react");
   const { View } = require("react-native") as typeof import("react-native");
   return {
-    WebView: (props: Record<string, unknown>) => {
+    WebView: React.forwardRef((props: Record<string, unknown>, ref) => {
       mockWebViewProps = props;
+      React.useImperativeHandle(ref, () => ({
+        injectJavaScript: (script: string) => mockInjectedScripts.push(script),
+      }));
       return React.createElement(View, { testID: props.testID as string });
-    },
+    }),
   };
 });
 
@@ -24,6 +35,10 @@ jest.mock("./shell/FeasibilityOverlay", () => {
   const { View } = require("react-native") as typeof import("react-native");
   return { FeasibilityOverlay: () => React.createElement(View, { testID: "feasibility-overlay" }) };
 });
+
+jest.mock("./lifecycle/createNavigationRecoveryController", () => ({
+  createNavigationRecoveryController: jest.fn(async () => mockRecoveryController),
+}));
 
 const RELEASE_MANIFEST = {
   release: true,
@@ -55,7 +70,11 @@ async function renderApp() {
 beforeEach(async () => {
   mockManifest = RELEASE_MANIFEST;
   mockWebViewProps = {};
+  mockInjectedScripts = [];
   jest.spyOn(Linking, "openURL").mockResolvedValue(true);
+  mockRecoveryController.reconcile.mockResolvedValue("session-ended");
+  mockRecoveryController.resume.mockResolvedValue("session-started");
+  mockRecoveryController.end.mockResolvedValue("session-ended");
 });
 
 describe("App WebView policy", () => {
@@ -102,6 +121,36 @@ describe("App bridge channel", () => {
     const match = script.match(/nonce:"([^"]+)"/);
     if (!match) throw new Error("bootstrap script publishes no nonce");
     return match[1];
+  };
+
+  const decodedMessages = (): Array<{
+    type?: string;
+    payload?: Record<string, unknown>;
+  }> =>
+    mockInjectedScripts.flatMap((script) => {
+      const encoded = script.match(/atob\("([A-Za-z0-9+/=]*)"\)/)?.[1];
+      if (!encoded) return [];
+      return [
+        JSON.parse(Buffer.from(encoded, "base64").toString("utf8")) as {
+          type?: string;
+          payload?: Record<string, unknown>;
+        },
+      ];
+    });
+
+  const post = async (nonce: string, message: Record<string, unknown>) => {
+    await emitAsync(mockWebViewProps.onMessage, {
+      nativeEvent: {
+        url: "https://openmapx.com/",
+        data: JSON.stringify({
+          protocolVersion: MOBILE_PROTOCOL_MAX,
+          messageId: "message-1",
+          channelNonce: nonce,
+          sentAtMs: Date.now(),
+          ...message,
+        }),
+      },
+    });
   };
 
   it("publishes a channel nonce to the main frame only", async () => {
@@ -161,6 +210,53 @@ describe("App bridge channel", () => {
         nativeEvent: { url: "https://openmapx.com/", data: undefined },
       }),
     ).resolves.toBeUndefined();
+  });
+
+  it("advertises no native navigation mode until the foreground graph is composed", async () => {
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart);
+
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "web-build-1",
+        minProtocolVersion: 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+
+    const hello = decodedMessages().find((message) => message.type === "native.hello");
+    expect(hello?.payload?.capabilities).toMatchObject({
+      groundNavigation: false,
+      transitNavigation: false,
+    });
+  });
+
+  it("rejects an uncomposed command instead of accepting and discarding it", async () => {
+    await renderApp();
+    const nonce = nonceIn(bootstrap());
+    await emitAsync(mockWebViewProps.onLoadStart);
+    await post(nonce, {
+      type: "web.hello",
+      payload: {
+        webBuildId: "web-build-1",
+        minProtocolVersion: 1,
+        maxProtocolVersion: MOBILE_PROTOCOL_MAX,
+      },
+    });
+
+    await post(nonce, {
+      messageId: "prepare-1",
+      type: "session.prepare",
+      payload: { startPackage: groundSessionFixture().payload.startPackage },
+    });
+
+    const error = decodedMessages().find((message) => message.type === "native.error");
+    expect(error?.payload).toEqual({
+      code: "unsupported-capability",
+      forMessageId: "prepare-1",
+    });
   });
 });
 
@@ -262,6 +358,48 @@ describe("App load states", () => {
   });
 });
 
+describe("App navigation recovery composition", () => {
+  it("derives an already-running process-death session before explaining a page failure", async () => {
+    mockRecoveryController.reconcile.mockResolvedValue("session-started");
+    const view = await renderApp();
+    await act(async () => undefined);
+
+    expect(mockRecoveryController.reconcile).toHaveBeenCalledTimes(1);
+    await act(async () => {
+      (mockWebViewProps.onError as () => void)();
+    });
+    expect(view.getByTestId("shell-state-offline-navigating")).toBeTruthy();
+  });
+
+  it("resumes through the recovery authority before changing presentation state", async () => {
+    mockRecoveryController.reconcile.mockResolvedValue("resume-required");
+    const view = await renderApp();
+    await act(async () => undefined);
+
+    expect(view.getByTestId("shell-state-resume-offer")).toBeTruthy();
+    await act(async () => {
+      await fireEvent.press(view.getByTestId("shell-action-resume"));
+    });
+
+    expect(mockRecoveryController.resume).toHaveBeenCalledTimes(1);
+    expect(view.queryByTestId("shell-state-resume-offer")).toBeNull();
+  });
+
+  it("ends a permission-lost session through the recovery authority", async () => {
+    mockRecoveryController.reconcile.mockResolvedValue("permission-lost");
+    const view = await renderApp();
+    await act(async () => undefined);
+
+    expect(view.getByTestId("shell-state-permission-lost")).toBeTruthy();
+    await act(async () => {
+      await fireEvent.press(view.getByTestId("shell-action-end"));
+    });
+
+    expect(mockRecoveryController.end).toHaveBeenCalledTimes(1);
+    expect(view.queryByTestId("shell-state-permission-lost")).toBeNull();
+  });
+});
+
 describe("App feasibility surface", () => {
   it("is absent from a build without the feasibility flag", async () => {
     const view = await renderApp();
@@ -272,6 +410,7 @@ describe("App feasibility surface", () => {
     mockManifest = { ...RELEASE_MANIFEST, release: false, feasibilityMode: true };
     const view = await renderApp();
     expect(view.getByTestId("feasibility-overlay")).toBeTruthy();
+    expect(mockRecoveryController.reconcile).not.toHaveBeenCalled();
   });
 });
 

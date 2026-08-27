@@ -35,7 +35,8 @@ export type BridgeRejectionCode =
 
 export type ReceiveOutcome =
   | { status: "handled"; type: WebToNativeMessage["type"] }
-  | { status: "rejected"; code: BridgeRejectionCode };
+  | { status: "rejected"; code: BridgeRejectionCode }
+  | { status: "failed"; code: "internal-error"; type: WebToNativeMessage["type"] };
 
 export type SendOutcome = "sent" | "queued" | "dropped" | "invalid";
 
@@ -80,6 +81,12 @@ interface OutboundDraft {
   revision?: number;
 }
 
+interface SendOptions {
+  sessionId?: string;
+  revision?: number;
+  forMessageId?: string;
+}
+
 export class NativeBridge {
   private queue: NativeToWebMessage[] = [];
 
@@ -119,7 +126,13 @@ export class NativeBridge {
     }
 
     if (command.type === "web.hello") {
-      await this.handleHello(command);
+      try {
+        if (!(await this.handleHello(command))) {
+          return { status: "rejected", code: "wrong-channel" };
+        }
+      } catch {
+        return this.containDependencyFailure(command, true);
+      }
       return { status: "handled", type: command.type };
     }
 
@@ -129,8 +142,30 @@ export class NativeBridge {
       return { status: "rejected", code: "protocol-mismatch" };
     }
 
-    await this.deps.dispatch(command);
+    try {
+      await this.deps.dispatch(command);
+    } catch {
+      return this.containDependencyFailure(command, false);
+    }
     return { status: "handled", type: command.type };
+  }
+
+  private containDependencyFailure(
+    command: WebToNativeMessage,
+    immediate: boolean,
+  ): Extract<ReceiveOutcome, { status: "failed" }> {
+    try {
+      this.emit(
+        { type: "native.error", payload: { code: "internal-error" } },
+        immediate ? { immediate: true, protocolVersion: command.protocolVersion } : {},
+        command.messageId,
+      );
+    } catch {
+      // Injection is a final platform boundary and can itself fail while a
+      // document is being replaced. The stable local outcome still prevents a
+      // rejected promise from escaping into React Native's global handler.
+    }
+    return { status: "failed", code: "internal-error", type: command.type };
   }
 
   /**
@@ -141,23 +176,25 @@ export class NativeBridge {
    * is no shell", and ask for a store update rather than silently starting its
    * own navigation engine alongside a native session.
    */
-  private async handleHello(command: Extract<WebToNativeMessage, { type: "web.hello" }>) {
+  private async handleHello(
+    command: Extract<WebToNativeMessage, { type: "web.hello" }>,
+  ): Promise<boolean> {
     const { registry } = this.deps;
     const channel = registry.current();
-    if (!channel) return;
+    if (!channel) return false;
 
     const selected = negotiateMobileProtocol(
       { min: command.payload.minProtocolVersion, max: command.payload.maxProtocolVersion },
       { min: MOBILE_PROTOCOL_MIN, max: MOBILE_PROTOCOL_MAX },
     );
+    const shell = await this.deps.describeShell();
+    if (!registry.isCurrent(channel.nonce)) return false;
     if (selected !== null) {
       registry.completeHandshake(channel.nonce, {
         webBuildId: command.payload.webBuildId,
         protocolVersion: selected,
       });
     }
-
-    const shell = await this.deps.describeShell();
     this.emit(
       {
         type: "native.hello",
@@ -171,41 +208,49 @@ export class NativeBridge {
       // The handshake reply is the one message that must go out before a
       // handshake exists — including when negotiation failed.
       { immediate: true, protocolVersion: selected ?? MOBILE_PROTOCOL_MAX },
+      command.messageId,
     );
     if (selected !== null) this.flush();
+    return true;
   }
 
   /* ------------------------------------------------------------ outbound --- */
 
   /** Sends a native-to-web message, queueing it until the page can receive it. */
-  send(
-    type: NativeToWebMessage["type"],
-    payload: unknown,
-    options: { sessionId?: string; revision?: number } = {},
-  ): SendOutcome {
-    return this.emit({ type, payload, ...options }, {});
+  send(type: NativeToWebMessage["type"], payload: unknown, options: SendOptions = {}): SendOutcome {
+    return this.emit({ type, payload, ...options }, {}, options.forMessageId);
   }
 
   private emit(
     draft: OutboundDraft,
     options: { immediate?: boolean; protocolVersion?: number },
+    forMessageId?: string,
   ): SendOutcome {
     const { registry } = this.deps;
     const channel = registry.current();
     if (!channel) return "dropped";
 
     const handshake = registry.handshake();
+    const protocolVersion =
+      options.protocolVersion ?? handshake?.protocolVersion ?? MOBILE_PROTOCOL_MAX;
+    const correlatedPayload =
+      forMessageId &&
+      draft.payload !== null &&
+      typeof draft.payload === "object" &&
+      !Array.isArray(draft.payload)
+        ? { ...(draft.payload as Record<string, unknown>), forMessageId }
+        : draft.payload;
     const candidate = {
       // Before negotiation the envelope carries this build's highest version;
       // nothing is delivered in that state except the handshake reply itself.
-      protocolVersion: options.protocolVersion ?? handshake?.protocolVersion ?? MOBILE_PROTOCOL_MAX,
+      protocolVersion,
       type: draft.type,
       messageId: this.deps.nextMessageId(),
       channelNonce: channel.nonce,
       ...(draft.sessionId === undefined ? {} : { sessionId: draft.sessionId }),
       ...(draft.revision === undefined ? {} : { revision: draft.revision }),
       sentAtMs: this.deps.now(),
-      payload: draft.payload,
+      payload: correlatedPayload,
     };
 
     // Validated before encoding, so a malformed native payload is a local error

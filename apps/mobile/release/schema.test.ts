@@ -21,7 +21,7 @@ const VERSION: ReleaseVersion = {
   iosBuildNumber: "1",
   androidVersionCode: 1,
   androidVersionName: "1.0.0",
-  protocol: { min: 1, max: 2 },
+  protocol: { min: 3, max: 3 },
   minimumWebBuild: null,
   channel: "beta",
 };
@@ -146,12 +146,12 @@ describe("compareWithPrevious", () => {
   it("rejects raising the protocol minimum", () => {
     const next = {
       ...VERSION,
-      protocol: { min: 2, max: 2 },
+      protocol: { min: 4, max: 4 },
       androidVersionCode: 2,
       iosBuildNumber: "2",
     };
 
-    // Deployed web builds still speaking v1 would stop working, and they cannot
+    // Deployed web builds still speaking v3 would stop working, and they cannot
     // be updated in lockstep with a store release.
     expect(fields(compareWithPrevious(next, VERSION))).toContain("protocol.min");
   });

@@ -1,4 +1,8 @@
-import type { MobileNavigationSession, WebToNativeMessage } from "@openmapx/core/navigation";
+import {
+  MOBILE_PROTOCOL_MAX,
+  type MobileNavigationSession,
+  type WebToNativeMessage,
+} from "@openmapx/core/navigation";
 import { migrateSessionSchema } from "../storage/migrations";
 import { SessionRepository } from "../storage/SessionRepository";
 import { openTestDatabase } from "../storage/testing/nodeSqliteDatabase";
@@ -57,7 +61,7 @@ function fakeGroundProcessor(): NavigationProcessor<"ground"> {
 interface Harness {
   coordinator: NavigationCoordinator;
   repository: SessionRepository;
-  sent: Array<{ type: string; payload: unknown }>;
+  sent: Array<{ type: string; payload: unknown; options: Record<string, unknown> }>;
   effectLog: string[];
   deps: CoordinatorDeps;
   close: () => Promise<void>;
@@ -79,7 +83,7 @@ async function harness(
   const processor = overrides.processor === undefined ? fakeGroundProcessor() : overrides.processor;
   if (processor) processors.register(processor);
 
-  const sent: Array<{ type: string; payload: unknown }> = [];
+  const sent: Array<{ type: string; payload: unknown; options: Record<string, unknown> }> = [];
   const effectLog: string[] = [];
   const fail = (label: string) => async () => {
     effectLog.push(label);
@@ -108,8 +112,8 @@ async function harness(
       diagnostics: { record: () => undefined },
     }),
     bridge: {
-      send: (type, payload) => {
-        sent.push({ type, payload });
+      send: (type, payload, options) => {
+        sent.push({ type, payload, options: options ?? {} });
       },
     },
     permissions: {
@@ -144,7 +148,7 @@ function cmd<T extends WebToNativeMessage["type"]>(
 ): WebToNativeMessage {
   messageCounter += 1;
   return {
-    protocolVersion: 1,
+    protocolVersion: MOBILE_PROTOCOL_MAX,
     type,
     messageId: extra.messageId ?? `m${messageCounter}`,
     channelNonce: "nonce",
@@ -777,6 +781,30 @@ describe("NavigationCoordinator effects", () => {
     expect(context.sent.map((entry) => entry.type)).toEqual([
       "session.prepared",
       "session.started",
+    ]);
+    await context.close();
+  });
+
+  it("names the command each direct response answers", async () => {
+    const context = await harness();
+    const prepared = await context.coordinator.dispatch(
+      cmd("session.prepare", { startPackage: START_PACKAGE }, { messageId: "prepare-command" }),
+    );
+    await context.coordinator.dispatch(
+      cmd(
+        "session.start",
+        {},
+        {
+          messageId: "start-command",
+          sessionId: prepared?.sessionId,
+          revision: 1,
+        },
+      ),
+    );
+
+    expect(context.sent.map((entry) => entry.options.forMessageId)).toEqual([
+      "prepare-command",
+      "start-command",
     ]);
     await context.close();
   });
