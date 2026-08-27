@@ -3,13 +3,17 @@
 import "./undici-fetch";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { isDeepStrictEqual } from "node:util";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+import { createFatalProcessHandler, findRepoRoot } from "@openmapx/core/server";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
+import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
 import Fastify from "fastify";
 import { auth } from "./auth";
 import { db, sql } from "./db/index";
+import { installedExtension } from "./db/schema";
 import {
   getAllIntegrations,
   initIntegrations,
@@ -22,9 +26,13 @@ import {
 import { redis } from "./redis";
 import { registerCoreRoutes } from "./routes/index";
 import {
+  controlledRequestLoggingOptions,
   corsOptions,
   makeRateLimitTierHook,
+  makeSecurityResponseHeaderHook,
+  makeStatusAwareRateLimit,
   makeTimelineAwareRateLimit,
+  registerControlledRequestLogging,
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring";
@@ -34,8 +42,13 @@ import {
   handleDataOperationJob,
   handleServiceBulkJob,
 } from "./services/admin-job-handlers";
-import { serviceApply, serviceRestart, serviceStart, serviceStop } from "./services/admin-ops";
-import { currentAppApiRuntimeInfo } from "./services/app-api-replacement";
+import {
+  renderAndPersistCompose,
+  serviceApply,
+  serviceRestart,
+  serviceStart,
+  serviceStop,
+} from "./services/admin-ops";
 import { appLogger } from "./services/app-logger";
 import {
   filterGatedSources,
@@ -46,28 +59,44 @@ import {
   refreshDataUsePolicy,
   startDataUsePolicyRefresh,
 } from "./services/data-use-policy";
+import { reconcileExtensionInstallJournals } from "./services/extension-install-journal";
 import {
   handleExtensionInstallJob,
   handleExtensionRemoveJob,
 } from "./services/extension-installer";
 import { pruneOldRecords } from "./services/health-history";
 import { jobRunner } from "./services/job-runner";
+import { createDurableOpsKey } from "./services/ops-client";
+import { openRuntimeRecoveryAuthority } from "./services/runtime-recovery-authority";
+import {
+  mergeRuntimeRecovery,
+  type RuntimeRecoveryRecord,
+} from "./services/runtime-recovery-journal";
 import { initServiceRegistry } from "./services/service-registry";
+import { reconcileRepoBackups } from "./services/service-repositories";
+import { reconcileDurableServiceRuntime } from "./services/service-runtime-recovery";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
+import { applyTrustedConfiguration } from "./services/trusted-config-operations";
+import { applyRequiredMigrations } from "./startup-migrations";
+import { configuredTrustedWebOrigins, makeCsrfGuardHook } from "./utils/csrf";
+import { dockerComposeAction } from "./utils/docker-compose";
 import { envInt, envString } from "./utils/env";
 import {
   authLimit,
   expensivePublicApiLimit,
   publicApiLimit,
+  statusPublicApiLimit,
   tilePublicApiLimit,
 } from "./utils/rate-limit";
+import { createSafePinoOptions } from "./utils/safe-log-fields";
 
 const { default: pino } = await import("pino");
+const loggerInstance = pino(
+  createSafePinoOptions(envString("LOG_LEVEL", "info")),
+  pino.multistream([{ stream: process.stdout }, { stream: appLogger.createPinoStream() }]),
+);
 const server = Fastify({
-  loggerInstance: pino(
-    { level: envString("LOG_LEVEL", "info") },
-    pino.multistream([{ stream: process.stdout }, { stream: appLogger.createPinoStream() }]),
-  ),
+  ...controlledRequestLoggingOptions(loggerInstance),
   trustProxy: trustProxyConfig(),
   routerOptions: {
     // DB HAFAS trip IDs can be ~300 chars when URL-encoded (default is 100)
@@ -78,45 +107,17 @@ const server = Fastify({
   bodyLimit: 10 * 1024 * 1024,
 });
 
-// Defense in depth against double-sends. The systemic cause is gone — the
-// data-use-policy preSerialization hook is now synchronous, so a handler that
-// sends then returns undefined no longer races a second send — but a future
-// async hook could re-arm it. If a stray second write ever throws
-// ERR_HTTP_HEADERS_SENT from Fastify's serialization continuation (outside any
-// route try/catch), survive that one error: the first response already wrote
-// correctly; only the stray second write fails. Everything else stays fail-fast.
-//
-// The error can surface on EITHER channel — uncaughtException, or
-// unhandledRejection if any dependency registers its own unhandledRejection
-// listener (which suppresses Node's default promotion to uncaughtException) — so
-// guard both with the same handler.
-function onFatal(err: unknown): void {
-  const e = err as (NodeJS.ErrnoException & { stack?: string }) | undefined;
-  if (e?.code === "ERR_HTTP_HEADERS_SENT") {
-    server.log.error(
-      { err },
-      "Suppressed ERR_HTTP_HEADERS_SENT (double send) — response dropped, process kept alive",
-    );
-    return;
-  }
-  // undici's HTTP response parser can throw an assertion (e.g. "false == true"
-  // from Parser.finish / Socket.onHttpSocketEnd) when an upstream server ends a
-  // response with invalid HTTP framing. It surfaces as an uncaughtException off
-  // the socket, escaping the originating fetch's try/catch, so it can't be
-  // handled at the call site. It is an isolated client-side parse fault of one
-  // outbound request — no app state is corrupted — so drop it and keep serving
-  // instead of crash-looping. Observed with flaky third-party GBFS feeds during
-  // shared-mobility fanout.
-  if (e?.code === "ERR_ASSERTION" && /undici/.test(e.stack ?? "")) {
-    server.log.error(
-      { err },
-      "Suppressed undici HTTP-parser assertion (flaky upstream) — request dropped, process kept alive",
-    );
-    return;
-  }
-  server.log.fatal({ err }, "Fatal uncaught error — exiting");
-  process.exit(1);
-}
+registerControlledRequestLogging(server);
+
+// No exception shape proves a process is safe to keep serving after control
+// reaches a fatal channel. The pinned standalone Undici contains the historical
+// parser fix, and structural route tests cover the former double-send cause.
+// Terminate uniformly and let the container restart through mandatory startup
+// migration/reconciliation rather than continuing with unknown shared state.
+const onFatal = createFatalProcessHandler({
+  fatal: (fields, message) => server.log.fatal(fields, message),
+  exit: (code) => process.exit(code),
+});
 process.on("uncaughtException", onFatal);
 process.on("unhandledRejection", onFatal);
 
@@ -124,26 +125,104 @@ server.setErrorHandler(uniformErrorHandler);
 
 // Run database migrations on startup (idempotent — skips already-applied migrations)
 const migrationsDir = join(import.meta.dirname ?? ".", "db", "migrations");
-let migrationsSucceeded = true;
-if (existsSync(migrationsDir)) {
-  try {
-    await migrate(db, { migrationsFolder: migrationsDir });
-    server.log.info("Database migrations applied");
-  } catch (err) {
-    migrationsSucceeded = false;
-    server.log.error(err, "Database migration failed");
-  }
+try {
+  await applyRequiredMigrations({
+    migrationsDirectory: migrationsDir,
+    directoryExists: existsSync,
+    migrate: () => migrate(db, { migrationsFolder: migrationsDir }),
+  });
+  server.log.info("Database migrations applied");
+} catch (err) {
+  // Never bind a socket against an unknown schema. A failed deployment must be
+  // visible to the orchestrator as a stopped container, not as a healthy API
+  // that turns schema mismatches into request-time errors or partial writes.
+  server.log.fatal(err, "Required database migration failed; refusing to start");
+  throw err;
 }
 
-await server.register(helmet);
-await server.register(cors, corsOptions());
+try {
+  await reconcileExtensionInstallJournals(findRepoRoot(), async (journal) => {
+    const [row] = await db
+      .select({ manifest: installedExtension.manifest })
+      .from(installedExtension)
+      .where(eq(installedExtension.id, journal.extensionId))
+      .limit(1);
+    return !!row && isDeepStrictEqual(row.manifest, journal.targetManifest);
+  });
+  server.log.info("Extension integration install journals reconciled");
+  const root = findRepoRoot();
+  const runtimeRecoveryJournal = await openRuntimeRecoveryAuthority(root);
+  const serviceRecovery = await reconcileRepoBackups({
+    restoreSelection: async (roots, recoveryId) => {
+      await initServiceRegistry();
+      await applyTrustedConfiguration({
+        kind: "serviceSelection.apply",
+        selectedRoots: roots,
+        operationKey: createDurableOpsKey("startup.selection.recovery", recoveryId),
+      });
+    },
+    persistRuntimeRecovery: async (recovery) => {
+      if (!recovery.incidentId) {
+        throw new Error("Service runtime recovery is missing its durable incident identity");
+      }
+      const discovered: RuntimeRecoveryRecord = {
+        version: 1,
+        incidentId: recovery.incidentId,
+        orphanedServiceIds: [...recovery.orphanedServiceIds],
+        restartServiceIds: [...recovery.restartServiceIds],
+      };
+      const retained = runtimeRecoveryJournal.record();
+      await runtimeRecoveryJournal.replace(
+        retained === null ? discovered : mergeRuntimeRecovery(retained, discovered),
+      );
+    },
+  });
+  await reconcileDurableServiceRuntime(serviceRecovery, runtimeRecoveryJournal, {
+    // Startup runtime recovery uses the same typed operations as every other
+    // lifecycle path, so recovery never needs a Docker socket either.
+    remove: (serviceId) =>
+      dockerComposeAction(serviceId, "remove", {
+        operationKey: createDurableOpsKey(
+          "startup.runtime-recovery.remove",
+          `${serviceRecovery.incidentId ?? "recovery-without-incident"}:${serviceId}`,
+        ),
+      }),
+    recreate: (serviceId) =>
+      dockerComposeAction(serviceId, "recreate-isolated", {
+        operationKey: createDurableOpsKey(
+          "startup.runtime-recovery.recreate",
+          `${serviceRecovery.incidentId ?? "recovery-without-incident"}:${serviceId}`,
+        ),
+      }),
+    initializeRegistry: initServiceRegistry,
+    renderCompose: () =>
+      renderAndPersistCompose({
+        operationKey: createDurableOpsKey(
+          "startup.runtime-recovery.render",
+          serviceRecovery.incidentId ?? "recovery-without-incident",
+        ),
+      }),
+  });
+  server.log.info("Service repository rollbacks reconciled");
+} catch (err) {
+  server.log.fatal(err, "Service repository rollback reconciliation failed; refusing to start");
+  throw err;
+}
 
+const trustedWebOrigins = configuredTrustedWebOrigins();
+
+await server.register(helmet);
+await server.register(cors, corsOptions(trustedWebOrigins));
+
+server.addHook("onRequest", makeSecurityResponseHeaderHook());
+server.addHook("onRequest", makeCsrfGuardHook(trustedWebOrigins));
 server.addHook(
   "onRequest",
   makeRateLimitTierHook({
     auth: authLimit.preHandler(),
     tile: tilePublicApiLimit.preHandler(),
     expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
+    status: makeStatusAwareRateLimit(statusPublicApiLimit),
     public: makeTimelineAwareRateLimit(publicApiLimit),
   }),
 );
@@ -200,9 +279,7 @@ setIntegrationsReloadedHook(() => {
 // from the committed `openapi.json`.
 await registerCoreRoutes(server, {
   authHandler: auth.handler,
-  authUiOrigin:
-    envString("CORS_ORIGIN", "http://localhost:3000").split(",")[0]?.trim() ||
-    "http://localhost:3000",
+  authUiOrigin: trustedWebOrigins[0],
 });
 
 // Service registry — load service manifests from services/ directory
@@ -325,10 +402,7 @@ try {
 // Only complete a checkpointed self-update after the replacement API is
 // genuinely listening, migrations succeeded, and Docker confirms that this
 // process is running the exact image pulled by the update job.
-await jobRunner.initialize({
-  completeRestartedUpdates: migrationsSucceeded,
-  currentAppApiRuntime: await currentAppApiRuntimeInfo(),
-});
+await jobRunner.initialize();
 
 // Graceful shutdown
 for (const signal of ["SIGINT", "SIGTERM"] as const) {

@@ -1,8 +1,9 @@
-import { resolveGooglePhotosLink } from "@integrations/photos/orchestrator";
+import { isGooglePhotosImageUrl, resolveGooglePhotosLink } from "@integrations/photos/orchestrator";
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync } from "fastify";
 import { envString } from "../utils/env.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
 
 /**
  * Allowed upstream hostname patterns for the image proxy.
@@ -167,12 +168,19 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
 
       // Google Photos share links are not direct images — resolve to actual image URL
       let imageUrl = url;
+      let resolvedGooglePhotos = false;
       if (parsed.hostname === "photos.app.goo.gl" || parsed.hostname === "photos.google.com") {
         const resolved = await resolveGooglePhotosLink(url);
         if (resolved.length === 0) {
           return reply.status(404).send({ message: "Could not resolve Google Photos link" });
         }
         imageUrl = resolved[0];
+        resolvedGooglePhotos = true;
+        // The resolver is a dependency, not an allowlist bypass. Validate its
+        // initial output independently before the first socket is opened.
+        if (!isGooglePhotosImageUrl(imageUrl)) {
+          return reply.status(403).send({ message: "Domain not allowed" });
+        }
       }
 
       try {
@@ -183,7 +191,11 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
           timeoutMs: 10_000,
           headers: { "User-Agent": USER_AGENT },
           maxRedirects: 5,
-          validateRedirectUrl: (next) => isAllowedHost(next.hostname),
+          validateRedirectUrl: (next) =>
+            resolvedGooglePhotos
+              ? isGooglePhotosImageUrl(next)
+              : (next.protocol === "https:" || next.protocol === "http:") &&
+                isAllowedHost(next.hostname),
         });
 
         if (!upstream.ok) {
@@ -254,7 +266,10 @@ export const imageProxyRoute: FastifyPluginAsync = async (fastify) => {
         }
         return reply;
       } catch (err) {
-        req.log.warn({ url, err }, "Image proxy fetch failed");
+        req.log.warn(
+          { imageSource: summarizeExternalUrl(url), errorClass: safeErrorClass(err) },
+          "Image proxy fetch failed",
+        );
         // If the stream failed AFTER headers were flushed (line above), a 502
         // send would be a double-send (ERR_HTTP_HEADERS_SENT). Abort the socket
         // so the client sees a truncated response instead, matching the

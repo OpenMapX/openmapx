@@ -32,7 +32,7 @@ const fetchMock = vi.hoisted(() => vi.fn());
 
 beforeAll(() => {
   process.env.DATA_MANAGER_AUTH_TOKEN = "service-token";
-  process.env.DATA_MANAGER_URL = "http://data-manager.test:4000";
+  process.env.DATA_MANAGER_URL = "https://data-manager.test:4000";
   vi.stubGlobal("fetch", fetchMock);
 });
 
@@ -82,9 +82,11 @@ describe("POST /data-manager/transit/sync", () => {
     expect(res.statusCode).toBe(202);
     expect(res.json()).toEqual({ ok: true, jobId: "job-xyz", status: "started" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://data-manager.test:4000/transit/sync",
+      "https://data-manager.test:4000/transit/sync",
       expect.objectContaining({
         method: "POST",
+        redirect: "error",
+        signal: expect.any(AbortSignal),
         headers: expect.objectContaining({
           Authorization: "Bearer service-token",
         }),
@@ -118,5 +120,40 @@ describe("POST /data-manager/transit/sync", () => {
       reason: "in-flight",
       existingJobId: "running-job",
     });
+  });
+
+  it("refuses a plaintext remote destination before forwarding the service token", async () => {
+    process.env.DATA_MANAGER_URL = "http://attacker.example:4000";
+    try {
+      const res = await app.inject({
+        method: "POST",
+        url: "/data-manager/transit/sync",
+        headers: { authorization: "Bearer service-token" },
+        payload: {},
+      });
+
+      expect(res.statusCode).toBe(500);
+      expect(fetchMock).not.toHaveBeenCalled();
+    } finally {
+      process.env.DATA_MANAGER_URL = "https://data-manager.test:4000";
+    }
+  });
+
+  it("rejects an oversized proxy response instead of buffering it", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(`{"padding":"${"x".repeat(4 * 1024 * 1024)}"}`, {
+        headers: { "content-type": "application/json" },
+      }),
+    );
+
+    const res = await app.inject({
+      method: "POST",
+      url: "/data-manager/transit/sync",
+      headers: { authorization: "Bearer service-token" },
+      payload: {},
+    });
+
+    expect(res.statusCode).toBe(500);
+    expect(res.json().message).toMatch(/too large/i);
   });
 });

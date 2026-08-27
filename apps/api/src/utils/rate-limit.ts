@@ -161,6 +161,13 @@ export const publicApiLimit = new RateLimiter({
 });
 
 /**
+ * Public status has a dedicated IP bucket because each cache refresh fans out
+ * to deployment dependencies. Keep this contract fixed at 60 requests/minute;
+ * the in-process snapshot and shared response cache reduce probe work further.
+ */
+export const statusPublicApiLimit = new RateLimiter({ max: 60, windowMs: 60_000 });
+
+/**
  * Tight limiter for CPU- or quota-expensive endpoints that fan out to
  * upstream services (Valhalla isochrone, MOTIS, geocoding, photo / review
  * aggregation).

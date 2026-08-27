@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { db } from "../db";
 import { adminAuditLog } from "../db/schema";
+import { appLogger } from "../services/app-logger.js";
+import { safeErrorClass, sanitizeLogMetadata } from "./safe-log-fields.js";
 
 // Sentinel actor id emitted by `requireAdmin`'s loopback short-circuit. Such
 // requests have no real user row, so the audit log writes `actorId: null` and
@@ -33,12 +35,21 @@ export async function writeAuditLog(entry: AuditLogEntry): Promise<void> {
       targetId: entry.targetId ?? null,
       targetType: entry.targetType ?? null,
       action: entry.action,
-      details: entry.details ?? null,
+      details:
+        entry.details === null || entry.details === undefined
+          ? null
+          : sanitizeLogMetadata(entry.details),
       ipAddress: entry.request?.ip ?? null,
       userAgent,
     });
   } catch (err) {
     // Audit log failures must never break the main operation
-    console.error("[audit-log] Failed to write entry:", err);
+    appLogger.add({
+      level: "error",
+      source: "audit-log",
+      msg: "Audit log persistence failed",
+      time: Date.now(),
+      metadata: { errorClass: safeErrorClass(err) },
+    });
   }
 }

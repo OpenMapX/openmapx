@@ -70,6 +70,7 @@ function timelineWithTrackIds(ids: string[]) {
 function transportResponse<T>(data: T, headers: Record<string, string> = {}): SafeJsonResponse<T> {
   return {
     data,
+    text: JSON.stringify(data),
     status: 200,
     headers: new Headers(headers),
     finalUrl: "https://timeline.example.test/api",

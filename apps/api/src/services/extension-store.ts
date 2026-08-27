@@ -1,5 +1,6 @@
+import { createHash } from "node:crypto";
 import { USER_AGENT_ADMIN, validatePublicUrl } from "@openmapx/core";
-import { services as coreServices, safeFetchJson } from "@openmapx/core/server";
+import { services as coreServices, safeFetchJson, safeFetchText } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
 import { db } from "../db";
 import {
@@ -9,17 +10,45 @@ import {
 } from "../db/schema";
 import { redis } from "../redis";
 import { envString } from "../utils/env.js";
+import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
+import { appLogger } from "./app-logger.js";
 
 type ExtensionManifest = coreServices.ExtensionManifest;
 type ExtensionTrust = "built-in" | "verified" | "community";
 
-// The curated OpenMapX catalog (verified tier). CI-gated PR inclusion is the
-// identity/validation gate; entries from any other (operator-added) source are
-// surfaced as the lower "community" tier.
+// The curated OpenMapX catalog. Verified trust is NOT granted by being this
+// source: it comes from immutable content only. The default is pinned to an
+// exact commit so the catalog bytes cannot move under us, and each entry still
+// has to be digest-bound (see `resolveEntryTrust`) to reach the verified tier.
+// Resolved with `git ls-remote https://github.com/openmapx/community-extensions.git
+// refs/heads/main` on 2026-08-25.
+const DEFAULT_EXTENSION_CATALOG_COMMIT = "254ed34c34f204809870323e7dca6389e0d6f81f";
 const DEFAULT_EXTENSION_CATALOG_URL = envString(
   "EXTENSION_CATALOG_URL",
-  "https://raw.githubusercontent.com/openmapx/community-extensions/main/catalog.json",
+  `https://raw.githubusercontent.com/openmapx/community-extensions/${DEFAULT_EXTENSION_CATALOG_COMMIT}/catalog.json`,
 );
+
+// A moving deny-only feed. It may disable extensions but can never add one,
+// change a manifest, raise trust, or select an upgrade.
+const EXTENSION_REVOCATION_FEED_URL = envString(
+  "EXTENSION_REVOCATION_URL",
+  "https://raw.githubusercontent.com/openmapx/community-extensions/main/revocations.json",
+);
+
+const COMMIT_PATH_SEGMENT = /(^|\/)[a-f0-9]{40}(\/|$)/;
+
+/**
+ * True when the catalog URL names an exact 40-hex commit. A branch or tag URL
+ * can be repointed at new bytes by whoever controls the ref, so it can never
+ * carry verified trust.
+ */
+export function isImmutableCatalogUrl(url: string): boolean {
+  try {
+    return COMMIT_PATH_SEGMENT.test(new URL(url).pathname);
+  } catch {
+    return false;
+  }
+}
 
 const CATALOG_CACHE_KEY = "extstore:catalog";
 const CATALOG_CACHE_TTL = 60 * 60 * 24; // 24h
@@ -56,6 +85,11 @@ export interface ExtensionCatalogEntry {
   featured?: boolean;
   /** Filled in by the resolver — never trusted from the document itself. */
   trust?: ExtensionTrust;
+  /**
+   * Exact SHA-256 of the manifest bytes this entry authorizes. Present only on
+   * verified entries; it is what makes the entry immutable.
+   */
+  manifestSha256?: string;
 }
 
 /** Kill-switch + delisting carried by a catalog document. */
@@ -73,6 +107,84 @@ export interface ExtensionCatalogSource {
 export interface KillSwitch {
   removed: Map<string, string>; // id -> reason
   critical: Map<string, { reason: string; maxVersion?: string }>;
+  /**
+   * True when the moving revocation feed could not be refreshed and the last
+   * known-good snapshot is being served instead. Administrators must be able to
+   * tell "nothing is revoked" from "we could not check".
+   */
+  stale: boolean;
+}
+
+const REVOCATION_CACHE_KEY = "extstore:revocations";
+const REVOCATION_CACHE_TTL = 60 * 60 * 24 * 30; // keep the last good snapshot for 30 days
+
+interface RevocationSnapshot {
+  removed: [string, string][];
+  critical: [string, { reason: string; maxVersion?: string }][];
+  fetchedAtMs: number;
+}
+
+/**
+ * Fetch the moving deny-only feed. It is parsed with a deny-only shape: there is
+ * deliberately no path by which it can introduce an entry, alter a manifest,
+ * raise trust, or select a version. On failure the last valid snapshot is
+ * reused and reported as stale rather than silently becoming "nothing revoked".
+ */
+async function fetchRevocations(): Promise<{ snapshot: RevocationSnapshot; stale: boolean }> {
+  const cached = await readCachedRevocations();
+  try {
+    const data = await safeFetchJson<unknown>(EXTENSION_REVOCATION_FEED_URL, {
+      headers: { "User-Agent": USER_AGENT_ADMIN },
+      timeoutMs: 15_000,
+    });
+    const control = (data ?? {}) as CatalogControl;
+    const snapshot: RevocationSnapshot = {
+      removed: (control.removed ?? [])
+        .filter((r) => typeof r?.id === "string")
+        .map((r) => [r.id, typeof r.reason === "string" ? r.reason : "delisted"]),
+      critical: (control.critical ?? [])
+        .filter((c) => typeof c?.id === "string")
+        .map((c) => [
+          c.id,
+          {
+            reason: typeof c.reason === "string" ? c.reason : "security advisory",
+            ...(typeof c.maxVersion === "string" ? { maxVersion: c.maxVersion } : {}),
+          },
+        ]),
+      fetchedAtMs: Date.now(),
+    };
+    if (redis) {
+      redis
+        .setex(REVOCATION_CACHE_KEY, REVOCATION_CACHE_TTL, JSON.stringify(snapshot))
+        .catch(() => {});
+    }
+    return { snapshot, stale: false };
+  } catch (err) {
+    appLogger.add({
+      level: "warn",
+      source: "extension-store",
+      msg: "Extension revocation feed refresh failed; serving last known snapshot",
+      time: Date.now(),
+      metadata: {
+        revocationSource: summarizeExternalUrl(EXTENSION_REVOCATION_FEED_URL),
+        errorClass: safeErrorClass(err),
+      },
+    });
+    return {
+      snapshot: cached ?? { removed: [], critical: [], fetchedAtMs: 0 },
+      stale: true,
+    };
+  }
+}
+
+async function readCachedRevocations(): Promise<RevocationSnapshot | null> {
+  if (!redis) return null;
+  try {
+    const raw = await redis.get(REVOCATION_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as RevocationSnapshot) : null;
+  } catch {
+    return null;
+  }
 }
 
 async function getExtraSources(): Promise<ExtensionCatalogSource[]> {
@@ -112,8 +224,35 @@ export async function listExtensionSources(): Promise<ExtensionCatalogSource[]> 
   ];
 }
 
-function trustForSource(isDefault: boolean): ExtensionTrust {
-  return isDefault ? "verified" : "community";
+/**
+ * Verified trust requires immutable content, never provenance. An entry earns
+ * it only when it comes from the default catalog resolved at an exact commit
+ * AND the entry itself is digest-bound to exact manifest bytes. Everything else
+ * — a custom source, a moving default, or an entry without a manifest digest —
+ * is community trust.
+ */
+export function resolveEntryTrust(
+  source: ExtensionCatalogSource,
+  entry: unknown,
+): { trust: ExtensionTrust; verified?: coreServices.VerifiedCatalogEntry } {
+  if (!source.isDefault || !isImmutableCatalogUrl(source.url)) return { trust: "community" };
+  const parsed = coreServices.verifiedCatalogEntrySchema.safeParse(
+    pickVerifiedFields(entry as Record<string, unknown>),
+  );
+  return parsed.success ? { trust: "verified", verified: parsed.data } : { trust: "community" };
+}
+
+// The verified schema is strict so a feed cannot smuggle extra trust inputs.
+// Editorial fields (name, icon, tags) are presentation only and are checked
+// separately, so they are not part of the authorization decision.
+function pickVerifiedFields(entry: Record<string, unknown>) {
+  return {
+    id: entry.id,
+    version: entry.version,
+    manifest: entry.manifest,
+    manifestSha256: entry.manifestSha256,
+    ...(entry.platform === undefined ? {} : { platform: entry.platform }),
+  };
 }
 
 interface FetchedCatalog {
@@ -180,6 +319,11 @@ export async function applyLiveVersions(
   await Promise.all(
     entries.map(async (entry) => {
       if (!entry.manifest) return;
+      // A verified entry is pinned to exact manifest bytes by the immutable
+      // catalog. Letting a moving manifest URL choose its version would hand
+      // version selection — and therefore what gets installed — back to a
+      // source that can change at any time.
+      if (entry.trust === "verified") return;
       const meta = await fetchMeta(entry.manifest);
       if (meta?.version) entry.version = meta.version;
       if (meta?.platform) entry.minPlatform = meta.platform;
@@ -205,11 +349,24 @@ async function buildCatalog(): Promise<CachedCatalog> {
   for (const source of sources) {
     try {
       const { entries: fetched, control } = await fetchCatalogFromUrl(source.url);
-      const trust = trustForSource(source.isDefault);
       for (const entry of fetched) {
         if (seen.has(entry.id)) continue;
         seen.add(entry.id);
-        entries.push({ ...entry, trust });
+        const resolved = resolveEntryTrust(source, entry);
+        entries.push({
+          ...entry,
+          trust: resolved.trust,
+          // A verified entry's authorized version and digest come from the
+          // immutable catalog bytes, not from whatever the manifest URL
+          // currently serves.
+          ...(resolved.verified
+            ? {
+                version: resolved.verified.version,
+                minPlatform: resolved.verified.platform,
+                manifestSha256: resolved.verified.manifestSha256,
+              }
+            : {}),
+        });
       }
       for (const r of control.removed ?? []) removed.push([r.id, r.reason ?? "delisted"]);
       for (const c of control.critical ?? []) {
@@ -219,7 +376,16 @@ async function buildCatalog(): Promise<CachedCatalog> {
         ]);
       }
     } catch (err) {
-      console.warn(`[extstore] Failed to fetch catalog from ${source.url}:`, err);
+      appLogger.add({
+        level: "warn",
+        source: "extension-store",
+        msg: "Extension catalog fetch failed",
+        time: Date.now(),
+        metadata: {
+          catalogSource: summarizeExternalUrl(source.url),
+          errorClass: safeErrorClass(err),
+        },
+      });
     }
   }
 
@@ -237,10 +403,14 @@ export async function getExtensionCatalog(forceRefresh = false): Promise<Extensi
 
 export async function getKillSwitch(): Promise<KillSwitch> {
   const cached = await getCatalogCached(false);
-  return {
-    removed: new Map(cached.killSwitch.removed),
-    critical: new Map(cached.killSwitch.critical),
-  };
+  const revocations = await fetchRevocations();
+  // Union of the catalog's own control block and the moving deny-only feed.
+  // Both can only ADD denials.
+  const removed = new Map(cached.killSwitch.removed);
+  const critical = new Map(cached.killSwitch.critical);
+  for (const [id, reason] of revocations.snapshot.removed) removed.set(id, reason);
+  for (const [id, value] of revocations.snapshot.critical) critical.set(id, value);
+  return { removed, critical, stale: revocations.stale };
 }
 
 async function getCatalogCached(forceRefresh: boolean): Promise<CachedCatalog> {
@@ -272,7 +442,23 @@ export async function resolveExtensionManifest(
   entry: ExtensionCatalogEntry,
 ): Promise<ExtensionManifest> {
   let raw: unknown;
-  if (entry.manifest) {
+  if (entry.manifest && entry.manifestSha256) {
+    // Verify the digest over the exact received bytes BEFORE they are parsed or
+    // cached. Parsing first would expose the parser to unverified content and
+    // would let a cache hold bytes that were never authorized.
+    const text = await safeFetchText(entry.manifest, {
+      headers: { "User-Agent": USER_AGENT_ADMIN },
+      timeoutMs: 15_000,
+    });
+    const digest = createHash("sha256").update(text, "utf8").digest("hex");
+    if (digest !== entry.manifestSha256.toLowerCase()) {
+      throw new Error(`Extension manifest digest mismatch for "${entry.id}"`);
+    }
+    raw = JSON.parse(text) as unknown;
+  } else if (entry.manifest) {
+    if (entry.trust === "verified") {
+      throw new Error(`Verified extension "${entry.id}" is missing its manifest digest`);
+    }
     raw = await safeFetchJson<unknown>(entry.manifest, {
       headers: { "User-Agent": USER_AGENT_ADMIN },
       timeoutMs: 15_000,
@@ -291,7 +477,16 @@ export async function resolveExtensionManifest(
   if (!validation.valid) {
     throw new Error(`Invalid extension.json for "${entry.id}": ${validation.errors.join("; ")}`);
   }
-  return raw as ExtensionManifest;
+  const manifest = raw as ExtensionManifest;
+  // The catalog entry and the manifest must describe the same thing. Without
+  // this, an entry could authorize one id/version and install another.
+  if (manifest.id !== entry.id) {
+    throw new Error(`Extension manifest id does not match catalog entry "${entry.id}"`);
+  }
+  if (entry.version && manifest.version !== entry.version) {
+    throw new Error(`Extension manifest version does not match catalog entry "${entry.id}"`);
+  }
+  return manifest;
 }
 
 export function isExtensionCompatible(entry: ExtensionCatalogEntry): boolean {

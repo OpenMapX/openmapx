@@ -1,5 +1,6 @@
 import type { RegistryEntry } from "@integrations/transit-dynamic-registry/registry-types";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { streamedJsonResponse } from "../../../../test/streamed-response.js";
 
 // Mocks
 
@@ -45,7 +46,7 @@ afterEach(() => {
 });
 
 function mockGraphQL(data: unknown) {
-  return { ok: true, json: async () => ({ data }) } as Response;
+  return streamedJsonResponse({ data });
 }
 
 // Test constants
@@ -543,7 +544,7 @@ describe("getAlerts", () => {
 
 describe("planJourney", () => {
   it("returns null when GraphQL data is null", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: true, json: async () => ({ data: null }) } as Response);
+    mockFetch.mockResolvedValueOnce(streamedJsonResponse({ data: null }));
 
     const { otpGraphQlAdapter } = await import(
       "@integrations/transit-dynamic-registry/otp-graphql"

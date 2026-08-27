@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -19,6 +19,22 @@ const fakeDb = vi.hoisted(() => ({
    * appropriate dataset.
    */
   callIndex: 0,
+}));
+
+// The lock is agent-owned; /state reads it through the typed operation rather
+// than from a copy of the repository inside this image.
+vi.mock("../../services/ops-client.js", () => ({
+  createApiOpsClient: vi.fn(() => ({}) as never),
+  createDurableOpsKey: vi.fn(() => "opk1_datamanagerstatefixture0000"),
+  executeAndWait: vi.fn(async () => ({
+    active: {
+      ref: "main@abc123def456",
+      submodules: { "transitland-atlas": "deadbeef" },
+      lockedAt: "2026-05-01T00:00:00.000Z",
+      lockedBy: "tester",
+    },
+    proposed: null,
+  })),
 }));
 
 vi.mock("../../auth", () => ({
@@ -96,19 +112,6 @@ let repoRootDir: string;
 
 beforeAll(async () => {
   repoRootDir = mkdtempSync(join(tmpdir(), "openmapx-dm-state-"));
-  // Write a fake lockfile so /state can return the ref.
-  const infraDir = join(repoRootDir, "infra", "docker");
-  mkdirSync(infraDir, { recursive: true });
-  writeFileSync(
-    join(infraDir, "transitous.lock.json"),
-    JSON.stringify({
-      ref: "main@abc123def456",
-      submodules: { "transitland-atlas": "deadbeef" },
-      lockedAt: "2026-05-01T00:00:00.000Z",
-      lockedBy: "tester",
-    }),
-    "utf-8",
-  );
   process.env.OPENMAPX_ROOT_DIR = repoRootDir;
   process.env.DATA_MANAGER_AUTH_TOKEN = "test-token";
 

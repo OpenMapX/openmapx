@@ -1,5 +1,6 @@
+import { Readable } from "node:stream";
 import type { FastifyInstance } from "fastify";
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestApp } from "../test/app.js";
 
 const WEB_ORIGIN = "https://openmapx.test";
@@ -53,6 +54,10 @@ beforeAll(async () => {
   app = await buildTestApp(mobileAuthRoute, { prefix: "/api" });
 });
 
+afterAll(async () => {
+  await app.close();
+});
+
 beforeEach(() => {
   authState.session = { user: { id: "user-A" } };
   authState.token = "ott-value";
@@ -83,7 +88,35 @@ const exchange = (payload: Record<string, unknown>, headers: Record<string, stri
   });
 
 const validIssue = { purpose: "sign-in", codeChallenge: CHALLENGE, state: STATE };
-const validExchange = { callbackCode: "code-value", codeVerifier: VERIFIER, state: STATE };
+const validExchange = { callbackCode: "a".repeat(43), codeVerifier: VERIFIER, state: STATE };
+
+function jsonBodyWithExactBytes(value: Record<string, unknown>, bytes: number): string {
+  const json = JSON.stringify(value);
+  const padding = bytes - Buffer.byteLength(json);
+  if (padding < 0) throw new Error(`JSON fixture already exceeds ${bytes} bytes`);
+  return `${json}${" ".repeat(padding)}`;
+}
+
+function expectMobilePrivacy(response: {
+  headers: Record<string, string | string[] | number | undefined>;
+}): void {
+  expect(response.headers["cache-control"]).toBe("no-store");
+  expect(response.headers.pragma).toBe("no-cache");
+  expect(response.headers["referrer-policy"]).toBe("no-referrer");
+}
+
+async function rawChunked(path: "issue" | "exchange", body: string) {
+  return app.inject({
+    method: "POST",
+    url: `/api/mobile-auth/${path}`,
+    headers: {
+      origin: WEB_ORIGIN,
+      "content-type": "application/json",
+      "transfer-encoding": "chunked",
+    },
+    payload: Readable.from([body.slice(0, 2_048), body.slice(2_048)]),
+  });
+}
 
 describe("POST /mobile-auth/issue", () => {
   it("returns only the callback code", async () => {
@@ -103,8 +136,7 @@ describe("POST /mobile-auth/issue", () => {
     const response = await issue(validIssue);
 
     // A one-time token in a shared cache is one somebody else can use.
-    expect(response.headers["cache-control"]).toBe("no-store");
-    expect(response.headers["referrer-policy"]).toBe("no-referrer");
+    expectMobilePrivacy(response);
   });
 
   it("requires an authenticated session", async () => {
@@ -113,6 +145,7 @@ describe("POST /mobile-auth/issue", () => {
     const response = await issue(validIssue);
 
     expect(response.statusCode).toBe(401);
+    expectMobilePrivacy(response);
     expect(handoff.issued).toEqual([]);
   });
 
@@ -120,6 +153,7 @@ describe("POST /mobile-auth/issue", () => {
     const response = await issue(validIssue, { origin: "https://evil.example" });
 
     expect(response.statusCode).toBe(403);
+    expectMobilePrivacy(response);
     expect(handoff.issued).toEqual([]);
   });
 
@@ -133,6 +167,7 @@ describe("POST /mobile-auth/issue", () => {
     });
 
     expect(response.statusCode).toBe(403);
+    expectMobilePrivacy(response);
   });
 
   it("passes the purpose, challenge and state through unchanged", async () => {
@@ -161,10 +196,78 @@ describe("POST /mobile-auth/issue", () => {
     expect((await issue(validIssue)).statusCode).toBe(429);
   });
 
-  it("refuses an oversize body before doing any work", async () => {
-    const response = await issue({ ...validIssue, padding: "x".repeat(8_000) });
+  it("accepts an exactly 4096-byte JSON body", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mobile-auth/issue",
+      headers: { origin: WEB_ORIGIN, "content-type": "application/json" },
+      payload: jsonBodyWithExactBytes(validIssue, 4_096),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(handoff.issued).toHaveLength(1);
+  });
+
+  it("rejects a 4097-byte JSON body before doing any work", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mobile-auth/issue",
+      headers: { origin: WEB_ORIGIN, "content-type": "application/json" },
+      payload: jsonBodyWithExactBytes(validIssue, 4_097),
+    });
 
     expect(response.statusCode).toBe(413);
+    expectMobilePrivacy(response);
+    expect(handoff.issued).toEqual([]);
+  });
+
+  it("rejects a chunked 4097-byte body with privacy headers before issuing", async () => {
+    const response = await rawChunked("issue", jsonBodyWithExactBytes(validIssue, 4_097));
+
+    expect(response.statusCode).toBe(413);
+    expectMobilePrivacy(response);
+    expect(handoff.issued).toEqual([]);
+  });
+
+  it("rejects unknown fields before issuing a handoff", async () => {
+    const response = await issue({ ...validIssue, unexpected: "value" });
+
+    expect(response.statusCode).toBe(400);
+    expectMobilePrivacy(response);
+    expect(handoff.issued).toEqual([]);
+  });
+
+  it.each([
+    ["codeChallenge", "c".repeat(128), "c".repeat(129)],
+    ["state", "s".repeat(128), "s".repeat(129)],
+  ] as const)("enforces the maximum length of %s", async (field, maximum, overlong) => {
+    expect((await issue({ ...validIssue, [field]: maximum })).statusCode).toBe(200);
+    handoff.issued = [];
+
+    const rejected = await issue({ ...validIssue, [field]: overlong });
+    expect(rejected.statusCode).toBe(400);
+    expectMobilePrivacy(rejected);
+    expect(handoff.issued).toEqual([]);
+  });
+
+  it("accepts only a declared handoff purpose", async () => {
+    const response = await issue({ ...validIssue, purpose: "sign-in-with-an-unlisted-flow" });
+
+    expect(response.statusCode).toBe(400);
+    expectMobilePrivacy(response);
+    expect(handoff.issued).toEqual([]);
+  });
+
+  it("rejects malformed JSON with privacy headers before issuing", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mobile-auth/issue",
+      headers: { origin: WEB_ORIGIN, "content-type": "application/json" },
+      payload: "{",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expectMobilePrivacy(response);
     expect(handoff.issued).toEqual([]);
   });
 });
@@ -187,13 +290,14 @@ describe("POST /mobile-auth/exchange", () => {
   it("never caches the response", async () => {
     const response = await exchange(validExchange);
 
-    expect(response.headers["cache-control"]).toBe("no-store");
+    expectMobilePrivacy(response);
   });
 
   it("refuses a cross-origin caller", async () => {
     const response = await exchange(validExchange, { origin: "https://evil.example" });
 
     expect(response.statusCode).toBe(403);
+    expectMobilePrivacy(response);
     expect(handoff.exchanged).toEqual([]);
   });
 
@@ -201,7 +305,7 @@ describe("POST /mobile-auth/exchange", () => {
     await exchange(validExchange);
 
     expect(handoff.exchanged[0]).toMatchObject({
-      callbackCode: "code-value",
+      callbackCode: validExchange.callbackCode,
       codeVerifier: VERIFIER,
       state: STATE,
     });
@@ -229,10 +333,59 @@ describe("POST /mobile-auth/exchange", () => {
     expect(response.headers["set-cookie"]).toBeUndefined();
   });
 
-  it("refuses an oversize body", async () => {
-    const response = await exchange({ ...validExchange, padding: "x".repeat(8_000) });
+  it("rejects a 4097-byte fixed-length body before exchange", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mobile-auth/exchange",
+      headers: { origin: WEB_ORIGIN, "content-type": "application/json" },
+      payload: jsonBodyWithExactBytes(validExchange, 4_097),
+    });
 
     expect(response.statusCode).toBe(413);
+    expectMobilePrivacy(response);
+    expect(handoff.exchanged).toEqual([]);
+  });
+
+  it("rejects a chunked 4097-byte body before exchange without Content-Length", async () => {
+    const response = await rawChunked("exchange", jsonBodyWithExactBytes(validExchange, 4_097));
+
+    expect(response.statusCode).toBe(413);
+    expectMobilePrivacy(response);
+    expect(handoff.exchanged).toEqual([]);
+  });
+
+  it("rejects unknown fields before exchanging a handoff", async () => {
+    const response = await exchange({ ...validExchange, unexpected: "value" });
+
+    expect(response.statusCode).toBe(400);
+    expectMobilePrivacy(response);
+    expect(handoff.exchanged).toEqual([]);
+  });
+
+  it.each([
+    ["callbackCode", "a".repeat(256), "a".repeat(257)],
+    ["codeVerifier", "v".repeat(128), "v".repeat(129)],
+    ["state", "s".repeat(128), "s".repeat(129)],
+  ] as const)("enforces the maximum length of %s", async (field, maximum, overlong) => {
+    expect((await exchange({ ...validExchange, [field]: maximum })).statusCode).toBe(200);
+    handoff.exchanged = [];
+
+    const rejected = await exchange({ ...validExchange, [field]: overlong });
+    expect(rejected.statusCode).toBe(400);
+    expectMobilePrivacy(rejected);
+    expect(handoff.exchanged).toEqual([]);
+  });
+
+  it("rejects malformed JSON with privacy headers before exchange", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mobile-auth/exchange",
+      headers: { origin: WEB_ORIGIN, "content-type": "application/json" },
+      payload: "{",
+    });
+
+    expect(response.statusCode).toBe(400);
+    expectMobilePrivacy(response);
     expect(handoff.exchanged).toEqual([]);
   });
 });

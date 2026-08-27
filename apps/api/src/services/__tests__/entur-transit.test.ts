@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { streamedJsonResponse } from "../../test/streamed-response.js";
 
 vi.mock("@openmapx/core", async () => {
   const actual = await vi.importActual<Record<string, unknown>>("@openmapx/core");
@@ -25,7 +26,7 @@ afterEach(() => {
 });
 
 function mockOk(data: unknown) {
-  return { ok: true, json: async () => data } as Response;
+  return streamedJsonResponse(data);
 }
 
 function nsrPolygon(...coordinates: number[]) {

@@ -99,7 +99,10 @@ vi.mock("./utils/require-auth.js", () => ({
 }));
 
 vi.mock("@openmapx/poi-source-registry", () => ({
+  beginPoiSourceRegistryStaging: vi.fn(),
+  commitPoiSourceRegistryStaging: vi.fn(),
   registerPoiSources: vi.fn(),
+  rollbackPoiSourceRegistryStaging: vi.fn(),
 }));
 
 import {

@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -87,5 +87,38 @@ describe("initServiceRegistry", () => {
       .map((service) => service.manifest.id)
       .sort();
     expect(enabled).toEqual(["app-api", "postgis"]);
+  });
+
+  it("prefers the committed trusted generation over a stale baked environment after restart", async () => {
+    writeManifest("app-api", { ...baseManifest, id: "app-api" });
+    writeManifest("postgis", { ...baseManifest, id: "postgis" });
+    writeManifest("valhalla", { ...baseManifest, id: "valhalla" });
+    const revision = `cfg1_${"a".repeat(43)}`;
+    const current = join(tmp, "infra", "docker", ".trusted-config-current");
+    const generation = join(tmp, "infra", "docker", ".trusted-config-generations", revision);
+    mkdirSync(generation, { recursive: true });
+    symlinkSync(join(".trusted-config-generations", revision), current);
+    writeFileSync(
+      join(generation, "service-selection.json"),
+      JSON.stringify({ selected: ["valhalla"] }),
+    );
+    process.env.OPENMAPX_ENABLED_SERVICES = "app-api,postgis";
+
+    await initServiceRegistry();
+
+    expect(
+      getServiceRegistry()
+        .enabled()
+        .map((service) => service.manifest.id),
+    ).toEqual(["valhalla"]);
+  });
+
+  it("fails closed on a malformed or dangling trusted selection pointer", async () => {
+    writeManifest("app-api", { ...baseManifest, id: "app-api" });
+    symlinkSync(
+      join(".trusted-config-generations", `cfg1_${"z".repeat(43)}`),
+      join(tmp, "infra", "docker", ".trusted-config-current"),
+    );
+    await expect(initServiceRegistry()).rejects.toThrow();
   });
 });

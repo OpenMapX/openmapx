@@ -52,8 +52,6 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "adapter maps timeout, network, HTTP status, malformed JSON, and ArcGIS error envelopes to provider-specific source errors",
   "integrations/overlay-winter-sports/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
-  "integrations/photos/orchestrator.ts":
-    "Google Photos share-link scraping: manual redirect + HTML text parsing",
   "integrations/restaurants/menu.ts":
     "manual per-hop redirect loop with SSRF re-check + binary HTML byte cap",
   "integrations/search-nlp/index.ts":

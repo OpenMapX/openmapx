@@ -1,7 +1,7 @@
 import { isAbsolute, relative, resolve } from "node:path";
-import { validatePublicUrl } from "@openmapx/core";
 import { findRepoRoot } from "@openmapx/core/server";
-import { assertValidBackupName, runOpenmapxCliJobCommand } from "./admin-cli";
+import { assertValidBackupName } from "./admin-cli";
+import { executeAdminJobOperation } from "./admin-job-ops";
 import type { JobContext } from "./job-runner";
 import { getServiceRegistry } from "./service-registry";
 
@@ -33,14 +33,7 @@ function toIdList(input: unknown): string[] {
     .filter((id) => id.length > 0);
 }
 
-// Argv-injection guards.
-//
-// `runOpenmapxCliJobCommand` spawns `node packages/cli/src/index.ts ...args` via
-// `spawn(...)` (no shell), so untrusted strings cannot break out of argv. They
-// can, however, still reach commander as flags if they begin with `-` —
-// e.g. `serviceIds: ["--preset=app"]` would inject a known option. Each helper
-// below pins an argv element to a known shape before it is forwarded to the
-// CLI process.
+// Input-shape guards run before values become typed operation identifiers.
 
 const SLUG_RE = /^[a-z0-9][a-z0-9._-]*$/i;
 const REGION_RE = /^[a-zA-Z0-9][a-zA-Z0-9_/.-]*$/;
@@ -122,105 +115,104 @@ export async function handleDataOperationJob(ctx: JobContext): Promise<Record<st
   const op = payload.operation;
   if (!op) throw new Error("Missing data operation");
 
-  const args: string[] = ["data"];
+  let operation:
+    | { kind: "data.downloadOsm"; regionId?: string }
+    | { kind: "data.downloadFonts" }
+    | {
+        kind: "data.update";
+        regionId?: string;
+        countryCodes?: string[];
+        failFast?: boolean;
+      }
+    | { kind: "data.convertOverpass"; regionId?: string }
+    | { kind: "data.link" }
+    | { kind: "data.clean"; dataTypeId: string }
+    | { kind: "data.generateApiKeys"; catalogRevisionId: string }
+    | { kind: "data.overtureSync"; regionId: string }
+    | { kind: "data.overtureConflate"; regionId: string; restart?: boolean }
+    | { kind: "data.searchIndexBuild"; regionId: string };
   switch (op) {
     case "download-osm": {
-      args.push("download", "osm");
       const region = nonEmptyString(payload.region);
-      if (region) {
-        assertRegion(region);
-        args.push(region);
-      }
+      if (region) assertRegion(region);
+      operation = { kind: "data.downloadOsm", ...(region ? { regionId: region } : {}) };
       break;
     }
     case "download-fonts": {
-      args.push("download", "fonts");
+      operation = { kind: "data.downloadFonts" };
       break;
     }
     case "update": {
-      args.push("update");
       const region = nonEmptyString(payload.region);
       const countries = nonEmptyString(payload.countries);
-      if (region) {
-        assertRegion(region);
-        args.push(region);
-      }
-      if (countries) {
-        assertCountries(countries);
-        args.push("--countries", countries);
-      }
-      if (payload.failFast === true) args.push("--fail-fast");
+      if (region) assertRegion(region);
+      if (countries) assertCountries(countries);
+      operation = {
+        kind: "data.update",
+        ...(region ? { regionId: region } : {}),
+        ...(countries ? { countryCodes: countries.toUpperCase().split(",") } : {}),
+        ...(payload.failFast === true ? { failFast: true } : {}),
+      };
       break;
     }
     case "convert-overpass": {
-      args.push("convert", "overpass");
       const region = nonEmptyString(payload.region);
-      if (region) {
-        assertRegion(region);
-        args.push(region);
-      }
+      if (region) assertRegion(region);
+      operation = { kind: "data.convertOverpass", ...(region ? { regionId: region } : {}) };
       break;
     }
     case "link": {
-      args.push("link");
+      operation = { kind: "data.link" };
       break;
     }
     case "clean": {
       const target = nonEmptyString(payload.target);
       if (!target) throw new Error("clean operation requires target");
-      // The CLI's `clean` accepts a data-type alias or "all" — both fit the
-      // slug shape and do not begin with "-".
       assertSlug(target, "target");
-      args.push("clean", target);
+      operation = { kind: "data.clean", dataTypeId: target };
       break;
     }
     case "generate-api-keys": {
-      args.push("generate-api-keys");
-      const repoUrl = nonEmptyString(payload.repoUrl);
-      const output = nonEmptyString(payload.output);
-      if (repoUrl) {
-        // SSRF posture: reject private/loopback/etc. and force https.
-        validatePublicUrl(repoUrl);
-        if (!/^https:/i.test(repoUrl)) throw new Error("repoUrl must use https");
-        rejectFlagLike(repoUrl, "repoUrl");
-        args.push("--repo-url", repoUrl);
-      }
-      if (output) {
-        const safe = assertInsideRepo(output, "output");
-        args.push("--output", safe);
-      }
+      operation = {
+        kind: "data.generateApiKeys",
+        catalogRevisionId: "transitous-fixed-v1",
+      };
       break;
     }
     case "overture-sync": {
-      args.push("overture-sync");
       const region = nonEmptyString(payload.region);
       if (!region) throw new Error("overture-sync requires region");
       assertRegion(region);
-      args.push(region);
+      operation = { kind: "data.overtureSync", regionId: region };
       break;
     }
     case "overture-conflate": {
-      args.push("overture-conflate");
       const region = nonEmptyString(payload.region);
       if (!region) throw new Error("overture-conflate requires region");
       assertRegion(region);
-      args.push(region);
-      if (payload.restart === true) args.push("--restart");
+      operation = {
+        kind: "data.overtureConflate",
+        regionId: region,
+        ...(payload.restart === true ? { restart: true } : {}),
+      };
       break;
     }
     case "search-index-build": {
       const region = nonEmptyString(payload.region);
       if (!region) throw new Error("search-index-build requires region");
       assertRegion(region);
-      args.push("search-index", "build", region);
+      operation = { kind: "data.searchIndexBuild", regionId: region };
       break;
     }
     default:
       throw new Error(`Unsupported data operation: ${String(op)}`);
   }
 
-  await runOpenmapxCliJobCommand(ctx, args);
-  return { operation: op, args };
+  const result = await executeAdminJobOperation(ctx, operation, `admin-job.data.${op}`);
+  return {
+    operation: op,
+    ...(result.resourceId ? { resourceId: result.resourceId } : {}),
+  };
 }
 
 export async function handleBackupOperationJob(ctx: JobContext): Promise<Record<string, unknown>> {
@@ -234,45 +226,49 @@ export async function handleBackupOperationJob(ctx: JobContext): Promise<Record<
   const op = payload.operation;
   if (!op) throw new Error("Missing backup operation");
 
-  const args: string[] = ["backup"];
   switch (op) {
     case "create": {
-      args.push("create");
-      const name = nonEmptyString(payload.name);
-      // When `name` is absent the CLI generates a safe ISO-timestamp default
-      // (`defaultBackupName`); only validate when the operator picked one.
-      if (name) {
-        assertValidBackupName(name);
-        args.push("--name", name);
-      }
-      break;
+      const backupId = nonEmptyString(payload.name) ?? `job-${ctx.jobId}`;
+      assertValidBackupName(backupId);
+      const result = await executeAdminJobOperation(
+        ctx,
+        { kind: "backup.create", backupId },
+        "admin-job.backup.create",
+      );
+      return { operation: op, backupId: result.backupId };
     }
     case "restore": {
-      const name = nonEmptyString(payload.name);
-      if (!name) throw new Error("restore operation requires name");
-      assertValidBackupName(name);
-      args.push("restore", name);
+      const backupId = nonEmptyString(payload.name);
+      if (!backupId) throw new Error("restore operation requires name");
+      assertValidBackupName(backupId);
       const serviceIds = toIdList(payload.serviceIds);
-      if (serviceIds.length > 0) {
-        assertKnownServiceIds(serviceIds);
-        args.push("--services", ...serviceIds);
-      }
-      if (payload.stopRunning === true) args.push("--stop-running");
-      break;
+      if (serviceIds.length > 0) assertKnownServiceIds(serviceIds);
+      const result = await executeAdminJobOperation(
+        ctx,
+        {
+          kind: "backup.restore",
+          backupId,
+          ...(serviceIds.length > 0 ? { serviceIds } : {}),
+          ...(payload.stopRunning === true ? { stopRunning: true } : {}),
+        },
+        "admin-job.backup.restore",
+      );
+      return { operation: op, backupId: result.backupId };
     }
     case "delete": {
-      const name = nonEmptyString(payload.name);
-      if (!name) throw new Error("delete operation requires name");
-      assertValidBackupName(name);
-      args.push("delete", name);
-      break;
+      const backupId = nonEmptyString(payload.name);
+      if (!backupId) throw new Error("delete operation requires name");
+      assertValidBackupName(backupId);
+      const result = await executeAdminJobOperation(
+        ctx,
+        { kind: "backup.delete", backupId },
+        "admin-job.backup.delete",
+      );
+      return { operation: op, backupId: result.backupId };
     }
     default:
       throw new Error(`Unsupported backup operation: ${String(op)}`);
   }
-
-  await runOpenmapxCliJobCommand(ctx, args);
-  return { operation: op, args };
 }
 
 export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<string, unknown>> {
@@ -289,28 +285,68 @@ export async function handleServiceBulkJob(ctx: JobContext): Promise<Record<stri
   const serviceIds = toIdList(payload.serviceIds);
   assertKnownServiceIds(serviceIds);
 
-  const args: string[] = ["services"];
   if (action === "build") {
     const region = nonEmptyString(payload.region);
     if (region) assertRegion(region);
     if (payload.all === true || serviceIds.length === 0) {
-      args.push("build-all");
-      if (region) args.push("--region", region);
-      if (payload.continueOnError === false) args.push("--fail-fast");
+      const result = await executeAdminJobOperation(
+        ctx,
+        {
+          kind: "services.buildAll",
+          ...(region ? { regionId: region } : {}),
+          ...(payload.continueOnError === false ? { failFast: true } : {}),
+        },
+        "admin-job.services.build-all",
+      );
+      return {
+        action,
+        completedServiceIds: result.completedServiceIds,
+        failedServiceIds: result.failedServiceIds,
+      };
     } else {
-      args.push("build", ...serviceIds);
-      if (region) args.push("--region", region);
-      if (payload.continueOnError === true) args.push("--continue-on-error");
+      const completedServiceIds: string[] = [];
+      const failedServiceIds: string[] = [];
+      for (const [index, serviceId] of serviceIds.entries()) {
+        try {
+          await executeAdminJobOperation(
+            ctx,
+            {
+              kind: "service.build",
+              serviceId,
+              ...(region ? { regionId: region } : {}),
+            },
+            "admin-job.service.build",
+            { durableIdentity: serviceId },
+          );
+          completedServiceIds.push(serviceId);
+        } catch (error) {
+          failedServiceIds.push(serviceId);
+          if (payload.continueOnError !== true) throw error;
+          await ctx.log(`Build failed for ${serviceId}`, "stderr");
+        }
+        await ctx.setProgress(Math.round(((index + 1) / serviceIds.length) * 100));
+      }
+      return { action, completedServiceIds, failedServiceIds };
     }
   } else {
     if (serviceIds.length === 0) {
       throw new Error(`Bulk action "${action}" requires one or more services`);
     }
-    args.push(action, ...serviceIds);
+    const completedServiceIds: string[] = [];
+    const kind = `service.${action}` as
+      | "service.start"
+      | "service.stop"
+      | "service.restart"
+      | "service.update";
+    for (const [index, serviceId] of serviceIds.entries()) {
+      await executeAdminJobOperation(ctx, { kind, serviceId }, `admin-job.service.${action}`, {
+        durableIdentity: serviceId,
+      });
+      completedServiceIds.push(serviceId);
+      await ctx.setProgress(Math.round(((index + 1) / serviceIds.length) * 100));
+    }
+    return { action, completedServiceIds, failedServiceIds: [] };
   }
-
-  await runOpenmapxCliJobCommand(ctx, args);
-  return { action, args, serviceIds };
 }
 
 // Re-exported for tests. Keep the surface minimal — test-only helpers should

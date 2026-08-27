@@ -1,22 +1,21 @@
-import { execFile as execFileCb } from "node:child_process";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, statSync } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { promisify } from "node:util";
 import { services as coreServices, repoPaths } from "@openmapx/core/server";
 import { parseMotisConfigExpectations } from "@openmapx/transitous-core";
-import { dockerComposeAction } from "../utils/docker-compose";
-import { envString } from "../utils/env";
+import {
+  type DockerComposeAction,
+  dockerComposeAction,
+  dockerStatus,
+} from "../utils/docker-compose";
 import type { JobContext } from "./job-runner";
-import { resolveAllServiceConfigs } from "./service-config-resolver";
+import { createDurableOpsKey } from "./ops-client";
 import { getServiceRegistry } from "./service-registry";
-import { regenerateServiceSecretFiles } from "./service-secret-files";
-import { resolveServiceVaultSecrets } from "./service-secrets";
+import { applyTrustedConfiguration } from "./trusted-config-operations";
 
-const execFile = promisify(execFileCb);
-const { DataManagerClient, buildAppApiServiceEnv, renderCompose } = coreServices;
+const { DataManagerClient } = coreServices;
 
 const HARDLINK_PLAN_FILE = "docker-compose.generated.hardlinks.json";
 const DATA_MANAGER_STARTUP_TIMEOUT_MS = 60_000;
@@ -78,8 +77,7 @@ const DOCKER_CACHE_TTL = 60_000; // 60 seconds
 export async function isDockerAvailable(): Promise<boolean> {
   if (_dockerCache !== null && Date.now() - _dockerCacheAt < DOCKER_CACHE_TTL) return _dockerCache;
   try {
-    await execFile("docker", ["info", "--format", "{{.ServerVersion}}"], { timeout: 5000 });
-    _dockerCache = true;
+    _dockerCache = (await dockerStatus()).reachable;
   } catch {
     _dockerCache = false;
   }
@@ -98,56 +96,11 @@ export function resetDockerCache(): void {
  * `service.start` so "save config + apply" can take effect without requiring
  * a separate manual CLI render.
  */
-export async function renderAndPersistCompose(): Promise<void> {
-  const registry = getServiceRegistry();
-  const enabled = registry.enabled();
-  const paths = repoPaths();
-  const resolvedServiceConfigs = await resolveAllServiceConfigs(
-    enabled.map((service) => ({
-      id: service.manifest.id,
-      configSchema: service.manifest.configSchema,
-      containerEnv: service.manifest.container.environment,
-    })),
-  );
-
-  if (enabled.some((service) => service.manifest.id === "app-api")) {
-    resolvedServiceConfigs.set(
-      "app-api",
-      buildAppApiServiceEnv(enabled, resolvedServiceConfigs.get("app-api") ?? {}, process.env),
-    );
-  }
-
-  // Resolve each enabled service's decrypted vault secrets. The key names wire
-  // the rendered `secrets:` mounts; the values are written to the regenerated
-  // secret files below. Both come from the same resolved set in one pass, so
-  // the YAML and the on-disk files never drift.
-  const secretsBySvc = new Map<string, Record<string, string>>();
-  for (const service of enabled) {
-    const secrets = await resolveServiceVaultSecrets(service.manifest.id);
-    if (Object.keys(secrets).length > 0) secretsBySvc.set(service.manifest.id, secrets);
-  }
-  const serviceSecretKeys = new Map(
-    [...secretsBySvc].map(([id, secrets]) => [id, Object.keys(secrets)]),
-  );
-
-  const rendered = renderCompose(enabled, {
-    domain: envString("DOMAIN", "localhost"),
-    composeOutDir: paths.infraDir,
-    allServices: registry.list(),
-    resolvedServiceConfigs,
-    serviceSecretKeys,
-  });
-
-  mkdirSync(paths.infraDir, { recursive: true });
-  writeFileSync(paths.composeOutPath, rendered.composeYaml, "utf-8");
-  writeFileSync(
-    join(paths.infraDir, "docker-compose.generated.hardlinks.json"),
-    JSON.stringify(rendered.hardlinkPlan, null, 2),
-    "utf-8",
-  );
-  // Always (re)generate — even when empty — so removing the last credential
-  // wipes the directory.
-  regenerateServiceSecretFiles(paths.infraDir, secretsBySvc);
+export async function renderAndPersistCompose(options: {
+  operationKey: string;
+  signal?: AbortSignal;
+}): Promise<void> {
+  await applyTrustedConfiguration({ kind: "stack.render", ...options });
 }
 
 function dataManagerEnabled(): boolean {
@@ -198,7 +151,7 @@ async function waitForDataManagerClient(): Promise<{
 
 function readHardlinkPlanFromDisk(): HardlinkPlanEntry[] {
   const paths = repoPaths();
-  const filePath = join(paths.infraDir, HARDLINK_PLAN_FILE);
+  const filePath = join(paths.infraDir, ".trusted-config-current", HARDLINK_PLAN_FILE);
   if (!existsSync(filePath)) {
     throw new Error(`Hardlink plan not found at ${filePath}. Render compose first.`);
   }
@@ -215,7 +168,11 @@ function readHardlinkPlanFromDisk(): HardlinkPlanEntry[] {
  * API container may not have direct host write access to infra/docker/data.
  */
 export async function applyHardlinksFromPlan(
-  opts: { log?: (msg: string) => Promise<void> | void } = {},
+  opts: {
+    log?: (msg: string) => Promise<void> | void;
+    operationIdentity?: string;
+    signal?: AbortSignal;
+  } = {},
 ): Promise<HardlinkApplySummary> {
   const plan = readHardlinkPlanFromDisk();
   if (plan.length === 0) {
@@ -228,7 +185,14 @@ export async function applyHardlinksFromPlan(
   }
 
   await opts.log?.("Ensuring data-manager is running for hardlink apply...");
-  const dmStart = await dockerComposeAction("data-manager", "start");
+  if (!opts.operationIdentity) throw new Error("Durable hardlink operation identity is required");
+  const dmStart = await dockerComposeAction("data-manager", "start", {
+    operationKey: createDurableOpsKey(
+      "admin-job.hardlinks.start",
+      `${opts.operationIdentity}:data-manager`,
+    ),
+    signal: opts.signal,
+  });
   if (dmStart.exitCode !== 0) {
     throw new Error(`docker compose up data-manager exited with ${dmStart.exitCode}`);
   }
@@ -242,7 +206,7 @@ export async function applyHardlinksFromPlan(
 // Service control (job handlers) — registry-authorized + routed through the
 // docker-compose helper that targets the generated compose file.
 
-function assertKnownService(service: string): void {
+function assertKnownService(service: string) {
   let svc: ReturnType<ReturnType<typeof getServiceRegistry>["get"]>;
   try {
     svc = getServiceRegistry().get(service);
@@ -255,20 +219,43 @@ function assertKnownService(service: string): void {
   if (!svc.enabled) {
     throw new Error(`Service "${service}" is disabled in the registry`);
   }
+  return svc;
+}
+
+async function serviceComposeAction(
+  service: string,
+  action: Exclude<DockerComposeAction, "recreate-isolated">,
+  ctx: JobContext,
+): Promise<{ exitCode: number }> {
+  assertKnownService(service);
+  // Community and built-in services now take the same typed path: the agent
+  // authorizes the id against its own trusted selection, so the API no longer
+  // needs a direct-Docker adapter for community lifecycle.
+  return dockerComposeAction(service, action, {
+    operationKey: createDurableOpsKey(`admin-job.service.${action}`, `${ctx.jobId}:${service}`),
+    signal: ctx.signal,
+  });
 }
 
 export async function serviceStart(service: string, ctx: JobContext): Promise<void> {
   assertKnownService(service);
   await ctx.log(`Rendering compose for latest config...`);
-  await renderAndPersistCompose();
-  const hardlinks = await applyHardlinksFromPlan({ log: (m) => ctx.log(m) });
+  await renderAndPersistCompose({
+    operationKey: createDurableOpsKey("admin-job.config.render", `${ctx.jobId}:${service}`),
+    signal: ctx.signal,
+  });
+  const hardlinks = await applyHardlinksFromPlan({
+    log: (m) => ctx.log(m),
+    operationIdentity: ctx.jobId,
+    signal: ctx.signal,
+  });
   if (hardlinks.applied) {
     await ctx.log(
       `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
     );
   }
   await ctx.log(`Starting ${service}...`);
-  const r = await dockerComposeAction(service, "start");
+  const r = await serviceComposeAction(service, "start", ctx);
   if (r.exitCode !== 0) throw new Error(`docker compose up exited with ${r.exitCode}`);
   await ctx.log(`${service} started.`);
 }
@@ -276,32 +263,47 @@ export async function serviceStart(service: string, ctx: JobContext): Promise<vo
 export async function serviceApply(service: string, ctx: JobContext): Promise<void> {
   assertKnownService(service);
   await ctx.log(`Rendering compose for latest config + secrets...`);
-  await renderAndPersistCompose();
-  const hardlinks = await applyHardlinksFromPlan({ log: (m) => ctx.log(m) });
+  const configurationKind = ctx.payload.configurationKind;
+  if (configurationKind === "vault") {
+    await applyTrustedConfiguration({
+      kind: "vault.apply",
+      serviceId: service,
+      operationKey: createDurableOpsKey("admin-job.vault.apply", `${ctx.jobId}:${service}`),
+      signal: ctx.signal,
+    });
+  } else {
+    await renderAndPersistCompose({
+      operationKey: createDurableOpsKey("admin-job.config.apply", `${ctx.jobId}:${service}`),
+      signal: ctx.signal,
+    });
+  }
+  const hardlinks = await applyHardlinksFromPlan({
+    log: (m) => ctx.log(m),
+    operationIdentity: ctx.jobId,
+    signal: ctx.signal,
+  });
   if (hardlinks.applied) {
     await ctx.log(
       `Hardlinks applied (${hardlinks.linked} linked, ${hardlinks.skipped} already linked, ${hardlinks.pruned} pruned)`,
     );
   }
   await ctx.log(`Applying rendered configuration to ${service}...`);
-  const r = await dockerComposeAction(service, "recreate");
+  const r = await serviceComposeAction(service, "recreate", ctx);
   if (r.exitCode !== 0)
     throw new Error(`docker compose up --force-recreate exited with ${r.exitCode}`);
   await ctx.log(`${service} configuration applied.`);
 }
 
 export async function serviceStop(service: string, ctx: JobContext): Promise<void> {
-  assertKnownService(service);
   await ctx.log(`Stopping ${service}...`);
-  const r = await dockerComposeAction(service, "stop");
+  const r = await serviceComposeAction(service, "stop", ctx);
   if (r.exitCode !== 0) throw new Error(`docker compose stop exited with ${r.exitCode}`);
   await ctx.log(`${service} stopped.`);
 }
 
 export async function serviceRestart(service: string, ctx: JobContext): Promise<void> {
-  assertKnownService(service);
   await ctx.log(`Restarting ${service}...`);
-  const r = await dockerComposeAction(service, "restart");
+  const r = await serviceComposeAction(service, "restart", ctx);
   if (r.exitCode !== 0) throw new Error(`docker compose restart exited with ${r.exitCode}`);
   await ctx.log(`${service} restarted.`);
 }

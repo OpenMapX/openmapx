@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { emptyResponse, streamedJsonResponse } from "../../../test/streamed-response.js";
 
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = (await importOriginal()) as Record<string, unknown>;
@@ -23,11 +24,11 @@ afterEach(() => {
 });
 
 function mockOk(data: unknown) {
-  return { ok: true, json: async () => data } as Response;
+  return streamedJsonResponse(data);
 }
 
 function mockNotOk() {
-  return { ok: false, status: 500 } as Response;
+  return emptyResponse();
 }
 
 function makePhoto(url: string) {

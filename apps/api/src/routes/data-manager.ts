@@ -1,9 +1,10 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { readBoundedResponseText } from "@openmapx/core";
+import { services as coreServices } from "@openmapx/core/server";
 import { and, asc, count, desc, eq } from "drizzle-orm";
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { db } from "../db/index.js";
 import { dataManagerFeedState, dataManagerJobStages, dataManagerJobs } from "../db/schema.js";
+import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client.js";
 import { getProviderHealth } from "../services/provider-health/registry.js";
 import { writeAuditLog } from "../utils/audit-log.js";
 import { envString } from "../utils/env.js";
@@ -28,6 +29,8 @@ import { safeEqual } from "../utils/safe-equal.js";
  */
 
 const DATA_MANAGER_URL_DEFAULT = "http://localhost:4000";
+const DATA_MANAGER_PROXY_TIMEOUT_MS = 15_000;
+const DATA_MANAGER_PROXY_MAX_BYTES = 4 * 1024 * 1024;
 
 interface AuthResult {
   kind: "session" | "token" | "denied";
@@ -80,8 +83,10 @@ async function proxyToDataManager(
   path: string,
   body?: unknown,
 ): Promise<FastifyJsonResponse> {
-  const baseUrl = envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT);
-  const url = `${baseUrl.replace(/\/$/, "")}${path}`;
+  const baseUrl = coreServices.validateDataManagerBaseUrl(
+    envString("DATA_MANAGER_URL", DATA_MANAGER_URL_DEFAULT),
+  );
+  const url = `${baseUrl}${path}`;
   const token = envString("DATA_MANAGER_AUTH_TOKEN", "");
   const res = await fetch(url, {
     method,
@@ -90,8 +95,12 @@ async function proxyToDataManager(
       Authorization: `Bearer ${token}`,
     },
     body: body !== undefined ? JSON.stringify(body) : undefined,
+    redirect: "error",
+    signal: AbortSignal.timeout(DATA_MANAGER_PROXY_TIMEOUT_MS),
   });
-  const text = await res.text();
+  const text = await readBoundedResponseText(res, DATA_MANAGER_PROXY_MAX_BYTES, {
+    label: "data-manager proxy response",
+  });
   let parsed: unknown;
   try {
     parsed = text ? JSON.parse(text) : null;
@@ -107,22 +116,20 @@ interface LockSummary {
   lockedBy: string | null;
 }
 
-function readLockSummary(): LockSummary {
-  const repoRoot = envString("OPENMAPX_ROOT_DIR", process.cwd());
-  const lockPath = join(repoRoot, "infra", "docker", "transitous.lock.json");
-  if (!existsSync(lockPath)) {
-    return { ref: null, lockedAt: null, lockedBy: null };
-  }
+async function readLockSummary(): Promise<LockSummary> {
+  // The lock lives under the repository's `infra/docker/`, which only the
+  // operations agent owns. Reading a copy baked into this image would report a
+  // build-time pin rather than the live one.
   try {
-    const raw = JSON.parse(readFileSync(lockPath, "utf-8")) as Record<string, unknown>;
-    return {
-      ref: typeof raw.ref === "string" ? raw.ref : null,
-      lockedAt: typeof raw.lockedAt === "string" ? raw.lockedAt : null,
-      lockedBy: typeof raw.lockedBy === "string" ? raw.lockedBy : null,
-    };
+    const { active } = await executeAndWait(
+      createApiOpsClient(),
+      { kind: "transitousLock.inspect" },
+      createDurableOpsKey("api.transitous-lock.inspect", "read-lock-summary"),
+    );
+    return active
+      ? { ref: active.ref, lockedAt: active.lockedAt, lockedBy: active.lockedBy }
+      : { ref: null, lockedAt: null, lockedBy: null };
   } catch {
-    // Corrupt lockfile — surface as a missing ref rather than 500ing the
-    // whole /state endpoint. Operator notices via the null ref + Sentry.
     return { ref: null, lockedAt: null, lockedBy: null };
   }
 }
@@ -178,7 +185,7 @@ export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
       return reply.code(401).send({ error: "Authentication required" });
     }
 
-    const lock = readLockSummary();
+    const lock = await readLockSummary();
 
     const [lastJobRow, feedCountRow, regionRows, statusRows, currentRows] = await Promise.all([
       db

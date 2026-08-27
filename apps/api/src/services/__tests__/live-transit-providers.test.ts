@@ -2,6 +2,7 @@ import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { streamedJsonResponse } from "../../test/streamed-response.js";
 
 vi.mock("@integrations/geocoding-db-ris/ris-client.js", () => ({
   isRisConfigured: vi.fn(() => true),
@@ -41,6 +42,7 @@ function createCtx(integrationId: string, config: Record<string, unknown> = {}) 
     ctx: {
       config,
       manifest: loadManifest(integrationId),
+      onActivate: (activate: () => void) => activate(),
       registerRealtimeProvider: (nextProvider: unknown) => {
         provider = nextProvider;
       },
@@ -194,9 +196,8 @@ describe("live-transit-entur provider", () => {
 
   it("maps realtime vehicles and local situations into the live-transit contract", async () => {
     mockFetch
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      .mockResolvedValueOnce(
+        streamedJsonResponse({
           data: {
             vehicles: [
               {
@@ -229,10 +230,9 @@ describe("live-transit-entur provider", () => {
             ],
           },
         }),
-      } as Response)
-      .mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({
+      )
+      .mockResolvedValueOnce(
+        streamedJsonResponse({
           data: {
             situations: [
               {
@@ -258,7 +258,7 @@ describe("live-transit-entur provider", () => {
             ],
           },
         }),
-      } as Response);
+      );
 
     const mod = await loadEnturProviderModule();
     const { ctx, getProvider } = createCtx("live-transit-entur", {

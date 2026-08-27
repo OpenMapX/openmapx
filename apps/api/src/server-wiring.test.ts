@@ -1,15 +1,22 @@
+import { Writable } from "node:stream";
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
+import pino from "pino";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  controlledRequestLoggingOptions,
   corsOptions,
   makeRateLimitTierHook,
+  makeSecurityResponseHeaderHook,
+  makeStatusAwareRateLimit,
   makeTimelineAwareRateLimit,
   type RateLimitTiers,
+  registerControlledRequestLogging,
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring.js";
 import { RateLimiter } from "./utils/rate-limit.js";
+import { createSafePinoOptions } from "./utils/safe-log-fields.js";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -101,6 +108,7 @@ describe("corsOptions", () => {
     expect(res.headers["access-control-expose-headers"]).toContain("Content-Range");
     expect(res.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Fetched-At");
     expect(res.headers["access-control-expose-headers"]).toContain("X-OpenMapX-Stale");
+    expect(res.headers.vary).toMatch(/(?:^|,\s*)Origin(?:,|$)/i);
     await app.close();
   });
 
@@ -113,6 +121,19 @@ describe("corsOptions", () => {
       headers: { origin: "http://evil.test" },
     });
     expect(res.headers["access-control-allow-origin"]).not.toBe("http://evil.test");
+    expect(res.headers.vary).toMatch(/(?:^|,\s*)Origin(?:,|$)/i);
+    await app.close();
+  });
+
+  it("uses normalized exact origins from the shared web-origin policy", async () => {
+    vi.stubEnv("CORS_ORIGIN", "HTTPS://ALLOWED.TEST:443");
+    const app = await corsApp();
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/thing",
+      headers: { origin: "https://allowed.test" },
+    });
+    expect(res.headers["access-control-allow-origin"]).toBe("https://allowed.test");
     await app.close();
   });
 });
@@ -126,6 +147,7 @@ describe("makeRateLimitTierHook", () => {
       auth: vi.fn(async () => {}),
       tile: vi.fn(async () => {}),
       expensive: vi.fn(async () => {}),
+      status: vi.fn(async () => {}),
       public: vi.fn(async () => {}),
     };
     return { hook: stubs as unknown as RateLimitTiers, stubs };
@@ -156,6 +178,11 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/integrations/food-delivery/ubereats/open", tier: "expensive" },
     { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "expensive" },
     { url: "/api/integrations/food-delivery/providers?country=de", tier: "public" },
+    { method: "GET", url: "/api/status", tier: "status" },
+    { method: "GET", url: "/api/status?probe=public", tier: "status" },
+    { method: "POST", url: "/api/status", tier: "public" },
+    { method: "GET", url: "/api/status/", tier: "public" },
+    { method: "GET", url: "/api/admin/status", tier: "public" },
     { method: "GET", url: "/api/timeline/connection", tier: "public" },
     { method: "GET", url: "/api/timeline/day/2026-08-09", tier: null },
     { method: "PUT", url: "/api/timeline/connection", tier: "expensive" },
@@ -210,6 +237,96 @@ describe("makeRateLimitTierHook", () => {
     expect(second.statusCode).toBe(429);
     expect(second.payload).toContain("Too many requests");
     expect(second.headers["retry-after"]).toBeDefined();
+    await app.close();
+    limiter.destroy();
+  });
+
+  it.each(["/api/mobile-auth/issue", "/api/mobile-auth/exchange"])(
+    "marks a global limiter 429 for %s private before its handler",
+    async (url) => {
+      const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
+      const { hook } = stubTiers();
+      hook.public = limiter.preHandler();
+      const handler = vi.fn(async () => ({ ok: true }));
+      const app = Fastify({ logger: false });
+      app.addHook("onRequest", makeSecurityResponseHeaderHook());
+      app.addHook("onRequest", makeRateLimitTierHook(hook));
+      app.post(url, handler);
+      await app.ready();
+
+      const request = { method: "POST" as const, url, remoteAddress: "198.51.100.9" };
+      const first = await app.inject(request);
+      const exhausted = await app.inject(request);
+
+      expect(first.statusCode).toBe(200);
+      expect(exhausted.statusCode).toBe(429);
+      for (const response of [first, exhausted]) {
+        expect(response.headers["cache-control"]).toBe("no-store");
+        expect(response.headers.pragma).toBe("no-cache");
+        expect(response.headers["referrer-policy"]).toBe("no-referrer");
+      }
+      expect(handler).toHaveBeenCalledTimes(1);
+      await app.close();
+      limiter.destroy();
+    },
+  );
+
+  it("keeps an exact public-status limiter 429 out of shared caches", async () => {
+    const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
+    const { hook } = stubTiers();
+    hook.status = makeStatusAwareRateLimit(limiter);
+    const handler = vi.fn(async () => ({ ok: true }));
+    const app = Fastify({ logger: false });
+    app.addHook("onRequest", makeSecurityResponseHeaderHook());
+    app.addHook("onRequest", makeRateLimitTierHook(hook));
+    app.get("/api/status", handler);
+    await app.ready();
+
+    const request = {
+      method: "GET" as const,
+      url: "/api/status",
+      remoteAddress: "198.51.100.10",
+    };
+    const first = await app.inject(request);
+    const exhausted = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(first.headers["cache-control"]).toBe("public, max-age=15, stale-while-revalidate=45");
+    expect(exhausted.statusCode).toBe(429);
+    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
+    expect(exhausted.headers.pragma).toBe("no-cache");
+    expect(handler).toHaveBeenCalledTimes(1);
+    await app.close();
+    limiter.destroy();
+  });
+
+  it("marks an admin-status parent-limiter 429 private before route hooks", async () => {
+    const limiter = new RateLimiter({ max: 1, windowMs: 60_000 });
+    const { hook } = stubTiers();
+    hook.public = limiter.preHandler();
+    const handler = vi.fn(async () => ({ ok: true }));
+    const app = Fastify({ logger: false });
+    app.addHook("onRequest", makeSecurityResponseHeaderHook());
+    app.addHook("onRequest", makeRateLimitTierHook(hook));
+    app.get("/api/admin/status", handler);
+    await app.ready();
+
+    const request = {
+      method: "GET" as const,
+      url: "/api/admin/status",
+      remoteAddress: "198.51.100.11",
+    };
+    const first = await app.inject(request);
+    const exhausted = await app.inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(exhausted.statusCode).toBe(429);
+    for (const response of [first, exhausted]) {
+      expect(response.headers["cache-control"]).toBe("private, no-store");
+      expect(response.headers.pragma).toBe("no-cache");
+      expect(response.headers.vary).toContain("Cookie");
+    }
+    expect(handler).toHaveBeenCalledTimes(1);
     await app.close();
     limiter.destroy();
   });
@@ -285,5 +402,152 @@ describe("makeRateLimitTierHook", () => {
     expect(exhausted.headers.vary).toContain("Cookie");
     await app.close();
     limiter.destroy();
+  });
+});
+
+describe("controlled request lifecycle logging", () => {
+  function captureLogger() {
+    const chunks: string[] = [];
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(String(chunk));
+        callback();
+      },
+    });
+    return {
+      chunks,
+      logger: pino(createSafePinoOptions("info"), stream),
+      records: () =>
+        chunks
+          .join("")
+          .split("\n")
+          .filter(Boolean)
+          .map((line) => JSON.parse(line) as Record<string, unknown>),
+    };
+  }
+
+  it("emits only controlled start and completion fields with a matched route template", async () => {
+    const capture = captureLogger();
+    let now = 100;
+    const app = Fastify(controlledRequestLoggingOptions(capture.logger));
+    registerControlledRequestLogging(app, { now: () => now });
+    app.post<{ Params: { id: string } }>("/items/:id", async (request) => {
+      now = 112.5;
+      return { id: request.params.id };
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/items/private-customer-id?token=fixture-query-token",
+      headers: {
+        cookie: "session=fixture-cookie",
+        authorization: "Bearer fixture-authorization",
+        "proxy-authorization": "Basic fixture-proxy-authorization",
+        "x-forwarded-client-cert": "fixture-forwarded-certificate",
+        "x-arbitrary-header": "fixture-arbitrary-header",
+        "content-type": "application/json",
+      },
+      payload: { password: "fixture-body-password" },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(200);
+    const records = capture.records();
+    expect(records).toHaveLength(2);
+    expect(records[0]).toMatchObject({ event: "request.start", method: "POST" });
+    expect(records[0]).not.toHaveProperty("route");
+    expect(records[1]).toMatchObject({
+      event: "request.complete",
+      method: "POST",
+      route: "/items/:id",
+      statusCode: 200,
+      durationMs: 12.5,
+    });
+    expect(records[0].requestId).toBe(records[1].requestId);
+    const output = capture.chunks.join("");
+    for (const marker of [
+      "private-customer-id",
+      "fixture-query-token",
+      "fixture-cookie",
+      "fixture-authorization",
+      "fixture-proxy-authorization",
+      "fixture-forwarded-certificate",
+      "fixture-arbitrary-header",
+      "fixture-body-password",
+    ]) {
+      expect(output).not.toContain(marker);
+    }
+  });
+
+  it("emits a safe error class and completion without error text or raw request data", async () => {
+    const capture = captureLogger();
+    let now = 200;
+    const app = Fastify(controlledRequestLoggingOptions(capture.logger));
+    registerControlledRequestLogging(app, { now: () => now });
+    app.setErrorHandler(uniformErrorHandler);
+    app.get("/explode/:id", async () => {
+      now = 205;
+      throw new Error(
+        "upstream https://fixture-user:fixture-pass@errors.example.test/private?token=fixture-error-token Bearer fixture-bearer-token",
+      );
+    });
+    await app.ready();
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/explode/private-customer-id?session=fixture-query-session",
+      headers: { cookie: "session=fixture-cookie" },
+    });
+    await app.close();
+
+    expect(response.statusCode).toBe(500);
+    const records = capture.records();
+    expect(records.map((record) => record.event)).toEqual([
+      "request.start",
+      "request.error",
+      "request.complete",
+    ]);
+    expect(records.find((record) => record.event === "request.error")).toMatchObject({
+      method: "GET",
+      route: "/explode/:id",
+      statusCode: 500,
+      durationMs: 5,
+      errorClass: "Error",
+    });
+    expect(records.find((record) => record.event === "request.complete")).toMatchObject({
+      route: "/explode/:id",
+      statusCode: 500,
+      durationMs: 5,
+    });
+    const output = capture.chunks.join("");
+    for (const marker of [
+      "fixture-user",
+      "fixture-pass",
+      "private?",
+      "fixture-error-token",
+      "fixture-bearer-token",
+      "private-customer-id",
+      "fixture-query-session",
+      "fixture-cookie",
+    ]) {
+      expect(output).not.toContain(marker);
+    }
+  });
+
+  it("uses an unmatched sentinel rather than a raw not-found URL", async () => {
+    const capture = captureLogger();
+    const app = Fastify(controlledRequestLoggingOptions(capture.logger));
+    registerControlledRequestLogging(app, { now: () => 1 });
+    await app.ready();
+
+    await app.inject({ url: "/missing/private-value?token=fixture-query-token" });
+    await app.close();
+
+    expect(capture.records().find((record) => record.event === "request.complete")).toMatchObject({
+      route: "unmatched",
+      statusCode: 404,
+    });
+    expect(capture.chunks.join("")).not.toMatch(/private-value|fixture-query-token/);
   });
 });

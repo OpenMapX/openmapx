@@ -9,8 +9,13 @@ import {
   searchHeroPhotos,
 } from "@integrations/photos/orchestrator";
 import { fetchAggregate, getReviewProviders } from "@integrations/reviews/orchestrator";
-import type { Place, ReviewProvider } from "@openmapx/core";
-import { type PlaceIds, parseId } from "@openmapx/core";
+import {
+  buildPlaceDetailsRequest,
+  type Place,
+  type PlaceIds,
+  parseId,
+  type ReviewProvider,
+} from "@openmapx/core";
 import { buildOpeningHoursInfo } from "@openmapx/core/server";
 import {
   buildFacebookUrl,
@@ -346,20 +351,29 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
     handler: async (req, reply) => {
       const rawId = decodeURIComponent(req.params.id);
       const lang = req.query.lang;
-      const effectiveLang = lang ?? "en";
       const hasAddress = req.query.hasAddress === "1";
-      // Structured hash rather than string concatenation: `rawId` and `lang`
-      // are both unconstrained request input, so an interpolated separator
-      // lets one request's key collide with another place's entry.
-      const cacheKey = hashKey("cache:place", { id: rawId, lang: effectiveLang, hasAddress });
+      const latInput = Number.parseFloat(req.query.lat ?? "");
+      const lngInput = Number.parseFloat(req.query.lng ?? "");
+      const placeRequest = buildPlaceDetailsRequest({
+        id: rawId,
+        coordinates:
+          Number.isFinite(latInput) && Number.isFinite(lngInput) ? [lngInput, latInput] : undefined,
+        name: req.query.name,
+        lang,
+        hasAddress,
+      });
+      // The shared canonical identity contains every normalized input that can
+      // affect resolution or enrichment. Hash the structured value so
+      // unconstrained string fields cannot create separator collisions.
+      const cacheKey = hashKey("cache:place", placeRequest.identity);
 
       try {
         const result = await withCache(cacheKey, TTL.places.detail, async () => {
           const parsedId = parseId(rawId);
-          const latQ = Number.parseFloat(req.query.lat ?? "");
-          const lngQ = Number.parseFloat(req.query.lng ?? "");
+          const latQ = placeRequest.identity.lat ?? Number.NaN;
+          const lngQ = placeRequest.identity.lng ?? Number.NaN;
           const resolverCtx: PlaceResolverContext = {
-            lang,
+            lang: placeRequest.identity.lang ?? undefined,
             lat: Number.isFinite(latQ) ? latQ : undefined,
             lng: Number.isFinite(lngQ) ? lngQ : undefined,
             hasAddress,
@@ -380,7 +394,9 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
                 };
                 throw err;
               }
-              return enrichLimit(() => enrichPlace(resolved, lang));
+              return enrichLimit(() =>
+                enrichPlace(resolved, placeRequest.identity.lang ?? undefined),
+              );
             }
             // No resolver registered for this scheme. The coord-fallback
             // below would happily snap to the nearest OSM POI — fine for
@@ -392,7 +408,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             // integration id is strict; everything else is freeform.
             if (isEnabledIntegrationScheme(parsedId.scheme)) {
               fastify.log.warn(
-                { scheme: parsedId.scheme, rawId },
+                { scheme: parsedId.scheme },
                 "places: integration scheme has no resolver; refusing coord-fallback",
               );
               const err: CacheableError = {
@@ -408,7 +424,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           // ids). Requires lat/lng/name — without them there's nothing to do.
           const lat = latQ;
           const lng = lngQ;
-          const name = req.query.name?.trim() ?? "";
+          const name = placeRequest.identity.name ?? "";
 
           if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
             const err: CacheableError = {
@@ -427,8 +443,13 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           }
 
           const place =
-            (await lookupByNameAndCoords(name, lat, lng, rawId, lang)) ??
-            (await lookupByCoords(lat, lng, rawId, lang));
+            (await lookupByNameAndCoords(
+              name,
+              lat,
+              lng,
+              rawId,
+              placeRequest.identity.lang ?? undefined,
+            )) ?? (await lookupByCoords(lat, lng, rawId, placeRequest.identity.lang ?? undefined));
 
           if (!place) {
             const err: CacheableError = {
@@ -438,7 +459,7 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
             throw err;
           }
 
-          return enrichLimit(() => enrichPlace(place, lang));
+          return enrichLimit(() => enrichPlace(place, placeRequest.identity.lang ?? undefined));
         });
         reply.header("Cache-Control", "public, max-age=86400");
         return result;

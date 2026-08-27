@@ -29,7 +29,7 @@ const dbMock = vi.hoisted(() => {
 
 vi.mock("../../db", () => ({ db: dbMock.db }));
 
-const { jobRunner } = await import("../job-runner");
+const { AGENT_RECOVERABLE_ADMIN_JOB_TYPES, jobRunner } = await import("../job-runner");
 
 const restartCheckpoint = {
   phase: "awaiting-app-api-restart",
@@ -54,6 +54,20 @@ afterEach(() => {
 });
 
 describe("job runner restart initialization", () => {
+  it("requeues only typed agent-backed administrative jobs for durable replay", async () => {
+    expect(AGENT_RECOVERABLE_ADMIN_JOB_TYPES).toEqual([
+      "backup.operation",
+      "data.operation",
+      "service.bulk",
+      "system.diagnostics",
+      "system.update",
+    ]);
+    await jobRunner.initialize({ completeRestartedUpdates: true });
+    expect(dbMock.updates).toContainEqual(
+      expect.objectContaining({ status: "queued", error: null }),
+    );
+  });
+
   it("finalizes a checkpointed update after successful migrations", async () => {
     dbMock.rows.push({ id: "update-1", result: restartCheckpoint });
 

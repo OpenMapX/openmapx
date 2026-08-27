@@ -6,6 +6,9 @@ export {
   feedState as dataManagerFeedState,
   jobStages as dataManagerJobStages,
   jobs as dataManagerJobs,
+  offlinePackageArtifactReferences as dataManagerOfflinePackageArtifactReferences,
+  offlinePackageJobOwners as dataManagerOfflinePackageJobOwners,
+  offlinePackageJobs as dataManagerOfflinePackageJobs,
   poiFeedState as dataManagerPoiFeedState,
 } from "@openmapx/db-schema";
 // Admin audit log

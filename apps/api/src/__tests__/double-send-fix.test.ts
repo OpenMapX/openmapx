@@ -10,8 +10,8 @@ import { afterEach, describe, expect, it } from "vitest";
  *
  * Both must deliver the correct status + body and never crash. The pattern that
  * does NOT appear here — `reply.send(); return undefined;` — is the one that
- * crashes under an async hook; the structural fixes remove it, and the
- * server.ts uncaughtException guard is the backstop if one ever returns.
+ * crashes under an async hook; the structural fixes remove it. Any regression
+ * now follows the ordinary fail-fast process policy instead of being suppressed.
  *
  * Runs against a real listening server because the raw-socket double write does
  * not surface through `inject`.

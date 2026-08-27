@@ -1,3 +1,4 @@
+import { types as utilTypes } from "node:util";
 import type { FastifyInstance } from "fastify";
 
 export interface PinoLikeLogger {
@@ -28,7 +29,13 @@ export function createIntegrationLogger(
     (level: keyof PinoLikeLogger) =>
     (msg: string, ...args: unknown[]) => {
       const bindings: Record<string, unknown> = { integration: integrationId };
-      const errIdx = args.findIndex((a) => a instanceof Error);
+      const errIdx = args.findIndex(
+        (argument) =>
+          typeof argument === "object" &&
+          argument !== null &&
+          !utilTypes.isProxy(argument) &&
+          argument instanceof Error,
+      );
       if (errIdx !== -1) {
         bindings.err = args[errIdx];
         args.splice(errIdx, 1);

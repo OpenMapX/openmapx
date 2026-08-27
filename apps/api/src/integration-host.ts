@@ -1,7 +1,17 @@
 import { createHash } from "node:crypto";
-import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from "node:fs";
-import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
+import {
+  beginRuntimeStaging as beginEvRuntimeStaging,
+  commitRuntimeStaging as commitEvRuntimeStaging,
+  rollbackRuntimeStaging as rollbackEvRuntimeStaging,
+} from "@integrations/ev-charging/runtime.js";
+import {
+  beginRuntimeStaging as beginParkingRuntimeStaging,
+  commitRuntimeStaging as commitParkingRuntimeStaging,
+  rollbackRuntimeStaging as rollbackParkingRuntimeStaging,
+} from "@integrations/parking/runtime.js";
 import {
   type CacheClient,
   type CustomHealthCheckFn,
@@ -21,11 +31,20 @@ import {
 } from "@openmapx/integration-framework";
 import {
   integrationBackendBundlePath,
-  integrationFrontendBundlePath,
   resolveLayerSelectorPreview,
 } from "@openmapx/integration-framework/installer";
 import { sharedStrings } from "@openmapx/integration-framework/strings";
-import { registerPoiSources as registerPoiSourcesInStore } from "@openmapx/poi-source-registry";
+import {
+  beginPlaceResolverStaging,
+  commitPlaceResolverStaging,
+  rollbackPlaceResolverStaging,
+} from "@openmapx/place-ids";
+import {
+  beginPoiSourceRegistryStaging,
+  commitPoiSourceRegistryStaging,
+  registerPoiSources as registerPoiSourcesInStore,
+  rollbackPoiSourceRegistryStaging,
+} from "@openmapx/poi-source-registry";
 import type { FastifyInstance } from "fastify";
 import { sql as pgClient } from "./db";
 import {
@@ -42,9 +61,12 @@ import {
   warnInvalidConfig,
 } from "./integration-config";
 import {
+  beginIntegrationRouteStaging,
+  commitIntegrationRouteStaging,
   registerIntegrationRoute,
   registerIntegrationRouteDispatcher,
   resetIntegrationRoutes,
+  rollbackIntegrationRouteStaging,
 } from "./integration-routes";
 import { redis } from "./redis";
 import {
@@ -69,26 +91,12 @@ import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
 import { getEmailDisclosure } from "./utils/email";
 
-function canonicalizeExisting(p: string): string {
-  let dir = resolve(p);
-  const tail: string[] = [];
-  for (;;) {
-    if (existsSync(dir)) {
-      return tail.length ? join(realpathSync(dir), ...tail) : realpathSync(dir);
-    }
-    const parent = dirname(dir);
-    if (parent === dir) return tail.length ? join(dir, ...tail) : dir;
-    tail.unshift(basename(dir));
-    dir = parent;
-  }
-}
-
 export type { ConfigSource, ConfigValueWithSource };
 export { resolveConfigWithSources };
 
 type SetupFunction = (ctx: IntegrationContext) => void | Promise<void>;
 
-const eventBus = new IntegrationEventBus();
+let eventBus = new IntegrationEventBus();
 const integrations = new Map<string, LoadedIntegration>();
 
 export type IntegrationDirectoryInput = string | { directory: string; isBuiltIn: boolean };
@@ -168,12 +176,26 @@ function loadStrings(directory: string): IntegrationStrings {
 }
 
 function resolveBackendEntryPoint(directory: string, isBuiltIn: boolean): string | null {
+  // Community directories are writable installation inputs. Importing any JS
+  // from them here would execute it with the API process's database, secrets,
+  // filesystem, and Docker authority. Community backends require an isolated
+  // service boundary; until one exists, their files are deliberately inert.
+  if (!isBuiltIn) return null;
   const bundled = integrationBackendBundlePath(directory);
-  if (!isBuiltIn && existsSync(bundled)) return bundled;
+  if (existsSync(bundled)) return bundled;
   const modulePath = join(directory, "index.ts");
   const jsModulePath = join(directory, "index.js");
   if (existsSync(modulePath)) return modulePath;
   return existsSync(jsModulePath) ? jsModulePath : null;
+}
+
+function hasBlockedCommunityBackend(directory: string, manifest: IntegrationManifest): boolean {
+  if (manifest.backend?.routes || manifest.backend?.cron) return true;
+  return [
+    integrationBackendBundlePath(directory),
+    join(directory, "index.ts"),
+    join(directory, "index.js"),
+  ].some((path) => existsSync(path));
 }
 
 // Cache-bust the dynamic import by the entry file's mtime+size so a reload
@@ -326,11 +348,20 @@ function buildIntegrationDb(manifest: IntegrationManifest): IntegrationContext["
   const needsDb = manifest.requires?.some((r) => r.service === "postgis");
   if (!needsDb) return undefined;
   return {
-    async execute<T = unknown>(query: string, params?: unknown[]): Promise<T> {
-      const result = params
-        ? await pgClient.unsafe(query, params as never[])
-        : await pgClient.unsafe(query);
-      return result as T;
+    async execute<T = unknown>(
+      query: string,
+      params?: unknown[],
+      options?: { signal?: AbortSignal },
+    ): Promise<T> {
+      options?.signal?.throwIfAborted();
+      const pending = params ? pgClient.unsafe(query, params as never[]) : pgClient.unsafe(query);
+      const onAbort = () => pending.cancel();
+      options?.signal?.addEventListener("abort", onAbort, { once: true });
+      try {
+        return (await pending) as T;
+      } finally {
+        options?.signal?.removeEventListener("abort", onAbort);
+      }
     },
   };
 }
@@ -390,9 +421,25 @@ function buildIntegrationContext(args: {
   providers: Map<string, unknown[]>;
   shutdownHandlers: Array<() => Promise<void>>;
   integration: LoadedIntegration;
+  eventBus: IntegrationEventBus;
+  integrationsByDomain: (domain: string) => LoadedIntegration[];
+  activationHandlers?: Array<() => void>;
 }): IntegrationContext {
-  const { id, manifest, config, log, http, cache, db, requiresMap, providers, shutdownHandlers } =
-    args;
+  const {
+    id,
+    manifest,
+    config,
+    log,
+    http,
+    cache,
+    db,
+    requiresMap,
+    providers,
+    shutdownHandlers,
+    eventBus: contextEventBus,
+    integrationsByDomain,
+    activationHandlers,
+  } = args;
   const { integration } = args;
   return {
     id,
@@ -505,20 +552,24 @@ function buildIntegrationContext(args: {
       integration.disclosures.push(disclosure);
     },
     emit(event: string, data: unknown) {
-      eventBus.emit({
+      contextEventBus.emit({
         type: event,
         integrationId: id,
         ...(typeof data === "object" && data !== null ? data : {}),
       } as never);
     },
     on(event: string, handler: (data: unknown) => void) {
-      return eventBus.on(event as never, handler as never);
+      return contextEventBus.on(event as never, handler as never);
+    },
+    onActivate(activate: () => void) {
+      if (activationHandlers) activationHandlers.push(activate);
+      else activate();
     },
     onShutdown(cleanup: () => Promise<void>) {
       shutdownHandlers.push(cleanup);
     },
     getIntegrationsByDomain(domain: string) {
-      return getIntegrationsByDomain(domain);
+      return integrationsByDomain(domain);
     },
     getDisallowedSourceIds() {
       return disallowedSourceResolver
@@ -679,6 +730,14 @@ export async function initIntegrations(
       shutdownHandlers,
     };
 
+    if (!isBuiltIn && hasBlockedCommunityBackend(directory, manifest)) {
+      integration.blockedCode = true;
+      fastify.log.warn(
+        { integrationId: id },
+        "Community backend code is not executed in the API process; use an isolated service component",
+      );
+    }
+
     if (!integration.enabled) {
       integrations.set(id, integration);
       log.info(`Integration ${id} is disabled`);
@@ -711,6 +770,8 @@ export async function initIntegrations(
       providers,
       shutdownHandlers,
       integration,
+      eventBus,
+      integrationsByDomain: getIntegrationsByDomain,
     });
 
     // Try to load the integration's setup function
@@ -742,7 +803,7 @@ export async function initIntegrations(
   }
 
   // Register the /api/integrations endpoint
-  fastify.get("/api/integrations", async () => {
+  fastify.get("/api/integrations", async (request, reply) => {
     const disclosures = Array.from(integrations.values())
       .filter((i) => i.enabled)
       .flatMap((i) => i.disclosures ?? []);
@@ -752,7 +813,7 @@ export async function initIntegrations(
       // Don't fail the whole endpoint if the email disclosure can't be resolved.
       fastify.log.warn({ err }, "email disclosure unavailable; omitting from /api/integrations");
     }
-    return {
+    const metadata = {
       integrations: Array.from(integrations.values())
         .filter((i) => i.enabled)
         .map((i) => ({
@@ -762,6 +823,28 @@ export async function initIntegrations(
       frameworkStrings: sharedStrings,
       disclosures,
     };
+    const revision = createHash("sha256").update(JSON.stringify(metadata)).digest("hex");
+    const etag = `"${revision}"`;
+    reply.header("Cache-Control", "private, no-cache");
+    reply.header("ETag", etag);
+
+    const ifNoneMatch = request.headers["if-none-match"];
+    const validators: string[] =
+      typeof ifNoneMatch === "string"
+        ? ifNoneMatch.split(",")
+        : Array.isArray(ifNoneMatch)
+          ? ifNoneMatch
+          : [];
+    if (
+      validators.some((validator) => {
+        const candidate = validator.trim();
+        return candidate === "*" || candidate.replace(/^W\//, "") === etag;
+      })
+    ) {
+      return reply.status(304).send();
+    }
+
+    return { revision, ...metadata };
   });
 
   const warnedPreviewIds = new Set<string>();
@@ -807,44 +890,6 @@ export async function initIntegrations(
     }
     return reply.send(bytes);
   });
-
-  // Serve community integration frontend bundles
-  fastify.get<{ Params: { id: string; "*": string } }>(
-    "/api/integrations/:id/bundle/*",
-    async (req, reply) => {
-      const integration = integrations.get(req.params.id);
-      if (!integration || integration.isBuiltIn) {
-        return reply.status(404).send({ error: "Not found" });
-      }
-      const fileName = req.params["*"];
-      if (!fileName) {
-        return reply.status(400).send({ error: "Invalid path" });
-      }
-      const filePath =
-        fileName === "index.js"
-          ? integrationFrontendBundlePath(integration.directory)
-          : join(integration.directory, "dist", "frontend", fileName);
-      const realRoot = canonicalizeExisting(integration.directory);
-      const realFile = canonicalizeExisting(filePath);
-      const rel = relative(realRoot, realFile);
-      if (rel.startsWith("..") || isAbsolute(rel)) {
-        return reply.status(400).send({ error: "Invalid path" });
-      }
-      if (!existsSync(filePath)) {
-        return reply.status(404).send({ error: "Bundle not found" });
-      }
-      const ext = fileName.split(".").pop();
-      const mimeTypes: Record<string, string> = {
-        js: "application/javascript",
-        mjs: "application/javascript",
-        css: "text/css",
-        json: "application/json",
-      };
-      reply.header("Content-Type", mimeTypes[ext ?? ""] ?? "application/octet-stream");
-      reply.header("Cache-Control", "public, max-age=3600");
-      return reply.send(readFileSync(filePath));
-    },
-  );
 
   // Public status reads are deliberately cache-only. The background scheduler
   // below and the authenticated admin sweep are the only full-check callers.
@@ -981,185 +1026,225 @@ export async function reloadIntegrations(): Promise<ReloadResult> {
 }
 
 /**
- * Reload all integrations: shutdown existing, re-discover manifests, re-setup.
- * Note: Fastify routes registered by integrations cannot be removed at runtime,
- * so only provider re-registration and lifecycle hooks are re-executed.
+ * Build a complete integration generation off to the side, synchronously swap
+ * every request-visible registry after setup succeeds, and only then retire the
+ * previous generation. A failed rebuild is discarded without disturbing the
+ * integrations that are currently serving requests.
  */
 async function doReloadIntegrations(): Promise<ReloadResult> {
   if (!_fastify) throw new Error("Integration host not initialized");
 
   const previousCount = integrations.size;
+  const previousIntegrations = Array.from(integrations.values());
+  const previousEventBus = eventBus;
+  const stagedEventBus = new IntegrationEventBus();
+  const next = new Map<string, LoadedIntegration>();
+  const activationHandlers: Array<() => void> = [];
+  let stagedManifestDataSources: ManifestDataSource[] = [];
 
-  // 1. Shutdown all existing integrations
-  for (const integration of integrations.values()) {
-    eventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
+  try {
+    beginIntegrationRouteStaging();
+    beginPoiSourceRegistryStaging();
+    beginPlaceResolverStaging();
+    beginParkingRuntimeStaging();
+    beginEvRuntimeStaging();
 
-    for (const handler of integration.shutdownHandlers) {
+    // Re-discover and re-setup (topological sort by dependencies, same as cold start).
+    const discovered = await discoverManifests(_integrationDirs);
+    const sorted = topologicalSort(discovered);
+    stagedManifestDataSources = collectManifestDataSources(sorted);
+
+    // Reload capability bindings and service registry for requires: resolution.
+    let reloadBindings = new Map<string, Map<string, string>>();
+    try {
+      reloadBindings = await loadAllBindingsByIntegration();
+    } catch {
+      _fastify.log.debug("Capability bindings unavailable during reload");
+    }
+
+    let reloadRegistry: ReturnType<typeof getServiceRegistry> | null = null;
+    let reloadServices: ReturnType<ReturnType<typeof getServiceRegistry>["list"]> = [];
+    try {
+      reloadRegistry = getServiceRegistry();
+      reloadServices = reloadRegistry.list();
+    } catch {
+      _fastify.log.debug("Service registry unavailable during reload");
+    }
+
+    for (const { manifest: raw, directory, isBuiltIn } of sorted) {
+      const validation = validateManifest(raw);
+      if (!validation.valid) {
+        const replacesActiveIntegration = previousIntegrations.some(
+          (integration) => integration.directory === directory,
+        );
+        _fastify.log[replacesActiveIntegration ? "error" : "warn"](
+          { id: raw.id, errors: validation.errors },
+          `${replacesActiveIntegration ? "Cannot stage" : "Skipping"} integration ${raw.id}: manifest validation failed`,
+        );
+        if (replacesActiveIntegration) {
+          throw new Error(
+            `Integration ${raw.id} manifest validation failed: ${validation.errors.join("; ")}`,
+          );
+        }
+        continue;
+      }
+
+      const manifest = raw as IntegrationManifest;
+      const id = manifest.id;
+
+      if (next.has(id)) {
+        _fastify.log.warn(`Skipping duplicate integration: ${id}`);
+        continue;
+      }
+
+      if (!isBuiltIn && manifest.platform) {
+        if (!satisfiesPlatformVersion(manifest.platform)) {
+          _fastify.log.warn(
+            `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
+          );
+          continue;
+        }
+      }
+
+      const config = await resolveConfig(manifest, directory);
+      const log = createLogger(id, _fastify);
+      const http = createHttpClient(log);
+      const cache = createCacheClient(id);
+      const shutdownHandlers: Array<() => Promise<void>> = [];
+      const providers = new Map<string, unknown[]>();
+
+      warnInvalidConfig(manifest, config, id, (msg) => _fastify?.log.warn(msg));
+
+      const integration: LoadedIntegration = {
+        id,
+        manifest,
+        config,
+        directory,
+        isBuiltIn,
+        enabled: config.enabled !== false,
+        providers,
+        strings: loadStrings(directory),
+        customHealthCheck: undefined,
+        shutdownHandlers,
+      };
+
+      if (!isBuiltIn && hasBlockedCommunityBackend(directory, manifest)) {
+        integration.blockedCode = true;
+        _fastify.log.warn(
+          { integrationId: id },
+          "Community backend code is not executed in the API process; use an isolated service component",
+        );
+      }
+
+      if (!integration.enabled) {
+        next.set(id, integration);
+        continue;
+      }
+
+      const integrationDb = buildIntegrationDb(manifest);
+
+      const fastifyForReload = _fastify;
+      const reloadRequiresMap = resolveRequiresForIntegration({
+        manifestId: id,
+        requires: manifest.requires,
+        loadedServices: reloadServices,
+        bindings: reloadBindings.get(id) ?? new Map(),
+        onUnsatisfied: (requirement, reason) =>
+          fastifyForReload?.log.warn(
+            { integration: id, requirement, reason },
+            `Integration ${id}: required service unresolved`,
+          ),
+      });
+
+      const ctx = buildIntegrationContext({
+        id,
+        manifest,
+        config,
+        log,
+        http,
+        cache,
+        db: integrationDb,
+        requiresMap: reloadRequiresMap,
+        providers,
+        shutdownHandlers,
+        integration,
+        eventBus: stagedEventBus,
+        integrationsByDomain: (domain) =>
+          Array.from(next.values()).filter(
+            (candidate) => candidate.enabled && candidate.manifest.domains.includes(domain),
+          ),
+        activationHandlers,
+      });
+
       try {
-        await handler();
-      } catch {
-        // best effort
+        const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
+
+        if (entryPoint) {
+          const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
+            setup?: SetupFunction;
+          };
+          if (typeof mod.setup === "function") {
+            await mod.setup(ctx);
+          }
+        }
+
+        next.set(id, integration);
+        log.info(`Integration ${id} v${manifest.version ?? "unknown"} reloaded successfully`);
+        stagedEventBus.emit({ type: "integration.loaded", integrationId: id });
+      } catch (err) {
+        _fastify.log.error(err, `Failed to stage integration ${id}; keeping current generation`);
+        next.delete(id);
+        for (const handler of shutdownHandlers) {
+          try {
+            await handler();
+          } catch {
+            // best effort cleanup for the partially staged integration
+          }
+        }
+        throw err;
       }
     }
+
+    // No awaits in this block: request handlers see the entire old graph or the
+    // entire new graph, never a mixture of registry/routes/POI/event generations.
+    for (const activate of activationHandlers) activate();
+    integrations.clear();
+    for (const [id, integration] of next) integrations.set(id, integration);
+    commitIntegrationRouteStaging();
+    commitPoiSourceRegistryStaging();
+    commitPlaceResolverStaging();
+    commitParkingRuntimeStaging();
+    commitEvRuntimeStaging();
+    eventBus = stagedEventBus;
+  } catch (err) {
+    rollbackIntegrationRouteStaging();
+    rollbackPoiSourceRegistryStaging();
+    rollbackPlaceResolverStaging();
+    rollbackParkingRuntimeStaging();
+    rollbackEvRuntimeStaging();
+    stagedEventBus.removeAll();
+    for (const integration of next.values()) {
+      for (const handler of integration.shutdownHandlers) {
+        try {
+          await handler();
+        } catch {
+          // best effort cleanup for resources created by the failed generation
+        }
+      }
+    }
+    throw err;
   }
 
-  eventBus.removeAll();
-  resetIntegrationRoutes();
-
-  // Rebuild into a detached map, then swap the shared map's CONTENTS in one
-  // synchronous burst after the loop — readers keep seeing the old registry
-  // (and the route dispatcher keeps its shared reference) until then.
-  const next = new Map<string, LoadedIntegration>();
-
-  // 2. Re-discover and re-setup (topological sort by dependencies, same as cold start)
-  const discovered = await discoverManifests(_integrationDirs);
-  const sorted = topologicalSort(discovered);
-
-  // Reload capability bindings and service registry for requires: resolution.
-  let reloadBindings = new Map<string, Map<string, string>>();
-  try {
-    reloadBindings = await loadAllBindingsByIntegration();
-  } catch {
-    _fastify.log.debug("Capability bindings unavailable during reload");
-  }
-
-  let reloadRegistry: ReturnType<typeof getServiceRegistry> | null = null;
-  let reloadServices: ReturnType<ReturnType<typeof getServiceRegistry>["list"]> = [];
-  try {
-    reloadRegistry = getServiceRegistry();
-    reloadServices = reloadRegistry.list();
-  } catch {
-    _fastify.log.debug("Service registry unavailable during reload");
-  }
-
-  // Refresh the AttributionIndex with the freshly discovered manifests so
-  // any added/removed integrations' dataSources are reflected in resolver
-  // lookups.
+  // Request-visible state is now committed. Refresh dependent indexes and
+  // invalidate derived caches before retiring the previous generation.
   const existingIndex = getAttributionIndex();
   if (existingIndex) {
-    existingIndex.setIntegrationManifests(collectManifestDataSources(sorted));
+    existingIndex.setIntegrationManifests(stagedManifestDataSources);
     try {
       await existingIndex.reload();
     } catch (err) {
       _fastify.log.warn(err, "AttributionIndex reload failed");
     }
-  }
-
-  for (const { manifest: raw, directory, isBuiltIn } of sorted) {
-    const validation = validateManifest(raw);
-    if (!validation.valid) {
-      _fastify.log.warn(
-        { id: raw.id, errors: validation.errors },
-        `Skipping integration ${raw.id}: manifest validation failed`,
-      );
-      continue;
-    }
-
-    const manifest = raw as IntegrationManifest;
-    const id = manifest.id;
-
-    if (next.has(id)) {
-      _fastify.log.warn(`Skipping duplicate integration: ${id}`);
-      continue;
-    }
-
-    if (!isBuiltIn && manifest.platform) {
-      if (!satisfiesPlatformVersion(manifest.platform)) {
-        _fastify.log.warn(
-          `Skipping community integration ${id}: requires platform >=${manifest.platform}, current is ${PLATFORM_VERSION}`,
-        );
-        continue;
-      }
-    }
-
-    const config = await resolveConfig(manifest, directory);
-    const log = createLogger(id, _fastify);
-    const http = createHttpClient(log);
-    const cache = createCacheClient(id);
-    const shutdownHandlers: Array<() => Promise<void>> = [];
-    const providers = new Map<string, unknown[]>();
-
-    warnInvalidConfig(manifest, config, id, (msg) => _fastify?.log.warn(msg));
-
-    const integration: LoadedIntegration = {
-      id,
-      manifest,
-      config,
-      directory,
-      isBuiltIn,
-      enabled: config.enabled !== false,
-      providers,
-      strings: loadStrings(directory),
-      customHealthCheck: undefined,
-      shutdownHandlers,
-    };
-
-    if (!integration.enabled) {
-      next.set(id, integration);
-      continue;
-    }
-
-    const integrationDb = buildIntegrationDb(manifest);
-
-    const fastifyForReload = _fastify;
-    const reloadRequiresMap = resolveRequiresForIntegration({
-      manifestId: id,
-      requires: manifest.requires,
-      loadedServices: reloadServices,
-      bindings: reloadBindings.get(id) ?? new Map(),
-      onUnsatisfied: (requirement, reason) =>
-        fastifyForReload?.log.warn(
-          { integration: id, requirement, reason },
-          `Integration ${id}: required service unresolved`,
-        ),
-    });
-
-    const ctx = buildIntegrationContext({
-      id,
-      manifest,
-      config,
-      log,
-      http,
-      cache,
-      db: integrationDb,
-      requiresMap: reloadRequiresMap,
-      providers,
-      shutdownHandlers,
-      integration,
-    });
-
-    try {
-      const entryPoint = resolveBackendEntryPoint(directory, isBuiltIn);
-
-      if (entryPoint) {
-        const mod = (await import(backendEntryImportSpecifier(entryPoint))) as {
-          setup?: SetupFunction;
-        };
-        if (typeof mod.setup === "function") {
-          await mod.setup(ctx);
-        }
-      }
-
-      next.set(id, integration);
-      log.info(`Integration ${id} v${manifest.version ?? "unknown"} reloaded successfully`);
-      eventBus.emit({ type: "integration.loaded", integrationId: id });
-    } catch (err) {
-      _fastify.log.error(err, `Failed to reload integration ${id}`);
-      integration.enabled = false;
-      next.set(id, integration);
-      eventBus.emit({
-        type: "integration.error",
-        integrationId: id,
-        error: err instanceof Error ? err : new Error(String(err)),
-      });
-    }
-  }
-
-  // Swap contents atomically (no awaits): readers never observe a partially
-  // rebuilt registry — they see the old set until this point, the new set after.
-  integrations.clear();
-  for (const [id, integration] of next) {
-    integrations.set(id, integration);
   }
 
   const enabledCount = Array.from(integrations.values()).filter((i) => i.enabled).length;
@@ -1169,7 +1254,23 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
 
   // The data-use policy memoizes gated sets derived from the (now-rebuilt)
   // registry; drop them so the next request re-derives against the new set.
-  integrationsReloadedHook?.();
+  try {
+    integrationsReloadedHook?.();
+  } catch (err) {
+    _fastify.log.warn(err, "Post-reload cache invalidation hook failed");
+  }
+
+  for (const integration of previousIntegrations) {
+    previousEventBus.emit({ type: "integration.unloaded", integrationId: integration.id });
+    for (const handler of integration.shutdownHandlers) {
+      try {
+        await handler();
+      } catch {
+        // best effort retirement of the previous generation
+      }
+    }
+  }
+  previousEventBus.removeAll();
 
   return {
     message: "Integrations reloaded",

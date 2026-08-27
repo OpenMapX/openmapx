@@ -1,13 +1,19 @@
 import { createConnection } from "node:net";
-import type { FastifyPluginAsync } from "fastify";
+import type { FastifyPluginAsync, FastifyReply } from "fastify";
 import { sql } from "../db/index.js";
 import { redis } from "../redis.js";
-import { tryAdminSession } from "../utils/require-admin.js";
+import { appLogger } from "../services/app-logger.js";
+import {
+  createStatusSnapshotStore,
+  type StatusSnapshotRead,
+  type StatusSnapshotStore,
+} from "../services/status-snapshot.js";
+import { requireAdmin } from "../utils/require-admin.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 
 const TIMEOUT = 5_000;
 
-interface ServiceStatus {
+export interface ServiceStatus {
   id: string;
   name: string;
   category: string;
@@ -25,6 +31,10 @@ interface ServiceStatus {
  * `/api/capabilities`, so keeping it here adds no new disclosure.
  */
 type PublicServiceStatus = Omit<ServiceStatus, "url" | "error">;
+
+export interface StatusProbeSnapshot {
+  services: ServiceStatus[];
+}
 
 function toPublicStatus(service: ServiceStatus): PublicServiceStatus {
   return {
@@ -213,49 +223,120 @@ async function checkSmtp(): Promise<ServiceStatus> {
   });
 }
 
-export const statusRoute: FastifyPluginAsync = async (fastify) => {
-  declareRouteAuth(fastify, "public");
+/** One fan-out across platform dependencies plus the scheduler's integration snapshot. */
+export async function probeStatusDependencies(): Promise<StatusProbeSnapshot> {
+  const platformResults = await Promise.all([
+    checkPostgres(),
+    checkRedis(),
+    checkGitHub(),
+    checkSmtp(),
+  ]);
 
-  fastify.get("/status", async (request) => {
-    // Platform checks (always present, not integration-managed)
-    const platformResults = await Promise.all([
-      checkPostgres(),
-      checkRedis(),
-      checkGitHub(),
-      checkSmtp(),
-    ]);
+  const { getAllIntegrations } = await import("../integration-host.js");
+  const { getCachedIntegrationHealthSnapshot } = await import("../services/integration-health.js");
+  const allIntegrations = getAllIntegrations().filter((integration) => integration.enabled);
+  const integrationResults = getCachedIntegrationHealthSnapshot(allIntegrations).results;
+  const multiCheckIntegrationIds = new Set(
+    allIntegrations
+      .filter(
+        (integration) =>
+          Array.isArray(integration.manifest.healthCheck) &&
+          integration.manifest.healthCheck.length > 1,
+      )
+      .map((integration) => integration.id),
+  );
+  const visibleIntegrationResults = integrationResults.filter(
+    (result) => !multiCheckIntegrationIds.has(result.id),
+  );
 
-    // Integration-managed checks (from manifests)
-    const { getAllIntegrations } = await import("../integration-host.js");
-    const { getCachedIntegrationHealthSnapshot } = await import(
-      "../services/integration-health.js"
-    );
-    const allIntegrations = getAllIntegrations().filter((i) => i.enabled);
-    const integrationResults = getCachedIntegrationHealthSnapshot(allIntegrations).results;
-    const multiCheckIntegrationIds = new Set(
-      allIntegrations
-        .filter((i) => Array.isArray(i.manifest.healthCheck) && i.manifest.healthCheck.length > 1)
-        .map((i) => i.id),
-    );
-    const visibleIntegrationResults = integrationResults.filter(
-      (result) => !multiCheckIntegrationIds.has(result.id),
-    );
+  return { services: [...platformResults, ...visibleIntegrationResults] };
+}
 
-    const services: ServiceStatus[] = [...platformResults, ...visibleIntegrationResults];
+// Exactly one store per API process. Fastify plugin instances and public/admin
+// requests share both the snapshot and the in-flight refresh promise.
+const processStatusStore = createStatusSnapshotStore({
+  probe: probeStatusDependencies,
+  onRefreshFailure: ({ generation, errorClass }) => {
+    appLogger.add({
+      level: "warn",
+      source: "status",
+      msg: "Status dependency snapshot refresh failed",
+      time: Date.now(),
+      metadata: { generation, errorClass },
+    });
+  },
+});
 
-    // Resolving the session touches the database. This endpoint has to keep
-    // answering when the database is the thing that is down, so a failed
-    // lookup degrades to the public view instead of a 500.
-    let adminSession: Awaited<ReturnType<typeof tryAdminSession>> = null;
-    try {
-      adminSession = await tryAdminSession(request);
-    } catch {
-      adminSession = null;
-    }
+export interface StatusRouteOptions {
+  /** Deterministic store injection for route tests. Production leaves this unset. */
+  statusStore?: StatusSnapshotStore<StatusProbeSnapshot>;
+}
 
-    return {
-      timestamp: new Date().toISOString(),
-      services: adminSession ? services : services.map(toPublicStatus),
-    };
+function sendUnavailable(
+  reply: FastifyReply,
+  result: Extract<StatusSnapshotRead<StatusProbeSnapshot>, { available: false }>,
+  admin: boolean,
+) {
+  return reply.code(503).send({
+    timestamp: result.observedAt,
+    snapshotAgeMs: null,
+    stale: false,
+    unavailable: true,
+    services: [],
+    ...(admin ? { refreshErrorClass: result.refreshErrorClass } : {}),
   });
+}
+
+function sendAvailable(
+  reply: FastifyReply,
+  result: Extract<StatusSnapshotRead<StatusProbeSnapshot>, { available: true }>,
+  admin: boolean,
+) {
+  return reply.send({
+    timestamp: result.capturedAt,
+    snapshotAgeMs: Math.floor(result.ageMs),
+    stale: result.stale,
+    unavailable: false,
+    services: admin ? result.data.services : result.data.services.map(toPublicStatus),
+    ...(admin && result.refreshErrorClass ? { refreshErrorClass: result.refreshErrorClass } : {}),
+  });
+}
+
+function applyAdminStatusPrivacyHeaders(reply: FastifyReply): void {
+  reply.header("Cache-Control", "private, no-store");
+  reply.header("Pragma", "no-cache");
+  reply.header("Vary", "Cookie");
+}
+
+export const statusRoute: FastifyPluginAsync<StatusRouteOptions> = async (fastify, options) => {
+  declareRouteAuth(fastify, "public");
+  const statusStore = options.statusStore ?? processStatusStore;
+
+  fastify.get("/status", async (_request, reply) => {
+    reply.header("Cache-Control", "public, max-age=15, stale-while-revalidate=45");
+    const result = await statusStore.read();
+    return result.available
+      ? sendAvailable(reply, result, false)
+      : sendUnavailable(reply, result, false);
+  });
+
+  fastify.get(
+    "/admin/status",
+    {
+      config: { auth: "admin" },
+      onRequest: (_request, reply) => {
+        applyAdminStatusPrivacyHeaders(reply);
+        return Promise.resolve();
+      },
+      preHandler: async (request) => {
+        request.adminSession = await requireAdmin(request);
+      },
+    },
+    async (_request, reply) => {
+      const result = await statusStore.read();
+      return result.available
+        ? sendAvailable(reply, result, true)
+        : sendUnavailable(reply, result, true);
+    },
+  );
 };

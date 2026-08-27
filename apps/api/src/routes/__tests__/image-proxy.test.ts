@@ -1,4 +1,6 @@
-import type { FastifyInstance } from "fastify";
+import { Writable } from "node:stream";
+import Fastify, { type FastifyInstance } from "fastify";
+import pino from "pino";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // Upstream fetch + Google Photos resolution are mocked so the proxy never hits
@@ -11,11 +13,17 @@ vi.mock("@openmapx/core", () => ({
   fetchWithRedirects: (...args: unknown[]) => mockFetchWithRedirects(...args),
   USER_AGENT: "test-agent",
 }));
-vi.mock("@integrations/photos/orchestrator", () => ({
+vi.mock("@integrations/photos/orchestrator", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@integrations/photos/orchestrator")>()),
   resolveGooglePhotosLink: (...args: unknown[]) => mockResolveGooglePhotosLink(...args),
 }));
 
+import {
+  controlledRequestLoggingOptions,
+  registerControlledRequestLogging,
+} from "../../server-wiring.js";
 import { buildTestApp } from "../../test/app.js";
+import { createSafePinoOptions } from "../../utils/safe-log-fields.js";
 import { imageProxyRoute, isAllowedHost } from "../image-proxy.js";
 
 const ALLOWED_REFERER = "http://localhost:3000/some/page";
@@ -164,9 +172,100 @@ describe("image-proxy route", () => {
     mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 502, headers: new Headers() });
     await inject({ referer: ALLOWED_REFERER });
     const opts = mockFetchWithRedirects.mock.calls[0]?.[1] as {
-      validateRedirectUrl: (u: { hostname: string }) => boolean;
+      validateRedirectUrl: (url: URL) => boolean;
     };
-    expect(opts.validateRedirectUrl({ hostname: "upload.wikimedia.org" })).toBe(true);
-    expect(opts.validateRedirectUrl({ hostname: "evil.attacker.com" })).toBe(false);
+    expect(opts.validateRedirectUrl(new URL("https://upload.wikimedia.org/next"))).toBe(true);
+    expect(opts.validateRedirectUrl(new URL("https://evil.attacker.com/next"))).toBe(false);
+  });
+
+  it.each([
+    "https://evil.attacker.com/stolen.png",
+    "http://lh3.googleusercontent.com/downgraded.png",
+    "https://photos.google.com/share/not-an-image",
+  ])("rejects an unsafe Google Photos resolution before fetching %s", async (resolved) => {
+    mockResolveGooglePhotosLink.mockResolvedValue([resolved]);
+
+    const res = await inject({
+      referer: ALLOWED_REFERER,
+      url: "https://photos.app.goo.gl/valid-share-id",
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(mockFetchWithRedirects).not.toHaveBeenCalled();
+  });
+
+  it("keeps every redirect from a resolved Google image on HTTPS Google image hosts", async () => {
+    mockResolveGooglePhotosLink.mockResolvedValue([
+      "https://lh3.googleusercontent.com/long-enough-image-id=w1200",
+    ]);
+    mockFetchWithRedirects.mockResolvedValue({ ok: false, status: 404, headers: new Headers() });
+
+    await inject({
+      referer: ALLOWED_REFERER,
+      url: "https://photos.app.goo.gl/valid-share-id",
+    });
+
+    const opts = mockFetchWithRedirects.mock.calls[0]?.[1] as {
+      validateRedirectUrl: (url: URL) => boolean;
+    };
+    expect(opts.validateRedirectUrl(new URL("https://lh4.googleusercontent.com/next"))).toBe(true);
+    expect(opts.validateRedirectUrl(new URL("http://lh4.googleusercontent.com/next"))).toBe(false);
+    expect(opts.validateRedirectUrl(new URL("https://photos.google.com/share/next"))).toBe(false);
+    expect(opts.validateRedirectUrl(new URL("https://evil.attacker.com/next"))).toBe(false);
+  });
+
+  it("logs only a branded host/digest summary and safe error class for a failed source", async () => {
+    const chunks: string[] = [];
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(String(chunk));
+        callback();
+      },
+    });
+    const logger = pino(createSafePinoOptions("info"), stream);
+    const secureApp = Fastify(controlledRequestLoggingOptions(logger));
+    registerControlledRequestLogging(secureApp, { now: () => 1 });
+    await secureApp.register(imageProxyRoute);
+    await secureApp.ready();
+    const privateUrl =
+      "https://fixture-user:fixture-pass@upload.wikimedia.org/sensitive/path/share-id?token=fixture-token#fixture-fragment";
+    mockFetchWithRedirects.mockRejectedValue(
+      new TypeError(`fetch failed at ${privateUrl} with Bearer fixture-bearer-token`),
+    );
+
+    const response = await secureApp.inject({
+      method: "GET",
+      url: "/image-proxy",
+      query: { url: privateUrl },
+      headers: { referer: ALLOWED_REFERER },
+    });
+    await secureApp.close();
+
+    expect(response.statusCode).toBe(502);
+    const records = chunks
+      .join("")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    const warning = records.find((record) => record.msg === "Image proxy fetch failed");
+    expect(warning).toMatchObject({
+      imageSource: {
+        host: "upload.wikimedia.org",
+        digest: "dd51043a63efd542821788b7e5906437",
+      },
+      errorClass: "TypeError",
+    });
+    const output = chunks.join("");
+    for (const marker of [
+      "fixture-user",
+      "fixture-pass",
+      "sensitive/path",
+      "share-id",
+      "fixture-token",
+      "fixture-fragment",
+      "fixture-bearer-token",
+    ]) {
+      expect(output).not.toContain(marker);
+    }
   });
 });

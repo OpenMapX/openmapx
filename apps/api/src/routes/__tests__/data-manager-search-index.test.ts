@@ -15,7 +15,7 @@ let app: FastifyInstance;
 
 beforeAll(async () => {
   process.env.DATA_MANAGER_AUTH_TOKEN = "service-token";
-  process.env.DATA_MANAGER_URL = "http://data-manager.test:4000";
+  process.env.DATA_MANAGER_URL = "https://data-manager.test:4000";
   vi.stubGlobal("fetch", fetchMock);
   const { dataManagerRoute } = await import("../data-manager.js");
   app = Fastify({ logger: false });
@@ -55,7 +55,7 @@ describe("GET /data-manager/search-index/status", () => {
     expect(res.statusCode).toBe(200);
     expect(res.json()).toMatchObject({ region: "europe/germany", status: "ready" });
     expect(fetchMock).toHaveBeenCalledWith(
-      "http://data-manager.test:4000/search-index/status",
+      "https://data-manager.test:4000/search-index/status",
       expect.objectContaining({
         method: "GET",
         headers: expect.objectContaining({ Authorization: "Bearer service-token" }),

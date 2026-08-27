@@ -56,13 +56,13 @@
     "opening_hours": "^3.14.0",
     "pino": "^10.3.1",
     "postgres": "^3.4.9",
-    "simple-git": "^3.36.0",
     "tsx": "4.23.5",
     "undici": "^8.9.0",
     "zod": "^4.4.3"
   },
   "devDependencies": {
     "@fastify/swagger": "^9.8.1",
+    "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^26.2.0",
     "@types/nodemailer": "^8.0.1",
     "@vitest/coverage-v8": "^4.1.10",

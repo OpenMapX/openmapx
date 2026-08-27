@@ -2,7 +2,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { oauthClient, serviceConfig } from "../../db/schema.js";
-import { dockerComposeContainerEnv } from "../../utils/docker-compose.js";
+import { inspectDawarichProvisioning } from "../../utils/docker-compose.js";
 import { envString } from "../../utils/env.js";
 import { resolveEffectiveServiceConfig } from "../service-config-resolver.js";
 import { getServiceRegistry, serviceUrl } from "../service-registry.js";
@@ -396,8 +396,14 @@ const defaultDependencies: ManagedDawarichResolverDependencies = {
   getOAuthAuthority: readOAuthAuthority,
   fetchHealth: (url, init) => fetch(url, init),
   now: Date.now,
-  getAppliedGeneration: (serviceId) =>
-    dockerComposeContainerEnv(serviceId, DAWARICH_PROVISIONING_GENERATION_KEY),
+  getAppliedGeneration: async (serviceId) => {
+    const inspection = await inspectDawarichProvisioning();
+    if (serviceId === DAWARICH_APP_SERVICE_ID) return inspection?.appliedGenerations.app ?? null;
+    if (serviceId === DAWARICH_WORKER_SERVICE_ID) {
+      return inspection?.appliedGenerations.worker ?? null;
+    }
+    return null;
+  },
   getRawProvisioningState: readRawProvisioningState,
 };
 

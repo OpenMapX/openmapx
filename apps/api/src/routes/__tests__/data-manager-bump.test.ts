@@ -36,7 +36,7 @@ vi.mock("../../utils/rate-limit.js", () => ({
 
 beforeAll(() => {
   process.env.DATA_MANAGER_AUTH_TOKEN = "service-token";
-  process.env.DATA_MANAGER_URL = "http://data-manager.test:4000";
+  process.env.DATA_MANAGER_URL = "https://data-manager.test:4000";
   vi.stubGlobal("fetch", fetchMock);
 });
 

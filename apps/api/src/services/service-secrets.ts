@@ -114,6 +114,17 @@ export async function resolveServiceVaultSecrets(
   }
 }
 
+/** Fail-closed variant used to publish an authoritative ops-agent snapshot. */
+export async function resolveServiceVaultSecretsStrict(
+  serviceId: string,
+): Promise<Record<string, string>> {
+  if (!isSecretsConfigured()) return {};
+  const rows = await db.select().from(serviceSecret).where(eq(serviceSecret.serviceId, serviceId));
+  const result: Record<string, string> = {};
+  for (const row of rows) result[row.key] = decrypt(row.ciphertext, row.iv, row.tag);
+  return result;
+}
+
 /** All service secrets across every service — used to render the secret files. */
 export async function listAllServiceSecrets(): Promise<
   Array<{ serviceId: string; key: string; updatedAt: Date; updatedBy: string | null }>

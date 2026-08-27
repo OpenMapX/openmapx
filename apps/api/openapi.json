@@ -1491,6 +1491,20 @@
         "x-openmapx-auth": "admin"
       }
     },
+    "/api/admin/status": {
+      "get": {
+        "operationId": "getApiAdminStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/admin/system": {
       "get": {
         "operationId": "getApiAdminSystem",
@@ -5445,6 +5459,49 @@
     "/api/mobile-auth/exchange": {
       "post": {
         "operationId": "postApiMobileAuthExchange",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "propertyNames": {
+                  "enum": [
+                    "callbackCode",
+                    "codeVerifier",
+                    "state"
+                  ]
+                },
+                "required": [
+                  "callbackCode",
+                  "codeVerifier",
+                  "state"
+                ],
+                "properties": {
+                  "callbackCode": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 256,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "codeVerifier": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response"
@@ -5459,6 +5516,51 @@
     "/api/mobile-auth/issue": {
       "post": {
         "operationId": "postApiMobileAuthIssue",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "additionalProperties": false,
+                "propertyNames": {
+                  "enum": [
+                    "purpose",
+                    "codeChallenge",
+                    "state"
+                  ]
+                },
+                "required": [
+                  "purpose",
+                  "codeChallenge",
+                  "state"
+                ],
+                "properties": {
+                  "purpose": {
+                    "type": "string",
+                    "enum": [
+                      "sign-in",
+                      "link-provider",
+                      "add-passkey"
+                    ]
+                  },
+                  "codeChallenge": {
+                    "type": "string",
+                    "minLength": 43,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  },
+                  "state": {
+                    "type": "string",
+                    "minLength": 16,
+                    "maxLength": 128,
+                    "pattern": "^[A-Za-z0-9_-]+$"
+                  }
+                }
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "Default Response"
@@ -5617,7 +5719,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "public"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/offline/packages/prepare": {
@@ -5631,7 +5733,7 @@
         "tags": [
           "offline"
         ],
-        "x-openmapx-auth": "public"
+        "x-openmapx-auth": "session"
       }
     },
     "/api/offline/packages/{packageId}/archive": {

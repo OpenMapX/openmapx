@@ -1,6 +1,6 @@
 import { eq } from "drizzle-orm";
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
-import { db, sql } from "../db";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { db } from "../db";
 import { capabilityBinding } from "../db/schema";
 import {
   getBinding,
@@ -10,47 +10,19 @@ import {
 } from "./capability-bindings";
 
 const TEST_INT = "routing-test";
-let dbAvailable = false;
-let dbUnavailableReason = "test database is not reachable";
+const skipDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
-beforeAll(async () => {
-  // Some local test DB setups don't run migrations ahead of this suite.
-  // Bootstrap the table minimally so DAO tests remain hermetic.
-  try {
-    await sql`
-      create table if not exists capability_binding (
-        integration_id text not null,
-        capability text not null,
-        service_id text not null,
-        created_at timestamptz not null default now(),
-        updated_at timestamptz not null default now(),
-        primary key (integration_id, capability)
-      )
-    `;
-    await sql`
-      create index if not exists idx_capability_binding_service
-        on capability_binding (service_id)
-    `;
-    dbAvailable = true;
-  } catch (error) {
-    dbUnavailableReason = error instanceof Error ? error.message : dbUnavailableReason;
-  }
-});
+describe.skipIf(skipDatabase)("capability-bindings DAO with PostgreSQL", () => {
+  beforeEach(async () => {
+    // The required CI job applies production migrations first. Connection or
+    // schema failures must reject this hook and fail the suite.
+    await db.delete(capabilityBinding).where(eq(capabilityBinding.integrationId, TEST_INT));
+  });
 
-beforeEach(async (context) => {
-  if (!dbAvailable) {
-    context.skip(`Skipping DB-backed DAO tests: ${dbUnavailableReason}`);
-    return;
-  }
-  await db.delete(capabilityBinding).where(eq(capabilityBinding.integrationId, TEST_INT));
-});
+  afterEach(async () => {
+    await db.delete(capabilityBinding).where(eq(capabilityBinding.integrationId, TEST_INT));
+  });
 
-afterEach(async () => {
-  if (!dbAvailable) return;
-  await db.delete(capabilityBinding).where(eq(capabilityBinding.integrationId, TEST_INT));
-});
-
-describe("capability-bindings DAO", () => {
   it("set and get", async () => {
     await setBinding({ integrationId: TEST_INT, capability: "routing-engine" }, "valhalla");
     expect(await getBinding({ integrationId: TEST_INT, capability: "routing-engine" })).toBe(

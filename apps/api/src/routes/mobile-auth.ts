@@ -1,5 +1,10 @@
 import { fromNodeHeaders } from "better-auth/node";
-import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
+import type {
+  FastifyContextConfig,
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+} from "fastify";
 import { auth } from "../auth";
 import { MobileAuthHandoffService } from "../services/mobileAuthHandoff";
 import { envString } from "../utils/env";
@@ -28,6 +33,58 @@ import { declareRouteAuth } from "../utils/route-auth";
 
 /** Bodies here are a handful of short base64url fields; anything larger is noise. */
 const MAX_BODY_BYTES = 4 * 1024;
+const BASE64URL_PATTERN = "^[A-Za-z0-9_-]+$";
+
+interface IssueBody {
+  purpose: "sign-in" | "link-provider" | "add-passkey";
+  codeChallenge: string;
+  state: string;
+}
+
+interface ExchangeBody {
+  callbackCode: string;
+  codeVerifier: string;
+  state: string;
+}
+
+const issueBodySchema = {
+  type: "object",
+  additionalProperties: false,
+  propertyNames: { enum: ["purpose", "codeChallenge", "state"] },
+  required: ["purpose", "codeChallenge", "state"],
+  properties: {
+    purpose: { type: "string", enum: ["sign-in", "link-provider", "add-passkey"] },
+    codeChallenge: {
+      type: "string",
+      minLength: 43,
+      maxLength: 128,
+      pattern: BASE64URL_PATTERN,
+    },
+    state: { type: "string", minLength: 16, maxLength: 128, pattern: BASE64URL_PATTERN },
+  },
+} as const;
+
+const exchangeBodySchema = {
+  type: "object",
+  additionalProperties: false,
+  propertyNames: { enum: ["callbackCode", "codeVerifier", "state"] },
+  required: ["callbackCode", "codeVerifier", "state"],
+  properties: {
+    callbackCode: {
+      type: "string",
+      minLength: 16,
+      maxLength: 256,
+      pattern: BASE64URL_PATTERN,
+    },
+    codeVerifier: {
+      type: "string",
+      minLength: 43,
+      maxLength: 128,
+      pattern: BASE64URL_PATTERN,
+    },
+    state: { type: "string", minLength: 16, maxLength: 128, pattern: BASE64URL_PATTERN },
+  },
+} as const;
 
 const service = new MobileAuthHandoffService();
 
@@ -69,13 +126,6 @@ function originAllowed(request: FastifyRequest): boolean {
   return allowedOrigins().includes(origin);
 }
 
-function tooLarge(request: FastifyRequest): boolean {
-  const length = Number(request.headers["content-length"] ?? 0);
-  return Number.isFinite(length) && length > MAX_BODY_BYTES;
-}
-
-const asString = (value: unknown): string => (typeof value === "string" ? value : "");
-
 export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
 
@@ -85,37 +135,48 @@ export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
    * The one-time token is minted here rather than in the browser so it never
    * appears in a page the user can be persuaded to read out.
    */
-  fastify.post("/mobile-auth/issue", { config: { auth: "session" } }, async (request, reply) => {
-    noStore(reply);
-    if (tooLarge(request)) return reply.code(413).send({ error: "invalid_request" });
-    if (!originAllowed(request)) return reply.code(403).send({ error: "invalid_request" });
+  fastify.post<{ Body: IssueBody }>(
+    "/mobile-auth/issue",
+    {
+      config: { auth: "session" } as FastifyContextConfig & { auth: "session" },
+      bodyLimit: MAX_BODY_BYTES,
+      schema: { body: issueBodySchema },
+      onRequest: (_request, reply) => {
+        noStore(reply);
+        return Promise.resolve();
+      },
+    },
+    async (request, reply) => {
+      noStore(reply);
+      if (!originAllowed(request)) return reply.code(403).send({ error: "invalid_request" });
 
-    const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
-    if (!session) return reply.code(401).send({ error: "authentication_required" });
+      const session = await auth.api.getSession({ headers: fromNodeHeaders(request.headers) });
+      if (!session) return reply.code(401).send({ error: "authentication_required" });
 
-    const body = (request.body ?? {}) as Record<string, unknown>;
-    const generated = await auth.api.generateOneTimeToken({
-      headers: fromNodeHeaders(request.headers),
-    });
-    const oneTimeToken = asString((generated as { token?: unknown } | null)?.token);
-    if (!oneTimeToken) return reply.code(500).send({ error: "invalid_request" });
+      const generated = await auth.api.generateOneTimeToken({
+        headers: fromNodeHeaders(request.headers),
+      });
+      const token = (generated as { token?: unknown } | null)?.token;
+      const oneTimeToken = typeof token === "string" ? token : "";
+      if (!oneTimeToken) return reply.code(500).send({ error: "invalid_request" });
 
-    const result = await service.issue({
-      userId: session.user.id,
-      purpose: asString(body.purpose),
-      codeChallenge: asString(body.codeChallenge),
-      state: asString(body.state),
-      oneTimeToken,
-      nowMs: Date.now(),
-    });
-    if (!result.ok) {
-      const status = result.reason === "too-many-attempts" ? 429 : 400;
-      return reply.code(status).send({ error: "invalid_request" });
-    }
+      const result = await service.issue({
+        userId: session.user.id,
+        purpose: request.body.purpose,
+        codeChallenge: request.body.codeChallenge,
+        state: request.body.state,
+        oneTimeToken,
+        nowMs: Date.now(),
+      });
+      if (!result.ok) {
+        const status = result.reason === "too-many-attempts" ? 429 : 400;
+        return reply.code(status).send({ error: "invalid_request" });
+      }
 
-    // The code and nothing else. No token, no user, no redirect target.
-    return reply.send({ callbackCode: result.callbackCode, expiresAtMs: result.expiresAtMs });
-  });
+      // The code and nothing else. No token, no user, no redirect target.
+      return reply.send({ callbackCode: result.callbackCode, expiresAtMs: result.expiresAtMs });
+    },
+  );
 
   /**
    * Called by the WebView, unauthenticated, with the verifier it kept.
@@ -124,21 +185,30 @@ export const mobileAuthRoute: FastifyPluginAsync = async (fastify) => {
    * Better Auth, which is what actually sets the WebView's session cookie — this
    * endpoint never sets one.
    */
-  fastify.post("/mobile-auth/exchange", async (request, reply) => {
-    noStore(reply);
-    if (tooLarge(request)) return reply.code(413).send({ error: "invalid_request" });
-    if (!originAllowed(request)) return reply.code(403).send({ error: "invalid_request" });
+  fastify.post<{ Body: ExchangeBody }>(
+    "/mobile-auth/exchange",
+    {
+      bodyLimit: MAX_BODY_BYTES,
+      schema: { body: exchangeBodySchema },
+      onRequest: (_request, reply) => {
+        noStore(reply);
+        return Promise.resolve();
+      },
+    },
+    async (request, reply) => {
+      noStore(reply);
+      if (!originAllowed(request)) return reply.code(403).send({ error: "invalid_request" });
 
-    const body = (request.body ?? {}) as Record<string, unknown>;
-    const result = await service.exchange({
-      callbackCode: asString(body.callbackCode),
-      codeVerifier: asString(body.codeVerifier),
-      state: asString(body.state),
-      nowMs: Date.now(),
-    });
-    // One status, one body, for every possible rejection.
-    if (!result.ok) return reply.code(400).send({ error: "invalid_request" });
+      const result = await service.exchange({
+        callbackCode: request.body.callbackCode,
+        codeVerifier: request.body.codeVerifier,
+        state: request.body.state,
+        nowMs: Date.now(),
+      });
+      // One status, one body, for every possible rejection.
+      if (!result.ok) return reply.code(400).send({ error: "invalid_request" });
 
-    return reply.send({ token: result.oneTimeToken });
-  });
+      return reply.send({ token: result.oneTimeToken });
+    },
+  );
 };

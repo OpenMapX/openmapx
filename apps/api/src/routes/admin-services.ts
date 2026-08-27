@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import type { OpsResultFor } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { isValidSecretKey } from "@openmapx/core/services/secret-key";
 import {
@@ -11,8 +12,6 @@ import type { FastifyInstance } from "fastify";
 import {
   assertValidBackupName,
   getServiceSelectionSummary,
-  listBackupSummaries,
-  writeServiceSelection as persistServiceSelection,
   validateServiceSelectionForWrite,
 } from "../services/admin-cli";
 import { isDockerAvailable } from "../services/admin-ops";
@@ -22,16 +21,27 @@ import {
   DAWARICH_CREDENTIAL_MANAGED_ERROR,
   isProvisioningOwnedDawarichCredential,
 } from "../services/dawarich/credential-policy.js";
+import {
+  createDirectAdminOpsKey,
+  DIRECT_OPS_IDEMPOTENCY_HEADER,
+  parseDirectOpsIdempotency,
+} from "../services/direct-ops-idempotency";
 import { jobRunner } from "../services/job-runner";
+import { createApiOpsClient, createDurableOpsKey, executeAndWait } from "../services/ops-client";
 import { isSecretsConfigured } from "../services/secrets";
 import { resolveServiceConfigWithSources } from "../services/service-config-resolver";
-import { mergeServiceConfig } from "../services/service-config-writer";
+import {
+  mergeServiceConfig,
+  readStoredServiceConfig,
+  restoreStoredServiceConfig,
+} from "../services/service-config-writer";
 import { getServiceRegistry } from "../services/service-registry";
 import {
   deleteServiceSecret,
   listServiceSecrets,
   setServiceSecret,
 } from "../services/service-secrets";
+import { applyTrustedConfiguration } from "../services/trusted-config-operations";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposeLogs, dockerComposePs } from "../utils/docker-compose";
 import { maskSecretConfigValues } from "../utils/mask-config.js";
@@ -55,6 +65,29 @@ const DATA_JOB_OPERATIONS = new Set([
 ] as const);
 const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "update", "build"] as const);
 
+function hasOnlyBodyKeys(body: unknown, allowed: ReadonlySet<string>): boolean {
+  return (
+    body === undefined ||
+    (body !== null &&
+      typeof body === "object" &&
+      !Array.isArray(body) &&
+      Object.keys(body).every((key) => allowed.has(key)))
+  );
+}
+
+const DATA_ACTION_BODY_KEYS: Readonly<Record<string, ReadonlySet<string>>> = {
+  "download-osm": new Set(["operation", "region"]),
+  "download-fonts": new Set(["operation"]),
+  update: new Set(["operation", "region", "countries", "failFast"]),
+  "convert-overpass": new Set(["operation", "region"]),
+  link: new Set(["operation"]),
+  clean: new Set(["operation", "target"]),
+  "generate-api-keys": new Set(["operation"]),
+  "overture-sync": new Set(["operation", "region"]),
+  "overture-conflate": new Set(["operation", "region", "restart"]),
+  "search-index-build": new Set(["operation", "region"]),
+};
+
 function toIdList(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
   const out: string[] = [];
@@ -65,6 +98,36 @@ function toIdList(input: unknown): string[] {
     out.push(id);
   }
   return out;
+}
+
+type BackupInventory = OpsResultFor<"backup.list">;
+
+async function loadBackupInventory(durableIdentity: string): Promise<BackupInventory> {
+  return executeAndWait(
+    createApiOpsClient(),
+    { kind: "backup.list" },
+    createDurableOpsKey("admin.backup.list", durableIdentity),
+    { signal: AbortSignal.timeout(30_000) },
+  );
+}
+
+function presentBackupInventory(inventory: BackupInventory) {
+  return {
+    backups: inventory.backups.map((backup) => ({
+      name: backup.backupId,
+      createdAt: backup.createdAt,
+      ...(backup.platformVersion ? { openmapxVersion: backup.platformVersion } : {}),
+      serviceCount: backup.serviceCount,
+      volumeCount: backup.volumeCount,
+      totalBytes: backup.totalBytes,
+      ...(backup.corrupt === true ? { corrupt: true, corruptReason: backup.corruptReason } : {}),
+    })),
+    warnings:
+      inventory.warningCount === 0
+        ? []
+        : [`${inventory.warningCount} backup entries could not be validated`],
+    root: "ops-agent-managed",
+  };
 }
 
 export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
@@ -216,14 +279,28 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       const selectedRoots = toIdList(req.body?.selectedRoots);
       let validated: ReturnType<typeof validateServiceSelectionForWrite>;
       try {
-        validated = validateServiceSelectionForWrite(registry, selectedRoots);
+        validated = validateServiceSelectionForWrite(registry, selectedRoots, {
+          allowBakedEnvironment: true,
+        });
       } catch (err) {
         reply.status(400);
         return { error: (err as Error).message };
       }
 
-      const path = persistServiceSelection(validated.normalized);
-      const summary = getServiceSelectionSummary(registry);
+      const operationKey = createDurableOpsKey(
+        "admin-route.selection.apply",
+        `${getAdminSession(req).user.id}\0${String(req.id)}`,
+      );
+      const applied = await applyTrustedConfiguration({
+        kind: "serviceSelection.apply",
+        selectedRoots: validated.normalized,
+        operationKey,
+      });
+      const expanded = coreServices.expandServiceSelection(registry.list(), validated.normalized, {
+        allowMissingSelected: false,
+      });
+      registry.applyEnabledIds(expanded.enabledIds);
+      const summary = getServiceSelectionSummary(registry, undefined, validated.normalized);
       const adminSession = getAdminSession(req);
       await writeAuditLog({
         actorId: adminSession.user.id,
@@ -237,7 +314,7 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         request: req,
       });
 
-      return { ok: true, path, summary };
+      return { ok: true, revisionId: applied.revisionId, summary };
     },
   );
 
@@ -255,6 +332,14 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     if (!action || !BULK_SERVICE_ACTIONS.has(action)) {
       reply.status(400);
       return { error: "Invalid action (expected start|stop|restart|update|build)" };
+    }
+    const allowedKeys =
+      action === "build"
+        ? new Set(["action", "serviceIds", "all", "region", "continueOnError"])
+        : new Set(["action", "serviceIds", "continueOnError"]);
+    if (!hasOnlyBodyKeys(req.body, allowedKeys)) {
+      reply.status(400);
+      return { error: "Request contains unsupported fields" };
     }
 
     const serviceIds = toIdList(req.body?.serviceIds);
@@ -349,7 +434,21 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         return { errors };
       }
       const adminSession = getAdminSession(req);
+      const previous = await readStoredServiceConfig(req.params.id);
       await mergeServiceConfig(req.params.id, config);
+      try {
+        await applyTrustedConfiguration({
+          kind: "serviceConfig.apply",
+          serviceId: req.params.id,
+          operationKey: createDurableOpsKey(
+            "admin-route.service-config.apply",
+            `${adminSession.user.id}\0${String(req.id)}`,
+          ),
+        });
+      } catch (error) {
+        await restoreStoredServiceConfig(req.params.id, previous);
+        throw error;
+      }
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: req.params.id,
@@ -372,7 +471,11 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     userId: string,
   ): Promise<{ ok: true; jobId?: string; needsRender?: boolean }> {
     if (await isDockerAvailable()) {
-      const jobId = await jobRunner.enqueue("service.apply", { service: serviceId }, userId);
+      const jobId = await jobRunner.enqueue(
+        "service.apply",
+        { service: serviceId, configurationKind: "vault" },
+        userId,
+      );
       return { ok: true, jobId };
     }
     return { ok: true, needsRender: true };
@@ -520,11 +623,24 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         reply.status(503);
         return { error: "Service registry not available" };
       }
-      if (!registry.get(req.params.id)) {
+      const service = registry.get(req.params.id);
+      if (!service) {
         reply.status(404);
         return { error: `Service "${req.params.id}" not found` };
       }
+      if (!service.enabled) {
+        reply.status(409);
+        return { error: `Service "${req.params.id}" is disabled` };
+      }
       const adminSession = getAdminSession(req);
+      let idempotencyValue: string;
+      try {
+        idempotencyValue = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]);
+      } catch (error) {
+        reply.status(400);
+        return { error: (error as Error).message };
+      }
+      const operationKey = createDirectAdminOpsKey(adminSession.user.id, idempotencyValue);
       await writeAuditLog({
         actorId: adminSession.user.id,
         targetId: req.params.id,
@@ -540,7 +656,12 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         : 200;
       reply.header("Content-Type", "text/plain; charset=utf-8");
       reply.hijack();
-      dockerComposeLogs(req.params.id, reply.raw, { tail });
+      // Community and built-in services stream through the same typed
+      // agent operation; the API no longer spawns a Docker log process.
+      await dockerComposeLogs(req.params.id, reply.raw, {
+        tail,
+        operationKey,
+      });
       return reply;
     },
   );
@@ -584,18 +705,14 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // GET /admin/services/data — data inventory (OSM, builds, MOTIS health)
   app.get("/admin/services/data", async () => {
-    const { getOsmPbfInfo, getBuildStatuses, getMotisTransitousStatus } = await import(
-      "../services/admin-ops"
+    const inventory = await executeAndWait(
+      createApiOpsClient(),
+      { kind: "data.inspect" },
+      createDurableOpsKey("admin.data.inspect", "current"),
+      { signal: AbortSignal.timeout(30_000) },
     );
-    const [osmInfo, buildStatuses, motisTransitous] = await Promise.all([
-      getOsmPbfInfo(),
-      getBuildStatuses(),
-      Promise.resolve(getMotisTransitousStatus()),
-    ]);
     return {
-      osm: osmInfo,
-      builds: buildStatuses,
-      motisTransitous,
+      ...inventory,
       fetchedAt: new Date().toISOString(),
     };
   });
@@ -618,8 +735,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       countries?: string;
       failFast?: boolean;
       target?: string;
-      repoUrl?: string;
-      output?: string;
       restart?: boolean;
     };
   }>("/admin/services/data/action", async (req, reply) => {
@@ -627,6 +742,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     if (!operation || !DATA_JOB_OPERATIONS.has(operation)) {
       reply.status(400);
       return { error: "Invalid operation" };
+    }
+    if (!hasOnlyBodyKeys(req.body, DATA_ACTION_BODY_KEYS[operation])) {
+      reply.status(400);
+      return { error: "Request contains unsupported fields" };
     }
     if (operation === "clean" && (!req.body.target || req.body.target.trim() === "")) {
       reply.status(400);
@@ -649,8 +768,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
         countries: req.body?.countries,
         failFast: req.body?.failFast === true,
         target: req.body?.target,
-        repoUrl: req.body?.repoUrl,
-        output: req.body?.output,
         restart: req.body?.restart === true,
       },
       adminSession.user.id,
@@ -667,13 +784,17 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
   });
 
   // GET /admin/services/backups — list on-disk backup manifests
-  app.get("/admin/services/backups", async () => {
-    const { backups, warnings, root } = listBackupSummaries();
-    return { backups, warnings, root };
+  app.get("/admin/services/backups", async (req) => {
+    const session = getAdminSession(req);
+    return presentBackupInventory(await loadBackupInventory(`${session.user.id}:${req.id}`));
   });
 
   // POST /admin/services/backups — create backup job
   app.post<{ Body: { name?: string } }>("/admin/services/backups", async (req, reply) => {
+    if (!hasOnlyBodyKeys(req.body, new Set(["name"]))) {
+      reply.status(400);
+      return { error: "Request contains unsupported fields" };
+    }
     const name = typeof req.body?.name === "string" ? req.body.name.trim() : "";
     if (name) {
       try {
@@ -706,6 +827,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
     Params: { name: string };
     Body: { serviceIds?: string[]; stopRunning?: boolean };
   }>("/admin/services/backups/:name/restore", async (req, reply) => {
+    if (!hasOnlyBodyKeys(req.body, new Set(["serviceIds", "stopRunning"]))) {
+      reply.status(400);
+      return { error: "Request contains unsupported fields" };
+    }
     const name = req.params.name.trim();
     try {
       assertValidBackupName(name);
@@ -714,8 +839,8 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: (err as Error).message };
     }
 
-    const { backups } = listBackupSummaries();
-    const target = backups.find((backup) => backup.name === name);
+    const inventory = await loadBackupInventory(`${getAdminSession(req).user.id}:${req.id}`);
+    const target = inventory.backups.find((backup) => backup.backupId === name);
     if (!target) {
       reply.status(404);
       return { error: `Backup not found: ${name}` };
@@ -752,6 +877,10 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
 
   // DELETE /admin/services/backups/:name — delete backup job
   app.delete<{ Params: { name: string } }>("/admin/services/backups/:name", async (req, reply) => {
+    if (!hasOnlyBodyKeys(req.body, new Set())) {
+      reply.status(400);
+      return { error: "Request contains unsupported fields" };
+    }
     const name = req.params.name.trim();
     try {
       assertValidBackupName(name);
@@ -760,8 +889,8 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       return { error: (err as Error).message };
     }
 
-    const { backups } = listBackupSummaries();
-    if (!backups.some((backup) => backup.name === name)) {
+    const inventory = await loadBackupInventory(`${getAdminSession(req).user.id}:${req.id}`);
+    if (!inventory.backups.some((backup) => backup.backupId === name)) {
       reply.status(404);
       return { error: `Backup not found: ${name}` };
     }

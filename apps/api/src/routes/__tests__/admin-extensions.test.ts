@@ -40,7 +40,8 @@ const ENTRY = {
   version: "1.0.0",
   trust: "verified" as const,
   minPlatform: "1.0",
-  manifest: "https://example.com/openconditions/extension.json",
+  manifest:
+    "https://fixture-user:fixture-pass@extensions.example.test/private/extension.json?token=fixture-extension-token#fixture-fragment",
   services: [{ repo: "https://github.com/openconditions/openconditions", service: "oc-ingest" }],
 };
 const MANIFEST = {
@@ -53,12 +54,13 @@ const MANIFEST = {
 const mockGetCatalog = vi.fn().mockResolvedValue([ENTRY]);
 const mockGetEntry = vi.fn().mockResolvedValue(ENTRY);
 const mockResolveManifest = vi.fn().mockResolvedValue(MANIFEST);
-const emptyKill = { removed: new Map(), critical: new Map() };
+const emptyKill = { removed: new Map(), critical: new Map(), stale: false };
+const mockKillSwitch = vi.fn().mockResolvedValue(emptyKill);
 
 vi.mock("../../services/extension-store.js", () => ({
   getExtensionCatalog: (...a: unknown[]) => mockGetCatalog(...a),
   getExtensionCatalogEntry: (...a: unknown[]) => mockGetEntry(...a),
-  getKillSwitch: vi.fn().mockResolvedValue(emptyKill),
+  getKillSwitch: (...a: unknown[]) => mockKillSwitch(...a),
   resolveExtensionManifest: (...a: unknown[]) => mockResolveManifest(...a),
   isExtensionCompatible: vi.fn().mockReturnValue(true),
   listExtensionSources: vi.fn().mockResolvedValue([]),
@@ -88,12 +90,36 @@ describe("GET /admin/extensions/catalog", () => {
       id: "openconditions",
       trust: "verified",
       installed: false,
+      status: "verified",
     });
+    expect(body.revocationDataStale).toBe(false);
+  });
+
+  it("reports a revoked entry as revoked whatever tier it came from", async () => {
+    mockKillSwitch.mockResolvedValueOnce({
+      removed: new Map([["openconditions", "delisted"]]),
+      critical: new Map(),
+      stale: false,
+    });
+    const res = await app.inject({ method: "GET", url: "/admin/extensions/catalog" });
+    expect(res.json().entries[0]).toMatchObject({ status: "revoked", trust: "verified" });
+  });
+
+  it("distinguishes an unrefreshable revocation feed from nothing being revoked", async () => {
+    mockKillSwitch.mockResolvedValueOnce({
+      removed: new Map(),
+      critical: new Map(),
+      stale: true,
+    });
+    const res = await app.inject({ method: "GET", url: "/admin/extensions/catalog" });
+    const body = res.json();
+    expect(body.entries[0]).toMatchObject({ status: "stale-revocation-data" });
+    expect(body.revocationDataStale).toBe(true);
   });
 });
 
 describe("POST /admin/extensions/install", () => {
-  it("installs by catalog id and enqueues extension.install", async () => {
+  it("installs by catalog id and retains only a safe audit source summary", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/admin/extensions/install",
@@ -106,8 +132,24 @@ describe("POST /admin/extensions/install", () => {
       expect.objectContaining({ sourceTrust: "verified", manifest: MANIFEST }),
       fakeSession.user.id,
     );
-    expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({ action: "extension.install" }),
+    const auditEntry = mockWriteAuditLog.mock.calls[0]?.[0] as {
+      action: string;
+      details: Record<string, unknown>;
+    };
+    expect(auditEntry).toMatchObject({
+      action: "extension.install",
+      details: {
+        version: "1.0.0",
+        sourceTrust: "verified",
+        sourceUrl: {
+          host: "extensions.example.test",
+          digest: "55f256172f64e55c11e87683de7a1217",
+        },
+        jobId: "job-ext-1",
+      },
+    });
+    expect(JSON.stringify(auditEntry.details)).not.toMatch(
+      /fixture-user|fixture-pass|private\/extension|fixture-extension-token|fixture-fragment/,
     );
   });
 
@@ -118,6 +160,55 @@ describe("POST /admin/extensions/install", () => {
       payload: {},
     });
     expect(res.statusCode).toBe(400);
+  });
+});
+
+describe("extension source audit details", () => {
+  it("summarizes both added and removed external source URLs", async () => {
+    const sourceUrl =
+      "https://fixture-user:fixture-pass@sources.example.test/private/catalog.json?token=fixture-source-token#fixture-fragment";
+
+    const added = await app.inject({
+      method: "POST",
+      url: "/admin/extensions/sources",
+      payload: { url: sourceUrl, label: "Fixture source" },
+    });
+    const removed = await app.inject({
+      method: "DELETE",
+      url: "/admin/extensions/sources",
+      payload: { url: sourceUrl },
+    });
+
+    expect(added.statusCode).toBe(200);
+    expect(removed.statusCode).toBe(200);
+    const auditEntries = mockWriteAuditLog.mock.calls.map(([entry]) => {
+      const typed = entry as { action: string; details: Record<string, unknown> };
+      return { action: typed.action, details: typed.details };
+    });
+    expect(auditEntries).toEqual([
+      expect.objectContaining({
+        action: "extension.add_source",
+        details: {
+          sourceUrl: {
+            host: "sources.example.test",
+            digest: "f72cb5b0d7040d04b3425f715f653830",
+          },
+          label: "Fixture source",
+        },
+      }),
+      expect.objectContaining({
+        action: "extension.remove_source",
+        details: {
+          sourceUrl: {
+            host: "sources.example.test",
+            digest: "f72cb5b0d7040d04b3425f715f653830",
+          },
+        },
+      }),
+    ]);
+    expect(JSON.stringify(auditEntries)).not.toMatch(
+      /fixture-user|fixture-pass|private\/catalog|fixture-source-token|fixture-fragment/,
+    );
   });
 });
 

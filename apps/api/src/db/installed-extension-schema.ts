@@ -1,4 +1,12 @@
-import { index, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  index,
+  jsonb,
+  pgTable,
+  primaryKey,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 // An installed Extension *bundle* — the parent record that ties together the
@@ -39,6 +47,13 @@ export const installedExtensionComponent = pgTable(
   (table) => [
     primaryKey({ columns: [table.extensionId, table.kind, table.componentId] }),
     index("installedExtensionComponent_componentId_idx").on(table.componentId),
+    // One installed component belongs to exactly one extension. Without this a
+    // second extension could claim a component another extension installed and
+    // then remove or reconfigure it.
+    uniqueIndex("installedExtensionComponent_kind_componentId_key").on(
+      table.kind,
+      table.componentId,
+    ),
   ],
 );
 

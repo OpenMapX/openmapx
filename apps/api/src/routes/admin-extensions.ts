@@ -7,6 +7,7 @@ import {
   getExtensionCatalogEntry,
   getKillSwitch,
   isExtensionCompatible,
+  type KillSwitch,
   listExtensionSources,
   listInstalledExtensions,
   PLATFORM_VERSION,
@@ -19,6 +20,7 @@ import { writeAuditLog } from "../utils/audit-log";
 import { storeInstallLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
+import { summarizeExternalUrl } from "../utils/safe-log-fields";
 
 const { computeServiceSecurityRating } = coreServices;
 
@@ -27,6 +29,20 @@ function componentCounts(entry: ExtensionCatalogEntry): { services: number; inte
     services: entry.services?.length ?? 0,
     integrations: entry.integrations?.length ?? 0,
   };
+}
+
+export type ExtensionStatus = "verified" | "community" | "revoked" | "stale-revocation-data";
+
+/**
+ * Revocation outranks trust: a revoked extension is revoked whatever tier it
+ * came from. When the deny-only feed could not be refreshed the entry is
+ * reported as `stale-revocation-data` rather than silently as clean, so an
+ * administrator can tell "not revoked" from "not checked".
+ */
+function extensionStatus(entry: ExtensionCatalogEntry, kill: KillSwitch): ExtensionStatus {
+  if (kill.removed.has(entry.id) || kill.critical.has(entry.id)) return "revoked";
+  if (kill.stale) return "stale-revocation-data";
+  return entry.trust === "verified" ? "verified" : "community";
 }
 
 export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> {
@@ -82,9 +98,13 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
           hasUpdate: !!inst && e.version != null && inst.installedVersion !== e.version,
           removed: kill.removed.has(e.id) ? kill.removed.get(e.id) : null,
           critical: kill.critical.has(e.id) ? kill.critical.get(e.id) : null,
+          // `verified` | `community` | `revoked` | `stale-revocation-data` are
+          // distinct states. "We could not check" must never render as "clean".
+          status: extensionStatus(e, kill),
         };
       }),
       total: entries.length,
+      revocationDataStale: kill.stale,
     };
   });
 
@@ -222,7 +242,12 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
         action: "extension.install",
         targetType: "extension",
         targetId: manifest.id,
-        details: { version: manifest.version, sourceTrust, sourceUrl, jobId },
+        details: {
+          version: manifest.version,
+          sourceTrust,
+          sourceUrl: sourceUrl ? summarizeExternalUrl(sourceUrl) : undefined,
+          jobId,
+        },
         request,
       });
 
@@ -319,7 +344,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
       await writeAuditLog({
         actorId: adminSession.user.id,
         action: "extension.add_source",
-        details: { url, label },
+        details: { sourceUrl: summarizeExternalUrl(url), label },
         request,
       });
       return { ok: true };
@@ -335,7 +360,7 @@ export async function adminExtensionsRoute(app: FastifyInstance): Promise<void> 
     await writeAuditLog({
       actorId: adminSession.user.id,
       action: "extension.remove_source",
-      details: { url },
+      details: { sourceUrl: summarizeExternalUrl(url) },
       request,
     });
     return { ok: true };

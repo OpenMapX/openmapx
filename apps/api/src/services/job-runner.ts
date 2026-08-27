@@ -3,25 +3,42 @@ import { and, asc, eq, inArray, notInArray } from "drizzle-orm";
 import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
 import { dbActorId } from "../utils/actor";
-import {
-  type AppApiReplacementOutcome,
-  type AppApiRuntimeInfo,
-  removeAppApiReplacementOutcome,
-  waitForAppApiReplacementOutcome,
-} from "./app-api-replacement";
+import { cancelAdminJobOperations } from "./admin-job-ops";
 import { appApiRestartCheckpoint } from "./system-update-state";
+
+type AppApiReplacementOutcome = "applied" | "rolled-back" | "failed";
+interface AppApiRuntimeInfo {
+  containerId: string;
+  imageId: string;
+  updateJobId: string | null;
+}
 
 export interface JobContext {
   jobId: string;
   payload: Record<string, unknown>;
   signal: AbortSignal;
-  log(line: string, stream?: "stdout" | "stderr"): Promise<void>;
+  log(
+    line: string,
+    stream?: "stdout" | "stderr",
+    sourceEventId?: string,
+    sourceSeq?: number,
+  ): Promise<void>;
   setProgress(progress: number): Promise<void>;
   /** Persist restart-safe state before an operation intentionally replaces app-api. */
   checkpoint(result: Record<string, unknown>, progress?: number): Promise<void>;
+  /** Last durable checkpoint loaded with the job and updated after each checkpoint. */
+  checkpointResult?: Record<string, unknown> | null;
 }
 
 type JobHandler = (ctx: JobContext) => Promise<Record<string, unknown> | undefined>;
+
+export const AGENT_RECOVERABLE_ADMIN_JOB_TYPES = [
+  "backup.operation",
+  "data.operation",
+  "service.bulk",
+  "system.diagnostics",
+  "system.update",
+] as const;
 
 class AdminJobRunner {
   private readonly handlers = new Map<string, JobHandler>();
@@ -52,17 +69,47 @@ class AdminJobRunner {
   }
 
   async cancel(jobId: string): Promise<boolean> {
-    const controller = this.active.get(jobId);
-    if (controller) {
-      controller.abort();
-      return true;
-    }
-    const result = await db
+    const queued = await db
       .update(adminJob)
       .set({ status: "canceled", finishedAt: new Date() })
       .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "queued")))
       .returning({ id: adminJob.id });
-    return result.length > 0;
+    if (queued.length > 0) return true;
+
+    const [job] = await db
+      .select({ status: adminJob.status, result: adminJob.result })
+      .from(adminJob)
+      .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "running")))
+      .limit(1);
+    if (!job) return false;
+    await db
+      .update(adminJob)
+      .set({ status: "cancel_pending" })
+      .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "running")));
+    let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>>;
+    try {
+      outcome = await cancelAdminJobOperations(job.result);
+    } catch {
+      return false;
+    }
+    if (outcome === "pending") return false;
+    // `already_terminal` means the agent work had ended before this request
+    // reached it, so this cancellation contained nothing. The still-running
+    // local execution settles the row; claiming a cancellation here would
+    // record containment that never happened.
+    if (outcome === "completed" || outcome === "already_terminal") {
+      await db
+        .update(adminJob)
+        .set({ status: "running" })
+        .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "cancel_pending")));
+      return false;
+    }
+    this.active.get(jobId)?.abort();
+    await db
+      .update(adminJob)
+      .set({ status: "canceled", finishedAt: new Date() })
+      .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "cancel_pending")));
+    return true;
   }
 
   async findActive(type: string): Promise<{ id: string; status: string } | null> {
@@ -83,6 +130,41 @@ class AdminJobRunner {
       cleanupReplacementOutcome?: (outcomeFile: string) => Promise<void>;
     } = {},
   ): Promise<void> {
+    const interruptedCancellations = await db
+      .select({ id: adminJob.id, status: adminJob.status, result: adminJob.result })
+      .from(adminJob)
+      .where(eq(adminJob.status, "cancel_pending"));
+    for (const job of interruptedCancellations) {
+      if (job.status !== "cancel_pending") continue;
+      let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>> = "pending";
+      try {
+        outcome = await cancelAdminJobOperations(job.result);
+      } catch {
+        // Keep the durable pending state until the authoritative agent can be reached.
+      }
+      if (outcome === "canceled") {
+        await db
+          .update(adminJob)
+          .set({ status: "canceled", finishedAt: new Date() })
+          .where(and(eq(adminJob.id, job.id), eq(adminJob.status, "cancel_pending")));
+      } else if (outcome === "completed") {
+        await db
+          .update(adminJob)
+          .set({ status: "queued", startedAt: null })
+          .where(and(eq(adminJob.id, job.id), eq(adminJob.status, "cancel_pending")));
+      } else if (outcome === "already_terminal") {
+        // The agent operations had already failed before the cancel request,
+        // and no local execution survived the restart to settle this row.
+        await db
+          .update(adminJob)
+          .set({
+            status: "failed",
+            finishedAt: new Date(),
+            error: "Operation failed before the cancellation request was applied",
+          })
+          .where(and(eq(adminJob.id, job.id), eq(adminJob.status, "cancel_pending")));
+      }
+    }
     // An application update deliberately replaces app-api as its final step.
     // The server calls this only after it is listening. Finalize only jobs that
     // wrote the explicit pre-restart checkpoint, passed the migration gate,
@@ -98,7 +180,7 @@ class AdminJobRunner {
       return checkpoint ? [{ id: job.id, checkpoint }] : [];
     });
     const checkpointedUpdateIds = checkpointedUpdates.map((job) => job.id);
-    const resolveOutcome = options.resolveReplacementOutcome ?? waitForAppApiReplacementOutcome;
+    const resolveOutcome = options.resolveReplacementOutcome ?? (async () => null);
     const evaluatedUpdates = await Promise.all(
       checkpointedUpdates.map(async (job) => ({
         ...job,
@@ -106,7 +188,7 @@ class AdminJobRunner {
       })),
     );
     const runtime = options.currentAppApiRuntime;
-    const cleanupOutcome = options.cleanupReplacementOutcome ?? removeAppApiReplacementOutcome;
+    const cleanupOutcome = options.cleanupReplacementOutcome ?? (async () => undefined);
     const completedUpdateIds =
       options.completeRestartedUpdates === false
         ? []
@@ -170,6 +252,24 @@ class AdminJobRunner {
       }
     }
 
+    // Agent-backed jobs use deterministic operation keys. Re-running their API
+    // projection performs a journal lookup/replay and cannot duplicate the
+    // underlying host effect, so an API restart safely requeues them.
+    await db
+      .update(adminJob)
+      .set({
+        status: "queued",
+        startedAt: null,
+        finishedAt: null,
+        error: null,
+      })
+      .where(
+        and(
+          eq(adminJob.status, "running"),
+          inArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
+        ),
+      );
+
     // Mark every other job that was running when the api process died as failed.
     //
     // Earlier this re-queued them, but that turned a job that crashed
@@ -190,8 +290,15 @@ class AdminJobRunner {
       })
       .where(
         checkpointedUpdateIds.length > 0
-          ? and(eq(adminJob.status, "running"), notInArray(adminJob.id, checkpointedUpdateIds))
-          : eq(adminJob.status, "running"),
+          ? and(
+              eq(adminJob.status, "running"),
+              notInArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
+              notInArray(adminJob.id, checkpointedUpdateIds),
+            )
+          : and(
+              eq(adminJob.status, "running"),
+              notInArray(adminJob.type, [...AGENT_RECOVERABLE_ADMIN_JOB_TYPES]),
+            ),
       );
     void this.pump();
   }
@@ -247,6 +354,7 @@ class AdminJobRunner {
       job.id,
       job.type,
       (job.payload as Record<string, unknown>) ?? {},
+      (job.result as Record<string, unknown> | null) ?? null,
       controller.signal,
     )
       .finally(() => {
@@ -266,6 +374,7 @@ class AdminJobRunner {
     jobId: string,
     type: string,
     payload: Record<string, unknown>,
+    checkpointResult: Record<string, unknown> | null,
     signal: AbortSignal,
   ): Promise<void> {
     const handler = this.handlers.get(type);
@@ -285,10 +394,16 @@ class AdminJobRunner {
       jobId,
       payload,
       signal,
-      log: async (line, stream = "stdout") => {
-        const seq = this.logSeq.get(jobId) ?? 0;
-        this.logSeq.set(jobId, seq + 1);
-        await db.insert(adminJobLog).values({ id: randomUUID(), jobId, seq, stream, line });
+      checkpointResult,
+      log: async (line, stream = "stdout", sourceEventId, sourceSeq) => {
+        const localSeq = this.logSeq.get(jobId) ?? 0;
+        const seq = sourceSeq ?? localSeq;
+        this.logSeq.set(jobId, Math.max(localSeq + 1, seq + 1));
+        const insertion = db
+          .insert(adminJobLog)
+          .values({ id: sourceEventId ?? randomUUID(), jobId, seq, stream, line });
+        if (sourceEventId) await insertion.onConflictDoNothing();
+        else await insertion;
       },
       setProgress: async (progress) => {
         await db.update(adminJob).set({ progress }).where(eq(adminJob.id, jobId));
@@ -298,6 +413,7 @@ class AdminJobRunner {
           .update(adminJob)
           .set({ result, ...(progress === undefined ? {} : { progress }) })
           .where(eq(adminJob.id, jobId));
+        ctx.checkpointResult = result;
       },
     };
 
@@ -314,7 +430,10 @@ class AdminJobRunner {
           .update(adminJob)
           .set({
             status: "success",
-            result: (result ?? null) as Record<string, unknown> | null,
+            result:
+              result === undefined
+                ? (ctx.checkpointResult ?? null)
+                : { ...(ctx.checkpointResult ?? {}), ...result },
             finishedAt: new Date(),
             progress: 100,
           })

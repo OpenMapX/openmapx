@@ -15,7 +15,8 @@ export type RegisteredIntegrationRoute = {
   score: number;
 };
 
-const integrationRoutes: RegisteredIntegrationRoute[] = [];
+let integrationRoutes: RegisteredIntegrationRoute[] = [];
+let stagedIntegrationRoutes: RegisteredIntegrationRoute[] | null = null;
 export const ROUTE_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] as const;
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
 let _routeDispatcherFastify: FastifyInstance<any, any, any, any> | null = null;
@@ -44,7 +45,8 @@ export function registerIntegrationRoute(
   handler: RouteHandler,
   options?: RouteOptions,
 ): void {
-  integrationRoutes.push({
+  const target = stagedIntegrationRoutes ?? integrationRoutes;
+  target.push({
     integrationId,
     method: method.toUpperCase(),
     path: normalizeRoutePath(path),
@@ -52,11 +54,30 @@ export function registerIntegrationRoute(
     options,
     score: routeScore(path),
   });
-  integrationRoutes.sort((a, b) => b.score - a.score);
+  target.sort((a, b) => b.score - a.score);
 }
 
 export function resetIntegrationRoutes(): void {
-  integrationRoutes.length = 0;
+  integrationRoutes = [];
+  stagedIntegrationRoutes = null;
+}
+
+/** Begin collecting a detached route table for an integration reload. */
+export function beginIntegrationRouteStaging(): void {
+  if (stagedIntegrationRoutes) throw new Error("integration route staging is already active");
+  stagedIntegrationRoutes = [];
+}
+
+/** Atomically make the fully built staged route table visible to dispatchers. */
+export function commitIntegrationRouteStaging(): void {
+  if (!stagedIntegrationRoutes) throw new Error("integration route staging is not active");
+  integrationRoutes = stagedIntegrationRoutes;
+  stagedIntegrationRoutes = null;
+}
+
+/** Discard a failed staged route table, leaving active dispatch unchanged. */
+export function rollbackIntegrationRouteStaging(): void {
+  stagedIntegrationRoutes = null;
 }
 
 function escapeRegex(value: string): string {
@@ -145,33 +166,46 @@ export function registerIntegrationRouteDispatcher(
     }
 
     let didSend = false;
-    await matched.route.handler(
-      {
-        query: request.query as Record<string, string>,
-        params: matched.params,
-        body: request.body,
-        userId,
-        headers: request.headers,
-      },
-      {
-        send: (data) => {
-          didSend = true;
-          reply.send(data);
+    const requestController = new AbortController();
+    const abortRequest = () => requestController.abort();
+    const abortDisconnectedReply = () => {
+      if (!reply.raw.writableEnded) abortRequest();
+    };
+    request.raw.once("aborted", abortRequest);
+    reply.raw.once("close", abortDisconnectedReply);
+    try {
+      await matched.route.handler(
+        {
+          query: request.query as Record<string, string>,
+          params: matched.params,
+          body: request.body,
+          userId,
+          headers: request.headers,
+          signal: requestController.signal,
         },
-        status: (code) => ({
+        {
           send: (data) => {
             didSend = true;
-            reply.status(code).send(data);
+            reply.send(data);
           },
-        }),
-        header: (name, value) => {
-          reply.header(name, value);
+          status: (code) => ({
+            send: (data) => {
+              didSend = true;
+              reply.status(code).send(data);
+            },
+          }),
+          header: (name, value) => {
+            reply.header(name, value);
+          },
+          type: (contentType) => {
+            reply.type(contentType);
+          },
         },
-        type: (contentType) => {
-          reply.type(contentType);
-        },
-      },
-    );
+      );
+    } finally {
+      request.raw.off("aborted", abortRequest);
+      reply.raw.off("close", abortDisconnectedReply);
+    }
 
     // A handler that returns without sending would leave the reply unsent;
     // `return reply` then hands Fastify an unfulfilled reply and the request

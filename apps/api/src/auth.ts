@@ -15,10 +15,16 @@ import {
 } from "better-auth/plugins";
 import { emailHarmony } from "better-auth-harmony";
 import { eq } from "drizzle-orm";
+import {
+  exchangeMapillaryAuthorizationCode,
+  fetchMapillaryUserInfo,
+  fetchOsmUserDetails,
+} from "./auth-provider-http";
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
 import { managedOAuthProviderOptions } from "./managed-oauth-provider";
 import { auditAdminActionsHook } from "./utils/auth-audit-hook";
+import { configuredTrustedWebOrigins } from "./utils/csrf.js";
 import { sendMail } from "./utils/email";
 import {
   emailOtpEmail,
@@ -40,14 +46,11 @@ async function fetchProviderImage(
 ): Promise<string | undefined> {
   try {
     if (providerId === "openstreetmap") {
-      const res = await fetch(getOsmConfig().apiUrl("api/0.6/user/details.json"), {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      if (!res.ok) return undefined;
-      const data = (await res.json()) as {
-        user: { img?: { href: string } };
-      };
-      return data.user?.img?.href;
+      const user = await fetchOsmUserDetails(
+        getOsmConfig().apiUrl("api/0.6/user/details.json"),
+        accessToken,
+      );
+      return user.img?.href;
     }
     // Mapillary v4 API does not expose user profile pictures
   } catch {
@@ -69,8 +72,7 @@ const providerAvatarSync = createProviderAvatarSync({
       const result = await auth.api.getAccessToken({ body: { providerId, userId } });
       return result.accessToken ?? undefined;
     } catch {
-      // Revoked, unrefreshable or (for a legacy plaintext token that looks
-      // like ciphertext) undecryptable. The person simply relinks.
+      // Revoked, unrefreshable, or undecryptable. The person simply relinks.
       return undefined;
     }
   },
@@ -94,9 +96,7 @@ const authOptions = {
   baseURL: envString("BETTER_AUTH_URL", "http://localhost:3001"),
   secret,
   trustedOrigins: [
-    ...envString("CORS_ORIGIN", "http://localhost:3000")
-      .split(",")
-      .map((o) => o.trim()),
+    ...configuredTrustedWebOrigins(),
     "openmapx://",
     ...(process.env.NODE_ENV === "development"
       ? ["exp://", "exp://**", "exp://192.168.*.*:*/**"]
@@ -258,14 +258,10 @@ const authOptions = {
           scopes: ["openid", "read_prefs"],
           pkce: true,
           async getUserInfo({ accessToken }) {
-            const res = await fetch(getOsmConfig().apiUrl("api/0.6/user/details.json"), {
-              headers: { Authorization: `Bearer ${accessToken}` },
-            });
-            if (!res.ok) throw new Error(`OSM user info fetch failed: ${res.status}`);
-            const data = (await res.json()) as {
-              user: { id: number; display_name: string; img?: { href: string } };
-            };
-            const osm = data.user;
+            const osm = await fetchOsmUserDetails(
+              getOsmConfig().apiUrl("api/0.6/user/details.json"),
+              accessToken,
+            );
             return {
               id: String(osm.id),
               name: osm.display_name,
@@ -283,39 +279,20 @@ const authOptions = {
           clientSecret: envString("MAPILLARY_CLIENT_SECRET", ""),
           scopes: ["read"],
           async getToken({ code, redirectURI }) {
-            const res = await fetch("https://graph.mapillary.com/token", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-                Authorization: `OAuth ${envString("MAPILLARY_CLIENT_SECRET", "")}`,
-              },
-              body: JSON.stringify({
-                grant_type: "authorization_code",
-                code,
-                client_id: envString("MAPILLARY_CLIENT_ID", ""),
-                redirect_uri: redirectURI,
-              }),
+            const token = await exchangeMapillaryAuthorizationCode({
+              code,
+              redirectUri: redirectURI,
+              clientId: envString("MAPILLARY_CLIENT_ID", ""),
+              clientSecret: envString("MAPILLARY_CLIENT_SECRET", ""),
             });
-            if (!res.ok) {
-              throw new Error(`Mapillary token exchange failed: ${res.status}`);
-            }
-            const data = (await res.json()) as {
-              access_token: string;
-              expires_in: number;
-              token_type: string;
-            };
             return {
-              accessToken: data.access_token,
-              tokenType: data.token_type,
-              accessTokenExpiresAt: new Date(Date.now() + data.expires_in * 1000),
+              accessToken: token.accessToken,
+              tokenType: token.tokenType,
+              accessTokenExpiresAt: new Date(Date.now() + token.expiresInSeconds * 1000),
             };
           },
           async getUserInfo({ accessToken }) {
-            const res = await fetch("https://graph.mapillary.com/me?fields=id,username", {
-              headers: { Authorization: `OAuth ${accessToken}` },
-            });
-            if (!res.ok) throw new Error(`Mapillary user info fetch failed: ${res.status}`);
-            const data = (await res.json()) as { id: string; username: string };
+            const data = await fetchMapillaryUserInfo(accessToken);
             return {
               id: data.id,
               name: data.username,

@@ -2,7 +2,7 @@ import { createHash, randomBytes as nodeRandomBytes, timingSafeEqual } from "nod
 import { eq, sql } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { serviceConfig } from "../../db/schema.js";
-import { dockerComposeContainerEnv, dockerComposePs } from "../../utils/docker-compose.js";
+import { dockerComposePs, inspectDawarichProvisioning } from "../../utils/docker-compose.js";
 import { resolveEffectiveServiceConfig } from "../service-config-resolver.js";
 import { mergeServiceConfig } from "../service-config-writer.js";
 import { getServiceRegistry } from "../service-registry.js";
@@ -755,6 +755,12 @@ const defaultDependencies: ManagedDawarichProvisioningDependencies = {
   withLock: withDawarichProvisioningLock,
   randomBytes: nodeRandomBytes,
   getRuntimeState: getDefaultRuntimeState,
-  getAppliedGeneration: (serviceId) =>
-    dockerComposeContainerEnv(serviceId, DAWARICH_PROVISIONING_GENERATION_KEY),
+  getAppliedGeneration: async (serviceId) => {
+    const inspection = await inspectDawarichProvisioning();
+    if (serviceId === DAWARICH_APP_SERVICE_ID) return inspection?.appliedGenerations.app ?? null;
+    if (serviceId === DAWARICH_WORKER_SERVICE_ID) {
+      return inspection?.appliedGenerations.worker ?? null;
+    }
+    return null;
+  },
 };

@@ -8,6 +8,9 @@ RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/pa
 FROM base AS deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# The lockfile references patched dependencies by file hash, so `pnpm install`
+# cannot resolve without the patch itself.
+COPY patches/ patches/
 COPY packages/core/package.json packages/core/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
@@ -36,6 +39,9 @@ RUN pnpm install --frozen-lockfile
 FROM base AS prod-deps
 WORKDIR /app
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
+# The lockfile references patched dependencies by file hash, so `pnpm install`
+# cannot resolve without the patch itself.
+COPY patches/ patches/
 COPY packages/core/package.json packages/core/
 COPY packages/db-schema/package.json packages/db-schema/
 COPY packages/hardlinks/package.json packages/hardlinks/
@@ -65,9 +71,11 @@ RUN pnpm install --frozen-lockfile --prod --ignore-scripts && \
     cd node_modules/.pnpm && \
     rm -rf next@* @next+swc* prisma@* @prisma+* sharp@* @img+sharp* \
            @electric-sql+pglite* @rolldown+binding* \
-           lightningcss* drizzle-kit@* effect@* typescript@*
+           lightningcss* drizzle-kit@* effect@* typescript@* image-size@*
 # Note: esbuild and @esbuild/* are kept because tsx pulls esbuild at runtime
 # to strip TypeScript types on-the-fly during dynamic integration imports.
+# image-size is only pulled into the shared pnpm store through Metro's mobile
+# toolchain; neither the API nor its runtime-loaded integrations use Metro.
 
 # Build (type-check + bundle)
 FROM base AS builder
@@ -111,16 +119,18 @@ WORKDIR /app
 #
 # git is required by admin Store / community-service repository installs:
 # both the community integration installer and service-repo refresh path clone
-# or fetch allowlisted Git URLs from inside the app-api container.
+# or fetch allowlisted Git URLs from inside the app-api container. Those clones
+# are bounded by time, entry count, size, path length, and file type, and the
+# URL is validated to a credential-free allowlisted host before `git` runs.
 #
-# docker-cli + docker-cli-compose enable the admin GUI's service-lifecycle
-# and data-maintenance workflows: admin-ops.ts and admin-cli.ts shell out to
-# `docker compose -f <generated>.yml up/stop/restart` and to `openmapx ...`.
-# The socket itself is mounted via services/app-api/service.json's
-# `@docker-socket` bindMount. Without the CLI in the image those handlers
-# would fail even when the socket is available. Kept behind the same apk
-# install for a single image layer.
-RUN apk add --no-cache curl ca-certificates git docker-cli docker-cli-compose
+# The Docker CLI is deliberately ABSENT. Every host effect the admin GUI
+# triggers is now a typed operation sent to the private operations agent, which
+# is the only component that holds the Docker socket. Shipping the CLI here
+# would hand a compromised API the tooling for host control the moment any
+# socket became reachable.
+RUN apk add --no-cache curl ca-certificates git && \
+    rm -rf /usr/local/lib/node_modules/npm && \
+    rm -f /usr/local/bin/npm /usr/local/bin/npx
 
 ENV NODE_ENV=production
 ENV PORT=3001
@@ -207,6 +217,14 @@ COPY apps/api/package.json ./apps/api/
 COPY tsconfig.base.json ./
 COPY apps/api/tsconfig.json ./apps/api/
 COPY packages/core/tsconfig.json ./packages/core/
+
+# Run as the image's existing non-root `node` user (uid/gid 1000). Only the
+# directories the runtime actually writes are handed over; the rest of /app
+# stays read-only to the process. A root API process was the difference between
+# "compromised service" and "compromised container" for every remaining mount.
+RUN mkdir -p /app/custom_integrations /var/lib/openmapx/trusted-config && \
+    chown -R node:node /app/custom_integrations /var/lib/openmapx
+USER node
 
 WORKDIR /app/apps/api
 EXPOSE 3001

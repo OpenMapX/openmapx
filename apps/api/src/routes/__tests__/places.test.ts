@@ -403,10 +403,11 @@ describe("GET /places/:id", () => {
     // fall through to lookupByCoords and substitute the nearest OSM POI's
     // tags onto the scooter.
     mockIsEnabledIntegrationScheme.mockImplementation((scheme) => scheme === "scooter-sharing");
+    const warn = vi.spyOn(app.log, "warn");
 
     const res = await app.inject({
       method: "GET",
-      url: `/places/${encodeURIComponent("scooter-sharing:dott-123")}?${qs({
+      url: `/places/${encodeURIComponent("scooter-sharing:fixture-private-share-id")}?${qs({
         lat: "50.7764",
         lng: "6.0889",
         name: "Dott E-Scooter",
@@ -416,6 +417,11 @@ describe("GET /places/:id", () => {
     expect(res.statusCode).toBe(404);
     expect(mockLookupByNameAndCoords).not.toHaveBeenCalled();
     expect(mockLookupByCoords).not.toHaveBeenCalled();
+    expect(warn).toHaveBeenCalledWith(
+      { scheme: "scooter-sharing" },
+      "places: integration scheme has no resolver; refusing coord-fallback",
+    );
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("fixture-private-share-id");
 
     mockIsEnabledIntegrationScheme.mockReturnValue(false);
   });
@@ -528,6 +534,23 @@ describe("GET /places/:id", () => {
     expect(mockWithCache.mock.calls[0]?.[0]).not.toBe(mockWithCache.mock.calls[1]?.[0]);
     expect(victim.json()).toMatchObject({ id: MOCK_PLACE.id });
     expect(mockLookupByOsmRef).toHaveBeenCalledWith("node", "123", "osm:node/123", "en");
+  });
+
+  it("uses different cache keys for the same opaque id at different coordinates", async () => {
+    mockLookupByNameAndCoords.mockResolvedValue(MOCK_PLACE);
+    mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
+    mockBuildReviewLinks.mockReturnValue([]);
+
+    await app.inject({
+      method: "GET",
+      url: `/places/custom-1?${qs({ lat: "52.5", lng: "13.4", name: "Moving Place" })}`,
+    });
+    await app.inject({
+      method: "GET",
+      url: `/places/custom-1?${qs({ lat: "52.6", lng: "13.5", name: "Moving Place" })}`,
+    });
+
+    expect(mockWithCache.mock.calls[0]?.[0]).not.toBe(mockWithCache.mock.calls[1]?.[0]);
   });
 
   it("does not set Cache-Control on 400 error", async () => {

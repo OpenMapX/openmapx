@@ -47,6 +47,14 @@ vi.mock("../../services/job-runner.js", () => ({
   jobRunner: { enqueue: (...args: unknown[]) => mockJobRunnerEnqueue(...args) },
 }));
 
+const mockExecuteAndWait = vi.fn().mockResolvedValue({ backups: [], warningCount: 0 });
+const mockOpsClient = {};
+vi.mock("../../services/ops-client.js", () => ({
+  createApiOpsClient: () => mockOpsClient,
+  createDurableOpsKey: () => `opk1_${"a".repeat(43)}`,
+  executeAndWait: (...args: unknown[]) => mockExecuteAndWait(...args),
+}));
+
 // DB (needed for service config routes)
 const mockDbSelect = vi.fn();
 const mockDbInsert = vi.fn();
@@ -77,13 +85,11 @@ const mockGetServiceSelectionSummary = vi.fn().mockReturnValue({
 const mockListBackupSummaries = vi
   .fn()
   .mockReturnValue({ backups: [], warnings: [], root: "/data" });
-const mockWriteServiceSelection = vi.fn().mockReturnValue("/data/service-selection.json");
 const mockValidateServiceSelectionForWrite = vi.fn().mockReturnValue({ normalized: [] });
 const mockAssertValidBackupName = vi.fn();
 vi.mock("../../services/admin-cli.js", () => ({
   getServiceSelectionSummary: (...args: unknown[]) => mockGetServiceSelectionSummary(...args),
   listBackupSummaries: (...args: unknown[]) => mockListBackupSummaries(...args),
-  writeServiceSelection: (...args: unknown[]) => mockWriteServiceSelection(...args),
   validateServiceSelectionForWrite: (...args: unknown[]) =>
     mockValidateServiceSelectionForWrite(...args),
   assertValidBackupName: (...args: unknown[]) => mockAssertValidBackupName(...args),
@@ -110,6 +116,11 @@ vi.mock("../../services/service-config-resolver.js", () => ({
 const mockMergeServiceConfig = vi.fn().mockResolvedValue(undefined);
 vi.mock("../../services/service-config-writer.js", () => ({
   mergeServiceConfig: (...args: unknown[]) => mockMergeServiceConfig(...args),
+  readStoredServiceConfig: vi.fn().mockResolvedValue(null),
+  restoreStoredServiceConfig: vi.fn().mockResolvedValue(undefined),
+}));
+vi.mock("../../services/trusted-config-operations.js", () => ({
+  applyTrustedConfiguration: vi.fn().mockResolvedValue({ revisionId: "revision_1" }),
 }));
 
 // @openmapx/core/server — getProvidedCapabilityNames + serviceConfigEnvPrefix
@@ -175,6 +186,20 @@ const MOCK_SERVICE_STOPPED = {
   },
   enabled: true,
   isBuiltIn: true,
+};
+
+const MOCK_COMMUNITY_RUNNING = {
+  manifest: {
+    id: "community-weather",
+    name: "Community weather",
+    version: "1.0.0",
+    description: "Community service",
+    quality: "community",
+    provides: [],
+    exposure: "internal",
+  },
+  enabled: true,
+  isBuiltIn: false,
 };
 
 let app: FastifyInstance;
@@ -259,6 +284,143 @@ describe("POST /admin/services/data/action", () => {
       }),
     );
   });
+
+  it("rejects caller URL/output/argv/environment before fixed API-key generation", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/services/data/action",
+      payload: {
+        operation: "generate-api-keys",
+        repoUrl: "https://attacker.example/catalog.git",
+        output: "/etc/passwd",
+        argv: ["--output", "/etc/passwd"],
+        environment: { NODE_OPTIONS: "--require=/tmp/payload" },
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+
+  it("rejects operation-inapplicable fields before enqueue", async () => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/services/data/action",
+      payload: { operation: "download-fonts", region: "europe/germany" },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+  });
+});
+
+describe("strict administrative effect bodies", () => {
+  it.each([
+    ["/admin/services/bulk-action", { action: "build", all: true, argv: ["--privileged"] }],
+    ["/admin/services/backups", { name: "nightly", output: "/etc/passwd" }],
+  ])("rejects forbidden control fields on %s", async (url, payload) => {
+    const response = await app.inject({ method: "POST", url, payload });
+    expect(response.statusCode).toBe(400);
+    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
+    expect(mockWriteAuditLog).not.toHaveBeenCalled();
+  });
+});
+
+describe("GET /admin/services/data", () => {
+  it("loads a kind-only inventory from ops-agent without passing a host path", async () => {
+    const inventory = {
+      osm: { found: false },
+      builds: [{ target: "valhalla", built: false }],
+      motisTransitous: { configFound: false },
+    };
+    mockExecuteAndWait.mockResolvedValueOnce(inventory);
+
+    const response = await app.inject({ method: "GET", url: "/admin/services/data" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject(inventory);
+    expect(response.json().fetchedAt).toEqual(expect.any(String));
+    expect(mockExecuteAndWait).toHaveBeenCalledWith(
+      mockOpsClient,
+      { kind: "data.inspect" },
+      expect.stringMatching(/^opk1_/),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+  });
+});
+
+describe("backup administration", () => {
+  it("reads the bounded agent-owned backup inventory through a kind-only request", async () => {
+    mockExecuteAndWait.mockResolvedValueOnce({
+      backups: [
+        {
+          backupId: "nightly",
+          createdAt: "2026-08-25T00:00:00.000Z",
+          platformVersion: "1.2.3",
+          serviceCount: 2,
+          volumeCount: 3,
+          totalBytes: 42,
+        },
+      ],
+      warningCount: 0,
+    });
+
+    const response = await app.inject({ method: "GET", url: "/admin/services/backups" });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      backups: [
+        {
+          name: "nightly",
+          createdAt: "2026-08-25T00:00:00.000Z",
+          openmapxVersion: "1.2.3",
+          serviceCount: 2,
+          volumeCount: 3,
+          totalBytes: 42,
+        },
+      ],
+      warnings: [],
+      root: "ops-agent-managed",
+    });
+    expect(mockExecuteAndWait).toHaveBeenCalledWith(
+      mockOpsClient,
+      { kind: "backup.list" },
+      expect.stringMatching(/^opk1_/),
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    expect(mockListBackupSummaries).not.toHaveBeenCalled();
+  });
+
+  it("uses the agent inventory for restore admission without exposing a host path", async () => {
+    mockExecuteAndWait.mockResolvedValueOnce({
+      backups: [
+        {
+          backupId: "nightly",
+          createdAt: "2026-08-25T00:00:00.000Z",
+          serviceCount: 1,
+          volumeCount: 1,
+          totalBytes: 42,
+        },
+      ],
+      warningCount: 0,
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/admin/services/backups/nightly/restore",
+      payload: { serviceIds: ["valhalla"], stopRunning: true },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
+      "backup.operation",
+      {
+        operation: "restore",
+        name: "nightly",
+        serviceIds: ["valhalla"],
+        stopRunning: true,
+      },
+      fakeSession.user.id,
+    );
+    expect(mockListBackupSummaries).not.toHaveBeenCalled();
+  });
 });
 
 describe("GET /admin/services/:id", () => {
@@ -284,12 +446,38 @@ describe("GET /admin/services/:id", () => {
 });
 
 describe("GET /admin/services/:id/logs", () => {
+  it("streams community logs through the same typed operation as built-ins", async () => {
+    mockRegistryGet.mockReturnValueOnce(MOCK_COMMUNITY_RUNNING);
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/admin/services/community-weather/logs?lines=20",
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
+    });
+
+    expect(response.statusCode).toBe(200);
+    // The direct-Docker log adapter is gone; community and built-in services
+    // both go through the bounded typed follow.
+    expect(mockDockerComposeLogs).toHaveBeenCalledWith(
+      "community-weather",
+      expect.anything(),
+      expect.objectContaining({ tail: 20 }),
+    );
+  });
+
   it("returns 404 and does not start a log stream for an unknown service", async () => {
     mockRegistryGet.mockReturnValueOnce(null);
 
     const res = await app.inject({ method: "GET", url: "/admin/services/unknown/logs" });
 
     expect(res.statusCode).toBe(404);
+    expect(mockDockerComposeLogs).not.toHaveBeenCalled();
+  });
+
+  it("requires a caller-retained idempotency value before starting an enabled stream", async () => {
+    mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
+    const response = await app.inject({ method: "GET", url: "/admin/services/motis/logs" });
+    expect(response.statusCode).toBe(400);
     expect(mockDockerComposeLogs).not.toHaveBeenCalled();
   });
 
@@ -300,9 +488,30 @@ describe("GET /admin/services/:id/logs", () => {
   ])("clamps lines=%s to a safe tail value", async (lines, tail) => {
     mockRegistryGet.mockReturnValueOnce(MOCK_SERVICE_RUNNING);
 
-    await app.inject({ method: "GET", url: `/admin/services/motis/logs?lines=${lines}` });
+    await app.inject({
+      method: "GET",
+      url: `/admin/services/motis/logs?lines=${lines}`,
+      headers: { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" },
+    });
 
-    expect(mockDockerComposeLogs).toHaveBeenCalledWith("motis", expect.anything(), { tail });
+    expect(mockDockerComposeLogs).toHaveBeenCalledWith(
+      "motis",
+      expect.anything(),
+      expect.objectContaining({
+        tail,
+        operationKey: expect.stringMatching(/^opk1_[A-Za-z0-9_-]{43}$/),
+      }),
+    );
+  });
+
+  it("uses one key for the same admin intent so a changed log payload conflicts at the agent", async () => {
+    mockRegistryGet.mockReturnValue(MOCK_SERVICE_RUNNING);
+    const headers = { "idempotency-key": "018f7b8a-3c7a-7b91-a9b0-9d6dd0f51ab1" };
+    await app.inject({ method: "GET", url: "/admin/services/motis/logs?lines=20", headers });
+    await app.inject({ method: "GET", url: "/admin/services/motis/logs?lines=21", headers });
+    expect(
+      (mockDockerComposeLogs.mock.calls[0]?.[2] as { operationKey?: string })?.operationKey,
+    ).toBe((mockDockerComposeLogs.mock.calls[1]?.[2] as { operationKey?: string })?.operationKey);
   });
 });
 
@@ -615,7 +824,7 @@ describe("service credentials", () => {
     );
     expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
       "service.apply",
-      { service: "openconditions-ingest" },
+      { service: "openconditions-ingest", configurationKind: "vault" },
       fakeSession.user.id,
     );
     expect(res.json()).toEqual({ ok: true, jobId: "job-123" });
@@ -682,7 +891,7 @@ describe("service credentials", () => {
     expect(mockDeleteServiceSecret).toHaveBeenCalledWith("openconditions-ingest", "NY_511_API_KEY");
     expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
       "service.apply",
-      { service: "openconditions-ingest" },
+      { service: "openconditions-ingest", configurationKind: "vault" },
       fakeSession.user.id,
     );
     expect(mockWriteAuditLog).toHaveBeenCalledWith(

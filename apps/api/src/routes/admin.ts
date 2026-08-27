@@ -24,6 +24,7 @@ import {
   getCachedHealthStatus,
 } from "../services/integration-health";
 import { jobRunner } from "../services/job-runner";
+import { createDurableOpsKey } from "../services/ops-client";
 import {
   deleteSecret,
   isSecretsConfigured,
@@ -31,6 +32,7 @@ import {
   listSecrets,
   setSecret,
 } from "../services/secrets";
+import { applyTrustedConfiguration } from "../services/trusted-config-operations";
 import { writeAuditLog } from "../utils/audit-log";
 import { dockerComposePs, type PsEntry } from "../utils/docker-compose";
 import { maskSecretConfigRecord, maskSecretConfigValues } from "../utils/mask-config.js";
@@ -61,6 +63,44 @@ interface CredentialStatusEntry {
   setup?: CredentialSetup;
   updatedAt?: string;
   updatedBy?: string | null;
+}
+
+async function persistAndApplyIntegrationConfig(options: {
+  integrationId: string;
+  config: Record<string, unknown>;
+  previous: Record<string, unknown> | null;
+  actorId: string;
+  requestId: string;
+}): Promise<void> {
+  await db
+    .insert(integrationConfig)
+    .values({ id: randomUUID(), integrationId: options.integrationId, config: options.config })
+    .onConflictDoUpdate({
+      target: integrationConfig.integrationId,
+      set: { config: options.config, updatedAt: new Date() },
+    });
+  try {
+    await applyTrustedConfiguration({
+      kind: "integrationConfig.apply",
+      integrationId: options.integrationId,
+      operationKey: createDurableOpsKey(
+        "admin-route.integration-config.apply",
+        `${options.actorId}\0${options.requestId}`,
+      ),
+    });
+  } catch (error) {
+    if (options.previous === null) {
+      await db
+        .delete(integrationConfig)
+        .where(eq(integrationConfig.integrationId, options.integrationId));
+    } else {
+      await db
+        .update(integrationConfig)
+        .set({ config: options.previous, updatedAt: new Date() })
+        .where(eq(integrationConfig.integrationId, options.integrationId));
+    }
+    throw error;
+  }
 }
 
 /**
@@ -262,9 +302,8 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       }
     }
 
-    // Unhealthy Docker services — `restarting` is the closest signal to the
-    // legacy "unhealthy" state that `docker compose ps --format json` exposes
-    // without per-service healthcheck inspection.
+    // `restarting` is the strongest failure signal exposed by
+    // `docker compose ps --format json` without a separate health inspection.
     for (const svc of dockerServices) {
       if (svc.state === "restarting") {
         attention.push({
@@ -322,6 +361,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
           domains: integration.manifest.domains,
           quality: integration.manifest.quality ?? "built-in",
           isBuiltIn: integration.isBuiltIn,
+          blockedCode: integration.blockedCode === true,
           enabled: integration.enabled,
           configured,
           hasHealthCheck: !!integration.manifest.healthCheck,
@@ -412,6 +452,7 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       domains: integration.manifest.domains,
       quality: integration.manifest.quality ?? "built-in",
       isBuiltIn: integration.isBuiltIn,
+      blockedCode: integration.blockedCode === true,
       enabled: integration.enabled,
       configured,
       hasHealthCheck: !!integration.manifest.healthCheck,
@@ -502,13 +543,13 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
       const newConfig = { ...existingConfig, ...updates };
 
-      await db
-        .insert(integrationConfig)
-        .values({ id: randomUUID(), integrationId: integration.id, config: newConfig })
-        .onConflictDoUpdate({
-          target: integrationConfig.integrationId,
-          set: { config: newConfig, updatedAt: new Date() },
-        });
+      await persistAndApplyIntegrationConfig({
+        integrationId: integration.id,
+        config: newConfig,
+        previous: (existing?.config as Record<string, unknown> | undefined) ?? null,
+        actorId: adminSession.user.id,
+        requestId: String(request.id),
+      });
 
       await writeAuditLog({
         actorId: adminSession.user.id,
@@ -541,13 +582,13 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
     const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
     const newConfig = { ...existingConfig, enabled: true };
 
-    await db
-      .insert(integrationConfig)
-      .values({ id: randomUUID(), integrationId: integration.id, config: newConfig })
-      .onConflictDoUpdate({
-        target: integrationConfig.integrationId,
-        set: { config: newConfig, updatedAt: new Date() },
-      });
+    await persistAndApplyIntegrationConfig({
+      integrationId: integration.id,
+      config: newConfig,
+      previous: (existing?.config as Record<string, unknown> | undefined) ?? null,
+      actorId: adminSession.user.id,
+      requestId: String(request.id),
+    });
 
     await writeAuditLog({
       actorId: adminSession.user.id,
@@ -579,13 +620,13 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       const existingConfig = (existing?.config as Record<string, unknown>) ?? {};
       const newConfig = { ...existingConfig, enabled: false };
 
-      await db
-        .insert(integrationConfig)
-        .values({ id: randomUUID(), integrationId: integration.id, config: newConfig })
-        .onConflictDoUpdate({
-          target: integrationConfig.integrationId,
-          set: { config: newConfig, updatedAt: new Date() },
-        });
+      await persistAndApplyIntegrationConfig({
+        integrationId: integration.id,
+        config: newConfig,
+        previous: (existing?.config as Record<string, unknown> | undefined) ?? null,
+        actorId: adminSession.user.id,
+        requestId: String(request.id),
+      });
 
       await writeAuditLog({
         actorId: adminSession.user.id,
@@ -965,7 +1006,8 @@ export async function adminRoute(app: FastifyInstance): Promise<void> {
       request,
     });
 
-    return { ok: true, imported, skipped };
+    const reloadResult = await reloadIntegrations();
+    return { ok: true, imported, skipped, ...reloadResult };
   });
 
   app.get("/admin/audit", async (request) => {

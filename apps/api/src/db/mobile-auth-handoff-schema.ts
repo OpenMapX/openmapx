@@ -1,4 +1,4 @@
-import { index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import { index, integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 import { user } from "./auth-schema";
 
 /**
@@ -19,9 +19,9 @@ import { user } from "./auth-schema";
  *  - The PKCE challenge is stored, the verifier never is. That is the entire
  *    point of PKCE: another app that intercepted the callback still cannot
  *    redeem it, because it never had the verifier.
- *  - The one-time token is stored, because the exchange has to hand it back.
- *    It is already single-use and already expires in two minutes, and the row
- *    holding it is deleted the instant it is consumed.
+ *  - The one-time token is AES-256-GCM encrypted with a key derived from the
+ *    application auth secret and authenticated to this row's ID. PostgreSQL
+ *    therefore holds no redeemable token even during the two-minute window.
  *
  * Nothing here is a session cookie, a password, an OAuth token, or a passkey
  * assertion, and none of those may ever be added.
@@ -41,8 +41,11 @@ export const mobileAuthHandoff = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
-    /** The Better Auth one-time token, itself single-use and short-lived. */
-    oneTimeToken: text("one_time_token").notNull(),
+    /** AES-256-GCM envelope for the short-lived Better Auth one-time token. */
+    tokenCiphertext: text("token_ciphertext").notNull(),
+    tokenIv: text("token_iv").notNull(),
+    tokenTag: text("token_tag").notNull(),
+    tokenKeyVersion: integer("token_key_version").notNull(),
     createdAt: timestamp("created_at").defaultNow().notNull(),
     expiresAt: timestamp("expires_at").notNull(),
     /** Set the moment it is redeemed, so a replay finds a consumed row. */

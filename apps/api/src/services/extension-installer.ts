@@ -1,11 +1,16 @@
 import { services as coreServices, findRepoRoot } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
 import {
+  backupInstalledIntegration,
   installIntegration as coreInstallIntegration,
   removeIntegration as coreRemoveIntegration,
+  discardInstalledIntegrationBackup,
+  type IntegrationRollbackBackup,
+  restoreInstalledIntegration,
 } from "@openmapx/integration-framework/installer";
 import { and, eq } from "drizzle-orm";
 import { db } from "../db";
+import type { ServiceRepositoryRow } from "../db/schema";
 import {
   installedExtension,
   installedExtensionComponent,
@@ -15,11 +20,36 @@ import {
 import { reloadIntegrations } from "../integration-host";
 import { dbActorId } from "../utils/actor";
 import { dockerComposeAction } from "../utils/docker-compose";
-import { getServiceSelectionSummary, writeServiceSelection } from "./admin-cli";
+import { getServiceSelectionSummary } from "./admin-cli";
 import { renderAndPersistCompose, serviceStart } from "./admin-ops";
+import { assertComponentOwnership } from "./extension-component-ownership";
+import {
+  appendIntegrationJournalEntry,
+  createExtensionInstallJournal,
+  type ExtensionInstallJournal,
+  markExtensionInstallJournalRestoring,
+  markIntegrationJournalEntryInstalled,
+  reconcileExtensionInstallJournal,
+} from "./extension-install-journal";
+import { getKillSwitch } from "./extension-store";
 import type { JobContext } from "./job-runner";
+import { createDurableOpsKey } from "./ops-client";
 import { getServiceRegistry, initServiceRegistry } from "./service-registry";
-import { hashUrl, registerRepo, removeRepo } from "./service-repositories";
+import {
+  backupRepo,
+  discardRepoBackup,
+  discardRepoPreparation,
+  discardStagedRepo,
+  hashUrl,
+  type PreparedServiceRepository,
+  publishStagedRepo,
+  removeRepo,
+  restoreRepo,
+  type ServiceRepoRollbackBackup,
+  type StagedServiceRepository,
+  stageRepo,
+} from "./service-repositories";
+import { applyTrustedConfiguration } from "./trusted-config-operations";
 
 type ExtensionManifest = coreServices.ExtensionManifest;
 const ROOT_DIR = findRepoRoot();
@@ -34,13 +64,91 @@ export interface InstallExtensionOptions {
   actorId?: string;
 }
 
-async function serviceRepoExists(url: string): Promise<boolean> {
+/**
+ * The validated, immutable result of preflight. `applyExtensionInstall` accepts
+ * only this, so every identity, ownership, and revocation decision is made
+ * before the first filesystem, registry, database, or container mutation.
+ */
+export interface ExtensionInstallPreflight {
+  readonly manifest: ExtensionManifest;
+  readonly components: readonly coreServices.ExtensionComponentRef[];
+  readonly serviceRepos: ReadonlyMap<
+    string,
+    ExtensionManifest["services"] extends Array<infer S> | undefined ? S : never
+  >;
+}
+
+export class ExtensionPreflightError extends Error {
+  override readonly name = "ExtensionPreflightError";
+}
+
+/**
+ * Revocation is authoritative at execution time, not at queue time. A denial
+ * published while the job waited must still stop the install.
+ */
+async function assertNotRevoked(extensionId: string, version: string): Promise<void> {
+  const kill = await getKillSwitch();
+  const removed = kill.removed.get(extensionId);
+  if (removed !== undefined) {
+    throw new ExtensionPreflightError(`Extension "${extensionId}" is delisted: ${removed}`);
+  }
+  const critical = kill.critical.get(extensionId);
+  if (critical && (critical.maxVersion === undefined || version <= critical.maxVersion)) {
+    throw new ExtensionPreflightError(
+      `Extension "${extensionId}" is flagged critical: ${critical.reason}`,
+    );
+  }
+}
+
+/**
+ * Validate identity, uniqueness, ownership, and platform compatibility. Performs
+ * no mutation, so any failure leaves the deployment exactly as it was.
+ */
+export async function preflightExtensionInstall(
+  opts: InstallExtensionOptions,
+): Promise<ExtensionInstallPreflight> {
+  const { manifest } = opts;
+  if (manifest.platform && !satisfiesPlatformVersion(manifest.platform)) {
+    throw new ExtensionPreflightError(
+      `Extension "${manifest.id}" requires platform >= ${manifest.platform} (this is ${PLATFORM_VERSION}).`,
+    );
+  }
+
+  const components = coreServices.extensionComponentSummary(manifest);
+  const seen = new Set<string>();
+  for (const component of components) {
+    const key = `${component.kind}:${component.id}`;
+    if (seen.has(key)) {
+      throw new ExtensionPreflightError(
+        `Extension "${manifest.id}" declares component ${key} more than once`,
+      );
+    }
+    seen.add(key);
+  }
+
+  const serviceRepos = new Map<string, NonNullable<ExtensionManifest["services"]>[number]>();
+  for (const component of manifest.services ?? []) {
+    const existing = serviceRepos.get(component.repo);
+    if (existing && existing.ref !== component.ref) {
+      throw new ExtensionPreflightError(
+        `Extension service repository "${component.repo}" is requested at conflicting refs`,
+      );
+    }
+    serviceRepos.set(component.repo, component);
+  }
+
+  await assertComponentOwnership(manifest.id, components);
+
+  return { manifest, components, serviceRepos: serviceRepos as never };
+}
+
+async function serviceRepoSnapshot(url: string): Promise<ServiceRepositoryRow | undefined> {
   const [row] = await db
-    .select({ hash: serviceRepository.hash })
+    .select()
     .from(serviceRepository)
     .where(eq(serviceRepository.hash, hashUrl(url)))
     .limit(1);
-  return !!row;
+  return row;
 }
 
 async function integrationInstalledExists(id: string): Promise<boolean> {
@@ -63,7 +171,12 @@ async function integrationInstalledExists(id: string): Promise<boolean> {
 // registry from env after this (that would re-read the stale baked list).
 
 /** Re-derive and apply an enabled set from a fresh root list, persist the file. */
-function applySelectionRoots(roots: string[], allowMissing: boolean): void {
+async function applySelectionRoots(
+  roots: string[],
+  allowMissing: boolean,
+  operationKey: string,
+  signal?: AbortSignal,
+): Promise<void> {
   const registry = getServiceRegistry();
   const normalized = coreServices.normalizeServiceIds(roots);
   const expanded = coreServices.expandServiceSelection(registry.list(), normalized, {
@@ -72,32 +185,51 @@ function applySelectionRoots(roots: string[], allowMissing: boolean): void {
   if (expanded.missingIds.length > 0) {
     throw new Error(`Selected service(s) are not installed: ${expanded.missingIds.join(", ")}`);
   }
-  writeServiceSelection(normalized);
+  await applyTrustedConfiguration({
+    kind: "serviceSelection.apply",
+    selectedRoots: normalized,
+    operationKey,
+    signal,
+  });
   registry.applyEnabledIds(expanded.enabledIds);
 }
 
 /** Add service ids to the selection. Returns the ids newly added. */
-function enableServicesInSelection(serviceIds: string[]): string[] {
+async function enableServicesInSelection(
+  serviceIds: string[],
+  operationKey: string,
+  signal?: AbortSignal,
+): Promise<string[]> {
   const registry = getServiceRegistry();
   const roots = [...getServiceSelectionSummary(registry).selectedRoots];
   const added = serviceIds.filter((id) => !roots.includes(id));
   if (added.length === 0) return [];
-  applySelectionRoots([...roots, ...added], false);
+  await applySelectionRoots([...roots, ...added], false, operationKey, signal);
   return added;
 }
 
-function disableServicesInSelection(serviceIds: string[]): void {
+async function disableServicesInSelection(
+  serviceIds: string[],
+  operationKey: string,
+  signal?: AbortSignal,
+): Promise<void> {
   const registry = getServiceRegistry();
   const roots = getServiceSelectionSummary(registry).selectedRoots.filter(
     (r) => !serviceIds.includes(r),
   );
-  applySelectionRoots(roots, true);
+  await applySelectionRoots(roots, true, operationKey, signal);
 }
 
 interface InstallLedger {
   addedRepoHashes: string[]; // repos newly cloned this run (eligible for rollback removal)
   enabledServiceIds: string[]; // services newly enabled this run
   installedIntegrationIds: string[]; // integrations newly installed this run
+  previousIntegrations: IntegrationRollbackBackup[];
+  previousServiceRepos: ServiceRepoRollbackBackup[];
+  newRepoPreparationJournals: string[];
+  touchedServiceIds: string[];
+  previouslyEnabledServiceIds: string[];
+  selectedRootsBefore: string[] | null;
 }
 
 /**
@@ -115,31 +247,98 @@ export async function installExtension(
   // Synthetic (loopback) actors have no user row → attribute to null.
   const installedBy = dbActorId(opts.actorId);
 
-  if (manifest.platform && !satisfiesPlatformVersion(manifest.platform)) {
-    throw new Error(
-      `Extension "${manifest.id}" requires platform >= ${manifest.platform} (this is ${PLATFORM_VERSION}).`,
-    );
-  }
+  // Everything that can be decided without touching the deployment is decided
+  // here, before the first mutation.
+  await preflightExtensionInstall(opts);
+  // Revocation can land between queueing and execution, so it is rechecked
+  // immediately before the first mutation as well as at the end.
+  await assertNotRevoked(manifest.id, manifest.version);
 
   const ledger: InstallLedger = {
     addedRepoHashes: [],
     enabledServiceIds: [],
     installedIntegrationIds: [],
+    previousIntegrations: [],
+    previousServiceRepos: [],
+    newRepoPreparationJournals: [],
+    touchedServiceIds: [],
+    previouslyEnabledServiceIds: [],
+    selectedRootsBefore: null,
   };
+  let bookkeepingCommitted = false;
+  let rollbackRequired = false;
+  let integrationJournal: ExtensionInstallJournal | null = null;
+  const stagedServiceRepos = new Map<string, StagedServiceRepository>();
 
   try {
     const serviceComponents = manifest.services ?? [];
     const integrationComponents = manifest.integrations ?? [];
+    const pendingServiceRepoRows: PreparedServiceRepository[] = [];
+    // Repository URL -> the row this install actually published for it, so a
+    // component's provenance is checked against the record we created rather
+    // than against a re-derived identifier.
+    const publishedByRepo = new Map<string, PreparedServiceRepository>();
+    // Validated by preflight: one ref per repository.
+    const serviceRepos = new Map<string, (typeof serviceComponents)[number]>();
+    for (const component of serviceComponents) serviceRepos.set(component.repo, component);
+
+    // Snapshot and stage every repository before copying any installed checkout
+    // aside. A stage is the exact cloned, fully validated snapshot that is later
+    // published, so a mutable ref cannot change between preflight and update.
+    const existingServiceRepos = new Map<string, ServiceRepositoryRow | undefined>();
+    for (const svc of serviceRepos.values()) {
+      existingServiceRepos.set(svc.repo, await serviceRepoSnapshot(svc.repo));
+    }
+
+    if (serviceComponents.length > 0) {
+      const registry = getServiceRegistry();
+      ledger.selectedRootsBefore = [...getServiceSelectionSummary(registry).selectedRoots];
+      ledger.touchedServiceIds = serviceComponents.map((component) => component.service);
+      ledger.previouslyEnabledServiceIds = ledger.touchedServiceIds.filter(
+        (serviceId) => registry.get(serviceId)?.enabled === true,
+      );
+    }
+
+    for (const svc of serviceRepos.values()) {
+      const previous = existingServiceRepos.get(svc.repo);
+      stagedServiceRepos.set(
+        svc.repo,
+        await stageRepo(svc.repo, {
+          ref: svc.ref,
+          managedByExtension: manifest.id,
+          journalNewInstall: !previous,
+          selectionBefore: ledger.selectedRootsBefore ?? undefined,
+          minimumLastFetchedAtExclusive: previous?.lastFetchedAt ?? undefined,
+          touchedServiceIds: ledger.touchedServiceIds,
+          previouslyEnabledServiceIds: ledger.previouslyEnabledServiceIds,
+        }),
+      );
+    }
 
     // 1. Register + pin every service repo.
-    for (const svc of serviceComponents) {
-      const existed = await serviceRepoExists(svc.repo);
+    for (const svc of serviceRepos.values()) {
+      const previous = existingServiceRepos.get(svc.repo);
+      if (previous) {
+        ledger.previousServiceRepos.push(
+          backupRepo(previous, {
+            selectionBefore: ledger.selectedRootsBefore ?? undefined,
+            touchedServiceIds: ledger.touchedServiceIds,
+            previouslyEnabledServiceIds: ledger.previouslyEnabledServiceIds,
+          }),
+        );
+        rollbackRequired = true;
+      }
       await ctx.log(`Registering service repo ${svc.repo}${svc.ref ? `@${svc.ref}` : ""}...`);
-      const row = await registerRepo(svc.repo, {
-        ref: svc.ref,
-        managedByExtension: manifest.id,
-      });
-      if (!existed) ledger.addedRepoHashes.push(row.hash);
+      const stage = stagedServiceRepos.get(svc.repo);
+      if (!stage) throw new Error(`Service repository "${svc.repo}" was not staged`);
+      const row = await publishStagedRepo(stage);
+      stagedServiceRepos.delete(svc.repo);
+      const { preparationJournal, ...repositoryRow } = row;
+      rollbackRequired = true;
+      pendingServiceRepoRows.push(repositoryRow);
+      publishedByRepo.set(svc.repo, repositoryRow);
+      if (preparationJournal) ledger.newRepoPreparationJournals.push(preparationJournal);
+      if (!previous) ledger.addedRepoHashes.push(row.hash);
     }
     await ctx.setProgress(25);
 
@@ -148,24 +347,58 @@ export async function installExtension(
     // Do NOT re-init after enabling — that re-reads the stale baked env list.
     if (serviceComponents.length > 0) {
       await initServiceRegistry();
-      const newlyEnabled = enableServicesInSelection(serviceComponents.map((s) => s.service));
+      const registry = getServiceRegistry();
+      for (const component of serviceComponents) {
+        const service = registry.get(component.service);
+        if (!service || service.isBuiltIn) {
+          throw new Error(
+            `Extension service "${component.service}" was not loaded from its registered repository`,
+          );
+        }
+        if (!service.manifest.container.digest) {
+          throw new Error(
+            `Extension service "${component.service}" must pin its container image by digest`,
+          );
+        }
+        // The registry record must prove it came from this extension's own
+        // repository and is owned by this extension before it can be linked.
+        const provenance = publishedByRepo.get(component.repo);
+        if (!provenance) {
+          throw new Error(
+            `Extension service "${component.service}" has no registered repository provenance`,
+          );
+        }
+        if (provenance.managedByExtension !== manifest.id) {
+          throw new Error(
+            `Extension service "${component.service}" is not owned by extension "${manifest.id}"`,
+          );
+        }
+      }
+      const newlyEnabled = await enableServicesInSelection(
+        serviceComponents.map((s) => s.service),
+        createDurableOpsKey("extension.selection.enable", `${ctx.jobId}:${manifest.id}`),
+        ctx.signal,
+      );
       ledger.enabledServiceIds.push(...newlyEnabled);
 
       await ctx.log("Rendering compose...");
-      await renderAndPersistCompose();
+      await renderAndPersistCompose({
+        operationKey: createDurableOpsKey("extension.config.render", `${ctx.jobId}:${manifest.id}`),
+        signal: ctx.signal,
+      });
       for (const svc of serviceComponents) {
-        // Pull first so a moving image tag (e.g. :latest) is refreshed on
-        // update — `up -d` alone won't re-pull a tag already cached on the host,
-        // so without this an updated extension would keep running the old image.
-        // Best-effort: a pull failure (offline / locally-built image) falls
-        // through to starting on the cached image.
-        const pulled = await dockerComposeAction(svc.service, "pull");
+        // The rendered reference includes the mandatory digest. Pull failure is
+        // fatal: starting a cached image would make the recorded extension
+        // version claim an artifact that was never acquired.
+        const pulled = await dockerComposeAction(svc.service, "pull", {
+          operationKey: createDurableOpsKey(
+            "extension.service.pull",
+            `${ctx.jobId}:${manifest.id}:${svc.service}`,
+          ),
+          signal: ctx.signal,
+        });
         if (pulled.exitCode !== 0) {
-          const reason = pulled.stderr.trim().split("\n").slice(-3).join("; ") || "unknown error";
-          await ctx.log(
-            `docker compose pull ${svc.service} failed (exit ${pulled.exitCode}): ${reason} — starting on the cached image (the container may keep running the previous version)`,
-            "stderr",
-          );
+          throw new Error(`Failed to pull community service image ${svc.service}`);
         }
         await serviceStart(svc.service, ctx);
       }
@@ -176,10 +409,32 @@ export async function installExtension(
     // bookkeeping rows are collected here and written in the step-4 transaction
     // so nothing is persisted until the whole record set can land atomically.
     const pendingIntegrationRows: Array<{ id: string; repository: string }> = [];
+    if (integrationComponents.length > 0) {
+      integrationJournal = createExtensionInstallJournal(
+        ROOT_DIR,
+        manifest.id,
+        manifest as unknown as Record<string, unknown>,
+      );
+      rollbackRequired = true;
+    }
     for (const intg of integrationComponents) {
+      if (!integrationJournal) throw new Error("Integration install journal was not initialized");
       const existed = await integrationInstalledExists(intg.id);
+      if (existed) {
+        const backup = backupInstalledIntegration(ROOT_DIR, intg.id);
+        if (!backup) {
+          throw new Error(`Installed integration "${intg.id}" is missing from disk`);
+        }
+        ledger.previousIntegrations.push(backup);
+      }
+      appendIntegrationJournalEntry(integrationJournal, {
+        id: intg.id,
+        backupDirectory:
+          ledger.previousIntegrations.find((backup) => backup.id === intg.id)?.backupDirectory ??
+          null,
+      });
       await ctx.log(`Installing integration ${intg.id} from ${intg.artifact}...`);
-      await coreInstallIntegration({
+      const installed = await coreInstallIntegration({
         rootDir: ROOT_DIR,
         source: intg.artifact,
         sourceKind: "artifact",
@@ -190,6 +445,15 @@ export async function installExtension(
           ctx.log(line, stream).catch(() => {});
         },
       });
+      // The artifact declares its own id. If it does not match the component
+      // the manifest authorized, the extension would own — and later remove —
+      // an integration nobody approved.
+      if (installed.id !== intg.id) {
+        throw new Error(
+          `Integration artifact installed "${installed.id}" but the manifest declared "${intg.id}"`,
+        );
+      }
+      markIntegrationJournalEntryInstalled(integrationJournal, intg.id);
       if (!existed) ledger.installedIntegrationIds.push(intg.id);
 
       pendingIntegrationRows.push({
@@ -211,7 +475,25 @@ export async function installExtension(
     // which removeExtension reads to decide what to tear down.
     const now = new Date();
     const components = coreServices.extensionComponentSummary(manifest);
+    // Last gate before the install becomes authoritative.
+    await assertNotRevoked(manifest.id, manifest.version);
+    await assertComponentOwnership(manifest.id, components);
     await db.transaction(async (tx) => {
+      for (const row of pendingServiceRepoRows) {
+        await tx
+          .insert(serviceRepository)
+          .values(row)
+          .onConflictDoUpdate({
+            target: serviceRepository.hash,
+            set: {
+              displayName: row.displayName,
+              lastFetchedAt: row.lastFetchedAt,
+              lastSha: row.lastSha,
+              pinnedRef: row.pinnedRef,
+              managedByExtension: row.managedByExtension,
+            },
+          });
+      }
       for (const row of pendingIntegrationRows) {
         await tx
           .insert(installedIntegration)
@@ -275,17 +557,96 @@ export async function installExtension(
         );
       }
     });
+    bookkeepingCommitted = true;
 
-    await ctx.setProgress(100);
-    await ctx.log(`Extension "${manifest.id}" installed (${components.length} component(s)).`);
+    // Once the bookkeeping transaction commits, the install is authoritative.
+    // Job-reporting failures must not roll back external state while leaving
+    // committed extension rows behind.
+    await ctx.setProgress(100).catch(() => {});
+    for (const backup of ledger.previousServiceRepos) {
+      try {
+        discardRepoBackup(backup);
+      } catch (error) {
+        await ctx
+          .log(
+            `Cleanup: failed to remove service repository backup for ${backup.snapshot.url}: ${(error as Error).message}`,
+            "stderr",
+          )
+          .catch(() => {});
+      }
+    }
+    for (const journal of ledger.newRepoPreparationJournals) {
+      try {
+        discardRepoPreparation(journal);
+      } catch (error) {
+        await ctx
+          .log(
+            `Cleanup: failed to remove repository preparation journal: ${(error as Error).message}`,
+            "stderr",
+          )
+          .catch(() => {});
+      }
+    }
+    for (const backup of ledger.previousIntegrations) {
+      try {
+        discardInstalledIntegrationBackup(ROOT_DIR, backup);
+      } catch (error) {
+        await ctx
+          .log(
+            `Cleanup: failed to remove integration backup for ${backup.id}: ${(error as Error).message}`,
+            "stderr",
+          )
+          .catch(() => {});
+      }
+    }
+    if (integrationJournal) {
+      await reconcileExtensionInstallJournal(ROOT_DIR, integrationJournal.path, async () => true);
+    }
+    await ctx
+      .log(`Extension "${manifest.id}" installed (${components.length} component(s)).`)
+      .catch(() => {});
     return { id: manifest.id, components: components.length };
   } catch (err) {
-    await ctx.log(`Install failed: ${(err as Error).message}. Rolling back...`, "stderr");
+    for (const stage of stagedServiceRepos.values()) {
+      try {
+        discardStagedRepo(stage);
+      } catch {
+        // Stages already consumed by publication are no longer owned here.
+      }
+    }
+    if (bookkeepingCommitted) throw err;
+    if (!rollbackRequired) throw err;
+    await ctx
+      .log(`Install failed: ${(err as Error).message}. Rolling back...`, "stderr")
+      .catch(() => {});
+    if (integrationJournal) {
+      try {
+        markExtensionInstallJournalRestoring(integrationJournal);
+      } catch (journalError) {
+        await ctx
+          .log(
+            `Rollback deferred to startup because the integration recovery journal could not be checkpointed: ${(journalError as Error).message}`,
+            "stderr",
+          )
+          .catch(() => {});
+        // Do not mutate integration artifacts without first recording the
+        // restoring phase. The existing journal and backups let startup retry
+        // from the last durable state.
+        throw err;
+      }
+    }
     await rollbackInstall(ctx, ledger).catch((rbErr) => {
       ctx
         .log(`Rollback encountered an error: ${(rbErr as Error).message}`, "stderr")
         .catch(() => {});
     });
+    if (integrationJournal) {
+      await reconcileExtensionInstallJournal(
+        ROOT_DIR,
+        integrationJournal.path,
+        async () => false,
+      ).catch(() => {});
+    }
     throw err;
   }
 }
@@ -297,38 +658,91 @@ async function rollbackInstall(ctx: JobContext, ledger: InstallLedger): Promise<
       coreRemoveIntegration({ rootDir: ROOT_DIR, id });
       await db.delete(installedIntegration).where(eq(installedIntegration.id, id));
     } catch (e) {
-      await ctx.log(
-        `Rollback: failed to remove integration ${id}: ${(e as Error).message}`,
-        "stderr",
-      );
+      await ctx
+        .log(`Rollback: failed to remove integration ${id}: ${(e as Error).message}`, "stderr")
+        .catch(() => {});
     }
   }
-  if (ledger.installedIntegrationIds.length > 0) {
+  for (const backup of ledger.previousIntegrations) {
+    try {
+      restoreInstalledIntegration(ROOT_DIR, backup);
+    } catch (error) {
+      await ctx
+        .log(
+          `Rollback: failed to restore integration ${backup.id}: ${(error as Error).message}`,
+          "stderr",
+        )
+        .catch(() => {});
+    }
+  }
+  if (ledger.installedIntegrationIds.length > 0 || ledger.previousIntegrations.length > 0) {
     await reloadIntegrations().catch(() => {});
   }
 
   if (ledger.enabledServiceIds.length > 0) {
     for (const svc of ledger.enabledServiceIds) {
-      await dockerComposeAction(svc, "remove").catch(() => ({
-        exitCode: 1,
-        stdout: "",
-        stderr: "",
-      }));
-    }
-    try {
-      disableServicesInSelection(ledger.enabledServiceIds);
-    } catch (e) {
-      await ctx.log(`Rollback: failed to disable services: ${(e as Error).message}`, "stderr");
+      const removed = await dockerComposeAction(svc, "remove", {
+        operationKey: createDurableOpsKey("extension.service.rollback", `${ctx.jobId}:${svc}`),
+      });
+      if (removed.exitCode !== 0) {
+        throw new Error(`Community runtime rollback failed for ${svc}`);
+      }
     }
   }
+  let removedAllNewRepos = true;
   for (const hash of ledger.addedRepoHashes) {
-    await removeRepo(hash).catch(() => {});
+    try {
+      await removeRepo(hash);
+    } catch (error) {
+      removedAllNewRepos = false;
+      await ctx
+        .log(
+          `Rollback: failed to remove service repository ${hash}: ${(error as Error).message}`,
+          "stderr",
+        )
+        .catch(() => {});
+    }
   }
-  if (ledger.enabledServiceIds.length > 0 || ledger.addedRepoHashes.length > 0) {
-    // disableServicesInSelection already applied the reduced enabled set in
-    // memory; just re-render. (No initServiceRegistry — it would re-read the
-    // stale baked OPENMAPX_ENABLED_SERVICES and undo the disable.)
-    await renderAndPersistCompose().catch(() => {});
+  if (removedAllNewRepos) {
+    for (const journal of ledger.newRepoPreparationJournals) {
+      try {
+        discardRepoPreparation(journal);
+      } catch {
+        // Startup reconciliation can safely finish this cleanup.
+      }
+    }
+  }
+  for (const backup of ledger.previousServiceRepos) {
+    await restoreRepo(backup).catch((error) => {
+      ctx
+        .log(
+          `Rollback: failed to restore service repository ${backup.snapshot.url}: ${(error as Error).message}`,
+          "stderr",
+        )
+        .catch(() => {});
+    });
+  }
+  if (ledger.touchedServiceIds.length > 0 && ledger.selectedRootsBefore) {
+    try {
+      await initServiceRegistry();
+      await applySelectionRoots(
+        ledger.selectedRootsBefore,
+        false,
+        createDurableOpsKey("extension.selection.rollback", ctx.jobId),
+        ctx.signal,
+      );
+      await renderAndPersistCompose({
+        operationKey: createDurableOpsKey("extension.rollback.render", ctx.jobId),
+        signal: ctx.signal,
+      });
+      for (const serviceId of ledger.previouslyEnabledServiceIds) {
+        await serviceStart(serviceId, ctx);
+      }
+    } catch (error) {
+      await ctx
+        .log(`Rollback: failed to restore service state: ${(error as Error).message}`, "stderr")
+        .catch(() => {});
+    }
   }
 }
 
@@ -362,12 +776,22 @@ export async function removeExtension(
   // Tear down service containers while they're still in the compose file.
   for (const svc of serviceIds) {
     await ctx.log(`Removing service container ${svc}...`);
-    await dockerComposeAction(svc, "remove").catch(() => ({ exitCode: 1, stdout: "", stderr: "" }));
+    const removed = await dockerComposeAction(svc, "remove", {
+      operationKey: createDurableOpsKey("extension.service.remove", `${ctx.jobId}:${svc}`),
+      signal: ctx.signal,
+    }).catch(() => ({ exitCode: 1 }));
+    if (removed.exitCode !== 0) {
+      throw new Error(`Failed to remove community service runtime ${svc}`);
+    }
   }
   // Remove the repos this extension owns + drop the services from selection.
   if (serviceIds.length > 0) {
     try {
-      disableServicesInSelection(serviceIds);
+      await disableServicesInSelection(
+        serviceIds,
+        createDurableOpsKey("extension.selection.disable", `${ctx.jobId}:${id}`),
+        ctx.signal,
+      );
     } catch (e) {
       await ctx.log(`Failed to disable services: ${(e as Error).message}`, "stderr");
     }
@@ -382,7 +806,10 @@ export async function removeExtension(
     // disableServicesInSelection already applied the reduced enabled set in
     // memory; re-render to drop the service from compose (no registry re-init,
     // which would re-read the stale baked env).
-    await renderAndPersistCompose().catch(() => {});
+    await renderAndPersistCompose({
+      operationKey: createDurableOpsKey("extension.remove.render", `${ctx.jobId}:${id}`),
+      signal: ctx.signal,
+    }).catch(() => {});
   }
   await ctx.setProgress(60);
 

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import { db } from "../db/index.js";
 import { serviceConfig } from "../db/schema.js";
 
@@ -25,5 +25,33 @@ export async function mergeServiceConfig(
         >`coalesce(${serviceConfig.config}, '{}'::jsonb) || excluded.${sql.identifier("config")}`,
         updatedAt: new Date(),
       },
+    });
+}
+
+export async function readStoredServiceConfig(
+  serviceId: string,
+): Promise<Record<string, unknown> | null> {
+  const [row] = await db
+    .select({ config: serviceConfig.config })
+    .from(serviceConfig)
+    .where(eq(serviceConfig.serviceId, serviceId))
+    .limit(1);
+  return (row?.config as Record<string, unknown> | undefined) ?? null;
+}
+
+export async function restoreStoredServiceConfig(
+  serviceId: string,
+  value: Record<string, unknown> | null,
+): Promise<void> {
+  if (value === null) {
+    await db.delete(serviceConfig).where(eq(serviceConfig.serviceId, serviceId));
+    return;
+  }
+  await db
+    .insert(serviceConfig)
+    .values({ id: randomUUID(), serviceId, config: value })
+    .onConflictDoUpdate({
+      target: serviceConfig.serviceId,
+      set: { config: value, updatedAt: new Date() },
     });
 }

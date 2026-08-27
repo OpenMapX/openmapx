@@ -51,8 +51,8 @@ function getLocalAdminToken(): string | null {
 }
 
 function isLocalAdminRequest(request: FastifyRequest): boolean {
-  // Operator opt-out for multi-tenant hosts where loopback isn't a trust
-  // boundary. Preserved for backwards compatibility.
+  // Explicit operator opt-out for multi-tenant hosts where loopback is not a
+  // sufficient trust boundary.
   if (process.env.OPENMAPX_DISABLE_LOCALHOST_AUTH === "1") return false;
   const peer = socketPeerAddress(request);
   if (!peer || !LOOPBACK_ADDRESSES.has(peer)) return false;

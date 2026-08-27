@@ -1,6 +1,6 @@
 import Fastify from "fastify";
 import { afterEach, describe, expect, it } from "vitest";
-import { RateLimiter } from "../rate-limit";
+import { RateLimiter, statusPublicApiLimit } from "../rate-limit";
 
 afterEach(() => {
   // Vitest's afterEach runs before the next test starts; nothing to clear here
@@ -86,5 +86,20 @@ describe("RateLimiter", () => {
 
     await app.close();
     limiter.destroy();
+  });
+});
+
+describe("public status limiter", () => {
+  it("admits exactly 60 requests per minute before rejecting the next", async () => {
+    statusPublicApiLimit.reset();
+    const app = buildApp(statusPublicApiLimit);
+
+    for (let index = 0; index < 60; index += 1) {
+      expect((await app.inject({ method: "GET", url: "/ping" })).statusCode).toBe(200);
+    }
+    expect((await app.inject({ method: "GET", url: "/ping" })).statusCode).toBe(429);
+
+    await app.close();
+    statusPublicApiLimit.reset();
   });
 });

@@ -1,5 +1,9 @@
+import { Writable } from "node:stream";
 import Fastify, { type FastifyInstance } from "fastify";
+import pino from "pino";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { controlledRequestLoggingOptions } from "../../server-wiring.js";
+import { createSafePinoOptions } from "../../utils/safe-log-fields.js";
 
 let app: FastifyInstance;
 
@@ -111,6 +115,50 @@ describe("GET /maptiler/*", () => {
 
     expect(res.statusCode).toBe(503);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it("logs a failed upstream only as a host/digest summary and safe error class", async () => {
+    vi.stubEnv("MAPTILER_KEY", "fixture-maptiler-key");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new TypeError(
+          "failed https://api.maptiler.com/maps/private-style-id/style.json?key=fixture-maptiler-key",
+        );
+      }),
+    );
+    const chunks: string[] = [];
+    const stream = new Writable({
+      write(chunk, _encoding, callback) {
+        chunks.push(String(chunk));
+        callback();
+      },
+    });
+    const loggerApp = Fastify(
+      controlledRequestLoggingOptions(pino(createSafePinoOptions("info"), stream)),
+    );
+    const { maptilerRoute } = await import("../maptiler.js");
+    await loggerApp.register(maptilerRoute);
+    await loggerApp.ready();
+
+    const response = await loggerApp.inject({
+      method: "GET",
+      url: "/maptiler/maps/private-style-id/style.json",
+    });
+    await loggerApp.close();
+
+    expect(response.statusCode).toBe(502);
+    const warning = chunks
+      .join("")
+      .split("\n")
+      .filter(Boolean)
+      .map((line) => JSON.parse(line) as Record<string, unknown>)
+      .find((record) => record.msg === "MapTiler proxy fetch failed");
+    expect(warning).toMatchObject({
+      upstream: { host: "api.maptiler.com", digest: "0d0cd3cdcbc3d368b8e43ff7f429df3c" },
+      errorClass: "TypeError",
+    });
+    expect(chunks.join("")).not.toMatch(/private-style-id|fixture-maptiler-key/);
   });
 
   it("ignores X-Forwarded-Host when rewriting style URLs (cache-poisoning guard)", async () => {

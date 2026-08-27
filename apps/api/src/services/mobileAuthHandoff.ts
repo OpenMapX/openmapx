@@ -2,6 +2,7 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db";
 import { mobileAuthHandoff } from "../db/schema";
+import { decryptHandoffToken, encryptHandoffToken } from "./mobileAuthHandoffCrypto";
 
 /**
  * The system-browser → WebView session handoff.
@@ -140,16 +141,21 @@ export class MobileAuthHandoffService {
       return { ok: false, reason: "too-many-attempts" };
     }
 
+    const id = this.randomId();
     const callbackCode = this.randomCode();
     const expiresAtMs = input.nowMs + HANDOFF_TTL_MS;
+    const encryptedToken = encryptHandoffToken(input.oneTimeToken, id);
     await this.db.insert(mobileAuthHandoff).values({
-      id: this.randomId(),
+      id,
       callbackCodeHash: hashCallbackCode(callbackCode),
       codeChallenge: input.codeChallenge,
       state: input.state,
       purpose: input.purpose,
       userId: input.userId,
-      oneTimeToken: input.oneTimeToken,
+      tokenCiphertext: encryptedToken.ciphertext,
+      tokenIv: encryptedToken.iv,
+      tokenTag: encryptedToken.tag,
+      tokenKeyVersion: encryptedToken.version,
       createdAt: new Date(input.nowMs),
       expiresAt: new Date(expiresAtMs),
     });
@@ -182,9 +188,13 @@ export class MobileAuthHandoffService {
         ),
       )
       .returning({
+        id: mobileAuthHandoff.id,
         codeChallenge: mobileAuthHandoff.codeChallenge,
         state: mobileAuthHandoff.state,
-        oneTimeToken: mobileAuthHandoff.oneTimeToken,
+        tokenCiphertext: mobileAuthHandoff.tokenCiphertext,
+        tokenIv: mobileAuthHandoff.tokenIv,
+        tokenTag: mobileAuthHandoff.tokenTag,
+        tokenKeyVersion: mobileAuthHandoff.tokenKeyVersion,
       });
 
     const row = consumed[0];
@@ -196,10 +206,26 @@ export class MobileAuthHandoffService {
     const stateMatches = equals(input.state, row.state);
     if (!verifierMatches || !stateMatches) return { ok: false, reason: "invalid" };
 
-    // The row's only remaining value is the token it just released.
+    let oneTimeToken: string;
+    try {
+      oneTimeToken = decryptHandoffToken(
+        {
+          version: row.tokenKeyVersion,
+          ciphertext: row.tokenCiphertext,
+          iv: row.tokenIv,
+          tag: row.tokenTag,
+        },
+        row.id,
+      );
+    } catch {
+      return { ok: false, reason: "invalid" };
+    }
+
+    // The row's only remaining sensitive value is ciphertext for the token it
+    // just released. Delete it immediately rather than waiting for expiry.
     await this.db.delete(mobileAuthHandoff).where(eq(mobileAuthHandoff.callbackCodeHash, hash));
 
-    return { ok: true, oneTimeToken: row.oneTimeToken };
+    return { ok: true, oneTimeToken };
   }
 
   /** Drops rows that can no longer be redeemed. Opportunistic, never required. */

@@ -2,6 +2,7 @@ import { USER_AGENT } from "@openmapx/core";
 import type { FastifyPluginAsync, FastifyRequest } from "fastify";
 import { envString } from "../utils/env.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
 
 const MAPTILER_ORIGIN = "https://api.maptiler.com";
 
@@ -176,7 +177,10 @@ export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
         signal: AbortSignal.timeout(15_000),
       });
     } catch (error) {
-      req.log.warn({ err: error, path }, "MapTiler proxy fetch failed");
+      req.log.warn(
+        { upstream: summarizeExternalUrl(upstreamUrl.href), errorClass: safeErrorClass(error) },
+        "MapTiler proxy fetch failed",
+      );
       return reply.status(502).send({ message: "MapTiler provider unavailable" });
     }
 

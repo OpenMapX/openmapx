@@ -1,6 +1,7 @@
 import { Writable } from "node:stream";
 import { db } from "../db/index";
 import { appLog } from "../db/schema";
+import { sanitizeLogMetadata, sanitizeLogString } from "../utils/safe-log-fields.js";
 
 export interface AppLogEntry {
   id: number;
@@ -35,13 +36,44 @@ const OMIT_KEYS = new Set([
   "responseTime",
 ]);
 
-class AppLogger {
+export interface AppLoggerOptions {
+  maxSize?: number;
+  persist?: (entry: AppLogEntry) => Promise<void>;
+}
+
+async function persistAppLog(entry: AppLogEntry): Promise<void> {
+  await db.insert(appLog).values({
+    level: entry.level,
+    source: entry.source,
+    msg: entry.msg,
+    metadata: entry.metadata ?? null,
+  });
+}
+
+function sanitizeEntry(entry: AppLogEntry): AppLogEntry {
+  return {
+    id: entry.id,
+    level: sanitizeLogString(entry.level),
+    source: sanitizeLogString(entry.source),
+    msg: sanitizeLogString(entry.msg),
+    time: Number.isFinite(entry.time) ? entry.time : Date.now(),
+    ...(entry.metadata === undefined ? {} : { metadata: sanitizeLogMetadata(entry.metadata) }),
+  };
+}
+
+export class AppLogger {
   private buffer: AppLogEntry[] = [];
-  private maxSize = 10_000;
+  private readonly maxSize: number;
+  private readonly persistAdapter: (entry: AppLogEntry) => Promise<void>;
   private nextId = 1;
 
+  constructor(options: AppLoggerOptions = {}) {
+    this.maxSize = options.maxSize ?? 10_000;
+    this.persistAdapter = options.persist ?? persistAppLog;
+  }
+
   add(entry: Omit<AppLogEntry, "id">) {
-    const full: AppLogEntry = { ...entry, id: this.nextId++ };
+    const full = sanitizeEntry({ ...entry, id: this.nextId++ });
     this.buffer.push(full);
     if (this.buffer.length > this.maxSize) {
       this.buffer.shift();
@@ -53,12 +85,9 @@ class AppLogger {
 
   private async persist(entry: AppLogEntry) {
     try {
-      await db.insert(appLog).values({
-        level: entry.level,
-        source: entry.source,
-        msg: entry.msg,
-        metadata: entry.metadata ?? null,
-      });
+      // Re-sanitize at the adapter boundary so later buffer readers cannot
+      // mutate a retained entry into a persistence bypass.
+      await this.persistAdapter(sanitizeEntry(entry));
     } catch {
       // silently fail — DB may not be available during startup
     }
@@ -131,7 +160,7 @@ class AppLogger {
           const msg = typeof parsed.msg === "string" ? parsed.msg : "";
           const time = typeof parsed.time === "number" ? parsed.time : Date.now();
 
-          const metadata: Record<string, unknown> = {};
+          const metadata = Object.create(null) as Record<string, unknown>;
           for (const [k, v] of Object.entries(parsed)) {
             if (!OMIT_KEYS.has(k)) metadata[k] = v;
           }

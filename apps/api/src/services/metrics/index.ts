@@ -199,7 +199,7 @@ export function getMetrics(): MetricsHandle {
 export interface ProviderCallLabels {
   providerId: string;
   method: string;
-  outcome: "ok" | "empty" | "error" | "skipped";
+  outcome: "ok" | "empty" | "error" | "skipped" | "timeout" | "cancelled";
 }
 
 /**

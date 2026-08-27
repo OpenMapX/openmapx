@@ -1,5 +1,5 @@
-import { existsSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { findRepoRoot, services } from "@openmapx/core/server";
 
 const {
@@ -17,9 +17,14 @@ let registry: InstanceType<typeof ServiceRegistry> | null = null;
 const warnings: string[] = [];
 const SERVICE_SELECTION_FILE = "service-selection.json";
 
-function readSelectionFile(rootDir: string): string[] | null {
-  const filePath = join(rootDir, "infra", "docker", SERVICE_SELECTION_FILE);
-  if (!existsSync(filePath)) return null;
+function readSelectionFile(rootDir: string, trusted: boolean): string[] | null {
+  const infra = join(rootDir, "infra", "docker");
+  const current = join(infra, ".trusted-config-current", SERVICE_SELECTION_FILE);
+  const filePath = trusted ? current : join(infra, SERVICE_SELECTION_FILE);
+  if (!existsSync(filePath)) {
+    if (trusted) throw new Error("Malformed trusted service selection");
+    return null;
+  }
 
   const raw = JSON.parse(readFileSync(filePath, "utf-8")) as { selected?: unknown };
   if (!Array.isArray(raw.selected)) {
@@ -27,6 +32,24 @@ function readSelectionFile(rootDir: string): string[] | null {
   }
 
   return normalizeServiceIds(raw.selected);
+}
+
+function hasTrustedSelection(rootDir: string): boolean {
+  const infra = join(rootDir, "infra", "docker");
+  const current = join(infra, ".trusted-config-current");
+  try {
+    const stats = lstatSync(current);
+    if (!stats.isSymbolicLink()) throw new Error("Malformed trusted service selection pointer");
+    const target = readlinkSync(current);
+    if (!/^\.trusted-config-generations\/cfg1_[A-Za-z0-9_-]{43}$/.test(target)) throw new Error();
+    const absolute = resolve(infra, target);
+    if (!absolute.startsWith(`${resolve(infra, ".trusted-config-generations")}/`))
+      throw new Error();
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw new Error("Malformed trusted service selection pointer");
+  }
 }
 
 export async function initServiceRegistry(): Promise<void> {
@@ -37,18 +60,24 @@ export async function initServiceRegistry(): Promise<void> {
   await registry.load();
   const envSelection = parseServiceIdList(process.env[SERVICE_SELECTION_ENV]);
   let fileSelection: string[] | null = null;
-  if (envSelection === null) {
+  const trustedSelection = hasTrustedSelection(rootDir);
+  if (trustedSelection || envSelection === null) {
     try {
-      fileSelection = readSelectionFile(rootDir);
+      fileSelection = readSelectionFile(rootDir, trustedSelection);
     } catch (error) {
+      if (trustedSelection) throw error;
       warnings.push((error as Error).message);
     }
   }
+  if (trustedSelection && fileSelection === null) {
+    throw new Error("Malformed trusted service selection");
+  }
   const selection = expandServiceSelection(
     registry.list(),
-    envSelection ?? fileSelection ?? DEFAULT_SELECTED_SERVICE_IDS,
+    (trustedSelection ? fileSelection : (envSelection ?? fileSelection)) ??
+      DEFAULT_SELECTED_SERVICE_IDS,
     {
-      allowMissingSelected: envSelection === null && fileSelection === null,
+      allowMissingSelected: !trustedSelection && envSelection === null && fileSelection === null,
     },
   );
   if (selection.missingIds.length > 0) {

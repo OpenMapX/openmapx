@@ -1,9 +1,6 @@
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { createInterface } from "node:readline";
-import { services as coreServices, findRepoRoot, repoPaths } from "@openmapx/core/server";
-import type { JobContext } from "./job-runner";
+import { existsSync, lstatSync, readFileSync, readlinkSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { services as coreServices, repoPaths } from "@openmapx/core/server";
 
 const {
   DEFAULT_SELECTED_SERVICE_IDS,
@@ -14,7 +11,6 @@ const {
 } = coreServices;
 
 const SERVICE_SELECTION_FILE = "service-selection.json";
-const BACKUPS_DIR = "backups";
 // Leading char must be alphanumeric: this rejects "." / ".." (path traversal
 // when the name is joined into the backups directory) and leading-dash names
 // (argument-injection-shaped when forwarded as a CLI argv element). Mirrors the
@@ -33,45 +29,41 @@ export interface ServiceSelectionSummary {
   selectionFilePath: string;
 }
 
-export interface ListedBackupSummary {
-  name: string;
-  /**
-   * For successfully-readable backups this is the manifest's createdAt.
-   * For corrupt entries (no/malformed manifest.json) we substitute the
-   * directory's filesystem mtime so the row can still sort sensibly.
-   */
-  createdAt: string;
-  openmapxVersion?: string;
-  services: number;
-  volumes: number;
-  totalBytes: number;
-  /**
-   * True when the backup directory exists but the manifest is missing or
-   * malformed. Corrupt entries can be deleted (the directory still exists)
-   * but cannot be restored from. Surfaced to the admin UI so operators can
-   * see + clean them up instead of having them silently disappear.
-   */
-  corrupt?: boolean;
-  corruptReason?: string;
-}
-
-interface BackupManifest {
-  name: string;
-  createdAt: string;
-  openmapxVersion?: string;
-  services: Array<{
-    id: string;
-    volumes: Array<{ name: string; file: string; mode: "tar" | "pg_dump"; sizeBytes: number }>;
-  }>;
+function trustedSelectionFilePath(rootDir?: string): string | null {
+  const infraDir = repoPaths(rootDir).infraDir;
+  const current = join(infraDir, ".trusted-config-current");
+  let stats: ReturnType<typeof lstatSync>;
+  try {
+    stats = lstatSync(current);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  if (!stats.isSymbolicLink()) throw new Error("Malformed trusted service selection pointer");
+  const target = readlinkSync(current);
+  if (!/^\.trusted-config-generations\/cfg1_[A-Za-z0-9_-]{43}$/.test(target)) {
+    throw new Error("Malformed trusted service selection pointer");
+  }
+  const absolute = resolve(infraDir, target);
+  if (!absolute.startsWith(`${resolve(infraDir, ".trusted-config-generations")}/`)) {
+    throw new Error("Malformed trusted service selection pointer");
+  }
+  return join(current, SERVICE_SELECTION_FILE);
 }
 
 function selectionFilePath(rootDir?: string): string {
-  return join(repoPaths(rootDir).infraDir, SERVICE_SELECTION_FILE);
+  return (
+    trustedSelectionFilePath(rootDir) ?? join(repoPaths(rootDir).infraDir, SERVICE_SELECTION_FILE)
+  );
 }
 
 function readSelectionFile(rootDir?: string): string[] | null {
+  const trusted = trustedSelectionFilePath(rootDir);
   const path = selectionFilePath(rootDir);
-  if (!existsSync(path)) return null;
+  if (!existsSync(path)) {
+    if (trusted) throw new Error("Malformed trusted service selection");
+    return null;
+  }
   const raw = JSON.parse(readFileSync(path, "utf-8")) as { selected?: unknown };
   if (!Array.isArray(raw.selected)) {
     throw new Error(`Malformed service selection file at ${path}: expected "selected" array`);
@@ -82,12 +74,27 @@ function readSelectionFile(rootDir?: string): string[] | null {
 export function getServiceSelectionSummary(
   registry: InstanceType<typeof coreServices.ServiceRegistry>,
   rootDir?: string,
+  authoritativeRoots?: string[],
 ): ServiceSelectionSummary {
+  const trustedCurrentExists = trustedSelectionFilePath(rootDir) !== null;
   const envSelection = parseServiceIdList(process.env[SERVICE_SELECTION_ENV]);
-  const fileSelection = envSelection === null ? readSelectionFile(rootDir) : null;
+  const fileSelection =
+    authoritativeRoots ??
+    (trustedCurrentExists || envSelection === null ? readSelectionFile(rootDir) : null);
   const source: ServiceSelectionSummary["source"] =
-    envSelection !== null ? "env" : fileSelection !== null ? "file" : "default";
-  const selectedRoots = envSelection ?? fileSelection ?? [...DEFAULT_SELECTED_SERVICE_IDS];
+    authoritativeRoots !== undefined
+      ? "file"
+      : trustedCurrentExists
+        ? "file"
+        : envSelection !== null
+          ? "env"
+          : fileSelection !== null
+            ? "file"
+            : "default";
+  const selectedRoots = authoritativeRoots ??
+    (trustedCurrentExists ? fileSelection : (envSelection ?? fileSelection)) ?? [
+      ...DEFAULT_SELECTED_SERVICE_IDS,
+    ];
   const selection = expandServiceSelection(registry.list(), selectedRoots, {
     allowMissingSelected: source === "default",
   });
@@ -107,8 +114,12 @@ export function getServiceSelectionSummary(
 export function validateServiceSelectionForWrite(
   registry: InstanceType<typeof coreServices.ServiceRegistry>,
   selected: string[],
+  options: { allowBakedEnvironment?: boolean } = {},
 ): { normalized: string[]; warnings: string[]; missingIds: string[] } {
-  if (parseServiceIdList(process.env[SERVICE_SELECTION_ENV]) !== null) {
+  if (
+    !options.allowBakedEnvironment &&
+    parseServiceIdList(process.env[SERVICE_SELECTION_ENV]) !== null
+  ) {
     throw new Error(
       `${SERVICE_SELECTION_ENV} is set; unset it before editing ${SERVICE_SELECTION_FILE}`,
     );
@@ -123,191 +134,8 @@ export function validateServiceSelectionForWrite(
   return { normalized, warnings: selection.warnings, missingIds: selection.missingIds };
 }
 
-export function writeServiceSelection(normalizedSelected: string[], rootDir?: string): string {
-  const path = selectionFilePath(rootDir);
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, JSON.stringify({ selected: normalizedSelected }, null, 2), "utf-8");
-  return path;
-}
-
-function backupsRoot(rootDir?: string): string {
-  return join(repoPaths(rootDir).infraDir, BACKUPS_DIR);
-}
-
-function readBackupManifest(path: string): BackupManifest {
-  const raw = JSON.parse(readFileSync(path, "utf-8")) as Partial<BackupManifest>;
-  if (
-    !raw ||
-    typeof raw.name !== "string" ||
-    typeof raw.createdAt !== "string" ||
-    !Array.isArray(raw.services)
-  ) {
-    throw new Error(`Malformed backup manifest at ${path}`);
-  }
-  return raw as BackupManifest;
-}
-
-export function listBackupSummaries(rootDir?: string): {
-  backups: ListedBackupSummary[];
-  warnings: string[];
-  root: string;
-} {
-  const root = backupsRoot(rootDir);
-  const warnings: string[] = [];
-  if (!existsSync(root)) return { backups: [], warnings, root };
-
-  const backups: ListedBackupSummary[] = [];
-  for (const entry of readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const dirPath = join(root, entry.name);
-    const manifestPath = join(dirPath, "manifest.json");
-    if (!existsSync(manifestPath)) {
-      backups.push(makeCorruptSummary(dirPath, entry.name, "no manifest.json"));
-      continue;
-    }
-    try {
-      const manifest = readBackupManifest(manifestPath);
-      const volumes = manifest.services.reduce((n, svc) => n + svc.volumes.length, 0);
-      const totalBytes = manifest.services
-        .flatMap((svc) => svc.volumes.map((vol) => vol.sizeBytes ?? 0))
-        .reduce((a, b) => a + b, 0);
-      backups.push({
-        name: entry.name,
-        createdAt: manifest.createdAt,
-        openmapxVersion: manifest.openmapxVersion,
-        services: manifest.services.length,
-        volumes,
-        totalBytes,
-      });
-    } catch (err) {
-      backups.push(makeCorruptSummary(dirPath, entry.name, (err as Error).message));
-    }
-  }
-
-  backups.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  return { backups, warnings, root };
-}
-
-function makeCorruptSummary(dirPath: string, name: string, reason: string): ListedBackupSummary {
-  let createdAt = new Date(0).toISOString();
-  try {
-    createdAt = statSync(dirPath).mtime.toISOString();
-  } catch {
-    // Directory disappeared between readdir and stat — keep the epoch-zero
-    // sentinel so the row at least renders.
-  }
-  return {
-    name,
-    createdAt,
-    services: 0,
-    volumes: 0,
-    totalBytes: 0,
-    corrupt: true,
-    corruptReason: reason,
-  };
-}
-
 export function assertValidBackupName(name: string): void {
-  if (!BACKUP_NAME_RE.test(name)) {
+  if (name.length > 128 || !BACKUP_NAME_RE.test(name)) {
     throw new Error(`Invalid backup name "${name}"`);
-  }
-}
-
-/**
- * Spawn the OpenMapX CLI from the monorepo and mirror output into job logs.
- * This keeps admin operations behaviour aligned with existing CLI workflows.
- *
- * We invoke the CLI through tsx (a workspace dep of packages/cli) rather
- * than `node --experimental-strip-types` directly: Node's strip-types
- * loader requires explicit `.ts`/`.js` extensions on every relative
- * import, which the CLI source doesn't have, so the equivalent node
- * invocation aborts with ERR_MODULE_NOT_FOUND on the first
- * `import "./commands/backup"` line. tsx mirrors what `pnpm openmapx`
- * uses on the host.
- */
-export async function runOpenmapxCliJobCommand(ctx: JobContext, args: string[]): Promise<void> {
-  const rootDir = findRepoRoot();
-  const cliEntry = join(rootDir, "packages", "cli", "src", "index.ts");
-  if (!existsSync(cliEntry)) {
-    throw new Error(`CLI entry not found at ${cliEntry}`);
-  }
-
-  // tsx is a regular dependency of packages/cli, so it's always present in
-  // the CLI package's local node_modules whether the install was a pnpm
-  // workspace install on the host or the production install baked into the
-  // app-api Docker image.
-  const tsxBin = join(rootDir, "packages", "cli", "node_modules", ".bin", "tsx");
-  if (!existsSync(tsxBin)) {
-    throw new Error(
-      `tsx not found at ${tsxBin}. Run \`pnpm install\` to populate packages/cli/node_modules.`,
-    );
-  }
-
-  // The CLI imports `@integrations/poi-search` via the tsconfig path alias
-  // declared in packages/cli/tsconfig.json. tsx applies tsconfig paths from
-  // a single tsconfig.json (resolved from cwd by default, and there's no
-  // tsconfig at the repo root), so point it at the CLI's tsconfig
-  // explicitly. Same effect as `pnpm -C packages/cli exec tsx src/index.ts`
-  // on the host.
-  const tsxTsconfig = join(rootDir, "packages", "cli", "tsconfig.json");
-
-  await ctx.log(`$ openmapx ${args.join(" ")}`);
-
-  const child = spawn(tsxBin, ["--tsconfig", tsxTsconfig, cliEntry, ...args], {
-    cwd: rootDir,
-    env: process.env,
-    stdio: ["ignore", "pipe", "pipe"],
-  });
-
-  let logChain: Promise<void> = Promise.resolve();
-  const enqueueLog = (line: string, stream: "stdout" | "stderr") => {
-    if (!line.trim()) return;
-    // Each ctx.log inserts into admin_job_log. If the database is briefly
-    // unreachable — e.g. when this same job is recreating postgis — the
-    // insert rejects with EAI_AGAIN. Without a per-step catch the
-    // rejection propagates through the whole chain (and from there into
-    // an unhandled promise rejection that brings the whole api process
-    // down). A failed log line is recoverable: drop it on the floor with
-    // a console warning and keep the chain alive so subsequent log lines
-    // and the final status update still go through.
-    logChain = logChain.then(() =>
-      ctx.log(line, stream).catch((err) => {
-        console.warn(
-          `[admin-cli] failed to persist job log line: ${err instanceof Error ? err.message : String(err)}`,
-        );
-      }),
-    );
-  };
-
-  const stdout = createInterface({ input: child.stdout });
-  const stderr = createInterface({ input: child.stderr });
-  stdout.on("line", (line) => enqueueLog(line, "stdout"));
-  stderr.on("line", (line) => enqueueLog(line, "stderr"));
-
-  const abortController = () => {
-    if (!child.killed) child.kill("SIGTERM");
-  };
-  ctx.signal.addEventListener("abort", abortController, { once: true });
-
-  const result = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>(
-    (resolve, reject) => {
-      child.on("error", reject);
-      child.on("close", (code, signal) => resolve({ code, signal }));
-    },
-  ).finally(() => {
-    ctx.signal.removeEventListener("abort", abortController);
-  });
-
-  stdout.close();
-  stderr.close();
-  await logChain;
-
-  if (ctx.signal.aborted) {
-    throw new DOMException("Aborted", "AbortError");
-  }
-  if (result.code !== 0) {
-    throw new Error(
-      `openmapx ${args.join(" ")} failed (exit ${result.code ?? "?"}${result.signal ? `, signal ${result.signal}` : ""})`,
-    );
   }
 }

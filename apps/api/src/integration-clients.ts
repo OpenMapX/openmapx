@@ -1,4 +1,8 @@
-import { DEFAULT_FETCH_TIMEOUT_MS } from "@openmapx/core";
+import {
+  DEFAULT_FETCH_JSON_MAX_BYTES,
+  DEFAULT_FETCH_TIMEOUT_MS,
+  readBoundedJsonResponse,
+} from "@openmapx/core";
 import type {
   CacheClient,
   HttpClient,
@@ -8,10 +12,27 @@ import type {
 } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
 import { redis } from "./redis";
+import { BoundedSingleFlight } from "./utils/bounded-single-flight";
 import { httpCacheKey } from "./utils/http-cache-key";
 import { createIntegrationLogger } from "./utils/integration-logger";
 
+const integrationSingleFlight = new BoundedSingleFlight(1_000);
+
+function cacheTtlWithJitter(ttlSeconds: number): number {
+  if (ttlSeconds < 60) return ttlSeconds;
+  return Math.max(1, Math.round(ttlSeconds * (0.9 + Math.random() * 0.2)));
+}
+
 export function createHttpClient(_log: Logger): HttpClient {
+  const signalFor = (options?: HttpClientOptions, operationSignal = options?.signal) => {
+    const timeout = AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS);
+    return operationSignal ? AbortSignal.any([operationSignal, timeout]) : timeout;
+  };
+  const readJson = <T>(response: Response, options?: HttpClientOptions) =>
+    readBoundedJsonResponse<T>(response, {
+      maxBytes: options?.maxResponseBytes ?? DEFAULT_FETCH_JSON_MAX_BYTES,
+      label: "integration HTTP response",
+    });
   return {
     async get<T>(url: string, options?: HttpClientOptions): Promise<T> {
       const u = new URL(url);
@@ -21,31 +42,54 @@ export function createHttpClient(_log: Logger): HttpClient {
         }
       }
 
-      if (options?.cache?.ttl && redis) {
+      if (options?.cache?.ttl) {
         const cacheKey = httpCacheKey(u.toString(), options?.headers);
-        try {
-          const cached = await redis.get(cacheKey);
-          if (cached) return JSON.parse(cached) as T;
-        } catch {
-          // cache miss
+        const cacheTtl = options.cache.ttl;
+        if (redis) {
+          try {
+            const cached = await redis.get(cacheKey);
+            if (cached) {
+              const maxBytes = options.maxResponseBytes ?? DEFAULT_FETCH_JSON_MAX_BYTES;
+              if (Buffer.byteLength(cached, "utf8") <= maxBytes) return JSON.parse(cached) as T;
+            }
+          } catch {
+            // cache miss
+          }
         }
 
-        const res = await fetch(u.toString(), {
-          headers: options?.headers,
-          signal: AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-        const data = (await res.json()) as T;
-        redis.setex(cacheKey, options.cache.ttl, JSON.stringify(data)).catch(() => {});
-        return data;
+        const flightKey = [
+          "http",
+          cacheKey,
+          cacheTtl,
+          options.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS,
+          options.maxResponseBytes ?? DEFAULT_FETCH_JSON_MAX_BYTES,
+        ].join(":");
+        return integrationSingleFlight.run(
+          flightKey,
+          async (flightSignal) => {
+            const res = await fetch(u.toString(), {
+              headers: options?.headers,
+              signal: signalFor(options, flightSignal),
+            });
+            if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
+            const data = await readJson<T>(res, options);
+            if (redis) {
+              await redis
+                .setex(cacheKey, cacheTtlWithJitter(cacheTtl), JSON.stringify(data))
+                .catch(() => {});
+            }
+            return data;
+          },
+          options.signal,
+        );
       }
 
       const res = await fetch(u.toString(), {
         headers: options?.headers,
-        signal: AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS),
+        signal: signalFor(options),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return (await res.json()) as T;
+      return readJson<T>(res, options);
     },
 
     async post<T>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T> {
@@ -53,10 +97,10 @@ export function createHttpClient(_log: Logger): HttpClient {
         method: "POST",
         headers: { "Content-Type": "application/json", ...options?.headers },
         body: body ? JSON.stringify(body) : undefined,
-        signal: AbortSignal.timeout(options?.timeoutMs ?? DEFAULT_FETCH_TIMEOUT_MS),
+        signal: signalFor(options),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
-      return (await res.json()) as T;
+      return readJson<T>(res, options);
     },
   };
 }
@@ -81,20 +125,39 @@ export function createCacheClient(prefix: string): CacheClient {
       if (!redis) return;
       await redis.del(`int:${prefix}:${key}`);
     },
-    async withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
+    async withCache<T>(
+      key: string,
+      ttlSeconds: number,
+      fn: (operationSignal: AbortSignal) => Promise<T>,
+      callerSignal?: AbortSignal,
+      shouldCache?: (value: T) => boolean,
+    ): Promise<T> {
+      const k = `int:${prefix}:${key}`;
       if (redis) {
-        const k = `int:${prefix}:${key}`;
         try {
           const cached = await redis.get(k);
-          if (cached) return JSON.parse(cached) as T;
+          if (cached) {
+            const parsed = JSON.parse(cached) as T;
+            if (shouldCache?.(parsed) ?? true) return parsed;
+            await redis.del(k).catch(() => {});
+          }
         } catch {
           // cache miss
         }
-        const result = await fn();
-        redis.setex(k, ttlSeconds, JSON.stringify(result)).catch(() => {});
-        return result;
       }
-      return fn();
+      return integrationSingleFlight.run(
+        `cache:${k}:${ttlSeconds}`,
+        async (operationSignal) => {
+          const result = await fn(operationSignal);
+          if (redis && (shouldCache?.(result) ?? true)) {
+            await redis
+              .setex(k, cacheTtlWithJitter(ttlSeconds), JSON.stringify(result))
+              .catch(() => {});
+          }
+          return result;
+        },
+        callerSignal,
+      );
     },
   };
 }

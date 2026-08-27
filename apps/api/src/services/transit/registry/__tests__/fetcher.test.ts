@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { emptyResponse, streamedJsonResponse } from "../../../../test/streamed-response.js";
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -26,11 +27,7 @@ const DB_JSON = {
 };
 
 function makeJsonResponse(data: unknown, ok = true): Response {
-  return {
-    ok,
-    status: ok ? 200 : 500,
-    json: () => Promise.resolve(data),
-  } as unknown as Response;
+  return ok ? streamedJsonResponse(data) : emptyResponse();
 }
 
 // JSDelivr listing response — two data entries + one ignored non-JSON

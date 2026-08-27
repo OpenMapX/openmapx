@@ -1,9 +1,14 @@
 import { repoPaths, services } from "@openmapx/core/server";
 import type { FastifyInstance } from "fastify";
 import { applyHardlinksFromPlan, renderAndPersistCompose } from "../services/admin-ops";
+import {
+  createDirectAdminOpsKey,
+  DIRECT_OPS_IDEMPOTENCY_HEADER,
+  parseDirectOpsIdempotency,
+} from "../services/direct-ops-idempotency";
 import { resolveAllServiceConfigs } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
-import { dockerComposeAction } from "../utils/docker-compose";
+import { dockerComposeAction, STACK_STOP_GUIDANCE } from "../utils/docker-compose";
 import { envString } from "../utils/env";
 import { requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
@@ -62,18 +67,28 @@ export async function registerAdminComposeRoutes(
   });
 
   // POST /api/admin/compose/up — bring the whole stack up
-  app.post("/api/admin/compose/up", async (req, _reply) => {
-    await requireAdmin(req);
-    await renderAndPersistCompose();
-    const hardlinks = await applyHardlinksFromPlan();
-    const r = await dockerComposeAction("", "start");
+  app.post("/api/admin/compose/up", async (req, reply) => {
+    const adminSession = await requireAdmin(req);
+    let idempotencyValue: string;
+    try {
+      idempotencyValue = parseDirectOpsIdempotency(req.headers[DIRECT_OPS_IDEMPOTENCY_HEADER]);
+    } catch (error) {
+      reply.code(400);
+      return { ok: false, error: (error as Error).message };
+    }
+    const operationKey = createDirectAdminOpsKey(adminSession.user.id, idempotencyValue);
+    await renderAndPersistCompose({ operationKey });
+    const hardlinks = await applyHardlinksFromPlan({ operationIdentity: operationKey });
+    const r = await dockerComposeAction("", "start", {
+      operationKey,
+    });
     return { ok: r.exitCode === 0, stdout: r.stdout, hardlinks };
   });
 
   // POST /api/admin/compose/down — stop the whole stack
-  app.post("/api/admin/compose/down", async (req, _reply) => {
+  app.post("/api/admin/compose/down", async (req, reply) => {
     await requireAdmin(req);
-    const r = await dockerComposeAction("", "stop");
-    return { ok: r.exitCode === 0, stdout: r.stdout };
+    reply.code(503);
+    return { ok: false, error: STACK_STOP_GUIDANCE };
   });
 }

@@ -42,6 +42,10 @@ vi.mock("../../services/job-runner.js", () => ({
   },
 }));
 
+vi.mock("../../services/trusted-config-operations.js", () => ({
+  applyTrustedConfiguration: vi.fn().mockResolvedValue({ revisionId: "revision_1" }),
+}));
+
 const mockListActivityJobs = vi.fn().mockResolvedValue({ jobs: [], total: 0 });
 const mockGetActivityJob = vi.fn().mockResolvedValue(null);
 vi.mock("../../services/activity-jobs.js", () => ({
@@ -609,6 +613,22 @@ describe("POST /admin/integrations/reload", () => {
     expect(mockWriteAuditLog).toHaveBeenCalledWith(
       expect.objectContaining({ action: "integration.reload.all" }),
     );
+  });
+});
+
+describe("POST /admin/integrations/import", () => {
+  it("reloads integrations after importing configuration", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/integrations/import",
+      payload: {
+        integrations: [{ integrationId: "geocoding-maptiler", config: { enabled: false } }],
+      },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({ ok: true, imported: 1, reloaded: 1 });
+    expect(mockReloadIntegrations).toHaveBeenCalledOnce();
   });
 });
 

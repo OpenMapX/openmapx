@@ -1,6 +1,106 @@
-import type { FastifyError, FastifyReply, FastifyRequest } from "fastify";
-import { envString } from "./utils/env";
+import type {
+  FastifyBaseLogger,
+  FastifyError,
+  FastifyInstance,
+  FastifyReply,
+  FastifyRequest,
+} from "fastify";
+import { LogController } from "fastify";
+import { configuredTrustedWebOrigins } from "./utils/csrf.js";
 import type { RateLimiter } from "./utils/rate-limit.js";
+import { safeErrorClass } from "./utils/safe-log-fields.js";
+
+export function controlledRequestLoggingOptions(loggerInstance: FastifyBaseLogger): {
+  loggerInstance: FastifyBaseLogger;
+  logController: LogController;
+} {
+  return {
+    loggerInstance,
+    logController: new LogController({ disableRequestLogging: true }),
+  };
+}
+
+function controlledRequestId(request: FastifyRequest): string {
+  const requestId = String(request.id);
+  return /^[A-Za-z0-9_-]{1,128}$/.test(requestId) ? requestId : "unknown";
+}
+
+function controlledMethod(request: FastifyRequest): string {
+  return /^[A-Z]{1,16}$/.test(request.method) ? request.method : "OTHER";
+}
+
+function matchedRoutePattern(request: FastifyRequest): string {
+  const route = request.routeOptions?.url;
+  if (
+    typeof route !== "string" ||
+    !route.startsWith("/") ||
+    route.length > 512 ||
+    /[?#\p{Cc}]/u.test(route)
+  ) {
+    return "unmatched";
+  }
+  return route;
+}
+
+export function registerControlledRequestLogging(
+  server: FastifyInstance,
+  options: { now?: () => number } = {},
+): void {
+  const now = options.now ?? (() => performance.now());
+  const starts = new WeakMap<FastifyRequest, number>();
+  const duration = (request: FastifyRequest): number => {
+    const startedAt = starts.get(request) ?? now();
+    return Math.max(0, Math.round((now() - startedAt) * 1_000) / 1_000);
+  };
+
+  server.addHook("onRequest", (request, _reply, done) => {
+    starts.set(request, now());
+    request.log.info(
+      {
+        event: "request.start",
+        requestId: controlledRequestId(request),
+        method: controlledMethod(request),
+      },
+      "Request started",
+    );
+    done();
+  });
+
+  server.addHook("onError", (request, reply, error, done) => {
+    request.log.error(
+      {
+        event: "request.error",
+        requestId: controlledRequestId(request),
+        method: controlledMethod(request),
+        route: matchedRoutePattern(request),
+        statusCode:
+          typeof error.statusCode === "number" && error.statusCode >= 400
+            ? error.statusCode
+            : Math.max(500, reply.statusCode),
+        durationMs: duration(request),
+        errorClass: safeErrorClass(error),
+      },
+      "Request failed",
+    );
+    done();
+  });
+
+  server.addHook("onResponse", (request, reply, done) => {
+    request.log.info(
+      {
+        event: "request.complete",
+        requestId: controlledRequestId(request),
+        method: controlledMethod(request),
+        route: matchedRoutePattern(request),
+        statusCode: reply.statusCode,
+        durationMs: duration(request),
+      },
+      "Request completed",
+    );
+    starts.delete(request);
+    done();
+  });
+}
 
 // Trust proxy hops in front of the API. The default deployment terminates TLS
 // at Traefik (one hop) and forwards to this container, so `request.ip` must be
@@ -31,26 +131,23 @@ export function trustProxyConfig(): number | boolean {
 // via Fastify's default to `{ statusCode, error: "<HTTP phrase>", message }` —
 // but every client reads `body.error` for the human-readable text, so a thrown
 // 401 would show "Unauthorized" instead of "Authentication required". Restore
-// the legacy `{ error: <message> }` shape for 4xx (matching the routes that
-// still send it by hand), and never leak an internal 5xx message.
+// the API's `{ error: <message> }` shape for 4xx (matching routes that send it
+// directly), and never leak an internal 5xx message.
 export function uniformErrorHandler(
   error: FastifyError,
-  request: FastifyRequest,
+  _request: FastifyRequest,
   reply: FastifyReply,
 ) {
   const statusCode = error.statusCode ?? 500;
   if (statusCode >= 500) {
-    request.log.error({ err: error }, "Request error");
     return reply.status(statusCode).send({ error: "Internal Server Error" });
   }
   return reply.status(statusCode).send({ error: error.message });
 }
 
-export function corsOptions() {
+export function corsOptions(trustedWebOrigins: readonly string[] = configuredTrustedWebOrigins()) {
   return {
-    origin: envString("CORS_ORIGIN", "http://localhost:3000")
-      .split(",")
-      .map((o) => o.trim()),
+    origin: [...trustedWebOrigins],
     credentials: true,
     // Browser clients need these response headers when the web app and API are
     // on different origins (the default local-development topology).
@@ -118,6 +215,44 @@ function addVaryHeader(reply: FastifyReply, value: string): void {
   reply.header("Vary", values.join(", "));
 }
 
+export function applyMobileAuthPrivacyHeaders(reply: FastifyReply): void {
+  reply.header("Cache-Control", "no-store");
+  reply.header("Pragma", "no-cache");
+  reply.header("Referrer-Policy", "no-referrer");
+}
+
+export function applyPublicStatusCacheHeaders(reply: FastifyReply): void {
+  reply.header("Cache-Control", "public, max-age=15, stale-while-revalidate=45");
+}
+
+export function applyAdminStatusPrivacyHeaders(reply: FastifyReply): void {
+  reply.header("Cache-Control", "private, no-store");
+  reply.header("Pragma", "no-cache");
+  addVaryHeader(reply, "Cookie");
+}
+
+/**
+ * Installs endpoint-specific response policy before the global rate limiter.
+ * Exact matching prevents privacy headers from becoming an accidental route
+ * classifier for status-like or mobile-auth-like paths.
+ */
+export function makeSecurityResponseHeaderHook() {
+  return (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
+    const path = request.url.split("?", 1)[0];
+    if (
+      request.method === "POST" &&
+      (path === "/api/mobile-auth/issue" || path === "/api/mobile-auth/exchange")
+    ) {
+      applyMobileAuthPrivacyHeaders(reply);
+    } else if (request.method === "GET" && path === "/api/status") {
+      applyPublicStatusCacheHeaders(reply);
+    } else if (request.method === "GET" && path === "/api/admin/status") {
+      applyAdminStatusPrivacyHeaders(reply);
+    }
+    return Promise.resolve();
+  };
+}
+
 export function applyTimelinePrivacyHeaders(reply: FastifyReply): void {
   reply.header("Cache-Control", "private, no-store");
   reply.header("Pragma", "no-cache");
@@ -151,10 +286,24 @@ export function makeTimelineAwareRateLimit(limiter: Pick<RateLimiter, "preHandle
     isTimelineApiRequest(request) ? timelineLimit(request, reply) : defaultLimit(request, reply);
 }
 
+export function makeStatusAwareRateLimit(limiter: Pick<RateLimiter, "preHandler">): Limit {
+  return limiter.preHandler({
+    onLimit: (_request, reply, retryAfterSeconds) => {
+      reply.header("Cache-Control", "private, no-store");
+      reply.header("Pragma", "no-cache");
+      return reply
+        .header("Retry-After", String(retryAfterSeconds))
+        .status(429)
+        .send({ error: "Too many requests", retryAfter: retryAfterSeconds });
+    },
+  });
+}
+
 export interface RateLimitTiers {
   auth: Limit;
   tile: Limit;
   expensive: Limit;
+  status: Limit;
   public: Limit;
 }
 
@@ -172,6 +321,7 @@ export interface RateLimitTiers {
 //   - `/api/auth/*`              → strict (credential stuffing, email spam)
 //   - tile / map asset routes    → generous (bursty, cacheable, CDN-friendly)
 //   - expensive public routes    → tight (Valhalla, MOTIS, geocoding fan-out)
+//   - exactly `GET /api/status`  → 60/minute (dependency snapshot refresh)
 //   - everything else            → broad floor
 export function makeRateLimitTierHook(limits: RateLimitTiers) {
   return async (request: FastifyRequest, reply: FastifyReply) => {
@@ -189,6 +339,11 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
 
     if (url.startsWith("/api/auth/")) {
       await limits.auth(request, reply);
+      return;
+    }
+    const path = url.split("?", 1)[0];
+    if (request.method === "GET" && path === "/api/status") {
+      await limits.status(request, reply);
       return;
     }
     if (TILE_PUBLIC_PATTERNS.some((p) => p.test(url))) {

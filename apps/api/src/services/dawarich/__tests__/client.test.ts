@@ -7,6 +7,7 @@ import { DawarichClient, DawarichClientError, type FetchJsonResponse } from "../
 function response<T>(data: T, headers: Record<string, string> = {}): SafeJsonResponse<T> {
   return {
     data,
+    text: JSON.stringify(data),
     status: 200,
     headers: new Headers(headers),
     finalUrl: "https://fixture.invalid/api",

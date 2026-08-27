@@ -47,6 +47,32 @@ describe("createHttpClient", () => {
     await expect(client.post("https://x.test/slow", { a: 1 }, { timeoutMs: 25 })).rejects.toThrow();
   });
 
+  it("combines caller cancellation with the ordinary client deadline", async () => {
+    let fetchSignal: AbortSignal | undefined;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            fetchSignal = init?.signal ?? undefined;
+            init?.signal?.addEventListener("abort", () => reject(init.signal?.reason), {
+              once: true,
+            });
+          }),
+      ),
+    );
+    const controller = new AbortController();
+    const work = createHttpClient(createNoopLogger()).get("https://x.test/slow", {
+      signal: controller.signal,
+      timeoutMs: 10_000,
+    });
+
+    controller.abort();
+
+    await expect(work).rejects.toThrow();
+    expect(fetchSignal?.aborted).toBe(true);
+  });
+
   it("always attaches a default abort signal on GET", async () => {
     const fn = vi.fn((_url: string, _init?: RequestInit) => jsonResponse({ ok: true }));
     vi.stubGlobal("fetch", fn);
@@ -54,6 +80,39 @@ describe("createHttpClient", () => {
     await client.get("https://x.test/data");
     const init = fn.mock.calls[0][1] as RequestInit;
     expect(init.signal).toBeInstanceOf(AbortSignal);
+  });
+
+  it("rejects declared and streamed JSON bodies above the operation limit", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response("{}", {
+            headers: { "Content-Type": "application/json", "Content-Length": "100" },
+          }),
+        )
+        .mockResolvedValueOnce(jsonResponse({ value: "x".repeat(100) })),
+    );
+    const client = createHttpClient(createNoopLogger());
+
+    await expect(client.get("https://x.test/declared", { maxResponseBytes: 10 })).rejects.toThrow(
+      /too large/i,
+    );
+    await expect(
+      client.post("https://x.test/streamed", undefined, { maxResponseBytes: 10 }),
+    ).rejects.toThrow(/too large/i);
+  });
+
+  it("rejects a successful non-JSON response", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () => new Response("<html>not json</html>", { headers: { "Content-Type": "text/html" } }),
+      ),
+    );
+    const client = createHttpClient(createNoopLogger());
+    await expect(client.get("https://x.test/data")).rejects.toThrow(/content type/i);
   });
 
   it("always attaches a default abort signal on POST", async () => {

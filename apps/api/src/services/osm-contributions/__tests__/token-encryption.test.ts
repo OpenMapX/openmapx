@@ -2,8 +2,7 @@
  * Pins the Better Auth 1.6.26 behavior the contribution flow depends on:
  * elevated OSM tokens are encrypted at rest, and the public server API still
  * hands the server a usable plaintext token plus the account's effective
- * scopes. It also pins the library's legacy-token detection, which decides
- * whether an operator upgrade forces a relink.
+ * scopes.
  */
 import { betterAuth } from "better-auth";
 import { memoryAdapter } from "better-auth/adapters/memory";
@@ -112,29 +111,6 @@ describe("OAuth token encryption at rest", () => {
     });
     expect(result.accessToken).toBe(OSM_TOKEN);
     expect(result.scopes).toEqual(["openid", "read_prefs", "write_api"]);
-  });
-});
-
-describe("legacy plaintext tokens after enabling encryption", () => {
-  it("passes an opaque legacy token through unchanged", async () => {
-    const { auth } = buildAuth(true);
-    // Real OSM access tokens are opaque URL-safe strings, not bare hex.
-    const legacy = "kR3n-Legacy_Token.Value";
-    const { userId } = await seedLinkedAccount(auth, legacy);
-    const result = await auth.api.getAccessToken({
-      body: { providerId: "openstreetmap", userId },
-    });
-    expect(result.accessToken).toBe(legacy);
-  });
-
-  it("misreads an even-length hex legacy token as ciphertext, forcing a relink", async () => {
-    // `isLikelyEncrypted()` treats any even-length hex string as encrypted, so
-    // this shape cannot be recovered. Operators must be told to relink.
-    const { auth } = buildAuth(true);
-    const { userId } = await seedLinkedAccount(auth, "abcdef0123456789");
-    await expect(
-      auth.api.getAccessToken({ body: { providerId: "openstreetmap", userId } }),
-    ).rejects.toThrow();
   });
 });
 

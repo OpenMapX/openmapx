@@ -10,6 +10,16 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "nod
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  getRuntimeContext as getEvRuntimeContext,
+  initRuntime as initEvRuntime,
+} from "@integrations/ev-charging/runtime.js";
+import {
+  getRuntimeContext as getParkingRuntimeContext,
+  initRuntime as initParkingRuntime,
+} from "@integrations/parking/runtime.js";
+import type { IntegrationContext } from "@openmapx/integration-framework";
+import { getPlaceResolver, registerPlaceResolver } from "@openmapx/place-ids";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -100,7 +110,10 @@ vi.mock("./utils/require-auth.js", () => ({
 }));
 
 vi.mock("@openmapx/poi-source-registry", () => ({
+  beginPoiSourceRegistryStaging: vi.fn(),
+  commitPoiSourceRegistryStaging: vi.fn(),
   registerPoiSources: vi.fn(),
+  rollbackPoiSourceRegistryStaging: vi.fn(),
 }));
 
 import {
@@ -111,6 +124,7 @@ import {
   shutdownIntegrations,
 } from "./integration-host.js";
 import { isSecretsConfigured } from "./services/secrets.js";
+import { resolveRequiresForIntegration } from "./services/service-registry.js";
 
 // Helper: build a minimal Fastify instance suitable for testing.
 function makeApp(): FastifyInstance {
@@ -148,6 +162,56 @@ describe("initIntegrations — loader", () => {
     const ids = all.map((i) => i.id);
     expect(ids).toContain("alpha");
     expect(ids).toContain("beta");
+  });
+
+  it("never imports a community backend bundle into the privileged API process", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-untrusted-backend-"));
+    const integrationDir = join(parent, "untrusted-backend");
+    const bundleDir = join(integrationDir, "dist", "backend");
+    const frontendBundleDir = join(integrationDir, "dist", "frontend");
+    const g = globalThis as Record<string, unknown>;
+    mkdirSync(bundleDir, { recursive: true });
+    mkdirSync(frontendBundleDir, { recursive: true });
+    writeFileSync(
+      join(integrationDir, "manifest.json"),
+      JSON.stringify({
+        id: "untrusted-backend",
+        version: "1.0.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        backend: { routes: true },
+        quality: "community",
+      }),
+    );
+    writeFileSync(
+      join(bundleDir, "index.mjs"),
+      [
+        "globalThis.__untrustedBackendExecuted = true;",
+        "export function setup(ctx) {",
+        '  ctx.registerRoute("GET", "/owned", (_request, reply) => reply.send({ owned: true }));',
+        "}",
+      ].join("\n"),
+    );
+    writeFileSync(join(frontendBundleDir, "index.js"), "globalThis.owned = true;");
+
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: false }]);
+      expect(g.__untrustedBackendExecuted).toBeUndefined();
+      expect(getIntegration("untrusted-backend")).toBeDefined();
+      expect(getIntegration("untrusted-backend")?.blockedCode).toBe(true);
+      expect((await app.inject("/api/integrations/untrusted-backend/owned")).statusCode).toBe(404);
+      expect(
+        (await app.inject("/api/integrations/untrusted-backend/bundle/index.js")).statusCode,
+      ).toBe(404);
+
+      await reloadIntegrations();
+      expect(g.__untrustedBackendExecuted).toBeUndefined();
+      expect(getIntegration("untrusted-backend")?.blockedCode).toBe(true);
+    } finally {
+      delete g.__untrustedBackendExecuted;
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 
   it("getIntegration returns the loaded alpha integration", async () => {
@@ -224,6 +288,24 @@ describe("initIntegrations — route dispatch", () => {
   beforeEach(async () => {
     app = makeApp();
     await initIntegrations(app, [FIXTURES_DIR]);
+  });
+
+  it("publishes a cache revision and honors conditional metadata requests", async () => {
+    const first = await app.inject({ method: "GET", url: "/api/integrations" });
+
+    expect(first.statusCode).toBe(200);
+    expect(first.json().revision).toMatch(/^[a-f0-9]{64}$/);
+    expect(first.headers.etag).toBe(`"${first.json().revision}"`);
+    expect(first.headers["cache-control"]).toBe("private, no-cache");
+
+    const unchanged = await app.inject({
+      method: "GET",
+      url: "/api/integrations",
+      headers: { "if-none-match": first.headers.etag as string },
+    });
+
+    expect(unchanged.statusCode).toBe(304);
+    expect(unchanged.body).toBe("");
   });
 
   it("dispatches GET /api/integrations/alpha/hello → 200 with fixture payload", async () => {
@@ -434,18 +516,14 @@ describe("shutdownIntegrations", () => {
   });
 });
 
-// Regression guard for the prod cache-bust: a store update of a community
-// integration whose bundle path is unchanged must take effect on reload WITHOUT
-// restarting app-api. Runs under NODE_ENV=production specifically — the old
-// behavior skipped cache-busting in prod, so the re-import returned the stale
-// module and this test would fail.
+// Regression guard for the dynamic-import cache-bust used by trusted built-in
+// backend code during an in-process reload.
 describe("reloadIntegrations — re-imports changed backend code in production", () => {
-  it("picks up a rewritten community bundle on reload (no restart)", async () => {
+  it("picks up rewritten trusted backend code on reload (no restart)", async () => {
     const prevEnv = process.env.NODE_ENV;
     const parent = mkdtempSync(join(tmpdir(), "omx-reload-probe-"));
     const intgDir = join(parent, "reload-probe");
-    const bundleDir = join(intgDir, "dist", "backend");
-    mkdirSync(bundleDir, { recursive: true });
+    mkdirSync(intgDir, { recursive: true });
     writeFileSync(
       join(intgDir, "manifest.json"),
       JSON.stringify({
@@ -454,10 +532,10 @@ describe("reloadIntegrations — re-imports changed backend code in production",
         license: "MIT",
         domains: ["knowledge"],
         backend: { routes: false },
-        quality: "community-verified",
+        quality: "built-in",
       }),
     );
-    const bundleFile = join(bundleDir, "index.mjs");
+    const bundleFile = join(intgDir, "index.js");
     // Marker is set at MODULE EVALUATION time, so it only changes if the module
     // is actually re-imported (a fresh URL) — not merely re-`setup()`-ed.
     const writeBundle = (marker: string) =>
@@ -472,7 +550,7 @@ describe("reloadIntegrations — re-imports changed backend code in production",
       process.env.NODE_ENV = "production";
 
       writeBundle("v1");
-      await initIntegrations(app, [{ directory: parent, isBuiltIn: false }]);
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
       expect(g.__reloadProbeVersion).toBe("v1");
 
       // Rewrite the bundle. Different content AND length so the mtime+size key
@@ -495,8 +573,8 @@ describe("reloadIntegrations — re-imports changed backend code in production",
 describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
   function writeGateFixture(): string {
     const parent = mkdtempSync(join(tmpdir(), "omx-gate-probe-"));
-    const bundleDir = join(parent, "gate-probe", "dist", "backend");
-    mkdirSync(bundleDir, { recursive: true });
+    const integrationDir = join(parent, "gate-probe");
+    mkdirSync(integrationDir, { recursive: true });
     writeFileSync(
       join(parent, "gate-probe", "manifest.json"),
       JSON.stringify({
@@ -505,15 +583,15 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
         license: "MIT",
         domains: ["knowledge"],
         backend: { routes: false },
-        quality: "community-verified",
+        quality: "built-in",
       }),
     );
     // Parks inside setup() only when armed; the setup count advances after the
     // park so each reload pass that runs gate-probe is observable.
     writeFileSync(
-      join(bundleDir, "index.mjs"),
+      join(integrationDir, "index.js"),
       [
-        "export async function setup() {",
+        "export async function setup(ctx) {",
         "  const g = globalThis;",
         "  if (g.__omxGateArmed) {",
         "    g.__omxGateArmed = false;",
@@ -523,6 +601,9 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
         "    });",
         "  }",
         "  g.__omxGateSetupCount = (g.__omxGateSetupCount ?? 0) + 1;",
+        "  ctx.onShutdown(async () => {",
+        "    g.__omxGateShutdownCount = (g.__omxGateShutdownCount ?? 0) + 1;",
+        "  });",
         "}",
         "",
       ].join("\n"),
@@ -530,12 +611,71 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
     return parent;
   }
 
+  function writeProcessStateFixture(): string {
+    const parent = mkdtempSync(join(tmpdir(), "omx-process-state-probe-"));
+    const integrationDir = join(parent, "process-state-probe");
+    mkdirSync(integrationDir, { recursive: true });
+    writeFileSync(
+      join(integrationDir, "manifest.json"),
+      JSON.stringify({
+        id: "process-state-probe",
+        version: "1.0.0",
+        license: "MIT",
+        domains: ["knowledge"],
+        backend: { routes: false },
+        quality: "built-in",
+      }),
+    );
+    writeFileSync(
+      join(integrationDir, "index.js"),
+      [
+        "export async function setup(ctx) {",
+        "  const g = globalThis;",
+        "  if (typeof g.__omxProcessStateSetup === 'function') g.__omxProcessStateSetup(ctx);",
+        "  if (g.__omxProcessStateFail) throw new Error('injected process-state failure');",
+        "  if (g.__omxProcessStateGateArmed) {",
+        "    g.__omxProcessStateGateArmed = false;",
+        "    await new Promise((resolve) => {",
+        "      g.__omxProcessStateRelease = resolve;",
+        "      if (typeof g.__omxProcessStateEntered === 'function') g.__omxProcessStateEntered();",
+        "    });",
+        "  }",
+        "}",
+        "",
+      ].join("\n"),
+    );
+    return parent;
+  }
+
+  function installProcessStateProbe(g: Record<string, unknown>): () => number {
+    let generation = 0;
+    g.__omxProcessStateSetup = (ctx: IntegrationContext) => {
+      generation += 1;
+      const registeredGeneration = generation;
+      const generationContext = {
+        ...ctx,
+        id: `process-state-generation-${registeredGeneration}`,
+      } as IntegrationContext;
+      initParkingRuntime(generationContext);
+      initEvRuntime(generationContext);
+      registerPlaceResolver("process-state-probe", async () => registeredGeneration);
+      ctx.onActivate(() => {
+        g.__omxActiveProcessStateGeneration = registeredGeneration;
+      });
+    };
+    return () => generation;
+  }
+
+  async function resolvedProcessStateGeneration(): Promise<number | null | undefined> {
+    return getPlaceResolver<number>("process-state-probe")?.("value", {});
+  }
+
   it("never exposes an empty/partial registry mid-reload and coalesces N callers into one trailing pass", async () => {
     const parent = writeGateFixture();
     const g = globalThis as Record<string, unknown>;
     const app = makeApp();
     try {
-      await initIntegrations(app, [FIXTURES_DIR, { directory: parent, isBuiltIn: false }]);
+      await initIntegrations(app, [FIXTURES_DIR, { directory: parent, isBuiltIn: true }]);
       expect(g.__omxGateSetupCount).toBe(1);
 
       // Arm so the next reload parks inside gate-probe's setup, mid-rebuild.
@@ -553,12 +693,22 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
       expect(midIds).toContain("alpha");
       expect(midIds).toContain("beta");
       expect(midIds).toContain("gate-probe");
+      expect(g.__omxGateShutdownCount ?? 0).toBe(0);
+
+      const midResponse = await app.inject({
+        method: "GET",
+        url: "/api/integrations/alpha/hello",
+      });
+      expect(midResponse.statusCode).toBe(200);
+      expect(midResponse.json()).toMatchObject({ integration: "alpha" });
 
       // Two more callers arriving during the in-flight pass share ONE trailing pass.
       const p2 = reloadIntegrations();
       const p3 = reloadIntegrations();
 
-      (g.__omxGateRelease as () => void)();
+      const release = g.__omxGateRelease as () => void;
+      delete g.__omxGateRelease;
+      release();
       const results = await Promise.all([p1, p2, p3]);
       for (const r of results) expect(r.message).toBe("Integrations reloaded");
 
@@ -571,10 +721,142 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
       expect(finalIds).toContain("beta");
       expect(finalIds).toContain("gate-probe");
     } finally {
+      if (typeof g.__omxGateRelease === "function") {
+        (g.__omxGateRelease as () => void)();
+        await Promise.allSettled([reloadIntegrations()]);
+      }
       delete g.__omxGateArmed;
       delete g.__omxGateRelease;
       delete g.__omxGateEntered;
       delete g.__omxGateSetupCount;
+      delete g.__omxGateShutdownCount;
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps place resolvers and parking/EV contexts on the old generation until commit", async () => {
+    const parent = writeProcessStateFixture();
+    const g = globalThis as Record<string, unknown>;
+    const app = makeApp();
+    const currentGeneration = installProcessStateProbe(g);
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(currentGeneration()).toBe(1);
+      expect(await resolvedProcessStateGeneration()).toBe(1);
+      expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
+      expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
+      expect(g.__omxActiveProcessStateGeneration).toBe(1);
+
+      g.__omxProcessStateGateArmed = true;
+      const entered = new Promise<void>((resolve) => {
+        g.__omxProcessStateEntered = resolve;
+      });
+      const reload = reloadIntegrations();
+      await entered;
+
+      expect(currentGeneration()).toBe(2);
+      expect(await resolvedProcessStateGeneration()).toBe(1);
+      expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
+      expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
+      expect(g.__omxActiveProcessStateGeneration).toBe(1);
+
+      (g.__omxProcessStateRelease as () => void)();
+      delete g.__omxProcessStateRelease;
+      await reload;
+
+      expect(await resolvedProcessStateGeneration()).toBe(2);
+      expect(getParkingRuntimeContext().id).toBe("process-state-generation-2");
+      expect(getEvRuntimeContext().id).toBe("process-state-generation-2");
+      expect(g.__omxActiveProcessStateGeneration).toBe(2);
+    } finally {
+      if (typeof g.__omxProcessStateRelease === "function") {
+        (g.__omxProcessStateRelease as () => void)();
+      }
+      delete g.__omxProcessStateSetup;
+      delete g.__omxProcessStateGateArmed;
+      delete g.__omxProcessStateEntered;
+      delete g.__omxProcessStateRelease;
+      delete g.__omxProcessStateFail;
+      delete g.__omxActiveProcessStateGeneration;
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("rolls back staged place resolvers and parking/EV contexts after setup fails", async () => {
+    const parent = writeProcessStateFixture();
+    const g = globalThis as Record<string, unknown>;
+    const app = makeApp();
+    const currentGeneration = installProcessStateProbe(g);
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      g.__omxProcessStateFail = true;
+
+      await expect(reloadIntegrations()).rejects.toThrow("injected process-state failure");
+
+      expect(currentGeneration()).toBe(2);
+      expect(await resolvedProcessStateGeneration()).toBe(1);
+      expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
+      expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
+      expect(g.__omxActiveProcessStateGeneration).toBe(1);
+    } finally {
+      delete g.__omxProcessStateSetup;
+      delete g.__omxProcessStateGateArmed;
+      delete g.__omxProcessStateEntered;
+      delete g.__omxProcessStateRelease;
+      delete g.__omxProcessStateFail;
+      delete g.__omxActiveProcessStateGeneration;
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("keeps the complete old graph active when staging fails before provider setup", async () => {
+    const app = makeApp();
+    await initIntegrations(app, [FIXTURES_DIR]);
+    const before = getAllIntegrations().map((integration) => integration.id);
+    vi.mocked(resolveRequiresForIntegration).mockImplementationOnce(() => {
+      throw new Error("injected staging failure");
+    });
+
+    await expect(reloadIntegrations()).rejects.toThrow("injected staging failure");
+
+    expect(getAllIntegrations().map((integration) => integration.id)).toEqual(before);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/integrations/alpha/hello",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ integration: "alpha" });
+  });
+
+  it("rejects an invalid staged manifest without retiring the valid old generation", async () => {
+    const parent = writeGateFixture();
+    const manifestPath = join(parent, "gate-probe", "manifest.json");
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [FIXTURES_DIR, { directory: parent, isBuiltIn: true }]);
+      expect(getIntegration("gate-probe")).toBeDefined();
+
+      writeFileSync(
+        manifestPath,
+        JSON.stringify({
+          id: "gate-probe",
+          version: 7,
+          license: "MIT",
+          domains: ["knowledge"],
+          quality: "built-in",
+        }),
+      );
+
+      await expect(reloadIntegrations()).rejects.toThrow("manifest validation failed");
+
+      expect(getIntegration("gate-probe")).toBeDefined();
+      const response = await app.inject({
+        method: "GET",
+        url: "/api/integrations/alpha/hello",
+      });
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ integration: "alpha" });
+    } finally {
       rmSync(parent, { recursive: true, force: true });
     }
   });
