@@ -129,7 +129,7 @@
     "opening_hours": "^3.14.0",
     "react": "19.2.8",
     "tz-lookup": "^6.1.25",
-    "undici": "8.9.0",
+    "undici": "8.10.0",
     "zod": "^4.4.3",
     "zustand": "^5.0.15"
   }
