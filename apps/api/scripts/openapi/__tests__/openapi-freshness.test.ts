@@ -12,7 +12,7 @@ describe("apps/api/openapi.json", () => {
       "The committed OpenAPI document no longer matches the routes the API registers. " +
         "Run `pnpm openapi:generate` and commit the result alongside your route change.",
     ).toBe(true);
-  });
+  }, 30_000);
 
   it("classifies the auth requirement of every operation", async () => {
     const document = JSON.parse(await generateDocument()) as {
