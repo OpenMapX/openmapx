@@ -20,6 +20,7 @@ describe("Docker release trust gate", () => {
     expect(release).not.toContain("workflow_dispatch:");
     expect(ci).toMatch(/^ {2}release:\n/m);
     expect(ci).toContain("needs: ci");
+    expect(ci).toContain("if: always() && needs.ci.result == 'success'");
     expect(ci).toContain("needs.ci.result == 'success'");
     expect(ci).toContain("github.event_name == 'push'");
     expect(ci).toContain("github.ref == 'refs/heads/main'");

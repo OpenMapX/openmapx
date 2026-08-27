@@ -529,7 +529,10 @@ jobs:
   release:
     name: build, scan, and publish Docker release
     needs: ci
-    if: needs.ci.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # The aggregate gate intentionally depends on PR-only Docker jobs, which
+    # are skipped on pushes. Force evaluation past GitHub's transitive skipped-
+    # dependency propagation, then admit only a successful trusted main push.
+    if: always() && needs.ci.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
