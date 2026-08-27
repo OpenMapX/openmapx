@@ -26,8 +26,9 @@ function shellScope(options: { transport?: boolean } = {}) {
   const deliver = (detail: unknown) =>
     handlers.get("openmapx:native")?.({ detail } as unknown as Event);
   const fire = (type: string) => handlers.get(type)?.({} as Event);
+  const isListening = (type: string) => handlers.has(type);
 
-  return { scope, sent, deliver, fire };
+  return { scope, sent, deliver, fire, isListening };
 }
 
 function helloReply(forMessageId: string, overrides: Record<string, unknown> = {}) {
@@ -374,6 +375,7 @@ describe("MobileRuntimeProvider store integration", () => {
     mount(shell.scope);
     deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
+    await waitFor(() => expect(shell.isListening("visibilitychange")).toBe(true));
     shell.sent.length = 0;
 
     shell.fire("visibilitychange");
@@ -387,6 +389,7 @@ describe("MobileRuntimeProvider store integration", () => {
     mount(shell.scope);
     deliverHello(shell);
     await waitFor(() => expect(text("state")).toBe("native-compatible"));
+    await waitFor(() => expect(shell.isListening("online")).toBe(true));
     shell.sent.length = 0;
 
     shell.fire("online");
