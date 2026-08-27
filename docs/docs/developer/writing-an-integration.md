@@ -1,17 +1,17 @@
 ---
 title: Writing an integration
-description: A hands-on walkthrough — scaffold a directory, write the manifest, implement setup(ctx), and package it as an installable community artifact.
+description: A hands-on walkthrough for trusted built-in integrations — scaffold a directory, write the manifest, and implement setup(ctx) in the OpenMapX monorepo.
 sidebar_position: 5
 ---
 
 # Writing an integration
 
 :::note
-Building an integration in your **own repository**? See [Building an external extension](./building-an-external-extension.md) for the out-of-monorepo path using the standalone SDK and CLI.
+Building an integration in your **own repository**? See [Building an external extension](./building-an-external-extension.md) for the separate declarative-artifact and companion-service path.
 :::
 
-This page builds your first integration from an empty directory to an
-installable artifact. It assumes you have read the
+This page builds a trusted **built-in** integration from an empty directory to
+a working in-tree feature. It assumes you have read the
 [Integration system](./integration-system.md) concepts — the manifest, the
 `IntegrationContext`, domains, and the loader-to-host lifecycle — and have a
 working [development setup](./development-setup.md) with the API running under
@@ -20,9 +20,9 @@ hot reload. Here we put those concepts to work end to end.
 The example throughout is a small **knowledge** provider that exposes one HTTP
 route fetching sunrise and sunset times for a coordinate. It is deliberately
 minimal: a manifest, one `setup(ctx)` function, a cache read-through, and
-attribution metadata. The same skeleton scales up to a weather provider, a POI
-data source, or a transit provider — the only thing that changes is which
-registrar you call.
+attribution metadata. The same trusted built-in pattern scales up to a weather
+provider, a POI data source, or a transit provider — the only thing that
+changes is which registrar you call.
 
 For the two data-rich domains with their own typed contracts and orchestration
 rules, follow the dedicated guides once you have the basics here:
@@ -59,10 +59,11 @@ in your real data sources, health check URL, and author info.
 
 ## Scaffold the directory
 
-An integration is just a directory. While you are developing, create it under
-`integrations/` so the API loads it directly from TypeScript source — no build
-step, and `pnpm dev`'s `node --watch` picks up your edits. We will move to a
-packaged community artifact [later](#package-and-install-as-a-community-integration).
+An integration is just a directory. Create this trusted built-in integration
+under `integrations/` so the API loads it directly from TypeScript source — no
+build step, and `pnpm dev`'s `node --watch` picks up your edits. Community
+extensions use a separate declarative artifact and companion-service contract;
+do not convert this directory into one.
 
 ```bash
 mkdir -p integrations/knowledge-sunrise-sunset/strings
@@ -70,8 +71,7 @@ cd integrations/knowledge-sunrise-sunset
 ```
 
 A built-in integration in the monorepo also gets a tiny `package.json` so pnpm
-treats it as a workspace member and resolves the framework packages. (A released
-community artifact does not need one — see [packaging](#package-and-install-as-a-community-integration).)
+treats it as a workspace member and resolves the framework packages.
 
 ```json
 {
@@ -257,18 +257,16 @@ imperative — they are operator instructions, not prose.
 
 ### Adding a map overlay
 
-This walkthrough builds a route-only provider, so its `frontend` flags are all
-`false`. If your integration instead draws on the map, ship a `map-layer.tsx`
+This walkthrough builds a trusted built-in route-only provider, so its `frontend`
+flags are all `false`. A built-in map integration can ship a `map-layer.tsx`
 (and optionally `legend.tsx` / `panel.tsx`), set the matching
 `frontend.mapLayer` / `legend` / `panel` flag, add `domains: ["map-overlay"]`
-and a `layerSelector` entry so users can toggle it. Community overlays reach the
-map via `useHostMap()` from `@openmapx/integration-framework/react`. A simple
+and a `layerSelector` entry so users can toggle it. A simple
 legend can be declared as `frontend.overlay.legend` in the manifest rather than
 written, and the layer registers the credits that appear in the map credits
 strip while it is drawn.
 
-The full `frontend.overlay` schema and the community frontend runtime are
-documented in
+The full `frontend.overlay` schema and the community-code restriction are documented in
 [Integration system → Map overlays](./integration-system.md#map-overlays).
 
 ## Implement `setup(ctx)`
@@ -408,11 +406,11 @@ restart. You can also trigger a reload explicitly in development:
 curl -X POST http://localhost:3001/api/integrations/reload
 ```
 
-Reload re-registers providers and routes and re-reads config and bindings. The
-one thing it cannot do is *remove* a previously registered route or pick up new
-backend code in a production process — ESM module imports are cached for the
-process lifetime, so a production deployment needs a real restart for new backend
-code. Confirm the integration is loaded and hit its route:
+Reload stages providers, dynamic routes, lifecycle resources, and bindings in a
+detached generation, then swaps it into service before retiring the old one. A
+failed setup leaves the current generation serving. Trusted built-in entry files
+are cache-busted when their contents change. Confirm the integration is loaded
+and hit its route:
 
 ```bash
 curl http://localhost:3001/api/integrations | jq '.integrations[].id'
@@ -425,98 +423,20 @@ You can validate the manifest at any point without restarting the server:
 pnpm openmapx integrations validate knowledge-sunrise-sunset
 ```
 
-:::note[Built-in versus community]
+## Community extensions use a separate contract
+
 An integration under `integrations/` is **built-in**: it runs from workspace
-TypeScript source, needs no build step, and ships in the repository. The rest of
-this page covers turning the same directory into a **community** integration —
-an installable, prebuilt artifact that runs from a bundle under
-`custom_integrations/`. The runtime difference is detailed in the
-[Integration system](./integration-system.md#built-in-versus-community).
-:::
+TypeScript source, needs no build step, and ships in this repository. This
+walkthrough intentionally ends at that trusted boundary.
 
-## Package and install as a community integration
-
-To distribute your integration to other deployments, you publish it as a
-prebuilt `.tar.gz` **artifact** and operators install it through the Extensions
-store (wrapped in an `extension.json`). The
-API never compiles code at runtime — it consumes the bundle — so the artifact
-must arrive fully built. The CLI is the only tool that builds; it uses esbuild to
-produce the bundles and stamps per-bundle checksums into the archive.
-
-### Build the artifact
-
-A community integration lives in its own repository, with `manifest.json` and
-`index.ts` at the root, just like the built-in layout (minus the workspace
-`package.json`). From a source tree, package it in one step:
-
-```bash
-pnpm openmapx integrations package ./knowledge-sunrise-sunset \
-  --out ./knowledge-sunrise-sunset.tar.gz
-```
-
-This builds `dist/backend/index.mjs` (from your `index.ts`) and, if you ship
-frontend components, `dist/frontend/index.js`; writes an
-`openmapx-artifact.json` with the platform version and per-bundle sha256
-checksums; and tars the directory. The resulting archive contains the manifest,
-the bundles, the artifact metadata, and your strings — but never a
-`node_modules/` directory, which artifacts are forbidden to ship. Backend runtime
-dependencies are bundled into `dist/backend/index.mjs`; the host exposes only
-`@openmapx/core`, `@openmapx/core/server`, `@openmapx/integration-framework`, and
-`@openmapx/place-ids` as externals, so do not bundle your own copies of those.
-
-For a community integration, set `"quality": "community"` and declare the
-platform version you build against, for example `"platform": "1.0"`. The host
-refuses to load an artifact whose major version differs from the running
-platform, or whose minor is lower.
-
-### Install through the Extensions store
-
-Publish the `.tar.gz` at an HTTPS URL — a GitHub release works well — then wrap it
-in an [`extension.json`](./building-an-external-extension.md#bundle-it-as-an-extension)
-so an administrator installs it from the **Extensions** store (a catalog entry,
-or `pnpm openmapx ext install <extension.json-url>`). The store install is
-**artifact-pinned** (SHA-256), never a Git build, which keeps the API image free
-of build tooling. For testing on a dev workstation, the CLI installs the artifact
-directly:
-
-```bash
-pnpm openmapx integrations install \
-  https://github.com/you/openmapx-sunrise/releases/download/v1.0.0/knowledge-sunrise-sunset.tar.gz \
-  --artifact --sha256 <hash>
-```
-
-The installer downloads, verifies the checksum if you pass one, extracts into a
-staging area with hardened tar handling, validates the manifest and the artifact
-contract, and atomically swaps the result into `custom_integrations/<id>/`. After
-installing in production, restart the API so its backend bundle loads into a fresh
-module cache:
-
-```bash
-pnpm openmapx services restart app-api
-```
-
-Installing, updating, removing, catalog sources, and the trust model are the
-administrator's side of this and are documented in
-[Community extensions](../administration/community-extensions.md). For the
-broader picture of where integrations sit relative to services and capabilities,
-see [How it works](../overview/how-it-works.md).
-
-## A faster inner loop with the CLI
-
-While iterating on a community integration outside the monorepo, the CLI can
-install a local source directory — it stages the directory, runs the same build
-the packager does, validates, and swaps it in:
-
-```bash
-pnpm openmapx integrations install ./knowledge-sunrise-sunset
-pnpm openmapx integrations build knowledge-sunrise-sunset   # re-bundle after edits
-pnpm openmapx integrations list                             # confirm it is installed
-pnpm openmapx integrations remove knowledge-sunrise-sunset  # tear it down
-```
-
-Source installs are a developer convenience; production always goes through a
-prebuilt artifact. The full command set lives in the
-[CLI reference](./cli-reference.md).
+A community artifact is not a packaged form of this directory. It contains only
+declarative metadata and safe static assets; backend code, providers, POI
+sources, presentation modules, and runtime bundles are rejected. Put executable
+behavior in a companion service, then package the declarative artifact and pin
+both in an `extension.json`. Follow [Building an external
+extension](./building-an-external-extension.md) for that separate workflow and
+the [Community extensions](../administration/community-extensions.md) guide for
+operator installation.
 
 ## Where to go next
 

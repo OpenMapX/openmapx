@@ -135,6 +135,26 @@ state differ. Backing up before a routine update is optional because promotion
 retains the prior healthy MOTIS slot for automatic rollback; use the separate
 backup workflow when your operating policy requires an independent copy.
 
+Operator feed URLs stay in the data-manager's protected desired-state store.
+During a sync, upstream Transitous receives only an unguessable, one-use relay
+URL bound to that run; it never receives the remote URL, query string, or
+credential headers. The relay accepts public HTTP(S) endpoints on their default
+ports, follows at most five redirects, revalidates and DNS-pins every hop, and
+rejects a hop if any resolved address is private, loopback, link-local, or
+reserved. A feed is limited to 512 MiB of compressed bytes and a five-minute
+remote-download deadline. An unused relay capability expires after ten minutes.
+Once claimed, one ten-minute total deadline covers download and response
+streaming, and a client that makes no byte progress for 30 seconds is
+disconnected. Run termination and client disconnects also abort the stream and
+delete the private archive. A failed use cannot be retried or fall back to the
+remote URL. Audit records contain only the source kind, hostname, duration,
+byte count, outcome, and successful SHA-256 digest.
+
+Do not embed credentials in an operator URL. Authenticated catalog feeds keep
+using the API-key file below. If an operator source is extended with configured
+headers, redirects must retain the exact scheme, hostname, and effective port;
+credentials are never forwarded cross-origin.
+
 :::note[Authenticated Transitous feeds]
 Some Transitous sources require API keys. Generate a key template, fill in the
 values you have, then sync:

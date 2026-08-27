@@ -9,9 +9,8 @@ sidebar_position: 6
 This guide is for authors who want to ship an OpenMapX integration in their **own
 repository** — not as a built-in inside the OpenMapX monorepo. OpenConditions
 (`openconditions/openconditions`) is the running example throughout: it publishes
-road-condition observations and needs both an installable integration (the API
-surface inside OpenMapX) and a companion ingest service (the Fastify daemon that
-owns the data).
+road-condition observations and needs both an installable presentation integration
+and a companion service (the Fastify daemon that owns the data and API behavior).
 
 If you are developing a built-in integration inside the monorepo instead, start
 with [Writing an integration](./writing-an-integration.md) — the paths and
@@ -21,11 +20,10 @@ tooling differ.
 
 An **external extension** is one or both of:
 
-- An **integration** — a manifest + `setup(ctx)` bundle that the OpenMapX
-  `app-api` loads and runs in-process. Integrations register routes, providers,
-  and UI components; they reach the outside world through the
-  `IntegrationContext` the host injects, never by importing the API server or the
-  database driver directly.
+- An **integration** — a manifest plus optional presentation assets. Community
+  artifacts are declarative/frontend-only; app-api and data-manager reject
+  backend and POI-source entry points instead of importing them with control-plane
+  authority.
 - A **companion service** — a separately containerized daemon described by a
   `service.json`, managed by the OpenMapX compose renderer, and registered in the
   host's service registry. Services do their own Postgres schema migrations and
@@ -33,67 +31,23 @@ An **external extension** is one or both of:
 
 The two dependency directions to keep in mind:
 
-1. **OpenMapX → your integration**: the `app-api` discovers, loads, and runs your
-   integration bundle. Your code never touches the host internals; it only speaks
-   through the context.
-2. **You → OpenMapX packages**: you consume `@openmapx/extension-sdk` (types and
-   helpers) as a dev dependency at build time. The host injects the actual
-   `@openmapx/integration-framework` at runtime — you never bundle it.
+1. **OpenMapX → your integration**: app-api discovers its manifest and serves its
+   approved presentation assets; it does not execute community server code.
+2. **You → OpenMapX tooling**: use `@openmapx/extension-cli` to scaffold,
+   validate, package, and assemble the signed component manifest. Runtime code
+   stays in the service container.
 
-Both the SDK and the CLI are published under Apache-2.0 and designed to be used
-outside this repository.
+The CLI is published under Apache-2.0 and designed for use outside this repository.
 
 ## Set up your repo
 
-### Install the SDK
+### Keep the integration artifact declarative
 
-Add the SDK as a dev dependency. It provides `IntegrationContext` types, a few
-authoring helpers, and the test mock — all you need to write and type-check an
-integration outside the monorepo:
-
-```sh
-npm i -D @openmapx/extension-sdk
-```
-
-### Mark host-injected packages as externals
-
-The host provides several packages at runtime and expects your bundle to treat
-them as externals — it will fail to load a bundle that ships its own copy. Add
-these to your bundler's external list (esbuild, Rollup, Vite, or equivalent):
-
-```js
-// esbuild example
-externals: [
-  "@openmapx/core",
-  "@openmapx/core/server",
-  "@openmapx/integration-framework",
-  "@openmapx/place-ids",
-]
-```
-
-If your integration contributes a frontend component (a map overlay written in
-React — see [Add a map overlay](#add-a-map-overlay)), also externalize the React
-+ map surfaces the host provides:
-
-```js
-externals: [
-  // ...server externals above (including @openmapx/core)...
-  "react",
-  "react/jsx-runtime",
-  "react/jsx-dev-runtime",
-  "@openmapx/integration-framework/react",
-  "maplibre-gl",
-]
-```
-
-The host resolves all of these to its own live singletons via the page's import
-map, so your overlay shares the host's React, registry context, and maplibre
-instance. Bundling your own copy breaks hooks/context and detaches popups from
-the map.
-
-Do **not** list `@openmapx/extension-sdk` as an external — that package is used
-only at build time (types and helpers); the SDK inlines what it needs into your
-bundle.
+No runtime SDK is needed for an installable integration artifact. It contains a
+manifest, localized strings, and optional safe static assets such as an SVG
+preview. App-api does not import community server modules, and the web app does
+not execute community scripts. Put all executable behavior in the companion
+service described below.
 
 ### Scaffold an integration
 
@@ -111,72 +65,16 @@ Then scaffold the integration directory:
 openmapx-ext scaffold integration conditions --domain knowledge --out ./integrations
 ```
 
-This creates `integrations/conditions/` with a ready-to-edit `index.ts`,
-`manifest.json`, `package.json`, and `strings/en.json`, with `__ID__` and
-`__DOMAIN__` tokens substituted throughout.
+This creates `integrations/conditions/` with `manifest.json`, `package.json`, and
+`strings/en.json`, with `__ID__` and `__DOMAIN__` tokens substituted throughout.
 
-## Write the integration
+## Write the integration metadata
 
-### Minimal `setup(ctx)`
-
-`index.ts` exports a `setup(ctx)` function. Import the `IntegrationContext` type
-from `@openmapx/extension-sdk` (not from `@openmapx/integration-framework` —
-the SDK re-exports the type so your build is self-contained):
-
-```ts
-import type { IntegrationContext } from "@openmapx/extension-sdk";
-
-export async function setup(ctx: IntegrationContext): Promise<void> {
-  ctx.registerRoute("GET", "/observations", async (req, reply) => {
-    const { bbox } = req.query as { bbox?: string };
-    if (!bbox) {
-      reply.status(400).send({ message: "bbox is required" });
-      return;
-    }
-
-    const cacheKey = `conditions:observations:${bbox}`;
-    const rows = await ctx.cache.withCache(cacheKey, 30, async () => {
-      const service = ctx.getRequiredService("conditions-ingest");
-      if (!service) throw new Error("conditions-ingest is unavailable");
-      return ctx.http.get(`${service.url}/observations`, {
-        params: { bbox },
-        timeoutMs: 5_000,
-      });
-    });
-
-    reply.send({ observations: rows });
-  });
-}
-```
-
-Key points:
-
-- **`ctx.registerRoute(method, path, handler)`** mounts the route under your
-  integration's prefix; the full path becomes
-  `GET /api/integrations/conditions/observations`.
-- **`ctx.cache.withCache(key, ttl, fn)`** reads through on a miss and stores the
-  result for `ttl` seconds.
-- **`ctx.getRequiredService(slug)`** returns a declared service's internal URL
-  and state; handle `null` for an optional or unavailable dependency.
-
-### Test it with the SDK mock
-
-The SDK ships a `createMockIntegrationContext` factory so you can test `setup`
-without a running OpenMapX instance:
-
-```ts
-import { createMockIntegrationContext } from "@openmapx/extension-sdk/testing";
-import { setup } from "./index.js";
-
-const ctx = createMockIntegrationContext({ config: {} });
-await setup(ctx);
-
-// assert what was registered
-console.assert(ctx.registered.routes.some((r) => r.path === "/observations"));
-```
-
-The mock records every `registerRoute`, `registerProvider`, and similar call so
-your tests can assert on them without spinning up a real host.
+Describe the feature, data flows, attribution, configuration keys, and companion
+service requirements in `manifest.json`. Do not add `index.ts`, `index.js`,
+`poi-sources.*`, `map-layer.tsx`, `legend.tsx`, `panel.tsx`, or `dist` runtime
+bundles: packaging and installation reject them until an appropriate isolation
+boundary exists.
 
 ### Validate the manifest
 
@@ -188,76 +86,72 @@ openmapx-ext validate ./integrations/conditions
 
 Exits non-zero and prints errors if the manifest is invalid.
 
-## Add a map overlay
+## Presentation code is not currently installable
 
-If your extension draws on the map, it ships a `map-layer.tsx` frontend bundle.
-The legend is the one part you can declare instead of writing, and the layer
-selector entry is manifest-only either way:
-
-```jsonc
-{
-  "domains": ["map-overlay"],
-  "frontend": {
-    "mapLayer": true,
-    "layerSelector": {
-      "group": "map-details",
-      "labelKey": "myOverlay",
-      "icon": "warning",
-      "preview": "preview.svg"
-    },
-    "overlay": {
-      "minZoom": 6,
-      "legend": { "kind": "categorical", "title": "My overlay", "items": [{ "color": "#cc0033", "label": "High" }] }
-    }
-  }
-}
-```
-
-Place the preview beside the manifest so the integration-root-relative path
-resolves directly:
-
-```text
-integrations/
-└── conditions/
-    ├── manifest.json
-    ├── preview.svg
-    ├── index.ts
-    └── strings/
-        └── en.json
-```
-
-The preview must be an SVG no larger than 64 KiB. The package command includes
-this static asset automatically. If the preview is omitted or cannot be loaded,
-the layer selector displays its generic placeholder.
-
-In `map-layer.tsx`, reach the map with `useHostMap()` from
-`@openmapx/integration-framework/react`, register your credits so they appear in
-the map credits strip, and externalize the React + `maplibre-gl` surfaces (see
-[Mark host-injected packages as externals](#mark-host-injected-packages-as-externals)).
-The full `frontend.overlay` schema and the community frontend runtime are
-documented in
-[Integration system → Map overlays](./integration-system.md#map-overlays).
-
-An extension does not have to draw anything itself. OpenConditions is
-backend-only: it declares no `frontend` block at all, publishing its road and
-traffic feeds as `dataSources` under the `road-conditions` domain, and the
-app's own overlays render and credit them.
+Custom `map-layer.tsx`, legend, and panel components are intentionally rejected.
+Running them as same-origin scripts would grant the artifact access to browser
+storage, the page DOM, and cookie-authenticated API calls. CSP does not contain
+code the application deliberately authorizes. A future external-presentation
+API must use a separate origin or equivalently isolated worker with a narrow,
+versioned capability protocol. Until then, contribute a trusted built-in UI or
+use existing host-rendered surfaces backed by the companion service.
 
 ## Package and install the integration
 
-### Build the artifact
+### Package the artifact
 
-From your repo root, build and package the integration:
+From your repo root, package the declarative integration:
 
 ```sh
 openmapx-ext package ./integrations/conditions --out conditions.tar.gz
 ```
 
-This bundles `index.ts` into `dist/backend/index.mjs` (and `dist/frontend/index.js`
-if you ship UI components), stamps per-bundle sha256 checksums into
-`openmapx-artifact.json`, and creates the archive. The resulting `.tar.gz`
-contains the manifest, bundles, artifact metadata, and strings — never a
-`node_modules/` directory.
+This validates that the source is declarative-only, generates artifact metadata,
+and creates the archive.
+
+#### What the archive contains
+
+Packaging copies an explicit allowlist into a fresh staging area — it never
+archives your source directory. Anything not on this list simply is not
+collected, so a stray `.env`, key, or scratch file next to a declared file
+cannot reach a release:
+
+| Included | Limit |
+| --- | --- |
+| `manifest.json` (after schema validation) | — |
+| `openmapx-artifact.json` (generated) | — |
+| `dist/frontend/index.js`, `dist/backend/index.mjs` when permitted | — |
+| `dist/licenses.json` (generated) | — |
+| `strings/<locale>.json` matching `[a-z0-9-]{2,35}` | 100 files, 256 KiB each |
+| The exact manifest-referenced SVG preview | 64 KiB |
+| `LICENSE`, `LICENSE.txt`, `LICENSE.md`, `NOTICE`, `NOTICE.txt` | 1 MiB each |
+
+Everything else is excluded: source and tests, source maps, `package.json`,
+lockfiles, dotfiles and `.env*`, VCS data, `node_modules/`, caches, unreferenced
+`assets/`, symlinks, hard links, sockets, and devices.
+
+Packaging never writes into your source tree, and two builds from the same
+source produce byte-identical archives.
+
+Preview the exact contents before publishing:
+
+```sh
+openmapx-ext package ./integrations/conditions --out conditions.tar.gz --dry-run
+```
+
+`--dry-run` prints each included relative path with its size and the total byte
+count, and writes nothing. If the manifest references a file outside the
+contract, packaging fails naming that relative path instead of producing an
+archive.
+
+#### Service repositories
+
+An extension's service repository is cloned under fixed budgets: HTTPS only, on
+the allowlisted hosts, with no credentials, query string, or fragment in the
+URL. Each clone is shallow and bounded to 120 seconds, 25,000 entries, 512 MiB
+total, 64 MiB per file, and 512 bytes per path; symlinks and special files are
+rejected rather than followed. Only the canonical credential-free URL and the
+exact resolved commit are recorded.
 
 For a distributable artifact, set `"quality": "community"` in your manifest and
 declare the platform version you build against:
@@ -283,8 +177,8 @@ pnpm openmapx integrations install \
   --artifact --sha256 <hash>
 ```
 
-The installer downloads, verifies the checksum, extracts into a staging area,
-validates the manifest and artifact contract, and atomically swaps the result
+The installer downloads, verifies the mandatory checksum, extracts into a staging area,
+rejects runtime entry points, validates the manifest and artifact contract, and atomically swaps the result
 into `custom_integrations/conditions/`. The bundled files persist there across
 upgrades until you remove the integration.
 
@@ -293,11 +187,13 @@ so an operator installs it from the **Extensions** store (or
 `pnpm openmapx ext install <extension.json-url>`) — that's the recommended path,
 and it's required once your extension also ships a companion service.
 
-### Restart `app-api`
+### Reload `app-api`
 
-After installing, the integration's backend bundle is on disk but not yet loaded —
-ESM module imports are cached for the process lifetime. Restart the API to bring
-it in:
+Community artifacts are declarative/frontend-only. Backend and POI-source
+JavaScript is rejected because app-api and data-manager are privileged control
+plane processes, not sandboxes; backend behavior must live in the companion
+service described below. After a manual CLI install, restart the API so the new
+manifest is discovered (the Extensions store performs a transactional reload):
 
 ```sh
 pnpm openmapx services restart app-api
@@ -392,35 +288,14 @@ bundle is the unit of installation.
 
 ## Wire them together
 
-### Declare the dependency in the integration manifest
+### Declare readiness in the extension manifest
 
-The integration must declare that it requires the companion service. Add a
-`requires` entry to `manifest.json`:
-
-```json
-{
-  "requires": [
-    { "service": "conditions-ingest" }
-  ]
-}
-```
-
-At load time the host resolves this and makes the service descriptor reachable
-through `ctx.getRequiredService("conditions-ingest")` (`serviceId`, internal
-base `url`, and enabled state). If the service is not installed or
-not healthy, the host refuses to load the integration (unless the entry is
-`"optional": true`).
-
-### Choose an explicit handoff contract
-
-The companion service owns and migrates the `conditions` schema. It can expose
-an internal HTTP API and the integration can call the descriptor's `url` through
-`ctx.http`; this keeps the service's database private and is the preferred
-community-extension boundary. A trusted integration that also declares the
-platform PostGIS requirement may instead use `ctx.db` and read the owned schema,
-but `getRequiredService()` itself is only service discovery — it is not a SQL
-client. Whichever contract you choose, version and document it alongside the
-bundle so the pinned service and integration evolve together.
+The companion service owns, migrates, and serves its data. Use the
+`extension.json` `readiness.requires` list to make installation readiness depend
+on that service. A community integration artifact cannot bridge the service into
+app-api with `setup(ctx)`; exposing a new host-facing route or provider requires
+either an existing versioned host protocol or a reviewed built-in adapter.
+Version and document that boundary alongside the bundle.
 
 ### Bundle it as an extension
 
@@ -467,10 +342,10 @@ catalog) is updated by re-running `pnpm openmapx ext install <newer extension.js
 
 ## Caveats
 
-**In-process trust.** An integration bundle runs in the same process as `app-api`
-with the same OS privileges. Install only extensions you trust. The `sha256`
-checksum on install verifies the artifact has not been tampered with, but it does
-not sandbox the code that runs inside it.
+**Runtime isolation.** Integration artifacts are declarative-only and require a
+SHA-256 pin. Executable extension behavior runs in the separately sandboxed
+service component; app-api, data-manager, and the same-origin web page do not
+execute community integration modules.
 
 **Platform-version compatibility.** The host rejects an integration whose
 declared `platform` major version differs from the running OpenMapX, or whose
@@ -501,5 +376,5 @@ through the matching `<KEY>_FILE` environment variable. See
   operator's view: installing, updating, removing, catalog sources, and the trust
   model.
 - **[Integration system](./integration-system.md)** — the manifest schema, the
-  `IntegrationContext` surface, built-in versus community bundles, and the
+  built-in `IntegrationContext` surface, community restrictions, and the
   loader-to-host lifecycle in depth.

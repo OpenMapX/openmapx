@@ -76,7 +76,7 @@ in full under [Managing services](../install/managing-services.md).
 | `services start [ids...]` | Render, apply hardlinks, then `docker compose up -d` the named services. Flag: `--preset <names>`. |
 | `services stop [ids...]` | `docker compose stop` the named services. Flag: `--preset <names>`. |
 | `services restart [ids...]` | In-place reboot (`docker compose restart`); does **not** re-render. Flag: `--preset <names>`. |
-| `services update [ids...]` | Re-render, link, pull images, then replace containers with `up -d --force-recreate`. Flag: `--preset <names>`. |
+| `services update [ids...]` | Re-render, link, pull the configured images, then replace containers with `up -d --force-recreate`. Flag: `--preset <names>`. For core OpenMapX app releases, use the aggregate release-manifest procedure in [Upgrading](../install/upgrading.md). |
 | `services status [id]` | Container status table for one or all services (`docker compose ps`). |
 | `services logs <id>` | Stream service logs. Flags: `--tail <n>` (default `100`), `--follow`. |
 | `services capabilities` | Inventory the capability and data-type vocabulary across the registry. Flag: `--unrecognised`. |
@@ -96,9 +96,10 @@ hand-written compose file — the renderer derives it from the enabled manifests
 | Command | Description |
 | --- | --- |
 | `compose render` | Render `docker-compose.generated.yml` and the hardlink plan from the manifests. Flags: `--domain <d>` (default `$DOMAIN`), `--services <ids>`, `--preset <names>`. |
-| `compose up` | Render, apply hardlinks, then `docker compose up -d` the whole selection. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`. |
+| `compose up` | Render, apply hardlinks, resolve the release overlay if it is missing, then `docker compose up -d` the whole selection. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`. |
+| `compose release` | Resolve `ghcr.io/openmapx/release-manifest:latest` and write `infra/docker/docker-compose.release.yml`, pinning `app-api`, `app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous helper image by digest. Every service/compose command includes this overlay automatically once it exists. |
 | `compose down` | Stop the stack (`docker compose down`). Flag: `--volumes` removes named volumes (**destructive**). |
-| `compose pull [ids...]` | Pull the latest images (no args pulls all services). |
+| `compose pull [ids...]` | Pull the images named in the generated Compose file (no args pulls all services). For core OpenMapX app releases, use the aggregate release-manifest procedure in [Upgrading](../install/upgrading.md). |
 
 For the difference between `services start` (a subset) and `compose up` (the
 whole stack), and how `--services` overrides the persisted selection for a single
@@ -165,8 +166,10 @@ for the trust model.
 Install is one orchestrated, atomic job: it registers and pins each service repo,
 renders and starts the container(s), installs each integration artifact (SHA-256
 verified), reloads the integration host, and records the result — rolling back on
-any failure. Because community code runs with container (and, for integrations,
-in-process API) privileges, install only from sources you trust.
+any failure. Community backend code runs only in its service container;
+community integration artifacts cannot install API/data-manager entry points.
+Install only from sources you trust because service components still execute
+code and declarative artifacts still influence the UI.
 
 Installing the [OpenConditions](https://github.com/openconditions/openconditions)
 bundle (road-conditions overlay + companion ingest service), published as the
@@ -190,11 +193,10 @@ documented in [Integration system](./integration-system.md).
 | --- | --- |
 | `integrations scaffold <id>` | Scaffold a new first-party integration under `integrations/<id>` from `integrations/_template/`, substituting the `__ID__`/`__DOMAIN__` tokens. Flag: `--domain <domain>`. Run `pnpm install` afterwards so pnpm picks up the new workspace package. See [Writing an integration](./writing-an-integration.md#quick-start-scaffold). |
 | `integrations list` | List installed community integrations. Flag: `--include-built-in` also lists the first-party integrations under `integrations/`. |
-| `integrations install <source>` | Install from a Git URL, local path, or prebuilt artifact. Flags: `--ref <ref>`, `--artifact`, `--sha256 <hash>`, `--no-build`. |
+| `integrations install <source>` | Install a declarative integration from a Git URL, local path, or artifact. Flags: `--ref <ref>`, `--artifact`, `--sha256 <hash>`. Executable runtime entry points are rejected. |
 | `integrations remove <id>` | Remove a community integration. |
 | `integrations validate [id]` | Validate one integration's manifest, or all if `id` is omitted. |
-| `integrations build <id>` | Build the frontend and backend bundles for one integration. |
-| `integrations package <source>` | Create a prebuilt `.tar.gz` artifact for admin/production installs. Requires `--out <file>`; `--no-build` requires existing dist bundles. |
+| `integrations package <source>` | Create a declarative `.tar.gz` artifact for admin/production installs. Requires `--out <file>`; all executable runtime entry points are rejected. Only the declared artifact contract is packaged — source, dotfiles, `.env*`, VCS data, lockfiles, `node_modules/`, and unreferenced assets are never collected. Add `--dry-run` to list the exact files and total bytes without writing an archive. |
 
 After installing or removing an integration, restart `app-api` so the
 integration host picks up the change:

@@ -32,14 +32,16 @@ Two things move during an upgrade, and they move independently:
   `git pull`.
 - **The images** — the application containers. The core app services
   (`app-api`, `app-web`, `data-manager`) run **prebuilt images published to the
-  GitHub Container Registry** (`ghcr.io/openmapx/*`), pinned to the
-  `latest` tag in their manifests. They are **not built on your host** — a new
-  app version arrives by *pulling* the newer `latest` image, not by rebuilding.
+  GitHub Container Registry** (`ghcr.io/openmapx/*`). A complete release is
+  selected through the single `ghcr.io/openmapx/release-manifest:latest`
+  pointer, which maps every application image to an immutable digest. They are
+  **not built on your host**.
 
 Because of that split, `git pull` alone does **not** update the running app: it
 updates the manifests and the CLI, but the containers keep running whatever image
-they already pulled. You get the new app version when you `compose pull` and
-replace the containers. The steps below do both, in the right order.
+they already pulled. You get the new app version by resolving the complete
+release manifest, then pulling and replacing the exact image set. The steps
+below do both, in the right order.
 
 ## 1. Optional: create a backup
 
@@ -112,40 +114,112 @@ and re-rendering when nothing changed is harmless — so when in doubt, render. 
 update command in the next step also re-renders for you, so you can skip this
 as a standalone step unless you want to inspect the diff first.
 
-## 4. Pull new images and replace containers
+## 4. Resolve the complete release and replace containers
 
-This is the step that actually swaps in the new app version. `services update`
-re-renders, refreshes the hardlinks, pulls the newest images, and force-recreates
-the containers:
-
-```bash
-pnpm openmapx services update app-api app-web data-manager
-```
-
-Under the hood this runs `docker compose pull` followed by
-`docker compose up -d --force-recreate` for the named services. The core app
-services pull their newer `latest` image from GHCR; any locally indexed engine
-that has no registry image is simply skipped by the pull (a warning, not an
-error) and recreated from its existing data.
-
-To roll the **entire** enabled stack forward in one shot instead of naming
-services, pull everything and bring the stack up:
+This is the step that actually swaps in the new app version. The short form
+resolves the aggregate release pointer, writes the overlay, and replaces the
+core containers:
 
 ```bash
-pnpm openmapx compose pull
-pnpm openmapx compose up
+pnpm openmapx compose release
+pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner
 ```
 
-`compose up` re-renders, re-applies the hardlink plan, and runs
-`docker compose up -d`, which recreates only the containers whose image or
-configuration actually changed. Heavy backend engines that didn't change are left
-running untouched.
+`compose up`, `services start`, and `services update` refuse to run release
+services when no overlay exists and the release manifest cannot be resolved.
+
+The equivalent manual procedure pulls the one aggregate release pointer and
+writes the same local Compose overlay by hand. The overlay survives later
+`compose render` runs because it is a separate file:
+
+```bash
+docker pull ghcr.io/openmapx/release-manifest:latest
+release_container=$(docker create ghcr.io/openmapx/release-manifest:latest true)
+docker cp "$release_container:/release-manifest.json" /tmp/openmapx-release-manifest.json
+docker rm "$release_container"
+
+release_api="$(jq -er '.images.api' /tmp/openmapx-release-manifest.json)" || exit 1
+release_web="$(jq -er '.images.web' /tmp/openmapx-release-manifest.json)" || exit 1
+release_data_manager="$(jq -er '.images["data-manager"]' /tmp/openmapx-release-manifest.json)" || exit 1
+release_ops_agent="$(jq -er '.images["ops-agent"]' /tmp/openmapx-release-manifest.json)" || exit 1
+release_transitous_runner="$(jq -er '.images["transitous-runner"]' /tmp/openmapx-release-manifest.json)" || exit 1
+release_transitous_tools="$(jq -er '.images["transitous-tools"]' /tmp/openmapx-release-manifest.json)" || exit 1
+
+if [[ ! "$release_api" =~ ^ghcr\.io/openmapx/api@sha256:[0-9a-f]{64}$ ]] || \
+   [[ ! "$release_web" =~ ^ghcr\.io/openmapx/web@sha256:[0-9a-f]{64}$ ]] || \
+   [[ ! "$release_data_manager" =~ ^ghcr\.io/openmapx/data-manager@sha256:[0-9a-f]{64}$ ]] || \
+   [[ ! "$release_ops_agent" =~ ^ghcr\.io/openmapx/ops-agent@sha256:[0-9a-f]{64}$ ]] || \
+   [[ ! "$release_transitous_runner" =~ ^ghcr\.io/openmapx/transitous-runner@sha256:[0-9a-f]{64}$ ]] || \
+   [[ ! "$release_transitous_tools" =~ ^ghcr\.io/openmapx/transitous-tools@sha256:[0-9a-f]{64}$ ]]; then
+  echo "The release manifest contains an invalid image reference" >&2
+  exit 1
+fi
+
+cat > infra/docker/docker-compose.release.yml <<EOF
+services:
+  app-api:
+    image: $release_api
+  app-web:
+    image: $release_web
+  data-manager:
+    image: $release_data_manager
+    environment:
+      OPENMAPX_TRANSITOUS_TOOLS_IMAGE: $release_transitous_tools
+  ops-agent:
+    image: $release_ops_agent
+  transitous-runner:
+    image: $release_transitous_runner
+EOF
+
+release_compose=(docker compose -f infra/docker/docker-compose.generated.yml -f infra/docker/docker-compose.release.yml)
+"${release_compose[@]}" pull app-api app-web data-manager ops-agent transitous-runner
+"${release_compose[@]}" up -d --force-recreate app-api app-web data-manager ops-agent transitous-runner
+```
+
+The `release-manifest:latest` tag moves atomically only after every image in its
+release has passed promotion. The generated overlay therefore keeps `app-api`,
+`app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous
+helper on the same release.
+
+:::note[Admin updater and later service commands]
+The admin system updater performs this same release-manifest resolution and
+writes `docker-compose.release.yml` atomically after every digest-pinned image
+has been pulled. API and CLI service lifecycle commands automatically include an
+existing release overlay, so restarting or re-rendering the stack retains the
+digest-pinned release. Keep the overlay with the deployment;
+delete it only when intentionally leaving the published OpenMapX release channel.
+Forks and mirrored registries select their own channel with
+`OPENMAPX_RELEASE_MANIFEST_IMAGE` (see [Configuration](./configuration.md)).
+:::
+
+To reconcile the **entire** enabled stack while retaining the selected app
+release, use the same overlay with Compose:
+
+```bash
+"${release_compose[@]}" pull
+"${release_compose[@]}" up -d
+```
+
+Run `pnpm openmapx compose render` before these commands whenever manifests or
+the service selection changed; it refreshes the generated base file without
+overwriting `docker-compose.release.yml`. Heavy backend engines that did not
+change are left running untouched.
 
 :::note[Pull vs. build]
 There is no "rebuild the app" step in a normal upgrade. The application images are
-pulled from GHCR — `compose pull` (or the pull baked into `services update`) is
-how you get the new version. You only build images yourself if you're doing local
-development against the source, which is outside the self-hosting flow.
+pulled by immutable digest from GHCR through the aggregate release manifest. You
+only build images yourself if you're doing local development against the source,
+which is outside the self-hosting flow.
+:::
+
+:::caution[Stricter `DATA_MANAGER_URL` validation]
+`app-api` now refuses a `DATA_MANAGER_URL` that is plain `http://` on any host
+other than `localhost`, `127.0.0.1`, `::1` or the Compose service name
+`data-manager`, and rejects URLs with credentials, a path prefix or a query
+string. If you reach the data-manager over HTTP on a LAN address or a custom
+service name, list that hostname in `DATA_MANAGER_PLAINTEXT_HOSTS` (see
+[Configuration](./configuration.md)); a path prefix must be moved to a
+dedicated hostname or port.
 :::
 
 ## 5. Database migrations apply automatically
@@ -205,23 +279,7 @@ on **encryption at rest for stored OAuth provider tokens**, because a linked
 OpenStreetMap account can now hold write permissions.
 
 Nothing is required of you to upgrade, and both contribution flags stay off
-until you set them. But be aware of how already-stored tokens behave.
-
-Tokens saved *before* this release are plaintext. Better Auth detects the format
-before decrypting, and the detection is a heuristic: a value is treated as
-encrypted if it starts with `$ba$` **or** if it is an even-length hexadecimal
-string. That has two consequences:
-
-- **Ordinary opaque tokens keep working.** Real OpenStreetMap and Mapillary
-  access tokens contain characters outside `[0-9a-f]`, so they are passed
-  through unchanged and are re-encrypted the next time the account is refreshed
-  or re-linked.
-- **A legacy token that happens to be even-length hex cannot be recovered.** It
-  is misread as ciphertext, decryption fails, and the affected person simply
-  needs to link their provider account again. OpenMapX degrades safely here: the
-  avatar sync skips, and the contribution gate asks them to re-authorize.
-
-Both behaviors are pinned by tests against the locked Better Auth version.
+until you set them.
 
 Keep `BETTER_AUTH_SECRET` **stable and protected**. It is now the key material
 for stored provider tokens as well as sessions. Rotating it deliberately is
@@ -230,7 +288,7 @@ Better Auth does not re-encrypt existing tokens under a new secret.
 
 ## Reclaiming disk after an upgrade
 
-Pulling new `latest` images leaves the previous ones on disk as dangling layers.
+Pulling a new release leaves the previous images on disk as dangling layers.
 Once you've confirmed the upgrade is healthy, prune them:
 
 ```bash
@@ -253,6 +311,26 @@ pnpm openmapx ext update <id>     # re-pin every part to the catalog's current v
 
 An update re-pins the bundle's service(s) and integration(s) together and
 re-renders the stack as one orchestrated step.
+
+### If `app-api` refuses to start after an interrupted extension update
+
+Extension installs and updates write small recovery journals next to the files
+they change — `services/.community/.rollback-*.json`,
+`services/.community/.prepare-*.json`, and
+`custom_integrations/.extension-install-journal-*.json`. If `app-api` crashes
+mid-update, the next start replays those journals before it serves anything,
+restoring the previous repository checkout, integration artifact, service
+selection, and running containers. That replay is fail-closed: when a journal
+refers to a backup or database row that no longer exists (for example after a
+manual clean-up), `app-api` logs
+`Service repository rollback reconciliation failed; refusing to start` with the
+journal path and exits instead of guessing.
+
+To recover, confirm the referenced repository or integration is in the state
+you want, then delete the journal named in the log (and, for `.rollback-*`
+journals, the matching `.rollback-*` backup directory) and start `app-api`
+again. Never delete a journal whose backup still exists unless you intend to
+keep the *new* files it was about to roll back.
 
 ## Where to go next
 

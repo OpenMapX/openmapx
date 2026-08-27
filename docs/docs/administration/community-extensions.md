@@ -14,10 +14,10 @@ into your own deployment from one place — the **Extensions store**
 An extension bundles the parts of one feature so you install it in a single
 action. A bundle may contain:
 
-- **integrations** — app-level features that run **in-process inside the API
-  server**: map overlays, POI data sources, transit/geocoding/routing providers,
-  extra API routes. Distributed as prebuilt `.tar.gz` artifacts, pinned by
-  SHA-256.
+- **integrations** — declarative app metadata and presentation assets.
+  Distributed as prebuilt `.tar.gz` artifacts, pinned by SHA-256. Community
+  backend and POI-source JavaScript is rejected rather than run in a privileged
+  host process.
 - **services** — backend containers: a database, a routing engine, an alternative
   geocoder, a data processor. Distributed as Git repositories, pinned by tag or
   commit.
@@ -27,10 +27,11 @@ bundle like [OpenConditions](#example-openconditions) ships both together. Eithe
 way you install it the same way, and the platform orchestrates the parts.
 
 :::warning[You are running third-party code]
-A community extension is code you did not write, running on your server. A
-service is a Docker container you choose to start; an integration's backend runs
-**in-process inside the API server**, with the same filesystem, network, and
-secrets access as a built-in. Verification (see [trust tiers](#trust-tiers)) is
+A community extension can contain code you did not write. Executable backend
+behavior runs as a separately sandboxed service; app-api and data-manager never
+import community runtime modules. Executable community presentation is disabled
+until it has a cross-origin sandbox and narrow capability protocol. Verification
+(see [trust tiers](#trust-tiers)) is
 an identity and automated-validation check — **not a security audit**. Install
 only from authors you trust, and read what an extension installs before you
 confirm.
@@ -116,14 +117,15 @@ gitignored and bind-mounted, so installs survive container restarts.
 
 The sandbox is derived from provenance, not the manifest's `quality` label:
 manifests loaded from `services/.community/` are third-party whether they say
-`community` or `community-verified`. They may **not** use `@`-prefixed bind
-mounts (no Docker socket or cross-service file sharing), `networkMode: "host"`,
+`community` or `community-verified`. They may **not** use any `bindMounts`
+entry: community service installation and updates reject every host bind mount,
+including read-only mounts, with `community_bind_mount_forbidden`. Use a
+namespaced named volume (`openmapx-<serviceId>-<suffix>`) for persistent service
+state instead. They may not use `networkMode: "host"`,
 `privileged: true`, host device pass-through, escape-class Linux capabilities
 (`SYS_ADMIN`, `SYS_PTRACE`, `NET_ADMIN`, and similar), deployment `envFile`, or
-Compose-variable bind paths. Named volumes must be namespaced as
-`openmapx-<serviceId>-<suffix>`, and network aliases may not collide with another
-service id or alias. Relative bind paths are canonicalized at render time and
-must remain within the service snapshot. Operator configuration belongs in
+Compose-variable bind paths. Network aliases may not collide with another
+service id or alias. Operator configuration belongs in
 `configSchema`; secret fields are delivered as `/run/secrets/<KEY>` with
 `<KEY>_FILE` set. A community Git URL must also be `https://` on a short
 allowlist of public hosts (`github.com`, `gitlab.com`, `codeberg.org`,
@@ -137,16 +139,18 @@ from what its manifest declares — published host ports lower it, auth-in-front
 and an owned (scoped) database schema raise it, and anything requiring built-in
 privileges floors it. It's an at-a-glance signal of how contained a service is
 *within* the allowed sandbox; it is not a verdict on the code. Integrations get
-no numeric rating — they run in-process with full access, so the card states that
-plainly instead.
+no numeric rating because installable integration artifacts are declarative-only;
+their companion services use the service rating instead.
 
 ### Install-time hardening
 
 Integration artifacts are guarded on several fronts: only HTTPS artifact URLs are
-accepted; the SHA-256 (when published) is checked before extraction; artifacts
+accepted; a SHA-256 pin is mandatory and checked before extraction; artifacts
 are capped at 200 MB; tar extraction blocks path-escape (zip-slip), malicious
 symlinks/hardlinks, and absolute paths; and an artifact shipping a
-`node_modules/` directory is rejected. These reduce the blast radius of a
+`node_modules/` directory is rejected. Backend, POI-source, and frontend runtime
+entry points are also rejected; executable behavior must move into an isolated
+service. These reduce the blast radius of a
 malformed archive — they are not a substitute for trusting the author.
 
 ## Updating, uninstalling, and the kill-switch

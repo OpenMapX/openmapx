@@ -30,12 +30,14 @@ required.
 openmapx/
 ├── apps/
 │   ├── web/                  Next.js 16 frontend (MapLibre GL JS, MUI 9)
-│   └── api/                  Fastify 5 BFF + integration host + admin API
+│   ├── api/                  Fastify 5 BFF + integration host + admin API
+│   └── ops-agent/            private typed operations broker
 ├── packages/                 shared libraries (see below)
 ├── integrations/             built-in application features (manifest.json each)
 ├── custom_integrations/      community integrations (gitignored)
 ├── services/                 built-in service plugins (service.json each)
-│   └── data-manager/         the one service that ships its own source
+│   ├── data-manager/         the one service that ships its own source
+│   └── ops-agent/            private deployment manifest for the operations broker
 ├── infra/docker/             generated compose + hardlink plan (gitignored)
 └── docs/                     this documentation site
 ```
@@ -51,11 +53,12 @@ service tree under `services/.community/` are populated at runtime from Git URLs
 | --- | --- | --- |
 | `apps/web` | Next.js 16 · React 19 · MapLibre GL JS 5 · MUI 9 · Tailwind 4 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state. |
 | `apps/api` | Fastify 5 | The backend-for-frontend (BFF) gateway. It is *also* the integration host: it discovers, validates, configures, and runs every integration, resolves their service requirements, gates the admin API, and runs background jobs. |
+| `apps/ops-agent` | Fastify 5 | A private, authenticated broker for a closed set of typed Docker and trusted-repository effects. It has no public route, host port, or community network attachment. |
 
-The two never talk to backend engines directly through the browser. The web app
-calls `apps/api`, and `apps/api` reaches the engines over the private Docker
-network. This indirection is what lets the same frontend front a Valhalla or an
-OSRM router without a code change.
+The browser never talks to backend engines directly. The web app calls
+`apps/api`, and `apps/api` reaches the engines over the private Docker network.
+This indirection is what lets the same frontend front a Valhalla or an OSRM
+router without a code change.
 
 ### Key packages
 
@@ -66,7 +69,7 @@ up without a separate build step.
 
 | Package | Owns |
 | --- | --- |
-| `@openmapx/core` | The shared spine: domain types (`Place`, `Route`, geometry, `BBox`), Zustand stores, the typed API client, TanStack Query hooks, and the **services framework** (manifest schema, registry, the compose renderer, the `DataManagerClient`, capability resolution). |
+| `@openmapx/core` | The shared spine: domain types (`Place`, `Route`, geometry, `BBox`), Zustand stores, the typed API client, TanStack Query hooks, the strict ops-agent contract/client, and the **services framework** (manifest schema, registry, the compose renderer, the `DataManagerClient`, capability resolution). |
 | `@openmapx/integration-framework` | The manifest schema, registry, loader, the `IntegrationContext` runtime type, and the **typed provider contracts** (one per domain — `TransitProvider`, `RealtimeProvider`, `MobilityDataSourceProvider`, `GeocodingProvider`, `RoutingProvider`, `WeatherProvider`, and more). |
 | `@openmapx/mobility-formats` | Pure, stateless parsers over raw bytes: GTFS, GTFS-RT, GBFS, NeTEx, SIRI, OJP, DATEX II, CSV. No I/O, no policy. |
 | `@openmapx/mobility-formats-tomp` | The TOMP-API (OpenAPI-generated) client, split out so its codegen dependencies don't bleed into every bundle that touches the other formats. |
@@ -74,13 +77,13 @@ up without a separate build step.
 | `@openmapx/db-schema` | Drizzle ORM table definitions shared between `apps/api` and `services/data-manager` (job tables, feed state, provider health). |
 | `@openmapx/cli` | The `openmapx` operator command line — services, compose, data/POI ingest, integrations/extensions, users, backups, cache, Transitous, and diagnostic checks. |
 | `@openmapx/i18n` | Locale JSON for `en` and `de`, plus a `check-translations` gate that fails CI when locales drift. Consumed by `apps/web` (next-intl) and `apps/api` (integration string lookups). |
-| `@openmapx/poi-source-registry` | A mutable in-process store of declared POI sources. Loaded independently by both `apps/api` (reader) and `services/data-manager` (ingest), so the same integration code drives both. |
+| `@openmapx/poi-source-registry` | A mutable in-process store of trusted built-in POI declarations. The data manager imports only image-baked integration modules; community POI JavaScript is rejected. |
 | `@openmapx/presets` | OSM preset matching and category chips, built on iD's tagging schema. |
 | `@openmapx/ev-charge-planner` | Pure EV trip planning: vehicle energy models, charge curves, corridor candidates, matrix scoring, network/availability/tariff policy, and itinerary estimates. |
-| `@openmapx/extension-cli`, `@openmapx/extension-sdk` | Standalone community-extension authoring tools and the stable public types/runtime helpers an external bundle may import. |
+| `@openmapx/extension-cli` | Community-extension manifest/service scaffolding, validation, and declarative packaging. Executable behavior belongs in an isolated service container. |
 | `@openmapx/openconditions-contrib-client` | Browser-side device enrollment, canonical claim validation/signing, reporting tokens, and signed votes for crowd reports. |
 | `@openmapx/transitous-core` | Shared Transitous catalog normalization and feed-selection logic used by the CLI, API, and data pipeline. |
-| `@openmapx/place-ids`, `@openmapx/mangrove-client`, `@openmapx/mangrove-react`, `@openmapx/command-palette`, `@openmapx/noaa-coops-data`, `@openmapx/ourairports-data`, `@openmapx/hardlinks`, `@openmapx/motis-feed-proxy-config`, `@openmapx/hey-api-client-fetch` | Focused utilities — stable place identifiers, Mangrove review signing, the search palette, bundled open datasets (tide stations, airports), the local hardlink applier, the MOTIS feed-proxy nginx config renderer, and a pinned `@hey-api/client-fetch` shim. |
+| `@openmapx/place-ids`, `@openmapx/mangrove-client`, `@openmapx/mangrove-react`, `@openmapx/command-palette`, `@openmapx/noaa-coops-data`, `@openmapx/ourairports-data`, `@openmapx/hardlinks`, `@openmapx/motis-feed-proxy-config`, `@openmapx/hey-api-client-fetch` | Focused utilities — stable place identifiers, Mangrove review signing, the search palette, bundled open datasets (tide stations, airports), the local hardlink applier, the MOTIS feed-proxy nginx config renderer, and the workspace fetch runtime used by generated API clients. |
 
 ## Runtime topology
 
@@ -120,10 +123,13 @@ graph TD
       PG[("postgis<br/>application + operational metadata<br/>no GTFS schedules")]
       Cache[("redis / valkey")]
       DM["data-manager"]
+      Ops["ops-agent · private typed broker"]
     end
 
     API --> PG
     API --> Cache
+    API -.->|authenticated typed effects| Ops
+    DM -.->|authenticated typed effects| Ops
     Jobs -.->|start/stop/restart| Engines
     DM -.->|OSM · styles · promoted MOTIS datasets| Engines
 ```
@@ -140,18 +146,34 @@ lowest priority so that more specific prefixes — `/api`, `/tiles`, `/martin`,
 
 **The always-on core.** A handful of services are selected by default —
 `traefik`, `well-known`, `app-api`, `app-web`, `postgis`, `redis`, and
-`data-manager`. Everything heavy (routing engines, geocoders, transit engines,
+`data-manager`; `app-api` and `data-manager` pull in the private `ops-agent`
+dependency. Everything heavy (routing engines, geocoders, transit engines,
 the Overpass server, tile servers) is opt-in: you add it to the *selection* and
 re-render. PostGIS is the system of record for application data and operational
 pipeline metadata; it does not store GTFS schedules. Redis (Valkey) is the
 cache.
+
+**The private operations boundary.** `ops-agent` accepts only versioned,
+short-lived requests from `app-api` or `data-manager`, authenticated with
+distinct file-mounted bearer credentials. Its contract is a strict
+discriminated union: callers cannot supply a command, arbitrary arguments,
+Compose/YAML, environment maps, caller paths, or container names. The agent
+maps authorized operation kinds to fixed runtime adapters and emits only
+bounded structured audit fields. It is reachable solely on the private
+`openmapx` network.
+
+`ops-agent` is the sole owner of the Docker socket and trusted repository write
+mounts. `app-api` and `data-manager` submit typed operations instead of receiving
+that host authority themselves. Traefik consumes generated configuration rather
+than discovering containers through the Docker socket, so there is no duplicate
+host-control path outside the broker.
 
 **`app-api` as integration host.** This is the architectural center. The Fastify
 process is one container, but it wears several hats at once:
 
 - Static routes registered directly on Fastify — `/health`, `/api/places`,
   `/api/isochrone`, `/api/tiles/*`, `/api/admin/*`, and so on.
-- The **integration host**, which loads every integration's `setup(ctx)` and
+- The **integration host**, which loads every trusted built-in integration's `setup(ctx)` and
   exposes their HTTP routes through a single dispatcher (more on this below).
 - The **service registry**, which validates `service.json` manifests and answers
   "what's installed, what does it provide, what URL is it on."
@@ -271,7 +293,7 @@ graph LR
    default.
 5. **Resolve `requires:`** — match each integration's requirements against the
    service registry and the capability bindings.
-6. **`setup(ctx)`** — call every enabled integration with a rich
+6. **`setup(ctx)`** — call every enabled built-in integration with a rich
    `IntegrationContext`. Through `ctx`, an integration registers providers
    (`ctx.registerTransitProvider`, `ctx.registerMobilityDataSource`,
    `ctx.registerProvider(domain, …)` for the rest), declares POI sources, mounts

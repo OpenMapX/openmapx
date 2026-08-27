@@ -175,9 +175,9 @@ Staged, starting small. Watch for:
 - Reports of guidance stopping in the background, by device vendor.
 - Handshake failures, which mean a web deploy and a shipped binary disagree.
 
-A phased rollout means several binaries are live against one web deployment at
-once. Keep old protocol support through the whole rollout; that is what makes
-halting it safe.
+This first release has one v3 protocol pairing and no older OpenMapX binary to
+support. Once a later binary actually exists, its release plan must define and
+test the concrete protocol overlap needed for that rollout.
 
 ### Halting
 
@@ -194,7 +194,7 @@ the fix is a new higher version, never a resubmission of the old one.
   the date it must already have shipped, not the date to start.
 - **16 KiB page size**: check every bundled native library after any dependency
   change, with compatibility mode disabled.
-- **Protocol**: additive changes only. Raising the minimum strands deployed web
-  builds and the release schema refuses it.
+- **Protocol**: v3 only for the first release. Future changes must be derived
+  from the deployed-version matrix and ship their overlap deliberately.
 - **Associations**: re-validate after any change to the well-known service, and
   after any signing-key rotation.

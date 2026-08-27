@@ -19,11 +19,14 @@ behavior, so you can verify and tune rather than guess.
 
 ## Status dashboard
 
-`/status` is the system-health snapshot — a quick "is everything up?"
+`/status` is the public system-health snapshot — a quick "is everything up?"
 check across the pieces the instance depends on, linked from the admin
-**Overview** page. It calls the API's `/api/status`
-endpoint, which reports `up`, `down`, or `not configured` with a measured
-response time.
+**Overview** page. It calls `/api/status`, which reports `up`, `down`, or `not
+configured` with a measured response time. This public representation never
+varies by session cookie and omits target URLs, dependency errors, and refresh
+error detail. Administrators can retrieve those fields from the separately
+authenticated `/api/admin/status` endpoint; that response is always marked
+`private, no-store`.
 
 Two groups of checks run:
 
@@ -40,13 +43,22 @@ Two groups of checks run:
   status page. An administrator can still force a fresh sweep from the
   integrations health view.
 
-The page groups results by category (Infrastructure first), shows a running
-count of operational / down / not-configured services, and displays each check's
-target URL with passwords masked. A connection string is never shown with its
-secret intact. Toggle **Auto-refresh** to refresh the view every 30 seconds while
-the tab is visible, or hit **Refresh** on demand. Infrastructure checks run on
-each refresh; integration results advance when the background scheduler
-publishes its next snapshot, unless an administrator forces a sweep.
+The page groups results by category (Infrastructure first) and shows a running
+count of operational / down / not-configured services. Toggle **Auto-refresh**
+to refresh the view every 30 seconds while the tab is visible, or hit
+**Refresh** on demand. Requests within 30 seconds reuse one process-local
+snapshot, and concurrent refreshes share one dependency probe fan-out. The
+public response is additionally cacheable for 15 seconds, with 45 seconds of
+stale-while-revalidate, and has a dedicated per-IP limit of 60 requests per
+minute.
+
+If a refresh fails, the API may serve the last successful snapshot for at most
+five minutes with `stale: true` and `snapshotAgeMs` reporting its monotonic age.
+Wall-clock adjustments cannot extend this window. After five minutes the API
+returns an unavailable representation with an empty service list, rather than
+exposing outdated dependency detail. Integration results advance when the
+background scheduler publishes its next snapshot, unless an administrator
+forces a sweep.
 
 The same snapshot also rolls up into the admin **Overview** dashboard's
 attention list; see [Admin panel](./admin-panel.md) for that landing view.
@@ -201,6 +213,40 @@ it to scroll back. Two things worth knowing about retention:
   ~10,000 entries), so the viewer is fast but a restart clears them.
 - `warn`, `error`, and `fatal` lines are additionally **persisted to the database**
   (the `app_logs` table) so the important events survive a restart.
+
+New application-log entries pass through the same bounded sanitizer before the
+in-memory buffer and database. Request lifecycle entries contain only an internal
+request ID, method, matched route template, status, duration, and safe error class.
+External URLs are represented by a normalized hostname and a SHA-256 digest
+prefix for correlation; credentials, paths, queries, and fragments are not
+retained.
+
+### Purging historical application logs
+
+Logs created before this protection was deployed may already contain sensitive
+URLs. Upgrades do not delete them automatically: retention is an operator policy,
+and an automatic purge could destroy evidence or records your organization must
+keep. First make and verify a database backup, review your legal and incident-
+response retention requirements, and record the UTC deployment time of the
+protected API. In your normal PostgreSQL administration client, preview and then
+delete only rows older than that operator-chosen cutoff:
+
+```sql
+SELECT count(*)
+FROM app_logs
+WHERE created_at < TIMESTAMPTZ '2026-08-25 00:00:00+00';
+
+BEGIN;
+DELETE FROM app_logs
+WHERE created_at < TIMESTAMPTZ '2026-08-25 00:00:00+00';
+COMMIT;
+```
+
+Replace the example timestamp with your deployment cutoff. Confirm the previewed
+row count before `DELETE`; the operation is irreversible without the backup. To
+retain a forensic copy, restrict access to the backup according to the same or
+stronger policy as the live database. There is intentionally no environment flag
+that restores raw request or URL logging.
 
 The viewer is read-only — it's for triage, not configuration.
 

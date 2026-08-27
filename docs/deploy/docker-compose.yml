@@ -2,12 +2,14 @@
 #
 # Runs as its OWN compose project, completely separate from the app stack in
 # ~/openmapx (Compose project "docker") and from the landing page in
-# ~/landing-page. It pulls the prebuilt image that CI publishes to GHCR
-# (.github/workflows/docker.yml, on push to main) and only *joins* the app
-# Traefik's network (docker_openmapx) so Traefik can route to it. Nothing in the
-# app or landing deployment is touched.
+# ~/landing-page. It pulls the prebuilt image that the post-CI scan/promotion
+# workflow publishes to GHCR (.github/workflows/docker.yml) and only *joins*
+# the app Traefik network (docker_openmapx) so Traefik can route to it. Nothing
+# in the app or landing deployment is touched.
 #
-# Deploy from the repo checkout on the server (e.g. ~/openmapx):
+# Deploy from the repo checkout on the server (e.g. ~/openmapx) after resolving
+# OPENMAPX_DOCS_IMAGE from ghcr.io/openmapx/release-manifest:latest as described
+# in ../README.md. This digest pin selects the complete release atomically:
 #   docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs pull
 #   docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs up -d
 #
@@ -15,7 +17,7 @@
 # Let's Encrypt cert automatically (HTTP-01 challenge, "letsencrypt" resolver).
 services:
   docs:
-    image: ghcr.io/openmapx/docs:latest
+    image: ${OPENMAPX_DOCS_IMAGE:?Resolve the complete release manifest before deploying docs}
     container_name: openmapx-docs
     restart: unless-stopped
     pull_policy: always

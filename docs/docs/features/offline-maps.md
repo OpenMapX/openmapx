@@ -16,6 +16,22 @@ extracts an immutable PMTiles archive from the deployment's OpenMapTiles-schema
 MBTiles source. The browser also pins the versioned glyph PBFs required by the
 configured OpenMapX light and dark styles.
 
+Preparing a new area and checking its preparation status require a signed-in
+OpenMapX session. Already-downloaded areas remain visible, removable, and usable
+on the device after sign-out. Capability discovery, immutable manifests, glyphs,
+and content-addressed archive downloads remain public so an issued download URL
+can finish without exposing account metadata.
+
+Preparation is limited to two authenticated requests in any rolling ten-minute
+window, including duplicate or rejected requests. A deployment also keeps an
+independent conservative IP limit. Data-manager permits at most one running and
+two queued requests per opaque account principal, and retains at most five
+artifact references totaling 5 GiB of logical bytes. Shared physical archives
+are charged at their full size to each retaining principal. A `429` response
+includes a bounded `Retry-After` value; wait that many seconds before retrying.
+Signing out closes and aborts a pending preparation UI, while a later sign-in
+may resume only jobs owned by that same derived principal.
+
 Packages do **not** contain another style bundle, sprite bundle, or copied layer
 definitions. Online and offline rendering both load the web app's configured
 OpenMapX style and sprites. Going offline rewrites only:
@@ -50,15 +66,20 @@ slices instead of loading the entire PMTiles file into memory. Missing ready
 archives are reconciled into a resumable error state rather than advertised to
 the map.
 
-The service worker installs the offline entry page, home page, both bundled
-styles, and required sprites as one app-shell generation. PMTiles bytes never
-enter Cache Storage: the page-side protocol reads them directly. Glyphs use a
-separate cache keyed by their content version and are removed only after the
-last package using that version is deleted. Glyph cache keys use the manifest's
-stable API path; `NEXT_PUBLIC_API_URL` only selects where missing glyphs are
-downloaded from, so moving the API origin does not strand installed assets.
-Cache Storage is a readiness requirement—a package is not advertised as ready
-if its glyphs cannot be retained durably.
+The service worker installs a credential-free offline entry page, both bundled
+styles, and required sprites as one app-shell generation. Navigation responses,
+including the home page, are never stored: documents are network-only and an
+offline failure may resolve only to that distinct `/offline` cache key. This
+prevents account, role, locale, reset-token, and callback state from crossing a
+browser-session boundary through Cache Storage.
+
+PMTiles bytes never enter Cache Storage: the page-side protocol reads them
+directly. Glyphs use a separate cache keyed by their content version and are
+removed only after the last package using that version is deleted. Glyph cache
+keys use the manifest's stable API path; `NEXT_PUBLIC_API_URL` only selects where
+missing glyphs are downloaded from, so moving the API origin does not strand
+installed assets. Cache Storage is a readiness requirement—a package is not
+advertised as ready if its glyphs cannot be retained durably.
 
 ## Rendering one or many areas
 

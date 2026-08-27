@@ -22,10 +22,9 @@ written, see [Managing services](../install/managing-services.md).
 ## Where it lives
 
 A service named `valhalla` lives at `services/valhalla/service.json`. The
-directory slug must equal the manifest's `id`, and any files the manifest
-bind-mounts (config templates, icons) are resolved relative to that directory.
-Community services install under `services/.community/<repo-hash>/<slug>/` and
-follow the same layout.
+directory slug must equal the manifest's `id`, and first-party bind-mount
+sources resolve relative to that directory. Community services install under
+`services/.community/<repo-hash>/<slug>/`, but cannot declare bind mounts.
 
 The manifest is validated by a Zod schema in
 `packages/core/src/services/manifest-schema.ts`. A file that fails validation is
@@ -115,6 +114,7 @@ The top-level descriptive fields.
 | `documentation` | URL | no | API/docs URL; validated as a URL. |
 | `quality` | enum | yes | `built-in`, `community-verified`, or `community`. Display/catalog label only; the sandbox uses where the manifest was loaded from (see [Quality tiers](#quality-tiers)). |
 | `platform` | string | no | Optional platform-version constraint a community manifest can declare against the OpenMapX core. |
+| `communityNetworkAccess` | service id[] | no | Audited first-party capability only. Explicitly attaches a built-in bridge service to the named community services' isolated networks while retaining `openmapx`. Rejected from community provenance at validation and render boundaries. Start with no entries; this is not a platform-network escape hatch. |
 
 ## `container`
 
@@ -126,11 +126,11 @@ service keys; the renderer copies them through.
 | `image` | string | **Required.** Lowercase, no tag suffix — matches `^[a-z0-9]([a-z0-9._\-/])*$`. Put the version in `tag`. |
 | `tag` | string | **Required.** The image tag (`latest`, `2.10.2`, `v3.6`); matches `^[a-zA-Z0-9._-]+$`. |
 | `containerName` | string | Pin the compose container to a fixed name (`container_name`) instead of the derived `<project>-<service>-<n>`. Required only when another service addresses this one by bare name over the Docker CLI (the data-manager does this for `motis`, `motis-staging`, `motis-feed-proxy`). It blocks scaling, so use it sparingly. |
-| `expose` | number[] | Container ports published on the internal `openmapx` network. Required if `exposure.proxy.enabled` is `true`. |
-| `networkAliases` | string[] | Extra DNS aliases on the `openmapx` network. Each must be a valid DNS label and may not collide with another service id or alias. Aliasing the service's own id is harmless. |
-| `command` | string \| string[] | Container command. |
-| `entrypoint` | string \| string[] | Container entrypoint. |
-| `environment` | object (string→string) | Environment variables. Supports `${VAR}`, `${VAR:-default}`, and `${VAR:?error message}` interpolation, resolved at render time. |
+| `expose` | number[] | Container ports exposed to the service's attached Compose network. Required if `exposure.proxy.enabled` is `true`. |
+| `networkAliases` | string[] | Extra DNS aliases on the service's attached network (`openmapx` for built-ins, its isolated network for community services). Each must be a valid DNS label and may not collide with another service id or alias. Aliasing the service's own id is harmless. |
+| `command` | string \| string[] | Container command. First-party services may use Compose interpolation; community services render `$` literally. |
+| `entrypoint` | string \| string[] | Container entrypoint. First-party services may use Compose interpolation; community services render `$` literally. |
+| `environment` | object (string→string) | Environment variables. First-party services support `${VAR}`, `${VAR:-default}`, and `${VAR:?error message}` interpolation passed to Docker Compose for deployment-time resolution. Community services render `$` literally and should use `configSchema` for operator-supplied settings. |
 | `envFile` | string[] | `env_file` pass-through. Relative paths under `infra/docker/` only. First-party services only: it can expose the deployment `.env`. Third-party services should use `configSchema`; secret fields arrive through `/run/secrets/<KEY>` with `<KEY>_FILE`. |
 | `workingDir` | string | Working directory inside the container. |
 | `user` | string | Run-as user, e.g. `"${UID:-1000}:${GID:-1000}"`. |
@@ -145,6 +145,25 @@ service keys; the renderer copies them through.
 | `dependsOn` | array | Start-order dependencies — `{ "service": "<id>", "condition": "service_started" \| "service_healthy" }`. |
 | `logging` | object | Compose logging — `{ "driver": "...", "options": { ... } }`. |
 | `healthcheck` | object | See below. |
+
+### Network isolation
+
+Bridge-mode built-ins join the shared `openmapx` network and keep service-id
+discovery there. Each community service instead receives exactly one dedicated
+network named `openmapx-community-<normalized-service-id>` and never joins
+`openmapx`. Different community services therefore cannot connect directly to
+each other or to Redis, Postgres, app-api, data-manager, or other platform
+peers. They retain ordinary outbound internet access through their own bridge.
+
+An audited built-in may declare top-level `communityNetworkAccess` with exact
+community service ids when a reviewed bridge genuinely needs to initiate a
+connection to that community container. The renderer rejects unknown targets,
+built-in targets, and normalized-name collisions. The capability is authorized
+from registry provenance (`isBuiltIn` / `firstParty`), never from the manifest's
+self-declared `quality`; a hand-built community `LoadedService` is rejected again
+at the render boundary. No shipped built-in opts in initially. If multiple
+community containers need to discover each other, define an explicit reviewed
+multi-component service bundle instead of widening platform-network access.
 
 ### `container.healthcheck`
 
@@ -169,7 +188,7 @@ port probe, and `exec` runs `command` directly.
 | `type` | enum | **Required.** `http`, `tcp`, or `exec`. |
 | `path` | string | HTTP path to probe (`http` only). |
 | `port` | number | Port to probe (`http`/`tcp`). |
-| `command` | string \| string[] | Command to run (`exec` only). |
+| `command` | string \| string[] | Command to run (`exec` only). First-party services may use Compose interpolation; community services render `$` literally. |
 | `interval` | string | Probe interval, e.g. `"30s"`. |
 | `timeout` | string | Per-probe timeout. |
 | `retries` | number | Failures before "unhealthy." |
@@ -278,8 +297,10 @@ on disk, an Overpass index).
 
 ### `bindMounts`
 
-Mount files from the service's own directory — or, for built-in services only, a
-small whitelist of host references — into the container.
+First-party services mount files from their own directory or a small whitelist
+of host references into the container. Community services may not declare any
+`bindMounts` entry, including read-only entries; use a namespaced named volume
+for persistent state instead.
 
 ```json
 "bindMounts": [
@@ -292,16 +313,16 @@ small whitelist of host references — into the container.
 
 | Field | Type | Notes |
 | :--- | :--- | :--- |
-| `source` | string | **Required.** See the source kinds below. Third-party relative sources are canonicalized at render time and must remain inside the service snapshot. |
-| `target` | string | **Required.** Absolute container path; first-party services may use a Compose-variable reference, but third-party services may not. No `..`. |
+| `source` | string | **Required.** See the first-party source kinds below. Community services cannot declare this field because all community bind mounts are rejected. |
+| `target` | string | **Required.** Absolute container path; first-party services may use a Compose-variable reference. No `..`. |
 | `readOnly` | boolean | Defaults to `true`. |
-| `optional` | boolean | When `true`, the mount is silently dropped at render time if the host source is absent. Used for operator-supplied secrets declared once but materialized only when the file is dropped in place. Not allowed with Compose-variable sources. |
+| `optional` | boolean | First-party only. When `true`, the mount is silently dropped at render time if the host source is absent. Used for operator-supplied secrets declared once but materialized only when the file is dropped in place. Not allowed with Compose-variable sources. |
 
 The `source` may be one of:
 
 | Source kind | Available to | Behavior |
 | :--- | :--- | :--- |
-| Relative path (`config/foo.json`) | all qualities | Resolved against the service's own directory. No `..`, no absolute paths. |
+| Relative path (`config/foo.json`) | **built-in only** | Resolved against the service's own directory. No `..`, no absolute paths. |
 | `@docker-socket` | **built-in only** | Mounts the host's `/var/run/docker.sock`. |
 | `@service:<slug>:<rel-path>` | **built-in only** | Mounts a path from another built-in service's directory (shared config). The renderer fails fast if the named service is unknown or the path escapes its directory. |
 | `@infra:<rel-path>` | **built-in only** | Resolves against `infra/docker/` — the directory the compose file renders into. Used to bind the shared `infra/docker/data/` tree. |
@@ -309,9 +330,10 @@ The `source` may be one of:
 
 ## `exposure`
 
-By default a service is reachable only on the private `openmapx` network, by
-service id (`http://valhalla:8002`). Nothing is published to the host or the
-internet unless the manifest opts in, in one of two ways.
+By default a built-in service is reachable only on the private `openmapx`
+network, by service id (`http://valhalla:8002`). A community service is reachable
+only on its own isolated community network. Nothing is published to the host or
+the internet unless the manifest opts in, in one of two ways.
 
 ```json
 "exposure": {
@@ -341,12 +363,14 @@ Publishes a container port on the host.
 ### `exposure.proxy`
 
 Attaches Traefik routing so a path prefix under your domain reaches the
-container — the common case for HTTP services. Enabling the proxy requires
-`container.expose` to declare at least one port (otherwise validation fails).
+container — the common case for first-party HTTP services. It is unavailable to
+community services because they cannot claim routes on the platform origin.
+Enabling the proxy requires `container.expose` to declare at least one port
+(otherwise validation fails).
 
 | Field | Type | Notes |
 | :--- | :--- | :--- |
-| `enabled` | boolean | **Required.** When `true`, requires `container.expose`. |
+| `enabled` | boolean | **Required.** First-party only; when `true`, requires `container.expose`. |
 | `pathPrefix` | string | HTTP prefix Traefik routes here. Must match `^/[a-zA-Z0-9._\-/]*$`. |
 | `stripPrefix` | boolean | If `true`, the prefix is stripped before forwarding. |
 | `middleware` | string[] | Traefik middleware names (e.g. `tiles-cache@file`). |
@@ -382,6 +406,24 @@ one as a file-based Docker `secret`, mounted into the container and read by the
 service through a `<KEY>_FILE` environment variable. See the
 [service credential vault](../administration/services-administration.md) for the
 operator workflow.
+
+Redis authentication is a platform-owned special case rather than a manifest
+author capability. Compose rendering bootstraps a canonical 32-byte random
+password under the host-only `0700` `infra/docker/secrets/` boundary, keeps the
+source file readable for non-root containers, and mounts it only into Redis,
+app-api, and data-manager. Those clients must read the exact bytes from
+`REDIS_PASSWORD_FILE`; whitespace, malformed base64url, symlinks, non-regular
+files, empty files, and oversized files fail closed. Rotation is performed only
+through `pnpm openmapx compose rotate-redis-password --confirm-clients-stopped`,
+after stopping app-api and data-manager. Password and derived ACL candidates are
+both durable before the password commit, but their individual atomic renames are
+sequential rather than a two-file transaction. Successful render/rotation paths
+reread and reconcile the pair after concurrent changes. If a crash or target
+integrity race interrupts the pair, keep clients stopped, repair or quarantine
+the invalid ACL target, and run `pnpm openmapx compose render` before recreating
+Redis. Wait for its authenticated health check before restarting either client;
+never delete the password first or place it in a manifest URL, environment
+value, command, label, or health-check text.
 
 Each declared key resolves through a three-layer cascade at render time, highest
 priority first:
@@ -486,15 +528,22 @@ this field.
 
 | Origin | Sandbox |
 | :--- | :--- |
-| First-party (`services/`, `quality: "built-in"`) | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, and privileged mode. |
-| Third-party (`services/.community/`, `quality: "community"` or `"community-verified"`) | Identical sandbox for both labels: no host networking, privileged mode, devices, escape-class capabilities, `@`-special sources, deployment `envFile`, or Compose-variable bind paths; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. |
+| First-party (`services/`, `quality: "built-in"`) | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`. |
+| Third-party (`services/.community/`, `quality: "community"` or `"community-verified"`) | Identical sandbox for both labels: one isolated per-service network; no `communityNetworkAccess`, bind mounts of any kind, host networking, privileged mode, devices, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, or Traefik proxy routes; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. |
 
-The third-party rules apply at validation and again at render time. Relative
-bind sources are canonicalized so a symlink shipped in a community snapshot
-cannot escape its service directory; the renderer also checks cross-service
-volume and network-alias collisions. Operator-supplied configuration should
-use `configSchema`; secret fields are delivered as `/run/secrets/<KEY>` with
-`<KEY>_FILE` set rather than by exposing `infra/docker/.env`.
+The third-party rules apply at validation and again at render time. Community
+services must migrate persistent state to a namespaced named volume; operator
+configuration should use `configSchema`, and secret fields are delivered as
+`/run/secrets/<KEY>` with `<KEY>_FILE` set rather than by exposing
+`infra/docker/.env`. The renderer also checks cross-service volume and
+network-alias collisions.
+
+Community services retain namespaced named-volume persistence and outbound
+internet access through their isolated bridge network. They cannot reach the
+private `openmapx` network, claim platform routes through Traefik, or interpolate
+deployment environment variables: every `$` in community `command`,
+`entrypoint`, environment keys or values, and exec health-check commands is
+rendered literally.
 
 ## Validation at a glance
 
@@ -504,11 +553,12 @@ The schema enforces, among other rules:
 - `image` matches `^[a-z0-9]([a-z0-9._\-/])*$` (no tag suffix); `tag` matches `^[a-zA-Z0-9._-]+$`.
 - Volume names match `^openmapx-[a-z0-9-]+$`.
 - Every `mountAt` and `target` is absolute and free of `..`.
-- A `bindMounts.source` is a relative path, a known first-party special source, or a Compose-variable reference — nothing else. Third-party relative sources must remain inside their snapshot after canonicalization.
+- A first-party `bindMounts.source` is a relative path, a known first-party special source, or a Compose-variable reference — nothing else. Community services may not declare `bindMounts`; use a namespaced named volume for persistent state.
 - `capAdd` entries come from the fixed capability allowlist; `devices` match `/dev/<name>`. Third-party services are further restricted to a safe capability subset and may not pass devices.
-- `exposure.proxy.enabled: true` requires at least one `container.expose` port.
+- First-party `exposure.proxy.enabled: true` requires at least one `container.expose` port; community services cannot enable the platform proxy.
 - Duplicate `(type, instance)` pairs in `produces` are rejected.
-- Third-party services may not use host networking, privileged mode, host device pass-through, escape-class capabilities, `@`-special bind sources, deployment `envFile`, or Compose-variable bind paths. Their volume names and network aliases are isolated from platform-owned names.
+- `communityNetworkAccess` is first-party-only and names installed community service ids; community services never join `openmapx`, including when a manifest is handed directly to the renderer.
+- Third-party services may not use bind mounts, host networking, privileged mode, host device pass-through, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, platform proxy routes, or deployment-variable interpolation in Compose command, entrypoint, environment, and exec health-check fields. Their volume names and network aliases are isolated from platform-owned names.
 
 Capability and data-type strings that are neither well-known nor namespaced
 produce warnings rather than errors, so the manifest still loads.

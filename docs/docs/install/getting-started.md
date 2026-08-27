@@ -53,9 +53,12 @@ cp infra/docker/.env.example infra/docker/.env
 ```
 
 Open `infra/docker/.env` and set, at minimum, the values the stack refuses to
-start without. The generated compose file references several of these with the
-`${VAR:?}` form, so a missing one fails the boot loudly rather than shipping an
-insecure default:
+start without. Do this before the first render or start. The generated compose
+file references several of these with the `${VAR:?}` form, so a missing one
+fails the boot loudly rather than shipping an insecure default. That Compose
+syntax checks only that input is non-empty; OpenMapX separately rejects known
+database placeholders, values shorter than 24 characters, and passwords that
+match the database username:
 
 ```bash
 # Public domain + TLS (Traefik / Let's Encrypt)
@@ -82,6 +85,12 @@ DOCKER_GID=                # docker-socket group id — `stat -c %g /var/run/doc
 drive Docker on the host, so the CLI's lifecycle and data commands work from
 inside the stack. The `.env.example` file documents how to generate each secret
 inline.
+
+The CLI performs the database-password check before any Docker command, and
+the API and data-manager repeat it whenever they bootstrap in production. A
+rejection names the failed policy rule without echoing the password or database
+URL. Generate a fresh value for each deployment; do not copy a credential from
+documentation or another environment.
 
 Everything else — map-tile keys, traffic and street-imagery tokens, OAuth login,
 per-integration credentials — is optional at boot and mostly managed from the
@@ -248,9 +257,9 @@ pnpm openmapx data link
 ```
 
 This re-renders the compose plan first (so the links match your current service
-selection) and then applies it. `build`, `build-all`, and `compose up` run this
-step for you, but it's worth knowing as its own command for when you refresh data
-without rebuilding.
+selection) and then applies it. `build` and `build-all` run this step for you,
+but it's worth knowing as its own command for when you refresh data without
+rebuilding.
 
 ## 9. Bring up the full stack
 
@@ -260,8 +269,14 @@ Finally, start everything:
 pnpm openmapx compose up
 ```
 
-This re-renders, applies the hardlink plan, and runs `docker compose up -d` for
-the whole enabled selection. Prepared services start from the artifacts you built
+This re-renders, applies the hardlink plan, resolves the aggregate app release
+(`ghcr.io/openmapx/release-manifest:latest`) into
+`infra/docker/docker-compose.release.yml` if that overlay does not exist yet,
+and runs `docker compose up -d` for the whole enabled selection. The overlay
+pins the core app images as one coherent set; if the registry is unreachable
+the CLI warns loudly and you can pin later with `pnpm openmapx compose release`
+(the manual procedure in [Upgrading](./upgrading.md#4-resolve-the-complete-release-and-replace-containers)
+produces the same file). Prepared services start from the artifacts you built
 in step 7; any heavy engine builds its internal index from the OSM extract on
 first start, which is slow at continent or planet scale.
 

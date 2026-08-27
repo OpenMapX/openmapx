@@ -119,6 +119,53 @@ fastify.post("/mobile-auth/issue", { config: { auth: "session" } }, handler);
 `unspecified` is deliberately distinct from `public`: an unclassified route must
 never be documented as open.
 
+### Status and mobile-auth request boundaries
+
+`GET /api/status` is the cookie-independent, redacted status representation.
+It may be shared-cacheable and never includes dependency URLs, probe errors, or
+refresh error classes. `GET /api/admin/status` requires an administrator session
+and returns operational detail with `Cache-Control: private, no-store`. Both
+representations report `snapshotAgeMs` and `stale`; stale data is bounded to five
+minutes.
+
+The two mobile session-handoff operations accept JSON bodies of at most 4096
+bytes. Fastify enforces that parser limit for fixed-length and chunked requests
+before either handler runs. Their schemas reject unknown keys and use these
+field bounds:
+
+| Operation | Field | Accepted value or length |
+| --- | --- | --- |
+| `POST /api/mobile-auth/issue` | `purpose` | `sign-in`, `link-provider`, or `add-passkey` |
+|  | `codeChallenge` | 43–128 base64url characters |
+|  | `state` | 16–128 base64url characters |
+| `POST /api/mobile-auth/exchange` | `callbackCode` | 16–256 base64url characters |
+|  | `codeVerifier` | 43–128 base64url characters |
+|  | `state` | 16–128 base64url characters |
+
+### Cookie mutation and CSRF boundary
+
+Every application `POST`, `PUT`, `PATCH`, or `DELETE` request that carries a
+`Cookie` header must also carry exactly one syntactically valid HTTP(S)
+`Origin`. Its normalized scheme, hostname, and effective port must exactly
+match an origin configured in `CORS_ORIGIN`. Wildcards, sibling or suffix
+matches, credentials, paths, queries, fragments, custom schemes, `null`, and a
+missing or repeated Origin are rejected with a generic 403 before body parsing
+or route handling. There is deliberately no application-level `Referer`
+fallback.
+
+The only path exemption is exactly `/api/auth` and its `/api/auth/` subtree,
+whose unsafe requests remain protected by Better Auth's own global origin
+middleware. Cookie-free bearer, service-token, loopback-CLI, and anonymous
+requests continue to their existing route authentication; that is an
+authentication-mode branch, not a route exemption. In particular, loopback
+admin mutations still require `X-OpenMapX-Local-Admin` independently of this
+guard. `GET`, `HEAD`, and `OPTIONS` are unaffected.
+
+`CORS_ORIGIN` is also the normalized web-origin source for CORS, Better Auth,
+and auth UI redirects. CORS responses vary on `Origin` and never reflect an
+untrusted origin. CORS is a browser response policy, not authorization, and it
+does not replace the mutation guard.
+
 ## What this document is not
 
 - **Not a response contract.** Adding a Fastify `response` schema is not

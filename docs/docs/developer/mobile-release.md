@@ -58,9 +58,9 @@ So the installed shell:
   allowlist and by WebKit App-Bound Domains;
 - injects only a per-load channel nonce, never arbitrary script.
 
-Built-in reviewed integrations remain fully available, and the ordinary web app
-and PWA keep community integrations exactly as before. Nothing here removes a
-feature from the website.
+Built-in reviewed integrations remain fully available. Community runtime code is
+also disabled in the ordinary web app and PWA; declarative community metadata and
+safe static assets remain supported.
 
 Enforced by:
 

@@ -43,15 +43,14 @@ over each other. Two durable session records disagree the first time one crashes
 | Wake lock | Screen Wake Lock API | Native |
 | Durable session | IndexedDB | Native SQLite |
 | Transit live refresh | Browser polling | Native, single token consumer |
-| Community frontend bundles | Loaded | Never executed |
+| Community frontend bundles | Never executed | Never executed |
 | Microphone / voice search | Available | Never offered |
 | Rendering, search, planning | Web | Web |
 
 The shell's presence is announced by an immutable descriptor injected before any
-page script runs. Every row above that says "never" is decided from that
-descriptor alone — **not** from the handshake. Waiting for negotiation would
-leave a window in which unreviewed code had already executed, and a window is
-all it takes.
+page script runs. Shell-only restrictions are decided from that descriptor alone,
+not from the handshake. Community runtime code is disabled at the platform level
+in every browser environment until it has a real isolation boundary.
 
 There are exactly two authorities, `browser` and `native`. `negotiating`,
 `incompatible` and `error` are all native states. None of them is permission to

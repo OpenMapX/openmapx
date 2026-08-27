@@ -176,6 +176,28 @@ Every mutation returns a job id. Desired state changes immediately, while active
 state changes only after the complete inactive-slot build and probes pass. A
 failure retains the prior active sources and live dataset.
 
+The protected desired-state file retains the operator's remote URL but is never
+passed upstream. Each sync substitutes a fresh, 256-bit, one-use relay
+capability before generating input for Transitous, so its catalog and Python
+metadata contain only that relay URL; process arguments, the result manifest,
+and logs contain neither the remote URL nor the capability. The current runner
+consumes the relay on the data-manager loopback interface; the same store accepts
+a private-network base URL for the separated runner without exposing the
+endpoint publicly or to community services.
+
+Remote acquisition is fail-closed: public HTTP(S) and default ports only, at
+most five redirects with every target and pinned DNS answer revalidated, a
+512 MiB compressed-byte ceiling, and a five-minute remote-download timeout. An
+unused capability expires after ten minutes. Once claimed, one ten-minute total
+deadline covers download and response streaming; 30 seconds without byte
+progress, client disconnect, or run termination aborts the stream and deletes
+the private archive. A capability is claimed before download and cannot be
+reused after success or failure. Audit events retain only the source kind,
+hostname, outcome, duration, byte count, and successful SHA-256 digest. Operator
+URLs must not contain credentials; configured credential headers, where
+supported, are restricted to redirects with the exact same scheme, hostname,
+and effective port.
+
 ### Keeping feeds fresh: the staging pipeline
 
 You don't have to rebuild MOTIS by hand to stay current. OpenMapX's data-manager

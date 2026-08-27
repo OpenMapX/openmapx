@@ -51,7 +51,7 @@ ship the placeholders.
 | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `DOMAIN`                  | Public domain. Drives Traefik routing, the auth URLs (`BETTER_AUTH_URL`, `PASSKEY_RP_ID`, `PASSKEY_ORIGIN`), the web app's `NEXT_PUBLIC_API_URL`, tile-server URLs, and the outbound contact identity (the contact address in third-party User-Agent strings and the email `From` fallback). Point both an A and an AAAA record at the host. | Default `localhost`           |
 | `ACME_EMAIL`              | Contact email for Traefik's automatic Let's Encrypt TLS certificates.                                                                   | Default `admin@example.com`   |
-| `POSTGRES_PASSWORD`       | Password for the PostgreSQL/PostGIS database (used by `postgis`, `app-api`, and `data-manager`). Compose refuses to start if unset. Generate with `openssl rand -hex 32`. | **Required**                  |
+| `POSTGRES_PASSWORD`       | Unique password for the PostgreSQL/PostGIS database (used by `postgis`, `app-api`, and `data-manager`). Generate it before the first render with `openssl rand -hex 32`; it must be at least 24 characters and must not be a known placeholder or match `POSTGRES_USER`. | **Required**                  |
 | `OPENMAPX_HOST_DIR`       | Absolute host path of the OpenMapX repo checkout. The `app-api` container shells out to `docker compose` from inside the container and bind-mounts this path at the same path on both sides, so generated bind sources like `./data` resolve correctly. Find it with `pwd` from the repo root. | **Required** (no default)     |
 | `DOCKER_GID`              | The host's docker-socket group id. Containers that mount the docker socket run as a non-root user and must join this group, or the data-manager's MOTIS import/promote fails with "permission denied". Host-specific — find it with `stat -c %g /var/run/docker.sock`. Compose has no fallback, so it must be set; `.env.example` pre-fills `999`. | **Required**                  |
 
@@ -61,6 +61,16 @@ dual-stack. For IPv6 to reach published ports, the Docker daemon needs
 `ip6tables` enabled — the default in Docker Engine 27+, otherwise add
 `{"experimental": true, "ip6tables": true}` to `/etc/docker/daemon.json` and
 restart the daemon.
+:::
+
+:::caution[Compose's required-variable check is not a strength check]
+The `${VAR:?required}` syntax rejects an unset or empty value only. It does not
+recognize a public example value, a username reused as a password, or a weak
+short value. `openmapx compose render`, service start, and `openmapx check`
+apply the stronger deployment policy before invoking Docker. The API and
+data-manager repeat the same check at production database bootstrap so direct
+Compose use cannot bypass it. Errors report only the policy reason, never the
+credential or full database URL.
 :::
 
 ## Secrets
@@ -88,6 +98,9 @@ required pieces of this group are listed under [Core / required](#core--required
 | `UID`                               | Host UID for bind-mounted volumes (Linux). macOS/Windows usually don't need this — Docker Desktop handles ownership. | Optional. Commented `1000`      |
 | `GID`                               | Host GID for bind-mounted volumes (Linux). Same caveat as `UID`.                                                    | Optional. Commented `1000`      |
 | `DATA_MANAGER_URL`                  | Base URL `app-api` uses to reach the data-manager. Compose overrides this to the service-network DNS name automatically. | Default `http://localhost:4000` (`pnpm dev`); compose sets `http://data-manager:4000` |
+| `DATA_MANAGER_PLAINTEXT_HOSTS`      | Comma-separated hostnames that may be reached over plain `http://` in addition to `localhost`, `127.0.0.1`, `::1` and `data-manager`. `DATA_MANAGER_URL` must otherwise be `https://`; credentials, path prefixes and query strings are always rejected. | Unset |
+| `OPENMAPX_FETCH_JSON_MAX_BYTES`     | Ceiling in bytes for upstream JSON responses fetched by integrations that do not set their own limit. Lower it to tighten memory use, or raise it for a large regional feed; a raised value is logged once at first use. | 8 MiB |
+| `OPENMAPX_RELEASE_MANIFEST_IMAGE`   | Release-manifest image the admin updater and `pnpm openmapx compose release` resolve. Forks or mirrored registries point it at their own `<registry>/<namespace>/release-manifest[:tag]`; every pinned image must then live under that `<registry>/<namespace>` and carry a digest. Set it to an **empty** value to disable release pinning for local-image workflows (no registry pull on start; `services update` of core apps then pulls manifest tags). | `ghcr.io/openmapx/release-manifest:latest` |
 | `OPENMAPX_ENABLED_SERVICES`         | Pin a specific service selection (comma- or space-separated) for CI/repeatable deploys. Wins over the `service-selection.json` written by the admin UI / CLI. | Optional. Default: `service-selection.json` |
 | `OPENMAPX_DOCKER_CONFIG_DIR`        | Host directory holding Docker registry credentials, mounted into `app-api` so the extension store's **Update** can pull private GHCR images. On the reference deploy this is `/home/ubuntu/.docker`. | Optional. Default unset |
 
@@ -322,6 +335,7 @@ Schedules and tuning for the daily Transitous transit-data sync.
 | `TRANSITOUS_STALENESS_CHECK_CRON`     | Cron schedule for the staleness sweep that flags feeds that have stopped updating. Set to `disabled` (or `off`/`false`) to turn it off. | Optional. Commented `0 4 * * *` |
 | `TRANSITOUS_FEED_PROXY_RELOAD_CRON`   | Cron schedule for the feed-proxy nginx-reload heartbeat — a safety net against a missed reload during sync. | Optional. Commented `*/15 * * * *` |
 | `TRANSITOUS_AUTO_BUMP_CRON`           | Opt-in cron that advances the pinned Transitous catalog to upstream's latest behind the staging-slot canary — activates the new pin (and promotes) only if the candidate builds and passes the functional probes, otherwise keeps the current pin and alerts. **Unset/empty = disabled** (the pin stays frozen). See [Transit engines](../guides/transit-engines.md). | Optional. Default disabled |
+| `TRANSITOUS_RUNNER_URL`               | Base URL of the private Transitous runner — the unprivileged container that executes the upstream catalog scripts. Compose wires this automatically; override it only if you run the runner elsewhere. Leaving it empty disables upstream script execution (the sync fails closed rather than running third-party Python inside the data manager). | Optional. Default `http://transitous-runner:4400` |
 | `TRANSITOUS_ALERT_GH_TOKEN` / `TRANSITOUS_ALERT_GH_REPO` | When both are set, sync/auto-bump failures and stale feeds open deduped GitHub issues instead of being log-only. Without them a canary rejection can silently freeze the live dataset for days. | Optional. Default log-only |
 | `MOTIS_RENTALS_WARMUP_MS` / `MOTIS_RENTALS_POLL_INTERVAL_MS` | How long the rentals canary re-polls MOTIS `/rentals` while it enumerates zero providers (GBFS warm-up after a restart) before failing, and the interval between polls. | Optional. Default `180000` / `5000` |
 

@@ -282,6 +282,22 @@ eager per-request fetch: declare the feed with `ctx.registerPoiSources(...)` so
 the `data-manager` service ingests it into PostGIS on a cron, and have `search`
 read only the rows intersecting the viewport. See the
 [service manifest](./service-manifest.md) for the data-manager side.
+
+Both fixed `fetch.url` values and URLs returned by `resolveUrl` use the same
+streaming safe downloader. It permits only public HTTP(S) endpoints on default
+ports, follows at most five redirects, validates and DNS-pins every connection,
+and rejects a hostname when any answer is private, loopback, link-local, or
+reserved. The default total deadline is 60 seconds. `fetch.timeoutMs` may set a
+source-specific deadline; `fetch.maxBytes` may raise or lower the 256 MiB
+compressed-byte default but cannot exceed the 2 GiB hard maximum. Parser-specific
+inflated and output limits still apply after acquisition.
+
+If `headers` or `resolveHeaders` supplies any header, every redirect must retain
+the exact scheme, hostname, and effective port. With no configured headers, URL
+userinfo and nonstandard headers are stripped. Partial files are removed on
+failure. Successful audit data is limited to the source kind, hostname, byte
+count, duration, and SHA-256 digest; never put a full URL, query, or credential
+in a source's own log messages.
 :::
 
 ## Attribution and freshness

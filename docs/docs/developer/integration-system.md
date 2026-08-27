@@ -27,14 +27,16 @@ This page complements it from the code side.
 
 An integration is a directory. Built-in integrations live under `integrations/`
 and run directly from workspace TypeScript source; community integrations live
-under `custom_integrations/` and run from prebuilt bundles (see
+under `custom_integrations/` and are limited to declarative metadata and
+frontend assets (see
 [Built-in versus community](#built-in-versus-community)). The host only requires
 two things to be present:
 
 - **`manifest.json`** — declarative metadata. Required. This is what the host
   discovers and validates; an integration with only a manifest and no code is a
   valid (if inert) integration.
-- **`index.ts`** (or a built backend bundle) — the runtime entry point. Optional.
+- **`index.ts`** — the trusted built-in runtime entry point. Optional and not
+  permitted in an installable community artifact.
   It exports a `setup(ctx)` function that the host invokes once at load time,
   passing the [`IntegrationContext`](#the-integration-context). This is where an
   integration registers providers, routes, and lifecycle hooks.
@@ -80,8 +82,8 @@ the exhaustive list.
 
 The `id` is load-bearing: it names the integration's directory, its config cache
 namespace, its environment-variable prefix, and its API route prefix
-(`/api/integrations/<id>/...`). It is constrained to a safe slug because it is
-also embedded as a string literal in generated community-bundle stubs.
+(`/api/integrations/<id>/...`). It is constrained to a safe slug because it also
+names files, URLs, and generated build-time identifiers.
 
 ### Domains
 
@@ -153,8 +155,9 @@ described in [Capability requirement resolution](#capability-requirement-resolut
 }
 ```
 
-`mapLayer` / `legend` / `panel` are advertisement flags for **code** components
-the integration ships. `searchCategory` and `layerSelector` are pure
+`mapLayer` / `legend` / `panel` advertise **trusted built-in code** components.
+Installable community manifests that set those flags are rejected until a
+cross-origin sandbox and capability protocol exist. `searchCategory` and `layerSelector` are pure
 declarations the host renders (a search-bar category chip; a layer-selector
 entry). `overlay` carries mutual-exclusion rules (`excludes`), `minZoom`, and an
 optional **declarative legend** the host draws from the manifest, which an
@@ -434,8 +437,9 @@ integration, are separate developer pages.
 
 ## Map overlays
 
-An integration that draws on the map (`domains` includes `map-overlay`, with a
-`layerSelector` entry so users can toggle it) ships a `map-layer.tsx`. Its
+ A trusted built-in integration that draws on the map (`domains` includes
+`map-overlay`, with a `layerSelector` entry so users can toggle it) ships a
+`map-layer.tsx`. Its
 legend is the one part it can declare instead of writing.
 
 ### Declarative legends (no shipped legend code)
@@ -451,25 +455,20 @@ this one switches on) and `minZoom`.
 
 ### Map layers (shipped components)
 
-The layer itself is always a shipped component: `map-layer.tsx`, with the
+For trusted built-ins the layer itself is a shipped component: `map-layer.tsx`, with the
 `frontend.mapLayer` flag set (and `frontend.legend` plus a `legend.tsx` when the
 declarative legend above isn't expressive enough). Built-in overlays import the
-app's internals directly. **Community** overlays reach the map through the
-curated runtime surface exported from `@openmapx/integration-framework/react`:
+app's map context and layer utilities directly:
 
 ```tsx
-import { useHostMap } from "@openmapx/integration-framework/react";
-import maplibregl from "maplibre-gl";
+import { useMap } from "@/lib/MapContext";
 
 export default function MapLayer() {
-  const { mapRef, mapReady, styleVersion, getFirstSymbolLayerId, setLayerInteractive } = useHostMap();
-  // add sources/layers to mapRef.current, anchor beneath labels, react to styleVersion…
+  const { mapRef, mapReady, styleVersion } = useMap();
+  // add sources/layers, anchor with the host utilities, react to styleVersion…
   return null;
 }
 ```
-
-`useHostMap()` returns the live host map (`mapRef`, `mapReady`, `styleVersion`)
-plus helpers (`getFirstSymbolLayerId`, `anchorBelowLabels`, `setLayerInteractive`).
 
 ### Crediting an overlay's sources
 
@@ -486,25 +485,17 @@ registers nothing. Credits that arrive with a response rather than a manifest
 (`MobilityResult.attributions`) go through `useMapAttributions(key, attributions)`.
 Either way the wording comes from the manifest, never from hand-rolled strings.
 
-### The community frontend runtime
+### Community presentation boundary
 
-Community integration frontends are built into a bundle and served back to the
-web app at `/api/integrations/:id/bundle/*` (refused for built-ins). The web app
-loads each as an ES module that self-registers its components onto
-`window.__openmapx_integrations`. Crucially, the bundle does **not** ship its own
-copy of React or the platform packages: it marks `react`, `react/jsx-runtime`,
-`@openmapx/core`, `@openmapx/integration-framework` (+ `/react`), and
-`maplibre-gl` as externals, and the page's import map resolves those to the
-host's live singletons. So a community overlay shares the host's React, registry
-context, and maplibre instance — hooks and context work across the boundary, and
-its `maplibregl.Popup` operates on the host map.
-
-:::note[CSP and the API origin]
-The bundle `<script>` loads from the API origin. When the app and API share an
-origin (the typical deployment, with `/api` proxied) the default
-`script-src 'self'` covers it. A cross-origin API deployment must add the API
-origin to the web app's `script-src`, or the browser blocks the bundle.
-:::
+Community integration artifacts are declarative-only. The installer rejects
+`map-layer.tsx`, `legend.tsx`, `panel.tsx`, and prebuilt frontend bundles; app-api
+does not serve a bundle route; and the web provider never appends community
+scripts. This is deliberate: a same-origin script has the signed-in user's full
+authority, and CSP cannot sandbox code the application intentionally executes.
+Executable community presentation will remain disabled until it can run on a
+separate origin (or equivalently isolated worker) behind a narrow, versioned
+message/capability API. Static SVG previews and host-rendered manifest fields
+remain supported.
 
 ## Lifecycle: discovery, loading, and hosting
 
@@ -567,15 +558,13 @@ The host then exposes the integration surface to the rest of the API:
 
 ### Reload versus restart
 
-In development, `POST /api/integrations/reload` re-runs discovery and setup:
-it invokes every `onShutdown` handler, clears the registry, and rebuilds it from
-the freshly read manifests. Reload re-registers providers and lifecycle hooks and
-re-reads config and bindings — which is why a config or binding change can take
-effect without a full restart. The one thing reload cannot do is *remove* a
-previously registered Fastify route or pick up *new backend code* in production
-(ESM module imports are cached for the process lifetime). Adding or changing
-backend code in a production deployment therefore requires restarting the API
-container.
+In development, `POST /api/integrations/reload` re-runs discovery and setup.
+The host builds a detached generation, then atomically swaps its registry,
+dynamic routes, POI registrations, and event subscriptions before retiring the
+old generation. A failed setup leaves the serving generation untouched. Config
+and binding changes therefore take effect without exposing a partially rebuilt
+host. Trusted built-in backend imports are cache-busted when their entry file
+changes.
 
 ## Capability requirement resolution
 
@@ -620,10 +609,13 @@ The host treats the two install locations differently, and the
 - **Built-in integrations** ship in the repository under `integrations/`. They
   run directly from workspace TypeScript source — the host imports their
   `index.ts` — and need no build step. They carry `quality: "built-in"`.
-- **Community integrations** are installed under `custom_integrations/` and run
-  from a prebuilt ESM bundle; the API never compiles code at runtime. Their
-  frontend bundles are served back to the web app through a dedicated route
-  (`/api/integrations/:id/bundle/*`), which is refused for built-ins. A community
+- **Community integrations** are installed under `custom_integrations/`. Their
+  manifests and safe static assets are discovered, but backend, `poi-sources`, and frontend
+  JavaScript is never imported by app-api or data-manager: those processes hold
+  database credentials, application secrets, a writable checkout, and Docker
+  authority and are not sandboxes. The installer rejects such entry points.
+  Backend behavior belongs in a separately containerized service component;
+  executable presentation remains disabled until a cross-origin sandbox exists. A community
   integration may declare a minimum `platform` version in its manifest; if the
   running platform's major version differs, or its minor is lower, the host skips
   the integration with a warning. The platform version uses simple
