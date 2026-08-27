@@ -37,7 +37,7 @@
   "devDependencies": {
     "@testcontainers/postgresql": "^12.1.0",
     "@types/node": "^26.3.0",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }
 }
