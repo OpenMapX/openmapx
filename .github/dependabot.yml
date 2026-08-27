@@ -62,6 +62,13 @@ updates:
       # ahead of the runtime — bump it deliberately when the Node version moves.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      # TypeScript 7 removes compiler APIs used by the build and OpenAPI tools;
+      # move compiler majors as an explicit repository-wide migration.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # Expo owns the compatible React Native and test-preset versions. Upgrade
+      # this pair with the Expo SDK instead of accepting standalone bumps.
+      - dependency-name: "react-native"
       - dependency-name: "@react-native/jest-preset"
         # Kept aligned with react-native; Expo upgrades both as one reviewed stack.
 

@@ -13,7 +13,7 @@
   "dependencies": {
     "@openmapx/core": "workspace:^",
     "fastify": "^5.12.1",
-    "tsx": "4.23.5"
+    "tsx": "4.23.12"
   },
   "devDependencies": {
     "@types/node": "^26.3.0",
