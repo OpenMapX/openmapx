@@ -72,6 +72,20 @@ for (const rel of ["apps/api/package.json", "packages/mobility-core/package.json
   }
 }
 
+// React Native's Jest preset imports runtime-internal entry points, so even a
+// semver-minor drift can make every mobile suite fail before tests execute.
+const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+};
+const reactNativeVersion = mobilePackage.dependencies?.["react-native"];
+const reactNativeJestPreset = mobilePackage.devDependencies?.["@react-native/jest-preset"];
+if (!reactNativeVersion || reactNativeJestPreset !== reactNativeVersion) {
+  errors.push(
+    `apps/mobile/package.json: @react-native/jest-preset "${reactNativeJestPreset}" must exactly match react-native "${reactNativeVersion}"`,
+  );
+}
+
 // gtfsclean commit: every image that builds it.
 for (const rel of [
   "services/motis/tools/transitous/Dockerfile",

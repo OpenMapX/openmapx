@@ -9,6 +9,20 @@ function read(relativePath: string): string {
 }
 
 describe("production supply-chain policy", () => {
+  it("keeps the React Native Jest preset exactly aligned with the runtime", () => {
+    const mobilePackage = JSON.parse(read("apps/mobile/package.json")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+    const reactNative = mobilePackage.dependencies?.["react-native"];
+    const jestPreset = mobilePackage.devDependencies?.["@react-native/jest-preset"];
+
+    expect(jestPreset).toBe(reactNative);
+    expect(read(".github/dependabot.yml")).toMatch(
+      /- dependency-name: "@react-native\/jest-preset"\n\s+# Kept aligned with react-native/,
+    );
+  });
+
   it("keeps digest pins current through reviewable Renovate PRs", () => {
     const renovate = JSON.parse(read("renovate.json")) as {
       enabledManagers?: string[];

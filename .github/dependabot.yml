@@ -62,6 +62,8 @@ updates:
       # ahead of the runtime — bump it deliberately when the Node version moves.
       - dependency-name: "@types/node"
         update-types: ["version-update:semver-major"]
+      - dependency-name: "@react-native/jest-preset"
+        # Kept aligned with react-native; Expo upgrades both as one reviewed stack.
 
   # The documentation site is a standalone pnpm workspace and is therefore
   # not covered by the root npm configuration above.
