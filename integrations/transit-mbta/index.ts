@@ -5,12 +5,13 @@ const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
-  mbta.setMbtaApiKey(ctx.config.apiKey as string | undefined);
+  ctx.onActivate(() => mbta.setMbtaApiKey(ctx.config.apiKey as string | undefined));
   ctx.registerTransitProvider({
     id: "transit-mbta",
     prefix: "mb:",
     coverage: { bbox: [-71.9, 41.3, -69.9, 42.9] },
     priority: 1,
+    role: "enrichment",
     attribution: attribution.all(),
     capabilities: {
       stops: {

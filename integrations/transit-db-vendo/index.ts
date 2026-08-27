@@ -5,12 +5,13 @@ const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
-  dbVendo.setDbVendoUserAgent(ctx.config.userAgent as string | undefined);
+  ctx.onActivate(() => dbVendo.setDbVendoUserAgent(ctx.config.userAgent as string | undefined));
   ctx.registerTransitProvider({
     id: "transit-db-vendo",
     prefix: "db:",
     coverage: { bbox: [5.87, 47.27, 15.04, 55.06] },
     priority: 6,
+    role: "regional",
     attribution: attribution.all(),
     capabilities: {
       stops: {
@@ -43,8 +44,8 @@ export function setup(ctx: IntegrationContext): void {
     async getArrivals(id, min) {
       return wrapRT(await dbVendo.getArrivals(id, min));
     },
-    async searchStopsByName(q, limit) {
-      return wrap(await dbVendo.searchByName(q, limit ?? 10));
+    async searchStopsByName(q, limit, context) {
+      return wrap(await dbVendo.searchByName(q, limit ?? 10, context?.signal));
     },
     async getStopPlatforms(id) {
       return wrap(await dbVendo.getPlatformStops(id));

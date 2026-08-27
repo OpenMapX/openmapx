@@ -31,8 +31,8 @@ scaffold
       console.log(`Scaffolded integration "${id}" at ${destDir}`);
       console.log("");
       console.log("Next steps:");
-      console.log("  1. Fill in manifest.json — add dataSources[], update healthCheck.url.");
-      console.log("  2. Implement setup(ctx) in index.ts.");
+      console.log("  1. Fill in manifest.json and update healthCheck.url.");
+      console.log("  2. Put executable behavior in a separately sandboxed service component.");
       console.log(`  3. Run: openmapx-ext validate ${join(options.out, id)}`);
       console.log(`  4. Run: openmapx-ext package ${join(options.out, id)} --out artifact.tar.gz`);
     } catch (err) {
@@ -64,12 +64,12 @@ scaffold
 
 program
   .command("package <source>")
-  .description("Build and package an integration into a distributable .tar.gz artifact")
+  .description("Package a declarative integration into a distributable .tar.gz artifact")
   .requiredOption("--out <file>", "Artifact output path (e.g. my-integration.tar.gz)")
-  .option("--no-build", "Skip building — require pre-built dist/ bundles")
-  .action(async (source: string, options: { out: string; build?: boolean }) => {
+  .option("--dry-run", "List the exact files that would be packaged and their total size")
+  .action(async (source: string, options: { out: string; dryRun?: boolean }) => {
     try {
-      await runPackage({ source, out: options.out, build: options.build });
+      await runPackage({ source, out: options.out, dryRun: options.dryRun });
     } catch (err) {
       console.error(`package failed: ${(err as Error).message}`);
       process.exit(1);

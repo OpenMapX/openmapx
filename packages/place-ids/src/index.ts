@@ -13,10 +13,13 @@ export {
   registerIdSchemeView,
 } from "./presentation";
 export {
+  beginPlaceResolverStaging,
+  commitPlaceResolverStaging,
   getPlaceResolver,
   listPlaceResolverSchemes,
   type PlaceResolver,
   type PlaceResolverContext,
   registerPlaceResolver,
+  rollbackPlaceResolverStaging,
 } from "./resolvers";
 export { buildTripadvisorUrl } from "./tripadvisor";

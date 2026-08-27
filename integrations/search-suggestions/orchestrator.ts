@@ -5,10 +5,18 @@ import {
   type SearchSuggestionQuery,
   type SearchSuggestionsResponse,
 } from "@openmapx/core";
-import type { IntegrationContext, SearchSuggestionProvider } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  mapSettledWithConcurrency,
+  ProviderCancelledError,
+  ProviderTimeoutError,
+  runWithProviderDeadline,
+  type SearchSuggestionProvider,
+} from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 
 export const PROVIDER_TIMEOUT_MS = 1_200;
+export const MAX_PROVIDER_CONCURRENCY = 4;
 
 interface ProviderEntry {
   integrationId: string;
@@ -30,21 +38,6 @@ function collectProviders(ctx: IntegrationContext): ProviderEntry[] {
   return entries;
 }
 
-function withTimeout<T>(promise: Promise<T>): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  return Promise.race([
-    promise,
-    new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error("search suggestion provider timeout")),
-        PROVIDER_TIMEOUT_MS,
-      );
-    }),
-  ]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-}
-
 function dedupeAttributions(attributions: Attribution[]): Attribution[] {
   const bySource = new Map<string, Attribution>();
   for (const attribution of attributions) {
@@ -57,7 +50,9 @@ async function invokeProvider(
   ctx: IntegrationContext,
   entry: ProviderEntry,
   query: SearchSuggestionQuery,
+  signal?: AbortSignal,
 ): Promise<SuccessfulProvider | null> {
+  if (signal?.aborted) throw new ProviderCancelledError();
   const startedAt = Date.now();
   const healthy = (await ctx.providerHealth?.isHealthy(entry.provider.id)) ?? true;
   if (!healthy) {
@@ -69,7 +64,10 @@ async function invokeProvider(
   }
 
   try {
-    const result = await withTimeout(entry.provider.searchSuggestions(query));
+    const result = await runWithProviderDeadline(
+      (providerContext) => entry.provider.searchSuggestions(query, providerContext),
+      { signal, timeoutMs: PROVIDER_TIMEOUT_MS },
+    );
     const elapsed = Date.now() - startedAt;
     await ctx.providerHealth?.recordSuccess(entry.provider.id, elapsed);
     ctx.metricsRecorder?.recordProviderCall(
@@ -84,9 +82,15 @@ async function invokeProvider(
   } catch (error) {
     const elapsed = Date.now() - startedAt;
     const reason = error instanceof Error ? error.message : "provider error";
-    await ctx.providerHealth?.recordFailure(entry.provider.id, elapsed, reason);
+    const cancelled = error instanceof ProviderCancelledError;
+    const timedOut = error instanceof ProviderTimeoutError;
+    if (!cancelled) await ctx.providerHealth?.recordFailure(entry.provider.id, elapsed, reason);
     ctx.metricsRecorder?.recordProviderCall(
-      { providerId: entry.provider.id, method: "searchSuggestions", outcome: "error" },
+      {
+        providerId: entry.provider.id,
+        method: "searchSuggestions",
+        outcome: cancelled ? "cancelled" : timedOut ? "timeout" : "error",
+      },
       elapsed,
     );
     throw error;
@@ -94,17 +98,22 @@ async function invokeProvider(
 }
 
 export function createSearchSuggestionsOrchestrator(ctx: IntegrationContext): {
-  search(query: SearchSuggestionQuery): Promise<SearchSuggestionsResponse>;
+  search(query: SearchSuggestionQuery, signal?: AbortSignal): Promise<SearchSuggestionsResponse>;
 } {
   return {
-    async search(query) {
+    async search(query, signal) {
       const disallowed = (await ctx.getDisallowedIntegrationIds?.()) ?? new Set<string>();
       const eligible = collectProviders(ctx).filter(
         ({ integrationId }) => integrationId !== ctx.id && !disallowed.has(integrationId),
       );
-      const settled = await Promise.allSettled(
-        eligible.map((entry) => invokeProvider(ctx, entry, query)),
+      const settled = await mapSettledWithConcurrency(eligible, MAX_PROVIDER_CONCURRENCY, (entry) =>
+        invokeProvider(ctx, entry, query, signal),
       );
+      // Provider fan-out uses all-settled semantics so individual upstream
+      // failures can produce a useful partial response. Caller cancellation is
+      // different: it must escape as a rejection so cache layers never persist
+      // a request-aborted empty result as successful shared data.
+      if (signal?.aborted) throw new ProviderCancelledError();
       const successful = settled.flatMap((outcome) =>
         outcome.status === "fulfilled" && outcome.value ? [outcome.value] : [],
       );

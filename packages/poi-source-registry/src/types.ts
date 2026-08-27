@@ -1,3 +1,4 @@
+import type { Buffer } from "node:buffer";
 import type { FeedIdParts } from "@openmapx/core/feed-id";
 
 /** Bounding box: [west, south, east, north] (lng/lat). */
@@ -31,6 +32,22 @@ export interface PoiSourceLogger {
   debug(message: string, ...args: unknown[]): void;
 }
 
+/** Text encodings accepted by Node's Buffer decoder plus the legacy feed codec we support. */
+export type PoiTextEncoding =
+  | "ascii"
+  | "base64"
+  | "base64url"
+  | "binary"
+  | "hex"
+  | "latin1"
+  | "ucs-2"
+  | "ucs2"
+  | "utf-16le"
+  | "utf-8"
+  | "utf16le"
+  | "utf8"
+  | "windows-1252";
+
 /** HTTP fetch spec. Auth is resolved by data-manager's secrets client. */
 export interface PoiHttpFetchSpec {
   type: "http";
@@ -38,7 +55,7 @@ export interface PoiHttpFetchSpec {
   timeoutMs?: number;
   /** Ceiling for the downloaded body in bytes. Defaults to the pipeline's own limit. */
   maxBytes?: number;
-  encoding?: BufferEncoding | "windows-1252";
+  encoding?: PoiTextEncoding;
   headers?: Record<string, string>;
   /**
    * Optional async header resolver. Runs at fetch time inside data-manager,

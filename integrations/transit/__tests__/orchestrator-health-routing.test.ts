@@ -18,6 +18,7 @@ function makeProvider(overrides: Partial<TransitProvider>): TransitProvider {
     prefix: "tp:",
     coverage: { all: true },
     priority: 5,
+    role: "enrichment",
     attribution: ATTR,
     capabilities: {
       stops: {

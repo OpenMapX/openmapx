@@ -14,10 +14,12 @@ export function setup(ctx: IntegrationContext): void {
   const url =
     resolved?.url ?? (ctx.config.endpoint as string | undefined) ?? "https://api.stadiamaps.com";
 
-  setValhallaUrl(url);
-  setValhallaApiKey(ctx.config.apiKey as string | undefined);
-  // Defaults on: only an explicit `false` from config disables it.
-  setValhallaBidirectionalAlternates(ctx.config["bidirectional-alternates"] !== false);
+  ctx.onActivate(() => {
+    setValhallaUrl(url);
+    setValhallaApiKey(ctx.config.apiKey as string | undefined);
+    // Defaults on: only an explicit `false` from config disables it.
+    setValhallaBidirectionalAlternates(ctx.config["bidirectional-alternates"] !== false);
+  });
 
   ctx.registerRoutingProvider(valhallaService);
 }

@@ -115,7 +115,7 @@ describe("street-level-imagery-mapillary /nearest", () => {
   });
 
   it("uses a Mapillary-safe bbox (≤ 0.0004 deg span) on every attempt", async () => {
-    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) });
+    fetchMock.mockImplementation(async () => Response.json({ data: [] }));
 
     const { ctx, routes } = buildCtx();
     setup(ctx);
@@ -135,7 +135,7 @@ describe("street-level-imagery-mapillary /nearest", () => {
   });
 
   it("retries with a slightly larger bbox when the first attempt finds no images", async () => {
-    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) });
+    fetchMock.mockImplementation(async () => Response.json({ data: [] }));
 
     const { ctx, routes } = buildCtx();
     setup(ctx);
@@ -154,7 +154,7 @@ describe("street-level-imagery-mapillary /nearest", () => {
   });
 
   it("returns 404 when no images are found even after expanding the bbox", async () => {
-    fetchMock.mockResolvedValue({ ok: true, status: 200, json: async () => ({ data: [] }) });
+    fetchMock.mockImplementation(async () => Response.json({ data: [] }));
 
     const { ctx, routes } = buildCtx();
     setup(ctx);
@@ -164,16 +164,14 @@ describe("street-level-imagery-mapillary /nearest", () => {
   });
 
   it("returns the nearest image to the requested point", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      status: 200,
-      json: async () => ({
+    fetchMock.mockResolvedValue(
+      Response.json({
         data: [
           { id: "far", computed_geometry: { type: "Point", coordinates: [13.42, 52.53] } },
           { id: "near", computed_geometry: { type: "Point", coordinates: [13.41, 52.52] } },
         ],
       }),
-    });
+    );
 
     const { ctx, routes } = buildCtx();
     setup(ctx);

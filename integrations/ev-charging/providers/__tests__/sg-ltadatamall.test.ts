@@ -16,6 +16,10 @@ const stations = JSON.parse(fixture);
 const SEARCH_BBOX = { south: 1.28, west: 103.84, north: 1.3, east: 103.86 };
 const BATCH_LINK = "https://dm-batch-bucket.s3.ap-southeast-1.amazonaws.com/EVBatch.json";
 
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
+}
+
 afterEach(() => {
   setSgLtaDatamallApiKey(undefined);
   vi.unstubAllGlobals();
@@ -53,10 +57,10 @@ describe("searchSgLtaDatamallCharging", () => {
     const fetchMock = vi.fn().mockImplementation((url: string, init?: RequestInit) => {
       if (url === "https://datamall2.mytransport.sg/ltaodataservice/EVCBatch") {
         expect((init?.headers as Record<string, string>).AccountKey).toBe("test-key");
-        return Promise.resolve(new Response(JSON.stringify({ value: [{ Link: BATCH_LINK }] })));
+        return Promise.resolve(jsonResponse({ value: [{ Link: BATCH_LINK }] }));
       }
       if (url === BATCH_LINK) {
-        return Promise.resolve(new Response(fixture));
+        return Promise.resolve(jsonResponse(stations));
       }
       throw new Error(`unexpected fetch: ${url}`);
     });
@@ -98,7 +102,7 @@ describe("fetchSgLtaDatamallChargingDetail", () => {
         "https://datamall2.mytransport.sg/ltaodataservice/EVChargingPoints?PostalCode=123456",
       );
       expect((init?.headers as Record<string, string>).AccountKey).toBe("test-key");
-      return Promise.resolve(new Response(JSON.stringify({ value: stations })));
+      return Promise.resolve(jsonResponse({ value: stations }));
     });
     vi.stubGlobal("fetch", fetchMock);
 

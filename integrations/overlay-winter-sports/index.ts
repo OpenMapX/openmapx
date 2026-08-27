@@ -1,4 +1,9 @@
 import { USER_AGENT } from "@openmapx/core";
+import {
+  createBoundedBinaryProxyStream,
+  MAX_RASTER_TILE_BYTES,
+  RASTER_IMAGE_MEDIA_TYPES,
+} from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 
 export function setup(ctx: IntegrationContext): void {
@@ -22,19 +27,26 @@ export function setup(ctx: IntegrationContext): void {
       .replace("{y}", String(y));
 
     try {
+      const timeoutSignal = AbortSignal.timeout(15_000);
+      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
       const response = await fetch(url, {
         headers: { "User-Agent": USER_AGENT },
-        signal: AbortSignal.timeout(15_000),
+        signal,
       });
       if (!response.ok) {
         reply.status(response.status).send({ message: "Upstream tile fetch failed" });
         return;
       }
-      const buffer = Buffer.from(await response.arrayBuffer());
+      const proxy = createBoundedBinaryProxyStream(response, {
+        maxBytes: MAX_RASTER_TILE_BYTES,
+        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
+        fallbackContentType: "image/png",
+        label: "OpenSnowMap tile",
+      });
       reply.header("Cache-Control", "public, max-age=604800, s-maxage=604800");
       reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.type("image/png");
-      reply.send(buffer);
+      reply.type(proxy.contentType);
+      reply.send(proxy.body);
     } catch (err) {
       ctx.log.warn("Winter sports tile fetch failed", err);
       reply.status(502).send({ message: "Winter sports tile provider unavailable" });

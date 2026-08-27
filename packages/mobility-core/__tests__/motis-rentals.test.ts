@@ -6,7 +6,6 @@ import {
   decodeMotisRentalId,
   fetchMotisRentals,
   mapMotisRentalSnapshot,
-  resolveLegacyMotisRentalId,
   setMotisRentalSourceIndex,
   setSharedMobilityMotisUrl,
   setSharedMobilityTransitousUrl,
@@ -257,14 +256,6 @@ describe("complete MOTIS rental mapping", () => {
     expect(snapshot.stations[0]?.emptySlots).toBeUndefined();
     expect(snapshot.stations[0]?.capacity).toBeUndefined();
     expect(snapshot.stations[0]?.isActive).toBe(false);
-  });
-
-  it("refuses ambiguous legacy IDs", () => {
-    const snapshot = mapMotisRentalSnapshot(fixture(), "motis-local");
-    expect(resolveLegacyMotisRentalId("motis:same/native:id", snapshot)).toBeNull();
-    expect(resolveLegacyMotisRentalId("motis:station:/中央", snapshot)?.nativeId).toBe(
-      "station:/中央",
-    );
   });
 
   it("keeps other providers when one zone geometry is malformed", () => {

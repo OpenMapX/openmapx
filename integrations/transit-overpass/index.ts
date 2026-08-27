@@ -7,7 +7,9 @@ const { attribution, wrap, init } = defineTransitProvider();
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
   const resolved = ctx.getRequiredService("overpass");
-  if (resolved?.url) setOverpassUrl(resolved.url);
+  ctx.onActivate(() => {
+    if (resolved?.url) setOverpassUrl(resolved.url);
+  });
 
   const overpassFallbackEnabled = process.env.OPENMAPX_OVERPASS_TRANSIT_FALLBACK === "true";
   if (!overpassFallbackEnabled) {
@@ -22,6 +24,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "osm:",
     coverage: { all: true },
     priority: 10,
+    role: "enrichment",
     attribution: attribution.all(),
     capabilities: {
       stops: {

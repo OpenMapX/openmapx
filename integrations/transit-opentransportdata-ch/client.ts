@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { fetchWithRedirects, USER_AGENT_TRANSIT } from "@openmapx/core";
+import { readBoundedBinaryResponse } from "@openmapx/core/server";
 import type { CacheClient, Logger } from "@openmapx/integration-framework";
 import {
   buildOjpLocationInformationRequestXml,
@@ -205,7 +206,12 @@ async function fetchBinaryFeed(url: string): Promise<ArrayBuffer> {
     const text = await response.text().catch(() => "");
     throw new Error(`Swiss binary feed failed (${response.status}): ${text.slice(0, 200)}`);
   }
-  return response.arrayBuffer();
+  const { data } = await readBoundedBinaryResponse(response, {
+    maxBytes: 32 * 1024 * 1024,
+    fallbackContentType: "application/octet-stream",
+    label: "Swiss realtime binary feed",
+  });
+  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 }
 
 async function fetchTextFeed(url: string): Promise<string> {

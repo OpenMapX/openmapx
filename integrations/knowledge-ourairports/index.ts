@@ -15,9 +15,9 @@ import {
   queryAirportsInBbox,
   searchAirportMatches,
   searchAirports,
+  startBackgroundLoad,
 } from "@openmapx/ourairports-data";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { startBackgroundLoad, stopBackgroundLoad } from "./data.js";
 import { createOurAirportsSource } from "./provider.js";
 
 const SEARCH_MIN_LEN = 2;
@@ -73,8 +73,13 @@ export function createOurAirportsSuggestionProvider(
 ): SearchSuggestionProvider {
   return {
     id: "knowledge-ourairports",
-    async searchSuggestions(query: SearchSuggestionQuery): Promise<SearchSuggestionProviderResult> {
+    async searchSuggestions(
+      query: SearchSuggestionQuery,
+      { signal },
+    ): Promise<SearchSuggestionProviderResult> {
+      signal.throwIfAborted();
       const matches = await search(ctx.log, query.query, query.limit);
+      signal.throwIfAborted();
       const attribution = ctx.attributionIndex?.getById("ourairports") ?? {
         sourceId: "ourairports",
         name: "OurAirports",
@@ -156,7 +161,8 @@ async function findNearestAirports(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  startBackgroundLoad(ctx.log);
+  const releaseBackgroundLoad = startBackgroundLoad(ctx.log);
+  ctx.onShutdown(async () => releaseBackgroundLoad());
   ctx.registerKnowledgeProvider(createOurAirportsSource(ctx.log));
   ctx.registerSearchSuggestionProvider(createOurAirportsSuggestionProvider(ctx));
 
@@ -270,9 +276,5 @@ export function setup(ctx: IntegrationContext): void {
     });
     reply.header("Cache-Control", "public, max-age=3600");
     reply.send(payload);
-  });
-
-  ctx.onShutdown(async () => {
-    stopBackgroundLoad();
   });
 }

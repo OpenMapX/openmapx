@@ -9,7 +9,7 @@ import { deriveExtrema, fetchMeasurements, reformatPegelTime } from "../index.js
 // (`CM_TO_FT = 0.0328084`, rounded to 2dp).
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 let mockFetch: ReturnType<typeof vi.fn>;

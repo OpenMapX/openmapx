@@ -1,3 +1,4 @@
+import { readBoundedBinaryResponse } from "@openmapx/core/server";
 import type { PoiSourceLogger } from "@openmapx/poi-source-registry";
 
 // MobiData BW's OCPDB deployment aggregates German charging data nationwide
@@ -105,7 +106,11 @@ export async function fetchAllOcpdbItems(
         );
         break;
       }
-      const buffer = Buffer.from(await res.arrayBuffer());
+      const { data: buffer } = await readBoundedBinaryResponse(res, {
+        maxBytes: 16 * 1024 * 1024,
+        fallbackContentType: "application/json",
+        label: "German OCPDB page",
+      });
       const page = parsePage(buffer);
       if (Array.isArray(page.items)) items.push(...page.items);
       offset = typeof page.next_offset === "number" ? page.next_offset : null;

@@ -22,13 +22,13 @@ interface IrailStation {
 let stationsCache: IrailStation[] | null = null;
 let stationsCachedAt = 0;
 
-async function getAllStations(): Promise<IrailStation[]> {
+async function getAllStations(signal?: AbortSignal): Promise<IrailStation[]> {
   if (stationsCache && Date.now() - stationsCachedAt < STATIONS_TTL_MS) {
     return stationsCache;
   }
   const data = await fetchJson<{ station?: IrailStation[] }>(
     `${BASE_URL}/stations/?format=json&lang=en`,
-    { nullOnError: true },
+    { nullOnError: true, signal },
   );
   if (!data) return stationsCache ?? [];
   stationsCache = data.station ?? [];
@@ -74,8 +74,12 @@ export async function getStopById(stopId: string): Promise<TransitStop | null> {
   return found ? stationToStop(found) : null;
 }
 
-export async function searchByName(query: string, limit = 10): Promise<TransitStop[]> {
-  const stations = await getAllStations();
+export async function searchByName(
+  query: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<TransitStop[]> {
+  const stations = await getAllStations(signal);
   const q = query.toLowerCase();
   return stations
     .filter((s) => s.name.toLowerCase().includes(q))

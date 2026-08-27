@@ -37,6 +37,7 @@ export type PlaceResolver<TPlace = unknown> = (
 ) => Promise<TPlace | null>;
 
 const registry = new Map<string, PlaceResolver<unknown>>();
+let stagedRegistry: Map<string, PlaceResolver<unknown>> | null = null;
 
 /**
  * Register (or replace) the resolver for a scheme. Idempotent so
@@ -46,7 +47,26 @@ export function registerPlaceResolver<TPlace = unknown>(
   scheme: string,
   fn: PlaceResolver<TPlace>,
 ): void {
-  registry.set(scheme, fn as PlaceResolver<unknown>);
+  (stagedRegistry ?? registry).set(scheme, fn as PlaceResolver<unknown>);
+}
+
+/** Begin a detached resolver generation for an atomic integration reload. */
+export function beginPlaceResolverStaging(): void {
+  if (stagedRegistry) throw new Error("Place resolver staging is already active");
+  stagedRegistry = new Map();
+}
+
+/** Replace the active resolver generation after every integration staged successfully. */
+export function commitPlaceResolverStaging(): void {
+  if (!stagedRegistry) throw new Error("Place resolver staging is not active");
+  registry.clear();
+  for (const [scheme, resolver] of stagedRegistry) registry.set(scheme, resolver);
+  stagedRegistry = null;
+}
+
+/** Discard resolver registrations from a failed integration generation. */
+export function rollbackPlaceResolverStaging(): void {
+  stagedRegistry = null;
 }
 
 /** Look up the resolver for a scheme, or `undefined` if none registered. */

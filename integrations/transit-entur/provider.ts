@@ -1909,9 +1909,11 @@ async function fetchGraphQl<T>(
   endpoint: string,
   query: string,
   variables?: Record<string, unknown>,
+  signal?: AbortSignal,
 ): Promise<T> {
   const json = await coreFetchJson<GraphQlResponse<T>>(endpoint, {
     timeoutMs: REQUEST_TIMEOUT_MS,
+    signal,
     userAgent: null,
     headers: { "Content-Type": "application/json", "ET-Client-Name": clientName },
     errorMessage: ({ status }) => `Entur GraphQL error ${status}`,
@@ -1930,16 +1932,21 @@ async function fetchGraphQl<T>(
   return json.data;
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T> {
   return coreFetchJson<T>(url, {
     timeoutMs: REQUEST_TIMEOUT_MS,
+    signal,
     userAgent: null,
     headers: { "ET-Client-Name": clientName },
     errorMessage: ({ status }) => `Entur HTTP error ${status}`,
   });
 }
 
-async function fetchGeocoderAutocomplete(text: string, size: number): Promise<EnturFeature[]> {
+async function fetchGeocoderAutocomplete(
+  text: string,
+  size: number,
+  signal?: AbortSignal,
+): Promise<EnturFeature[]> {
   const url = new URL(`${geocoderEndpoint}/autocomplete`);
   url.searchParams.set("text", text);
   url.searchParams.set("size", String(size));
@@ -1947,7 +1954,7 @@ async function fetchGeocoderAutocomplete(text: string, size: number): Promise<En
     url.searchParams.set("boundary.country", boundaryCountry);
   }
   url.searchParams.set("multiModal", multiModal);
-  const data = await fetchJson<EnturFeatureCollection>(url.toString());
+  const data = await fetchJson<EnturFeatureCollection>(url.toString(), signal);
   return data.features ?? [];
 }
 
@@ -2957,14 +2964,19 @@ export async function isEnturTransitAvailable(): Promise<boolean> {
   }
 }
 
-export async function searchByName(query: string, limit = 10): Promise<TransitStop[]> {
+export async function searchByName(
+  query: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<TransitStop[]> {
   try {
-    const features = await fetchGeocoderAutocomplete(query, Math.min(limit, 20));
+    const features = await fetchGeocoderAutocomplete(query, Math.min(limit, 20), signal);
     return features
       .map((feature) => featureToTransitStop(feature))
       .filter((stop): stop is TransitStop => stop !== null)
       .slice(0, limit);
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return [];
   }
 }

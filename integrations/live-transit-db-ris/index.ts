@@ -134,10 +134,12 @@ async function getDbLiveTransitVehicles(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
-  setRisCredentials({
-    clientId: ctx.config.clientId as string | undefined,
-    apiKey: ctx.config.apiKey as string | undefined,
+  ctx.onActivate(() => {
+    attribution.set(ctx.manifest.dataSources ?? []);
+    setRisCredentials({
+      clientId: ctx.config.clientId as string | undefined,
+      apiKey: ctx.config.apiKey as string | undefined,
+    });
   });
 
   const administrationIds = parseAdministrationIds(ctx.config.administrationIds);

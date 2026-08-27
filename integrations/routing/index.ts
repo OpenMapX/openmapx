@@ -4,7 +4,13 @@ import {
   overpassQuerySafe,
   type TravelMode,
 } from "@openmapx/core";
-import { type IntegrationContext, RoutingProviderError } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  parseWgs84BoundingBox,
+  parseWgs84Point,
+  parseWgs84PointList,
+  RoutingProviderError,
+} from "@openmapx/integration-framework";
 import {
   applyClosureExclusions,
   hashKey,
@@ -31,6 +37,7 @@ interface RawRoadAlert {
  * alerts wouldn't fit on screen anyway.
  */
 const MAX_ALERT_BBOX_DEG2 = 0.6;
+const MAX_ROUTE_WAYPOINTS = 50;
 
 /**
  * Motorised modes request live speed observations so providers that support
@@ -145,13 +152,27 @@ function mapAlertElements(
 
 /** Parse semicolon-separated "lng,lat" pairs into coordinate tuples. */
 function parseWaypoints(raw: string): [number, number][] {
-  return raw.split(";").map((pair) => {
-    const [lng, lat] = pair.split(",").map(Number);
-    if (Number.isNaN(lng) || Number.isNaN(lat)) {
-      throw new Error(`Invalid coordinate pair: "${pair}"`);
-    }
-    return [lng, lat] as [number, number];
-  });
+  const candidates = raw.split(";").map((pair) => pair.split(","));
+  const points = parseWgs84PointList(candidates, { min: 2, max: MAX_ROUTE_WAYPOINTS });
+  if (!points) {
+    throw new Error(`Waypoints must contain 2-${MAX_ROUTE_WAYPOINTS} valid WGS84 lng,lat pairs`);
+  }
+  return points;
+}
+
+function parseEndpointWaypoints(
+  originLng: unknown,
+  originLat: unknown,
+  destLng: unknown,
+  destLat: unknown,
+): [number, number][] | null {
+  return parseWgs84PointList(
+    [
+      [originLng, originLat],
+      [destLng, destLat],
+    ],
+    { min: 2, max: 2 },
+  );
 }
 
 /** Round all waypoints for cache-key stability. */
@@ -167,27 +188,18 @@ function roundWaypoints(wps: [number, number][]): [number, number][] {
  */
 function parseBodyWaypoints(body: Record<string, unknown> | null | undefined): [number, number][] {
   const raw = body?.waypoints;
-  let waypoints: [number, number][];
+  let candidates: unknown;
   if (Array.isArray(raw)) {
-    waypoints = raw.map((pair) => {
-      if (!Array.isArray(pair) || pair.length < 2) {
-        throw new Error("Each waypoint must be a [lng, lat] pair");
-      }
-      const [lng, lat] = pair.map(Number);
-      if (Number.isNaN(lng) || Number.isNaN(lat)) {
-        throw new Error(`Invalid coordinate pair: ${JSON.stringify(pair)}`);
-      }
-      return [lng, lat] as [number, number];
-    });
+    candidates = raw;
   } else if (
     body?.originLng != null &&
     body?.originLat != null &&
     body?.destLng != null &&
     body?.destLat != null
   ) {
-    waypoints = [
-      [Number(body.originLng), Number(body.originLat)],
-      [Number(body.destLng), Number(body.destLat)],
+    candidates = [
+      [body.originLng, body.originLat],
+      [body.destLng, body.destLat],
     ];
   } else {
     throw new Error(
@@ -195,8 +207,9 @@ function parseBodyWaypoints(body: Record<string, unknown> | null | undefined): [
     );
   }
 
-  if (waypoints.length < 2) {
-    throw new Error("At least 2 waypoints are required");
+  const waypoints = parseWgs84PointList(candidates, { min: 2, max: MAX_ROUTE_WAYPOINTS });
+  if (!waypoints) {
+    throw new Error(`Waypoints must contain 2-${MAX_ROUTE_WAYPOINTS} valid WGS84 points`);
   }
   return waypoints;
 }
@@ -343,11 +356,18 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(400).send({ error: (e as Error).message });
         return;
       }
-    } else if (originLng && originLat && destLng && destLat) {
-      waypoints = [
-        [Number(originLng), Number(originLat)],
-        [Number(destLng), Number(destLat)],
-      ];
+    } else if (
+      originLng !== undefined &&
+      originLat !== undefined &&
+      destLng !== undefined &&
+      destLat !== undefined
+    ) {
+      const parsed = parseEndpointWaypoints(originLng, originLat, destLng, destLat);
+      if (!parsed) {
+        reply.status(400).send({ error: "Origin and destination must be valid WGS84 coordinates" });
+        return;
+      }
+      waypoints = parsed;
     } else {
       reply.status(400).send({
         error:
@@ -556,11 +576,18 @@ export function setup(ctx: IntegrationContext): void {
         reply.status(400).send({ error: (e as Error).message });
         return;
       }
-    } else if (originLng && originLat && destLng && destLat) {
-      waypoints = [
-        [Number(originLng), Number(originLat)],
-        [Number(destLng), Number(destLat)],
-      ];
+    } else if (
+      originLng !== undefined &&
+      originLat !== undefined &&
+      destLng !== undefined &&
+      destLat !== undefined
+    ) {
+      const parsed = parseEndpointWaypoints(originLng, originLat, destLng, destLat);
+      if (!parsed) {
+        reply.status(400).send({ error: "Origin and destination must be valid WGS84 coordinates" });
+        return;
+      }
+      waypoints = parsed;
     } else {
       reply.status(400).send({
         error:
@@ -781,9 +808,15 @@ export function setup(ctx: IntegrationContext): void {
         return;
       }
       const point = p as { lat: number; lng: number; time?: unknown };
+      const coordinates = parseWgs84Point(point.lng, point.lat);
+      if (!coordinates) {
+        reply.status(400).send({ error: "each trace point must be a finite WGS84 coordinate" });
+        return;
+      }
+      const [lng, lat] = coordinates;
       const out: { lat: number; lng: number; time?: string } = {
-        lat: point.lat,
-        lng: point.lng,
+        lat,
+        lng,
       };
       if (typeof point.time === "string") out.time = point.time;
       trace.push(out);
@@ -838,20 +871,38 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "bbox required as 'south,west,north,east'" });
       return;
     }
-    const parts = bbox.split(",").map(Number);
-    if (parts.length !== 4 || parts.some((n) => Number.isNaN(n))) {
+    const parts = bbox.split(",");
+    if (parts.length !== 4) {
       reply.status(400).send({ error: "bbox must be four numbers: south,west,north,east" });
       return;
     }
-    const [south, west, north, east] = parts;
-    if (Math.abs(north - south) * Math.abs(east - west) > MAX_ALERT_BBOX_DEG2) {
-      reply.send({ alerts: [] }); // corridor too large to query in one go
+    const [southRaw, westRaw, northRaw, eastRaw] = parts;
+    const southwest = parseWgs84Point(westRaw, southRaw);
+    const northeast = parseWgs84Point(eastRaw, northRaw);
+    if (!southwest || !northeast || southwest[0] >= northeast[0] || southwest[1] >= northeast[1]) {
+      reply.status(400).send({ error: "bbox is invalid or reversed" });
       return;
     }
+    const parsed = parseWgs84BoundingBox(
+      { south: southRaw, west: westRaw, north: northRaw, east: eastRaw },
+      {
+        maxLatitudeSpan: 2,
+        maxLongitudeSpan: 2,
+        maxArea: MAX_ALERT_BBOX_DEG2,
+      },
+    );
+    if (!parsed) {
+      // A corridor too large to query in one go is a normal navigation state
+      // (long legs), not a client error: answer empty rather than 4xx so the
+      // request does not show up as a failure in logs and metrics.
+      reply.send({ alerts: [] });
+      return;
+    }
+    const [west, south, east, north] = parsed;
 
     const key = hashKey(
       "cache:nav:alerts",
-      parts.map((n) => round(n, 3)),
+      [south, west, north, east].map((n) => round(n, 3)),
     );
     try {
       const result = await ctx.cache.withCache(key, 86_400, async () => {

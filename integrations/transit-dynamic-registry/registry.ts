@@ -21,11 +21,16 @@ function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
 }
 
-class RegistryManager {
+export class RegistryManager {
   private entries: RegistryEntry[] = [];
   private byPrefix = new Map<string, RegistryEntry>();
   private refreshTimer: ReturnType<typeof setInterval> | null = null;
+  private refreshOwners = new Set<symbol>();
   private _initialized = false;
+
+  constructor(
+    private readonly fetchEntries: () => Promise<RegistryEntry[]> = fetchRegistryEntries,
+  ) {}
 
   get initialized(): boolean {
     return this._initialized;
@@ -35,8 +40,10 @@ class RegistryManager {
     return this.entries.length;
   }
 
-  async initialize(): Promise<void> {
-    const all = await fetchRegistryEntries();
+  async initialize(
+    fetchEntries: () => Promise<RegistryEntry[]> = this.fetchEntries,
+  ): Promise<void> {
+    const all = await fetchEntries();
     this.index(all);
     this._initialized = true;
     console.log(
@@ -72,25 +79,47 @@ class RegistryManager {
     }
   }
 
-  startRefresh(): void {
+  startRefresh(): () => void {
+    const owner = Symbol("transit-registry-refresh-owner");
+    this.refreshOwners.add(owner);
     // Refresh every 24 hours
-    this.refreshTimer = setInterval(
-      async () => {
-        try {
-          const all = await fetchRegistryEntries();
-          this.index(all);
-          console.log(`[transit-registry] Refreshed: ${this.entries.length} dynamic providers`);
-        } catch (err) {
-          console.warn("[transit-registry] Refresh failed:", err);
-        }
-      },
-      24 * 60 * 60 * 1000,
-    );
-    // Don't keep the process alive just for this timer
-    this.refreshTimer.unref?.();
+    if (!this.refreshTimer) {
+      this.refreshTimer = setInterval(
+        async () => {
+          try {
+            const all = await this.fetchEntries();
+            this.index(all);
+            console.log(`[transit-registry] Refreshed: ${this.entries.length} dynamic providers`);
+          } catch (err) {
+            console.warn("[transit-registry] Refresh failed:", err);
+          }
+        },
+        24 * 60 * 60 * 1000,
+      );
+      // Don't keep the process alive just for this timer
+      this.refreshTimer.unref?.();
+    }
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      this.refreshOwners.delete(owner);
+      if (this.refreshOwners.size === 0) this.stopRefreshTimer();
+    };
   }
 
   stopRefresh(): void {
+    this.refreshOwners.clear();
+    this.stopRefreshTimer();
+  }
+
+  replaceWith(next: RegistryManager): void {
+    this.entries = next.entries;
+    this.byPrefix = new Map(next.byPrefix);
+    this._initialized = next._initialized;
+  }
+
+  private stopRefreshTimer(): void {
     if (this.refreshTimer) {
       clearInterval(this.refreshTimer);
       this.refreshTimer = null;

@@ -58,8 +58,7 @@ describe("SharedMobilityDetailStore", () => {
     const items = [station("provider-a", "station-1"), vehicle("provider-a", "vehicle-1")];
     await firstReplica.store(items);
 
-    const providerWrites = writes.filter((key) => !key.includes(":legacy:"));
-    expect(providerWrites).toHaveLength(1);
+    expect(writes).toHaveLength(1);
 
     const freshReplica = new SharedMobilityDetailStore(600, 1);
     freshReplica.setCache(cache);
@@ -67,7 +66,7 @@ describe("SharedMobilityDetailStore", () => {
     expect(await freshReplica.get(items[1]?.id ?? "")).toMatchObject({ nativeId: "vehicle-1" });
   });
 
-  it("survives L1 eviction and refuses ambiguous legacy identities", async () => {
+  it("survives L1 eviction while keeping providers isolated", async () => {
     const { cache } = sharedCache();
     const store = new SharedMobilityDetailStore(600, 1);
     store.setCache(cache);
@@ -77,7 +76,7 @@ describe("SharedMobilityDetailStore", () => {
 
     store.clearL1();
     expect(await store.get(first.id)).toMatchObject({ providerId: first.providerId });
-    expect(await store.get("motis:same-id")).toBeNull();
+    expect(await store.get(second.id)).toMatchObject({ providerId: second.providerId });
   });
 
   it("resolves a direct-provider detail after process restart", async () => {

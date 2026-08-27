@@ -28,9 +28,9 @@ export function setOtpUrl(url: string): void {
 
 const OTP_URL = () => OTP_BASE_URL ?? "http://localhost:8090";
 
-export async function isOtpAvailable(): Promise<boolean> {
+export async function isOtpAvailable(baseUrl = OTP_URL()): Promise<boolean> {
   try {
-    const res = await fetch(`${OTP_URL()}/otp/routers/default`, {
+    const res = await fetch(`${baseUrl}/otp/routers/default`, {
       signal: AbortSignal.timeout(3000),
     });
     return res.ok;

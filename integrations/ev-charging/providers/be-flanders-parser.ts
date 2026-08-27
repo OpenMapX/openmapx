@@ -1,3 +1,4 @@
+import { readBoundedBinaryResponse } from "@openmapx/core/server";
 import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
 import type { PoiRow, PoiSourceLogger, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { cleanString, connector, splitList, stableHashId } from "./utils.js";
@@ -200,7 +201,13 @@ async function fetchNextPage(startIndex: number, log: PoiSourceLogger): Promise<
       );
       return null;
     }
-    return Buffer.from(await res.arrayBuffer());
+    return (
+      await readBoundedBinaryResponse(res, {
+        maxBytes: 32 * 1024 * 1024,
+        fallbackContentType: "application/json",
+        label: "Flanders charging page",
+      })
+    ).data;
   } catch (err) {
     log.error(
       `be-flanders-parser: fetch failed at startIndex ${startIndex} (${(err as Error).message}) — returning partial data`,

@@ -409,19 +409,22 @@ function attributionFor(sourceId: string): Attribution[] {
 }
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
-  clientName =
-    ctx.config.clientName && String(ctx.config.clientName).trim().length > 0
-      ? String(ctx.config.clientName).trim()
-      : DEFAULT_CLIENT_NAME;
-  journeyPlannerEndpoint =
-    ctx.config.journeyPlannerEndpoint && String(ctx.config.journeyPlannerEndpoint).trim().length > 0
-      ? String(ctx.config.journeyPlannerEndpoint).trim()
-      : DEFAULT_JOURNEY_PLANNER_ENDPOINT;
-  vehiclesEndpoint =
-    ctx.config.vehiclesEndpoint && String(ctx.config.vehiclesEndpoint).trim().length > 0
-      ? String(ctx.config.vehiclesEndpoint).trim()
-      : DEFAULT_VEHICLES_ENDPOINT;
+  ctx.onActivate(() => {
+    attribution.set(ctx.manifest.dataSources ?? []);
+    clientName =
+      ctx.config.clientName && String(ctx.config.clientName).trim().length > 0
+        ? String(ctx.config.clientName).trim()
+        : DEFAULT_CLIENT_NAME;
+    journeyPlannerEndpoint =
+      ctx.config.journeyPlannerEndpoint &&
+      String(ctx.config.journeyPlannerEndpoint).trim().length > 0
+        ? String(ctx.config.journeyPlannerEndpoint).trim()
+        : DEFAULT_JOURNEY_PLANNER_ENDPOINT;
+    vehiclesEndpoint =
+      ctx.config.vehiclesEndpoint && String(ctx.config.vehiclesEndpoint).trim().length > 0
+        ? String(ctx.config.vehiclesEndpoint).trim()
+        : DEFAULT_VEHICLES_ENDPOINT;
+  });
 
   ctx.registerHealthCheck(async () => {
     const available = await isEnturLiveTransitAvailable();

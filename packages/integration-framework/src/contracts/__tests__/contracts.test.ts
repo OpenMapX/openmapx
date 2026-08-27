@@ -42,6 +42,7 @@ describe("TransitProvider contract", () => {
       prefix: "min:",
       coverage: { all: true },
       priority: 1,
+      role: "enrichment",
       capabilities: allFalseCapabilities,
       attribution: noAttribution,
     };
@@ -54,6 +55,7 @@ describe("TransitProvider contract", () => {
       prefix: "wsl:",
       coverage: { bbox: [-180, -90, 180, 90] },
       priority: 2,
+      role: "enrichment",
       capabilities: {
         ...allFalseCapabilities,
         stops: { ...allFalseCapabilities.stops, lookup: true },
@@ -80,6 +82,7 @@ describe("TransitProvider contract", () => {
       prefix: "b:",
       coverage: { bbox: [0, 0, 1, 1] },
       priority: 1,
+      role: "enrichment",
       capabilities: allFalseCapabilities,
       attribution: noAttribution,
     };
@@ -88,6 +91,7 @@ describe("TransitProvider contract", () => {
       prefix: "g:",
       coverage: { all: true },
       priority: 1,
+      role: "enrichment",
       capabilities: allFalseCapabilities,
       attribution: noAttribution,
     };
@@ -155,7 +159,10 @@ describe("SearchSuggestionProvider contract", () => {
 
     expect(ctx.registered.searchSuggestions).toEqual([provider]);
     await expect(
-      provider.searchSuggestions({ query: "FRA", lang: "en", limit: 8 }),
+      provider.searchSuggestions(
+        { query: "FRA", lang: "en", limit: 8 },
+        { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
+      ),
     ).resolves.toMatchObject({ freshnessSeconds: 3_600 });
   });
 });

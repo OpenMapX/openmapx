@@ -5,10 +5,15 @@ import {
   type SearchSuggestionProviderResult,
   type SearchSuggestionQuery,
 } from "@openmapx/core";
-import type {
-  IntegrationContext,
-  SearchSuggestionProvider,
-  TripPlanRequest,
+import {
+  type BoundingBoxLimits,
+  clampViewportBoundingBox,
+  type IntegrationContext,
+  type ProviderCallContext,
+  parsePositiveRadius,
+  parseWgs84Point,
+  type SearchSuggestionProvider,
+  type TripPlanRequest,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
@@ -52,7 +57,11 @@ function envelope<T>(
 }
 
 interface TransitSearchOrchestrator {
-  searchByName(query: string, limit: number): Promise<MobilityResult<TransitStop[]>>;
+  searchByName(
+    query: string,
+    limit: number,
+    context?: ProviderCallContext,
+  ): Promise<MobilityResult<TransitStop[]>>;
 }
 
 export function createTransitSuggestionProvider(
@@ -60,8 +69,11 @@ export function createTransitSuggestionProvider(
 ): SearchSuggestionProvider {
   return {
     id: "transit",
-    async searchSuggestions(query: SearchSuggestionQuery): Promise<SearchSuggestionProviderResult> {
-      const result = await orchestrator.searchByName(query.query, query.limit);
+    async searchSuggestions(
+      query: SearchSuggestionQuery,
+      context,
+    ): Promise<SearchSuggestionProviderResult> {
+      const result = await orchestrator.searchByName(query.query, query.limit, context);
       const normalizedQuery = normalizeSearchTerm(query.query);
       return {
         suggestions: result.data.map((stop) => {
@@ -97,29 +109,25 @@ export function createTransitSuggestionProvider(
 }
 
 function parseBBox(q: Record<string, string>): BBox | null {
-  const sw_lat = Number(q.sw_lat);
-  const sw_lng = Number(q.sw_lng);
-  const ne_lat = Number(q.ne_lat);
-  const ne_lng = Number(q.ne_lng);
-  if (
-    !Number.isFinite(sw_lat) ||
-    !Number.isFinite(sw_lng) ||
-    !Number.isFinite(ne_lat) ||
-    !Number.isFinite(ne_lng) ||
-    sw_lat >= ne_lat
-  ) {
-    return null;
-  }
-  return [sw_lng, sw_lat, ne_lng, ne_lat];
+  return clampViewportBoundingBox(
+    { west: q.sw_lng, south: q.sw_lat, east: q.ne_lng, north: q.ne_lat },
+    TRANSIT_BBOX_LIMITS,
+  );
 }
+
+const TRANSIT_BBOX_LIMITS: BoundingBoxLimits = {
+  maxLatitudeSpan: 30,
+  maxLongitudeSpan: 60,
+  maxArea: 900,
+};
 
 function parsePlaceQuery(
   q: Record<string, string>,
 ): { lat: number; lng: number; name: string } | null {
-  const lat = Number(q.lat);
-  const lng = Number(q.lng);
   const name = q.name?.trim();
-  if (!Number.isFinite(lat) || !Number.isFinite(lng) || !name) return null;
+  const point = parseWgs84Point(q.lng, q.lat);
+  if (!point || !name) return null;
+  const [lng, lat] = point;
   return { lat, lng, name };
 }
 
@@ -252,13 +260,16 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/nearby
   ctx.registerRoute("GET", "/stops/nearby", async (req, reply) => {
-    const lat = Number(req.query.lat);
-    const lng = Number(req.query.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
-      reply.status(400).send({ error: "Required: lat, lng" });
+    const point = parseWgs84Point(req.query.lng, req.query.lat, { maxAbsLatitude: 85 });
+    const radiusMeters = parsePositiveRadius(req.query.radius, {
+      defaultValue: 500,
+      max: 2_000,
+    });
+    if (!point || radiusMeters === null) {
+      reply.status(400).send({ error: "Required: valid lat, lng, and radius in (0, 2000]" });
       return;
     }
-    const radiusMeters = Math.min(Number(req.query.radius ?? 500), 2000);
+    const [lng, lat] = point;
     const latDelta = radiusMeters / 111_320;
     const lngDelta = radiusMeters / (111_320 * Math.cos((lat * Math.PI) / 180));
     const bbox: BBox = [lng - lngDelta, lat - latDelta, lng + lngDelta, lat + latDelta];
@@ -579,21 +590,16 @@ export function setup(ctx: IntegrationContext): void {
   // GET /plan
   ctx.registerRoute("GET", "/plan", async (req, reply) => {
     const q = req.query;
-    const fromLat = Number(q.from_lat);
-    const fromLng = Number(q.from_lng);
-    const toLat = Number(q.to_lat);
-    const toLng = Number(q.to_lng);
-    if (
-      !Number.isFinite(fromLat) ||
-      !Number.isFinite(fromLng) ||
-      !Number.isFinite(toLat) ||
-      !Number.isFinite(toLng)
-    ) {
+    const from = parseWgs84Point(q.from_lng, q.from_lat);
+    const to = parseWgs84Point(q.to_lng, q.to_lat);
+    if (!from || !to) {
       reply.status(400).send({
         error: "Invalid or missing coordinate params (from_lat, from_lng, to_lat, to_lng)",
       });
       return;
     }
+    const [fromLng, fromLat] = from;
+    const [toLng, toLat] = to;
     reply.header("Cache-Control", "private, max-age=60");
     let date: string;
     let time: string;
@@ -827,12 +833,12 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /reachable
   ctx.registerRoute("GET", "/reachable", async (req, reply) => {
-    const lat = Number(req.query.lat);
-    const lng = Number(req.query.lng);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+    const point = parseWgs84Point(req.query.lng, req.query.lat);
+    if (!point) {
       reply.status(400).send({ error: "Required: lat, lng" });
       return;
     }
+    const [lng, lat] = point;
     const maxRaw = Number(req.query.maxTravelTime ?? 30);
     const maxTravelTime = Number.isFinite(maxRaw) ? Math.min(Math.max(maxRaw, 1), 120) : 30;
 

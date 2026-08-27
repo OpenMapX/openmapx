@@ -8,11 +8,13 @@ import {
 } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  setEnturGeocodingConfig({
-    endpoint: ctx.config.endpoint as string | undefined,
-    clientName: ctx.config.clientName as string | undefined,
-    boundaryCountry: ctx.config.boundaryCountry as string | undefined,
-    multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
+  ctx.onActivate(() => {
+    setEnturGeocodingConfig({
+      endpoint: ctx.config.endpoint as string | undefined,
+      clientName: ctx.config.clientName as string | undefined,
+      boundaryCountry: ctx.config.boundaryCountry as string | undefined,
+      multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
+    });
   });
 
   ctx.registerGeocodingProvider(enturGeocodingService);

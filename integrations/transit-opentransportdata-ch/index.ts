@@ -7,21 +7,23 @@ const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
-  swiss.setOpenTransportDataChConfig({
-    apiKey: ctx.config.apiKey as string | undefined,
-    cache: ctx.cache,
-    fallbackEndpoint: ctx.config.fallbackEndpoint as string | undefined,
-    formationEndpoint: ctx.config.formationEndpoint as string | undefined,
-    gtfsRtEndpoint: ctx.config.gtfsRtEndpoint as string | undefined,
-    gtfsSaEndpoint: ctx.config.gtfsSaEndpoint as string | undefined,
-    log: ctx.log,
-    ojpEndpoint: ctx.config.ojpEndpoint as string | undefined,
-    ojpFareEndpoint: ctx.config.ojpFareEndpoint as string | undefined,
-    requestLanguage: ctx.config.requestLanguage as string | undefined,
-    requestorRef: ctx.config.requestorRef as string | undefined,
-    siriSxEndpoint: ctx.config.siriSxEndpoint as string | undefined,
-    siriSxUnplannedEndpoint: ctx.config.siriSxUnplannedEndpoint as string | undefined,
-    userAgent: ctx.config.userAgent as string | undefined,
+  ctx.onActivate(() => {
+    swiss.setOpenTransportDataChConfig({
+      apiKey: ctx.config.apiKey as string | undefined,
+      cache: ctx.cache,
+      fallbackEndpoint: ctx.config.fallbackEndpoint as string | undefined,
+      formationEndpoint: ctx.config.formationEndpoint as string | undefined,
+      gtfsRtEndpoint: ctx.config.gtfsRtEndpoint as string | undefined,
+      gtfsSaEndpoint: ctx.config.gtfsSaEndpoint as string | undefined,
+      log: ctx.log,
+      ojpEndpoint: ctx.config.ojpEndpoint as string | undefined,
+      ojpFareEndpoint: ctx.config.ojpFareEndpoint as string | undefined,
+      requestLanguage: ctx.config.requestLanguage as string | undefined,
+      requestorRef: ctx.config.requestorRef as string | undefined,
+      siriSxEndpoint: ctx.config.siriSxEndpoint as string | undefined,
+      siriSxUnplannedEndpoint: ctx.config.siriSxUnplannedEndpoint as string | undefined,
+      userAgent: ctx.config.userAgent as string | undefined,
+    });
   });
   ctx.registerHealthCheck(async () => {
     const hasKey = Boolean((ctx.config.apiKey as string | undefined)?.trim());
@@ -38,6 +40,7 @@ export function setup(ctx: IntegrationContext): void {
     id: "transit-opentransportdata-ch",
     prefix: "otdch:",
     priority: 1,
+    role: "regional",
     coverage: { bbox: SWITZERLAND_BBOX },
     attribution: attribution.all(),
     capabilities: {
@@ -105,8 +108,11 @@ export function setup(ctx: IntegrationContext): void {
       const plan = await swiss.planTrip(params);
       return wrapRT(plan ? [plan] : []);
     },
-    async searchStopsByName(query, limit) {
-      return wrap(await swiss.searchByName(query, limit ?? 10));
+    async searchStopsByName(query, limit, context) {
+      context?.signal.throwIfAborted();
+      const result = await swiss.searchByName(query, limit ?? 10);
+      context?.signal.throwIfAborted();
+      return wrap(result);
     },
   });
 }

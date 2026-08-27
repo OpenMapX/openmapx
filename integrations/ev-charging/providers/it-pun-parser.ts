@@ -1,3 +1,4 @@
+import { readBoundedBinaryResponse } from "@openmapx/core/server";
 import type { EvChargingConnector } from "@openmapx/mobility-core/ev-charging";
 import type { PoiRow, PoiSourceLogger, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { cleanString, connector, parseInteger, parseLocalizedNumber, splitList } from "./utils.js";
@@ -88,7 +89,11 @@ async function fetchAllFeatures(seed: Buffer, log: PoiSourceLogger): Promise<ItP
         log.error(`it-pun-parser: HTTP ${res.status} at offset ${offset} — returning partial`);
         break;
       }
-      const buffer = Buffer.from(await res.arrayBuffer());
+      const { data: buffer } = await readBoundedBinaryResponse(res, {
+        maxBytes: 32 * 1024 * 1024,
+        fallbackContentType: "application/json",
+        label: "Italian PUN charging page",
+      });
       page = parsePage(buffer);
       all.push(...page);
       offset += page.length;

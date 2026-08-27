@@ -7,14 +7,16 @@ const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
-  entur.setEnturTransitConfig({
-    geocoderEndpoint: ctx.config.geocoderEndpoint as string | undefined,
-    journeyPlannerEndpoint: ctx.config.journeyPlannerEndpoint as string | undefined,
-    vehiclesEndpoint: ctx.config.vehiclesEndpoint as string | undefined,
-    nsrEndpoint: ctx.config.nsrEndpoint as string | undefined,
-    clientName: ctx.config.clientName as string | undefined,
-    boundaryCountry: ctx.config.boundaryCountry as string | undefined,
-    multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
+  ctx.onActivate(() => {
+    entur.setEnturTransitConfig({
+      geocoderEndpoint: ctx.config.geocoderEndpoint as string | undefined,
+      journeyPlannerEndpoint: ctx.config.journeyPlannerEndpoint as string | undefined,
+      vehiclesEndpoint: ctx.config.vehiclesEndpoint as string | undefined,
+      nsrEndpoint: ctx.config.nsrEndpoint as string | undefined,
+      clientName: ctx.config.clientName as string | undefined,
+      boundaryCountry: ctx.config.boundaryCountry as string | undefined,
+      multiModal: ctx.config.multiModal as "parent" | "child" | "all" | undefined,
+    });
   });
 
   ctx.registerHealthCheck(async () => {
@@ -29,6 +31,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "entur:",
     coverage: { bbox: NORWAY_BBOX },
     priority: 1,
+    role: "regional",
     attribution: attribution.all(),
     capabilities: {
       stops: {
@@ -52,8 +55,8 @@ export function setup(ctx: IntegrationContext): void {
     async getStopsNearby(lat, lng, radiusMeters) {
       return wrap(await entur.getStopsNearby(lat, lng, radiusMeters));
     },
-    async searchStopsByName(query, limit) {
-      return wrap(await entur.searchByName(query, limit ?? 10));
+    async searchStopsByName(query, limit, context) {
+      return wrap(await entur.searchByName(query, limit ?? 10, context?.signal));
     },
     async getStop(stopId) {
       return wrap(await entur.getStop(stopId));

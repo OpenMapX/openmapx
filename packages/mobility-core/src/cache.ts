@@ -12,7 +12,13 @@ export interface CacheClient {
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
-  withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T>;
+  /** Loader signal belongs to the shared cache fill, not any one request. */
+  withCache<T>(
+    key: string,
+    ttlSeconds: number,
+    fn: (operationSignal: AbortSignal) => Promise<T>,
+    callerSignal?: AbortSignal,
+  ): Promise<T>;
 }
 
 let _cache: CacheClient | null = null;
@@ -32,13 +38,15 @@ export async function cacheSet(key: string, value: unknown, ttlSeconds: number):
 export async function withCache<T>(
   key: string,
   ttlSeconds: number,
-  fn: () => Promise<T>,
+  fn: (operationSignal: AbortSignal) => Promise<T>,
+  callerSignal?: AbortSignal,
 ): Promise<T> {
+  if (callerSignal?.aborted) throw callerSignal.reason;
   if (_cache) {
     const cached = await _cache.get<T>(key);
     if (cached !== null) return cached;
   }
-  const result = await fn();
+  const result = await fn(callerSignal ?? new AbortController().signal);
   await _cache?.set(key, result, ttlSeconds);
   return result;
 }

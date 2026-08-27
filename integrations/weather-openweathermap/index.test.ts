@@ -7,7 +7,7 @@ import { owmIdToWmo, setup } from "./index.js";
 const COORDS: LngLat = [13.405, 52.52];
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 type LoadedWeatherProvider = WeatherProvider &

@@ -187,14 +187,16 @@ async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]
 }
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
-  localClient.setConfig({
-    baseUrl: resolveMotisUrl(ctx),
-    headers: { "User-Agent": USER_AGENT_TRANSIT },
-  });
-  transitousClient.setConfig({
-    baseUrl: (ctx.config.transitousUrl as string | undefined) || TRANSITOUS_URL,
-    headers: { "User-Agent": USER_AGENT_TRANSIT },
+  ctx.onActivate(() => {
+    attribution.set(ctx.manifest.dataSources ?? []);
+    localClient.setConfig({
+      baseUrl: resolveMotisUrl(ctx),
+      headers: { "User-Agent": USER_AGENT_TRANSIT },
+    });
+    transitousClient.setConfig({
+      baseUrl: (ctx.config.transitousUrl as string | undefined) || TRANSITOUS_URL,
+      headers: { "User-Agent": USER_AGENT_TRANSIT },
+    });
   });
 
   const provider: RealtimeProvider = {

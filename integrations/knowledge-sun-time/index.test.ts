@@ -58,7 +58,7 @@ function makeReply(): FakeReply {
 }
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 // Collects handlers by path so both /times and /timezone can be exercised

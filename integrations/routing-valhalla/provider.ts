@@ -80,17 +80,10 @@ function valhallaErrorMessage(prefix: string) {
     `${prefix} ${status}${body ? `: ${body.replace(/\s+/g, " ").slice(0, 512)}` : ""}`;
 }
 
-/**
- * Current Valhalla releases encode lane directions and validity as bitmasks.
- * Older/hosted variants have also returned strings, arrays, or booleans, so the
- * compatibility forms stay accepted at this integration boundary.
- */
-type ValhallaLaneFlag = number | boolean | string | string[];
-
 interface ValhallaLaneRaw {
-  directions?: number | string[];
-  active?: ValhallaLaneFlag;
-  valid?: ValhallaLaneFlag;
+  directions?: number;
+  active?: number;
+  valid?: number;
 }
 
 /** A single signage element on a Valhalla maneuver's `sign`. */
@@ -273,28 +266,19 @@ const VALHALLA_LANE_BITS = [
   [1024, "merge_to_right"],
 ] as const;
 
-/** Decode Valhalla's documented lane-direction bitmask (or a legacy array). */
+/** Decode Valhalla's lane-direction bitmask. */
 function laneDirections(value: ValhallaLaneRaw["directions"]): string[] {
-  if (Array.isArray(value)) return value;
   if (typeof value !== "number" || !Number.isFinite(value)) return [];
   return VALHALLA_LANE_BITS.filter(([bit]) => (value & bit) !== 0).map(([, token]) => token);
 }
 
-/** True when a Valhalla lane flag is set (positive bitmask or legacy value). */
-function laneFlagSet(flag: ValhallaLaneFlag | undefined): boolean {
-  if (Array.isArray(flag)) return flag.length > 0;
-  if (typeof flag === "string") return flag.length > 0;
-  if (typeof flag === "number") return flag > 0;
-  return Boolean(flag);
+/** True when a Valhalla lane bitmask is set. */
+function laneFlagSet(flag: number | undefined): boolean {
+  return typeof flag === "number" && Number.isFinite(flag) && flag > 0;
 }
 
 /** The active indication string from a Valhalla lane flag, when it carries one. */
-function laneFlagIndication(
-  flag: ValhallaLaneFlag | undefined,
-  directions: string[],
-): string | undefined {
-  if (Array.isArray(flag)) return flag[0];
-  if (typeof flag === "string" && flag.length > 0) return flag;
+function laneFlagIndication(flag: number | undefined, directions: string[]): string | undefined {
   if (typeof flag === "number") {
     const active = laneDirections(flag);
     return active.find((candidate) => directions.includes(candidate)) ?? active[0];

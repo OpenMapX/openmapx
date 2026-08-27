@@ -7,7 +7,7 @@ import { setup } from "./index.js";
 const COORDS: LngLat = [10.7522, 59.9139];
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 type LoadedWeatherProvider = WeatherProvider &

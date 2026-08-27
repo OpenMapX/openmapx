@@ -210,7 +210,7 @@ export function setGithubToken(value: string | undefined): void {
   githubToken = value && value.length > 0 ? value : undefined;
 }
 
-function githubAuthHeaders(url: string): Record<string, string> {
+function githubAuthHeaders(url: string, token = githubToken): Record<string, string> {
   // Only attach the token to the real GitHub API host. A substring check
   // (url.includes("api.github.com")) would also match e.g.
   // https://api.github.com.evil.com and leak the credential, so compare the
@@ -221,7 +221,7 @@ function githubAuthHeaders(url: string): Record<string, string> {
   } catch {
     isGithubApiHost = false;
   }
-  return githubToken && isGithubApiHost ? { Authorization: `token ${githubToken}` } : {};
+  return token && isGithubApiHost ? { Authorization: `token ${token}` } : {};
 }
 
 interface JsDelivrFile {
@@ -253,20 +253,20 @@ function collectDataPaths(
 }
 
 /** Fetch file listing via jsDelivr (no auth, no rate limits). */
-async function fetchPathsFromJsdelivr(): Promise<string[]> {
+async function fetchPathsFromJsdelivr(token?: string): Promise<string[]> {
   const json = await fetchJson<JsDelivrFile>(TRANSPORT_APIS_JSDELIVR_PKG_URL, {
     timeoutMs: 15_000,
-    headers: githubAuthHeaders(TRANSPORT_APIS_JSDELIVR_PKG_URL),
+    headers: githubAuthHeaders(TRANSPORT_APIS_JSDELIVR_PKG_URL, token),
     errorMessage: ({ status }) => `JSDelivr listing: ${status}`,
   });
   return collectDataPaths(json);
 }
 
 /** Fetch file listing via GitHub Tree API (requires GITHUB_TOKEN for reliable access). */
-async function fetchPathsFromGithub(): Promise<string[]> {
+async function fetchPathsFromGithub(token?: string): Promise<string[]> {
   const tree = await fetchJson<{ tree: GitTreeEntry[] }>(TRANSPORT_APIS_GITHUB_TREE_URL, {
     timeoutMs: 15_000,
-    headers: githubAuthHeaders(TRANSPORT_APIS_GITHUB_TREE_URL),
+    headers: githubAuthHeaders(TRANSPORT_APIS_GITHUB_TREE_URL, token),
     errorMessage: ({ status }) => `GitHub tree: ${status}`,
   });
   return tree.tree
@@ -274,7 +274,11 @@ async function fetchPathsFromGithub(): Promise<string[]> {
     .map((e) => e.path);
 }
 
-async function fetchInBatchesFrom(paths: string[], baseUrl: string): Promise<RegistryEntry[]> {
+async function fetchInBatchesFrom(
+  paths: string[],
+  baseUrl: string,
+  token?: string,
+): Promise<RegistryEntry[]> {
   const entries: RegistryEntry[] = [];
   for (let i = 0; i < paths.length; i += MAX_CONCURRENT) {
     const batch = paths.slice(i, i + MAX_CONCURRENT);
@@ -283,7 +287,7 @@ async function fetchInBatchesFrom(paths: string[], baseUrl: string): Promise<Reg
         const url = `${baseUrl}/${path}`;
         const json = await fetchJson(url, {
           timeoutMs: 10_000,
-          headers: githubAuthHeaders(url),
+          headers: githubAuthHeaders(url, token),
           nullOnError: true,
         });
         return json ? parseEntry(path, json) : null;
@@ -298,13 +302,25 @@ async function fetchInBatchesFrom(paths: string[], baseUrl: string): Promise<Reg
   return entries;
 }
 
-export async function fetchRegistryEntries(): Promise<RegistryEntry[]> {
+export async function fetchRegistryEntries(
+  options: { cache?: CacheClient | null; githubToken?: string; preferCache?: boolean } = {},
+): Promise<RegistryEntry[]> {
+  const cache = options.cache === undefined ? _cache : options.cache;
+  const token = options.githubToken === undefined ? githubToken : options.githubToken;
   let entries: RegistryEntry[] | null = null;
+
+  // Integration reloads (every credential or config edit) rebuild this
+  // registry. Serve a recent cached catalog instead of re-fetching hundreds of
+  // files; the periodic refresh timer always goes to the network.
+  if (options.preferCache && cache) {
+    const cached = await loadFromCache(cache).catch(() => []);
+    if (cached.length > 0) return cached;
+  }
 
   // 1. Primary: jsDelivr CDN (no auth, no rate limits, no GitHub API calls)
   try {
-    const paths = await fetchPathsFromJsdelivr();
-    entries = await fetchInBatchesFrom(paths, TRANSPORT_APIS_JSDELIVR_CDN_BASE);
+    const paths = await fetchPathsFromJsdelivr(token);
+    entries = await fetchInBatchesFrom(paths, TRANSPORT_APIS_JSDELIVR_CDN_BASE, token);
     console.log(
       `[transit-registry] ${entries.length} entries loaded (JSDelivr @ ${TRANSPORT_APIS_COMMIT.slice(0, 12)})`,
     );
@@ -315,8 +331,8 @@ export async function fetchRegistryEntries(): Promise<RegistryEntry[]> {
   // 2. Fallback: GitHub Tree API + raw.githubusercontent.com
   if (!entries) {
     try {
-      const paths = await fetchPathsFromGithub();
-      entries = await fetchInBatchesFrom(paths, TRANSPORT_APIS_RAW_BASE);
+      const paths = await fetchPathsFromGithub(token);
+      entries = await fetchInBatchesFrom(paths, TRANSPORT_APIS_RAW_BASE, token);
       console.log(
         `[transit-registry] ${entries.length} entries loaded (GitHub API @ ${TRANSPORT_APIS_COMMIT.slice(0, 12)})`,
       );
@@ -326,16 +342,16 @@ export async function fetchRegistryEntries(): Promise<RegistryEntry[]> {
   }
 
   if (entries && entries.length > 0) {
-    if (_cache) {
-      await _cache.set(REGISTRY_CACHE_KEY, entries, REGISTRY_CACHE_TTL).catch(() => {});
+    if (cache) {
+      await cache.set(REGISTRY_CACHE_KEY, entries, REGISTRY_CACHE_TTL).catch(() => {});
     }
     return entries;
   }
 
-  return loadFromCache();
+  return loadFromCache(cache);
 }
 
-async function loadFromCache(): Promise<RegistryEntry[]> {
-  if (!_cache) return [];
-  return (await _cache.get<RegistryEntry[]>(REGISTRY_CACHE_KEY)) ?? [];
+async function loadFromCache(cache: CacheClient | null): Promise<RegistryEntry[]> {
+  if (!cache) return [];
+  return (await cache.get<RegistryEntry[]>(REGISTRY_CACHE_KEY)) ?? [];
 }

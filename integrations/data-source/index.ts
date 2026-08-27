@@ -1,6 +1,26 @@
 import { ConfigurationError } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type BoundingBoxLimits,
+  clampViewportBoundingBox,
+  type IntegrationContext,
+} from "@openmapx/integration-framework";
 import { createDataSourceOrchestrator } from "./orchestrator.js";
+
+const DATA_SOURCE_BBOX_LIMITS: BoundingBoxLimits = {
+  maxLatitudeSpan: 30,
+  maxLongitudeSpan: 60,
+  maxArea: 900,
+};
+
+export function parseDataSourceBBox(query: Record<string, string>) {
+  const bbox = clampViewportBoundingBox(
+    { west: query.west, south: query.south, east: query.east, north: query.north },
+    DATA_SOURCE_BBOX_LIMITS,
+  );
+  if (!bbox) return null;
+  const [west, south, east, north] = bbox;
+  return { south, west, north, east };
+}
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createDataSourceOrchestrator(ctx);
@@ -17,17 +37,11 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const south = Number(req.query.south);
-    const west = Number(req.query.west);
-    const north = Number(req.query.north);
-    const east = Number(req.query.east);
-
-    if ([south, west, north, east].some((n) => !Number.isFinite(n))) {
+    const bbox = parseDataSourceBBox(req.query);
+    if (!bbox) {
       reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
-
-    const bbox = { south, west, north, east };
 
     let filters: Record<string, unknown> | undefined;
     if (req.query.filters) {
@@ -124,17 +138,11 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const south = Number(req.query.south);
-    const west = Number(req.query.west);
-    const north = Number(req.query.north);
-    const east = Number(req.query.east);
-
-    if ([south, west, north, east].some((n) => !Number.isFinite(n))) {
+    const bbox = parseDataSourceBBox(req.query);
+    if (!bbox) {
       reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
-
-    const bbox = { south, west, north, east };
 
     let filters: Record<string, unknown> | undefined;
     if (req.query.filters) {

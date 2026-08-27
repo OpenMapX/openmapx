@@ -215,14 +215,12 @@ function isAggregator(vehicle: SharedMobilityVehicle): boolean {
 /**
  * Extract the operator-assigned raw vehicle ID from a namespaced vehicle ID.
  *   "gbfs/dott-berlin/2850b11e-…"  →  "2850b11e-…"
- *   "motis:2850b11e-…"             →  "2850b11e-…"
+ *   "transitous/dott/vehicle/abc"   →  "abc"
  *   "felyx/abc123"                 →  "abc123"
  */
 function extractRawId(id: string): string {
   const slashIdx = id.lastIndexOf("/");
   if (slashIdx >= 0) return id.slice(slashIdx + 1);
-  const colonIdx = id.lastIndexOf(":");
-  if (colonIdx >= 0) return id.slice(colonIdx + 1);
   return id;
 }
 
@@ -236,8 +234,8 @@ function canonicalVehicleIdentity(vehicle: SharedMobilityVehicle): string {
  * Dedup free-floating vehicles across data sources using exact vehicle ID matching.
  *
  * Transitous re-publishes GBFS data and passes through the operator's original vehicle
- * IDs unchanged, so the raw ID extracted from "gbfs/dott-berlin/<uuid>" and
- * "motis:<uuid>" is identical for the same physical vehicle.
+ * IDs unchanged, so their provider and native ID match the direct feed for the
+ * same physical vehicle.
  *
  * Two-pass strategy — dedup is strictly inter-source, never intra-source:
  *

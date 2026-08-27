@@ -1,3 +1,4 @@
+import { readBoundedResponseText } from "@openmapx/core";
 import {
   assertResolvesToPublicIp,
   deliveryProviderIdForHost,
@@ -227,13 +228,10 @@ async function fetchText(url: string, log: Logger): Promise<string | null> {
       if (!res.ok) return null;
       const ct = res.headers.get("content-type") ?? "";
       if (!ct.includes("html") && !ct.includes("text")) return null;
-      const buf = await res.arrayBuffer();
-      const truncated = buf.byteLength > MAX_BYTES;
-      const bytes = truncated ? buf.slice(0, MAX_BYTES) : buf;
-      // `stream: true` on a truncated slice makes the decoder hold back (drop) an
-      // incomplete trailing multi-byte sequence instead of emitting U+FFFD, so
-      // the byte cut never corrupts the last character we keep.
-      return new TextDecoder("utf-8").decode(bytes, { stream: truncated });
+      return await readBoundedResponseText(res, MAX_BYTES, {
+        truncate: true,
+        label: "restaurant website",
+      });
     }
     return null;
   } catch (err) {

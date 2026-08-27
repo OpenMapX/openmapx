@@ -7,7 +7,7 @@ import { deriveExtrema, fetchObservations, reformatIocTime } from "../index.js";
 // metres→feet conversion applied to the derived high/low extrema.
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 let mockFetch: ReturnType<typeof vi.fn>;
@@ -52,6 +52,10 @@ describe("fetchObservations", () => {
     );
 
     const obs = await fetchObservations("acld");
+
+    expect(String(mockFetch.mock.calls[0]?.[0])).toMatch(
+      /^https:\/\/www\.ioc-sealevelmonitoring\.org\/service\.php\?/,
+    );
 
     expect(obs.map((p) => p.sensor)).toEqual(["rad", "rad", "rad"]);
     expect(obs.map((p) => p.stime)).toEqual([

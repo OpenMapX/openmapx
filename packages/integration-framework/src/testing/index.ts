@@ -60,7 +60,7 @@ export interface FakeHttpClient extends HttpClient {
 }
 
 /**
- * An {@link HttpClient} that returns canned responses and records every call.
+ * An `HttpClient` that returns canned responses and records every call.
  * Unmatched requests throw, so an integration that reaches an un-stubbed
  * endpoint fails loudly instead of hitting the network.
  */
@@ -90,13 +90,13 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
   };
 }
 
-/** A {@link Logger} that swallows everything. Override per-call to assert. */
+/** A `Logger` that swallows everything. Override per-call to assert. */
 export function createNoopLogger(): Logger {
   return { info: () => {}, warn: () => {}, error: () => {}, debug: () => {} };
 }
 
 /**
- * A pass-through {@link CacheClient}: reads always miss and `withCache` always
+ * A pass-through `CacheClient`: reads always miss and `withCache` always
  * runs its factory, so a cached path is exercised end-to-end without a real
  * store hiding work from call-count assertions.
  */
@@ -105,7 +105,11 @@ export function createPassthroughCache(): CacheClient {
     get: async () => null,
     set: async () => undefined,
     del: async () => undefined,
-    withCache: async <T>(_key: string, _ttl: number, fn: () => Promise<T>) => fn(),
+    withCache: async <T>(
+      _key: string,
+      _ttl: number,
+      fn: (operationSignal: AbortSignal) => Promise<T>,
+    ) => fn(new AbortController().signal),
   };
 }
 
@@ -150,7 +154,7 @@ export interface MockIntegrationContext extends IntegrationContext {
 }
 
 /**
- * Build an {@link IntegrationContext} backed by inert fakes. Pass overrides for
+ * Build an `IntegrationContext` backed by inert fakes. Pass overrides for
  * the pieces a test cares about (typically `config` + `http`). The returned
  * `registered` collects everything `setup(ctx)` wires up, which is how the
  * repo-wide provider-contract conformance test inspects real integrations.
@@ -259,6 +263,7 @@ export function createMockIntegrationContext(
     },
     emit: noop,
     on: () => () => undefined,
+    onActivate: (activate) => activate(),
     onShutdown: noop,
     getIntegrationsByDomain: () => [],
     getRequiredService: () => null,

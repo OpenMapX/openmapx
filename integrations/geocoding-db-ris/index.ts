@@ -5,9 +5,11 @@ import { dbRisGeocodingService, lookupDbStation } from "./provider.js";
 import { setRisCredentials } from "./ris-client.js";
 
 export function setup(ctx: IntegrationContext): void {
-  setRisCredentials({
-    clientId: ctx.config.clientId as string | undefined,
-    apiKey: ctx.config.apiKey as string | undefined,
+  ctx.onActivate(() => {
+    setRisCredentials({
+      clientId: ctx.config.clientId as string | undefined,
+      apiKey: ctx.config.apiKey as string | undefined,
+    });
   });
   ctx.registerGeocodingProvider(dbRisGeocodingService);
 

@@ -10,7 +10,7 @@ export interface BundleOptions {
   homepage?: string;
   /** Each "<repo>,<ref>,<serviceId>" (ref optional → empty). */
   service?: string[];
-  /** Each "<artifactUrl>,<sha256>,<id>" (sha256 optional → empty). */
+  /** Each "<artifactUrl>,<sha256>,<id>". */
   integration?: string[];
 }
 
@@ -23,7 +23,7 @@ export interface ExtensionManifestDoc {
   license?: string;
   homepage?: string;
   services?: Array<{ repo: string; ref?: string; service: string }>;
-  integrations?: Array<{ artifact: string; sha256?: string; id: string }>;
+  integrations?: Array<{ artifact: string; sha256: string; id: string }>;
 }
 
 const ID_RE = /^[a-z0-9][a-z0-9-]*$/;
@@ -44,10 +44,10 @@ export function buildExtensionManifest(opts: BundleOptions): ExtensionManifestDo
 
   const integrations = (opts.integration ?? []).map((spec) => {
     const [artifact, sha256, id] = spec.split(",").map((s) => s.trim());
-    if (!artifact || !id) {
+    if (!artifact || !sha256 || !id) {
       throw new Error(`--integration must be "<artifactUrl>,<sha256>,<id>" (got "${spec}")`);
     }
-    return sha256 ? { artifact, sha256, id } : { artifact, id };
+    return { artifact, sha256, id };
   });
 
   if (services.length + integrations.length === 0) {

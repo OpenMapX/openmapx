@@ -9,7 +9,7 @@ import {
 let mockFetch: ReturnType<typeof vi.fn>;
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 const STOP_PLACE_FEATURE = {

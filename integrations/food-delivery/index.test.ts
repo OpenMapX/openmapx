@@ -69,9 +69,8 @@ describe("food-delivery routes", () => {
   }
 
   it("returns exact/search/browse metadata and caches a validated exact match", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({
+    fetchMock.mockResolvedValue(
+      Response.json({
         data: {
           feedItems: [
             {
@@ -85,7 +84,7 @@ describe("food-delivery routes", () => {
           ],
         },
       }),
-    });
+    );
     const { cache } = makeCache();
     const handler = route("/resolve", cache);
     const first = makeReply();
@@ -110,7 +109,7 @@ describe("food-delivery routes", () => {
 
   it("caches only a valid no-match, not an upstream failure", async () => {
     const missState = makeCache();
-    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({ data: { feedItems: [] } }) });
+    fetchMock.mockResolvedValueOnce(Response.json({ data: { feedItems: [] } }));
     const missHandler = route("/resolve", missState.cache);
     await missHandler({ query, params: {}, body: undefined }, makeReply().reply);
     expect(missState.cache.set).toHaveBeenCalledWith(

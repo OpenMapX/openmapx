@@ -102,7 +102,11 @@ export async function getStop(stopId: string): Promise<TransitStop | null> {
   return data ? normalizeStop(data) : null;
 }
 
-export async function searchByName(query: string, limit = 10): Promise<TransitStop[]> {
+export async function searchByName(
+  query: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<TransitStop[]> {
   const key = apiKey();
   if (!key) return [];
   const params = new URLSearchParams({
@@ -112,7 +116,7 @@ export async function searchByName(query: string, limit = 10): Promise<TransitSt
   // biome-ignore lint/suspicious/noExplicitAny: external API response
   const data = await fetchJson<{ matches?: any[] }>(
     `${BASE_URL}/StopPoint/Search/${encodeURIComponent(query)}?${params}`,
-    { nullOnError: true },
+    { nullOnError: true, signal },
   );
   return (data?.matches ?? []).slice(0, limit).map(normalizeStop);
 }

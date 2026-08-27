@@ -131,23 +131,6 @@ export function decodeMotisRentalId(id: string): DecodedMotisRentalId | null {
   };
 }
 
-/** Legacy IDs are intentionally ambiguous until a provider snapshot proves one match. */
-export function decodeLegacyMotisRentalId(id: string): string | null {
-  return id.startsWith("motis:") && id.length > 6 ? id.slice(6) : null;
-}
-
-export function resolveLegacyMotisRentalId(
-  legacyId: string,
-  snapshot: MotisRentalSnapshot,
-): SharedMobilityStation | SharedMobilityVehicle | null {
-  const nativeId = decodeLegacyMotisRentalId(legacyId);
-  if (!nativeId) return null;
-  const matches = [...snapshot.stations, ...snapshot.vehicles].filter(
-    (entry) => entry.nativeId === nativeId,
-  );
-  return matches.length === 1 ? (matches[0] ?? null) : null;
-}
-
 function mapFormFactor(formFactor: RentalFormFactor): VehicleFormFactor {
   switch (formFactor) {
     case "BICYCLE":

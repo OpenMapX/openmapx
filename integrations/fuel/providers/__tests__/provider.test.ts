@@ -227,10 +227,7 @@ describe("fuelProvider.getDetail", () => {
       e10: 1.639,
       diesel: 1.559,
     };
-    mockFetch.mockResolvedValue({
-      ok: true,
-      json: async () => ({ ok: true, station: apiStation }),
-    });
+    mockFetch.mockResolvedValue(Response.json({ ok: true, station: apiStation }));
 
     const enrichedDetail = {
       id: itemId,

@@ -20,6 +20,10 @@ const fixture = readFileSync(
 
 const VIENNA_BBOX = { south: 48.15, west: 16.3, north: 48.25, east: 16.45 };
 
+function jsonResponse(body: string): Response {
+  return new Response(body, { headers: { "Content-Type": "application/json" } });
+}
+
 afterEach(() => {
   setAtEcontrolApiKey(undefined);
   setAtEcontrolRefererDomain(undefined);
@@ -79,7 +83,7 @@ describe("searchAtEcontrolCharging", () => {
       const headers = init?.headers as Record<string, string>;
       expect(headers.Apikey).toBe("test-key");
       expect(headers.Referer).toBe("https://example.com");
-      return Promise.resolve(new Response(fixture));
+      return Promise.resolve(jsonResponse(fixture));
     });
     vi.stubGlobal("fetch", fetchMock);
 
@@ -156,7 +160,7 @@ describe("searchAtEcontrolCharging", () => {
   it("emits no tariff for a free-of-charge connector, and maps OTHER/DOMESTIC_F to Schuko", async () => {
     setAtEcontrolApiKey("test-key");
     setAtEcontrolRefererDomain("example.com");
-    const fetchMock = vi.fn().mockResolvedValue(new Response(fixture));
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(fixture));
     vi.stubGlobal("fetch", fetchMock);
 
     // Graz is outside VIENNA_BBOX but inside Austria coverage, so query a

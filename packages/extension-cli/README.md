@@ -20,7 +20,7 @@ Scaffold a new integration directory from the built-in template:
 openmapx-ext scaffold integration my-weather --domain weather --out ./integrations
 ```
 
-Creates `integrations/my-weather/` with `index.ts`, `manifest.json`, `package.json`, and `strings/en.json`, with `__ID__` and `__DOMAIN__` tokens substituted.
+Creates `integrations/my-weather/` with `manifest.json`, `package.json`, and `strings/en.json`, with `__ID__` and `__DOMAIN__` tokens substituted. Executable behavior belongs in a companion service; community runtime entry points are rejected until a dedicated isolation boundary exists.
 
 ### scaffold service
 
@@ -44,13 +44,13 @@ Exits with a non-zero code and prints errors if the manifest is invalid.
 
 ### package
 
-Build and package an integration into a distributable `.tar.gz` artifact:
+Package a declarative integration into a distributable `.tar.gz` artifact:
 
 ```sh
 openmapx-ext package ./integrations/my-weather --out my-weather.tar.gz
 ```
 
-Bundles the backend (`index.ts`) and any declared frontend components, then creates a `.tar.gz` artifact suitable for installation via the OpenMapX admin panel.
+Creates a declarative `.tar.gz` artifact suitable for installation via the OpenMapX admin panel. The packager rejects backend, POI-source, and same-origin frontend JavaScript.
 
 ### bundle
 
@@ -69,6 +69,5 @@ openmapx-ext bundle \
 `repository,ref,serviceId` and `artifactUrl,sha256,integrationId`. Optional
 bundle metadata includes `--description`, `--license`, and `--homepage`.
 
-## Authoring types
-
-Integration authoring types (the `IntegrationContext` API, manifest schema, etc.) come from [`@openmapx/extension-sdk`](https://www.npmjs.com/package/@openmapx/extension-sdk).
+Integration artifacts are declarative. Put executable behavior and its types in
+the companion service rather than depending on an in-process host SDK.

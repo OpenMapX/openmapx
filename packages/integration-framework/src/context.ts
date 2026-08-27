@@ -21,6 +21,8 @@ import type { IntegrationManifest } from "./manifest";
 export interface HttpClientOptions {
   params?: Record<string, string | number | boolean | undefined>;
   headers?: Record<string, string>;
+  /** Request/provider cancellation; combined with the client's own timeout. */
+  signal?: AbortSignal;
   cache?: { ttl: number };
   /**
    * Abort the request after this many milliseconds. Defaults to the
@@ -28,6 +30,8 @@ export interface HttpClientOptions {
    * legitimately slow upstreams (bulk downloads, LLM generation).
    */
   timeoutMs?: number;
+  /** Maximum successful JSON response bytes. Bulk operations must opt in explicitly. */
+  maxResponseBytes?: number;
 }
 
 export interface HttpClient {
@@ -39,7 +43,19 @@ export interface CacheClient {
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
   del(key: string): Promise<void>;
-  withCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T>;
+  /**
+   * Coalesce equal cache misses. The loader receives the shared operation
+   * signal; `callerSignal` cancels only that caller, and shared work is aborted
+   * once no callers remain. `shouldCache` can keep a useful but degraded
+   * fulfilled value out of the shared cache.
+   */
+  withCache<T>(
+    key: string,
+    ttlSeconds: number,
+    fn: (operationSignal: AbortSignal) => Promise<T>,
+    callerSignal?: AbortSignal,
+    shouldCache?: (value: T) => boolean,
+  ): Promise<T>;
 }
 
 /**
@@ -72,7 +88,11 @@ export interface Logger {
 }
 
 export interface DatabaseClient {
-  execute<T = unknown>(query: string, params?: unknown[]): Promise<T>;
+  execute<T = unknown>(
+    query: string,
+    params?: unknown[],
+    options?: { signal?: AbortSignal },
+  ): Promise<T>;
 }
 
 export type RouteHandler = (
@@ -93,6 +113,8 @@ export type RouteHandler = (
      * `if-none-match`, not `If-None-Match`.
      */
     headers: Record<string, string | string[] | undefined>;
+    /** Aborts when the caller disconnects. */
+    signal?: AbortSignal;
   },
   reply: {
     send: (data: unknown) => void;
@@ -193,11 +215,11 @@ export interface ProviderHealthHandle {
  *
  * Outcome labels follow a closed enum: `"ok"` (call returned a value),
  * `"empty"` (call succeeded but returned null / empty list), `"error"` (call
- * threw / rejected), `"skipped"` (orchestrator pre-flight skipped the call
- * before invoking the provider, e.g. due to a health cooldown or a
- * capability mismatch).
+ * threw / rejected), `"timeout"` and `"cancelled"` (deadline and caller
+ * cancellation respectively), or `"skipped"` (orchestrator pre-flight
+ * skipped the call before invoking the provider).
  */
-export type ProviderCallOutcome = "ok" | "empty" | "error" | "skipped";
+export type ProviderCallOutcome = "ok" | "empty" | "error" | "skipped" | "timeout" | "cancelled";
 
 export type TransitDecisionOperation = "plan" | "routes" | "refresh" | "realtime";
 export type TransitDecisionReason =
@@ -369,6 +391,12 @@ export interface IntegrationContext {
   emit(event: string, data: unknown): void;
   on(event: string, handler: (data: unknown) => void): () => void;
 
+  /**
+   * Publish a synchronous process-wide runtime mutation with this integration
+   * generation. During a hot reload the host defers the callback until every
+   * integration has staged successfully; during initial startup it runs now.
+   */
+  onActivate(activate: () => void): void;
   onShutdown(cleanup: () => Promise<void>): void;
 
   /** Query all enabled integrations registered under a domain. */

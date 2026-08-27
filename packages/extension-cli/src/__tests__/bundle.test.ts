@@ -46,4 +46,15 @@ describe("buildExtensionManifest", () => {
       }),
     ).toThrow(/Invalid id/);
   });
+
+  it("rejects an integration artifact without a digest", () => {
+    expect(() =>
+      buildExtensionManifest({
+        id: "x",
+        name: "X",
+        version: "1.0.0",
+        integration: ["https://example.com/x.tar.gz,,x"],
+      }),
+    ).toThrow(/sha256/);
+  });
 });

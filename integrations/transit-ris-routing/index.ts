@@ -6,17 +6,19 @@ const { attribution, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
-  setRisCredentials({
-    clientId: ctx.config.clientId as string | undefined,
-    apiKey: ctx.config.apiKey as string | undefined,
+  const clientId = ctx.config.clientId as string | undefined;
+  const apiKey = ctx.config.apiKey as string | undefined;
+  ctx.onActivate(() => {
+    setRisCredentials({ clientId, apiKey });
   });
-  if (!ris.isConfigured()) return;
+  if (!clientId?.trim() || !apiKey?.trim()) return;
 
   ctx.registerTransitProvider({
     id: "transit-ris-routing",
     prefix: "ris:",
     coverage: { bbox: [5.87, 47.27, 15.04, 55.06] },
     priority: 1,
+    role: "regional",
     attribution: attribution.all(),
     capabilities: {
       stops: {

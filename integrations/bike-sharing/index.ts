@@ -13,26 +13,28 @@ import {
 } from "./providers/provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  initCache(ctx.cache);
-  setDetailCache(ctx.cache);
-  setManifestDataSources(ctx.manifest.dataSources ?? []);
-  setSharedMobilityDecisionObserver((category, decision) => {
-    ctx.metricsRecorder?.recordProviderCall(
-      {
-        providerId: `shared-mobility-${category}`,
-        method: "source-policy",
-        outcome: decision.partial ? "error" : decision.calledAdapters.length ? "ok" : "skipped",
-      },
-      0,
-    );
-  });
   const motis = ctx.getRequiredService("motis");
   const nominatim = ctx.getRequiredService("nominatim");
-  if (motis?.url) setSharedMobilityMotisUrl(motis.url);
-  if (nominatim?.url) setSharedMobilityNominatimUrl(nominatim.url);
-  setDbBikeCredentials({
-    clientId: ctx.config["db-bike-client-id"] as string | undefined,
-    apiKey: ctx.config["db-bike-api-key"] as string | undefined,
+  ctx.onActivate(() => {
+    initCache(ctx.cache);
+    setDetailCache(ctx.cache);
+    setManifestDataSources(ctx.manifest.dataSources ?? []);
+    setSharedMobilityDecisionObserver((category, decision) => {
+      ctx.metricsRecorder?.recordProviderCall(
+        {
+          providerId: `shared-mobility-${category}`,
+          method: "source-policy",
+          outcome: decision.partial ? "error" : decision.calledAdapters.length ? "ok" : "skipped",
+        },
+        0,
+      );
+    });
+    if (motis?.url) setSharedMobilityMotisUrl(motis.url);
+    if (nominatim?.url) setSharedMobilityNominatimUrl(nominatim.url);
+    setDbBikeCredentials({
+      clientId: ctx.config["db-bike-client-id"] as string | undefined,
+      apiKey: ctx.config["db-bike-api-key"] as string | undefined,
+    });
   });
   ctx.registerMobilityDataSource(bikeSharingProvider);
   registerPlaceResolver(bikeSharingProvider.id, createDataSourceResolver(bikeSharingProvider));

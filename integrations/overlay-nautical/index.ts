@@ -1,4 +1,9 @@
-import { createPlace, fetchJson, USER_AGENT } from "@openmapx/core";
+import { createPlace, fetchJson, readBoundedResponseText, USER_AGENT } from "@openmapx/core";
+import {
+  MAX_RASTER_TILE_BYTES,
+  RASTER_IMAGE_MEDIA_TYPES,
+  readBoundedBinaryResponse,
+} from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import {
   findNearestStation,
@@ -16,6 +21,7 @@ import {
 } from "./stations";
 
 const FETCH_TIMEOUT_MS = 15_000;
+const MAX_HARBOUR_LIST_BYTES = 2 * 1024 * 1024;
 const SEAMARK_CACHE_TTL = 24 * 60 * 60; // 24h — OpenSeaMap tiles refresh daily
 const DEPTH_CONTOUR_CACHE_TTL = 7 * 24 * 60 * 60; // 7d — contour data is very stable
 const DEPTH_RELIEF_CACHE_TTL = 30 * 24 * 60 * 60; // 30d — GEBCO updates yearly
@@ -55,8 +61,6 @@ interface StationFeatureProperties {
   name: string;
   /** Two-letter country code, when known. */
   country?: string;
-  /** NOAA-only — US state code, kept for backward compat with the place-panel attribution row. */
-  state?: string;
   /** Primary capability the marker advertises. */
   primaryType: TideStationCapability;
   hasTide: boolean;
@@ -173,17 +177,21 @@ function parseTileParams(req: {
   return { z, x, y };
 }
 
-async function fetchWithTimeout(url: string, init?: RequestInit): Promise<Response | null> {
+async function fetchWithTimeout(
+  url: string,
+  init?: RequestInit,
+  requestSignal?: AbortSignal,
+): Promise<Response | null> {
   try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(url, {
+    const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+    const signals = [init?.signal, requestSignal, timeoutSignal].filter(
+      (signal): signal is AbortSignal => signal !== undefined && signal !== null,
+    );
+    return await fetch(url, {
       ...init,
       headers: { "User-Agent": USER_AGENT, ...(init?.headers ?? {}) },
-      signal: controller.signal,
+      signal: signals.length === 1 ? signals[0] : AbortSignal.any(signals),
     });
-    clearTimeout(timer);
-    return res;
   } catch {
     return null;
   }
@@ -194,16 +202,26 @@ async function fetchAndCacheTile(
   cacheKey: string,
   ttl: number,
   upstreamUrl: string,
+  signal?: AbortSignal,
 ): Promise<Buffer | null> {
   const cached = await ctx.cache.get<{ data: string }>(cacheKey);
   if (cached?.data) {
     return Buffer.from(cached.data, "base64");
   }
-  const res = await fetchWithTimeout(upstreamUrl);
+  const res = await fetchWithTimeout(upstreamUrl, undefined, signal);
   if (!res?.ok) return null;
-  const buf = Buffer.from(await res.arrayBuffer());
-  await ctx.cache.set(cacheKey, { data: buf.toString("base64") }, ttl);
-  return buf;
+  try {
+    const { data } = await readBoundedBinaryResponse(res, {
+      maxBytes: MAX_RASTER_TILE_BYTES,
+      allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
+      fallbackContentType: "image/png",
+      label: "nautical tile",
+    });
+    await ctx.cache.set(cacheKey, { data: data.toString("base64") }, ttl);
+    return data;
+  } catch {
+    return null;
+  }
 }
 
 export function parseHarbourJsonp(text: string): HarborFeature[] {
@@ -326,7 +344,7 @@ export function setup(ctx: IntegrationContext): void {
     const { z, x, y } = params;
     const cacheKey = `seamark:${z}:${x}:${y}`;
     const upstream = `${seamarkBase}/${z}/${x}/${y}.png`;
-    const buf = await fetchAndCacheTile(ctx, cacheKey, SEAMARK_CACHE_TTL, upstream);
+    const buf = await fetchAndCacheTile(ctx, cacheKey, SEAMARK_CACHE_TTL, upstream, req.signal);
     if (!buf) {
       reply.status(502).send({ message: "Seamark tile fetch failed" });
       return;
@@ -360,7 +378,13 @@ export function setup(ctx: IntegrationContext): void {
     wmsUrl.searchParams.set("transparent", "TRUE");
 
     const cacheKey = `depth:contour:${z}:${x}:${y}`;
-    const buf = await fetchAndCacheTile(ctx, cacheKey, DEPTH_CONTOUR_CACHE_TTL, wmsUrl.toString());
+    const buf = await fetchAndCacheTile(
+      ctx,
+      cacheKey,
+      DEPTH_CONTOUR_CACHE_TTL,
+      wmsUrl.toString(),
+      req.signal,
+    );
     if (!buf) {
       reply.status(502).send({ message: "Depth contour tile fetch failed" });
       return;
@@ -394,20 +418,36 @@ export function setup(ctx: IntegrationContext): void {
 
     const cacheKey = `depth:relief:${z}:${x}:${y}`;
     const cached = await ctx.cache.get<{ data: string; contentType: string }>(cacheKey);
-    if (cached?.data) {
+    if (
+      cached?.data &&
+      RASTER_IMAGE_MEDIA_TYPES.includes(
+        cached.contentType as (typeof RASTER_IMAGE_MEDIA_TYPES)[number],
+      )
+    ) {
       reply.header("Content-Type", cached.contentType);
       reply.header("Cache-Control", "public, max-age=2592000, s-maxage=2592000");
       reply.header("Cross-Origin-Resource-Policy", "cross-origin");
       reply.send(Buffer.from(cached.data, "base64"));
       return;
     }
-    const res = await fetchWithTimeout(wmsUrl.toString());
+    const res = await fetchWithTimeout(wmsUrl.toString(), undefined, req.signal);
     if (!res?.ok) {
       reply.status(502).send({ message: "GEBCO tile fetch failed" });
       return;
     }
-    const contentType = res.headers.get("content-type") ?? "image/jpeg";
-    const buf = Buffer.from(await res.arrayBuffer());
+    let buf: Buffer;
+    let contentType: string;
+    try {
+      ({ data: buf, contentType } = await readBoundedBinaryResponse(res, {
+        maxBytes: MAX_RASTER_TILE_BYTES,
+        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
+        fallbackContentType: "image/jpeg",
+        label: "GEBCO relief tile",
+      }));
+    } catch {
+      reply.status(502).send({ message: "GEBCO tile fetch failed" });
+      return;
+    }
     await ctx.cache.set(
       cacheKey,
       { data: buf.toString("base64"), contentType },
@@ -442,7 +482,13 @@ export function setup(ctx: IntegrationContext): void {
     wmsUrl.searchParams.set("transparent", "TRUE");
 
     const cacheKey = `noaa:${z}:${x}:${y}`;
-    const buf = await fetchAndCacheTile(ctx, cacheKey, NOAA_CACHE_TTL, wmsUrl.toString());
+    const buf = await fetchAndCacheTile(
+      ctx,
+      cacheKey,
+      NOAA_CACHE_TTL,
+      wmsUrl.toString(),
+      req.signal,
+    );
     if (!buf) {
       reply.status(502).send({ message: "NOAA chart tile fetch failed" });
       return;
@@ -477,7 +523,13 @@ export function setup(ctx: IntegrationContext): void {
     wmsUrl.searchParams.set("transparent", "TRUE");
 
     const cacheKey = `charts:no:${z}:${x}:${y}`;
-    const buf = await fetchAndCacheTile(ctx, cacheKey, NOAA_CACHE_TTL, wmsUrl.toString());
+    const buf = await fetchAndCacheTile(
+      ctx,
+      cacheKey,
+      NOAA_CACHE_TTL,
+      wmsUrl.toString(),
+      req.signal,
+    );
     if (!buf) {
       reply.status(502).send({ message: "Kartverket chart tile fetch failed" });
       return;
@@ -521,12 +573,20 @@ export function setup(ctx: IntegrationContext): void {
     url.searchParams.set("r", String(east));
     url.searchParams.set("zoom", String(zoom));
 
-    const res = await fetchWithTimeout(url.toString());
+    const res = await fetchWithTimeout(url.toString(), undefined, req.signal);
     if (!res?.ok) {
       reply.status(502).send({ message: "Harbour list fetch failed" });
       return;
     }
-    const text = await res.text();
+    let text: string;
+    try {
+      text = await readBoundedResponseText(res, MAX_HARBOUR_LIST_BYTES, {
+        label: "OpenSeaMap harbour list",
+      });
+    } catch {
+      reply.status(502).send({ message: "Harbour list fetch failed" });
+      return;
+    }
     const features = parseHarbourJsonp(text);
     const collection: HarborCollection = { type: "FeatureCollection", features };
     await ctx.cache.set(cacheKey, collection, HARBORS_CACHE_TTL);
@@ -712,7 +772,6 @@ export function setup(ctx: IntegrationContext): void {
             country: s.country,
             // `state` kept undefined for non-NOAA networks; the NOAA-specific
             // attribution surface checks for its presence.
-            state: undefined,
             primaryType,
             hasTide: s.types.includes("tide-predictions"),
             hasWaterLevel: s.types.includes("water-level"),

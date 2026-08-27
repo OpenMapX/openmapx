@@ -54,8 +54,14 @@ export function setup(ctx: IntegrationContext): void {
       isUppercaseAcronymIntent(rawQuery) ? "upper" : "lower",
       limit,
     ].join(":");
-    const result = await ctx.cache.withCache(key, 300, () => orchestrator.search(query));
-    reply.header("Cache-Control", "public, max-age=300");
+    const result = await ctx.cache.withCache(
+      key,
+      300,
+      (operationSignal) => orchestrator.search(query, operationSignal),
+      req.signal,
+      (value) => !value.partial,
+    );
+    reply.header("Cache-Control", result.partial ? "no-store" : "public, max-age=300");
     reply.send(result);
   });
 }

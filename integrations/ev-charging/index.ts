@@ -12,26 +12,28 @@ import { setSgLtaDatamallApiKey } from "./providers/sg-ltadatamall.js";
 import { setSiNapToken } from "./providers/si-nap.js";
 import { setTwTdxCredentials } from "./providers/tw-tdx.js";
 import { setUsAfdcApiKey } from "./providers/us-afdc.js";
-import { initRuntime } from "./runtime.js";
+import { initRuntime, stageRuntimeCommit } from "./runtime.js";
 
 export function setup(ctx: IntegrationContext): void {
-  initCache(ctx.cache);
   initRuntime(ctx);
   const resolved = ctx.getRequiredService("overpass");
-  if (resolved?.url) setOverpassUrl(resolved.url);
-  setOcmApiKey(ctx.config["ocm-api-key"] as string | undefined);
-  setUsAfdcApiKey(ctx.config["us-afdc-api-key"] as string | undefined);
-  setNoNobilApiKey(ctx.config["no-nobil-api-key"] as string | undefined);
-  setSiNapToken(ctx.config["si-nap-api-key"] as string | undefined);
-  setAtEcontrolApiKey(ctx.config["at-econtrol-api-key"] as string | undefined);
-  setAtEcontrolRefererDomain(ctx.config["at-econtrol-referer-domain"] as string | undefined);
-  setSgLtaDatamallApiKey(ctx.config["sg-ltadatamall-api-key"] as string | undefined);
-  setTwTdxCredentials(
-    ctx.config["tw-tdx-client-id"] as string | undefined,
-    ctx.config["tw-tdx-client-secret"] as string | undefined,
-  );
-  setLogger(ctx.log);
-  setManifestDataSources(ctx.manifest.dataSources ?? []);
+  stageRuntimeCommit(() => {
+    initCache(ctx.cache);
+    if (resolved?.url) setOverpassUrl(resolved.url);
+    setOcmApiKey(ctx.config["ocm-api-key"] as string | undefined);
+    setUsAfdcApiKey(ctx.config["us-afdc-api-key"] as string | undefined);
+    setNoNobilApiKey(ctx.config["no-nobil-api-key"] as string | undefined);
+    setSiNapToken(ctx.config["si-nap-api-key"] as string | undefined);
+    setAtEcontrolApiKey(ctx.config["at-econtrol-api-key"] as string | undefined);
+    setAtEcontrolRefererDomain(ctx.config["at-econtrol-referer-domain"] as string | undefined);
+    setSgLtaDatamallApiKey(ctx.config["sg-ltadatamall-api-key"] as string | undefined);
+    setTwTdxCredentials(
+      ctx.config["tw-tdx-client-id"] as string | undefined,
+      ctx.config["tw-tdx-client-secret"] as string | undefined,
+    );
+    setLogger(ctx.log);
+    setManifestDataSources(ctx.manifest.dataSources ?? []);
+  });
   ctx.registerPoiSources(declarePoiSources());
   ctx.registerMobilityDataSource(evChargingProvider);
   registerPlaceResolver(evChargingProvider.id, createDataSourceResolver(evChargingProvider));

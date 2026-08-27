@@ -10,9 +10,6 @@
     "legend": false,
     "panel": false
   },
-  "backend": {
-    "routes": true
-  },
   "quality": "community",
   "category": "Knowledge",
   "healthCheck": {

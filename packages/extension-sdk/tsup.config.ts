@@ -1,9 +1,0 @@
-import { defineConfig } from "tsup";
-
-export default defineConfig({
-  entry: { index: "src/index.ts", testing: "src/testing.ts" },
-  format: ["esm", "cjs"],
-  dts: false,
-  clean: true,
-  noExternal: [/^@openmapx\//],
-});

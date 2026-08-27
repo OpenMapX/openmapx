@@ -17,7 +17,7 @@ import { fetchRouteGeometry } from "./overpass-geometry.js";
 import { mapSummary } from "./waymarked-trails.js";
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 describe("coord-transform", () => {

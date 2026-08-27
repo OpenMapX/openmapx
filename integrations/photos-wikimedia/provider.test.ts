@@ -45,12 +45,9 @@ beforeEach(() => {
     const url = String(input);
     for (const [pattern, body] of Object.entries(routes)) {
       if (url.includes(pattern)) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => body,
-          text: async () => mockOkText(body),
-        };
+        return new Response(mockOkText(body), {
+          headers: { "content-type": "application/json" },
+        });
       }
     }
     return { ok: false, status: 404, json: async () => ({}) };

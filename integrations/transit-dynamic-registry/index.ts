@@ -6,9 +6,9 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import { getAdapter } from "./adapters.js";
-import { setCache, setGithubToken } from "./fetcher.js";
+import { fetchRegistryEntries, setCache, setGithubToken } from "./fetcher.js";
 import { setRedis } from "./hafas-mgate.js";
-import { registry } from "./registry.js";
+import { RegistryManager, registry } from "./registry.js";
 
 // Manifest declares the static infrastructure credits (jsdelivr CDN, GitHub
 // catalog). Per-upstream credits are constructed at runtime from the dynamic
@@ -37,22 +37,19 @@ function buildAttributionFor(
 }
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
-  attribution.set(ctx.manifest.dataSources ?? []);
-  // Inject the cache client so the fetcher can persist registry data
-  setCache(ctx.cache);
-  setGithubToken(ctx.config.githubToken as string | undefined);
+  const githubToken = ctx.config.githubToken as string | undefined;
 
   // Inject Redis for cached-hafas-client if available via config
   const redisClient = ctx.config.redis;
-  if (redisClient) {
-    setRedis(redisClient);
-  }
-
-  // Initialize the dynamic registry (fetches from GitHub)
-  await registry.initialize().catch(() => {});
+  const stagedRegistry = new RegistryManager(() =>
+    fetchRegistryEntries({ cache: ctx.cache, githubToken }),
+  );
+  await stagedRegistry
+    .initialize(() => fetchRegistryEntries({ cache: ctx.cache, githubToken, preferCache: true }))
+    .catch(() => {});
 
   // Register each discovered entry as a transit provider
-  for (const entry of registry.listEntries()) {
+  for (const entry of stagedRegistry.listEntries()) {
     const adapter = getAdapter(entry.protocol);
     if (!adapter) continue;
 
@@ -82,6 +79,7 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
       prefix: entry.prefix,
       coverage: { bbox: entry.bbox },
       priority: 5,
+      role: "enrichment",
       attribution: entryAttribution,
       capabilities: {
         stops: {
@@ -129,9 +127,19 @@ export async function setup(ctx: IntegrationContext): Promise<void> {
     });
   }
 
-  // Start periodic refresh
-  registry.startRefresh();
-  ctx.onShutdown(async () => registry.stopRefresh());
+  let releaseRefresh: (() => void) | null = null;
+  ctx.onActivate(() => {
+    attribution.set(ctx.manifest.dataSources ?? []);
+    setCache(ctx.cache);
+    setGithubToken(githubToken);
+    // Clear the previous generation's adapter as well as installing a new one;
+    // otherwise removing Redis from configuration leaves the retired client
+    // reachable through cached-hafas-client after reload.
+    setRedis(redisClient ?? null);
+    registry.replaceWith(stagedRegistry);
+    releaseRefresh = registry.startRefresh();
+  });
+  ctx.onShutdown(async () => releaseRefresh?.());
 }
 
 export type { ProtocolAdapter } from "./adapter-types";

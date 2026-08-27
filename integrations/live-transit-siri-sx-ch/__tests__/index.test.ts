@@ -29,6 +29,7 @@ function createCtx(config: Record<string, unknown> = {}): CtxHandle {
       ],
     },
     log: { info: vi.fn(), warn: vi.fn(), error: vi.fn(), debug: vi.fn() },
+    onActivate: (activate: () => void) => activate(),
     registerRealtimeProvider: (next: RealtimeProvider) => {
       provider = next;
     },

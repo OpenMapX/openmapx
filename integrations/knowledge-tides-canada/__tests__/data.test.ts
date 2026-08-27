@@ -13,7 +13,7 @@ import {
 // tagged by comparison with the adjacent value).
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 let mockFetch: ReturnType<typeof vi.fn>;

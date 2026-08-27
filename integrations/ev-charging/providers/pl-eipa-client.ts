@@ -1,3 +1,4 @@
+import { readBoundedBinaryResponse } from "@openmapx/core/server";
 import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type { PoiSourceLogger } from "@openmapx/poi-source-registry";
 
@@ -76,7 +77,12 @@ export async function fetchEipaFile(url: string, log: PoiSourceLogger): Promise<
       log.error(`pl-eipa-client: HTTP ${res.status} fetching ${url}`);
       return [];
     }
-    return parseEipaEnvelope(Buffer.from(await res.arrayBuffer()));
+    const { data } = await readBoundedBinaryResponse(res, {
+      maxBytes: 64 * 1024 * 1024,
+      fallbackContentType: "application/json",
+      label: "Polish EIPA charging feed",
+    });
+    return parseEipaEnvelope(data);
   } catch (err) {
     log.error(`pl-eipa-client: fetch failed for ${url} (${(err as Error).message})`);
     return [];

@@ -27,6 +27,8 @@ const REGISTRY = new Map<string, RegisteredPoiSource>();
  * consumers always see a defined `id`/`stationIdPrefix`.
  */
 const RAW_SOURCES = new Map<string, PoiSource>();
+let STAGED_REGISTRY: Map<string, RegisteredPoiSource> | null = null;
+let STAGED_RAW_SOURCES: Map<string, PoiSource> | null = null;
 
 /**
  * Read-only snapshot of all currently-registered sources. The result is a
@@ -56,6 +58,8 @@ export function getPoiSourcesByDomain(domain: string): readonly RegisteredPoiSou
 export function __clearPoiSourceRegistry(): void {
   REGISTRY.clear();
   RAW_SOURCES.clear();
+  STAGED_REGISTRY = null;
+  STAGED_RAW_SOURCES = null;
 }
 
 const CRON_RE = /^[\d*/,-]+(\s+[\d*/,-]+){4}$/;
@@ -158,19 +162,49 @@ export function registerPoiSource(source: PoiSource, log?: PoiRegistryLogger): v
       `registerPoiSource: invalid declaration for "${id}":\n  - ${errors.join("\n  - ")}`,
     );
   }
-  const existingRaw = RAW_SOURCES.get(id);
+  const targetRegistry = STAGED_REGISTRY ?? REGISTRY;
+  const targetRawSources = STAGED_RAW_SOURCES ?? RAW_SOURCES;
+  const existingRaw = targetRawSources.get(id);
   if (existingRaw) {
     if (existingRaw === source) return;
     log?.warn(`registerPoiSource: id "${id}" already registered; ignoring duplicate registration`);
     return;
   }
-  RAW_SOURCES.set(id, source);
-  REGISTRY.set(id, normalized);
+  targetRawSources.set(id, source);
+  targetRegistry.set(id, normalized);
 }
 
 /** Bulk variant. Each source validated independently; first error halts. */
 export function registerPoiSources(sources: readonly PoiSource[], log?: PoiRegistryLogger): void {
   for (const src of sources) registerPoiSource(src, log);
+}
+
+/** Begin a detached registry generation for an atomic integration reload. */
+export function beginPoiSourceRegistryStaging(): void {
+  if (STAGED_REGISTRY || STAGED_RAW_SOURCES) {
+    throw new Error("POI source registry staging is already active");
+  }
+  STAGED_REGISTRY = new Map();
+  STAGED_RAW_SOURCES = new Map();
+}
+
+/** Atomically replace the active generation with the fully validated staged one. */
+export function commitPoiSourceRegistryStaging(): void {
+  if (!STAGED_REGISTRY || !STAGED_RAW_SOURCES) {
+    throw new Error("POI source registry staging is not active");
+  }
+  REGISTRY.clear();
+  RAW_SOURCES.clear();
+  for (const [id, source] of STAGED_REGISTRY) REGISTRY.set(id, source);
+  for (const [id, source] of STAGED_RAW_SOURCES) RAW_SOURCES.set(id, source);
+  STAGED_REGISTRY = null;
+  STAGED_RAW_SOURCES = null;
+}
+
+/** Discard staged declarations without changing what current readers observe. */
+export function rollbackPoiSourceRegistryStaging(): void {
+  STAGED_REGISTRY = null;
+  STAGED_RAW_SOURCES = null;
 }
 
 /**

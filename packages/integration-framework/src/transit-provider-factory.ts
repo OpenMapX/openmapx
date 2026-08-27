@@ -55,7 +55,7 @@ export function defineTransitProvider(): TransitProviderScaffold {
     wrap,
     wrapRT,
     init(ctx: IntegrationContext): void {
-      attribution.set(ctx.manifest.dataSources ?? []);
+      ctx.onActivate(() => attribution.set(ctx.manifest.dataSources ?? []));
     },
   };
 }

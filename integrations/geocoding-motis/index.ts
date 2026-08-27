@@ -15,10 +15,11 @@ export function setup(ctx: IntegrationContext): void {
     (ctx.config.endpoint as string | undefined) ??
     process.env.MOTIS_URL ??
     "http://localhost:8081";
-  setMotisLocalUrl(url);
-
   const transitousUrl = ctx.config.transitousUrl as string | undefined;
-  if (transitousUrl && transitousUrl.length > 0) setTransitousUrl(transitousUrl);
+  ctx.onActivate(() => {
+    setMotisLocalUrl(url);
+    if (transitousUrl && transitousUrl.length > 0) setTransitousUrl(transitousUrl);
+  });
 
   ctx.registerGeocodingProvider(motisGeocodingService);
 }

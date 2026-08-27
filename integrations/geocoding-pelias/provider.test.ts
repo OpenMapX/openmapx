@@ -4,7 +4,7 @@ import { makeIdFromGid, mapLayer, peliasService, setPeliasUrl } from "./provider
 let mockFetch: ReturnType<typeof vi.fn>;
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 beforeEach(() => {

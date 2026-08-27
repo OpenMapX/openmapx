@@ -105,10 +105,16 @@ export function createOsmAliasSuggestionProvider(
 ): SearchSuggestionProvider {
   return {
     id: "search-osm-aliases",
-    async searchSuggestions(query: SearchSuggestionQuery): Promise<SearchSuggestionProviderResult> {
+    async searchSuggestions(
+      query: SearchSuggestionQuery,
+      { signal },
+    ): Promise<SearchSuggestionProviderResult> {
+      signal.throwIfAborted();
       if (!ctx.db) return { suggestions: [], attributions: [], freshnessSeconds: 86_400 };
       const states = await ctx.db.execute<IndexStateRow[]>(
         "SELECT epoch, status FROM osm_search.index_state WHERE singleton = 1",
+        undefined,
+        { signal },
       );
       const state = states[0];
       if (state?.status !== "ready") {
@@ -126,14 +132,19 @@ export function createOsmAliasSuggestionProvider(
         query.limit,
       ].join(":");
       return ctx.cache.withCache(key, 86_400, async () => {
-        const rows = await ctx.db?.execute<SearchRow[]>(SEARCH_SQL, [
-          normalized,
-          allowsPrefix(normalized),
-          query.limit,
-          proximity?.[0] ?? null,
-          proximity?.[1] ?? null,
-          isUppercaseAcronymIntent(query.query),
-        ]);
+        signal.throwIfAborted();
+        const rows = await ctx.db?.execute<SearchRow[]>(
+          SEARCH_SQL,
+          [
+            normalized,
+            allowsPrefix(normalized),
+            query.limit,
+            proximity?.[0] ?? null,
+            proximity?.[1] ?? null,
+            isUppercaseAcronymIntent(query.query),
+          ],
+          { signal },
+        );
         const suggestions = (rows ?? []).map(mapRow);
         return {
           suggestions,

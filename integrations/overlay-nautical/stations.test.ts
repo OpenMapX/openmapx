@@ -174,6 +174,13 @@ describe("loadAllTideStations", () => {
     const out = await loadAllTideStations(cache, log, "test-ua");
     vi.unstubAllGlobals();
 
+    const iocRequest = fetchJson.mock.calls.find(([url]) =>
+      String(url).includes("ioc-sealevelmonitoring"),
+    );
+    expect(String(iocRequest?.[0])).toMatch(
+      /^https:\/\/www\.ioc-sealevelmonitoring\.org\/service\.php\?/,
+    );
+
     const byNetwork = (n: MergedTideStation["network"]) => out.filter((s) => s.network === n);
 
     // IOC: only the active, valid-coord station, with alpha-2 country.

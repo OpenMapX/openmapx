@@ -6,7 +6,7 @@ import type { RisStopPlace } from "./stations-types.js";
 let mockFetch: ReturnType<typeof vi.fn>;
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 function mockError(status = 500) {

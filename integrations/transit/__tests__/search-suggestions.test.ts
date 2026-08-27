@@ -25,11 +25,10 @@ describe("transit search suggestion adapter", () => {
     const searchByName = vi.fn().mockResolvedValue(result);
     const provider = createTransitSuggestionProvider({ searchByName });
 
-    const response = await provider.searchSuggestions({
-      query: "8000207",
-      lang: "de",
-      limit: 3,
-    });
+    const response = await provider.searchSuggestions(
+      { query: "8000207", lang: "de", limit: 3 },
+      { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
+    );
 
     expect(response.suggestions[0]).toMatchObject({
       id: "db:8000207",
@@ -45,7 +44,10 @@ describe("transit search suggestion adapter", () => {
     const provider = createTransitSuggestionProvider({
       searchByName: vi.fn().mockResolvedValue(result),
     });
-    const response = await provider.searchSuggestions({ query: "Hamburg", lang: "de", limit: 3 });
+    const response = await provider.searchSuggestions(
+      { query: "Hamburg", lang: "de", limit: 3 },
+      { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
+    );
     expect(response.suggestions[0].searchMatch).toMatchObject({
       kind: "name",
       value: "Hamburg Hbf",

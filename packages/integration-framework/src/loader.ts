@@ -14,6 +14,12 @@ export interface LoadedIntegration {
   providers: Map<string, unknown[]>;
   strings: IntegrationStrings;
   customHealthCheck?: CustomHealthCheckFn;
+  /**
+   * True when a community directory ships backend/frontend code that the
+   * host deliberately does not execute. Surfaced to the admin UI so the
+   * deactivation is visible rather than a log line.
+   */
+  blockedCode?: boolean;
   disclosures?: Disclosure[];
   shutdownHandlers: Array<() => Promise<void>>;
 }
@@ -29,10 +35,9 @@ export interface LoadedIntegrationMeta {
   healthCheck?: IntegrationManifest["healthCheck"];
   strings?: IntegrationStrings;
   /**
-   * False for community integrations loaded from `custom_integrations/` (their
-   * frontend ships as a runtime bundle), true/undefined for built-ins. The
-   * frontend hosts use this to route community integrations to the community
-   * (bundle) render path instead of the build-time `@integrations/*` import.
+   * False for declarative community integrations loaded from
+   * `custom_integrations/`, true/undefined for trusted built-ins. Community
+   * runtime components stay absent until a separate isolation boundary exists.
    */
   isBuiltIn?: boolean;
 }
@@ -44,6 +49,8 @@ export interface LoadedIntegrationMeta {
  * without a separate fetch.
  */
 export interface IntegrationsResponse {
+  /** SHA-256 revision of the complete runtime metadata payload. */
+  revision: string;
   integrations: Array<LoadedIntegrationMeta & { isBuiltIn?: boolean }>;
   frameworkStrings: LocaleStrings;
   disclosures: Disclosure[];

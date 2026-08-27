@@ -27,7 +27,10 @@ describe("OSM alias suggestion provider", () => {
       createMockIntegrationContext({ db: { execute } }),
     );
 
-    const result = await provider.searchSuggestions({ query: "FRA", lang: "en", limit: 8 });
+    const result = await provider.searchSuggestions(
+      { query: "FRA", lang: "en", limit: 8 },
+      { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
+    );
 
     expect(execute.mock.calls[1]?.[1]).toEqual(["fra", true, 8, null, null, true]);
     expect(result.suggestions[0]).toMatchObject({
@@ -49,12 +52,10 @@ describe("OSM alias suggestion provider", () => {
       createMockIntegrationContext({ db: { execute } }),
     );
 
-    await provider.searchSuggestions({
-      query: "uncc",
-      lang: "en",
-      limit: 4,
-      proximity: [-80.73, 35.3],
-    });
+    await provider.searchSuggestions(
+      { query: "uncc", lang: "en", limit: 4, proximity: [-80.73, 35.3] },
+      { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
+    );
 
     expect(execute.mock.calls[1]?.[1]).toEqual(["uncc", true, 4, -80.73, 35.3, false]);
     expect(String(execute.mock.calls[1]?.[0])).toContain("ST_DWithin");

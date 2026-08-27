@@ -122,6 +122,7 @@ export async function searchByName(
   inst: HafasInstance,
   query: string,
   limit = 10,
+  signal?: AbortSignal,
 ): Promise<TransitStop[]> {
   try {
     const params = new URLSearchParams({
@@ -134,12 +135,14 @@ export async function searchByName(
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     const data = await fetchJson<any[]>(`${inst.baseUrl}/locations?${params}`, {
       nullOnError: true,
+      signal,
     });
     if (!data) return [];
     return data
       .filter((s) => s.type === "stop" || s.type === "station")
       .map((s) => normalizeStop(s, inst));
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return [];
   }
 }

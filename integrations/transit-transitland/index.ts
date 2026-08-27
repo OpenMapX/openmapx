@@ -5,12 +5,13 @@ const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
-  transitland.setTransitlandApiKey(ctx.config.apiKey as string | undefined);
+  ctx.onActivate(() => transitland.setTransitlandApiKey(ctx.config.apiKey as string | undefined));
   ctx.registerTransitProvider({
     id: "transit-transitland",
     prefix: "tl:",
     coverage: { all: true },
     priority: 9,
+    role: "enrichment",
     attribution: attribution.all(),
     capabilities: {
       stops: {

@@ -14,11 +14,7 @@ const VALID_ENTRY = {
 };
 
 function makeJsonResponse(data: unknown, ok = true): Response {
-  return {
-    ok,
-    status: ok ? 200 : 500,
-    json: () => Promise.resolve(data),
-  } as unknown as Response;
+  return Response.json(data, { status: ok ? 200 : 500 });
 }
 
 function listing(...paths: string[]) {
@@ -34,6 +30,38 @@ afterEach(() => {
 });
 
 describe("pinned transit registry fetches", () => {
+  it("serves a cached catalog without touching the network when preferCache is set", async () => {
+    const cached = [{ id: "at-oebb", prefix: "oebb:", protocol: "hafas-mgate" }];
+    const cache = {
+      get: vi.fn(async () => cached),
+      set: vi.fn(async () => {}),
+      del: vi.fn(async () => {}),
+      withCache: vi.fn(),
+    };
+
+    const entries = await fetchRegistryEntries({ cache: cache as never, preferCache: true });
+
+    expect(entries).toBe(cached);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it("goes to the network when preferCache is set but the cache is empty", async () => {
+    const cache = {
+      get: vi.fn(async () => null),
+      set: vi.fn(async () => {}),
+      del: vi.fn(async () => {}),
+      withCache: vi.fn(),
+    };
+    mockFetch
+      .mockResolvedValueOnce(makeJsonResponse(listing("data/at/oebb-hafas-mgate.json")))
+      .mockResolvedValueOnce(makeJsonResponse(VALID_ENTRY));
+
+    const entries = await fetchRegistryEntries({ cache: cache as never, preferCache: true });
+
+    expect(entries).toHaveLength(1);
+    expect(mockFetch).toHaveBeenCalled();
+  });
+
   it("fetches both the listing and files at the immutable revision", async () => {
     mockFetch
       .mockResolvedValueOnce(makeJsonResponse(listing("data/at/oebb-hafas-mgate.json")))

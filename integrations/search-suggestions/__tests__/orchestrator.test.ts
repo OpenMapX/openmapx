@@ -1,5 +1,8 @@
 import type { SearchSuggestion, SearchSuggestionProviderResult } from "@openmapx/core";
-import type { SearchSuggestionProvider } from "@openmapx/integration-framework";
+import {
+  ProviderCancelledError,
+  type SearchSuggestionProvider,
+} from "@openmapx/integration-framework";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { describe, expect, it, vi } from "vitest";
 import { createSearchSuggestionsOrchestrator } from "../orchestrator.js";
@@ -111,5 +114,65 @@ describe("search suggestion fan-out", () => {
 
     expect(blocked.searchSuggestions).not.toHaveBeenCalled();
     expect(result).toEqual({ suggestions: [], attributions: [], partial: false });
+  });
+
+  it("aborts timed-out provider work and records timeout separately", async () => {
+    vi.useFakeTimers();
+    const recordProviderCall = vi.fn();
+    let providerSignal: AbortSignal | undefined;
+    const slow: SearchSuggestionProvider = {
+      id: "slow",
+      searchSuggestions: vi.fn(async (_query, { signal }) => {
+        providerSignal = signal;
+        await new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+        throw new Error("unreachable");
+      }),
+    };
+    const ctx = context([slow]);
+    ctx.metricsRecorder = { recordProviderCall };
+    const work = createSearchSuggestionsOrchestrator(ctx).search({
+      query: "FRA",
+      lang: "en",
+      limit: 8,
+    });
+
+    await vi.advanceTimersByTimeAsync(1_200);
+
+    await expect(work).resolves.toMatchObject({ partial: true, suggestions: [] });
+    expect(providerSignal?.aborted).toBe(true);
+    expect(recordProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({ outcome: "timeout" }),
+      expect.any(Number),
+    );
+    vi.useRealTimers();
+  });
+
+  it("rejects caller cancellation instead of returning a cacheable partial result", async () => {
+    let providerStarted!: () => void;
+    const started = new Promise<void>((resolve) => {
+      providerStarted = resolve;
+    });
+    const slow: SearchSuggestionProvider = {
+      id: "slow",
+      searchSuggestions: async (_query, { signal }) => {
+        providerStarted();
+        await new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+        throw new Error("unreachable");
+      },
+    };
+    const controller = new AbortController();
+    const work = createSearchSuggestionsOrchestrator(context([slow])).search(
+      { query: "FRA", lang: "en", limit: 8 },
+      controller.signal,
+    );
+    await started;
+
+    controller.abort(new Error("caller left"));
+
+    await expect(work).rejects.toBeInstanceOf(ProviderCancelledError);
   });
 });

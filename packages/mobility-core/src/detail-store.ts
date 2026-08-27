@@ -31,10 +31,6 @@ function decodeProviderScopedMotisId(id: string): {
   }
 }
 
-function decodeLegacyId(id: string): string | null {
-  return id.startsWith("motis:") && id.length > 6 ? id.slice(6) : null;
-}
-
 function directScope(id: string): string | null {
   const [prefix, provider] = id.split("/");
   if (!prefix) return null;
@@ -45,16 +41,11 @@ function directScope(id: string): string | null {
 export function sharedMobilityDetailScope(id: string): string | null {
   const motis = decodeProviderScopedMotisId(id);
   if (motis) return `${motis.origin}/${motis.providerId}`;
-  if (decodeLegacyId(id)) return null;
   return directScope(id);
 }
 
 function cacheKey(scope: string): string {
   return `shared-mobility-detail:v1:${encodeURIComponent(scope)}`;
-}
-
-function legacyCacheKey(origin: "motis-local" | "transitous"): string {
-  return `shared-mobility-detail:v1:legacy:${origin}`;
 }
 
 /**
@@ -112,7 +103,6 @@ export class SharedMobilityDetailStore {
 
   async store(items: SharedMobilityDetailItem[]): Promise<void> {
     const byScope = new Map<string, SharedMobilityDetailItem[]>();
-    const legacyByOrigin = new Map<"motis-local" | "transitous", SharedMobilityDetailItem[]>();
     for (const item of items) {
       this.remember(item);
       const scope = sharedMobilityDetailScope(item.id);
@@ -121,18 +111,10 @@ export class SharedMobilityDetailStore {
         scoped.push(item);
         byScope.set(scope, scoped);
       }
-      if (item.servingOrigin) {
-        const legacy = legacyByOrigin.get(item.servingOrigin) ?? [];
-        legacy.push(item);
-        legacyByOrigin.set(item.servingOrigin, legacy);
-      }
     }
-    await Promise.all([
-      ...[...byScope].map(([scope, scoped]) => this.mergeAndStore(cacheKey(scope), scoped)),
-      ...[...legacyByOrigin].map(([origin, scoped]) =>
-        this.mergeAndStore(legacyCacheKey(origin), scoped),
-      ),
-    ]);
+    await Promise.all(
+      [...byScope].map(([scope, scoped]) => this.mergeAndStore(cacheKey(scope), scoped)),
+    );
   }
 
   private async readSnapshot(key: string): Promise<SharedMobilityDetailItem[]> {
@@ -147,24 +129,6 @@ export class SharedMobilityDetailStore {
   async get(id: string): Promise<SharedMobilityDetailItem | null> {
     const l1 = this.l1.get(id);
     if (l1) return l1;
-
-    const legacyNativeId = decodeLegacyId(id);
-    if (legacyNativeId) {
-      const snapshots = await Promise.all([
-        this.readSnapshot(legacyCacheKey("motis-local")),
-        this.readSnapshot(legacyCacheKey("transitous")),
-      ]);
-      const matches = snapshots
-        .flat()
-        .filter((item) => item.nativeId === legacyNativeId)
-        .filter(
-          (item, index, all) => all.findIndex((candidate) => candidate.id === item.id) === index,
-        );
-      if (matches.length !== 1) return null;
-      const match = matches[0] ?? null;
-      if (match) this.remember(match);
-      return match;
-    }
 
     const scope = sharedMobilityDetailScope(id);
     if (!scope) return null;

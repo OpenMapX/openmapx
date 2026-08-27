@@ -2,9 +2,9 @@ import { createWriteStream } from "node:fs";
 import { mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { Readable } from "node:stream";
 import { pipeline } from "node:stream/promises";
 import { fetchWithRedirects, haversineMeters, USER_AGENT } from "@openmapx/core";
+import { createBoundedBinaryProxyStream, readBoundedBinaryResponse } from "@openmapx/core/server";
 import { parseCsvRecords } from "@openmapx/mobility-formats";
 import { strFromU8, unzipSync } from "fflate";
 
@@ -62,6 +62,7 @@ const MAX_OCCUPANCY_ENTRY_BYTES = 32 * 1024 * 1024;
  * member prevents the ordinary multi-member memory blowup.
  */
 const MAX_MEMBER_BYTES = 256 * 1024 * 1024;
+const MAX_DATASET_DOWNLOAD_BYTES = 64 * 1024 * 1024;
 
 export interface SwissServicePoint {
   abbreviation?: string;
@@ -292,7 +293,12 @@ async function fetchArrayBuffer(url: string): Promise<ArrayBuffer> {
   if (!response.ok) {
     throw new Error(`Swiss dataset request failed (${response.status}) for ${url}`);
   }
-  return response.arrayBuffer();
+  const { data } = await readBoundedBinaryResponse(response, {
+    maxBytes: MAX_DATASET_DOWNLOAD_BYTES,
+    fallbackContentType: "application/octet-stream",
+    label: "Swiss dataset archive",
+  });
+  return data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength) as ArrayBuffer;
 }
 
 async function downloadToTempFile(url: string, prefix: string): Promise<string> {
@@ -314,11 +320,18 @@ async function downloadToTempFile(url: string, prefix: string): Promise<string> 
 
   const dir = await mkdtemp(join(tmpdir(), `${prefix}-`));
   const filePath = join(dir, "dataset.zip");
-  await pipeline(
-    Readable.fromWeb(response.body as Parameters<typeof Readable.fromWeb>[0]),
-    createWriteStream(filePath),
-  );
-  return filePath;
+  const proxy = createBoundedBinaryProxyStream(response, {
+    maxBytes: MAX_OCCUPANCY_ZIP_BYTES,
+    fallbackContentType: "application/zip",
+    label: "Swiss occupancy archive",
+  });
+  try {
+    await pipeline(proxy.body, createWriteStream(filePath));
+    return filePath;
+  } catch (error) {
+    await rm(dir, { force: true, recursive: true }).catch(() => {});
+    throw error;
+  }
 }
 
 export async function extractZipEntryText(
@@ -328,7 +341,9 @@ export async function extractZipEntryText(
   try {
     const { size } = await stat(zipPath);
     if (size > MAX_OCCUPANCY_ZIP_BYTES) return null;
-    const files = unzipSync(new Uint8Array(await readFile(zipPath)));
+    const files = unzipSync(new Uint8Array(await readFile(zipPath)), {
+      filter: (file) => file.name === entryName && file.originalSize <= MAX_OCCUPANCY_ENTRY_BYTES,
+    });
     const entry = files[entryName];
     if (!entry || entry.length > MAX_OCCUPANCY_ENTRY_BYTES) return null;
     return strFromU8(entry).replace(/^\uFEFF/, "") || null;
@@ -383,6 +398,9 @@ function unzipFirstCsv(buffer: ArrayBuffer): string {
   });
   const firstFile = picked ? files[picked] : undefined;
   if (!firstFile) throw new Error("Swiss ZIP dataset was empty");
+  if (firstFile.length > MAX_MEMBER_BYTES) {
+    throw new Error(`Inflated ZIP member exceeds max ${MAX_MEMBER_BYTES} bytes`);
+  }
   return strFromU8(firstFile).replace(/^\uFEFF/, "");
 }
 

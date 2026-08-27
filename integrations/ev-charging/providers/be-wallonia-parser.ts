@@ -132,5 +132,9 @@ export const parseBeWallonia: PoiStaticParseFn = (buffer) => {
     },
   });
   if (!picked) return [];
-  return parseWalloniaRows(Buffer.from(files[picked]).toString("utf8"));
+  const csv = files[picked];
+  if (!csv || csv.length > MAX_MEMBER_BYTES) {
+    throw new Error(`Inflated ZIP member exceeds max ${MAX_MEMBER_BYTES} bytes`);
+  }
+  return parseWalloniaRows(Buffer.from(csv).toString("utf8"));
 };

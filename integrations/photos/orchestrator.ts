@@ -1,5 +1,4 @@
-import type { PlacePhoto } from "@openmapx/core";
-import { parseId } from "@openmapx/core";
+import { fetchWithRedirects, type PlacePhoto, parseId } from "@openmapx/core";
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import {
   lookupByNameAndCoords,
@@ -146,7 +145,7 @@ async function resolveImageValue(value: string): Promise<string[] | null> {
   // Full album extraction is implemented (extractGoogleUserContentUrls) but
   // disabled for legal reasons (Google ToS, photographer copyright).
   // We only use the og:image which is intended for link-preview embedding.
-  if (value.includes("photos.app.goo.gl") || value.includes("photos.google.com/share")) {
+  if (isGooglePhotosShareUrl(value)) {
     const preview = await resolveGooglePhotosPreview(value);
     return preview ? [preview] : null;
   }
@@ -162,33 +161,59 @@ const BROWSER_HEADERS = {
   "Accept-Language": "en-US,en;q=0.9",
 };
 
+const GOOGLE_PHOTOS_SHARE_HOSTS = new Set(["photos.app.goo.gl", "photos.google.com"]);
+const GOOGLE_PHOTOS_IMAGE_HOST = /^lh[3-6]\.googleusercontent\.com$/;
+
+function parseHttpsUrl(value: string | URL): URL | null {
+  try {
+    const parsed = value instanceof URL ? value : new URL(value);
+    if (
+      parsed.protocol !== "https:" ||
+      parsed.username !== "" ||
+      parsed.password !== "" ||
+      (parsed.port !== "" && parsed.port !== "443")
+    ) {
+      return null;
+    }
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function isGooglePhotosShareUrl(value: string | URL): boolean {
+  const parsed = parseHttpsUrl(value);
+  if (!parsed || !GOOGLE_PHOTOS_SHARE_HOSTS.has(parsed.hostname)) return false;
+  if (parsed.hostname === "photos.google.com") return parsed.pathname.startsWith("/share/");
+  return parsed.pathname.length > 1;
+}
+
+/** The only hosts Google Photos resolution is permitted to return to the proxy. */
+export function isGooglePhotosImageUrl(value: string | URL): boolean {
+  const parsed = parseHttpsUrl(value);
+  return parsed !== null && GOOGLE_PHOTOS_IMAGE_HOST.test(parsed.hostname);
+}
+
+async function fetchGooglePhotosSharePage(shareUrl: string): Promise<Response | null> {
+  const initial = parseHttpsUrl(shareUrl);
+  if (!initial || !isGooglePhotosShareUrl(initial)) return null;
+  const response = await fetchWithRedirects(initial, {
+    timeoutMs: 8_000,
+    headers: BROWSER_HEADERS,
+    maxRedirects: 3,
+    validateRedirectUrl: (next) => isGooglePhotosShareUrl(next),
+  });
+  return response.ok ? response : null;
+}
+
 /**
  * Resolve a Google Photos share link to actual image URLs.
  * Exported so the image proxy can use it as a fallback.
  */
 export async function resolveGooglePhotosLink(shareUrl: string): Promise<string[]> {
   try {
-    // Step 1: For short URLs (photos.app.goo.gl), follow the redirect manually
-    // to get the actual photos.google.com/share/ URL. Using redirect: "follow"
-    // lands on a DurableDeepLink wrapper page that has no image data.
-    let pageUrl = shareUrl;
-    if (shareUrl.includes("photos.app.goo.gl")) {
-      const redirect = await fetch(shareUrl, {
-        signal: AbortSignal.timeout(5_000),
-        redirect: "manual",
-      });
-      const location = redirect.headers.get("location");
-      if (location?.includes("photos.google.com")) {
-        pageUrl = location;
-      }
-    }
-
-    // Step 2: Fetch the actual Google Photos share page
-    const res = await fetch(pageUrl, {
-      signal: AbortSignal.timeout(8_000),
-      headers: BROWSER_HEADERS,
-    });
-    if (!res.ok) return [];
+    const res = await fetchGooglePhotosSharePage(shareUrl);
+    if (!res) return [];
 
     const html = await res.text();
 
@@ -201,10 +226,11 @@ export async function resolveGooglePhotosLink(shareUrl: string): Promise<string[
     const ogMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i);
     if (ogMatch) {
       let imgUrl = ogMatch[1].replace(/&amp;/g, "&");
+      if (!isGooglePhotosImageUrl(imgUrl)) return [];
       if (imgUrl.includes("googleusercontent.com") && !imgUrl.includes("=w")) {
         imgUrl += "=w1200";
       }
-      return [imgUrl];
+      return isGooglePhotosImageUrl(imgUrl) ? [imgUrl] : [];
     }
 
     return [];
@@ -220,32 +246,19 @@ export async function resolveGooglePhotosLink(shareUrl: string): Promise<string[
  */
 async function resolveGooglePhotosPreview(shareUrl: string): Promise<string | null> {
   try {
-    let pageUrl = shareUrl;
-    if (shareUrl.includes("photos.app.goo.gl")) {
-      const redirect = await fetch(shareUrl, {
-        signal: AbortSignal.timeout(5_000),
-        redirect: "manual",
-      });
-      const location = redirect.headers.get("location");
-      if (location?.includes("photos.google.com")) {
-        pageUrl = location;
-      }
-    }
-
-    const res = await fetch(pageUrl, {
-      signal: AbortSignal.timeout(8_000),
-      headers: BROWSER_HEADERS,
-    });
-    if (!res.ok) return null;
+    const res = await fetchGooglePhotosSharePage(shareUrl);
+    if (!res) return null;
 
     const html = await res.text();
 
     const ogMatch = html.match(/<meta\s+(?:property|name)="og:image"\s+content="([^"]+)"/i);
     if (ogMatch) {
       let imgUrl = ogMatch[1].replace(/&amp;/g, "&");
+      if (!isGooglePhotosImageUrl(imgUrl)) return null;
       // Replace any existing size suffix with high-quality one
       imgUrl = imgUrl.replace(/=[swh]\d[\da-z-]*$/i, "").replace(/=s\d[\da-z-]*$/i, "");
-      return `${imgUrl}=w2048`;
+      const sized = `${imgUrl}=w2048`;
+      return isGooglePhotosImageUrl(sized) ? sized : null;
     }
 
     return null;

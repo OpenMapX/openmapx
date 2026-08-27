@@ -129,7 +129,7 @@
     {
       "name": "IOC Sea Level Monitoring",
       "type": "http",
-      "url": "http://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json"
+      "url": "https://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json"
     },
     {
       "name": "EMODnet Physics tide gauges",
@@ -274,7 +274,7 @@
     {
       "sourceId": "ioc-sealevel",
       "name": "IOC Sea Level Station Monitoring Facility",
-      "url": "http://www.ioc-sealevelmonitoring.org/",
+      "url": "https://www.ioc-sealevelmonitoring.org/",
       "license": "UNESCO-IOC public data",
       "licenseUrl": "https://www.unesco.org/en/open-access",
       "commercialUse": "yes",

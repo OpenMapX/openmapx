@@ -8,7 +8,7 @@ interface MdbState {
   includeGbfsFeeds: boolean;
 }
 
-const state: MdbState = {
+let state: MdbState = {
   client: null,
   includeRtFeeds: false,
   includeGbfsFeeds: false,
@@ -24,8 +24,8 @@ const state: MdbState = {
  * Both extra families flow through the same `MdbCatalogFeed` shape; the
  * `dataType` field distinguishes them for downstream filtering.
  */
-export async function getMdbCatalogFeeds(): Promise<MdbCatalogFeed[]> {
-  const { client, includeRtFeeds, includeGbfsFeeds } = state;
+async function listMdbCatalogFeeds(generation: MdbState): Promise<MdbCatalogFeed[]> {
+  const { client, includeRtFeeds, includeGbfsFeeds } = generation;
   if (!client) return [];
 
   const tasks: Array<Promise<unknown[]>> = [client.listGtfsFeeds()];
@@ -43,6 +43,10 @@ export async function getMdbCatalogFeeds(): Promise<MdbCatalogFeed[]> {
   }
 }
 
+export async function getMdbCatalogFeeds(): Promise<MdbCatalogFeed[]> {
+  return listMdbCatalogFeeds(state);
+}
+
 /** True when the MDB integration is configured and ready to serve catalog rows. */
 export function isMdbConfigured(): boolean {
   return state.client !== null;
@@ -50,32 +54,42 @@ export function isMdbConfigured(): boolean {
 
 export async function setup(ctx: IntegrationContext): Promise<void> {
   const refreshToken = (ctx.config.refreshToken as string | undefined)?.trim();
+  const generation: MdbState = {
+    client: null,
+    includeRtFeeds: ctx.config.includeRtFeeds !== false,
+    includeGbfsFeeds: ctx.config.includeGbfsFeeds !== false,
+  };
   if (!refreshToken) {
     ctx.log.warn(
       "[transit-mobility-database] no refresh token configured; catalog disabled. Set INTEGRATION_TRANSIT_MOBILITY_DATABASE_REFRESHTOKEN or store via the admin secrets API.",
     );
-    state.client = null;
+    ctx.onActivate(() => {
+      state = generation;
+    });
     return;
   }
 
-  state.client = new MdbClient({
+  generation.client = new MdbClient({
     refreshToken,
     baseUrl: ctx.config.apiBaseUrl as string | undefined,
     cache: ctx.cache,
   });
-  state.includeRtFeeds = ctx.config.includeRtFeeds !== false;
-  state.includeGbfsFeeds = ctx.config.includeGbfsFeeds !== false;
+  ctx.onActivate(() => {
+    state = generation;
+  });
 
   // Register discovery through the generic catalog contract so the admin can
   // offer these URLs as operator-source candidates without owning schedules.
   const provider: GtfsCatalogProvider = {
     id: "transit-mobility-database",
-    listFeeds: getMdbCatalogFeeds,
+    listFeeds: () => listMdbCatalogFeeds(generation),
   };
   ctx.registerGtfsCatalogProvider(provider);
 
   ctx.onShutdown(async () => {
-    state.client = null;
+    generation.client = null;
+    if (state === generation)
+      state = { client: null, includeRtFeeds: false, includeGbfsFeeds: false };
   });
 }
 

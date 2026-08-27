@@ -50,8 +50,8 @@ function makeCache(): CacheClient {
   const withCache: CacheClient["withCache"] = async <T>(
     _k: string,
     _t: number,
-    fn: () => Promise<T>,
-  ) => fn();
+    fn: (operationSignal: AbortSignal) => Promise<T>,
+  ) => fn(new AbortController().signal);
   return {
     get: vi.fn(async () => null),
     set: vi.fn(async () => undefined),

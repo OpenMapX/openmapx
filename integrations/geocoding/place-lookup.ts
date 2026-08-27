@@ -608,8 +608,8 @@ const OVERPASS_MAX_DISTANCE_M = 150;
  * When `identity` is provided, candidates must match at least one identity
  * field (ref, operator, network, brand — case-insensitive). This stops a Dott
  * bike station from snapping to a co-located optician kiosk whose OSM node
- * happens to carry `amenity=bicycle_rental`. Without an identity hint, falls
- * back to the legacy nearest-match behaviour.
+ * happens to carry `amenity=bicycle_rental`. Without an identity hint, the
+ * closest matching feature is selected.
  */
 export async function lookupByOsmFilters(
   lat: number,

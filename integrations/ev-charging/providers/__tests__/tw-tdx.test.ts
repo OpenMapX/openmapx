@@ -15,6 +15,10 @@ const API_BASE = "https://tdx.transportdata.tw/api/basic";
 // fixture station (same city, different coordinates) sits well outside it.
 const SEARCH_BBOX = { south: 25.03, west: 121.55, north: 25.05, east: 121.58 };
 
+function jsonResponse(value: unknown): Response {
+  return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
+}
+
 function stubTaipeiFetch() {
   return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (url === TOKEN_URL) {
@@ -26,24 +30,22 @@ function stubTaipeiFetch() {
       expect(body.get("grant_type")).toBe("client_credentials");
       expect(body.get("client_id")).toBe("test-client-id");
       expect(body.get("client_secret")).toBe("test-client-secret");
-      return Promise.resolve(
-        new Response(JSON.stringify({ access_token: "test-token", expires_in: 86400 })),
-      );
+      return Promise.resolve(jsonResponse({ access_token: "test-token", expires_in: 86400 }));
     }
     if (url.startsWith(`${API_BASE}/v1/EV/Station/City/Taipei`)) {
       expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
-      return Promise.resolve(new Response(JSON.stringify({ Stations: fixture.stations })));
+      return Promise.resolve(jsonResponse({ Stations: fixture.stations }));
     }
     if (url.startsWith(`${API_BASE}/v1/EV/ConnectorLiveStatus/City/Taipei`)) {
       expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
-      return Promise.resolve(new Response(JSON.stringify({ LiveStatuses: fixture.liveStatuses })));
+      return Promise.resolve(jsonResponse({ LiveStatuses: fixture.liveStatuses }));
     }
     // The Taipei approx-bbox sits entirely inside the NewTaipei approx-bbox
     // (New Taipei geographically surrounds Taipei), so any bbox touching
     // Taipei also fans out to a NewTaipei query — respond with no stations
     // rather than treating that as an error.
     if (url.startsWith(`${API_BASE}/v1/EV/Station/City/`)) {
-      return Promise.resolve(new Response(JSON.stringify({ Stations: [] })));
+      return Promise.resolve(jsonResponse({ Stations: [] }));
     }
     throw new Error(`unexpected fetch: ${url}`);
   });

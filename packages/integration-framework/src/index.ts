@@ -1,12 +1,3 @@
-export type { CommunityIntegrationModule } from "./community";
-export {
-  getCommunityModule,
-  getCommunityModuleIds,
-  getCommunityModulesVersion,
-  initCommunityIntegrationRegistry,
-  registerCommunityModule,
-  subscribeCommunityModules,
-} from "./community";
 export type {
   AiSearchDisclosure,
   AttributionIndexHandle,
@@ -177,9 +168,22 @@ export { isPlausibleNlSearch, NL_CONFIDENCE_FLOOR } from "./contracts/search-nlp
 export { integrationEnvVarName } from "./env-var";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
+export {
+  type BoundingBoxLimits,
+  clampViewportBoundingBox,
+  type PointLimits,
+  type PointListLimits,
+  parsePositiveRadius,
+  parseWgs84BoundingBox,
+  parseWgs84Point,
+  parseWgs84PointList,
+  type RadiusLimits,
+  type Wgs84BoundingBox,
+  type Wgs84Point,
+} from "./geospatial";
 export { httpError } from "./http-error";
-// Installer exports (`buildIntegration` / `installIntegration` / `listIntegrations`
-// / `removeIntegration` / `validateIntegrationDirectory` and their option/result
+// Installer exports (`installIntegration` / `listIntegrations` /
+// `removeIntegration` / `validateIntegrationDirectory` and their option/result
 // types) intentionally do NOT live in this barrel. `installer.ts` imports
 // node:fs/crypto/os/path, and any barrel that re-exports it taints everyone
 // who imports the barrel — including the client-reachable `@openmapx/core`
@@ -223,6 +227,14 @@ export {
   type StaticPoiReaderOptions,
   type TwoTierPoiReaderOptions,
 } from "./poi-source-reader";
+export {
+  mapSettledWithConcurrency,
+  type ProviderCallContext,
+  ProviderCancelledError,
+  type ProviderDeadlineOptions,
+  ProviderTimeoutError,
+  runWithProviderDeadline,
+} from "./provider-execution";
 export { IntegrationRegistry } from "./registry";
 // `useIntegrationRegistry` and `IntegrationRegistryContext` live in the
 // `/react` subpath — pulling them into this barrel would force every

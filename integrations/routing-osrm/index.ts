@@ -8,7 +8,7 @@ export function setup(ctx: IntegrationContext): void {
     (ctx.config.endpoint as string | undefined) ??
     "https://router.project-osrm.org";
 
-  setOsrmUrl(url);
+  ctx.onActivate(() => setOsrmUrl(url));
 
   ctx.registerRoutingProvider(osrmService);
 }

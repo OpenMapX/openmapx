@@ -7,7 +7,7 @@ const GERMANY_CENTER = { lat: 52.52, lng: 13.405 };
 const OUTSIDE = { lat: 0, lng: 0 };
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 /** Run setup() with credentials and return the registered realtime provider. */

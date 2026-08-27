@@ -10,6 +10,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "ir:",
     coverage: { bbox: [2.54, 49.49, 5.92, 51.51] },
     priority: 1,
+    role: "regional",
     attribution: attribution.all(),
     capabilities: {
       stops: {
@@ -43,8 +44,8 @@ export function setup(ctx: IntegrationContext): void {
     async getArrivals(stopId, minutes) {
       return wrapRT(await irail.getArrivals(stopId, minutes));
     },
-    async searchStopsByName(query, limit) {
-      return wrap(await irail.searchByName(query, limit ?? 10));
+    async searchStopsByName(query, limit, context) {
+      return wrap(await irail.searchByName(query, limit ?? 10, context?.signal));
     },
     async getVehicleJourney(vehicleId) {
       return wrapRT(await irail.getVehicleJourney(vehicleId));

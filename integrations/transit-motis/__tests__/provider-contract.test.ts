@@ -49,6 +49,7 @@ describe("transit-motis provider contract", () => {
       prefix: "mo:",
       coverage: { all: true },
       priority: 7,
+      role: "fallback",
       attribution: [],
       capabilities: cloudCapabilities,
       getStop: noop,
@@ -84,6 +85,7 @@ describe("transit-motis provider contract", () => {
       prefix: "ms:",
       coverage: { all: true },
       priority: 1,
+      role: "baseline",
       attribution: [],
       capabilities: localCapabilities,
       getStop: noop,
@@ -111,6 +113,7 @@ describe("transit-motis provider contract", () => {
       prefix: "ms:",
       coverage: { all: true },
       priority: 99,
+      role: "baseline",
       attribution: [],
       capabilities: {
         ...allFalse,

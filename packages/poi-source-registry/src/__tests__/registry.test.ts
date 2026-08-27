@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   __clearPoiSourceRegistry,
+  beginPoiSourceRegistryStaging,
+  commitPoiSourceRegistryStaging,
   getAllPoiSources,
   getPoiSource,
   getPoiSourcesByDomain,
@@ -10,6 +12,7 @@ import {
   type PoiStaticParseFn,
   registerPoiSource,
   registerPoiSources,
+  rollbackPoiSourceRegistryStaging,
   validatePoiSourceRegistry,
 } from "../index.js";
 
@@ -47,6 +50,24 @@ function makeBundledSource(overrides: Partial<PoiSource> = {}): PoiSource {
 
 beforeEach(() => {
   __clearPoiSourceRegistry();
+});
+
+describe("transactional staging", () => {
+  it("keeps the active generation visible until commit and preserves it on rollback", () => {
+    registerPoiSource(makeStaticSource({ id: "active-source" }));
+
+    beginPoiSourceRegistryStaging();
+    registerPoiSource(makeStaticSource({ id: "discarded-source" }));
+    expect(getAllPoiSources().map((source) => source.id)).toEqual(["active-source"]);
+    rollbackPoiSourceRegistryStaging();
+    expect(getAllPoiSources().map((source) => source.id)).toEqual(["active-source"]);
+
+    beginPoiSourceRegistryStaging();
+    registerPoiSource(makeStaticSource({ id: "replacement-source" }));
+    expect(getAllPoiSources().map((source) => source.id)).toEqual(["active-source"]);
+    commitPoiSourceRegistryStaging();
+    expect(getAllPoiSources().map((source) => source.id)).toEqual(["replacement-source"]);
+  });
 });
 
 describe("validatePoiSourceRegistry", () => {

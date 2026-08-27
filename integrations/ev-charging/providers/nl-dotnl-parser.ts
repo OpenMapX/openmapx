@@ -1,4 +1,5 @@
 import { gunzipSync } from "node:zlib";
+import { readBoundedBinaryResponse } from "@openmapx/core/server";
 import type { EvChargingConnector, EvChargingTariff } from "@openmapx/mobility-core/ev-charging";
 import type { PoiRow, PoiSourceLogger, PoiStaticParseFn } from "@openmapx/poi-source-registry";
 import { buildTariffMap, NL_DOTNL_TARIFFS_URL, resolveTariffs } from "./nl-dotnl-tariff.js";
@@ -156,7 +157,11 @@ async function fetchTariffMap(log: PoiSourceLogger): Promise<Map<string, EvCharg
       );
       return new Map();
     }
-    const compressed = Buffer.from(await res.arrayBuffer());
+    const { data: compressed } = await readBoundedBinaryResponse(res, {
+      maxBytes: 64 * 1024 * 1024,
+      fallbackContentType: "application/gzip",
+      label: "DOT-NL tariff archive",
+    });
     // The tariffs feed is a bare gzip body — no Content-Encoding header, so
     // fetch()/undici won't auto-decompress it (see the scout report).
     const decompressed = gunzipBounded(compressed);

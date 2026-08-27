@@ -7,7 +7,7 @@ import { flickrPhotoProvider, setFlickrApiKey } from "./provider.js";
 // `datetaken` → ISO conversion, and the no-key / empty-result short-circuits.
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 const QUERY = { lat: 48.8584, lng: 2.2945, limit: 6 };

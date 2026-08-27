@@ -1,12 +1,14 @@
 import type { BBox } from "@openmapx/core";
-import type {
-  IntegrationContext,
-  MetricsRecorder,
-  ProviderCallOutcome,
-  ProviderHealthHandle,
-  TransitProvider,
-  TripPlanRequest,
-  TripRefreshRequest,
+import {
+  type IntegrationContext,
+  type MetricsRecorder,
+  mapSettledWithConcurrency,
+  type ProviderCallContext,
+  type ProviderCallOutcome,
+  type ProviderHealthHandle,
+  type TransitProvider,
+  type TripPlanRequest,
+  type TripRefreshRequest,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { Freshness } from "@openmapx/mobility-core/freshness";
@@ -73,7 +75,7 @@ function providerOverlapsBbox(p: TransitProvider, bbox: BBox): boolean {
 function providerRole(
   provider: TransitProvider,
 ): "baseline" | "fallback" | "enrichment" | "regional" {
-  return provider.role ?? (provider.capabilities.planning ? "regional" : "enrichment");
+  return provider.role;
 }
 
 const ROLE_RANK = { baseline: 0, regional: 1, fallback: 2, enrichment: 3 } as const;
@@ -464,8 +466,9 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
   async function searchByName(
     query: string,
     limit: number,
+    context?: ProviderCallContext,
   ): Promise<MobilityResult<TransitStop[]>> {
-    const raw = await searchByNameRaw(query, limit);
+    const raw = await searchByNameRaw(query, limit, undefined, context);
     const deduped = deduplicateStops(raw.data, (provider) => getProviderPriority(provider)).slice(
       0,
       limit,
@@ -482,26 +485,22 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     query: string,
     limit: number,
     bbox?: BBox,
+    context?: ProviderCallContext,
   ): Promise<MobilityResult<TransitStop[]>> {
     const baseProviders = bbox
       ? await getProvidersForBbox(bbox)
       : await filterHealthy(collectProviders().sort((a, b) => a.priority - b.priority));
     const withSearch = baseProviders.filter((p) => p.searchStopsByName);
 
-    const results = await Promise.allSettled(
-      withSearch.map(async (p) => {
-        if (!p.searchStopsByName) return null;
-        const fn = p.searchStopsByName.bind(p);
-        const outcome = await timed(
-          providerHealth,
-          metricsRecorder,
-          p.id,
-          "searchStopsByName",
-          () => fn(query, limit),
-        );
-        return outcome.ok ? outcome.value : null;
-      }),
-    );
+    const results = await mapSettledWithConcurrency(withSearch, 4, async (p) => {
+      context?.signal.throwIfAborted();
+      if (!p.searchStopsByName) return null;
+      const fn = p.searchStopsByName.bind(p);
+      const outcome = await timed(providerHealth, metricsRecorder, p.id, "searchStopsByName", () =>
+        fn(query, limit, context),
+      );
+      return outcome.ok ? outcome.value : null;
+    });
 
     const ok = results
       .map((r) => (r.status === "fulfilled" ? r.value : null))

@@ -23,7 +23,7 @@ import {
 import { parseHarbourJsonp, setup } from "./index.js";
 
 function mockOkText(text: string) {
-  return { ok: true, status: 200, text: async () => text } as Response;
+  return new Response(text, { status: 200 });
 }
 
 describe("parseHarbourJsonp", () => {

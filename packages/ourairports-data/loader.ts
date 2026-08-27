@@ -70,9 +70,12 @@ let store: DataStore | null = null;
 let loadPromise: Promise<DataStore | null> | null = null;
 let lastFailureAt = 0;
 let refreshTimer: ReturnType<typeof setInterval> | null = null;
+const refreshOwners = new Set<symbol>();
 const conditionalState = new Map<string, ConditionalGet>();
 
-export function startBackgroundLoad(log: Logger): void {
+export function startBackgroundLoad(log: Logger): () => void {
+  const owner = Symbol("ourairports-background-load-owner");
+  refreshOwners.add(owner);
   void ensureLoaded(log);
   if (!refreshTimer) {
     refreshTimer = setInterval(() => {
@@ -80,9 +83,21 @@ export function startBackgroundLoad(log: Logger): void {
     }, REFRESH_INTERVAL_MS);
     if (typeof refreshTimer.unref === "function") refreshTimer.unref();
   }
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    refreshOwners.delete(owner);
+    if (refreshOwners.size === 0) stopRefreshTimer();
+  };
 }
 
 export function stopBackgroundLoad(): void {
+  refreshOwners.clear();
+  stopRefreshTimer();
+}
+
+function stopRefreshTimer(): void {
   if (refreshTimer) {
     clearInterval(refreshTimer);
     refreshTimer = null;

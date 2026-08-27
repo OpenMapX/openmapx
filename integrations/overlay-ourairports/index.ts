@@ -94,7 +94,8 @@ export function setup(ctx: IntegrationContext): void {
   // Start loading the airport catalog in the background. The shared package
   // dedupes against any other integration (knowledge-ourairports) that may
   // already have started a load.
-  startBackgroundLoad(ctx.log);
+  const releaseBackgroundLoad = startBackgroundLoad(ctx.log);
+  ctx.onShutdown(async () => releaseBackgroundLoad());
 
   ctx.registerRoute("GET", "/airports", async (req, reply) => {
     const bbox = parseBbox(req.query);

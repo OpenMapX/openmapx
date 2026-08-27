@@ -1,4 +1,9 @@
 import { fetchJson, USER_AGENT } from "@openmapx/core";
+import {
+  createBoundedBinaryProxyStream,
+  MAX_RASTER_TILE_BYTES,
+  RASTER_IMAGE_MEDIA_TYPES,
+} from "@openmapx/core/server";
 import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 10_000;
@@ -96,22 +101,27 @@ export function setup(ctx: IntegrationContext): void {
     const tileUrl = `${cached.host}${framePath}/256/${z}/${x}/${y}/1/1_1.png`;
 
     try {
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+      const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
       const tileRes = await fetch(tileUrl, {
         headers: { "User-Agent": USER_AGENT },
-        signal: controller.signal,
+        signal,
       });
-      clearTimeout(timer);
       if (!tileRes.ok) {
         reply.status(tileRes.status).send({ message: "Radar tile fetch failed" });
         return;
       }
+      const proxy = createBoundedBinaryProxyStream(tileRes, {
+        maxBytes: MAX_RASTER_TILE_BYTES,
+        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
+        fallbackContentType: "image/png",
+        label: "RainViewer tile",
+      });
 
       reply.header("Content-Type", "image/png");
       reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
       reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.send(Buffer.from(await tileRes.arrayBuffer()));
+      reply.send(proxy.body);
     } catch {
       reply.status(502).send({ message: "Radar tile fetch failed" });
     }
@@ -131,19 +141,24 @@ export function setup(ctx: IntegrationContext): void {
 
     try {
       const tileUrl = `https://tile.openweathermap.org/map/${layer}/${z}/${x}/${y}.png?appid=${owmApiKey}`;
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-      const tileRes = await fetch(tileUrl, { signal: controller.signal });
-      clearTimeout(timer);
+      const timeoutSignal = AbortSignal.timeout(FETCH_TIMEOUT_MS);
+      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
+      const tileRes = await fetch(tileUrl, { signal });
       if (!tileRes.ok) {
         reply.status(tileRes.status).send({ message: "Tile fetch failed" });
         return;
       }
+      const proxy = createBoundedBinaryProxyStream(tileRes, {
+        maxBytes: MAX_RASTER_TILE_BYTES,
+        allowedContentTypes: RASTER_IMAGE_MEDIA_TYPES,
+        fallbackContentType: "image/png",
+        label: "OpenWeatherMap tile",
+      });
 
       reply.header("Content-Type", "image/png");
       reply.header("Cache-Control", "public, max-age=600, s-maxage=600");
       reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-      reply.send(Buffer.from(await tileRes.arrayBuffer()));
+      reply.send(proxy.body);
     } catch {
       reply.status(502).send({ message: "Tile fetch failed" });
     }

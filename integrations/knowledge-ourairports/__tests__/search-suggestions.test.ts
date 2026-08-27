@@ -29,7 +29,10 @@ describe("OurAirports search suggestion adapter", () => {
     ]);
     const provider = createOurAirportsSuggestionProvider(createMockIntegrationContext(), search);
 
-    const result = await provider.searchSuggestions({ query: "FRA", lang: "en", limit: 8 });
+    const result = await provider.searchSuggestions(
+      { query: "FRA", lang: "en", limit: 8 },
+      { signal: new AbortController().signal, deadlineAt: Number.POSITIVE_INFINITY },
+    );
 
     expect(search).toHaveBeenCalledWith(expect.anything(), "FRA", 8);
     expect(result.suggestions[0]).toMatchObject({

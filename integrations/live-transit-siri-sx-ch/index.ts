@@ -14,7 +14,7 @@ const SWITZERLAND_BBOX: BBox = [5.96, 45.82, 10.49, 47.81];
 const attribution = createManifestAttribution();
 
 export function setup(ctx: IntegrationContext): void {
-  attribution.set(ctx.manifest.dataSources ?? []);
+  ctx.onActivate(() => attribution.set(ctx.manifest.dataSources ?? []));
   const provider: RealtimeProvider = {
     id: PROVIDER_ID,
     coverage: { bbox: SWITZERLAND_BBOX },

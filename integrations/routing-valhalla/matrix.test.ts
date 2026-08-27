@@ -14,18 +14,15 @@ describe("valhallaService.getMatrix", () => {
       vi.fn(async (url: string, init?: RequestInit) => {
         capturedUrl = url;
         capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
-        return {
-          ok: true,
-          json: async () => ({
-            sources_to_targets: [
-              [
-                { from_index: 0, to_index: 0, time: 0, distance: 0 },
-                { from_index: 0, to_index: 1, time: 120, distance: 2.0 },
-              ],
+        return Response.json({
+          sources_to_targets: [
+            [
+              { from_index: 0, to_index: 0, time: 0, distance: 0 },
+              { from_index: 0, to_index: 1, time: 120, distance: 2.0 },
             ],
-            units: "kilometers",
-          }),
-        };
+          ],
+          units: "kilometers",
+        });
       }),
     );
 
@@ -51,13 +48,12 @@ describe("valhallaService.getMatrix", () => {
   it("maps a null time/distance cell to null", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({
+      vi.fn(async () =>
+        Response.json({
           sources_to_targets: [[{ from_index: 0, to_index: 0, time: null, distance: null }]],
           units: "kilometers",
         }),
-      })),
+      ),
     );
 
     const rows = await valhallaService.getMatrix?.([[6.9, 50.9]], [[6.9, 50.9]]);

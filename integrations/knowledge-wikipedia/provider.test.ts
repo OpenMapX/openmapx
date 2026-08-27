@@ -36,7 +36,7 @@ beforeEach(() => {
     const url = String(input);
     for (const [pattern, body] of Object.entries(routes)) {
       if (url.includes(pattern)) {
-        return { ok: true, status: 200, json: async () => body };
+        return Response.json(body);
       }
     }
     return { ok: false, status: 404, json: async () => ({}) };

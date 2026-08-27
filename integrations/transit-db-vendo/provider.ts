@@ -150,19 +150,25 @@ export async function getPlatformStops(stopId: string): Promise<TransitStop[]> {
   }
 }
 
-export async function searchByName(query: string, limit = 10): Promise<TransitStop[]> {
+export async function searchByName(
+  query: string,
+  limit = 10,
+  signal?: AbortSignal,
+): Promise<TransitStop[]> {
   try {
     const data = await client.locations(query, {
       results: limit,
       stops: true,
       addresses: false,
       poi: false,
+      signal,
     });
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     return (data as any[])
       .filter((s) => s.type === "stop" || s.type === "station")
       .map(normalizeStop);
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     return [];
   }
 }

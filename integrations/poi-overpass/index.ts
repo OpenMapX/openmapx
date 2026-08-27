@@ -58,6 +58,8 @@ export const overpassProvider: PoiSearchProvider = {
 
 export function setup(ctx: IntegrationContext): void {
   const resolved = ctx.getRequiredService("overpass");
-  if (resolved?.url) setOverpassUrl(resolved.url);
+  ctx.onActivate(() => {
+    if (resolved?.url) setOverpassUrl(resolved.url);
+  });
   ctx.registerPoiSearchProvider(overpassProvider);
 }

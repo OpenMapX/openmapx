@@ -8,7 +8,7 @@ const DATA_SOURCES = JSON.parse(readFileSync(join(__dirname, "manifest.json"), "
   .dataSources as unknown[];
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => ({ data }) } as Response;
+  return Response.json({ data });
 }
 
 /** Run setup() with a capturing context and return the registered realtime provider. */

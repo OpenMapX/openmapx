@@ -1,4 +1,4 @@
-import { USER_AGENT_CONTACT } from "@openmapx/core";
+import { readBoundedResponseText, USER_AGENT_CONTACT } from "@openmapx/core";
 import { assertResolvesToPublicIp } from "@openmapx/core/server";
 import type { Logger } from "@openmapx/integration-framework";
 
@@ -203,10 +203,9 @@ export async function fetchOfficialBookingUrl(
       if (!res.ok) return null;
       const ct = res.headers.get("content-type") ?? "";
       if (!ct.includes("html") && !ct.includes("text")) return null;
-      const buf = await res.arrayBuffer();
-      const truncated = buf.byteLength > MAX_BYTES;
-      const html = new TextDecoder("utf-8").decode(truncated ? buf.slice(0, MAX_BYTES) : buf, {
-        stream: truncated,
+      const html = await readBoundedResponseText(res, MAX_BYTES, {
+        truncate: true,
+        label: "hotel website",
       });
       return extractOfficialBookingUrl(html, current, dates);
     }

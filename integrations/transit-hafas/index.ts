@@ -13,6 +13,7 @@ export function setup(ctx: IntegrationContext): void {
     prefix: "db-hafas:",
     coverage: { bbox: [5.87, 47.27, 15.04, 55.06] },
     priority: 3,
+    role: "enrichment",
     attribution: attribution.all(),
     capabilities: {
       stops: {
@@ -45,8 +46,8 @@ export function setup(ctx: IntegrationContext): void {
     async getArrivals(stopId, minutes) {
       return wrapRT(await hafas.getArrivals(dbInst, stopId, minutes));
     },
-    async searchStopsByName(query, limit) {
-      return wrap(await hafas.searchByName(dbInst, query, limit ?? 10));
+    async searchStopsByName(query, limit, context) {
+      return wrap(await hafas.searchByName(dbInst, query, limit ?? 10, context?.signal));
     },
   });
 }

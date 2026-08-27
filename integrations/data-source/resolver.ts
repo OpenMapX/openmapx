@@ -49,9 +49,8 @@ export function createDataSourceResolver(provider: MobilityDataSourceProvider): 
 
     // When the provider supplies an identity for the item (operator / ref /
     // network / brand), constrain the OSM snap to candidates that match it.
-    // Providers that don't yet expose `identity` on their detail get the
-    // legacy nearest-match behaviour — the gate inside `lookupByOsmFilters`
-    // ignores identity when none is passed.
+    // Providers without an identity hint use an unconstrained nearest match;
+    // the gate inside `lookupByOsmFilters` ignores identity when none is passed.
     const identity = osmFilters && !isVehicle ? await fetchIdentity(provider, value) : undefined;
 
     // Providers without an OSM equivalent (webcams, scooters, …) skip the

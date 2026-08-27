@@ -20,8 +20,7 @@
     "test": "cd ../.. && vitest run --project node packages/extension-cli/src/__tests__"
   },
   "dependencies": {
-    "commander": "^15.0.0",
-    "esbuild": "^0.28.2"
+    "commander": "^15.0.0"
   },
   "devDependencies": {
     "@openmapx/integration-framework": "workspace:^",

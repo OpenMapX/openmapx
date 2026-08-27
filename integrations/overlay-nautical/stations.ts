@@ -75,7 +75,7 @@ interface IocStationRaw {
   status?: number; // 1 = active
 }
 
-const IOC_URL = "http://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json";
+const IOC_URL = "https://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json";
 
 async function loadIocStations(
   cache: CacheClient,

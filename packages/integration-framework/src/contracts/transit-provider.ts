@@ -16,6 +16,7 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import type { LineString } from "geojson";
 import type { HealthCheckResult } from "../context.js";
+import type { ProviderCallContext } from "../provider-execution.js";
 
 /**
  * Per-runtime-feed attribution map returned by `getFeedAttribution`. Keys
@@ -160,7 +161,7 @@ export type { VehicleJourney };
 
 /**
  * Static timetable entry for a stop. Providers resolve
- * `getStopTimetable(stopId, date)` to a `Departure[]`, so the canonical shape
+ * `getStopTimetable(stopId, date)` to a departure array, so the canonical shape
  * is reused here.
  */
 export type TimetableEntry = Departure;
@@ -170,8 +171,8 @@ export interface TransitProvider {
   readonly prefix: string;
   readonly coverage: { bbox: BBox } | { all: true };
   readonly priority: number;
-  /** Operation policy role; legacy providers default to `enrichment`. */
-  readonly role?: TransitProviderRole;
+  /** Operation policy role. */
+  readonly role: TransitProviderRole;
   readonly capabilities: TransitCapabilities;
   readonly planningMetadata?: TransitPlanningMetadata;
   readonly attribution: Attribution[];
@@ -183,7 +184,11 @@ export interface TransitProvider {
     radiusMeters: number,
   ): Promise<MobilityResult<TransitStop[]>>;
   getStopsInBbox?(bbox: BBox): Promise<MobilityResult<TransitStop[]>>;
-  searchStopsByName?(q: string, limit?: number): Promise<MobilityResult<TransitStop[]>>;
+  searchStopsByName?(
+    q: string,
+    limit?: number,
+    context?: ProviderCallContext,
+  ): Promise<MobilityResult<TransitStop[]>>;
   getStopInfrastructure?(stopId: string): Promise<MobilityResult<TransitStopInfrastructure | null>>;
   getStopPlatforms?(stopId: string): Promise<MobilityResult<TransitStop[]>>;
   getStopTimetable?(stopId: string, date: string): Promise<MobilityResult<TimetableEntry[]>>;
@@ -191,7 +196,7 @@ export interface TransitProvider {
   getStopTransfers?(stopId: string): Promise<MobilityResult<StopTransfer[]>>;
 
   getDepartures?(stopId: string, minutes: number): Promise<MobilityResult<Departure[]>>;
-  /** Arrivals reuse the {@link Departure} shape; the `direction` field
+  /** Arrivals reuse the departure shape; the `direction` field
    *  distinguishes inbound from outbound. Providers populate it with arriving
    *  trips at the given stop within `minutes`. */
   getArrivals?(stopId: string, minutes: number): Promise<MobilityResult<Departure[]>>;

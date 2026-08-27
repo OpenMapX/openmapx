@@ -141,7 +141,7 @@ function makeReply(): FakeReply {
 }
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 function getHandler(): RouteHandler {

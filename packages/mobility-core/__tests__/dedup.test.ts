@@ -296,11 +296,20 @@ function makeVehicle(
   };
 }
 
-describe("dedupVehicles", () => {
-  // ID formats used throughout:
-  //   GBFS:       "gbfs/<system>/<uuid>"  →  raw ID = "<uuid>"
-  //   Transitous: "motis:<uuid>"          →  raw ID = "<uuid>"
+function makeTransitousVehicle(
+  nativeId: string,
+  sources: string[] = ["transitous"],
+): SharedMobilityVehicle {
+  return makeVehicle({
+    id: `transitous/shared-test-system/vehicle/${nativeId}`,
+    nativeId,
+    coordinates: [13.41, 52.52],
+    sources,
+    servingOrigin: "transitous",
+  });
+}
 
+describe("dedupVehicles", () => {
   it("returns empty array for empty input", () => {
     expect(dedupVehicles([])).toEqual([]);
   });
@@ -315,11 +324,7 @@ describe("dedupVehicles", () => {
   });
 
   it("keeps a single aggregator vehicle when there is no direct-source counterpart", () => {
-    const v = makeVehicle({
-      id: "motis:uuid-1",
-      coordinates: [13.41, 52.52],
-      sources: ["transitous"],
-    });
+    const v = makeTransitousVehicle("uuid-1");
     expect(dedupVehicles([v])).toHaveLength(1);
   });
 
@@ -329,11 +334,8 @@ describe("dedupVehicles", () => {
       coordinates: [13.41, 52.52],
       sources: ["gbfs/dott-berlin"],
     });
-    const transitous = makeVehicle({
-      id: "motis:uuid-1",
-      coordinates: [13.5, 52.6],
-      sources: ["transitous"],
-    });
+    const transitous = makeTransitousVehicle("uuid-1");
+    transitous.coordinates = [13.5, 52.6];
     // Coordinates deliberately differ — ID match is the only criterion
 
     const result = dedupVehicles([gbfs, transitous]);
@@ -348,11 +350,7 @@ describe("dedupVehicles", () => {
       coordinates: [13.41, 52.52],
       sources: ["gbfs/dott-berlin"],
     });
-    const transitous = makeVehicle({
-      id: "motis:uuid-2",
-      coordinates: [13.41, 52.52],
-      sources: ["transitous"],
-    });
+    const transitous = makeTransitousVehicle("uuid-2");
 
     const result = dedupVehicles([gbfs, transitous]);
     expect(result).toHaveLength(2);
@@ -404,11 +402,7 @@ describe("dedupVehicles", () => {
       coordinates: [13.41, 52.52],
       sources: ["gbfs/foo"],
     });
-    const motis = makeVehicle({
-      id: "motis:uuid-1",
-      coordinates: [13.41, 52.52],
-      sources: ["motis"],
-    });
+    const motis = makeTransitousVehicle("uuid-1", ["motis"]);
 
     const result = dedupVehicles([gbfs, motis]);
     expect(result).toHaveLength(1);
@@ -446,20 +440,12 @@ describe("dedupVehicles", () => {
   });
 
   it("merges sources when two aggregator vehicles share a raw ID and no direct-source exists", () => {
-    const mo1 = makeVehicle({
-      id: "motis:uuid-1",
-      coordinates: [13.41, 52.52],
-      sources: ["transitous"],
-    });
-    const mo2 = makeVehicle({
-      id: "motis:uuid-1",
-      coordinates: [13.41, 52.52],
-      sources: ["motis"],
-    });
+    const mo1 = makeTransitousVehicle("uuid-1");
+    const mo2 = makeTransitousVehicle("uuid-1", ["motis"]);
 
     const result = dedupVehicles([mo1, mo2]);
     expect(result).toHaveLength(1);
-    expect(result[0].id).toBe("motis:uuid-1");
+    expect(result[0].id).toBe("transitous/shared-test-system/vehicle/uuid-1");
     expect(result[0].sources).toEqual(["transitous", "motis"]);
   });
 
@@ -469,37 +455,29 @@ describe("dedupVehicles", () => {
       coordinates: [13.41, 52.52],
       sources: ["gbfs/dott"],
     });
-    const mo1 = makeVehicle({
-      id: "motis:uuid-1",
-      coordinates: [13.41, 52.52],
-      sources: ["transitous"],
-    }); // matches gbfs
-    const mo2 = makeVehicle({
-      id: "motis:uuid-2",
-      coordinates: [13.5, 52.6],
-      sources: ["transitous"],
-    }); // no match
+    const mo1 = makeTransitousVehicle("uuid-1"); // matches gbfs
+    const mo2 = makeTransitousVehicle("uuid-2"); // no match
+    mo2.coordinates = [13.5, 52.6];
 
     const result = dedupVehicles([gbfs, mo1, mo2]);
     expect(result).toHaveLength(2);
     expect(result[0].id).toBe("gbfs/dott/uuid-1");
     expect(result[0].sources).toEqual(["gbfs/dott", "transitous"]);
-    expect(result[1].id).toBe("motis:uuid-2");
+    expect(result[1].id).toBe("transitous/shared-test-system/vehicle/uuid-2");
     expect(result[1].sources).toEqual(["transitous"]);
   });
 
-  it("extracts raw ID correctly from various ID formats", () => {
-    // "gbfs/system/uuid" → "uuid"
+  it("falls back to extracting the last namespaced ID segment", () => {
     const a = makeVehicle({
       id: "gbfs/dott-berlin/2850b11e-abc",
       coordinates: [13.41, 52.52],
       sources: ["gbfs/dott-berlin"],
     });
-    // "motis:uuid" → "uuid"
     const b = makeVehicle({
-      id: "motis:2850b11e-abc",
+      id: "transitous/shared-test-system/vehicle/2850b11e-abc",
       coordinates: [13.41, 52.52],
       sources: ["transitous"],
+      servingOrigin: "transitous",
     });
 
     const result = dedupVehicles([a, b]);

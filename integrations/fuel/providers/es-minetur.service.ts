@@ -6,6 +6,9 @@ import type { FuelPriceProvider } from "./price-provider";
 const SPAIN = { minLat: 27.6, maxLat: 43.8, minLng: -18.2, maxLng: 4.4 };
 const API_URL =
   "https://sedeaplicaciones.minetur.gob.es/ServiciosRESTCarburantes/PreciosCarburantes/EstacionesTerrestres/";
+// The nationwide feed was 12.1 MB in August 2026. This reviewed bulk limit is
+// intentionally larger than the ordinary API ceiling but remains bounded.
+const MAX_RESPONSE_BYTES = 16 * 1024 * 1024;
 
 // Cache the full station list — prices are updated daily
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -49,6 +52,7 @@ async function fetchAllStations(): Promise<EsMineturStation[]> {
   _inflight = (async () => {
     const data = await fetchJson<EsMineturResponse>(API_URL, {
       headers: { Accept: "application/json" },
+      maxBytes: MAX_RESPONSE_BYTES,
       errorMessage: ({ status }) => `Spain fuel API error: ${status}`,
     });
     const stations = data.ListaEESSPrecio;

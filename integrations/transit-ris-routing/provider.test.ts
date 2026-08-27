@@ -14,7 +14,7 @@ type LegInput = Parameters<typeof mapLeg>[0];
 type TripInput = Parameters<typeof mapTrip>[0];
 
 function mockOk(data: unknown) {
-  return { ok: true, status: 200, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 describe("parseDuration", () => {

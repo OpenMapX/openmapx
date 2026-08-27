@@ -3,9 +3,8 @@
 // integrations …`) and the admin Store (`apps/api/src/services/store.ts`) both
 // call into this module so they share one source of truth.
 //
-// Bundling uses esbuild's JS API (`import("esbuild")`). The CLI ships esbuild
-// as a dep and is the only entry point that requests builds — app-api never
-// builds at runtime; it consumes prebuilt artifacts.
+// Community install/package entry points enforce declarative-only artifacts;
+// app-api never builds or executes community bundles at runtime.
 
 import { createHash, randomBytes } from "node:crypto";
 import {
@@ -24,62 +23,19 @@ import {
   symlinkSync,
   writeFileSync,
 } from "node:fs";
-import { dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, normalize, relative, resolve, sep } from "node:path";
 import { gunzipSync } from "node:zlib";
-import {
-  assertAllowedGitUrl,
-  gitShallowClone,
-  safeDownload,
-  scanLicenses,
-  spawnWithBufferedLogs,
-} from "@openmapx/core/server";
+import { scanLicenses } from "@openmapx/core/licenses";
+import { assertAllowedGitUrl, gitShallowClone, safeDownload } from "@openmapx/core/server";
+import { createDeterministicTarGz } from "./deterministic-tar";
 import { INTEGRATION_ID_REGEX, validateManifest } from "./manifest";
 import { PLATFORM_VERSION } from "./platform";
-
-// Bare specifiers community frontend bundles import as externals; the host
-// page's import map resolves them to singleton ESM modules under
-// `apps/web/public/runtime/`. Adding to this list also requires adding the
-// module to `apps/web/scripts/build-runtime-modules.mjs` and to the import map
-// in `apps/web/src/app/layout.tsx`.
-//
-// `@openmapx/integration-framework/react` MUST be shared — it owns the
-// IntegrationRegistryContext. If a plugin bundle inlines its own copy,
-// `useIntegrationRegistry()` reads from a different context than the one the
-// host provides and falls back to the empty default registry.
-const FRONTEND_RUNTIME_EXTERNALS = [
-  "react",
-  "react/jsx-runtime",
-  "react/jsx-dev-runtime",
-  "@openmapx/core",
-  "@openmapx/integration-framework",
-  "@openmapx/integration-framework/react",
-  // Shared so a community map overlay's Popup/expressions operate on the host's
-  // single maplibre-gl instance (the live map is a host maplibre object).
-  "maplibre-gl",
-] as const;
-
-// Server runtime exposes these as already-loaded modules; integrations must
-// not bundle their own copies (would break IntegrationContext singletons).
-// `@openmapx/place-ids` owns the place-resolver registry — if a plugin inlines
-// its own copy, `registerPlaceResolver()` writes into a private map while
-// `/api/places/:id` reads from the host's, so resolvers never run.
-// `@openmapx/integration-framework` itself owns the community-module registry,
-// IntegrationEventBus, and PLATFORM_VERSION; backend bundles inlining their
-// own copy would write into a private community-module map and report
-// version skew against a separate constant.
-const BACKEND_RUNTIME_EXTERNALS = [
-  "@openmapx/core",
-  "@openmapx/core/server",
-  "@openmapx/integration-framework",
-  "@openmapx/place-ids",
-] as const;
 
 export interface IntegrationSummary {
   id: string;
   name: string;
   version: string;
   quality: string;
-  hasBundle: boolean;
   directory: string;
 }
 
@@ -150,7 +106,6 @@ function summarise(directory: string): IntegrationSummary | null {
     name: typeof manifest.name === "string" ? manifest.name : manifest.id,
     version: typeof manifest.version === "string" ? manifest.version : "?",
     quality: typeof manifest.quality === "string" ? manifest.quality : "community",
-    hasBundle: existsSync(join(directory, ...FRONTEND_BUNDLE_PATH)),
     directory,
   };
 }
@@ -261,26 +216,14 @@ export interface InstallOptions {
    */
   source: string;
   /**
-   * `source` clones/copies a working directory and (optionally) builds bundles
-   * locally — used by the CLI for dev workflows. `artifact` extracts a
-   * prebuilt OpenMapX community-integration release tarball — used by the
-   * admin Store for production installs.
+   * `source` clones/copies a working directory. `artifact` extracts an
+   * OpenMapX community-integration release tarball used by the admin Store.
+   * Both paths enforce the declarative-only community code policy.
    */
   sourceKind?: "source" | "artifact";
   ref?: string;
   artifactSha256?: string;
   maxArtifactBytes?: number;
-  /**
-   * Build dist/frontend/index.js for declared frontend components before the
-   * atomic swap. CLI-only; only set when installing from source. esbuild is
-   * loaded via the JS API and must be resolvable from this process.
-   */
-  buildFrontend?: boolean;
-  /**
-   * Build dist/backend/index.mjs for backend integration code before the
-   * atomic swap. CLI-only; only set when installing from source.
-   */
-  buildBackend?: boolean;
   /**
    * Whether to allow installing from a local filesystem path or local
    * `.tar.gz`. Defaults to `true`. Set to `false` for admin-facing endpoints
@@ -296,9 +239,6 @@ export interface InstallResult {
   id: string;
   directory: string;
   replaced: boolean;
-  build?: BuildResult;
-  backendBuild?: BuildResult;
-  artifact?: ArtifactValidationResult;
 }
 
 // Matches anything that *looks like* a URL scheme (e.g. `https://`, `http://`,
@@ -332,6 +272,9 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
       const parsed = new URL(opts.source);
       if (parsed.protocol !== "https:") {
         throw new Error(`Only https:// artifact URLs are supported (got ${parsed.protocol})`);
+      }
+      if (!opts.artifactSha256) {
+        throw new Error("Remote integration artifacts require an expected SHA-256 digest");
       }
     } else if (!allowLocal) {
       throw new Error("Local artifact paths are not allowed in this context.");
@@ -380,6 +323,7 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
       throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
     }
     resolveLayerSelectorPreview(stage, manifest);
+    assertNoExecutableCommunityCode(stage, manifest);
 
     // The schema regex already enforces the slug shape, but resolveInstallTarget
     // (via assertSafeId) gives a single point of defense if the schema ever
@@ -387,32 +331,7 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
     const id = manifest.id;
     const target = resolveInstallTarget(opts.rootDir, id);
     const replaced = existsSync(target);
-    const build = opts.buildFrontend
-      ? await buildIntegrationDirectory({
-          rootDir: opts.rootDir,
-          directory: stage,
-          id,
-          onLog: opts.onLog,
-          signal: opts.signal,
-        })
-      : undefined;
-    const backendBuild = opts.buildBackend
-      ? await buildIntegrationBackendDirectory({
-          rootDir: opts.rootDir,
-          directory: stage,
-          id,
-          onLog: opts.onLog,
-          signal: opts.signal,
-        })
-      : undefined;
-    // Artifact installs must arrive fully prebuilt. Source installs that
-    // skipped building (CLI `--no-build`) are accepted; they will run only if
-    // the dist/ outputs are committed in the source tree.
-    const requirePrebuilt = sourceKind === "artifact";
-    const artifact = validateArtifactContract(stage, manifest, {
-      requirePrebuiltFrontend: requirePrebuilt,
-      requirePrebuiltBackend: requirePrebuilt,
-    });
+    validateDeclarativeArtifact(stage);
     if (sourceKind === "artifact") {
       validateArtifactMetadata(stage, manifest);
     }
@@ -420,7 +339,7 @@ export async function installIntegration(opts: InstallOptions): Promise<InstallR
       rmSync(target, { recursive: true, force: true });
     }
     renameSync(stage, target);
-    return { id, directory: target, replaced, build, backendBuild, artifact };
+    return { id, directory: target, replaced };
   } catch (err) {
     rmSync(stage, { recursive: true, force: true });
     throw err;
@@ -446,10 +365,13 @@ async function stageArtifactSource(opts: InstallOptions): Promise<string> {
   try {
     let sourcePath = opts.source;
     if (URL_SCHEME_REGEX.test(opts.source)) {
-      await safeDownload(opts.source, {
-        destPath: archivePath,
+      await safeDownload({
+        url: new URL(opts.source),
+        destination: archivePath,
         maxBytes: maxArtifactBytes,
         timeoutMs: 5 * 60_000,
+        allowedContentTypes: [],
+        credentialPolicy: "none",
         headers: { "User-Agent": "OpenMapX integration installer" },
       });
       sourcePath = archivePath;
@@ -743,6 +665,75 @@ export interface RemoveOptions {
   id: string;
 }
 
+export interface IntegrationRollbackBackup {
+  id: string;
+  backupDirectory: string;
+}
+
+function validateIntegrationRollbackBackup(
+  rootDir: string,
+  backup: IntegrationRollbackBackup,
+): { target: string; backupDirectory: string } {
+  const target = resolveInstallTarget(rootDir, backup.id);
+  const parent = resolve(customDir(rootDir));
+  const backupDirectory = resolve(backup.backupDirectory);
+  const expectedPrefix = `.rollback-integration-${backup.id}-`;
+  if (
+    dirname(backupDirectory) !== parent ||
+    !basename(backupDirectory).startsWith(expectedPrefix) ||
+    !/^[a-f0-9]{12}$/.test(basename(backupDirectory).slice(expectedPrefix.length))
+  ) {
+    throw new Error("Invalid integration rollback backup path");
+  }
+  return { target, backupDirectory };
+}
+
+/** Copy an installed artifact aside while leaving the active files available. */
+export function backupInstalledIntegration(
+  rootDir: string,
+  id: string,
+): IntegrationRollbackBackup | null {
+  const target = resolveInstallTarget(rootDir, id);
+  if (!existsSync(target)) return null;
+  const backup: IntegrationRollbackBackup = {
+    id,
+    backupDirectory: join(
+      customDir(rootDir),
+      `.rollback-integration-${id}-${randomBytes(6).toString("hex")}`,
+    ),
+  };
+  const validated = validateIntegrationRollbackBackup(rootDir, backup);
+  cpSync(target, validated.backupDirectory, { recursive: true, errorOnExist: true, force: false });
+  return backup;
+}
+
+/** Restore the exact artifact snapshot after a failed multi-component update. */
+export function restoreInstalledIntegration(
+  rootDir: string,
+  backup: IntegrationRollbackBackup,
+): void {
+  const { target, backupDirectory } = validateIntegrationRollbackBackup(rootDir, backup);
+  if (!existsSync(backupDirectory)) throw new Error("Integration rollback backup is missing");
+  const restoreStage = createStagePath(rootDir, `restore-${backup.id}`);
+  try {
+    cpSync(backupDirectory, restoreStage, { recursive: true, errorOnExist: true, force: false });
+    if (existsSync(target)) rmSync(target, { recursive: true, force: true });
+    renameSync(restoreStage, target);
+  } catch (error) {
+    rmSync(restoreStage, { recursive: true, force: true });
+    throw error;
+  }
+  discardInstalledIntegrationBackup(rootDir, backup);
+}
+
+export function discardInstalledIntegrationBackup(
+  rootDir: string,
+  backup: IntegrationRollbackBackup,
+): void {
+  const { backupDirectory } = validateIntegrationRollbackBackup(rootDir, backup);
+  rmSync(backupDirectory, { recursive: true, force: true });
+}
+
 export function removeIntegration(opts: RemoveOptions): { directory: string } {
   const target = resolveInstallTarget(opts.rootDir, opts.id);
   if (!existsSync(target)) {
@@ -754,24 +745,6 @@ export function removeIntegration(opts: RemoveOptions): { directory: string } {
   return { directory: target };
 }
 
-export interface BuildOptions {
-  rootDir: string;
-  id: string;
-  onLog?: InstallOptions["onLog"];
-  signal?: AbortSignal;
-}
-
-export interface BuildResult {
-  bundlePath: string | null;
-  skipped: boolean;
-  reason?: string;
-}
-
-export interface ArtifactValidationResult {
-  hasFrontendBundle: boolean;
-  hasBackendBundle: boolean;
-}
-
 export interface PackageOptions {
   rootDir: string;
   /** Installed community integration id. */
@@ -779,21 +752,157 @@ export interface PackageOptions {
   /** Explicit source directory, useful before an integration is installed. */
   source?: string;
   outFile: string;
-  buildFrontend?: boolean;
-  buildBackend?: boolean;
   onLog?: InstallOptions["onLog"];
   signal?: AbortSignal;
+  /**
+   * Report the exact allowlisted file list and total bytes without writing an
+   * archive. Never prints file contents.
+   */
+  dryRun?: boolean;
 }
 
 export interface PackageResult {
   id: string;
   artifactPath: string;
-  validation: ArtifactValidationResult;
+  /** Relative paths included in the artifact, sorted. */
+  files?: string[];
+  /** Total bytes of the included files. */
+  totalBytes?: number;
 }
 
-interface ArtifactMetadataBundle {
-  path: string;
-  sha256: string;
+// The artifact contract. Packaging copies exactly these entries into a fresh
+// staging directory; everything else in the source tree — dotfiles, `.env*`,
+// VCS data, sources, tests, source maps, lockfiles, `node_modules`, caches,
+// unreferenced assets — is simply never collected, so it cannot leak into a
+// release even if it sits next to a declared file.
+const MAX_LOCALE_FILES = 100;
+const MAX_LOCALE_BYTES = 256 * 1024;
+const MAX_PREVIEW_BYTES = 64 * 1024;
+const MAX_LEGAL_BYTES = 1024 * 1024;
+const LOCALE_NAME = /^[a-z0-9-]{2,35}\.json$/;
+const LEGAL_FILES = ["LICENSE", "LICENSE.txt", "LICENSE.md", "NOTICE", "NOTICE.txt"] as const;
+
+interface StagedFile {
+  /** Path relative to the artifact root. */
+  relativePath: string;
+  /** Absolute source path, or null when the contents are generated. */
+  absoluteSource: string | null;
+  contents?: string;
+  sizeBytes: number;
+}
+
+/** `lstat` a candidate without following links; return null when unusable. */
+function regularFile(absolute: string): { size: number } | null {
+  try {
+    const stats = lstatSync(absolute);
+    // A symlink, socket, device, FIFO, or hard-linked file is never packaged.
+    if (!stats.isFile() || stats.isSymbolicLink() || stats.nlink !== 1) return null;
+    return { size: Number(stats.size) };
+  } catch {
+    return null;
+  }
+}
+
+function collectStagedFile(
+  directory: string,
+  relativePath: string,
+  maxBytes: number,
+  required: boolean,
+): StagedFile | null {
+  const absolute = join(directory, relativePath);
+  const stats = regularFile(absolute);
+  if (!stats) {
+    if (required) {
+      throw new Error(`Required artifact file ${relativePath} is missing or is not a regular file`);
+    }
+    return null;
+  }
+  if (stats.size > maxBytes) {
+    throw new Error(`Artifact file ${relativePath} exceeds its ${maxBytes}-byte limit`);
+  }
+  return { relativePath, absoluteSource: absolute, sizeBytes: stats.size };
+}
+
+/**
+ * Build the exact list of files the artifact may contain. Generated metadata and
+ * license output are produced as in-memory contents so packaging never mutates
+ * the caller's source directory.
+ */
+function collectArtifactFiles(
+  directory: string,
+  manifest: Record<string, unknown>,
+  generated: { metadata: string; licenses: string | null },
+): StagedFile[] {
+  const files: StagedFile[] = [];
+  const manifestFile = collectStagedFile(directory, "manifest.json", MAX_LEGAL_BYTES, true);
+  if (manifestFile) files.push(manifestFile);
+
+  files.push({
+    relativePath: ARTIFACT_METADATA_FILE,
+    absoluteSource: null,
+    contents: generated.metadata,
+    sizeBytes: Buffer.byteLength(generated.metadata, "utf8"),
+  });
+  if (generated.licenses !== null) {
+    files.push({
+      relativePath: "dist/licenses.json",
+      absoluteSource: null,
+      contents: generated.licenses,
+      sizeBytes: Buffer.byteLength(generated.licenses, "utf8"),
+    });
+  }
+
+  // Locale files, by exact name shape and count.
+  const stringsDir = join(directory, "strings");
+  if (regularDirectory(stringsDir)) {
+    const names = readdirSync(stringsDir)
+      .filter((name) => LOCALE_NAME.test(name))
+      .sort();
+    if (names.length > MAX_LOCALE_FILES) {
+      throw new Error(`Artifact declares more than ${MAX_LOCALE_FILES} locale files`);
+    }
+    for (const name of names) {
+      const staged = collectStagedFile(directory, `strings/${name}`, MAX_LOCALE_BYTES, false);
+      if (staged) files.push(staged);
+    }
+  }
+
+  // Only the exact manifest-referenced preview, after the safe relative-path
+  // validator has already run.
+  const preview = resolveLayerSelectorPreview(directory, manifest);
+  if (preview) {
+    // `resolveLayerSelectorPreview` returns a realpath, so the relative path
+    // has to be taken against the canonical root too — otherwise a symlinked
+    // temp root (macOS `/var` -> `/private/var`) yields an escaping path.
+    const relativePreview = relative(realpathSync(directory), preview).split(sep).join("/");
+    const staged = collectStagedFile(directory, relativePreview, MAX_PREVIEW_BYTES, true);
+    if (staged) files.push(staged);
+  }
+
+  for (const legal of LEGAL_FILES) {
+    const staged = collectStagedFile(directory, legal, MAX_LEGAL_BYTES, false);
+    if (staged) files.push(staged);
+  }
+
+  const seen = new Set<string>();
+  for (const file of files) {
+    if (seen.has(file.relativePath)) {
+      throw new Error(`Artifact would contain ${file.relativePath} twice`);
+    }
+    seen.add(file.relativePath);
+  }
+  // Code-unit ordering keeps the manifest of included files reproducible
+  // regardless of the host locale.
+  return files.sort((left, right) => (left.relativePath < right.relativePath ? -1 : 1));
+}
+
+function regularDirectory(absolute: string): boolean {
+  try {
+    const stats = lstatSync(absolute);
+    return stats.isDirectory() && !stats.isSymbolicLink();
+  } catch {
+    return false;
+  }
 }
 
 interface ArtifactMetadata {
@@ -801,35 +910,12 @@ interface ArtifactMetadata {
   id: string;
   platformVersion: string;
   builtAt: string;
-  bundles: {
-    frontend?: ArtifactMetadataBundle;
-    backend?: ArtifactMetadataBundle;
-  };
 }
 
-const FRONTEND_FILES = ["map-layer.tsx", "legend.tsx", "panel.tsx"] as const;
-type FrontendFile = (typeof FRONTEND_FILES)[number];
-const FRONTEND_BUNDLE_PATH = ["dist", "frontend", "index.js"] as const;
 const BACKEND_BUNDLE_PATH = ["dist", "backend", "index.mjs"] as const;
 const ARTIFACT_METADATA_FILE = "openmapx-artifact.json";
-
-const FRONTEND_EXPORT_NAME: Record<FrontendFile, string> = {
-  "map-layer.tsx": "mapLayer",
-  "legend.tsx": "legend",
-  "panel.tsx": "panel",
-};
-
-const FRONTEND_LOCAL_NAME: Record<FrontendFile, string> = {
-  "map-layer.tsx": "MapLayer",
-  "legend.tsx": "Legend",
-  "panel.tsx": "Panel",
-};
-
-function manifestDeclaresFrontend(manifest: Record<string, unknown>): boolean {
-  const frontend = manifest.frontend;
-  if (!frontend || typeof frontend !== "object") return false;
-  return Object.values(frontend as Record<string, unknown>).some((value) => value === true);
-}
+// Fixed build stamp so the same source always produces byte-identical output.
+const DETERMINISTIC_TIMESTAMP = "1970-01-01T00:00:00Z";
 
 function manifestDeclaresBackend(manifest: Record<string, unknown>): boolean {
   const backend = manifest.backend;
@@ -839,119 +925,92 @@ function manifestDeclaresBackend(manifest: Record<string, unknown>): boolean {
   );
 }
 
-function hasFrontendSources(directory: string): boolean {
-  return FRONTEND_FILES.some((file) => existsSync(join(directory, file)));
+const EXECUTABLE_COMMUNITY_CODE_PATHS = [
+  "index.ts",
+  "index.js",
+  "poi-sources.ts",
+  "poi-sources.js",
+  "dist/backend/index.mjs",
+  "map-layer.tsx",
+  "legend.tsx",
+  "panel.tsx",
+  "dist/frontend/index.js",
+] as const;
+
+function manifestDeclaresFrontendCode(manifest: Record<string, unknown>): boolean {
+  const frontend = manifest.frontend;
+  if (!frontend || typeof frontend !== "object") return false;
+  const declaration = frontend as Record<string, unknown>;
+  return declaration.mapLayer === true || declaration.legend === true || declaration.panel === true;
 }
 
-function hasBackendSource(directory: string): boolean {
-  return existsSync(join(directory, "index.ts")) || existsSync(join(directory, "index.js"));
-}
-
-function frontendBundlePath(directory: string): string {
-  return join(directory, ...FRONTEND_BUNDLE_PATH);
-}
-
-export function integrationFrontendBundlePath(directory: string): string {
-  return frontendBundlePath(directory);
+function assertNoExecutableCommunityCode(
+  directory: string,
+  manifest: Record<string, unknown>,
+): void {
+  const found = EXECUTABLE_COMMUNITY_CODE_PATHS.filter((path) => existsSync(join(directory, path)));
+  if (
+    !manifestDeclaresBackend(manifest) &&
+    !manifestDeclaresFrontendCode(manifest) &&
+    found.length === 0
+  ) {
+    return;
+  }
+  const details = found.length > 0 ? ` Found: ${found.join(", ")}.` : "";
+  throw new Error(
+    "Executable community integration code cannot be installed without an isolation boundary." +
+      details +
+      " Move backend behavior into an isolated service component and keep the integration artifact declarative-only.",
+  );
 }
 
 export function integrationBackendBundlePath(directory: string): string {
   return join(directory, ...BACKEND_BUNDLE_PATH);
 }
 
-function validateArtifactContract(
-  directory: string,
-  manifest: Record<string, unknown>,
-  opts: { requirePrebuiltFrontend: boolean; requirePrebuiltBackend: boolean },
-): ArtifactValidationResult {
-  const hasFrontend = manifestDeclaresFrontend(manifest) || hasFrontendSources(directory);
-  const hasFrontendBundle = existsSync(frontendBundlePath(directory));
-  if (opts.requirePrebuiltFrontend && hasFrontend && !hasFrontendBundle) {
-    throw new Error(
-      "Integration declares frontend components but no prebuilt dist/frontend/index.js was found. " +
-        "Package the integration with `pnpm openmapx integrations package` before installing through the admin API.",
-    );
-  }
-
-  const hasBackend = manifestDeclaresBackend(manifest) || hasBackendSource(directory);
-  const hasBackendBundle = existsSync(integrationBackendBundlePath(directory));
-  if (opts.requirePrebuiltBackend && hasBackend && !hasBackendBundle) {
-    throw new Error(
-      "Integration contains backend code but no prebuilt dist/backend/index.mjs was found. " +
-        "Package the integration with `pnpm openmapx integrations package` before installing through the admin API.",
-    );
-  }
-
+function validateDeclarativeArtifact(directory: string): void {
   if (existsSync(join(directory, "node_modules"))) {
-    throw new Error(
-      "Integration artifacts must not ship a node_modules/ directory. Bundle all runtime " +
-        "dependencies into dist/backend/index.mjs via the CLI packager.",
-    );
+    throw new Error("Declarative integration artifacts must not ship a node_modules/ directory.");
   }
-
-  return { hasFrontendBundle, hasBackendBundle };
 }
 
-function relativeArtifactPath(directory: string, path: string): string {
-  return relative(directory, path).split(sep).join("/");
-}
-
-function resolveArtifactRelativePath(directory: string, path: string): string {
-  const safePath = safeArchivePath(path);
-  const target = resolve(directory, safePath);
-  const base = resolve(directory);
-  if (target !== base && !target.startsWith(`${base}${sep}`)) {
-    throw new Error(`Artifact metadata path escapes integration directory: ${path}`);
-  }
-  return target;
-}
-
-function writeArtifactMetadata(
-  directory: string,
-  manifest: Record<string, unknown>,
-  validation: ArtifactValidationResult,
-): void {
-  if (typeof manifest.id !== "string") return;
-
-  const frontendBundle = frontendBundlePath(directory);
-  const backendBundle = integrationBackendBundlePath(directory);
+/**
+ * The same metadata `writeArtifactMetadata` persists, returned instead of
+ * written. Packaging stages it so the caller's source tree is left untouched.
+ */
+function buildArtifactMetadata(manifest: Record<string, unknown>, builtAt: string): string | null {
+  if (typeof manifest.id !== "string") return null;
   const metadata: ArtifactMetadata = {
     schemaVersion: 1,
     id: manifest.id,
     platformVersion: PLATFORM_VERSION,
-    builtAt: new Date().toISOString(),
-    bundles: {},
+    builtAt,
   };
-
-  if (validation.hasFrontendBundle && existsSync(frontendBundle)) {
-    metadata.bundles.frontend = {
-      path: relativeArtifactPath(directory, frontendBundle),
-      sha256: sha256File(frontendBundle),
-    };
-  }
-  if (validation.hasBackendBundle && existsSync(backendBundle)) {
-    metadata.bundles.backend = {
-      path: relativeArtifactPath(directory, backendBundle),
-      sha256: sha256File(backendBundle),
-    };
-  }
-
-  writeFileSync(
-    join(directory, ARTIFACT_METADATA_FILE),
-    JSON.stringify(metadata, null, 2),
-    "utf-8",
-  );
+  return JSON.stringify(metadata, null, 2);
 }
 
 function validateArtifactMetadata(directory: string, manifest: Record<string, unknown>): void {
   const metadataPath = join(directory, ARTIFACT_METADATA_FILE);
   if (!existsSync(metadataPath)) return;
 
-  let metadata: ArtifactMetadata;
+  let value: unknown;
   try {
-    metadata = JSON.parse(readFileSync(metadataPath, "utf-8")) as ArtifactMetadata;
+    value = JSON.parse(readFileSync(metadataPath, "utf-8")) as unknown;
   } catch {
     throw new Error(`${ARTIFACT_METADATA_FILE} is not valid JSON`);
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`${ARTIFACT_METADATA_FILE} has an invalid shape`);
+  }
+  const metadata = value as Record<string, unknown>;
+  if (
+    Object.keys(metadata).sort().join(",") !== "builtAt,id,platformVersion,schemaVersion" ||
+    typeof metadata.id !== "string" ||
+    typeof metadata.platformVersion !== "string" ||
+    typeof metadata.builtAt !== "string"
+  ) {
+    throw new Error(`${ARTIFACT_METADATA_FILE} has an invalid shape`);
   }
 
   if (metadata.schemaVersion !== 1) {
@@ -964,66 +1023,11 @@ function validateArtifactMetadata(directory: string, manifest: Record<string, un
       `${ARTIFACT_METADATA_FILE} id mismatch: metadata has ${metadata.id}, manifest has ${manifest.id}`,
     );
   }
-
-  for (const [name, bundle] of Object.entries(metadata.bundles ?? {})) {
-    if (!bundle) continue;
-    const path = resolveArtifactRelativePath(directory, bundle.path);
-    if (!existsSync(path)) {
-      throw new Error(`${ARTIFACT_METADATA_FILE} ${name} bundle is missing: ${bundle.path}`);
-    }
-    const actual = sha256File(path);
-    if (actual.toLowerCase() !== bundle.sha256.toLowerCase()) {
-      throw new Error(
-        `${ARTIFACT_METADATA_FILE} ${name} bundle checksum mismatch: expected ${bundle.sha256}, got ${actual}`,
-      );
-    }
-  }
-}
-
-// esbuild is loaded lazily through its JS API so the api image never imports
-// it (only the CLI ever requests a build). Resolution flows through normal
-// node module lookup from this package — esbuild is a `@openmapx/cli` runtime
-// dependency. If a non-CLI consumer ever asks for a build, this surfaces a
-// clear error rather than hanging.
-type EsbuildModule = typeof import("esbuild");
-let esbuildModule: EsbuildModule | null = null;
-async function loadEsbuild(): Promise<EsbuildModule> {
-  if (esbuildModule) return esbuildModule;
-  try {
-    esbuildModule = (await import("esbuild")) as EsbuildModule;
-  } catch {
+  if (metadata.platformVersion !== PLATFORM_VERSION) {
     throw new Error(
-      "esbuild is not available in this process. Run integration builds through the OpenMapX CLI " +
-        "(`pnpm openmapx integrations build|package`), which ships esbuild as a dependency.",
+      `${ARTIFACT_METADATA_FILE} platform version mismatch: expected ${PLATFORM_VERSION}`,
     );
   }
-  return esbuildModule;
-}
-
-export async function buildIntegration(opts: BuildOptions): Promise<BuildResult> {
-  const directory = resolveInstallTarget(opts.rootDir, opts.id);
-  if (!existsSync(directory)) {
-    throw new Error(`Community integration '${opts.id}' is not installed`);
-  }
-  const manifest = readManifest(directory);
-  if (!manifest) {
-    throw new Error(`No manifest.json in ${directory}`);
-  }
-
-  return buildIntegrationDirectory({ ...opts, directory });
-}
-
-export async function buildIntegrationBackend(opts: BuildOptions): Promise<BuildResult> {
-  const directory = resolveInstallTarget(opts.rootDir, opts.id);
-  if (!existsSync(directory)) {
-    throw new Error(`Community integration '${opts.id}' is not installed`);
-  }
-  const manifest = readManifest(directory);
-  if (!manifest) {
-    throw new Error(`No manifest.json in ${directory}`);
-  }
-
-  return buildIntegrationBackendDirectory({ ...opts, directory });
 }
 
 export async function packageIntegration(opts: PackageOptions): Promise<PackageResult> {
@@ -1046,52 +1050,73 @@ export async function packageIntegration(opts: PackageOptions): Promise<PackageR
     throw new Error(`Manifest validation failed:\n  - ${validation.errors.join("\n  - ")}`);
   }
   resolveLayerSelectorPreview(directory, manifest);
+  assertNoExecutableCommunityCode(directory, manifest);
 
-  if (opts.buildFrontend) {
-    await buildIntegrationDirectory({
-      rootDir: opts.rootDir,
-      directory,
-      id: manifest.id,
-      onLog: opts.onLog,
-      signal: opts.signal,
-    });
-  }
-  if (opts.buildBackend ?? opts.buildFrontend) {
-    await buildIntegrationBackendDirectory({
-      rootDir: opts.rootDir,
-      directory,
-      id: manifest.id,
-      onLog: opts.onLog,
-      signal: opts.signal,
-    });
-  }
+  validateDeclarativeArtifact(directory);
 
-  const artifactValidation = validateArtifactContract(directory, manifest, {
-    requirePrebuiltFrontend: true,
-    requirePrebuiltBackend: true,
-  });
-  writeArtifactMetadata(directory, manifest, artifactValidation);
+  // Generated in memory, not written into the caller's tree: packaging must
+  // leave the source directory byte-for-byte unchanged.
+  const metadata = buildArtifactMetadata(
+    manifest,
+    // Deterministic: two packages built from the same source must be identical.
+    DETERMINISTIC_TIMESTAMP,
+  );
+  if (metadata === null) throw new Error("Could not build artifact metadata");
   // Ship a license manifest alongside the bundles so OpenMapX's /licenses
   // page can surface the deps the artifact bundled in. Best-effort — only
   // emits when the source tree has a package.json with reachable deps.
-  writeArtifactLicenses(directory, manifest, opts.onLog);
+  const licenses = buildArtifactLicenses(directory, manifest, opts.onLog);
 
+  const files = collectArtifactFiles(directory, manifest, { metadata, licenses });
+  const totalBytes = files.reduce((sum, file) => sum + file.sizeBytes, 0);
+  const relativePaths = files.map((file) => file.relativePath);
+
+  if (opts.dryRun) {
+    // The list and the byte total only — never file contents.
+    for (const file of files)
+      opts.onLog?.(`${file.relativePath} (${file.sizeBytes} bytes)`, "stdout");
+    opts.onLog?.(`${files.length} files, ${totalBytes} bytes`, "stdout");
+    return {
+      id: manifest.id,
+      artifactPath: resolve(opts.outFile),
+      files: relativePaths,
+      totalBytes,
+    };
+  }
+
+  // Built in memory from the exact allowlisted set. Platform `tar` dialects
+  // disagree about the flags that make output reproducible, so the archive is
+  // written with fixed ustar headers instead of shelling out.
   mkdirSync(dirname(resolve(opts.outFile)), { recursive: true });
-  await spawnWithBufferedLogs("tar", ["-czf", resolve(opts.outFile), "-C", directory, "."], {
-    signal: opts.signal,
-    onLog: opts.onLog,
-  });
+  writeFileSync(
+    resolve(opts.outFile),
+    createDeterministicTarGz(
+      files.map((file) => ({
+        path: file.relativePath,
+        contents:
+          file.absoluteSource === null
+            ? Buffer.from(file.contents ?? "", "utf-8")
+            : readFileSync(file.absoluteSource),
+      })),
+    ),
+  );
 
-  return { id: manifest.id, artifactPath: resolve(opts.outFile), validation: artifactValidation };
+  return {
+    id: manifest.id,
+    artifactPath: resolve(opts.outFile),
+    files: relativePaths,
+    totalBytes,
+  };
 }
 
-function writeArtifactLicenses(
+/** The same license manifest, returned instead of written into the source tree. */
+function buildArtifactLicenses(
   directory: string,
   manifest: Record<string, unknown>,
   onLog: PackageOptions["onLog"],
-): void {
+): string | null {
   const pkgJsonPath = join(directory, "package.json");
-  if (!existsSync(pkgJsonPath)) return;
+  if (!existsSync(pkgJsonPath)) return null;
   let notices: ReturnType<typeof scanLicenses> = [];
   try {
     notices = scanLicenses({
@@ -1100,125 +1125,9 @@ function writeArtifactLicenses(
     });
   } catch (err) {
     onLog?.(`license scan skipped: ${(err as Error).message}`, "stderr");
-    return;
+    return null;
   }
-  if (notices.length === 0) return;
-  const distDir = join(directory, "dist");
-  mkdirSync(distDir, { recursive: true });
-  writeFileSync(
-    join(distDir, "licenses.json"),
-    `${JSON.stringify({ integrationId: manifest.id, notices }, null, 2)}\n`,
-    "utf-8",
-  );
+  if (notices.length === 0) return null;
   onLog?.(`license manifest → dist/licenses.json (${notices.length} entries)`, "stdout");
-}
-
-function backendEntryPath(directory: string): string | null {
-  const ts = join(directory, "index.ts");
-  if (existsSync(ts)) return ts;
-  const js = join(directory, "index.js");
-  return existsSync(js) ? js : null;
-}
-
-async function buildIntegrationBackendDirectory(
-  opts: BuildOptions & { directory: string },
-): Promise<BuildResult> {
-  const entryPath = backendEntryPath(opts.directory);
-  if (!entryPath) {
-    return {
-      bundlePath: null,
-      skipped: true,
-      reason: "no backend entry (index.ts/index.js)",
-    };
-  }
-
-  const esbuild = await loadEsbuild();
-  const bundlePath = integrationBackendBundlePath(opts.directory);
-  mkdirSync(dirname(bundlePath), { recursive: true });
-  opts.signal?.throwIfAborted();
-
-  await esbuild.build({
-    entryPoints: [entryPath],
-    bundle: true,
-    platform: "node",
-    format: "esm",
-    outfile: bundlePath,
-    target: "node24",
-    external: [...BACKEND_RUNTIME_EXTERNALS],
-    minify: true,
-    absWorkingDir: opts.directory,
-    logLevel: "warning",
-  });
-  opts.onLog?.(`backend bundle → ${bundlePath}`, "stdout");
-
-  return { bundlePath, skipped: false };
-}
-
-async function buildIntegrationDirectory(
-  opts: BuildOptions & { directory: string },
-): Promise<BuildResult> {
-  const { directory } = opts;
-  const present = FRONTEND_FILES.filter((f) => existsSync(join(directory, f)));
-  if (present.length === 0) {
-    return {
-      bundlePath: null,
-      skipped: true,
-      reason: "no frontend components (map-layer/legend/panel)",
-    };
-  }
-
-  const esbuild = await loadEsbuild();
-  const distDir = dirname(frontendBundlePath(directory));
-  mkdirSync(distDir, { recursive: true });
-
-  const token = randomBytes(4).toString("hex");
-  const entryPath = join(directory, `.openmapx-build-entry-${token}.tsx`);
-  // JSON.stringify so the id is properly quoted/escaped — defense in depth on
-  // top of the slug regex (which already excludes `"`, `\`, `${`, etc.).
-  const idLiteral = JSON.stringify(opts.id);
-  const lines: string[] = [
-    "// Auto-generated build entry",
-    'import type { CommunityIntegrationModule } from "@openmapx/core";',
-    "",
-  ];
-  for (const file of present) {
-    const local = FRONTEND_LOCAL_NAME[file];
-    lines.push(`import ${local} from "./${file.replace(/\.tsx$/, "")}";`);
-  }
-  lines.push("", `const mod: CommunityIntegrationModule = { id: ${idLiteral} };`);
-  for (const file of present) {
-    lines.push(`mod.${FRONTEND_EXPORT_NAME[file]} = ${FRONTEND_LOCAL_NAME[file]};`);
-  }
-  lines.push(
-    "",
-    "window.__openmapx_integrations = window.__openmapx_integrations || [];",
-    "window.__openmapx_integrations.push(mod);",
-    "",
-  );
-  writeFileSync(entryPath, lines.join("\n"), "utf-8");
-
-  const bundlePath = frontendBundlePath(directory);
-  try {
-    opts.signal?.throwIfAborted();
-    await esbuild.build({
-      entryPoints: [entryPath],
-      bundle: true,
-      format: "esm",
-      outfile: bundlePath,
-      // React and @openmapx/core are exposed as singletons through the host
-      // page's import map (apps/web/src/app/layout.tsx). Any other dep the
-      // integration uses gets bundled in.
-      external: [...FRONTEND_RUNTIME_EXTERNALS],
-      jsx: "automatic",
-      target: "es2022",
-      minify: true,
-      absWorkingDir: directory,
-      logLevel: "warning",
-    });
-    opts.onLog?.(`frontend bundle → ${bundlePath}`, "stdout");
-  } finally {
-    rmSync(entryPath, { force: true });
-  }
-
-  return { bundlePath, skipped: false };
+  return `${JSON.stringify({ integrationId: manifest.id, notices }, null, 2)}\n`;
 }

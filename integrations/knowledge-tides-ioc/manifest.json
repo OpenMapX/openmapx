@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "license": "MIT",
-  "documentation": "http://www.ioc-sealevelmonitoring.org/service.php",
+  "documentation": "https://www.ioc-sealevelmonitoring.org/service.php",
   "domains": ["knowledge"],
   "frontend": {
     "mapLayer": false,
@@ -25,7 +25,7 @@
     {
       "name": "IOC Sea Level Monitoring",
       "type": "http",
-      "url": "http://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json"
+      "url": "https://www.ioc-sealevelmonitoring.org/service.php?query=stationlist&format=json"
     }
   ],
   "dataSources": [

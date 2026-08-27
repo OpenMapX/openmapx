@@ -28,7 +28,7 @@ import { createTidesIntegration, type IntegrationContext } from "@openmapx/integ
  * the shared `createTidesIntegration` factory; everything below is the
  * IOC-specific catalog/observation handling.
  */
-const BASE = "http://www.ioc-sealevelmonitoring.org/service.php";
+const BASE = "https://www.ioc-sealevelmonitoring.org/service.php";
 const FETCH_TIMEOUT_MS = 15_000;
 const CATALOG_TTL = 7 * 24 * 60 * 60;
 const TIDES_TTL = 30 * 60; // observations refresh; predictions cache shorter

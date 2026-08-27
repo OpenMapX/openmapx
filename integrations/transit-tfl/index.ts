@@ -5,12 +5,13 @@ const { attribution, wrap, wrapRT, init } = defineTransitProvider();
 
 export function setup(ctx: IntegrationContext): void {
   init(ctx);
-  tfl.setTflApiKey(ctx.config.apiKey as string | undefined);
+  ctx.onActivate(() => tfl.setTflApiKey(ctx.config.apiKey as string | undefined));
   ctx.registerTransitProvider({
     id: "transit-tfl",
     prefix: "tfl:",
     coverage: { bbox: [-0.51, 51.28, 0.33, 51.69] },
     priority: 1,
+    role: "enrichment",
     attribution: attribution.all(),
     capabilities: {
       stops: {
@@ -40,8 +41,8 @@ export function setup(ctx: IntegrationContext): void {
     async getDepartures(id, min) {
       return wrapRT(await tfl.getDepartures(id, min));
     },
-    async searchStopsByName(q, limit) {
-      return wrap(await tfl.searchByName(q, limit ?? 10));
+    async searchStopsByName(q, limit, context) {
+      return wrap(await tfl.searchByName(q, limit ?? 10, context?.signal));
     },
     async getAlertsForStop(id) {
       return wrapRT(await tfl.getStopAlerts(id));

@@ -833,7 +833,7 @@ export function NauticalLayer() {
         primaryScheme: scheme,
         ids: { [scheme]: id },
         name,
-        address: String(p.state ?? ""),
+        address: "",
         countryCode: country?.toLowerCase(),
         coordinates: [lng, lat],
         category: "Tide Station",

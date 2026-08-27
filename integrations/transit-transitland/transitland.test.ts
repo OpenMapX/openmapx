@@ -4,7 +4,7 @@ import { getDepartures, getRoute, getStop, getStops, setTransitlandApiKey } from
 let mockFetch: ReturnType<typeof vi.fn>;
 
 function mockOk(data: unknown) {
-  return { ok: true, json: async () => data } as Response;
+  return Response.json(data);
 }
 
 beforeEach(() => {

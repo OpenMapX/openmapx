@@ -25,7 +25,8 @@ describe("scaffold integration", () => {
 
     expect(existsSync(destDir)).toBe(true);
     expect(existsSync(join(destDir, "manifest.json"))).toBe(true);
-    expect(existsSync(join(destDir, "index.ts"))).toBe(true);
+    expect(existsSync(join(destDir, "map-layer.tsx"))).toBe(false);
+    expect(existsSync(join(destDir, "index.ts"))).toBe(false);
     expect(existsSync(join(destDir, "package.json"))).toBe(true);
     expect(existsSync(join(destDir, "package.json.template"))).toBe(false);
     expect(existsSync(join(destDir, "strings", "en.json"))).toBe(true);
@@ -41,11 +42,6 @@ describe("scaffold integration", () => {
       name: string;
     };
     expect(pkg.name).toBe("@openmapx/integration-demo");
-
-    const indexContent = readFileSync(join(destDir, "index.ts"), "utf-8");
-    expect(indexContent).toContain("demo");
-    expect(indexContent).not.toContain("__ID__");
-    expect(indexContent).not.toContain("__DOMAIN__");
   });
 
   it("rejects an invalid id", () => {
@@ -95,6 +91,19 @@ describe("validate", () => {
 });
 
 describe("CLI binary (integration + validate + package)", () => {
+  it("package help does not offer forbidden pre-built runtime bundles", () => {
+    execFileSync("pnpm", ["run", "build"], {
+      cwd: resolve(__dirname, "../.."),
+      encoding: "utf-8",
+    });
+    const output = execFileSync("node", [CLI, "package", "--help"], {
+      encoding: "utf-8",
+    });
+
+    expect(output).not.toContain("--no-build");
+    expect(output).not.toContain("dist/");
+  });
+
   it.skipIf(!existsSync(CLI))("scaffold integration via CLI", () => {
     const output = execFileSync(
       "node",
@@ -122,7 +131,7 @@ describe("CLI binary (integration + validate + package)", () => {
   });
 
   it.skipIf(!existsSync(CLI))(
-    "package produces a .tar.gz artifact with dist/backend/index.mjs",
+    "package produces a declarative .tar.gz artifact without runtime bundles",
     () => {
       execFileSync(
         "node",
@@ -139,7 +148,8 @@ describe("CLI binary (integration + validate + package)", () => {
       expect(existsSync(outFile)).toBe(true);
 
       const tarContents = execFileSync("tar", ["-tzf", outFile], { encoding: "utf-8" });
-      expect(tarContents).toContain("dist/backend/index.mjs");
+      expect(tarContents).not.toContain("dist/frontend/index.js");
+      expect(tarContents).not.toContain("dist/backend/index.mjs");
     },
   );
 });

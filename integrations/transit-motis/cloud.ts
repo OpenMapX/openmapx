@@ -19,7 +19,6 @@ function withPrefix(id: string, prefix: "mo:"): string {
 }
 
 export function setupCloud(ctx: IntegrationContext): void {
-  const providerPolicyEnabled = ctx.config.providerPolicy !== false;
   if (
     ctx.config.hostedRuntimeFallback === false ||
     process.env.MOTIS_OPERATIONS_PROFILE === "regional-sovereign"
@@ -41,7 +40,7 @@ export function setupCloud(ctx: IntegrationContext): void {
     prefix: "mo:",
     coverage: { all: true },
     priority: 7,
-    role: providerPolicyEnabled ? "fallback" : undefined,
+    role: "fallback",
     attribution: attributionTransitous(),
     capabilities: {
       stops: {

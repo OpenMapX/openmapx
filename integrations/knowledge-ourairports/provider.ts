@@ -1,6 +1,6 @@
 import type { AirportInfo, KnowledgeProvider, KnowledgeResult, LngLat } from "@openmapx/core";
 import type { Logger } from "@openmapx/integration-framework";
-import { lookupAirport, lookupNearestAerodrome } from "./data.js";
+import { lookupAirport, lookupNearestAerodrome } from "@openmapx/ourairports-data";
 
 /**
  * Aeroway values that represent the airport entity itself. These get matched

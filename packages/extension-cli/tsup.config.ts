@@ -17,8 +17,6 @@ export default defineConfig({
       "const require = __openmapxCreateRequire(import.meta.url);",
     ].join("\n"),
   },
-  // Bundle the Apache-2.0 engine; keep esbuild external (it ships its own
-  // platform binary and must be a real runtime dependency, not inlined).
+  // Bundle the Apache-2.0 engine and its workspace dependencies.
   noExternal: [/^@openmapx\//],
-  external: ["esbuild"],
 });

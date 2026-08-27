@@ -10,6 +10,9 @@ import type { SharedMobilityStation } from "./types.js";
 
 const NEXTBIKE_URL = "https://maps.nextbike.net/maps/nextbike-live.json";
 const FETCH_TIMEOUT_MS = 10_000;
+// The global feed was 28.6 MB in August 2026. Keep this bulk-only ceiling
+// separate from the ordinary 8 MiB API limit and leave bounded growth room.
+const MAX_RESPONSE_BYTES = 40 * 1024 * 1024;
 const CACHE_KEY = "shared-mobility:nextbike:all";
 
 interface NextbikeCountry {
@@ -56,6 +59,7 @@ export async function searchNextbike(bbox: BoundingBox): Promise<SharedMobilityS
     async () => {
       const json = await fetchJson<{ countries: NextbikeCountry[] }>(NEXTBIKE_URL, {
         timeoutMs: FETCH_TIMEOUT_MS,
+        maxBytes: MAX_RESPONSE_BYTES,
         errorMessage: ({ status }) => `Nextbike API error: ${status}`,
       });
       return json.countries;

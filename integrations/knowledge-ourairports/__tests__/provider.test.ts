@@ -2,12 +2,14 @@ import type { Logger } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createOurAirportsSource } from "../provider.js";
 
-vi.mock("../data.js", () => ({
+vi.mock("@openmapx/ourairports-data", () => ({
   lookupAirport: vi.fn(),
   lookupNearestAerodrome: vi.fn(),
 }));
 
-const { lookupAirport, lookupNearestAerodrome } = (await import("../data.js")) as unknown as {
+const { lookupAirport, lookupNearestAerodrome } = (await import(
+  "@openmapx/ourairports-data"
+)) as unknown as {
   lookupAirport: ReturnType<typeof vi.fn>;
   lookupNearestAerodrome: ReturnType<typeof vi.fn>;
 };

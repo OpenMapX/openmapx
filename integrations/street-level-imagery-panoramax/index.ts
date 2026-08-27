@@ -1,3 +1,8 @@
+import {
+  createBoundedBinaryProxyStream,
+  MAX_VECTOR_TILE_BYTES,
+  VECTOR_TILE_MEDIA_TYPES,
+} from "@openmapx/core/server";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { createPanoramaxProvider } from "./provider.js";
 
@@ -46,23 +51,34 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const url = `${instanceUrl.replace(/\/$/, "")}/map/${z}/${x}/${y}.mvt`;
-    // Raw fetch: forwards the upstream's binary tile body, content-type, and
-    // status verbatim — fetchJson always parses JSON, so it can't express this.
+    // Raw fetch is required because fetchJson cannot express a binary stream.
     // 10s proved too tight in production: a viewport change fans out
     // 30-60 tile requests and these tiles run to hundreds of KB, so the
     // public instances regularly overran it and coverage went missing.
-    const upstream = await fetch(url, { signal: AbortSignal.timeout(25_000) });
-    if (!upstream.ok) {
-      ctx.log.warn(`Panoramax tile request failed: ${upstream.status}`);
-      reply.status(upstream.status).send({ message: "Panoramax tile unavailable" });
-      return;
-    }
+    try {
+      const timeoutSignal = AbortSignal.timeout(25_000);
+      const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
+      const upstream = await fetch(url, { signal });
+      if (!upstream.ok) {
+        ctx.log.warn(`Panoramax tile request failed: ${upstream.status}`);
+        reply.status(upstream.status).send({ message: "Panoramax tile unavailable" });
+        return;
+      }
 
-    const bytes = await upstream.arrayBuffer();
-    reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
-    reply.header("Cross-Origin-Resource-Policy", "cross-origin");
-    reply.type(upstream.headers.get("content-type") ?? "application/vnd.mapbox-vector-tile");
-    reply.send(Buffer.from(bytes));
+      const proxy = createBoundedBinaryProxyStream(upstream, {
+        maxBytes: MAX_VECTOR_TILE_BYTES,
+        allowedContentTypes: VECTOR_TILE_MEDIA_TYPES,
+        fallbackContentType: "application/vnd.mapbox-vector-tile",
+        label: "Panoramax vector tile",
+      });
+      reply.header("Cache-Control", "public, max-age=86400, s-maxage=86400");
+      reply.header("Cross-Origin-Resource-Policy", "cross-origin");
+      reply.type(proxy.contentType);
+      reply.send(proxy.body);
+    } catch (error) {
+      ctx.log.warn("Panoramax tile request failed", error);
+      reply.status(502).send({ message: "Panoramax tile unavailable" });
+    }
   });
 
   ctx.registerRoute("GET", "/nearest", async (req, reply) => {

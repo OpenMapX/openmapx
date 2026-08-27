@@ -113,42 +113,6 @@ describe("valhallaLanes", () => {
     ).toBeUndefined();
   });
 
-  it("maps directions to indications and derives validity (boolean form)", () => {
-    const lanes = valhallaLanes({
-      type: 10,
-      instruction: "",
-      length: 0,
-      time: 0,
-      begin_shape_index: 0,
-      end_shape_index: 0,
-      lanes: [
-        { directions: ["left"], valid: false, active: false },
-        { directions: ["through", "right"], valid: true, active: false },
-      ],
-    });
-    expect(lanes).toEqual([
-      { indications: ["left"], valid: false },
-      { indications: ["through", "right"], valid: true },
-    ]);
-  });
-
-  it("captures the active indication from array-form active/valid lanes", () => {
-    const lanes = valhallaLanes({
-      type: 10,
-      instruction: "",
-      length: 0,
-      time: 0,
-      begin_shape_index: 0,
-      end_shape_index: 0,
-      lanes: [
-        { directions: ["through", "right"], valid: ["right"], active: ["right"] },
-        { directions: ["left"], valid: [], active: [] },
-      ],
-    });
-    expect(lanes?.[0]).toEqual({ indications: ["through", "right"], valid: true, active: "right" });
-    expect(lanes?.[1]).toEqual({ indications: ["left"], valid: false });
-  });
-
   it("decodes current Valhalla direction and active bitmasks", () => {
     const lanes = valhallaLanes({
       type: 24,
@@ -325,10 +289,7 @@ describe("valhallaService.getRoute exclusion body params", () => {
       "fetch",
       vi.fn(async (_url: string, init?: RequestInit) => {
         capturedBody = JSON.parse(init?.body as string) as Record<string, unknown>;
-        return {
-          ok: true,
-          json: async () => MINIMAL_VALHALLA_RESPONSE,
-        };
+        return Response.json(MINIMAL_VALHALLA_RESPONSE);
       }),
     );
   });

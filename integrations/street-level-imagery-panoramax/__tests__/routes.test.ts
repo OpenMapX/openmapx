@@ -110,16 +110,27 @@ describe("upstream failure handling", () => {
     expect(reply.status).toHaveBeenCalledWith(502);
   });
 
+  it("rejects a non-vector tile response with a normalized 502", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("not a tile", { headers: { "Content-Type": "text/html" } })),
+    );
+
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await routes
+      .find((r) => r.path === "/tiles/:z/:x/:y")
+      ?.handler({ params: { z: "12", x: "1", y: "2" }, query: {} } as never, reply as never);
+
+    expect(reply.status).toHaveBeenCalledWith(502);
+    expect(reply.send).toHaveBeenCalledWith({ message: "Panoramax tile unavailable" });
+  });
+
   it("still reports genuine absence as 404", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        headers: new Headers({ "content-type": "application/json" }),
-        json: async () => ({ type: "FeatureCollection", features: [] }),
-        text: async () => '{"type":"FeatureCollection","features":[]}',
-      })),
+      vi.fn(async () => Response.json({ type: "FeatureCollection", features: [] })),
     );
 
     const { ctx, routes } = buildCtx();
