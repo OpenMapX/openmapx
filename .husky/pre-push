@@ -3,4 +3,25 @@
 # local cache makes an unchanged re-run near-instant). Tests need Docker for
 # the testcontainers-based suites; skip those with SKIP_TESTCONTAINERS=1 if
 # the daemon isn't running.
+#
+# Git exports repository-local paths to hooks. Those paths point at the shared
+# metadata directory in a linked worktree and would leak into tests that create
+# temporary repositories, so clear the complete local-variable set first.
+unset \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES \
+  GIT_COMMON_DIR \
+  GIT_CONFIG \
+  GIT_CONFIG_COUNT \
+  GIT_CONFIG_PARAMETERS \
+  GIT_DIR \
+  GIT_GRAFT_FILE \
+  GIT_IMPLICIT_WORK_TREE \
+  GIT_INDEX_FILE \
+  GIT_NO_REPLACE_OBJECTS \
+  GIT_OBJECT_DIRECTORY \
+  GIT_PREFIX \
+  GIT_REPLACE_REF_BASE \
+  GIT_SHALLOW_FILE \
+  GIT_WORK_TREE
+
 pnpm check-types && pnpm test
