@@ -7,6 +7,9 @@ FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432
 WORKDIR /app
 RUN npm install -g pnpm@11.1.2
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+# The lockfile references patched dependencies by file hash, so `pnpm install`
+# cannot resolve without the patch itself.
+COPY patches/ patches/
 RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build

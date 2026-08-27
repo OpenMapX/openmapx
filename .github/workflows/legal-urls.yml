@@ -6,8 +6,8 @@ on:
     # independently of code changes, so this runs on a schedule rather than per
     # commit/PR — a network check is too flaky to gate the dev flow (a provider
     # being briefly down would otherwise block unrelated work). The offline
-    # check-legal-tables guard still runs in the regular CI to ensure the URL
-    # fields are present at PR time.
+    # check:policy still runs the offline legal-table guard in regular CI to
+    # ensure the URL fields are present at PR time.
     - cron: "23 5 * * 1"
   workflow_dispatch:
 

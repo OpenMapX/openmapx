@@ -9,6 +9,7 @@
   "container": {
     "image": "traefik",
     "tag": "v3.6",
+    "digest": "sha256:31267173a15b4944e797a76ffd9c419707c8d8b32fe5b610f80cd0cfa05f372d",
     "expose": [80, 443],
     "environment": {
       "TRAEFIK_CERTIFICATESRESOLVERS_LETSENCRYPT_ACME_EMAIL": "${ACME_EMAIL:-admin@example.com}"
@@ -26,7 +27,6 @@
     }
   ],
   "bindMounts": [
-    { "source": "@docker-socket", "target": "/var/run/docker.sock", "readOnly": true },
     { "source": "config/traefik.yml", "target": "/etc/traefik/traefik.yml", "readOnly": true },
     { "source": "config/dynamic", "target": "/etc/traefik/dynamic", "readOnly": true }
   ],

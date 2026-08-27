@@ -6,7 +6,7 @@
  * occurrence matches, so a bump in one place can't silently drift from the
  * others. Mirrors the other scripts/check-*.ts gates (run in pre-commit).
  */
-import { readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -20,12 +20,37 @@ const ROOT = join(HERE, "..");
 
 const read = (rel: string): string => readFileSync(join(ROOT, rel), "utf-8");
 const errors: string[] = [];
+const SHA256 = /^[a-f0-9]{64}$/;
+const OCI_DIGEST = /^sha256:[a-f0-9]{64}$/;
+
+// Third-party production services must retain a readable tag and an immutable
+// multi-architecture manifest digest. First-party OpenMapX images are released
+// by this repository and intentionally follow the separately gated digest
+// promotion workflow.
+for (const entry of readdirSync(join(ROOT, "services"), { withFileTypes: true })) {
+  if (!entry.isDirectory()) continue;
+  const rel = `services/${entry.name}/service.json`;
+  if (!existsSync(join(ROOT, rel))) continue;
+  const manifest = JSON.parse(read(rel)) as {
+    container?: { image?: string; digest?: string };
+  };
+  const container = manifest.container;
+  if (!container?.image || container.image.startsWith("ghcr.io/openmapx/")) continue;
+  if (!OCI_DIGEST.test(container.digest ?? "")) {
+    errors.push(`${rel}: third-party image is missing a valid immutable sha256 digest`);
+  }
+}
 
 // MOTIS version: service.json container.tag (motis + staging).
 for (const rel of ["services/motis/service.json", "services/motis-staging/service.json"]) {
-  const tag = (JSON.parse(read(rel)) as { container?: { tag?: string } }).container?.tag;
+  const container = (JSON.parse(read(rel)) as { container?: { tag?: string; digest?: string } })
+    .container;
+  const tag = container?.tag;
   if (tag !== MOTIS_VERSION) {
     errors.push(`${rel}: container.tag "${tag}" != MOTIS_VERSION "${MOTIS_VERSION}"`);
+  }
+  if (!OCI_DIGEST.test(container?.digest ?? "")) {
+    errors.push(`${rel}: MOTIS image is not pinned by digest`);
   }
 }
 
@@ -47,13 +72,75 @@ for (const rel of ["apps/api/package.json", "packages/mobility-core/package.json
   }
 }
 
-// gtfsclean commit: both images that build it.
+// gtfsclean commit: every image that builds it.
 for (const rel of [
   "services/motis/tools/transitous/Dockerfile",
   "services/data-manager/Dockerfile",
+  "apps/transitous-runner/Dockerfile",
 ]) {
   if (!read(rel).includes(`gtfsclean@${GTFSCLEAN_COMMIT}`)) {
     errors.push(`${rel}: gtfsclean commit != ${GTFSCLEAN_COMMIT}`);
+  }
+}
+
+const dataManagerDockerfile = read("services/data-manager/Dockerfile");
+for (const artifact of ["DOCKER_CLI", "DOCKER_COMPOSE", "DUCKDB"] as const) {
+  for (const arch of ["AMD64", "ARM64"] as const) {
+    const value = dataManagerDockerfile.match(
+      new RegExp(`ARG ${artifact}_SHA256_${arch}=([a-f0-9]{64})`),
+    )?.[1];
+    if (!value || !SHA256.test(value)) {
+      errors.push(`services/data-manager/Dockerfile: ${artifact}_SHA256_${arch} is not pinned`);
+    }
+  }
+}
+if ((dataManagerDockerfile.match(/sha256sum -c -/g) ?? []).length < 3) {
+  errors.push("services/data-manager/Dockerfile: every downloaded executable must be checksummed");
+}
+
+const transitousDockerfile = read("services/motis/tools/transitous/Dockerfile");
+for (const arch of ["AMD64", "ARM64"] as const) {
+  const value = transitousDockerfile.match(
+    new RegExp(`ARG MOTIS_SHA256_${arch}=([a-f0-9]{64})`),
+  )?.[1];
+  if (!value || !SHA256.test(value)) {
+    errors.push(`services/motis/tools/transitous/Dockerfile: MOTIS_SHA256_${arch} is not pinned`);
+  }
+}
+if (!transitousDockerfile.includes("sha256sum -c -")) {
+  errors.push("services/motis/tools/transitous/Dockerfile: MOTIS download is not checksummed");
+}
+
+const requirementsInput = read("services/motis/tools/transitous/requirements.in");
+const requirementsLock = read("services/motis/tools/transitous/requirements.txt");
+for (const requirement of requirementsInput
+  .split("\n")
+  .filter((line) => line && !line.startsWith("#"))) {
+  const packageName = requirement.split("==", 1)[0]?.toLowerCase().replaceAll(/[._]/g, "-");
+  if (packageName && !requirementsLock.toLowerCase().includes(`${packageName}==`)) {
+    errors.push(
+      `services/motis/tools/transitous/requirements.txt: missing direct pin ${requirement}`,
+    );
+  }
+}
+const lockedRequirementBlocks = requirementsLock
+  .split(/\n(?=[a-z0-9][a-z0-9._-]*==)/i)
+  .filter((block) => /^[a-z0-9][a-z0-9._-]*==/i.test(block));
+if (
+  lockedRequirementBlocks.length === 0 ||
+  lockedRequirementBlocks.some((block) => !block.includes("--hash=sha256:"))
+) {
+  errors.push(
+    "services/motis/tools/transitous/requirements.txt: every locked package needs a hash",
+  );
+}
+for (const [rel, dockerfile] of [
+  ["services/data-manager/Dockerfile", dataManagerDockerfile],
+  ["services/motis/tools/transitous/Dockerfile", transitousDockerfile],
+  ["apps/transitous-runner/Dockerfile", read("apps/transitous-runner/Dockerfile")],
+] as const) {
+  if (!dockerfile.includes("pip3 install --no-cache-dir --require-hashes")) {
+    errors.push(`${rel}: Python lock installation must use --require-hashes`);
   }
 }
 
@@ -116,11 +203,11 @@ if (!registryCommit) {
 
 if (errors.length > 0) {
   console.error(
-    `✗ Toolchain pins out of sync with @openmapx/transitous-core:\n${errors.map((e) => `  - ${e}`).join("\n")}\n` +
-      "Update the literals to match, or bump MOTIS_VERSION / GTFSCLEAN_COMMIT in packages/transitous-core/src/constants.ts.",
+    `✗ Production supply-chain pins are incomplete or out of sync:\n${errors.map((e) => `  - ${e}`).join("\n")}\n` +
+      "Update the reviewed image/artifact/Python pins together with their source versions.",
   );
   process.exit(1);
 }
 console.log(
-  `✓ Toolchain pins consistent — MOTIS ${MOTIS_VERSION}, gtfsclean ${GTFSCLEAN_COMMIT.slice(0, 10)}, transport-apis ${registryCommit?.slice(0, 10)}.`,
+  `✓ Supply-chain pins consistent — immutable third-party images, checked release artifacts, hash-locked Python, MOTIS ${MOTIS_VERSION}, gtfsclean ${GTFSCLEAN_COMMIT.slice(0, 10)}, transport-apis ${registryCommit?.slice(0, 10)}.`,
 );

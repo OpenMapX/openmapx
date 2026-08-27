@@ -15,7 +15,8 @@ permissions:
 env:
   TURBO_TELEMETRY_DISABLED: 1
 
-# The gate jobs (lint, types, test-node, test-web) run in parallel; the final
+# The gate jobs (lint, types, tests, mobile, database, app/package build, and
+# pull-request Docker build) run in parallel; the final
 # `ci` job aggregates them under the job name `lint / types / test`, which is
 # the required status check in the "main protection" ruleset. Renaming that
 # job (or letting it skip) breaks branch protection — see
@@ -43,6 +44,10 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # The root workspace intentionally excludes docs, while the image-parser
+      # policy probe verifies both independently locked copies.
+      - run: pnpm -C docs install --frozen-lockfile
+
       - name: Lint commit messages (PR only)
         if: github.event_name == 'pull_request'
         run: pnpm exec commitlint --from "${BASE_SHA}" --to "${HEAD_SHA}" --verbose
@@ -51,6 +56,24 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
 
       - run: pnpm lint
+
+      - name: Check repository policy invariants
+        # Deterministic/offline checks also used by the local pre-commit hook.
+        # Live legal-URL and routing probes remain in scheduled workflows.
+        run: pnpm check:policy
+
+      - name: Probe patched image parsers
+        # Keep the child-process timeout visible as a dedicated security gate.
+        run: pnpm check-image-size-dos
+
+      - name: Check Docker build contexts for secrets
+        # Enumerates ignored path names only; candidate contents are never opened.
+        run: pnpm check-docker-context-secrets
+
+      - name: Check host authority confinement
+        # Fails if a Docker socket mount, a Docker provider, or a direct Docker
+        # invocation reappears outside the private operations agent.
+        run: pnpm check-ops-authority
 
       - name: Check the committed OpenAPI document matches the API surface
         # Mounts the route table in-process — no database, cache or network.
@@ -142,6 +165,328 @@ jobs:
 
       - run: pnpm test --project web
 
+  mobile:
+    name: test (mobile)
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # React Native components, the bridge, coordinator, storage, permissions,
+      # and background runtime use jest-expo and are intentionally outside both
+      # root Vitest projects. Keep this portable suite in the required gate.
+      - name: Test the mobile runtime
+        run: pnpm --filter @openmapx/mobile test
+
+      - name: Type-check the mobile runtime
+        run: pnpm --filter @openmapx/mobile check-types
+
+      - name: Verify the signed runtime boundary
+        run: pnpm --filter @openmapx/mobile assert-boundary
+
+      - name: Verify generated native configuration
+        run: pnpm --filter @openmapx/mobile assert-generated
+
+      - name: Verify generated permission surface
+        run: pnpm --filter @openmapx/mobile assert-permissions
+
+      - name: Verify mobile dependency inventory
+        run: pnpm --filter @openmapx/mobile inventory
+
+      # Metro bundles the real headless entry. This catches resolution and
+      # accidental React/UI imports that Jest and TypeScript cannot detect.
+      - name: Smoke-test the release background bundle
+        run: pnpm mobile:bundle:check
+
+  database:
+    name: test (database)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    services:
+      postgis:
+        # Match the production PostGIS line and pin the reviewed multi-arch
+        # manifest rather than trusting a mutable registry tag.
+        image: ghcr.io/baosystems/postgis:18-3.6@sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: openmapx_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d openmapx_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/openmapx_test
+      # This is a positive assertion that database infrastructure is required.
+      # Once set, every selected suite fails instead of skipping if PostGIS or
+      # the Docker daemon is unavailable.
+      OPENMAPX_RUN_DATABASE_TESTS: "1"
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Apply the production database migrations
+        run: pnpm --filter @openmapx/api exec drizzle-kit migrate
+
+      - name: Run the required database integration suites
+        run: pnpm test:database
+
+  build:
+    name: build (production)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      NEXT_TELEMETRY_DISABLED: 1
+      NODE_OPTIONS: --max-old-space-size=6144
+      # Turborepo declares this as a build input and the service-worker build
+      # embeds it, matching the Docker workflow's deploy identity.
+      SW_BUILD_ID: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Restore Turbo build cache
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .turbo/cache
+          key: turbo-build-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            turbo-build-${{ runner.os }}-
+            turbo-${{ runner.os }}-
+
+      - name: Build production applications, services, and packages
+        run: pnpm build
+
+      - name: Install and exercise the packed public extension packages
+        run: pnpm check-packed-packages
+
+  docker-changes:
+    name: select Docker targets
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      apps: ${{ steps.filter.outputs.changes }}
+    steps:
+      - name: Select deployable targets affected by this pull request
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          filters: |
+            api:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docker.yml'
+              - '.dockerignore'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig.base.json'
+              - 'turbo.json'
+              - 'apps/api/**'
+              - 'packages/brands/**'
+              - 'packages/cli/**'
+              - 'packages/core/**'
+              - 'packages/db-schema/**'
+              - 'packages/ev-charge-planner/**'
+              - 'packages/hardlinks/**'
+              - 'packages/hey-api-client-fetch/**'
+              - 'packages/i18n/**'
+              - 'packages/integration-framework/**'
+              - 'packages/mangrove-client/**'
+              - 'packages/mobility-core/**'
+              - 'packages/mobility-formats/**'
+              - 'packages/motis-feed-proxy-config/**'
+              - 'packages/noaa-coops-data/**'
+              - 'packages/openconditions-contrib-client/**'
+              - 'packages/ourairports-data/**'
+              - 'packages/place-ids/**'
+              - 'packages/poi-source-registry/**'
+              - 'packages/presets/**'
+              - 'packages/transitous-core/**'
+              - 'integrations/**'
+              - 'services/**'
+            web:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docker.yml'
+              - '.dockerignore'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig.base.json'
+              - 'turbo.json'
+              - 'apps/web/**'
+              - 'apps/api/openapi.json'
+              - 'packages/brands/**'
+              - 'packages/command-palette/**'
+              - 'packages/core/**'
+              - 'packages/ev-charge-planner/**'
+              - 'packages/hey-api-client-fetch/**'
+              - 'packages/i18n/**'
+              - 'packages/integration-framework/**'
+              - 'packages/mangrove-client/**'
+              - 'packages/mangrove-react/**'
+              - 'packages/mobility-core/**'
+              - 'packages/mobility-formats/**'
+              - 'packages/noaa-coops-data/**'
+              - 'packages/openconditions-contrib-client/**'
+              - 'packages/ourairports-data/**'
+              - 'packages/place-ids/**'
+              - 'packages/poi-source-registry/**'
+              - 'packages/presets/**'
+              - 'packages/transitous-core/**'
+              - 'integrations/**'
+            data-manager:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docker.yml'
+              - '.dockerignore'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig.base.json'
+              - 'services/data-manager/**'
+              - 'services/motis/tools/transitous/requirements.txt'
+              - 'packages/brands/**'
+              - 'packages/cli/**'
+              - 'packages/core/**'
+              - 'packages/db-schema/**'
+              - 'packages/ev-charge-planner/**'
+              - 'packages/hardlinks/**'
+              - 'packages/hey-api-client-fetch/**'
+              - 'packages/i18n/**'
+              - 'packages/integration-framework/**'
+              - 'packages/mangrove-client/**'
+              - 'packages/mobility-core/**'
+              - 'packages/mobility-formats/**'
+              - 'packages/motis-feed-proxy-config/**'
+              - 'packages/noaa-coops-data/**'
+              - 'packages/openconditions-contrib-client/**'
+              - 'packages/ourairports-data/**'
+              - 'packages/place-ids/**'
+              - 'packages/poi-source-registry/**'
+              - 'packages/presets/**'
+              - 'packages/transitous-core/**'
+              - 'integrations/**'
+            ops-agent:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docker.yml'
+              - '.dockerignore'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig.base.json'
+              - 'apps/ops-agent/**'
+              - 'packages/**'
+              - 'services/**/service.json'
+            transitous-runner:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docker.yml'
+              - '.dockerignore'
+              - 'package.json'
+              - 'pnpm-lock.yaml'
+              - 'pnpm-workspace.yaml'
+              - 'tsconfig.base.json'
+              - 'apps/transitous-runner/**'
+              - 'packages/core/**'
+              - 'services/motis/tools/transitous/requirements.txt'
+            transitous-tools:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docker.yml'
+              - 'services/motis/tools/transitous/**'
+            docs:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docker.yml'
+              - 'docs/**'
+
+  docker-build:
+    name: build Docker (${{ matrix.app }})
+    needs: docker-changes
+    if: github.event_name == 'pull_request' && needs.docker-changes.outputs.apps != '[]' && needs.docker-changes.outputs.apps != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJSON(needs.docker-changes.outputs.apps) }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Resolve build context
+        id: context
+        env:
+          APP: ${{ matrix.app }}
+        run: |
+          case "$APP" in
+            api) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/api/Dockerfile" >> "$GITHUB_OUTPUT" ;;
+            web) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/web/Dockerfile" >> "$GITHUB_OUTPUT" ;;
+            data-manager) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/data-manager/Dockerfile" >> "$GITHUB_OUTPUT" ;;
+            ops-agent) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/ops-agent/Dockerfile" >> "$GITHUB_OUTPUT" ;;
+            transitous-runner) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/transitous-runner/Dockerfile" >> "$GITHUB_OUTPUT" ;;
+            transitous-tools) echo "context=services/motis/tools/transitous" >> "$GITHUB_OUTPUT"; echo "dockerfile=services/motis/tools/transitous/Dockerfile" >> "$GITHUB_OUTPUT" ;;
+            docs) echo "context=docs" >> "$GITHUB_OUTPUT"; echo "dockerfile=docs/Dockerfile" >> "$GITHUB_OUTPUT" ;;
+            *) echo "Unknown Docker target: $APP" >&2; exit 1 ;;
+          esac
+
+      - name: Set up Docker Buildx
+        id: buildx
+        continue-on-error: true
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Retry Docker Buildx setup
+        if: steps.buildx.outcome == 'failure'
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Build deployable target without publishing
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: ${{ steps.context.outputs.context }}
+          file: ${{ steps.context.outputs.dockerfile }}
+          platforms: linux/amd64
+          build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', github.sha) || '' }}
+          push: false
+          cache-from: type=gha,scope=${{ matrix.app }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.app }}
+
   # Aggregate gate. Keeps the required-status-check context stable at
   # `lint / types / test` while the real work runs in parallel above.
   # `if: always()` so it reports (red) even when a dependency fails instead of
@@ -150,15 +495,30 @@ jobs:
     name: lint / types / test
     runs-on: ubuntu-latest
     timeout-minutes: 5
-    needs: [lint, types, test-node, test-web]
+    needs: [lint, types, test-node, test-web, mobile, database, build, docker-changes, docker-build]
     if: always()
     steps:
       - name: Fail if any gate job did not succeed
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        # Pull requests build only affected deployable targets. A no-target PR
+        # legitimately skips docker-build; main skips both selection and build
+        # because the downstream release workflow rebuilds and scans all images.
+        if: >-
+          needs.lint.result != 'success' ||
+          needs.types.result != 'success' ||
+          needs.test-node.result != 'success' ||
+          needs.test-web.result != 'success' ||
+          needs.mobile.result != 'success' ||
+          needs.database.result != 'success' ||
+          needs.build.result != 'success' ||
+          (github.event_name == 'pull_request' && needs.docker-changes.result != 'success') ||
+          (github.event_name == 'pull_request' && needs.docker-changes.outputs.apps != '[]' && needs.docker-build.result != 'success') ||
+          (github.event_name == 'pull_request' && needs.docker-changes.outputs.apps == '[]' && needs.docker-build.result != 'skipped') ||
+          (github.event_name != 'pull_request' && needs.docker-changes.result != 'skipped') ||
+          (github.event_name != 'pull_request' && needs.docker-build.result != 'skipped')
         run: |
           echo "One or more gate jobs failed:"
           echo '${{ toJSON(needs.*.result) }}'
           exit 1
 
       - name: All gate jobs succeeded
-        run: echo "lint, types, test-node, test-web all green"
+        run: echo "lint, types, tests, mobile, database, production build, and applicable Docker build all green"

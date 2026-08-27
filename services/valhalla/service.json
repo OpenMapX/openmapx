@@ -10,6 +10,7 @@
   "container": {
     "image": "ghcr.io/valhalla/valhalla-scripted",
     "tag": "latest",
+    "digest": "sha256:84a16139deb6c94db9bf9cc66b8a79d4ced6fd31417f54c0c3ed2fdb6a699e2a",
     "expose": [8002],
     "environment": {
       "serve_tiles": "True",

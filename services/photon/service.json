@@ -9,6 +9,7 @@
   "container": {
     "image": "rtuszik/photon-docker",
     "tag": "latest",
+    "digest": "sha256:21549c60f9e6488fff3217e40429a652c4b445f374800333fe32859e47cec293",
     "expose": [2322],
     "environment": {
       "REGION": "${PHOTON_REGION:-planet}",

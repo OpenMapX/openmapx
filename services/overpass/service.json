@@ -9,6 +9,7 @@
   "container": {
     "image": "wiktorn/overpass-api",
     "tag": "latest",
+    "digest": "sha256:9bb5f4a9b54cd225bf828c04c67e7f4010650ff4d70b72157a9473a9ba02d93c",
     "expose": [80],
     "environment": {
       "OVERPASS_META": "yes",

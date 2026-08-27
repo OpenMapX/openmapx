@@ -10,6 +10,7 @@
   "container": {
     "image": "freikin/dawarich",
     "tag": "1.10.3",
+    "digest": "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b",
     "expose": [3000],
     "entrypoint": ["/usr/local/bin/openmapx-entrypoint.sh"],
     "command": ["bin/rails", "server", "-p", "3000", "-b", "::"],

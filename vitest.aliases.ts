@@ -31,6 +31,14 @@ export function createRepoVitestAliases(repoRoot: string) {
       replacement: resolve(repoRoot, "packages/core/src/server.ts"),
     },
     {
+      find: /^@openmapx\/core\/ops$/,
+      replacement: resolve(repoRoot, "packages/core/src/ops/index.ts"),
+    },
+    {
+      find: /^@openmapx\/core\/transitous-runner$/,
+      replacement: resolve(repoRoot, "packages/core/src/transitous-runner/index.ts"),
+    },
+    {
       find: /^@openmapx\/core\/feed-id$/,
       replacement: resolve(repoRoot, "packages/core/src/feed-id.ts"),
     },
@@ -83,14 +91,6 @@ export function createRepoVitestAliases(repoRoot: string) {
     {
       find: /^@openmapx\/integration-framework$/,
       replacement: resolve(repoRoot, "packages/integration-framework/src/index.ts"),
-    },
-    {
-      find: /^@openmapx\/extension-sdk\/testing$/,
-      replacement: resolve(repoRoot, "packages/extension-sdk/src/testing.ts"),
-    },
-    {
-      find: /^@openmapx\/extension-sdk$/,
-      replacement: resolve(repoRoot, "packages/extension-sdk/src/index.ts"),
     },
     {
       find: /^@integrations\/(.+)$/,

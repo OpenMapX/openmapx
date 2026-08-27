@@ -9,6 +9,7 @@
   "container": {
     "image": "ollama/ollama",
     "tag": "latest",
+    "digest": "sha256:9d30908e41144b1f1da89b9d8e33c07e4aeb43ff41a8660241b1686e2cc330ad",
     "expose": [11434],
     "environment": {
       "OLLAMA_KEEP_ALIVE": "${OLLAMA_KEEP_ALIVE:-30m}",

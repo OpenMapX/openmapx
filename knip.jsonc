@@ -88,15 +88,6 @@
     "packages/extension-cli": {
       "ignoreFiles": ["templates/**"]
     },
-    "packages/extension-sdk": {
-      // These packages are part of the public declaration/API Extractor surface
-      // even when their imports are erased from emitted JavaScript.
-      "ignoreDependencies": [
-        "@openmapx/core",
-        "@openmapx/place-ids",
-        "@openmapx/poi-source-registry"
-      ]
-    },
     "packages/i18n": {
       // Root locale scripts invoke this workspace through `pnpm exec tsx`.
       "ignoreDependencies": ["tsx"]

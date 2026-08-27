@@ -44,6 +44,32 @@ brief follow-up in case the original report was missed.
 OpenMapX is pre-1.0. Only the latest commit on `main` and the most recent
 tagged release receive security fixes. Older releases are not patched.
 
+## Temporary dependency exceptions
+
+### `image-size` malformed-image denial of service
+
+- **Advisories:** GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq.
+- **Exact versions:** `image-size@1.2.1` in the root lockfile and
+  `image-size@2.0.2` in the standalone docs lockfile.
+- **Reachability:** build/development tooling only. Metro reaches 1.2.1 during
+  mobile work, and Docusaurus reaches 2.0.2 during docs work; neither package is
+  part of the API runtime.
+- **Mitigation:** pnpm applies
+  `patches/image-size@1.2.1.patch` and
+  `docs/patches/image-size@2.0.2.patch`. The patches reject malformed ICNS and
+  ISO-BMFF/JXL/HEIF box traversal, and
+  `scripts/check-image-size-dos.mjs` probes every installed vulnerable public
+  entry under isolated child-process deadlines.
+- **Audit handling:** scanners may continue to report the vulnerable version
+  ranges. The findings remain visible and are not suppressed; the checked-in
+  patches and passing regression probe are required while this exception is
+  active.
+- **Owner:** Security maintainers.
+- **Review cadence:** monthly. Prefer a maintained replacement or upstream/fork
+  release that fixes both advisories over renewing local patches.
+- **Expires:** 2026-11-23. A fresh security review is required before changing
+  this date or carrying the exception beyond it.
+
 ## Scope
 
 In scope:
@@ -85,13 +111,25 @@ above.
 
 If you self-host OpenMapX, a few recommendations:
 
-- Rotate the secrets in `.env` / `infra/docker/.env` away from the example
-  values (`BETTER_AUTH_SECRET`, database passwords, `LOCAL_ADMIN_TOKEN`).
+- Generate unique secrets in `infra/docker/.env` before the first render.
+  `POSTGRES_PASSWORD` must be at least 24 characters, must not be a known
+  placeholder, and must not match the database username. The CLI and both
+  production database clients enforce this without echoing rejected values.
 - Terminate TLS at Traefik (the default config provisions Let's Encrypt
   certificates).
 - Restrict admin routes to a trusted network or VPN where possible.
 - Treat community integrations as untrusted code — review the manifest and
   source before installing.
+- Keep generated credentials and mobile signing output out of the repository's
+  root Docker build context. Run `pnpm check-docker-context-secrets` after
+  changing `.dockerignore`, Dockerfiles, or build contexts; the check enumerates
+  ignored path names but never opens candidate secret files.
+- Treat persisted application logs as sensitive operational data. Current API
+  logs are bounded and redact request data, credentials, and raw external URLs,
+  but historical `app_logs` rows from an older release may not be. Back up the
+  database and follow the operator-controlled cutoff procedure in
+  [Monitoring & logs](docs/docs/administration/monitoring.md#purging-historical-application-logs);
+  upgrades never delete these records automatically.
 - Subscribe to the repository's "Releases only" notifications so security
   releases reach you.
 

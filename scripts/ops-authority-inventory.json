@@ -1,0 +1,282 @@
+{
+  "schemaVersion": 2,
+  "callSites": [
+    "services/data-manager/src/jobs/atomic-download.ts|execa|1|curl|data-manager-worker|data-manager.download-inspect",
+    "services/data-manager/src/jobs/atomic-download.ts|execa|2|curl|data-manager-worker|data-manager.download",
+    "services/data-manager/src/jobs/convert-overpass.ts|execa|1|osmium|data-manager-worker|data-manager.convert-overpass",
+    "services/data-manager/src/jobs/download-fonts.ts|execa|1|unzip|data-manager-worker|data-manager.fonts-inspect",
+    "services/data-manager/src/jobs/download-fonts.ts|execa|2|unzip|data-manager-worker|data-manager.fonts-extract",
+    "services/data-manager/src/jobs/download-osm.ts|execa|1|curl|data-manager-worker|data-manager.osm-download",
+    "services/data-manager/src/jobs/overture/duckdb.ts|execa|1|duckdb|data-manager-worker|data-manager.duckdb",
+    "services/data-manager/src/jobs/overture/extract-osm-pois.ts|execa|1|osmium|data-manager-worker|data-manager.overture-extract",
+    "services/data-manager/src/jobs/overture/extract-osm-pois.ts|execa|2|osmium|data-manager-worker|data-manager.overture-export",
+    "services/data-manager/src/jobs/overture/pull.ts|execa|1|curl|data-manager-worker|data-manager.overture-download",
+    "services/data-manager/src/jobs/search-index/extract.ts|execa|1|osmium|data-manager-worker|data-manager.search-filter",
+    "services/data-manager/src/jobs/search-index/extract.ts|execa|2|osmium|data-manager-worker|data-manager.search-export",
+    "services/data-manager/src/jobs/transitous/catalog-bump.ts|execa|1|file|transitous-runner|transitous.fixed-runner",
+    "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|1|git|transitous-runner|transitous.catalog-status",
+    "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|2|git|transitous-runner|transitous.catalog-diff",
+    "services/data-manager/src/jobs/transitous/catalog-bump.ts|runner|3|git|transitous-runner|transitous.catalog-proposal",
+    "services/data-manager/src/jobs/transitous/internal.ts|execa|1|command|transitous-runner|transitous.fixed-runner",
+    "services/data-manager/src/jobs/transitous/internal.ts|execa|2|git|transitous-runner|transitous.git-read",
+    "services/data-manager/src/jobs/transitous/prepare.ts|runner|1|git|transitous-runner|transitous.checkout-fetch",
+    "services/data-manager/src/jobs/transitous/prepare.ts|runner|2|git|transitous-runner|transitous.checkout-resolve",
+    "services/data-manager/src/jobs/transitous/prepare.ts|runner|3|git|transitous-runner|transitous.checkout-materialize",
+    "services/data-manager/src/jobs/transitous/validate.ts|execa|1|unzip|transitous-runner|transitous.archive-validate"
+  ],
+  "typedEffectRoles": {
+    "api": [
+      "appApi.replace",
+      "appApi.runtime.inspect",
+      "backup.create",
+      "backup.delete",
+      "backup.list",
+      "backup.restore",
+      "data.clean",
+      "data.convertOverpass",
+      "data.downloadFonts",
+      "data.downloadOsm",
+      "data.generateApiKeys",
+      "data.inspect",
+      "data.link",
+      "data.overtureConflate",
+      "data.overtureSync",
+      "data.searchIndexBuild",
+      "data.update",
+      "dawarich.provisioning.inspect",
+      "docker.status",
+      "extension.install",
+      "extension.remove",
+      "extension.repository.inspect",
+      "extension.update",
+      "integrationConfig.apply",
+      "release.apply",
+      "release.inspect",
+      "release.pull",
+      "release.resolve",
+      "service.build",
+      "service.logs",
+      "service.logs.follow",
+      "service.pull",
+      "service.recreate",
+      "service.recreateIsolated",
+      "service.remove",
+      "service.restart",
+      "service.start",
+      "service.stop",
+      "service.update",
+      "serviceConfig.apply",
+      "serviceSelection.apply",
+      "services.buildAll",
+      "stack.render",
+      "stack.start",
+      "stack.status",
+      "stack.stop",
+      "system.diagnostics",
+      "system.inspect",
+      "system.update",
+      "vault.apply"
+    ],
+    "data-manager": [
+      "feedProxy.validateAndReload",
+      "gbfsCatalogLock.inspect",
+      "motis.primary.promote",
+      "motis.primary.restart",
+      "motis.primary.stop",
+      "motis.staging.restart",
+      "motis.staging.stop",
+      "postgis.capacity.inspect",
+      "transitousLock.approve",
+      "transitousLock.inspect",
+      "transitousLock.propose",
+      "valhalla.traffic.applyPredicted",
+      "valhalla.traffic.inspect",
+      "valhalla.traffic.rebuild",
+      "valhalla.traffic.refreshWaysToEdges"
+    ]
+  },
+  "trustedDataSourceKinds": [
+    "extension.repository.inspect",
+    "extension.install",
+    "extension.update",
+    "extension.remove",
+    "serviceSelection.apply",
+    "serviceConfig.apply",
+    "integrationConfig.apply",
+    "vault.apply",
+    "release.pull",
+    "release.apply",
+    "appApi.replace",
+    "system.update",
+    "backup.create",
+    "backup.restore",
+    "backup.delete",
+    "motis.primary.promote",
+    "feedProxy.validateAndReload",
+    "data.generateApiKeys"
+  ],
+  "sourceUnions": {
+    "apps/api/src/services/admin-job-handlers.ts#DataOperation": [
+      "download-osm",
+      "download-fonts",
+      "update",
+      "convert-overpass",
+      "link",
+      "clean",
+      "generate-api-keys",
+      "overture-sync",
+      "overture-conflate",
+      "search-index-build"
+    ],
+    "apps/api/src/services/admin-job-handlers.ts#BackupOperation": ["create", "restore", "delete"],
+    "apps/api/src/services/admin-job-handlers.ts#BulkServiceAction": [
+      "start",
+      "stop",
+      "restart",
+      "update",
+      "build"
+    ]
+  },
+  "businessEffects": [
+    {
+      "id": "api.admin-cli.data",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/admin-job-handlers.ts#DataOperation"],
+      "typedKinds": [
+        "data.downloadOsm",
+        "data.downloadFonts",
+        "data.update",
+        "data.convertOverpass",
+        "data.link",
+        "data.clean",
+        "data.generateApiKeys",
+        "data.overtureSync",
+        "data.overtureConflate",
+        "data.searchIndexBuild",
+        "data.inspect"
+      ]
+    },
+    {
+      "id": "api.admin-cli.backup",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/admin-job-handlers.ts#BackupOperation"],
+      "typedKinds": ["backup.create", "backup.restore", "backup.delete", "backup.list"]
+    },
+    {
+      "id": "api.admin-cli.bulk-service",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/admin-job-handlers.ts#BulkServiceAction"],
+      "typedKinds": [
+        "service.start",
+        "service.stop",
+        "service.restart",
+        "service.update",
+        "service.build",
+        "services.buildAll"
+      ]
+    },
+    {
+      "id": "api.compose-runtime",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/utils/docker-compose.ts#dockerComposeAction"],
+      "typedKinds": [
+        "docker.status",
+        "stack.status",
+        "stack.start",
+        "stack.stop",
+        "service.recreate",
+        "service.recreateIsolated",
+        "service.pull",
+        "service.remove",
+        "service.logs",
+        "service.logs.follow",
+        "dawarich.provisioning.inspect"
+      ]
+    },
+    {
+      "id": "api.release-system-self-replacement",
+      "callSiteIds": [],
+      "semanticSources": ["apps/api/src/services/system-maintenance.ts"],
+      "typedKinds": [
+        "stack.render",
+        "release.resolve",
+        "release.pull",
+        "release.inspect",
+        "release.apply",
+        "appApi.replace",
+        "appApi.runtime.inspect",
+        "system.diagnostics",
+        "system.update",
+        "system.inspect"
+      ]
+    },
+    {
+      "id": "api.extension-repository",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/service-repositories.ts#prepareRepo",
+        "apps/api/src/services/service-repositories.ts#removeRepo",
+        "apps/api/src/services/extension-installer.ts#installExtension",
+        "apps/api/src/services/extension-installer.ts#removeExtension"
+      ],
+      "typedKinds": [
+        "extension.repository.inspect",
+        "extension.install",
+        "extension.update",
+        "extension.remove"
+      ]
+    },
+    {
+      "id": "api.trusted-config-writes",
+      "callSiteIds": [],
+      "semanticSources": [
+        "apps/api/src/services/trusted-config-operations.ts#applyTrustedConfiguration",
+        "apps/api/src/services/admin-cli.ts#validateServiceSelectionForWrite",
+        "apps/api/src/routes/admin.ts#adminRoute",
+        "apps/api/src/services/service-secrets.ts#setServiceSecret"
+      ],
+      "typedKinds": [
+        "serviceSelection.apply",
+        "serviceConfig.apply",
+        "integrationConfig.apply",
+        "vault.apply"
+      ]
+    },
+    {
+      "id": "data-manager.fixed-docker-effects",
+      "callSiteIds": [],
+      "semanticSources": [],
+      "typedKinds": [
+        "motis.staging.restart",
+        "motis.staging.stop",
+        "motis.primary.restart",
+        "motis.primary.stop",
+        "motis.primary.promote",
+        "feedProxy.validateAndReload",
+        "valhalla.traffic.inspect",
+        "valhalla.traffic.rebuild",
+        "valhalla.traffic.refreshWaysToEdges",
+        "valhalla.traffic.applyPredicted",
+        "postgis.capacity.inspect"
+      ]
+    },
+    {
+      "id": "data-manager.catalog-locks",
+      "callSiteIds": [],
+      "semanticSources": ["services/data-manager/src/transitous-lock.ts#parseRefShaPair"],
+      "typedKinds": [
+        "transitousLock.inspect",
+        "transitousLock.propose",
+        "transitousLock.approve",
+        "gbfsCatalogLock.inspect"
+      ]
+    }
+  ],
+  "mounts": [
+    "app-api|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 community integrations are stored under the host checkout}/custom_integrations|${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}|false",
+    "ops-agent|@docker-socket|/var/run/docker.sock|false",
+    "ops-agent|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set \u2014 ops-agent renders and applies trusted local stack configuration}|${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set}|false",
+    "ops-agent|${OPENMAPX_DOCKER_CONFIG_DIR:-/root/.docker}|/home/node/.docker|true"
+  ],
+  "providers": []
+}

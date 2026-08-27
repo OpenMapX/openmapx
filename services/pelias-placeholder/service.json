@@ -8,6 +8,7 @@
   "container": {
     "image": "pelias/placeholder",
     "tag": "latest",
+    "digest": "sha256:42546b12463df3c7460923aef08eb507fd383e8700a9fda152b1f4c59671fd6e",
     "expose": [4100],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped"

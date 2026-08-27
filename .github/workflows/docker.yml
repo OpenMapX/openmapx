@@ -1,135 +1,139 @@
-name: Build & Push Docker Images
+name: Build, Scan & Publish Docker Images
 
 on:
-  push:
+  # Publication is downstream of the complete required CI workflow. A direct
+  # push trigger would race CI and could publish a commit whose tests fail.
+  workflow_run:
+    workflows: ["CI"]
+    types: [completed]
     branches: [main]
+  # Manual reruns are allowed only for the current main commit and only when
+  # that exact commit already has a successful trusted CI push run (gate job).
   workflow_dispatch:
+
+concurrency:
+  group: docker-release
+  # Let a release finish coherently. Cancelling during publication must never
+  # interrupt the final complete-release pointer update.
+  cancel-in-progress: false
 
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/openmapx
 
-# Least-privilege default; each job opts into the extra scopes it needs
-# (the build job adds packages: write + security-events: write).
 permissions:
   contents: read
 
 jobs:
-  changes:
-    name: Detect changed apps
+  gate:
+    name: Verify trusted CI result
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     permissions:
+      actions: read
       contents: read
     outputs:
-      apps: ${{ steps.set.outputs.apps }}
+      sha: ${{ steps.verify.outputs.sha }}
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Require successful CI for the current trusted main commit
+        id: verify
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
-          persist-credentials: false
+          script: |
+            const expectedRepository = `${context.repo.owner}/${context.repo.repo}`;
+            const run = context.payload.workflow_run;
+            const candidate = run?.head_sha ?? context.sha;
 
-      - id: filter
-        if: github.event_name != 'workflow_dispatch'
-        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
-        with:
-          filters: |
-            api:
-              - '.github/workflows/docker.yml'
-              - 'apps/api/**'
-              - 'packages/**'
-              - 'integrations/**'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'package.json'
-              - 'apps/api/Dockerfile'
-            web:
-              - '.github/workflows/docker.yml'
-              - 'apps/web/**'
-              - 'packages/**'
-              - 'integrations/**'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'package.json'
-              - 'apps/web/Dockerfile'
-            data-manager:
-              - '.github/workflows/docker.yml'
-              - 'services/data-manager/**'
-              - 'packages/**'
-              - 'integrations/**'
-              - 'pnpm-lock.yaml'
-              - 'pnpm-workspace.yaml'
-              - 'package.json'
-            transitous-tools:
-              - '.github/workflows/docker.yml'
-              - 'services/motis/tools/transitous/**'
-            docs:
-              - '.github/workflows/docker.yml'
-              - 'docs/**'
+            if (run) {
+              if (run.conclusion !== "success") {
+                core.setFailed(`CI concluded ${run.conclusion}; refusing to publish`);
+                return;
+              }
+              if (
+                run.event !== "push" ||
+                run.head_branch !== "main" ||
+                run.head_repository?.full_name !== expectedRepository
+              ) {
+                core.setFailed("Refusing an untrusted or non-main workflow_run");
+                return;
+              }
+            }
 
-      - id: set
-        env:
-          DISPATCH: ${{ github.event_name == 'workflow_dispatch' }}
-          FILTER_CHANGES: ${{ steps.filter.outputs.changes }}
-        run: |
-          if [ "$DISPATCH" = "true" ]; then
-            echo 'apps=["api","web","data-manager","transitous-tools","docs"]' >> "$GITHUB_OUTPUT"
-          else
-            echo "apps=${FILTER_CHANGES}" >> "$GITHUB_OUTPUT"
-          fi
+            const { data: main } = await github.rest.git.getRef({
+              ...context.repo,
+              ref: "heads/main",
+            });
+            if (candidate !== main.object.sha) {
+              core.setFailed(
+                `Candidate ${candidate} is not the current main commit ${main.object.sha}`,
+              );
+              return;
+            }
+
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: "ci.yml",
+              head_sha: candidate,
+              event: "push",
+              status: "success",
+              per_page: 100,
+            });
+            const trusted = data.workflow_runs.some(
+              (candidateRun) =>
+                candidateRun.conclusion === "success" &&
+                candidateRun.head_branch === "main" &&
+                candidateRun.head_repository?.full_name === expectedRepository,
+            );
+            if (!trusted) {
+              core.setFailed(`No successful trusted CI push run exists for ${candidate}`);
+              return;
+            }
+
+            core.setOutput("sha", candidate);
 
   build:
-    name: Build ${{ matrix.app }}
-    needs: changes
-    if: needs.changes.outputs.apps != '[]' && needs.changes.outputs.apps != ''
+    name: Build and scan ${{ matrix.app }}
+    needs: gate
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
       packages: write
       security-events: write
-
     strategy:
       fail-fast: false
       matrix:
-        app: ${{ fromJSON(needs.changes.outputs.apps) }}
+        include:
+          - app: api
+            context: .
+            dockerfile: apps/api/Dockerfile
+          - app: web
+            context: .
+            dockerfile: apps/web/Dockerfile
+          - app: data-manager
+            context: .
+            dockerfile: services/data-manager/Dockerfile
+          - app: ops-agent
+            context: .
+            dockerfile: apps/ops-agent/Dockerfile
+          - app: transitous-runner
+            context: .
+            dockerfile: apps/transitous-runner/Dockerfile
+          - app: transitous-tools
+            context: services/motis/tools/transitous
+            dockerfile: services/motis/tools/transitous/Dockerfile
+          - app: docs
+            context: docs
+            dockerfile: docs/Dockerfile
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          ref: ${{ needs.gate.outputs.sha }}
           persist-credentials: false
 
-      - name: Resolve build context
-        id: ctx
-        env:
-          APP: ${{ matrix.app }}
-        run: |
-          case "$APP" in
-            api)
-              echo "context=." >> "$GITHUB_OUTPUT"
-              echo "dockerfile=apps/api/Dockerfile" >> "$GITHUB_OUTPUT"
-              ;;
-            web)
-              echo "context=." >> "$GITHUB_OUTPUT"
-              echo "dockerfile=apps/web/Dockerfile" >> "$GITHUB_OUTPUT"
-              ;;
-            data-manager)
-              echo "context=." >> "$GITHUB_OUTPUT"
-              echo "dockerfile=services/data-manager/Dockerfile" >> "$GITHUB_OUTPUT"
-              ;;
-            transitous-tools)
-              echo "context=services/motis/tools/transitous" >> "$GITHUB_OUTPUT"
-              echo "dockerfile=services/motis/tools/transitous/Dockerfile" >> "$GITHUB_OUTPUT"
-              ;;
-            docs)
-              echo "context=docs" >> "$GITHUB_OUTPUT"
-              echo "dockerfile=docs/Dockerfile" >> "$GITHUB_OUTPUT"
-              ;;
-            *)
-              echo "Unknown app: $APP" >&2
-              exit 1
-              ;;
-          esac
-
-      # Buildx startup pulls its BuildKit image from Docker Hub. A transient
-      # registry timeout should not sink one matrix leg while the others pass.
+      # Buildx startup pulls its BuildKit image from Docker Hub. Retry that
+      # infrastructure fetch once, but never soften build or scan failures.
       - name: Set up Docker Buildx
         id: buildx
         continue-on-error: true
@@ -139,56 +143,192 @@ jobs:
         if: steps.buildx.outcome == 'failure'
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
-      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+      - name: Log in to the candidate registry
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6
-        id: meta
-        with:
-          images: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest
-
-      - uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+      # Push content-addressed candidate blobs only. No SHA or latest tag is
+      # visible until all matrix legs have passed the mandatory scan below.
+      - name: Build untagged candidate by digest
         id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
-          context: ${{ steps.ctx.outputs.context }}
-          file: ${{ steps.ctx.outputs.dockerfile }}
+          context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
-          # Stamp the web service worker with the commit SHA so each deploy
-          # produces a fresh sw.js and the PWA's update prompt fires. Ignored by
-          # the other images (their Dockerfiles declare no such ARG).
-          build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', github.sha) || '' }}
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', needs.gate.outputs.sha) || '' }}
+          outputs: type=image,name=${{ env.IMAGE_PREFIX }}/${{ matrix.app }},push-by-digest=true,name-canonical=true,push=true
+          labels: |
+            org.opencontainers.image.revision=${{ needs.gate.outputs.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
           cache-from: type=gha,scope=${{ matrix.app }}
           cache-to: type=gha,mode=max,scope=${{ matrix.app }}
           provenance: mode=max
           sbom: true
 
-      # Trivy scan + SARIF upload require Code Scanning, which needs
-      # GitHub Advanced Security on private repos. To enable: make the
-      # repo public OR set repo variable ENABLE_CODE_SCANNING=true
-      # under Settings → Secrets and variables → Actions → Variables.
-      - name: Scan image with Trivy
-        if: vars.ENABLE_CODE_SCANNING == 'true'
+      # Keep the complete finding set for review, including vulnerabilities
+      # for which the distro or upstream project has not published a fix.
+      - name: Audit exact candidate digest with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
           image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.build.outputs.digest }}
           format: sarif
           output: trivy-${{ matrix.app }}.sarif
+          scanners: vuln
+          vuln-type: os,library
           severity: CRITICAL,HIGH
-          ignore-unfixed: true
+          limit-severities-for-sarif: true
+          ignore-unfixed: "false"
           exit-code: "0"
 
+      # This is the promotion policy, not merely reporting: any actionable
+      # HIGH/CRITICAL OS or library vulnerability blocks every image tag.
+      # Unfixed advisories stay visible in the SARIF audit above, but cannot
+      # permanently deadlock releases when no remediation exists.
+      - name: Gate exact candidate digest with Trivy
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.build.outputs.digest }}
+          format: table
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: "true"
+          trivyignores: .trivyignore.yaml
+          exit-code: "1"
+
+      # Code-scanning upload needs GHAS in private repositories. Reporting may
+      # be unavailable, but both scans above are unconditional and the
+      # actionable-finding gate is fail-closed.
       - name: Upload Trivy results
-        if: always() && vars.ENABLE_CODE_SCANNING == 'true'
+        if: always() && (github.event.repository.visibility == 'public' || vars.ENABLE_CODE_SCANNING == 'true')
         uses: github/codeql-action/upload-sarif@5595ccaf912efad79be6eef63a5619ff05969be3 # v4.37.6
         with:
           sarif_file: trivy-${{ matrix.app }}.sarif
           category: trivy-${{ matrix.app }}
+
+      - name: Export approved digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid image digest: $DIGEST" >&2
+            exit 1
+          fi
+          mkdir -p digest
+          touch "digest/${DIGEST#sha256:}"
+
+      - name: Preserve approved digest for aggregate promotion
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: docker-digest-${{ matrix.app }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: digest/*
+          if-no-files-found: error
+          retention-days: 1
+
+  promote:
+    name: Publish coherent release
+    needs: [gate, build]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download every approved digest
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          pattern: docker-digest-*-${{ github.run_id }}-${{ github.run_attempt }}
+          path: digests
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+
+      - name: Log in for promotion
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # SHA tags make each approved image independently addressable. The one
+      # release-manifest pointer below is the atomic deployment contract.
+      - name: Promote every scanned digest to SHA and assemble the release manifest
+        env:
+          IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
+          RELEASE_MANIFEST_IMAGE: ${{ env.IMAGE_PREFIX }}/release-manifest
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          mkdir -p release-manifest
+          first=true
+          image_lines=""
+          for app in api web data-manager ops-agent transitous-runner transitous-tools docs; do
+            shopt -s nullglob
+            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
+            if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
+              echo "Expected exactly one approved digest artifact for ${app}" >&2
+              exit 1
+            fi
+            digest_file="${digest_files[0]}"
+            DIGEST="sha256:${digest_file##*/}"
+            if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid approved digest for ${app}: $DIGEST" >&2
+              exit 1
+            fi
+
+            IMAGE="${IMAGE_PREFIX}/${app}"
+            docker buildx imagetools create \
+              --tag "${IMAGE}:${RELEASE_SHA}" \
+              "${IMAGE}@${DIGEST}"
+            docker buildx imagetools inspect "${IMAGE}:${RELEASE_SHA}"
+
+            if [ "$first" = true ]; then
+              first=false
+            else
+              image_lines="${image_lines},\n"
+            fi
+            image_lines="${image_lines}    \"${app}\": \"${IMAGE}@${DIGEST}\""
+          done
+
+          {
+            printf '{\n'
+            printf '  "schemaVersion": 1,\n'
+            printf '  "release": "%s",\n' "$RELEASE_SHA"
+            printf '  "images": {\n'
+            printf '%b\n' "$image_lines"
+            printf '  }\n'
+            printf '}\n'
+          } > release-manifest/release-manifest.json
+
+          cat > release-manifest/Dockerfile <<'EOF'
+          FROM scratch
+          COPY release-manifest.json /release-manifest.json
+          EOF
+
+      - name: Publish the immutable release manifest
+        env:
+          RELEASE_MANIFEST_IMAGE: ${{ env.IMAGE_PREFIX }}/release-manifest
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          docker buildx build \
+            --file release-manifest/Dockerfile \
+            --tag "${RELEASE_MANIFEST_IMAGE}:${RELEASE_SHA}" \
+            --push \
+            release-manifest
+          docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:${RELEASE_SHA}"
+
+      # This one registry tag is the atomic deployment switch. If building,
+      # scanning, any SHA promotion, or publishing the immutable manifest
+      # fails, it remains pointed at the last complete release.
+      - name: Advance the complete release pointer
+        env:
+          RELEASE_MANIFEST_IMAGE: ${{ env.IMAGE_PREFIX }}/release-manifest
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+        run: |
+          docker buildx imagetools create \
+            --tag "${RELEASE_MANIFEST_IMAGE}:latest" \
+            "${RELEASE_MANIFEST_IMAGE}:${RELEASE_SHA}"
+          docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:latest"

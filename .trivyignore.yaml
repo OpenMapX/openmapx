@@ -1,0 +1,52 @@
+vulnerabilities:
+  # Docker 29.7.2 is the newest official static CLI release as of 2026-08-20,
+  # but it was built with Go 1.26.5, one patch before these stdlib fixes.
+  # Keep each exception scoped to that binary and let it expire so a newer
+  # upstream build must replace it rather than silently extending the waiver.
+  - id: CVE-2026-33818
+    paths: ["usr/local/bin/docker"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Docker CLI binary built with Go 1.26.6 or newer.
+  - id: CVE-2026-39821
+    paths: ["usr/local/bin/docker"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Docker CLI binary built with Go 1.26.6 or newer.
+  - id: CVE-2026-46600
+    paths: ["usr/local/bin/docker"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Docker CLI binary built with Go 1.26.6 or newer.
+  - id: CVE-2026-56853
+    paths: ["usr/local/bin/docker"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Docker CLI binary built with Go 1.26.6 or newer.
+  - id: CVE-2026-56858
+    paths: ["usr/local/bin/docker"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Docker CLI binary built with Go 1.26.6 or newer.
+  - id: CVE-2026-56859
+    paths: ["usr/local/bin/docker"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Docker CLI binary built with Go 1.26.6 or newer.
+  - id: CVE-2026-56860
+    paths: ["usr/local/bin/docker"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Docker CLI binary built with Go 1.26.6 or newer.
+  - id: CVE-2026-56862
+    paths: ["usr/local/bin/docker"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Docker CLI binary built with Go 1.26.6 or newer.
+
+  # Compose 5.5.0 is likewise the newest official release as of 2026-08-20;
+  # these are fixed in upstream modules but not yet in a released binary.
+  - id: CVE-2026-34040
+    paths: ["usr/local/lib/docker/cli-plugins/docker-compose"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Compose binary with docker/docker 29.3.1 or newer.
+  - id: CVE-2026-56864
+    paths: ["usr/local/lib/docker/cli-plugins/docker-compose"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Compose binary with golang.org/x/mod 0.40.0 or newer.
+  - id: CVE-2026-56865
+    paths: ["usr/local/lib/docker/cli-plugins/docker-compose"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Compose binary with golang.org/x/mod 0.40.0 or newer.

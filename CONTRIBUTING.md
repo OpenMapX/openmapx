@@ -74,13 +74,14 @@ Git hooks enforce a two-stage local gate:
   A small in-package commit takes seconds; one touching root config or a
   widely-depended-on package pays a full type check.
 - **pre-push** — full workspace type check (`pnpm check-types`) as the
-  backstop for the scoped pre-commit check, then the full test suite
-  (`pnpm test`). Requires Docker for the testcontainers-based suites; set
-  `SKIP_TESTCONTAINERS=1` to bypass those when the daemon isn't running.
+  backstop for the scoped pre-commit check, then the portable test suite
+  (`pnpm test`).
 
-CI runs lint, types, and the node/web test projects as parallel jobs on every
-push and PR, aggregated under the required `lint / types / test` check;
-repo-wide coverage runs on a weekly schedule (non-gating).
+CI runs lint, types, node/web/mobile tests, the database integration suite, and
+production builds as parallel jobs on every push and PR. Pull requests also
+build each affected deployable Docker target without publishing it. These jobs are
+aggregated under the required `lint / types / test` check; repo-wide coverage
+runs on a weekly schedule (non-gating).
 
 ### Testing
 
@@ -93,8 +94,19 @@ or `test` scripts; always run from the repo root:
 pnpm test                            # whole suite
 pnpm test --project web              # scope to one environment (web | node)
 pnpm exec vitest run packages/core   # scope by path or test-name substring
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/openmapx \
+  pnpm test:database                 # migrated PostGIS + Docker required
+pnpm build                           # production app/service/package outputs
+pnpm check-packed-packages           # clean tarball consumer smoke test
 pnpm test:coverage                   # V8 coverage report (written to coverage/)
 ```
+
+The normal suite skips database tests through one explicit opt-in. CI applies
+the production Drizzle migrations to its PostGIS service before setting
+`OPENMAPX_RUN_DATABASE_TESTS=1`; after that point a missing database, schema,
+or Docker daemon is a hard test failure. For a local run, apply migrations to
+the `DATABASE_URL` target first (`pnpm --filter @openmapx/api exec drizzle-kit
+migrate`).
 
 Conventions:
 
@@ -166,9 +178,11 @@ are skipped automatically because those packages are marked `private`.
 2. Open an issue first if the change is non-trivial — saves rework when
    scope or approach needs alignment.
 3. Push your branch and open a PR. Fill out the PR template.
-4. PR CI runs lint, types, and tests. Docker images build and publish after a
-   merge to `main` (or through a manual workflow dispatch), so use a local or
-   manually dispatched image build before merging image-sensitive changes.
+4. PR CI runs lint, types, tests, production builds, and non-publishing Docker
+   builds for the deployable targets affected by the PR. After a merge to
+   `main`, a separate release workflow accepts only the current commit after successful CI,
+   scans exact image digests, and then promotes the complete set to SHA and
+   `latest` tags. Manual dispatch cannot bypass the successful-CI requirement.
 5. A maintainer reviews. Squash-merge is the default; we keep the merged
    PR's title and summary as the squash commit message, so make both
    accurate.

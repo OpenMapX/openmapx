@@ -85,6 +85,7 @@ plans/
 # CLI generated outputs
 infra/docker/docker-compose.generated.yml
 infra/docker/docker-compose.generated.hardlinks.json
+infra/docker/docker-compose.release.yml
 infra/docker/service-selection.json
 # Decrypted per-service secret files (rendered from the vault; never commit)
 infra/docker/.generated-secrets/
@@ -119,3 +120,6 @@ apps/mobile/modules/*/Package.resolved
 
 # Locally built release artifacts, symbols and provenance output.
 dist/mobile/
+
+# Generated Traefik file-provider routing (produced by `openmapx compose render`).
+services/traefik/config/dynamic/generated-routes.yml

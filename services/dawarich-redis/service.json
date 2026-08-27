@@ -9,6 +9,7 @@
   "container": {
     "image": "redis",
     "tag": "7.4-alpine",
+    "digest": "sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2",
     "expose": [6379],
     "command": ["redis-server", "--save", "900", "1", "--save", "300", "10", "--appendonly", "no"],
     "memory": "512m",

@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { dirname, extname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -42,11 +42,17 @@ function trackedTextFiles(): string[] {
     encoding: "buffer",
     maxBuffer: 64 * 1024 * 1024,
   });
-  return out
-    .toString("utf8")
-    .split("\0")
-    .filter(Boolean)
-    .filter((file) => TEXT_EXTENSIONS.has(extname(file)));
+  return (
+    out
+      .toString("utf8")
+      .split("\0")
+      .filter(Boolean)
+      // `git ls-files` keeps staged/unstaged deletions in the index. They have no
+      // working-tree contents to inspect and disappear from the list once the
+      // deletion is committed.
+      .filter((file) => existsSync(resolve(REPO_ROOT, file)))
+      .filter((file) => TEXT_EXTENSIONS.has(extname(file)))
+  );
 }
 
 describe("tracked text sources", () => {

@@ -15,6 +15,9 @@ overrides:
   mermaid: ^11.16.1
   nanoid@3: ^3.3.18
 
+patchedDependencies:
+  image-size@2.0.2: 008e623284dce9de634eeae78e65126b539c5ecb3b988684f6b3eec3ea569517
+
 importers:
 
   .:
@@ -7473,7 +7476,7 @@ snapshots:
       estree-util-value-to-estree: 3.5.0
       file-loader: 6.2.0(webpack@5.109.2(@swc/core@1.15.47)(@swc/html@1.15.47)(clean-css@5.3.3)(cssnano@6.1.2(postcss@8.5.25))(csso@5.0.5)(html-minifier-terser@7.2.0)(lightningcss@1.33.0)(postcss@8.5.25))
       fs-extra: 11.4.0
-      image-size: 2.0.2
+      image-size: 2.0.2(patch_hash=008e623284dce9de634eeae78e65126b539c5ecb3b988684f6b3eec3ea569517)
       mdast-util-mdx: 3.0.0(supports-color@8.1.1)
       mdast-util-to-string: 4.0.0
       react: 19.2.8
@@ -11055,7 +11058,7 @@ snapshots:
 
   ignore@5.3.2: {}
 
-  image-size@2.0.2: {}
+  image-size@2.0.2(patch_hash=008e623284dce9de634eeae78e65126b539c5ecb3b988684f6b3eec3ea569517): {}
 
   immediate@3.3.0: {}
 

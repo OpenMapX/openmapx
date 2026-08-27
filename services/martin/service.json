@@ -9,6 +9,7 @@
   "container": {
     "image": "ghcr.io/maplibre/martin",
     "tag": "latest",
+    "digest": "sha256:fe5e8952312ca8ea0a25c4b1f72ceb13676f2b50dca310843e48b31c8ceb2264",
     "expose": [3000],
     "environment": {
       "DATABASE_URL": "postgresql://postgres:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@postgis:5432/openmapx"

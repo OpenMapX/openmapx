@@ -8,6 +8,7 @@
   "container": {
     "image": "pelias/pip-service",
     "tag": "latest",
+    "digest": "sha256:cbc1a00c70028894d1384479b451fb98d33700d5f436529c17d03d21aaa2f382",
     "expose": [4200],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped"

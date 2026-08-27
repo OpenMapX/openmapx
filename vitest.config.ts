@@ -65,6 +65,8 @@ export default defineConfig({
           include: [
             "apps/api/src/**/*.test.ts",
             "apps/api/scripts/**/*.test.ts",
+            "apps/ops-agent/src/**/*.test.ts",
+            "apps/transitous-runner/src/**/*.test.ts",
             // Mobile Node-side config/plugin tests only. React Native component
             // and coordinator tests run under `apps/mobile`'s own jest-expo
             // project, which neither Vitest environment can host.

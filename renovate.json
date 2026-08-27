@@ -1,0 +1,21 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "enabledManagers": ["custom.regex"],
+  "schedule": ["before 6am on monday"],
+  "timezone": "Europe/Berlin",
+  "labels": ["dependencies", "docker"],
+  "automerge": false,
+  "customManagers": [
+    {
+      "customType": "regex",
+      "description": "Refresh immutable service-image digests behind reviewable tags",
+      "managerFilePatterns": ["/^services\\/[^/]+\\/service\\.json$/"],
+      "matchStrings": [
+        "\\\"image\\\"\\s*:\\s*\\\"(?<depName>[^\\\"]+)\\\"\\s*,\\s*\\\"tag\\\"\\s*:\\s*\\\"(?<currentValue>[^\\\"]+)\\\"\\s*,\\s*\\\"digest\\\"\\s*:\\s*\\\"(?<currentDigest>sha256:[a-f0-9]{64})\\\""
+      ],
+      "datasourceTemplate": "docker",
+      "versioningTemplate": "docker"
+    }
+  ]
+}

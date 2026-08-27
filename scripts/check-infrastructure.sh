@@ -21,6 +21,8 @@ docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$SHELLCHECK_IMAGE" \
 
 docker run --rm -v "$REPO_ROOT:/repo" -w /repo "$HADOLINT_IMAGE" /bin/hadolint \
   apps/api/Dockerfile \
+  apps/ops-agent/Dockerfile \
+  apps/transitous-runner/Dockerfile \
   apps/web/Dockerfile \
   docs/Dockerfile \
   services/data-manager/Dockerfile \

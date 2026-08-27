@@ -9,6 +9,7 @@
   "container": {
     "image": "ghcr.io/baosystems/postgis",
     "tag": "17-3.5",
+    "digest": "sha256:55bf4418b32fd285b7a8c88da0baef148d35ee89d9db302c498cb0b952d2c070",
     "expose": [5432],
     "environment": {
       "POSTGRES_USER": "postgres",

@@ -9,6 +9,7 @@
   "container": {
     "image": "pelias/api",
     "tag": "latest",
+    "digest": "sha256:831766a9c0f9ded0d6f1d8bfb2121eb0b6778e80eda5c16636515da1b53aadf8",
     "expose": [4000],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped",

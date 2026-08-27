@@ -1,0 +1,2505 @@
+diff --git a/dist/detector.cjs b/dist/detector.cjs
+index 0898608dbeca36722dfd795341b1c3c1448f58aa..ef7a45442826136713255338e03c5dad6d4bdfab 100644
+--- a/dist/detector.cjs
++++ b/dist/detector.cjs
+@@ -27,22 +27,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -143,35 +150,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -246,14 +260,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize = getImageSize2(imageHeader[0]);
+       images.push(imageSize);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -281,14 +313,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -469,7 +502,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -483,12 +516,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -509,7 +546,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/detector.mjs b/dist/detector.mjs
+index 67afcab02d627f95e98c938499e07a934b832a26..fc762982728d24f81f464c2437428e79bdf54fbe 100644
+--- a/dist/detector.mjs
++++ b/dist/detector.mjs
+@@ -25,22 +25,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -141,35 +148,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -244,14 +258,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize = getImageSize2(imageHeader[0]);
+       images.push(imageSize);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -279,14 +311,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -467,7 +500,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -481,12 +514,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -507,7 +544,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/fromFile.cjs b/dist/fromFile.cjs
+index c226d3dac07f235db456c774b26cca88f655e1af..db284ecfefd821205e7326b047c838abfe3ae380 100644
+--- a/dist/fromFile.cjs
++++ b/dist/fromFile.cjs
+@@ -53,22 +53,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -169,35 +176,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -272,14 +286,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize2 = getImageSize2(imageHeader[0]);
+       images.push(imageSize2);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -307,14 +339,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -495,7 +528,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -509,12 +542,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -535,7 +572,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/fromFile.mjs b/dist/fromFile.mjs
+index 4a3c44432982397204f7a9d04fc66ef65a8e7ba4..abe987ac22b8626e3280e8ee058dd771e85afea9 100644
+--- a/dist/fromFile.mjs
++++ b/dist/fromFile.mjs
+@@ -30,22 +30,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -146,35 +153,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -249,14 +263,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize2 = getImageSize2(imageHeader[0]);
+       images.push(imageSize2);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -284,14 +316,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -472,7 +505,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -486,12 +519,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -512,7 +549,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/index.cjs b/dist/index.cjs
+index bde0210eb131db06ccca30a5c466c7252a03af50..5e0653a8370d8e58c7769ecdd4e060ffa310a63c 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -29,22 +29,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -145,35 +152,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -248,14 +262,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize2 = getImageSize2(imageHeader[0]);
+       images.push(imageSize2);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -283,14 +315,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -471,7 +504,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -485,12 +518,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -511,7 +548,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 22c17afad4e406eba013fff7858366cb5f8e3ba4..4817b041c0c6af2f26254669a6de2445fed07519 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -25,22 +25,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -141,35 +148,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -244,14 +258,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize2 = getImageSize2(imageHeader[0]);
+       images.push(imageSize2);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -279,14 +311,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -467,7 +500,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -481,12 +514,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -507,7 +544,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/lookup.cjs b/dist/lookup.cjs
+index 9731ad8bb0949f8fdf9297851bdb312e91282f01..a1eebcee9b7a4bc967bcc77c01f87d04fd035f0d 100644
+--- a/dist/lookup.cjs
++++ b/dist/lookup.cjs
+@@ -27,22 +27,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -143,35 +150,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -246,14 +260,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize2 = getImageSize2(imageHeader[0]);
+       images.push(imageSize2);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -281,14 +313,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -469,7 +502,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -483,12 +516,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -509,7 +546,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/lookup.mjs b/dist/lookup.mjs
+index f787d1c8408d7b681fec8617595d058f66959869..d6b83da8960821a6f4fdac8176eb744be995d69a 100644
+--- a/dist/lookup.mjs
++++ b/dist/lookup.mjs
+@@ -25,22 +25,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -141,35 +148,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -244,14 +258,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize2 = getImageSize2(imageHeader[0]);
+       images.push(imageSize2);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -279,14 +311,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -467,7 +500,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -481,12 +514,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -507,7 +544,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/types/heif.cjs b/dist/types/heif.cjs
+index 1f490788ea654ea9896060a5c0253d81e348af92..6dcc337abb72379bcd13520d42876fd12b3aec87 100644
+--- a/dist/types/heif.cjs
++++ b/dist/types/heif.cjs
+@@ -5,22 +5,29 @@ var decoder = new TextDecoder();
+ var toUTF8String = (input, start = 0, end = input.length) => decoder.decode(input.slice(start, end));
+ var getView = (input, offset) => new DataView(input.buffer, input.byteOffset + offset);
+ var readUInt32BE = (input, offset = 0) => getView(input, offset).getUint32(0, false);
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -41,35 +48,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+diff --git a/dist/types/heif.mjs b/dist/types/heif.mjs
+index 01330919e01b3c034a96a7b4b1dbf5a7f658bb2d..6736f2a1defcaf6f2aa6fcfdd4e48fbe215242f6 100644
+--- a/dist/types/heif.mjs
++++ b/dist/types/heif.mjs
+@@ -3,22 +3,29 @@ var decoder = new TextDecoder();
+ var toUTF8String = (input, start = 0, end = input.length) => decoder.decode(input.slice(start, end));
+ var getView = (input, offset) => new DataView(input.buffer, input.byteOffset + offset);
+ var readUInt32BE = (input, offset = 0) => getView(input, offset).getUint32(0, false);
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -39,35 +46,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+diff --git a/dist/types/icns.cjs b/dist/types/icns.cjs
+index 32c8d370dcf80a10f14a6deebfdbe04d3c70585c..1d0898fc56af7828ccf259162871d9a4fe63597e 100644
+--- a/dist/types/icns.cjs
++++ b/dist/types/icns.cjs
+@@ -67,14 +67,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize = getImageSize(imageHeader[0]);
+       images.push(imageSize);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+diff --git a/dist/types/icns.mjs b/dist/types/icns.mjs
+index 8710027bc5890a79d05a7fdb87de3018e556729e..12931eeed18ac1d8f8ce3e8afbfa09d81916736d 100644
+--- a/dist/types/icns.mjs
++++ b/dist/types/icns.mjs
+@@ -65,14 +65,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize = getImageSize(imageHeader[0]);
+       images.push(imageSize);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+diff --git a/dist/types/index.cjs b/dist/types/index.cjs
+index 6949cd134db7ab59dae7b804b36c7bacb4e387cf..239c35f4071ecc5057ea050ba8c763596a22fd65 100644
+--- a/dist/types/index.cjs
++++ b/dist/types/index.cjs
+@@ -27,22 +27,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -143,35 +150,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -246,14 +260,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize = getImageSize2(imageHeader[0]);
+       images.push(imageSize);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -281,14 +313,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -469,7 +502,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -483,12 +516,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -509,7 +546,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/types/index.mjs b/dist/types/index.mjs
+index b026dda4aa16c6077a76e4b3cfe3f54fe1d6d1d0..9175b989094f899ca2de151182dea4447c23192a 100644
+--- a/dist/types/index.mjs
++++ b/dist/types/index.mjs
+@@ -25,22 +25,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -141,35 +148,42 @@ var HEIF = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "ftyp") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand in brandMap;
+   },
+   calculate(input) {
+-    const metaBox = findBox(input, "meta", 0);
+-    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12);
+-    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8);
++    const metaBox = findBox(input, "meta", 0, input.length);
++    const metaEnd = metaBox && metaBox.offset + metaBox.size;
++    const iprpBox = metaBox && findBox(input, "iprp", metaBox.offset + 12, metaEnd);
++    const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++    const ipcoBox = iprpBox && findBox(input, "ipco", iprpBox.offset + 8, iprpEnd);
+     if (!ipcoBox) {
+       throw new TypeError("Invalid HEIF, no ipco box found");
+     }
++    const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+     const type = toUTF8String(input, 8, 12);
+     const images = [];
+     let currentOffset = ipcoBox.offset + 8;
+-    while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-      const ispeBox = findBox(input, "ispe", currentOffset);
++    while (currentOffset < ipcoEnd) {
++      const ispeBox = findBox(input, "ispe", currentOffset, ipcoEnd);
+       if (!ispeBox) break;
+       const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+       const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-      const clapBox = findBox(input, "clap", currentOffset);
++      const clapBox = findBox(input, "clap", currentOffset, ipcoEnd);
+       let width = rawWidth;
+       let height = rawHeight;
+-      if (clapBox && clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++      if (clapBox && clapBox.offset < ipcoEnd) {
+         const cropRight = readUInt32BE(input, clapBox.offset + 12);
+         width = rawWidth - cropRight;
+       }
+       images.push({ height, width });
+-      currentOffset = ispeBox.offset + ispeBox.size;
++      const nextOffset = ispeBox.offset + ispeBox.size;
++      if (nextOffset <= currentOffset) {
++        throw new TypeError("Invalid HEIF, non-advancing box");
++      }
++      currentOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid HEIF, no sizes found");
+@@ -244,14 +258,32 @@ var ICNS = {
+   validate: (input) => toUTF8String(input, 0, 4) === "icns",
+   calculate(input) {
+     const inputLength = input.length;
++    if (inputLength < SIZE_HEADER2) {
++      throw new TypeError("Invalid ICNS, truncated header");
++    }
+     const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++    if (fileLength < SIZE_HEADER2 || fileLength > inputLength) {
++      throw new TypeError("Invalid ICNS, invalid file length");
++    }
+     let imageOffset = SIZE_HEADER2;
+     const images = [];
+-    while (imageOffset < fileLength && imageOffset < inputLength) {
++    while (imageOffset < fileLength) {
++      const remaining = Math.min(fileLength, inputLength) - imageOffset;
++      if (remaining < 8) {
++        throw new TypeError("Invalid ICNS, truncated entry header");
++      }
+       const imageHeader = readImageHeader(input, imageOffset);
++      const imageLength = imageHeader[1];
++      if (imageLength < 8 || imageLength > remaining) {
++        throw new TypeError("Invalid ICNS, invalid entry length");
++      }
++      const nextOffset = imageOffset + imageLength;
++      if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++        throw new TypeError("Invalid ICNS, non-advancing entry");
++      }
+       const imageSize = getImageSize2(imageHeader[0]);
+       images.push(imageSize);
+-      imageOffset += imageHeader[1];
++      imageOffset = nextOffset;
+     }
+     if (images.length === 0) {
+       throw new TypeError("Invalid ICNS, no sizes found");
+@@ -279,14 +311,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+@@ -467,7 +500,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -481,12 +514,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -507,7 +544,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/types/jp2.cjs b/dist/types/jp2.cjs
+index cdd7c884efeb940b99f69a8f1d6ed361a1979211..d0d9a34d2632d84e1daadfcf472d4f95adacec98 100644
+--- a/dist/types/jp2.cjs
++++ b/dist/types/jp2.cjs
+@@ -5,22 +5,29 @@ var decoder = new TextDecoder();
+ var toUTF8String = (input, start = 0, end = input.length) => decoder.decode(input.slice(start, end));
+ var getView = (input, offset) => new DataView(input.buffer, input.byteOffset + offset);
+ var readUInt32BE = (input, offset = 0) => getView(input, offset).getUint32(0, false);
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -29,14 +36,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+diff --git a/dist/types/jp2.mjs b/dist/types/jp2.mjs
+index 63a537635b4f91250431a53225d4521ed60cf67d..3e5fecb82b61fa9ed6316362a1d76872694949c9 100644
+--- a/dist/types/jp2.mjs
++++ b/dist/types/jp2.mjs
+@@ -3,22 +3,29 @@ var decoder = new TextDecoder();
+ var toUTF8String = (input, start = 0, end = input.length) => decoder.decode(input.slice(start, end));
+ var getView = (input, offset) => new DataView(input.buffer, input.byteOffset + offset);
+ var readUInt32BE = (input, offset = 0) => getView(input, offset).getUint32(0, false);
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -27,14 +34,15 @@ var JP2 = {
+   validate(input) {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "jP  ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jp2 ";
+   },
+   calculate(input) {
+-    const jp2hBox = findBox(input, "jp2h", 0);
+-    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8);
++    const jp2hBox = findBox(input, "jp2h", 0, input.length);
++    const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++    const ihdrBox = jp2hBox && findBox(input, "ihdr", jp2hBox.offset + 8, jp2hEnd);
+     if (ihdrBox) {
+       return {
+         height: readUInt32BE(input, ihdrBox.offset + 8),
+diff --git a/dist/types/jxl.cjs b/dist/types/jxl.cjs
+index a12095be85c7a8fd25763895a47c46b4292ebd9c..6b5e70f4a75890eaa5bac0a37b16a1432f485750 100644
+--- a/dist/types/jxl.cjs
++++ b/dist/types/jxl.cjs
+@@ -46,22 +46,29 @@ var toUTF8String = (input, start = 0, end = input.length) => decoder.decode(inpu
+ var toHexString = (input, start = 0, end = input.length) => input.slice(start, end).reduce((memo, i) => memo + `0${i.toString(16)}`.slice(-2), "");
+ var getView = (input, offset) => new DataView(input.buffer, input.byteOffset + offset);
+ var readUInt32BE = (input, offset = 0) => getView(input, offset).getUint32(0, false);
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -100,7 +107,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -114,12 +121,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -140,7 +151,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/types/jxl.mjs b/dist/types/jxl.mjs
+index 49b0c4cac6abb366378e5feed745f16981b441c0..fddb340c832d6a2a27552d1372b6dce5325140b1 100644
+--- a/dist/types/jxl.mjs
++++ b/dist/types/jxl.mjs
+@@ -44,22 +44,29 @@ var toUTF8String = (input, start = 0, end = input.length) => decoder.decode(inpu
+ var toHexString = (input, start = 0, end = input.length) => input.slice(start, end).reduce((memo, i) => memo + `0${i.toString(16)}`.slice(-2), "");
+ var getView = (input, offset) => new DataView(input.buffer, input.byteOffset + offset);
+ var readUInt32BE = (input, offset = 0) => getView(input, offset).getUint32(0, false);
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+@@ -98,7 +105,7 @@ var JXLStream = {
+
+ // lib/types/jxl.ts
+ function extractCodestream(input) {
+-  const jxlcBox = findBox(input, "jxlc", 0);
++  const jxlcBox = findBox(input, "jxlc", 0, input.length);
+   if (jxlcBox) {
+     return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+   }
+@@ -112,12 +119,16 @@ function extractPartialStreams(input) {
+   const partialStreams = [];
+   let offset = 0;
+   while (offset < input.length) {
+-    const jxlpBox = findBox(input, "jxlp", offset);
++    const jxlpBox = findBox(input, "jxlp", offset, input.length);
+     if (!jxlpBox) break;
+     partialStreams.push(
+       input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size)
+     );
+-    offset = jxlpBox.offset + jxlpBox.size;
++    const nextOffset = jxlpBox.offset + jxlpBox.size;
++    if (nextOffset <= offset) {
++      throw new TypeError("Invalid JXL, non-advancing box");
++    }
++    offset = nextOffset;
+   }
+   return partialStreams;
+ }
+@@ -138,7 +149,7 @@ var JXL = {
+   validate: (input) => {
+     const boxType = toUTF8String(input, 4, 8);
+     if (boxType !== "JXL ") return false;
+-    const ftypBox = findBox(input, "ftyp", 0);
++    const ftypBox = findBox(input, "ftyp", 0, input.length);
+     if (!ftypBox) return false;
+     const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+     return brand === "jxl ";
+diff --git a/dist/types/utils.cjs b/dist/types/utils.cjs
+index 23d52e4cbf271e667feb2d7f040c07f69678d3aa..bfcc66aa1331a19e627e233a9cbb822c7d0f2923 100644
+--- a/dist/types/utils.cjs
++++ b/dist/types/utils.cjs
+@@ -27,22 +27,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }
+
+diff --git a/dist/types/utils.d.mts b/dist/types/utils.d.mts
+index 421d4fd3c35699aa97eb03f9b9c29de63e3a5e80..5c8787c083ad10ebbfa79388bc0517f1a99a39e7 100644
+--- a/dist/types/utils.d.mts
++++ b/dist/types/utils.d.mts
+@@ -9,7 +9,7 @@ declare const readUInt32BE: (input: Uint8Array, offset?: number) => number;
+ declare const readUInt32LE: (input: Uint8Array, offset?: number) => number;
+ declare const readUInt64: (input: Uint8Array, offset: number, isBigEndian: boolean) => bigint;
+ declare function readUInt(input: Uint8Array, bits: 16 | 32, offset?: number, isBigEndian?: boolean): number;
+-declare function findBox(input: Uint8Array, boxName: string, currentOffset: number): {
++declare function findBox(input: Uint8Array, boxName: string, currentOffset: number, parentEnd?: number): {
+     name: string;
+     offset: number;
+     size: number;
+diff --git a/dist/types/utils.d.ts b/dist/types/utils.d.ts
+index 421d4fd3c35699aa97eb03f9b9c29de63e3a5e80..5c8787c083ad10ebbfa79388bc0517f1a99a39e7 100644
+--- a/dist/types/utils.d.ts
++++ b/dist/types/utils.d.ts
+@@ -9,7 +9,7 @@ declare const readUInt32BE: (input: Uint8Array, offset?: number) => number;
+ declare const readUInt32LE: (input: Uint8Array, offset?: number) => number;
+ declare const readUInt64: (input: Uint8Array, offset: number, isBigEndian: boolean) => bigint;
+ declare function readUInt(input: Uint8Array, bits: 16 | 32, offset?: number, isBigEndian?: boolean): number;
+-declare function findBox(input: Uint8Array, boxName: string, currentOffset: number): {
++declare function findBox(input: Uint8Array, boxName: string, currentOffset: number, parentEnd?: number): {
+     name: string;
+     offset: number;
+     size: number;
+diff --git a/dist/types/utils.mjs b/dist/types/utils.mjs
+index 3f09dceb036e40be8538dbb5588d88c951339158..675a9fab1d55692f13acabbabe34457c66e8f0a2 100644
+--- a/dist/types/utils.mjs
++++ b/dist/types/utils.mjs
+@@ -25,22 +25,29 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+   const methodName = `readUInt${bits}${endian}`;
+   return methods[methodName](input, offset);
+ }
+-function readBox(input, offset) {
+-  if (input.length - offset < 4) return;
++function readBox(input, offset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < 8) return;
+   const boxSize = readUInt32BE(input, offset);
+-  if (input.length - offset < boxSize) return;
++  if (boxSize === 1) return;
++  const size = boxSize === 0 ? end - offset : boxSize;
++  const nextOffset = offset + size;
++  if (size < 8 || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end) return;
+   return {
+     name: toUTF8String(input, 4 + offset, 8 + offset),
+     offset,
+-    size: boxSize
++    size
+   };
+ }
+-function findBox(input, boxName, currentOffset) {
+-  while (currentOffset < input.length) {
+-    const box = readBox(input, currentOffset);
++function findBox(input, boxName, currentOffset, parentEnd = input.length) {
++  const end = Math.min(parentEnd, input.length);
++  while (currentOffset < end) {
++    const box = readBox(input, currentOffset, end);
+     if (!box) break;
+     if (box.name === boxName) return box;
+-    currentOffset += box.size > 0 ? box.size : 8;
++    const nextOffset = box.offset + box.size;
++    if (nextOffset <= currentOffset) break;
++    currentOffset = nextOffset;
+   }
+ }

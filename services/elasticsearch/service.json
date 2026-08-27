@@ -8,6 +8,7 @@
   "container": {
     "image": "elasticsearch",
     "tag": "7.17.18",
+    "digest": "sha256:5f99f2f450ca38aff315a4a8849e892934cafef0aee5e6ab5d894ede97a02ca9",
     "expose": [9200],
     "environment": {
       "discovery.type": "single-node",

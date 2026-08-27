@@ -9,7 +9,7 @@
  * package or after changing the policy. Edits are line-based so the resulting
  * diff is one changed/added line per file; property order is preserved.
  *
- *   Reusable substrate (the plugin SDK + shared `core`/libs) -> Apache-2.0
+ *   Reusable substrate (extension tooling + shared `core`/libs) -> Apache-2.0
  *   The product (app, integrations, services, app-internal packages) -> AGPL-3.0-or-later
  *   Vendored third-party code -> kept under its upstream license
  *
@@ -37,14 +37,13 @@ const AGPL = "AGPL-3.0-or-later";
 const MIT = "MIT";
 
 /**
- * The reusable substrate: the plugin SDK, the shared `core` foundation that the
- * SDK and nearly every integration import, and the standalone data libraries.
+ * The reusable substrate: extension tooling, the shared `core` foundation that
+ * nearly every integration imports, and the standalone data libraries.
  * Permissive so anyone can build their own app or new integrations on top.
  */
 const APACHE_PACKAGES = new Set([
   "integration-framework",
-  "core", // SDK + ~all integrations depend on it; it is the shared foundation
-  "extension-sdk", // prebuilt public authoring surface — the plugin SDK itself
+  "core", // Nearly all integrations depend on it; it is the shared foundation
   "extension-cli", // standalone Apache-2.0 authoring CLI (scaffold / package / validate)
   "presets", // integration-poi-search depends on it
   "brands", // brand/chain catalog distilled from NSI, mirrors presets
@@ -69,7 +68,7 @@ const VENDORED: Record<string, string> = {
 };
 
 /** Packages currently meant to be published to npm (not `private`). */
-const PUBLIC_PACKAGES = new Set(["core", "extension-sdk", "extension-cli"]);
+const PUBLIC_PACKAGES = new Set(["core", "extension-cli"]);
 
 type Plan = { spdx: string; keepPrivate: boolean };
 

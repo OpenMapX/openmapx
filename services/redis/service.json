@@ -9,18 +9,32 @@
   "container": {
     "image": "valkey/valkey",
     "tag": "8-alpine",
+    "digest": "sha256:e0eb7c480958d32bdc4357a74bdd70653ae15f2f9b4c93c4a5a9fad1dc471c84",
     "expose": [6379],
+    "command": ["--aclfile", "/etc/valkey/users.acl"],
     "memory": "512m",
     "restart": "unless-stopped",
     "healthcheck": {
       "type": "exec",
-      "command": ["redis-cli", "ping"],
+      "command": "REDISCLI_AUTH=\"$(cat /run/secrets/redis-password)\" exec redis-cli ping",
       "interval": "10s",
       "timeout": "3s",
       "retries": 5
     }
   },
   "provides": ["cache"],
+  "bindMounts": [
+    {
+      "source": "@infra:secrets/redis-password",
+      "target": "/run/secrets/redis-password",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/redis-acl.conf",
+      "target": "/etc/valkey/users.acl",
+      "readOnly": true
+    }
+  ],
   "volumes": [
     { "name": "openmapx-redisdata", "mountAt": "/data", "backup": true, "backupMode": "tar" }
   ],

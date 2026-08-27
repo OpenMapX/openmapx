@@ -1,6 +1,6 @@
 # Traefik Static Configuration
 # Reverse proxy for OpenMapX services.
-# Routing is configured via Docker labels in docker-compose.yml.
+# Routing is generated into the file provider's `dynamic/` directory.
 
 api:
   dashboard: true
@@ -43,11 +43,11 @@ certificatesResolvers:
       httpChallenge:
         entryPoint: web
 
+# Routing is generated from validated first-party service manifests into
+# `dynamic/`. Traefik holds no Docker socket: an internet-facing reverse proxy
+# with host authority is the exact escape this removes. Community services never
+# receive a platform route.
 providers:
-  docker:
-    endpoint: "unix:///var/run/docker.sock"
-    exposedByDefault: false
-    network: docker_openmapx
   file:
     directory: /etc/traefik/dynamic
     watch: true
