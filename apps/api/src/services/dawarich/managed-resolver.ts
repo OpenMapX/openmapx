@@ -335,7 +335,7 @@ function authoritativeIssuer(): string | null {
 }
 
 /**
- * Read-only authority snapshot for user-facing readiness. Better Auth 1.6.26
+ * Read-only authority snapshot for user-facing readiness. Better Auth
  * has no supported system/headerless client inspector and its full API is
  * intentionally admin-session protected. Select only non-secret client
  * metadata from Better Auth's own persistence; all client writes remain
@@ -358,9 +358,8 @@ async function readOAuthAuthority(): Promise<ManagedOAuthAuthoritySnapshot> {
       require_pkce: oauthClient.requirePKCE,
       skip_consent: oauthClient.skipConsent,
       enable_end_session: oauthClient.enableEndSession,
-      public: oauthClient.public,
       disabled: oauthClient.disabled,
-      type: oauthClient.type,
+      application_type: oauthClient.applicationType,
     })
     .from(oauthClient)
     .where(eq(oauthClient.softwareId, DAWARICH_SOFTWARE_ID));

@@ -17,24 +17,14 @@ export const OSM_CONTRIBUTE_CALLBACK_PARAM = "osm-contribute";
 export type OsmContributionIntent = "edit" | "note";
 
 /**
- * The complete scope set an account-link request must carry.
- *
- * Better Auth 1.6.26's generic-OAuth *link* route uses
- * `body.scopes || configuredScopes`, so a supplied array **replaces** the
- * provider defaults rather than adding to them (unlike the sign-in route,
- * which concatenates). Passing only the missing scope would therefore drop
- * base identity — and drop a write scope the person already granted, since one
- * provider token is stored per account. So we always send base identity plus
- * the intended action plus any contribution scope already in effect.
+ * The scope set for this contribution action. Better Auth 1.7 retains scopes
+ * already granted on the linked account, so this request names only the base
+ * identity scopes and the action currently being authorized.
  */
-export function linkScopesFor(
-  capabilities: Pick<OsmContributionCapabilities, "canWriteApi" | "canWriteNotes">,
-  intent: OsmContributionIntent,
-): string[] {
+export function linkScopesFor(intent: OsmContributionIntent): string[] {
   const scopes = ["openid", "read_prefs"];
-  if (capabilities.canWriteApi || intent === "edit") scopes.push("write_api");
-  if (capabilities.canWriteNotes || intent === "note") scopes.push("write_notes");
-  return [...new Set(scopes)];
+  scopes.push(intent === "edit" ? "write_api" : "write_notes");
+  return scopes;
 }
 
 /** Same-origin return URL carrying only a boolean reopen marker. */
@@ -91,10 +81,10 @@ export function OsmContributionGate({
   }
 
   const authorize = async () => {
-    await authClient.oauth2.link({
-      providerId: "openstreetmap",
+    await authClient.linkSocial({
+      provider: "openstreetmap",
       callbackURL: callbackUrlFor(window.location.href),
-      scopes: linkScopesFor(capabilities, intent),
+      scopes: linkScopesFor(intent),
     });
   };
 

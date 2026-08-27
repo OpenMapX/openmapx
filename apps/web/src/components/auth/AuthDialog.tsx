@@ -276,8 +276,8 @@ export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProp
         setError(tMobile("openInBrowserBody"));
         return;
       }
-      await authClient.signIn.oauth2({
-        providerId,
+      await authClient.signIn.social({
+        provider: providerId,
         callbackURL: window.location.origin,
       });
     } catch {

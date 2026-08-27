@@ -29,9 +29,8 @@ function readyClient(overrides: Partial<ManagedOAuthClient> = {}): ManagedOAuthC
     require_pkce: true,
     skip_consent: true,
     enable_end_session: false,
-    public: false,
     disabled: false,
-    type: "web",
+    application_type: "web",
     ...overrides,
   };
 }

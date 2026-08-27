@@ -21,8 +21,8 @@ function build(overrides: Partial<ProviderAvatarDeps> = {}) {
 describe("account creation", () => {
   it("sets the image from the newly linked provider", async () => {
     const { sync, deps, images } = build();
-    await sync.onAccountCreated("openstreetmap", "user-1");
-    expect(deps.resolveAccessToken).toHaveBeenCalledWith("openstreetmap", "user-1");
+    await sync.onAccountCreated("account-1", "openstreetmap", "user-1");
+    expect(deps.resolveAccessToken).toHaveBeenCalledWith("account-1", "user-1");
     expect(images.get("user-1")).toBe("https://osm.example/avatar.png");
   });
 
@@ -30,14 +30,14 @@ describe("account creation", () => {
     const { sync, deps } = build({
       getCurrentImage: vi.fn(async () => "https://existing.example"),
     });
-    await sync.onAccountCreated("openstreetmap", "user-1");
+    await sync.onAccountCreated("account-1", "openstreetmap", "user-1");
     expect(deps.setUserImage).not.toHaveBeenCalled();
     expect(deps.resolveAccessToken).not.toHaveBeenCalled();
   });
 
   it("ignores providers outside the avatar list", async () => {
     const { sync, deps } = build();
-    await sync.onAccountCreated("credential", "user-1");
+    await sync.onAccountCreated("account-1", "credential", "user-1");
     expect(deps.resolveAccessToken).not.toHaveBeenCalled();
   });
 });
@@ -45,25 +45,25 @@ describe("account creation", () => {
 describe("account update", () => {
   it("refreshes the image after a token refresh", async () => {
     const { sync, images } = build();
-    await sync.onAccountUpdated("openstreetmap", "user-1");
+    await sync.onAccountUpdated("account-1", "openstreetmap", "user-1");
     expect(images.get("user-1")).toBe("https://osm.example/avatar.png");
   });
 
   it("clears the image when OpenStreetMap no longer has one", async () => {
     const { sync, deps } = build({ fetchProviderImage: vi.fn(async () => undefined) });
-    await sync.onAccountUpdated("openstreetmap", "user-1");
+    await sync.onAccountUpdated("account-1", "openstreetmap", "user-1");
     expect(deps.setUserImage).toHaveBeenCalledWith("user-1", null);
   });
 
   it("does not clear the image for a non-OpenStreetMap provider", async () => {
     const { sync, deps } = build({ fetchProviderImage: vi.fn(async () => undefined) });
-    await sync.onAccountUpdated("mapillary", "user-1");
+    await sync.onAccountUpdated("account-1", "mapillary", "user-1");
     expect(deps.setUserImage).not.toHaveBeenCalled();
   });
 
   it("does nothing when no usable token can be resolved", async () => {
     const { sync, deps } = build({ resolveAccessToken: vi.fn(async () => undefined) });
-    await sync.onAccountUpdated("openstreetmap", "user-1");
+    await sync.onAccountUpdated("account-1", "openstreetmap", "user-1");
     expect(deps.fetchProviderImage).not.toHaveBeenCalled();
     expect(deps.setUserImage).not.toHaveBeenCalled();
   });
@@ -75,7 +75,7 @@ describe("account update", () => {
       return undefined;
     });
     const { sync } = build({ fetchProviderImage });
-    await sync.onAccountUpdated("mapillary", "user-1");
+    await sync.onAccountUpdated("account-1", "mapillary", "user-1");
     expect(fetchProviderImage).toHaveBeenCalledTimes(1);
   });
 });
@@ -88,28 +88,28 @@ describe("recursion guard", () => {
     // Resolving a token can refresh and persist the account, which fires the
     // update hook again; the guard must swallow that second entry.
     (built.resolveAccessToken as ReturnType<typeof vi.fn>).mockImplementation(async () => {
-      inner = sync.onAccountUpdated("openstreetmap", "user-1");
+      inner = sync.onAccountUpdated("account-1", "openstreetmap", "user-1");
       await inner;
       return USABLE_TOKEN;
     });
-    await sync.onAccountUpdated("openstreetmap", "user-1");
+    await sync.onAccountUpdated("account-1", "openstreetmap", "user-1");
     expect(built.resolveAccessToken).toHaveBeenCalledTimes(1);
     expect(built.setUserImage).toHaveBeenCalledTimes(1);
   });
 
   it("releases the guard so a later update still syncs", async () => {
     const { sync, deps } = build();
-    await sync.onAccountUpdated("openstreetmap", "user-1");
-    await sync.onAccountUpdated("openstreetmap", "user-1");
+    await sync.onAccountUpdated("account-1", "openstreetmap", "user-1");
+    await sync.onAccountUpdated("account-1", "openstreetmap", "user-1");
     expect(deps.resolveAccessToken).toHaveBeenCalledTimes(2);
   });
 
   it("keeps separate guards per user and provider", async () => {
     const { sync, deps } = build();
     await Promise.all([
-      sync.onAccountUpdated("openstreetmap", "user-1"),
-      sync.onAccountUpdated("openstreetmap", "user-2"),
-      sync.onAccountUpdated("mapillary", "user-1"),
+      sync.onAccountUpdated("account-1", "openstreetmap", "user-1"),
+      sync.onAccountUpdated("account-2", "openstreetmap", "user-2"),
+      sync.onAccountUpdated("account-3", "mapillary", "user-1"),
     ]);
     expect(deps.resolveAccessToken).toHaveBeenCalledTimes(3);
   });
@@ -122,6 +122,8 @@ describe("failure containment", () => {
         throw new Error("upstream down");
       }),
     });
-    await expect(sync.onAccountUpdated("openstreetmap", "user-1")).resolves.toBeUndefined();
+    await expect(
+      sync.onAccountUpdated("account-1", "openstreetmap", "user-1"),
+    ).resolves.toBeUndefined();
   });
 });

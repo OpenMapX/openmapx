@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { getTableColumns } from "drizzle-orm";
+import { getTableConfig } from "drizzle-orm/pg-core";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 const ORIGINAL_SECRET = process.env.BETTER_AUTH_SECRET;
@@ -29,15 +30,29 @@ function policyIdentity(id: string, role: string) {
 
 beforeAll(() => {
   vi.stubEnv("BETTER_AUTH_SECRET", "test-secret-at-least-thirty-two-characters");
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async () =>
+      Response.json({
+        issuer: "https://www.openstreetmap.org",
+        authorization_endpoint: "https://www.openstreetmap.org/oauth2/authorize",
+        token_endpoint: "https://www.openstreetmap.org/oauth2/token",
+        userinfo_endpoint: "https://api.openstreetmap.org/api/0.6/user/details.json",
+        jwks_uri: "https://www.openstreetmap.org/oauth2/jwks",
+        id_token_signing_alg_values_supported: ["RS256"],
+      }),
+    ),
+  );
 });
 
 afterAll(() => {
   vi.unstubAllEnvs();
+  vi.unstubAllGlobals();
   if (ORIGINAL_SECRET !== undefined) process.env.BETTER_AUTH_SECRET = ORIGINAL_SECRET;
 });
 
 describe("managed OAuth provider policy", () => {
-  it("pins every runtime Better Auth family to 1.6.26 and the schema CLI to 1.6.25", () => {
+  it("pins every runtime Better Auth package and the schema CLI to 1.7.1", () => {
     const apiManifest = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { dependencies: Record<string, string>; scripts: Record<string, string> };
@@ -68,25 +83,40 @@ describe("managed OAuth provider policy", () => {
     const webPackages = ["@better-auth/core", "@better-auth/passkey", "better-auth"];
 
     for (const packageName of apiPackages) {
-      expect(apiManifest.dependencies[packageName]).toBe("1.6.26");
+      expect(apiManifest.dependencies[packageName]).toBe("1.7.1");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.6.26`);
+      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.7.1`);
     }
     for (const packageName of corePackages) {
-      expect(coreManifest.dependencies[packageName]).toBe("1.6.26");
+      expect(coreManifest.dependencies[packageName]).toBe("1.7.1");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.6.26`);
+      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.7.1`);
     }
     for (const packageName of webPackages) {
-      expect(webManifest.dependencies[packageName]).toBe("1.6.26");
+      expect(webManifest.dependencies[packageName]).toBe("1.7.1");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(webLock).toContain(`${lockName}:\n        specifier: 1.6.26`);
+      expect(webLock).toContain(`${lockName}:\n        specifier: 1.7.1`);
     }
-    expect(apiManifest.scripts["auth:generate"]).toContain("auth@1.6.25 generate");
+    expect(apiManifest.scripts["auth:generate"]).toContain("auth@1.7.1 generate");
     for (const importer of [apiLock, coreLock, webLock]) {
-      expect(importer).not.toContain("@better-auth/core@1.6.25");
-      expect(importer).not.toContain("specifier: ^1.6.25");
+      expect(importer).not.toContain("specifier: 1.6.");
     }
+  });
+
+  it("scopes account identity by required issuer and provider account ID", async () => {
+    const { account } = await import("./db/schema");
+    const columns = getTableColumns(account);
+    const config = getTableConfig(account);
+
+    expect(columns.issuer).toMatchObject({ notNull: true });
+    expect(
+      config.indexes.some(
+        (index) =>
+          index.config.unique &&
+          index.config.columns.map((column) => ("name" in column ? column.name : "")).join(",") ===
+            "issuer,account_id",
+      ),
+    ).toBe(true);
   });
 
   it("exposes every provider table through the application Drizzle schema", async () => {
@@ -103,7 +133,7 @@ describe("managed OAuth provider policy", () => {
     );
   });
 
-  it("keeps the exact 1.6.26 two-factor lockout columns emitted by the pinned generator", async () => {
+  it("keeps the generated two-factor lockout columns", async () => {
     const { twoFactor } = await import("./db/schema");
     const columns = getTableColumns(twoFactor);
 
@@ -144,8 +174,7 @@ describe("managed OAuth provider policy", () => {
     expect(managedOAuthProviderOptions).not.toHaveProperty("cachedTrustedClients");
     expect(managedOAuthProviderOptions).not.toHaveProperty("disableJwtPlugin");
     expect(managedOAuthProviderOptions).not.toHaveProperty("storeClientSecret");
-    // Better Auth 1.6's resource-indicator implementation is safe from
-    // cross-audience escalation only with its single default audience.
+    // The provider exposes only its first-party resource configuration.
     expect(managedOAuthProviderOptions).not.toHaveProperty("validAudiences");
     expect(managedOAuthProviderOptions).not.toHaveProperty("customAccessTokenClaims");
   });

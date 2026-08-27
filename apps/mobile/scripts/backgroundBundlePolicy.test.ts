@@ -42,7 +42,7 @@ describe("forbidden dependencies", () => {
   it.each([
     ["/node_modules/.pnpm/react-dom@19.2.3/node_modules/react-dom/index.js", "react-dom"],
     ["/node_modules/.pnpm/zustand@5.0.14/node_modules/zustand/index.js", "zustand"],
-    ["/node_modules/.pnpm/better-auth@1.6.26/node_modules/better-auth/index.js", "better-auth"],
+    ["/node_modules/.pnpm/better-auth@1.7.1/node_modules/better-auth/index.js", "better-auth"],
     [
       "/node_modules/.pnpm/@tanstack+react-query@5.1.0/node_modules/@tanstack/react-query/index.js",
       "@tanstack/react-query",

@@ -1,5 +1,5 @@
 /**
- * Pins the Better Auth 1.6.26 behavior the contribution flow depends on:
+ * Pins the Better Auth behavior the contribution flow depends on:
  * elevated OSM tokens are encrypted at rest, and the public server API still
  * hands the server a usable plaintext token plus the account's effective
  * scopes.
@@ -61,19 +61,23 @@ async function seedLinkedAccount(
   scope = "openid,read_prefs,write_api",
 ) {
   const ctx = await auth.$context;
-  const user = await ctx.internalAdapter.createUser({
-    email: "mapper@test.example",
-    name: "Mapper",
-    emailVerified: true,
-  });
-  await ctx.internalAdapter.createAccount({
+  const user = await ctx.internalAdapter.createUser(
+    {
+      email: "mapper@test.example",
+      name: "Mapper",
+      emailVerified: true,
+    },
+    { method: "email-password" },
+  );
+  const account = await ctx.internalAdapter.createAccount({
     userId: user.id,
     providerId: "openstreetmap",
+    issuer: "local:oauth:openstreetmap",
     accountId: "12345",
     accessToken,
     scope,
   });
-  return { ctx, userId: user.id };
+  return { ctx, userId: user.id, accountId: account.id };
 }
 
 describe("OAuth token encryption at rest", () => {
@@ -104,10 +108,10 @@ describe("OAuth token encryption at rest", () => {
     const { auth } = buildAuth(true);
     const ctx = await auth.$context;
     const encrypted = await setTokenUtil(OSM_TOKEN, widen(ctx));
-    const { userId } = await seedLinkedAccount(auth, encrypted ?? "");
+    const { userId, accountId } = await seedLinkedAccount(auth, encrypted ?? "");
 
     const result = await auth.api.getAccessToken({
-      body: { providerId: "openstreetmap", userId },
+      body: { accountId, userId },
     });
     expect(result.accessToken).toBe(OSM_TOKEN);
     expect(result.scopes).toEqual(["openid", "read_prefs", "write_api"]);

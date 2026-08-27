@@ -40,9 +40,8 @@ function baseClient(overrides: Partial<ManagedOAuthClient> = {}): ManagedOAuthCl
     require_pkce: true,
     skip_consent: true,
     enable_end_session: false,
-    public: false,
     disabled: false,
-    type: "web",
+    application_type: "web",
     ...overrides,
   };
 }
@@ -233,7 +232,7 @@ describe("provisionManagedDawarich", () => {
         skip_consent: true,
         enable_end_session: false,
         client_secret_expires_at: 0,
-        type: "web",
+        application_type: "web",
       }),
     );
     const dbPassword = harness.secrets.get(
@@ -434,7 +433,7 @@ describe("provisionManagedDawarich", () => {
     ["consent", { skip_consent: false }],
     ["end-session behavior", { enable_end_session: true }],
     ["secret expiry", { client_secret_expires_at: 123 }],
-    ["client type", { type: "native" }],
+    ["application type", { application_type: "native" }],
   ] as const)("reports %s drift as OAuth-not-ready until reconciliation", async (_name, drift) => {
     const harness = createHarness();
     await provision(harness.dependencies);
