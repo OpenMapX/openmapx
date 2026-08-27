@@ -34,9 +34,9 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-          # changesets/action creates and pushes the version commit, so this is
-          # the one checkout that deliberately retains Git credentials.
-          persist-credentials: true
+          # changesets/action v2 pushes signed commits through the GitHub API;
+          # do not leave Git credentials available to later package scripts.
+          persist-credentials: false
 
       - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
 
@@ -49,16 +49,14 @@ jobs:
 
       # Opens / updates a "Version Packages" PR while there are unreleased
       # changesets. When that PR is merged, the action tags the release.
-      # Publishing to npm is intentionally disabled — uncomment `publish:`
+      # Publishing to npm is intentionally disabled — uncomment `publish-script:`
       # and add the NPM_TOKEN secret if/when packages are published.
       - name: Create release PR
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1
+        uses: changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1
         with:
-          version: pnpm exec changeset version
-          commit: "chore: version packages"
-          title: "chore: version packages"
-          createGithubReleases: true
-          # publish: pnpm exec changeset publish
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          version-script: pnpm exec changeset version
+          commit-message: "chore: version packages"
+          pr-title: "chore: version packages"
+          create-github-releases: true
+          # publish-script: pnpm exec changeset publish
