@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { FLIGHT_PROVIDERS, getFlightProvider } from "./providers/index.js";
 import { parseFlightQuery } from "./query.js";
 import type { FlightProviderConfig, FlightProviderInfo } from "./types.js";
@@ -41,7 +41,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(404).send({ error: "Unknown flight provider" });
       return;
     }
-    const parsed = parseFlightQuery(req.query);
+    const parsed = parseFlightQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;
@@ -56,7 +56,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(404).send({ error: "Unknown flight provider" });
       return;
     }
-    const parsed = parseFlightQuery(req.query);
+    const parsed = parseFlightQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;

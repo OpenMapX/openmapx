@@ -1,6 +1,8 @@
 export type {
+  AirQualityMetrics,
   AiSearchDisclosure,
   AttributionIndexHandle,
+  BinaryHttpResponse,
   CacheClient,
   CustomHealthCheckFn,
   DatabaseClient,
@@ -10,12 +12,18 @@ export type {
   HealthCheckResult,
   HttpClient,
   HttpClientOptions,
+  HttpResponse,
   IntegrationContext,
   LiveStoreClient,
   Logger,
   MetricsRecorder,
   ProviderCallOutcome,
+  ProviderHealthCountedOutcome,
+  ProviderHealthFailureOutcome,
   ProviderHealthHandle,
+  ProviderHealthNonCountedOutcome,
+  ProviderHealthSnapshot,
+  ResponseOptions,
   RouteHandler,
   RouteOptions,
   SecretsClient,
@@ -166,6 +174,11 @@ export type {
 // build catches this.
 export { RoutingProviderError } from "./contracts/routing-provider";
 export { isPlausibleNlSearch, NL_CONFIDENCE_FLOOR } from "./contracts/search-nlp-provider";
+export {
+  type OpaqueCursorCodec,
+  OpaqueCursorError,
+  type OpaqueCursorErrorCode,
+} from "./cursor";
 export { integrationEnvVarName } from "./env-var";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
@@ -236,6 +249,7 @@ export {
   ProviderTimeoutError,
   runWithProviderDeadline,
 } from "./provider-execution";
+export { QueryValidationError, type RouteQuery, scalarQueries, scalarQuery } from "./query";
 export { IntegrationRegistry } from "./registry";
 // `useIntegrationRegistry` and `IntegrationRegistryContext` live in the
 // `/react` subpath — pulling them into this barrel would force every
@@ -254,3 +268,10 @@ export {
   type TidesIntegrationConfig,
 } from "./tides-integration-factory";
 export { defineTransitProvider, type TransitProviderScaffold } from "./transit-provider-factory";
+export type {
+  QuotaDecision,
+  QuotaWindow,
+  UpstreamCacheRead,
+  UpstreamCacheTtl,
+  UpstreamRuntime,
+} from "./upstream-runtime";

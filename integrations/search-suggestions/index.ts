@@ -3,13 +3,14 @@ import {
   normalizeSearchTerm,
   type SearchSuggestionQuery,
 } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { createSearchSuggestionsOrchestrator } from "./orchestrator.js";
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createSearchSuggestionsOrchestrator(ctx);
   ctx.registerRoute("GET", "/search", async (req, reply) => {
-    const rawQuery = typeof req.query.q === "string" ? req.query.q : "";
+    const rawQuery =
+      typeof scalarQueries(req.query).q === "string" ? scalarQueries(req.query).q : "";
     const normalized = normalizeSearchTerm(rawQuery);
     if (normalized.replace(/[^\p{L}\p{N}]/gu, "").length < 2) {
       reply.header("Cache-Control", "public, max-age=60");
@@ -17,12 +18,12 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const parsedLimit = Number.parseInt(req.query.limit ?? "", 10);
+    const parsedLimit = Number.parseInt(scalarQueries(req.query).limit ?? "", 10);
     const limit = Number.isFinite(parsedLimit) ? Math.max(1, Math.min(20, parsedLimit)) : 8;
-    const latProvided = req.query.lat !== undefined;
-    const lngProvided = req.query.lng !== undefined;
-    const lat = Number.parseFloat(req.query.lat ?? "");
-    const lng = Number.parseFloat(req.query.lng ?? "");
+    const latProvided = scalarQueries(req.query).lat !== undefined;
+    const lngProvided = scalarQueries(req.query).lng !== undefined;
+    const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+    const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
     if (
       latProvided !== lngProvided ||
       (latProvided &&
@@ -39,7 +40,10 @@ export function setup(ctx: IntegrationContext): void {
 
     const query: SearchSuggestionQuery = {
       query: rawQuery,
-      lang: typeof req.query.lang === "string" && req.query.lang ? req.query.lang : "en",
+      lang:
+        typeof scalarQueries(req.query).lang === "string" && scalarQueries(req.query).lang
+          ? scalarQueries(req.query).lang
+          : "en",
       limit,
       ...(latProvided ? { proximity: [lng, lat] as [number, number] } : {}),
     };

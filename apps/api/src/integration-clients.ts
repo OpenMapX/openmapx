@@ -3,12 +3,16 @@ import {
   DEFAULT_FETCH_TIMEOUT_MS,
   readBoundedJsonResponse,
 } from "@openmapx/core";
+import { readBoundedBinaryResponse } from "@openmapx/core/server";
 import type {
+  BinaryHttpResponse,
   CacheClient,
   HttpClient,
   HttpClientOptions,
+  HttpResponse,
   LiveStoreClient,
   Logger,
+  ResponseOptions,
 } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
 import { redis } from "./redis";
@@ -33,14 +37,37 @@ export function createHttpClient(_log: Logger): HttpClient {
       maxBytes: options?.maxResponseBytes ?? DEFAULT_FETCH_JSON_MAX_BYTES,
       label: "integration HTTP response",
     });
+  const urlFor = (url: string, options?: HttpClientOptions) => {
+    const parsed = new URL(url);
+    if (options?.params) {
+      for (const [key, value] of Object.entries(options.params)) {
+        if (value !== undefined) parsed.searchParams.set(key, String(value));
+      }
+    }
+    return parsed;
+  };
+  const selectedHeaders = (
+    response: Response,
+    allowlist: readonly string[] | undefined,
+  ): Readonly<Record<string, string>> => {
+    const selected: Record<string, string> = {};
+    for (const requested of allowlist ?? []) {
+      const key = requested.toLowerCase();
+      const value = response.headers.get(requested);
+      if (value !== null) selected[key] = value;
+    }
+    return selected;
+  };
+  const assertAllowedContentType = (response: Response, options: ResponseOptions): void => {
+    const mediaType = response.headers.get("content-type")?.split(";", 1)[0]?.trim().toLowerCase();
+    const allowed = options.contentTypes.map((value) => value.toLowerCase());
+    if (!mediaType || !allowed.includes(mediaType)) {
+      throw new Error("integration HTTP response has unexpected content type");
+    }
+  };
   return {
     async get<T>(url: string, options?: HttpClientOptions): Promise<T> {
-      const u = new URL(url);
-      if (options?.params) {
-        for (const [k, v] of Object.entries(options.params)) {
-          if (v !== undefined) u.searchParams.set(k, String(v));
-        }
-      }
+      const u = urlFor(url, options);
 
       if (options?.cache?.ttl) {
         const cacheKey = httpCacheKey(u.toString(), options?.headers);
@@ -101,6 +128,43 @@ export function createHttpClient(_log: Logger): HttpClient {
       });
       if (!res.ok) throw new Error(`HTTP ${res.status} ${res.statusText}`);
       return readJson<T>(res, options);
+    },
+
+    async getResponse<T>(url: string, options: ResponseOptions): Promise<HttpResponse<T>> {
+      const response = await fetch(urlFor(url, options).toString(), {
+        headers: options.headers,
+        signal: signalFor(options),
+        redirect: options.redirect,
+      });
+      assertAllowedContentType(response, options);
+      const body = await readBoundedJsonResponse<T>(response, {
+        maxBytes: options.maxBytes,
+        label: "integration HTTP response",
+        signal: options.signal,
+      });
+      return {
+        status: response.status,
+        headers: selectedHeaders(response, options.responseHeaders),
+        body,
+      };
+    },
+
+    async getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse> {
+      const response = await fetch(urlFor(url, options).toString(), {
+        headers: options.headers,
+        signal: signalFor(options),
+        redirect: options.redirect,
+      });
+      const { data } = await readBoundedBinaryResponse(response, {
+        maxBytes: options.maxBytes,
+        allowedContentTypes: options.contentTypes.map((value) => value.toLowerCase()),
+        label: "integration HTTP response",
+      });
+      return {
+        status: response.status,
+        headers: selectedHeaders(response, options.responseHeaders),
+        bytes: new Uint8Array(data),
+      };
     },
   };
 }

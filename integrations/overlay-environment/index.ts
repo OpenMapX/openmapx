@@ -1,5 +1,9 @@
 import { fetchJson } from "@openmapx/core";
-import type { IntegrationContext, Logger } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  type Logger,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 15_000;
 const STATION_CACHE_TTL = 600;
@@ -110,7 +114,10 @@ function roundBbox(south: number, west: number, north: number, east: number): st
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/stations", async (req, reply) => {
-    const { south, west, north, east, sensor, exposure } = req.query as Record<string, string>;
+    const { south, west, north, east, sensor, exposure } = scalarQueries(req.query) as Record<
+      string,
+      string
+    >;
 
     const s = Number.parseFloat(south);
     const w = Number.parseFloat(west);

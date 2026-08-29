@@ -4,7 +4,11 @@ import {
   MAX_RASTER_TILE_BYTES,
   RASTER_IMAGE_MEDIA_TYPES,
 } from "@openmapx/core/server";
-import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  type RouteHandler,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 
 const FETCH_TIMEOUT_MS = 10_000;
 
@@ -79,7 +83,7 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/radar/tile/:z/:x/:y", async (req, reply) => {
     if (await denyIfRadarGated(reply)) return;
-    const framePath = req.query.path;
+    const framePath = scalarQueries(req.query).path;
     if (!framePath) {
       reply.status(400).send({ message: "Missing path query parameter" });
       return;

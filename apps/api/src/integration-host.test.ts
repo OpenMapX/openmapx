@@ -123,6 +123,7 @@ import {
   reloadIntegrations,
   shutdownIntegrations,
 } from "./integration-host.js";
+import { setIntegrationRouteRateLimits } from "./integration-routes.js";
 import { isSecretsConfigured } from "./services/secrets.js";
 import { resolveRequiresForIntegration } from "./services/service-registry.js";
 
@@ -134,6 +135,7 @@ function makeApp(): FastifyInstance {
 // Clear module-level state (the integration map, route list, _fastify ref) by
 // shutting down after every test so tests don't bleed into each other.
 afterEach(async () => {
+  setIntegrationRouteRateLimits(null);
   try {
     await shutdownIntegrations();
   } catch {
@@ -147,6 +149,32 @@ afterEach(async () => {
   vi.clearAllMocks();
   // Restore secrets mock to default (configured = true) in case a test changed it.
   vi.mocked(isSecretsConfigured).mockReturnValue(true);
+});
+
+describe("integration route rate tiers", () => {
+  it("uses exactly the declared tier and stops before the handler on 429", async () => {
+    const publicLimit = vi.fn(async () => undefined);
+    const expensiveLimit = vi.fn(async (_request, reply) => {
+      reply.status(429).send({ error: "limited" });
+    });
+    const tileLimit = vi.fn(async () => undefined);
+    setIntegrationRouteRateLimits({
+      public: publicLimit,
+      expensive: expensiveLimit,
+      tile: tileLimit,
+    });
+    const app = makeApp();
+    await initIntegrations(app, [FIXTURES_DIR]);
+
+    expect((await app.inject("/api/integrations/alpha/tier-public")).statusCode).toBe(200);
+    const limited = await app.inject("/api/integrations/alpha/tier-expensive");
+    expect(limited.statusCode).toBe(429);
+    expect(limited.json()).toEqual({ error: "limited" });
+    expect((await app.inject("/api/integrations/alpha/tier-tile")).statusCode).toBe(200);
+    expect(publicLimit).toHaveBeenCalledTimes(1);
+    expect(expensiveLimit).toHaveBeenCalledTimes(1);
+    expect(tileLimit).toHaveBeenCalledTimes(1);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -414,6 +442,16 @@ describe("initIntegrations — route dispatch", () => {
     // client cased them, and pass the value through byte-for-byte —
     // including the quotes an ETag comparison depends on.
     expect(res.json()).toMatchObject({ ifNoneMatch: '"abc123"' });
+  });
+
+  it("preserves repeated integration query parameters as arrays", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/api/integrations/alpha/echo-query?lat=1&lat=2&optional=ok",
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({ query: { lat: ["1", "2"], optional: "ok" } });
   });
 });
 

@@ -1,5 +1,5 @@
 import type { LngLat, WeatherOptions } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { createWeatherOrchestrator } from "./orchestrator.js";
 
 function roundCoord2(n: number): string {
@@ -10,8 +10,8 @@ export function setup(ctx: IntegrationContext): void {
   const orchestrator = createWeatherOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/current", async (req, reply) => {
-    const lat = Number.parseFloat(req.query.lat);
-    const lng = Number.parseFloat(req.query.lng);
+    const lat = Number.parseFloat(scalarQueries(req.query).lat);
+    const lng = Number.parseFloat(scalarQueries(req.query).lng);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       reply.status(400).send({ message: "Invalid coordinates" });
@@ -20,8 +20,8 @@ export function setup(ctx: IntegrationContext): void {
 
     const coords: LngLat = [lng, lat];
     const options: WeatherOptions = {
-      lang: req.query.lang,
-      units: (req.query.units as "metric" | "imperial") ?? "metric",
+      lang: scalarQueries(req.query).lang,
+      units: (scalarQueries(req.query).units as "metric" | "imperial") ?? "metric",
     };
 
     const key = `weather:current:${roundCoord2(lat)},${roundCoord2(lng)}:${options.units}`;
@@ -40,8 +40,8 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/forecast", async (req, reply) => {
-    const lat = Number.parseFloat(req.query.lat);
-    const lng = Number.parseFloat(req.query.lng);
+    const lat = Number.parseFloat(scalarQueries(req.query).lat);
+    const lng = Number.parseFloat(scalarQueries(req.query).lng);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       reply.status(400).send({ message: "Invalid coordinates" });
@@ -49,11 +49,11 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     const coords: LngLat = [lng, lat];
-    const hours = Math.min(Number.parseInt(req.query.hours ?? "48", 10), 168);
-    const days = Math.min(Number.parseInt(req.query.days ?? "3", 10), 16);
+    const hours = Math.min(Number.parseInt(scalarQueries(req.query).hours ?? "48", 10), 168);
+    const days = Math.min(Number.parseInt(scalarQueries(req.query).days ?? "3", 10), 16);
     const options: WeatherOptions = {
-      lang: req.query.lang,
-      units: (req.query.units as "metric" | "imperial") ?? "metric",
+      lang: scalarQueries(req.query).lang,
+      units: (scalarQueries(req.query).units as "metric" | "imperial") ?? "metric",
     };
 
     const key = `weather:forecast:${roundCoord2(lat)},${roundCoord2(lng)}:${hours}:${days}:${options.units}`;

@@ -13,6 +13,7 @@ import {
   parsePositiveRadius,
   parseWgs84Point,
   type SearchSuggestionProvider,
+  scalarQueries,
   type TripPlanRequest,
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -283,21 +284,26 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops
   ctx.registerRoute("GET", "/stops", async (req, reply) => {
-    const bbox = parseBBox(req.query);
+    const bbox = parseBBox(scalarQueries(req.query));
     if (!bbox) {
       reply
         .status(400)
         .send({ error: "Invalid or missing bbox params (sw_lat, sw_lng, ne_lat, ne_lng)" });
       return;
     }
-    const result = await orchestrator.getStopsInBbox(bbox, parseModes(req.query.modes));
+    const result = await orchestrator.getStopsInBbox(
+      bbox,
+      parseModes(scalarQueries(req.query).modes),
+    );
     reply.send(toEnvelope(result));
   });
 
   // GET /stops/nearby
   ctx.registerRoute("GET", "/stops/nearby", async (req, reply) => {
-    const point = parseWgs84Point(req.query.lng, req.query.lat, { maxAbsLatitude: 85 });
-    const radiusMeters = parsePositiveRadius(req.query.radius, {
+    const point = parseWgs84Point(scalarQueries(req.query).lng, scalarQueries(req.query).lat, {
+      maxAbsLatitude: 85,
+    });
+    const radiusMeters = parsePositiveRadius(scalarQueries(req.query).radius, {
       defaultValue: 500,
       max: 2_000,
     });
@@ -310,18 +316,21 @@ export function setup(ctx: IntegrationContext): void {
     const lngDelta = radiusMeters / (111_320 * Math.cos((lat * Math.PI) / 180));
     const bbox: BBox = [lng - lngDelta, lat - latDelta, lng + lngDelta, lat + latDelta];
     reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
-    const result = await orchestrator.getStopsInBbox(bbox, parseModes(req.query.modes));
+    const result = await orchestrator.getStopsInBbox(
+      bbox,
+      parseModes(scalarQueries(req.query).modes),
+    );
     reply.send(toEnvelope(result));
   });
 
   // GET /stops/search
   ctx.registerRoute("GET", "/stops/search", async (req, reply) => {
-    const query = req.query.q?.trim();
+    const query = scalarQueries(req.query).q?.trim();
     if (!query || query.length < 2) {
       reply.status(400).send({ error: "Query parameter 'q' must be at least 2 characters" });
       return;
     }
-    const limit = Math.min(Math.max(Number(req.query.limit) || 5, 1), 20);
+    const limit = Math.min(Math.max(Number(scalarQueries(req.query).limit) || 5, 1), 20);
     reply.header("Cache-Control", "public, max-age=300, s-maxage=300");
     const stops = await orchestrator.searchByName(query, limit);
     reply.send(toEnvelope(stops));
@@ -329,7 +338,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/near-place
   ctx.registerRoute("GET", "/stops/near-place", async (req, reply) => {
-    const place = parsePlaceQuery(req.query);
+    const place = parsePlaceQuery(scalarQueries(req.query));
     if (!place) {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
@@ -339,7 +348,7 @@ export function setup(ctx: IntegrationContext): void {
       place.lat,
       place.lng,
       place.name,
-      req.query.place_id,
+      scalarQueries(req.query).place_id,
     );
     reply.send(toEnvelope(result));
   });
@@ -399,7 +408,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id/timetable
   ctx.registerRoute("GET", "/stops/:id/timetable", async (req, reply) => {
-    const date = req.query.date ?? utcDate();
+    const date = scalarQueries(req.query).date ?? utcDate();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       reply.status(400).send({ error: "Invalid date format. Use YYYY-MM-DD." });
       return;
@@ -415,7 +424,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id/departures
   ctx.registerRoute("GET", "/stops/:id/departures", async (req, reply) => {
-    const minutes = parseMinutes(req.query.minutes);
+    const minutes = parseMinutes(scalarQueries(req.query).minutes);
     if (!minutes) {
       reply.status(400).send({ error: "Invalid minutes param" });
       return;
@@ -432,7 +441,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /stops/:id/arrivals
   ctx.registerRoute("GET", "/stops/:id/arrivals", async (req, reply) => {
-    const minutes = parseMinutes(req.query.minutes);
+    const minutes = parseMinutes(scalarQueries(req.query).minutes);
     if (!minutes) {
       reply.status(400).send({ error: "Invalid minutes param" });
       return;
@@ -467,8 +476,8 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /routes
   ctx.registerRoute("GET", "/routes", async (req, reply) => {
-    if (req.query.stop_id) {
-      const stopId = decodeURIComponent(req.query.stop_id);
+    if (scalarQueries(req.query).stop_id) {
+      const stopId = decodeURIComponent(scalarQueries(req.query).stop_id);
       const cacheKey = `transit:routes-for-stop:${stopId}`;
       const routes = await ctx.cache.withCache(cacheKey, 300, async () => {
         const res = await orchestrator.getRoutesForStop(stopId);
@@ -477,7 +486,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(routes);
       return;
     }
-    const bbox = parseBBox(req.query);
+    const bbox = parseBBox(scalarQueries(req.query));
     if (!bbox) {
       reply.status(400).send({ error: "Provide stop_id or valid bbox params" });
       return;
@@ -487,7 +496,7 @@ export function setup(ctx: IntegrationContext): void {
     // viewports onto one upstream MOTIS call instead of hammering the always-on
     // cloud instance.
     reply.header("Cache-Control", "public, max-age=120, s-maxage=120");
-    const zoom = routeZoomBucket(req.query.zoom);
+    const zoom = routeZoomBucket(scalarQueries(req.query).zoom);
     const cacheKey = `transit:routes-bbox:${zoom}:${bbox.map((n) => n.toFixed(3)).join(",")}`;
     const routes = await ctx.cache.withCache(cacheKey, 120, async () => {
       const res = await orchestrator.getRoutesInBbox(bbox, zoom);
@@ -498,7 +507,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /routes/for-place
   ctx.registerRoute("GET", "/routes/for-place", async (req, reply) => {
-    const place = parsePlaceQuery(req.query);
+    const place = parsePlaceQuery(scalarQueries(req.query));
     if (!place) {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
@@ -508,7 +517,7 @@ export function setup(ctx: IntegrationContext): void {
       place.lat,
       place.lng,
       place.name,
-      req.query.place_id,
+      scalarQueries(req.query).place_id,
     );
     reply.send(toEnvelope(result));
   });
@@ -535,8 +544,8 @@ export function setup(ctx: IntegrationContext): void {
   // GET /routes/:id/stops
   ctx.registerRoute("GET", "/routes/:id/stops", async (req, reply) => {
     const routeId = decodeURIComponent(req.params.id);
-    const hintStopId = req.query.hint_stop_id
-      ? decodeURIComponent(req.query.hint_stop_id)
+    const hintStopId = scalarQueries(req.query).hint_stop_id
+      ? decodeURIComponent(scalarQueries(req.query).hint_stop_id)
       : undefined;
     const cacheKey = `transit:route-stops:${routeId}:${hintStopId ?? ""}`;
     let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown[]> | null;
@@ -592,13 +601,13 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /leg-geometry
   ctx.registerRoute("GET", "/leg-geometry", async (req, reply) => {
-    const tripId = req.query.trip_id?.trim();
+    const tripId = scalarQueries(req.query).trip_id?.trim();
     if (!tripId) {
       reply.status(400).send({ error: "Required: trip_id" });
       return;
     }
-    const fromStopId = req.query.from_stop_id?.trim() || undefined;
-    const toStopId = req.query.to_stop_id?.trim() || undefined;
+    const fromStopId = scalarQueries(req.query).from_stop_id?.trim() || undefined;
+    const toStopId = scalarQueries(req.query).to_stop_id?.trim() || undefined;
     // Trip polylines are static (trains always follow the same track), so cache
     // aggressively in Redis to avoid hammering the dbweb endpoint on every request.
     // Throw inside the callback when geometry is null so withCache does not
@@ -625,7 +634,7 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /plan
   ctx.registerRoute("GET", "/plan", async (req, reply) => {
-    const q = req.query;
+    const q = scalarQueries(req.query);
     const from = parseWgs84Point(q.from_lng, q.from_lat);
     const to = parseWgs84Point(q.to_lng, q.to_lat);
     if (!from || !to) {
@@ -897,144 +906,154 @@ export function setup(ctx: IntegrationContext): void {
     reply.send(capabilities);
   });
 
-  ctx.registerRoute("POST", "/reachability/surface", async (req, reply) => {
-    const startedAt = Date.now();
-    let request: TransitReachabilitySurfaceRequest;
-    try {
-      request = parseTransitReachabilitySurfaceRequest(req.body);
-    } catch (error) {
-      reply.status(400).send({ error: (error as Error).message });
-      return;
-    }
-    try {
-      const capabilities = await orchestrator.getReachabilityCapabilities();
-      if (!capabilities?.estimatedSurface) {
+  ctx.registerRoute(
+    "POST",
+    "/reachability/surface",
+    async (req, reply) => {
+      const startedAt = Date.now();
+      let request: TransitReachabilitySurfaceRequest;
+      try {
+        request = parseTransitReachabilitySurfaceRequest(req.body);
+      } catch (error) {
+        reply.status(400).send({ error: (error as Error).message });
+        return;
+      }
+      try {
+        const capabilities = await orchestrator.getReachabilityCapabilities();
+        if (!capabilities?.estimatedSurface) {
+          ctx.metricsRecorder?.recordTransitReachability?.({
+            operation: "surface",
+            source: "none",
+            capabilityState: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
+            outcome: "unavailable",
+            cacheOutcome: "none",
+            errorKind: "unavailable",
+            latencyMs: Date.now() - startedAt,
+          });
+          reply.status(503).send({ error: "Transit reachability is unavailable" });
+          return;
+        }
+        const cacheKey = transitSurfaceCacheKey(request, capabilities.datasetEpoch);
+        let cacheMiss = false;
+        const result = await ctx.cache.withCache(cacheKey, 300, async () => {
+          cacheMiss = true;
+          const providerResult = await orchestrator.getReachabilitySurface(request, req.signal);
+          return {
+            ...providerResult,
+            data: thinTransitReachabilitySurface(providerResult.data),
+          };
+        });
+        ctx.metricsRecorder?.recordTransitReachability?.({
+          operation: "surface",
+          source: result.data.source,
+          capabilityState: result.data.capabilities.exactPointCheckReason,
+          outcome: "ok",
+          cacheOutcome: cacheMiss ? "miss" : "hit",
+          errorKind: "none",
+          latencyMs: Date.now() - startedAt,
+          rawSeedCount: result.data.thinning.originalSeedCount,
+          seedCount: result.data.thinning.seedCount,
+          gridMetres: result.data.thinning.gridMetres,
+        });
+        reply.header("Cache-Control", "public, max-age=300");
+        reply.send(toEnvelope(result));
+      } catch (error) {
+        const failure = reachabilityFailure(error, req.signal);
         ctx.metricsRecorder?.recordTransitReachability?.({
           operation: "surface",
           source: "none",
-          capabilityState: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
-          outcome: "unavailable",
+          capabilityState: "runtime-unhealthy",
+          ...failure,
           cacheOutcome: "none",
-          errorKind: "unavailable",
           latencyMs: Date.now() - startedAt,
         });
-        reply.status(503).send({ error: "Transit reachability is unavailable" });
+        reply
+          .status(failure.errorKind === "timeout" ? 504 : 502)
+          .send({ error: "Transit reachability failed" });
+      }
+    },
+    { rateLimitTier: "expensive" },
+  );
+
+  ctx.registerRoute(
+    "POST",
+    "/reachability/check",
+    async (req, reply) => {
+      const startedAt = Date.now();
+      let request: TransitReachabilityCheckRequest;
+      try {
+        request = parseTransitReachabilityCheckRequest(req.body);
+      } catch (error) {
+        reply.status(400).send({ error: (error as Error).message });
         return;
       }
-      const cacheKey = transitSurfaceCacheKey(request, capabilities.datasetEpoch);
-      let cacheMiss = false;
-      const result = await ctx.cache.withCache(cacheKey, 300, async () => {
-        cacheMiss = true;
-        const providerResult = await orchestrator.getReachabilitySurface(request, req.signal);
-        return {
-          ...providerResult,
-          data: thinTransitReachabilitySurface(providerResult.data),
-        };
-      });
-      ctx.metricsRecorder?.recordTransitReachability?.({
-        operation: "surface",
-        source: result.data.source,
-        capabilityState: result.data.capabilities.exactPointCheckReason,
-        outcome: "ok",
-        cacheOutcome: cacheMiss ? "miss" : "hit",
-        errorKind: "none",
-        latencyMs: Date.now() - startedAt,
-        rawSeedCount: result.data.thinning.originalSeedCount,
-        seedCount: result.data.thinning.seedCount,
-        gridMetres: result.data.thinning.gridMetres,
-      });
-      reply.header("Cache-Control", "public, max-age=300");
-      reply.send(toEnvelope(result));
-    } catch (error) {
-      const failure = reachabilityFailure(error, req.signal);
-      ctx.metricsRecorder?.recordTransitReachability?.({
-        operation: "surface",
-        source: "none",
-        capabilityState: "runtime-unhealthy",
-        ...failure,
-        cacheOutcome: "none",
-        latencyMs: Date.now() - startedAt,
-      });
-      reply
-        .status(failure.errorKind === "timeout" ? 504 : 502)
-        .send({ error: "Transit reachability failed" });
-    }
-  });
-
-  ctx.registerRoute("POST", "/reachability/check", async (req, reply) => {
-    const startedAt = Date.now();
-    let request: TransitReachabilityCheckRequest;
-    try {
-      request = parseTransitReachabilityCheckRequest(req.body);
-    } catch (error) {
-      reply.status(400).send({ error: (error as Error).message });
-      return;
-    }
-    try {
-      const capabilities = await orchestrator.getReachabilityCapabilities();
-      if (!capabilities?.exactPointChecks) {
+      try {
+        const capabilities = await orchestrator.getReachabilityCapabilities();
+        if (!capabilities?.exactPointChecks) {
+          ctx.metricsRecorder?.recordTransitReachability?.({
+            operation: "exact",
+            source: capabilities?.exactPointCheckReason === "hosted-source" ? "transitous" : "none",
+            capabilityState: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
+            outcome: "unavailable",
+            cacheOutcome: "none",
+            errorKind: "unavailable",
+            latencyMs: Date.now() - startedAt,
+            destinationCount: request.destinations.length,
+            batchCount: 0,
+          });
+          reply.status(409).send({
+            error: "Exact transit reachability is unavailable",
+            reason: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
+          });
+          return;
+        }
+        const cacheKey = transitCheckCacheKey(request, capabilities.datasetEpoch);
+        let cacheMiss = false;
+        const result = await ctx.cache.withCache(cacheKey, 300, () => {
+          cacheMiss = true;
+          return orchestrator.checkReachabilityDestinations(request, req.signal);
+        });
         ctx.metricsRecorder?.recordTransitReachability?.({
           operation: "exact",
-          source: capabilities?.exactPointCheckReason === "hosted-source" ? "transitous" : "none",
-          capabilityState: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
-          outcome: "unavailable",
-          cacheOutcome: "none",
-          errorKind: "unavailable",
+          source: "self-hosted-motis",
+          capabilityState: capabilities.exactPointCheckReason,
+          outcome: "ok",
+          cacheOutcome: cacheMiss ? "miss" : "hit",
+          errorKind: "none",
           latencyMs: Date.now() - startedAt,
           destinationCount: request.destinations.length,
-          batchCount: 0,
+          batchCount: Math.ceil(
+            request.destinations.length / (capabilities.maxDestinationsPerBatch ?? 1),
+          ),
         });
-        reply.status(409).send({
-          error: "Exact transit reachability is unavailable",
-          reason: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
+        reply.header("Cache-Control", "private, max-age=0");
+        reply.send(toEnvelope(result));
+      } catch (error) {
+        const failure = reachabilityFailure(error, req.signal);
+        ctx.metricsRecorder?.recordTransitReachability?.({
+          operation: "exact",
+          source: "self-hosted-motis",
+          capabilityState: "runtime-unhealthy",
+          ...failure,
+          cacheOutcome: "none",
+          latencyMs: Date.now() - startedAt,
+          destinationCount: request.destinations.length,
         });
-        return;
+        if (failure.errorKind === "unsupported" || failure.errorKind === "unavailable") {
+          reply.status(409).send({ error: "Exact transit reachability is unavailable" });
+          return;
+        }
+        reply
+          .status(failure.errorKind === "timeout" ? 504 : 502)
+          .send({ error: "Exact transit check failed" });
       }
-      const cacheKey = transitCheckCacheKey(request, capabilities.datasetEpoch);
-      let cacheMiss = false;
-      const result = await ctx.cache.withCache(cacheKey, 300, () => {
-        cacheMiss = true;
-        return orchestrator.checkReachabilityDestinations(request, req.signal);
-      });
-      ctx.metricsRecorder?.recordTransitReachability?.({
-        operation: "exact",
-        source: "self-hosted-motis",
-        capabilityState: capabilities.exactPointCheckReason,
-        outcome: "ok",
-        cacheOutcome: cacheMiss ? "miss" : "hit",
-        errorKind: "none",
-        latencyMs: Date.now() - startedAt,
-        destinationCount: request.destinations.length,
-        batchCount: Math.ceil(
-          request.destinations.length / (capabilities.maxDestinationsPerBatch ?? 1),
-        ),
-      });
-      reply.header("Cache-Control", "private, max-age=0");
-      reply.send(toEnvelope(result));
-    } catch (error) {
-      const failure = reachabilityFailure(error, req.signal);
-      ctx.metricsRecorder?.recordTransitReachability?.({
-        operation: "exact",
-        source: "self-hosted-motis",
-        capabilityState: "runtime-unhealthy",
-        ...failure,
-        cacheOutcome: "none",
-        latencyMs: Date.now() - startedAt,
-        destinationCount: request.destinations.length,
-      });
-      if (failure.errorKind === "unsupported" || failure.errorKind === "unavailable") {
-        reply.status(409).send({ error: "Exact transit reachability is unavailable" });
-        return;
-      }
-      reply
-        .status(failure.errorKind === "timeout" ? 504 : 502)
-        .send({ error: "Exact transit check failed" });
-    }
-  });
+    },
+    { rateLimitTier: "expensive" },
+  );
 
   // GET /alerts
   ctx.registerRoute("GET", "/alerts", async (req, reply) => {
-    const bbox = parseBBox(req.query);
+    const bbox = parseBBox(scalarQueries(req.query));
     if (!bbox) {
       reply.status(400).send({ error: "Invalid or missing bbox params" });
       return;
@@ -1051,12 +1070,12 @@ export function setup(ctx: IntegrationContext): void {
   // GET /vehicles
   ctx.registerRoute("GET", "/vehicles", async (req, reply) => {
     reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
-    if (req.query.route_id) {
-      const vehicles = await orchestrator.getVehiclePositions(req.query.route_id);
+    if (scalarQueries(req.query).route_id) {
+      const vehicles = await orchestrator.getVehiclePositions(scalarQueries(req.query).route_id);
       reply.send(toEnvelope(vehicles));
       return;
     }
-    const bbox = parseBBox(req.query);
+    const bbox = parseBBox(scalarQueries(req.query));
     if (bbox) {
       const vehicles = await orchestrator.getVehicleRadar(bbox);
       reply.send(toEnvelope(vehicles));
@@ -1070,8 +1089,10 @@ export function setup(ctx: IntegrationContext): void {
   // GET /vehicles/:id
   ctx.registerRoute("GET", "/vehicles/:id", async (req, reply) => {
     const tripId = decodeURIComponent(req.params.id);
-    const fallbackIds = req.query.fallback_ids
-      ? req.query.fallback_ids.split(",").map((s) => decodeURIComponent(s.trim()))
+    const fallbackIds = scalarQueries(req.query).fallback_ids
+      ? scalarQueries(req.query)
+          .fallback_ids.split(",")
+          .map((s) => decodeURIComponent(s.trim()))
       : undefined;
     const cacheKey = `transit:vehicle-journey:${tripId}:${(fallbackIds ?? []).join(",")}`;
     let env = (await ctx.cache.get(cacheKey)) as MobilityEnvelope<unknown> | null;
@@ -1091,12 +1112,12 @@ export function setup(ctx: IntegrationContext): void {
 
   // GET /departures/for-place
   ctx.registerRoute("GET", "/departures/for-place", async (req, reply) => {
-    const place = parsePlaceQuery(req.query);
+    const place = parsePlaceQuery(scalarQueries(req.query));
     if (!place) {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
     }
-    const minutes = parseMinutes(req.query.minutes);
+    const minutes = parseMinutes(scalarQueries(req.query).minutes);
     if (!minutes) {
       reply.status(400).send({ error: "Invalid minutes param" });
       return;
@@ -1107,19 +1128,19 @@ export function setup(ctx: IntegrationContext): void {
       place.lng,
       place.name,
       minutes,
-      req.query.place_id,
+      scalarQueries(req.query).place_id,
     );
     reply.send(toEnvelope(result));
   });
 
   // GET /arrivals/for-place
   ctx.registerRoute("GET", "/arrivals/for-place", async (req, reply) => {
-    const place = parsePlaceQuery(req.query);
+    const place = parsePlaceQuery(scalarQueries(req.query));
     if (!place) {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
     }
-    const minutes = parseMinutes(req.query.minutes);
+    const minutes = parseMinutes(scalarQueries(req.query).minutes);
     if (!minutes) {
       reply.status(400).send({ error: "Invalid minutes param" });
       return;
@@ -1130,14 +1151,14 @@ export function setup(ctx: IntegrationContext): void {
       place.lng,
       place.name,
       minutes,
-      req.query.place_id,
+      scalarQueries(req.query).place_id,
     );
     reply.send(toEnvelope(result));
   });
 
   // GET /alerts/for-place
   ctx.registerRoute("GET", "/alerts/for-place", async (req, reply) => {
-    const place = parsePlaceQuery(req.query);
+    const place = parsePlaceQuery(scalarQueries(req.query));
     if (!place) {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
@@ -1147,14 +1168,14 @@ export function setup(ctx: IntegrationContext): void {
       place.lat,
       place.lng,
       place.name,
-      req.query.place_id,
+      scalarQueries(req.query).place_id,
     );
     reply.send(toEnvelope(result));
   });
 
   // GET /facilities/for-place
   ctx.registerRoute("GET", "/facilities/for-place", async (req, reply) => {
-    const place = parsePlaceQuery(req.query);
+    const place = parsePlaceQuery(scalarQueries(req.query));
     if (!place) {
       reply.status(400).send({ error: "Required: lat, lng, name" });
       return;
@@ -1164,7 +1185,7 @@ export function setup(ctx: IntegrationContext): void {
       place.lat,
       place.lng,
       place.name,
-      req.query.place_id,
+      scalarQueries(req.query).place_id,
     );
     reply.send(toEnvelope(result));
   });

@@ -1,5 +1,5 @@
 import { fetchJson } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { find as findTimezone } from "geo-tz";
 
 const API_BASE = "https://api.sunrise-sunset.org/json";
@@ -33,7 +33,11 @@ function round4(n: number): number {
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/times", async (req, reply) => {
-    const { lat, lng, date } = req.query as { lat?: string; lng?: string; date?: string };
+    const { lat, lng, date } = scalarQueries(req.query) as {
+      lat?: string;
+      lng?: string;
+      date?: string;
+    };
 
     const latNum = Number.parseFloat(lat ?? "");
     const lngNum = Number.parseFloat(lng ?? "");
@@ -116,7 +120,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/timezone", async (req, reply) => {
-    const { lat, lng } = req.query as { lat?: string; lng?: string };
+    const { lat, lng } = scalarQueries(req.query) as { lat?: string; lng?: string };
 
     const latNum = Number.parseFloat(lat ?? "");
     const lngNum = Number.parseFloat(lng ?? "");

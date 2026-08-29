@@ -1,4 +1,8 @@
-import type { IntegrationContext, RouteHandler } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  type RouteHandler,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 import { nifcOffsetForZoom, normalizeViewport } from "./bounds.js";
 import { loadEffis } from "./effis.js";
 import { type FirmsDayRange, type FirmsSource, firmsFreshTtlSeconds, loadFirms } from "./firms.js";
@@ -92,7 +96,7 @@ function viewportSourceHandler(
   return async (req, reply) => {
     let bounds: NormalizedViewport;
     try {
-      bounds = normalizeViewport(req.query);
+      bounds = normalizeViewport(scalarQueries(req.query));
     } catch {
       invalidViewportReply(reply);
       return;
@@ -139,8 +143,8 @@ function noaaSmokeHandler(ctx: IntegrationContext): RouteHandler {
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/wildfires", async (req, reply) => {
-    const dayRange = Number.parseInt(req.query.dayRange ?? "1", 10);
-    const source = req.query.source ?? "VIIRS_SNPP_NRT";
+    const dayRange = Number.parseInt(scalarQueries(req.query).dayRange ?? "1", 10);
+    const source = scalarQueries(req.query).source ?? "VIIRS_SNPP_NRT";
 
     if (!DAY_RANGES.includes(dayRange as FirmsDayRange)) {
       reply.status(400).send({ message: "Invalid dayRange (1-3)" });

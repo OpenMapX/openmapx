@@ -1,5 +1,5 @@
 import { createPlace, type Place } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import {
   fetchHighLowPredictions,
   fetchLatestMet,
@@ -183,7 +183,7 @@ export function setup(ctx: IntegrationContext): void {
       lat,
       lng,
       station: stationParam,
-    } = req.query as {
+    } = scalarQueries(req.query) as {
       lat?: string;
       lng?: string;
       station?: string;

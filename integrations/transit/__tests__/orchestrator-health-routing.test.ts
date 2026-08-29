@@ -50,6 +50,23 @@ function makeCtx(
       isHealthy: health.isHealthy,
       recordSuccess: () => Promise.resolve(),
       recordFailure: () => Promise.resolve(),
+      getSnapshot: () =>
+        Promise.resolve({
+          state: "healthy",
+          successCount: 0,
+          failureCount: 0,
+          countedFailureCount: 0,
+          consecutiveSuccesses: 0,
+          consecutiveFailures: 0,
+          windowFailureRate: null,
+          emaLatencyMs: 0,
+          lastSuccessAt: null,
+          lastFailureAt: null,
+          lastFailureOutcome: null,
+          lastOperatorMessage: null,
+          retryAt: null,
+          ownsHalfOpenProbe: false,
+        }),
     } as ProviderHealthHandle,
     getIntegrationsByDomain: (domain: string) => {
       if (domain !== "transit") return [];

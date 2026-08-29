@@ -27,4 +27,28 @@ export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/echo-header", async (req, reply) => {
     reply.send({ ifNoneMatch: req.headers["if-none-match"] ?? null });
   });
+
+  ctx.registerRoute("GET", "/echo-query", async (req, reply) => {
+    reply.send({ query: req.query });
+  });
+
+  ctx.registerRoute("GET", "/tier-public", async (_req, reply) => {
+    reply.send({ invoked: true });
+  });
+  ctx.registerRoute(
+    "GET",
+    "/tier-expensive",
+    async (_req, reply) => {
+      reply.send({ invoked: true });
+    },
+    { rateLimitTier: "expensive" },
+  );
+  ctx.registerRoute(
+    "GET",
+    "/tier-tile",
+    async (_req, reply) => {
+      reply.send({ invoked: true });
+    },
+    { rateLimitTier: "tile" },
+  );
 }

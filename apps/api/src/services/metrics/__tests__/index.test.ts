@@ -4,6 +4,7 @@ import { internalMetricsRoute } from "../../../routes/internal-metrics.js";
 import {
   getMetrics,
   initMetrics,
+  recordAirQuality,
   recordOsmContributionOperation,
   recordPersonalTimelineRequest,
   recordProviderCall,
@@ -97,6 +98,28 @@ describe("metrics service", () => {
     expect(text).toContain('reason="refresh_fallback"');
     expect(text).not.toContain("token");
     expect(text).not.toContain("latitude");
+  });
+
+  it("records air-quality metrics using only the closed aggregate vocabulary", async () => {
+    recordAirQuality({
+      method: "current",
+      outcome: "partial",
+      cacheResult: "stale",
+      headlineClass: "computed-ground",
+      rejectionCode: "incomplete-window",
+      compatibilityUse: "none",
+      quotaTruncated: true,
+      evidenceCount: 4,
+      latencyMs: 37,
+    });
+    const text = await getMetrics().renderPrometheus();
+    expect(text).toContain("air_quality_requests_total");
+    expect(text).toContain("air_quality_request_duration_ms");
+    expect(text).toContain("air_quality_evidence_count");
+    expect(text).toContain('headline_class="computed-ground"');
+    expect(text).toContain('rejection_code="incomplete-window"');
+    expect(text).not.toContain("latitude");
+    expect(text).not.toContain("station_name");
   });
 
   it("records routing latency, route counts, and traffic baseline coverage", async () => {

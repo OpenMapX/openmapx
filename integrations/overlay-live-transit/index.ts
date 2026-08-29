@@ -1,5 +1,5 @@
 import type { BBox } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { createLiveTransitOrchestrator } from "./orchestrator.js";
 
 function parseBbox(query: Record<string, string>): BBox | null {
@@ -34,7 +34,7 @@ export function setup(ctx: IntegrationContext): void {
   const orchestrator = createLiveTransitOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/snapshot", async (req, reply) => {
-    const bbox = parseBbox(req.query);
+    const bbox = parseBbox(scalarQueries(req.query));
     if (!bbox) {
       reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;

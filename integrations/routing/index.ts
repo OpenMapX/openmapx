@@ -10,6 +10,7 @@ import {
   parseWgs84Point,
   parseWgs84PointList,
   RoutingProviderError,
+  scalarQueries,
 } from "@openmapx/integration-framework";
 import {
   applyClosureExclusions,
@@ -345,7 +346,7 @@ export function setup(ctx: IntegrationContext): void {
       lang,
       departAt: departAtRaw,
       arriveBy: arriveByRaw,
-    } = req.query;
+    } = scalarQueries(req.query);
 
     let waypoints: [number, number][];
 
@@ -565,7 +566,7 @@ export function setup(ctx: IntegrationContext): void {
       lang,
       departAt: departAtRaw,
       arriveBy: arriveByRaw,
-    } = req.query;
+    } = scalarQueries(req.query);
 
     let waypoints: [number, number][];
 
@@ -866,7 +867,7 @@ export function setup(ctx: IntegrationContext): void {
    * timeouts on long routes. Speed-camera legality is enforced client-side.
    */
   ctx.registerRoute("GET", "/navigation/alerts", async (req, reply) => {
-    const { bbox } = req.query;
+    const { bbox } = scalarQueries(req.query);
     if (typeof bbox !== "string") {
       reply.status(400).send({ error: "bbox required as 'south,west,north,east'" });
       return;

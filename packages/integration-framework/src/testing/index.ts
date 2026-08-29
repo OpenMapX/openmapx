@@ -2,15 +2,18 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { PoiSource } from "@openmapx/poi-source-registry";
 import type {
+  BinaryHttpResponse,
   CacheClient,
   CustomHealthCheckFn,
   DatabaseClient,
   Disclosure,
   HttpClient,
   HttpClientOptions,
+  HttpResponse,
   IntegrationContext,
   LiveStoreClient,
   Logger,
+  ResponseOptions,
   RouteHandler,
   RouteOptions,
   SecretsClient,
@@ -42,10 +45,10 @@ import type { WeatherProvider } from "../contracts/weather-provider.js";
  */
 
 export interface FakeHttpRequest {
-  method: "get" | "post";
+  method: "get" | "post" | "getResponse" | "getBytes";
   url: string;
   body?: unknown;
-  options?: HttpClientOptions;
+  options?: HttpClientOptions | ResponseOptions;
 }
 
 /**
@@ -86,6 +89,41 @@ export function fakeHttpClient(responder: FakeHttpResponder = {}): FakeHttpClien
       const req: FakeHttpRequest = { method: "post", url, body, options };
       calls.push(req);
       return Promise.resolve(resolve(req) as T);
+    },
+    getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>> {
+      const req: FakeHttpRequest = { method: "getResponse", url, options };
+      calls.push(req);
+      const value = resolve(req);
+      if (
+        value &&
+        typeof value === "object" &&
+        "status" in value &&
+        "headers" in value &&
+        "body" in value
+      ) {
+        return Promise.resolve(value as HttpResponse<T>);
+      }
+      return Promise.resolve({ status: 200, headers: {}, body: value as T });
+    },
+    getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse> {
+      const req: FakeHttpRequest = { method: "getBytes", url, options };
+      calls.push(req);
+      const value = resolve(req);
+      if (
+        value &&
+        typeof value === "object" &&
+        "status" in value &&
+        "headers" in value &&
+        "bytes" in value
+      ) {
+        return Promise.resolve(value as BinaryHttpResponse);
+      }
+      if (!(value instanceof Uint8Array)) {
+        throw new TypeError(
+          "fakeHttpClient: getBytes response must be Uint8Array or BinaryHttpResponse",
+        );
+      }
+      return Promise.resolve({ status: 200, headers: {}, bytes: value });
     },
   };
 }

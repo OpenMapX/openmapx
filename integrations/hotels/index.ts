@@ -1,5 +1,5 @@
 import { bareDomain, type HotelOffer, type HotelProviderInfo } from "@openmapx/core/server";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { buildExactDeepLink, type IdResolverDeps, resolveOtaHotelId } from "./idResolver.js";
 import { fetchOfficialBookingUrl } from "./official.js";
 import { createLiteApiProvider } from "./provider.js";
@@ -84,7 +84,7 @@ export function setup(ctx: IntegrationContext): void {
   const OFFICIAL_TTL = 24 * 60 * 60;
 
   ctx.registerRoute("GET", "/providers", async (req, reply) => {
-    const country = (req.query.country ?? "").trim().toLowerCase() || undefined;
+    const country = (scalarQueries(req.query).country ?? "").trim().toLowerCase() || undefined;
     const providers: HotelProviderInfo[] = HOTEL_PROVIDERS.filter((p) =>
       providerServes(p, country),
     ).map(toInfo);
@@ -95,7 +95,7 @@ export function setup(ctx: IntegrationContext): void {
   // Hotel-aware: for THIS hotel, return only the providers we can deep-link —
   // exact for id-only OTAs (Wikidata/typeahead resolved), always for Booking.
   ctx.registerRoute("GET", "/resolve", async (req, reply) => {
-    const parsed = parseHotelQuery(req.query);
+    const parsed = parseHotelQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;
@@ -132,7 +132,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(204).send({});
       return;
     }
-    const parsed = parseHotelQuery(req.query);
+    const parsed = parseHotelQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;
@@ -144,8 +144,8 @@ export function setup(ctx: IntegrationContext): void {
     }
     // Currency + guest nationality are user-chosen; fall back to the operator
     // currency and the place's country (US) when absent or malformed.
-    const curRaw = (req.query.currency ?? "").trim();
-    const natRaw = (req.query.nationality ?? "").trim();
+    const curRaw = (scalarQueries(req.query).currency ?? "").trim();
+    const natRaw = (scalarQueries(req.query).nationality ?? "").trim();
     const opts = {
       currency: CURRENCY_RE.test(curRaw) ? curRaw.toUpperCase() : liteApiCurrency,
       guestNationality: NATIONALITY_RE.test(natRaw)
@@ -181,12 +181,12 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/official", async (req, reply) => {
-    const website = (req.query.website ?? "").trim();
+    const website = (scalarQueries(req.query).website ?? "").trim();
     if (!website) {
       reply.status(204).send({});
       return;
     }
-    const parsed = parseHotelQuery(req.query); // requires name; client always has it
+    const parsed = parseHotelQuery(scalarQueries(req.query)); // requires name; client always has it
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;
@@ -218,7 +218,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(404).send({ error: "Unknown hotel provider" });
       return;
     }
-    const parsed = parseHotelQuery(req.query);
+    const parsed = parseHotelQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;
@@ -245,7 +245,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(404).send({ error: "Unknown hotel provider" });
       return;
     }
-    const parsed = parseHotelQuery(req.query);
+    const parsed = parseHotelQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;

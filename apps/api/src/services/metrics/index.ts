@@ -1,3 +1,4 @@
+import type { AirQualityMetrics } from "@openmapx/integration-framework";
 import { type Counter, type Histogram, metrics } from "@opentelemetry/api";
 import { PrometheusSerializer } from "@opentelemetry/exporter-prometheus";
 import {
@@ -80,6 +81,9 @@ export interface MetricsHandle {
   osmContributionLatency: Histogram;
   personalTimelineRequestCounter: Counter;
   personalTimelineRequestLatency: Histogram;
+  airQualityRequestCounter: Counter;
+  airQualityRequestLatency: Histogram;
+  airQualityEvidenceCount: Histogram;
   /** Render the current metric state as Prometheus text format. */
   renderPrometheus(): Promise<string>;
   /** Shut the meter provider down (idempotent). */
@@ -162,6 +166,16 @@ export function initMetrics(): MetricsHandle {
       unit: "ms",
     },
   );
+  const airQualityRequestCounter = meter.createCounter("air_quality_requests_total", {
+    description: "Canonical air-quality requests with bounded outcome and provenance labels",
+  });
+  const airQualityRequestLatency = meter.createHistogram("air_quality_request_duration_ms", {
+    description: "Canonical air-quality request duration",
+    unit: "ms",
+  });
+  const airQualityEvidenceCount = meter.createHistogram("air_quality_evidence_count", {
+    description: "Number of evidence records returned by a canonical request",
+  });
 
   const osmContributionCounter = meter.createCounter("osm_contribution_operations_total", {
     description: "OpenStreetMap contribution operations by operation and outcome",
@@ -210,6 +224,9 @@ export function initMetrics(): MetricsHandle {
     osmContributionLatency,
     personalTimelineRequestCounter,
     personalTimelineRequestLatency,
+    airQualityRequestCounter,
+    airQualityRequestLatency,
+    airQualityEvidenceCount,
     renderPrometheus,
     close,
   };
@@ -254,6 +271,22 @@ export function recordProviderCall(labels: ProviderCallLabels, latencyMs: number
   const promLabels = toPromLabels(labels);
   handle.providerCallCounter.add(1, promLabels);
   handle.providerCallLatency.record(latencyMs, promLabels);
+}
+
+export function recordAirQuality(metric: AirQualityMetrics): void {
+  const labels = {
+    method: metric.method,
+    outcome: metric.outcome,
+    cache_result: metric.cacheResult,
+    headline_class: metric.headlineClass,
+    rejection_code: metric.rejectionCode,
+    quota_truncated: String(metric.quotaTruncated),
+    compatibility_use: metric.compatibilityUse,
+  };
+  const handle = getMetrics();
+  handle.airQualityRequestCounter.add(1, labels);
+  handle.airQualityRequestLatency.record(Math.max(0, metric.latencyMs), labels);
+  handle.airQualityEvidenceCount.record(Math.max(0, Math.floor(metric.evidenceCount)), labels);
 }
 
 export interface TransitDecisionLabels {

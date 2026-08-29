@@ -1,5 +1,5 @@
 import { fetchJson } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 
 const OPEN_METEO_AQ_BASE = "https://air-quality-api.open-meteo.com/v1/air-quality";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -41,8 +41,8 @@ function roundCoord(n: number): number {
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/aqi", async (req, reply) => {
-    const lat = Number.parseFloat(req.query.lat);
-    const lng = Number.parseFloat(req.query.lng);
+    const lat = Number.parseFloat(scalarQueries(req.query).lat);
+    const lng = Number.parseFloat(scalarQueries(req.query).lng);
 
     if (Number.isNaN(lat) || Number.isNaN(lng)) {
       reply.status(400).send({ message: "lat and lng query parameters are required" });

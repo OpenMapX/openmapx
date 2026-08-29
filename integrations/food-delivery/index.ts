@@ -3,7 +3,7 @@ import {
   type DeliveryLinkKind,
   type DeliveryProviderInfo,
 } from "@openmapx/core/server";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { DELIVERY_PROVIDERS, getDeliveryProvider, providerServes } from "./providers/index.js";
 import { parseDeliveryQuery } from "./query.js";
 import type { DeliveryProvider, DeliveryProviderConfig, DeliveryQuery } from "./types.js";
@@ -42,7 +42,7 @@ export function setup(ctx: IntegrationContext): void {
   };
 
   ctx.registerRoute("GET", "/providers", async (req, reply) => {
-    const country = (req.query.country ?? "").trim().toLowerCase() || undefined;
+    const country = (scalarQueries(req.query).country ?? "").trim().toLowerCase() || undefined;
     const providers: DeliveryProviderInfo[] = DELIVERY_PROVIDERS.filter((p) =>
       providerServes(p, country),
     ).map((p) => providerInfo(p, p.fallbackKind));
@@ -121,63 +121,78 @@ export function setup(ctx: IntegrationContext): void {
     return { url: fallback(), linkKind: provider.fallbackKind };
   }
 
-  ctx.registerRoute("GET", "/resolve", async (req, reply) => {
-    const parsed = parseDeliveryQuery(req.query);
-    if (!parsed.ok) {
-      reply.status(400).send({ error: parsed.error });
-      return;
-    }
-    const handoffs = await Promise.all(
-      DELIVERY_PROVIDERS.filter((provider) =>
-        providerServes(provider, parsed.query.countryCode),
-      ).map(async (provider) => {
-        const handoff = await resolveUrl(provider, parsed.query);
-        return {
-          provider: providerInfo(
-            provider,
-            handoff.linkKind,
-            handoff.linkKind === "exact" ? handoff.url : undefined,
-          ),
-          degraded: handoff.degraded === true,
-        };
-      }),
-    );
-    const degraded = handoffs.some((handoff) => handoff.degraded);
-    reply.header(
-      "Cache-Control",
-      degraded ? "private, no-store, max-age=0" : "private, max-age=3600",
-    );
-    reply.send({ providers: handoffs.map((handoff) => handoff.provider), degraded });
-  });
+  ctx.registerRoute(
+    "GET",
+    "/resolve",
+    async (req, reply) => {
+      const parsed = parseDeliveryQuery(scalarQueries(req.query));
+      if (!parsed.ok) {
+        reply.status(400).send({ error: parsed.error });
+        return;
+      }
+      const handoffs = await Promise.all(
+        DELIVERY_PROVIDERS.filter((provider) =>
+          providerServes(provider, parsed.query.countryCode),
+        ).map(async (provider) => {
+          const handoff = await resolveUrl(provider, parsed.query);
+          return {
+            provider: providerInfo(
+              provider,
+              handoff.linkKind,
+              handoff.linkKind === "exact" ? handoff.url : undefined,
+            ),
+            degraded: handoff.degraded === true,
+          };
+        }),
+      );
+      const degraded = handoffs.some((handoff) => handoff.degraded);
+      reply.header(
+        "Cache-Control",
+        degraded ? "private, no-store, max-age=0" : "private, max-age=3600",
+      );
+      reply.send({ providers: handoffs.map((handoff) => handoff.provider), degraded });
+    },
+    { rateLimitTier: "expensive" },
+  );
 
-  ctx.registerRoute("GET", "/:provider/open", async (req, reply) => {
-    const provider = getDeliveryProvider(req.params.provider ?? "");
-    if (!provider) {
-      reply.status(404).send({ error: "Unknown delivery provider" });
-      return;
-    }
-    const parsed = parseDeliveryQuery(req.query);
-    if (!parsed.ok) {
-      reply.status(400).send({ error: parsed.error });
-      return;
-    }
-    const handoff = await resolveUrl(provider, parsed.query);
-    reply.header("Location", handoff.url);
-    reply.status(302).send({});
-  });
+  ctx.registerRoute(
+    "GET",
+    "/:provider/open",
+    async (req, reply) => {
+      const provider = getDeliveryProvider(req.params.provider ?? "");
+      if (!provider) {
+        reply.status(404).send({ error: "Unknown delivery provider" });
+        return;
+      }
+      const parsed = parseDeliveryQuery(scalarQueries(req.query));
+      if (!parsed.ok) {
+        reply.status(400).send({ error: parsed.error });
+        return;
+      }
+      const handoff = await resolveUrl(provider, parsed.query);
+      reply.header("Location", handoff.url);
+      reply.status(302).send({});
+    },
+    { rateLimitTier: "expensive" },
+  );
 
-  ctx.registerRoute("GET", "/:provider/url", async (req, reply) => {
-    const provider = getDeliveryProvider(req.params.provider ?? "");
-    if (!provider) {
-      reply.status(404).send({ error: "Unknown delivery provider" });
-      return;
-    }
-    const parsed = parseDeliveryQuery(req.query);
-    if (!parsed.ok) {
-      reply.status(400).send({ error: parsed.error });
-      return;
-    }
-    const handoff = await resolveUrl(provider, parsed.query);
-    reply.send({ provider: provider.id, ...handoff });
-  });
+  ctx.registerRoute(
+    "GET",
+    "/:provider/url",
+    async (req, reply) => {
+      const provider = getDeliveryProvider(req.params.provider ?? "");
+      if (!provider) {
+        reply.status(404).send({ error: "Unknown delivery provider" });
+        return;
+      }
+      const parsed = parseDeliveryQuery(scalarQueries(req.query));
+      if (!parsed.ok) {
+        reply.status(400).send({ error: parsed.error });
+        return;
+      }
+      const handoff = await resolveUrl(provider, parsed.query);
+      reply.send({ provider: provider.id, ...handoff });
+    },
+    { rateLimitTier: "expensive" },
+  );
 }

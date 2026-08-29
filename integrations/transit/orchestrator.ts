@@ -197,6 +197,23 @@ const noopHealth: ProviderHealthHandle = {
   isHealthy: () => Promise.resolve(true),
   recordSuccess: () => Promise.resolve(),
   recordFailure: () => Promise.resolve(),
+  getSnapshot: () =>
+    Promise.resolve({
+      state: "healthy",
+      successCount: 0,
+      failureCount: 0,
+      countedFailureCount: 0,
+      consecutiveSuccesses: 0,
+      consecutiveFailures: 0,
+      windowFailureRate: null,
+      emaLatencyMs: 0,
+      lastSuccessAt: null,
+      lastFailureAt: null,
+      lastFailureOutcome: null,
+      lastOperatorMessage: null,
+      retryAt: null,
+      ownsHalfOpenProbe: false,
+    }),
 };
 
 const noopMetrics: MetricsRecorder = {
@@ -259,7 +276,7 @@ async function timed<T>(
     return { ok: true, value };
   } catch (error) {
     const elapsed = performance.now() - start;
-    await health.recordFailure(providerId, elapsed, failureReason(error));
+    await health.recordFailure(providerId, elapsed, "connection", failureReason(error));
     metrics.recordProviderCall({ providerId, method, outcome: "error" }, elapsed);
     return { ok: false, error };
   }

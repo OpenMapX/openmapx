@@ -1,5 +1,5 @@
 import { fetchJson, haversineKm } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 
 const EONET_BASE = "https://eonet.gsfc.nasa.gov/api/v3/events/geojson";
 const GDACS_BASE = "https://www.gdacs.org/gdacsapi/api/events/geteventlist/SEARCH";
@@ -182,9 +182,11 @@ function deduplicateFeatures(
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/events", async (req, reply) => {
-    const status = req.query.status ?? "open";
-    const category = req.query.category ?? "";
-    const days = req.query.days ? Number.parseInt(req.query.days, 10) : undefined;
+    const status = scalarQueries(req.query).status ?? "open";
+    const category = scalarQueries(req.query).category ?? "";
+    const days = scalarQueries(req.query).days
+      ? Number.parseInt(scalarQueries(req.query).days, 10)
+      : undefined;
 
     if (!["open", "closed", "all"].includes(status)) {
       reply.status(400).send({ message: "Invalid status parameter." });

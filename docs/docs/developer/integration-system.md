@@ -234,6 +234,12 @@ they surface are described on the
     attribution?: string;
     providerCountry: string;          // ISO country code
     providerPrivacyUrl: string;
+    owner?: string;
+    termsUrl?: string;
+    methodologyUrl?: string;
+    dataUseClass?: "open" | "attribution" | "share-alike" | "non-commercial" | "restricted" | "unknown";
+    credentialOwner?: "none" | "instance-operator" | "openmapx-project" | "end-user";
+    reviewedAt?: string;              // ISO date, YYYY-MM-DD
     commercialUse?: "yes" | "no" | "conditional" | "unknown";
     endUserExposure?: "direct" | "mixed" | "proxied" | "server-only" | "build-time";
     personalData?: boolean;
@@ -320,6 +326,8 @@ interface IntegrationContext {
   readonly attributionIndex?: AttributionIndexHandle;  // resolve sourceIds + MOTIS feeds
   readonly providerHealth?: ProviderHealthHandle;      // record latency/outcome; cooldowns
   readonly metricsRecorder?: MetricsRecorder;          // OpenTelemetry per-call counters
+  readonly upstreamRuntime?: UpstreamRuntime;           // distributed cache/lease/quota
+  readonly cursorCodec?: OpaqueCursorCodec;             // signed, purpose-scoped cursors
   // …
 }
 ```
@@ -328,6 +336,27 @@ These let an orchestrator skip a provider that is in a failure cooldown, record
 per-call latency and outcome, and resolve attribution rows — without the
 framework taking a compile-time dependency on the API server (they are declared
 as structural interfaces and injected by the host).
+
+`upstreamRuntime` is the production primitive for quota-bound acquisition. Its
+cache returns `fresh`, `stale`, `stale-if-error`, or `miss`; a refresh lease is
+owner-released; and all named quota windows are checked and consumed atomically.
+Do not replace it with process-local maps or counters in production. Redis
+failure must deny a new quota-consuming refresh, although eligible stale data
+may still be returned with its original evidence time.
+
+Use `http.getResponse()` when status or allowlisted rate-limit headers matter,
+and `http.getBytes()` for binary payloads. Both require a byte ceiling and media
+type allowlist; redirects can be rejected. Non-success bodies are bounded too.
+Integration-local raw `fetch` is not an escape hatch for provider work.
+
+Route queries arrive exactly as Fastify parsed them: each value is a string, an
+array for a repeated key, or undefined. Use `scalarQuery`/`scalarQueries` and
+reject repeated scalar keys. Never coerce an array with `String(...)` or select
+one value silently.
+
+Opaque cursors are HMAC-signed and purpose-scoped. Bind their encoded value to
+the normalized query/provider context and give it a finite expiry; decoding a
+cursor under another route purpose must fail.
 
 ### Registering capabilities
 
@@ -351,7 +380,7 @@ interface IntegrationContext {
   registerRoadConditionsProvider(p: RoadConditionsProvider): void; // → "road-conditions"
 
   registerPoiSources(sources: readonly PoiSource[]): void;    // → data-manager ingest
-  registerRoute(method, path, handler, options?): void;       // → /api/integrations/<id>/…
+  registerRoute(method, path, handler, options?): void;       // options.rateLimitTier
   registerHealthCheck(fn: CustomHealthCheckFn): void;         // overrides manifest probe
   registerDisclosure(d: Disclosure): void;                    // surfaces a capability note
 }
@@ -364,7 +393,18 @@ shared POI-source registry that the data-manager ingest pipeline also reads, so
 large bbox-queryable datasets are ingested once rather than fetched eagerly per
 request. `registerRoute` mounts a route under the integration's prefix; passing
 `{ requireAuth: true }` makes the host reject unauthenticated callers with 401
-before the handler runs.
+before the handler runs. Every route consumes exactly one host limiter bucket:
+`rateLimitTier` defaults to `public`, upstream-heavy point/list routes use
+`expensive`, and tile fan-out uses `tile`. Do not add integration paths to the
+global URL-pattern limiter.
+
+Provider health accepts only closed outcomes. Timeouts, connection failures,
+upstream 5xx responses, authentication failures, and invalid payloads affect the
+circuit; valid empty results, policy/input rejection, quota denial, and caller
+cancellation remain observable without penalizing the provider. Keep bounded
+operator detail separate from the outcome code. Air-quality metrics likewise
+accept only closed method, outcome, cache, evidence-class, rejection, quota, and
+compatibility fields; user strings and location identifiers are not labels.
 
 ### Lifecycle, events, and discovery
 

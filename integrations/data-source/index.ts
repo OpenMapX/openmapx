@@ -3,6 +3,7 @@ import {
   type BoundingBoxLimits,
   clampViewportBoundingBox,
   type IntegrationContext,
+  scalarQueries,
 } from "@openmapx/integration-framework";
 import { createDataSourceOrchestrator } from "./orchestrator.js";
 
@@ -37,16 +38,16 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const bbox = parseDataSourceBBox(req.query);
+    const bbox = parseDataSourceBBox(scalarQueries(req.query));
     if (!bbox) {
       reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
 
     let filters: Record<string, unknown> | undefined;
-    if (req.query.filters) {
+    if (scalarQueries(req.query).filters) {
       try {
-        filters = JSON.parse(req.query.filters);
+        filters = JSON.parse(scalarQueries(req.query).filters);
       } catch {
         reply.status(400).send({ error: "Invalid filters JSON" });
         return;
@@ -138,16 +139,16 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const bbox = parseDataSourceBBox(req.query);
+    const bbox = parseDataSourceBBox(scalarQueries(req.query));
     if (!bbox) {
       reply.status(400).send({ error: "Invalid bbox coordinates" });
       return;
     }
 
     let filters: Record<string, unknown> | undefined;
-    if (req.query.filters) {
+    if (scalarQueries(req.query).filters) {
       try {
-        filters = JSON.parse(req.query.filters);
+        filters = JSON.parse(scalarQueries(req.query).filters);
       } catch {
         reply.status(400).send({ error: "Invalid filters JSON" });
         return;
@@ -155,9 +156,9 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     let options: Record<string, unknown> | undefined;
-    if (req.query.options) {
+    if (scalarQueries(req.query).options) {
       try {
-        options = JSON.parse(req.query.options);
+        options = JSON.parse(scalarQueries(req.query).options);
       } catch {
         reply.status(400).send({ error: "Invalid options JSON" });
         return;

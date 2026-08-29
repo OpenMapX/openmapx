@@ -4,6 +4,7 @@ import type {
   RouteOptions,
 } from "@openmapx/integration-framework";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { RateLimitTiers } from "./server-wiring";
 import { requireAuth } from "./utils/require-auth";
 
 export type RegisteredIntegrationRoute = {
@@ -20,6 +21,13 @@ let stagedIntegrationRoutes: RegisteredIntegrationRoute[] | null = null;
 export const ROUTE_METHODS = ["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD"] as const;
 // biome-ignore lint/suspicious/noExplicitAny: accept any Fastify logger variant
 let _routeDispatcherFastify: FastifyInstance<any, any, any, any> | null = null;
+let routeRateLimits: Pick<RateLimitTiers, "public" | "expensive" | "tile"> | null = null;
+
+export function setIntegrationRouteRateLimits(
+  limits: Pick<RateLimitTiers, "public" | "expensive" | "tile"> | null,
+): void {
+  routeRateLimits = limits;
+}
 
 function normalizeRoutePath(path: string): string {
   const withSlash = path.startsWith("/") ? path : `/${path}`;
@@ -160,6 +168,13 @@ export function registerIntegrationRouteDispatcher(
     const matched = findIntegrationRoute(id, request.method, routePath);
     if (!matched) return reply.status(404).send({ error: "Not found" });
 
+    const rateLimitTier = matched.route.options?.rateLimitTier ?? "public";
+    const limiter = routeRateLimits?.[rateLimitTier];
+    if (limiter) {
+      await limiter(request, reply);
+      if (reply.sent) return reply;
+    }
+
     let userId: string | undefined;
     if (matched.route.options?.requireAuth === true) {
       userId = await requireAuth(request);
@@ -176,7 +191,7 @@ export function registerIntegrationRouteDispatcher(
     try {
       await matched.route.handler(
         {
-          query: request.query as Record<string, string>,
+          query: request.query as Record<string, string | string[] | undefined>,
           params: matched.params,
           body: request.body,
           userId,

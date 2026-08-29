@@ -1,5 +1,5 @@
 import type { BBox } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { eventsToFeatureCollection } from "./eventsToGeojson.js";
 import { flowSpansForRoutes, parseRouteFlowBody } from "./flowAlongRoute.js";
 import { flowToFeatureCollection } from "./flowToGeojson.js";
@@ -55,18 +55,20 @@ export function setup(ctx: IntegrationContext): void {
   // Aggregates every enabled road-conditions provider into one GeoJSON
   // FeatureCollection — consumed by both the map overlay and navigation.
   ctx.registerRoute("GET", "/events", async (req, reply) => {
-    const bbox = parseBbox(req.query.bbox);
+    const bbox = parseBbox(scalarQueries(req.query).bbox);
     if (!bbox) {
       reply.status(400).send({ error: "bbox required: west,south,east,north" });
       return;
     }
 
-    const types = (req.query.types ?? "")
+    const types = (scalarQueries(req.query).types ?? "")
       .split(",")
       .map((t) => t.trim())
       .filter(Boolean) as RoadConditionType[];
-    const minSeverity = (req.query.minSeverity || undefined) as RoadConditionSeverity | undefined;
-    const horizonDays = parseHorizonDays(req.query.horizonDays);
+    const minSeverity = (scalarQueries(req.query).minSeverity || undefined) as
+      | RoadConditionSeverity
+      | undefined;
+    const horizonDays = parseHorizonDays(scalarQueries(req.query).horizonDays);
 
     const key = `conditions:query:roads:${bboxKey(bbox)}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
 
@@ -102,7 +104,7 @@ export function setup(ctx: IntegrationContext): void {
   // (Task 2) are the primary path, this route backs providers/consumers
   // that can't speak MVT.
   ctx.registerRoute("GET", "/flow", async (req, reply) => {
-    const bbox = parseBbox(req.query.bbox);
+    const bbox = parseBbox(scalarQueries(req.query).bbox);
     if (!bbox) {
       reply.status(400).send({ error: "bbox required: west,south,east,north" });
       return;

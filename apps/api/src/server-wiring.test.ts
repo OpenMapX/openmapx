@@ -6,12 +6,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   controlledRequestLoggingOptions,
   corsOptions,
+  EXPENSIVE_PUBLIC_PATTERNS,
   makeRateLimitTierHook,
   makeSecurityResponseHeaderHook,
   makeStatusAwareRateLimit,
   makeTimelineAwareRateLimit,
   type RateLimitTiers,
   registerControlledRequestLogging,
+  TILE_PUBLIC_PATTERNS,
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring.js";
@@ -186,17 +188,17 @@ describe("makeRateLimitTierHook", () => {
     {
       method: "POST",
       url: "/api/integrations/transit/reachability/surface",
-      tier: "expensive",
+      tier: null,
     },
     {
       method: "POST",
       url: "/api/integrations/transit/reachability/check",
-      tier: "expensive",
+      tier: null,
     },
-    { url: "/api/integrations/food-delivery/resolve", tier: "expensive" },
-    { url: "/api/integrations/food-delivery/ubereats/open", tier: "expensive" },
-    { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "expensive" },
-    { url: "/api/integrations/food-delivery/providers?country=de", tier: "public" },
+    { url: "/api/integrations/food-delivery/resolve", tier: null },
+    { url: "/api/integrations/food-delivery/ubereats/open", tier: null },
+    { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: null },
+    { url: "/api/integrations/food-delivery/providers?country=de", tier: null },
     { method: "GET", url: "/api/status", tier: "status" },
     { method: "GET", url: "/api/status?probe=public", tier: "status" },
     { method: "POST", url: "/api/status", tier: "public" },
@@ -210,6 +212,12 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/saved", tier: "public" },
     { url: "/whatever", tier: null },
   ];
+
+  it("keeps integration routes out of global pattern classifiers", () => {
+    for (const pattern of [...EXPENSIVE_PUBLIC_PATTERNS, ...TILE_PUBLIC_PATTERNS]) {
+      expect(pattern.source).not.toContain("integrations");
+    }
+  });
 
   for (const { method = "GET", url, tier } of cases) {
     it(`routes ${method} ${url} to the ${tier ?? "no"} tier`, async () => {

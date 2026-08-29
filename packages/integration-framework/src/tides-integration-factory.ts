@@ -2,6 +2,7 @@ import { haversineKm } from "@openmapx/core";
 import type { PlaceResolverContext } from "@openmapx/place-ids";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import type { IntegrationContext } from "./context";
+import { scalarQuery } from "./query";
 
 /**
  * Shared shell for the coastal water-level / tide knowledge integrations
@@ -131,7 +132,7 @@ export function createTidesIntegration<S extends TideStationBase, R>(
   });
 
   ctx.registerRoute("GET", "/tides", async (req, reply) => {
-    const stationParam = req.query.station;
+    const stationParam = scalarQuery(req.query, "station");
     let resolvedStation: S | null = null;
     let distanceKm = 0;
 
@@ -144,8 +145,8 @@ export function createTidesIntegration<S extends TideStationBase, R>(
       }
       resolvedStation = found;
     } else {
-      const lat = Number.parseFloat(req.query.lat ?? "");
-      const lng = Number.parseFloat(req.query.lng ?? "");
+      const lat = Number.parseFloat(scalarQuery(req.query, "lat") ?? "");
+      const lng = Number.parseFloat(scalarQuery(req.query, "lng") ?? "");
       if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
         reply.status(400).send({ message: "Invalid coordinates" });
         return;

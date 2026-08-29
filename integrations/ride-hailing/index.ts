@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { createRideOrchestrator, RideComparisonError } from "./orchestrator.js";
 import { parseRideQuery } from "./query.js";
 
@@ -34,7 +34,7 @@ export function setup(ctx: IntegrationContext): void {
   const orchestrator = createRideOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/providers", async (req, reply) => {
-    const parsed = parseRideQuery(req.query);
+    const parsed = parseRideQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;
@@ -72,7 +72,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(404).send({ error: "Unknown ride provider" });
       return;
     }
-    const parsed = parseRideQuery(req.query);
+    const parsed = parseRideQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;
@@ -88,7 +88,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(404).send({ error: "Unknown ride provider" });
       return;
     }
-    const parsed = parseRideQuery(req.query);
+    const parsed = parseRideQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
       return;

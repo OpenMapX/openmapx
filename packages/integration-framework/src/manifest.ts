@@ -2,6 +2,11 @@ import { feedIdSchema } from "@openmapx/core/feed-id";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import z from "zod/v4";
 
+const governanceUrlSchema = z.url().refine((value) => {
+  const protocol = new URL(value).protocol;
+  return protocol === "https:" || protocol === "http:";
+}, "must be an HTTP(S) URL");
+
 export const dataSourceSchema = z.object({
   // Source matching — connects this entry to provider source values
   sourceId: feedIdSchema,
@@ -9,6 +14,16 @@ export const dataSourceSchema = z.object({
   // Identity
   name: z.string(),
   url: z.string(),
+  /** Organization ultimately responsible for the source data. */
+  owner: z.string().min(1).optional(),
+  termsUrl: governanceUrlSchema.optional(),
+  methodologyUrl: governanceUrlSchema.optional(),
+  dataUseClass: z
+    .enum(["open", "attribution", "share-alike", "non-commercial", "restricted", "unknown"])
+    .optional(),
+  credentialOwner: z.enum(["none", "instance-operator", "openmapx-project", "end-user"]).optional(),
+  /** Date on which the source contract and terms were last reviewed. */
+  reviewedAt: z.iso.date().optional(),
   /**
    * Actual data-API host(s) this source's requests go to, when they differ from
    * the registrable domain of `url` (which is usually the human-facing dataset /

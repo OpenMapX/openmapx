@@ -1,5 +1,5 @@
 import { fetchJson } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 
 const USGS_FEED_BASE = "https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary";
 const FETCH_TIMEOUT_MS = 15_000;
@@ -112,8 +112,8 @@ export function enrichFeatures(fc: USGSFeatureCollection): USGSFeatureCollection
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/earthquakes", async (req, reply) => {
-    const timeRange = req.query.timeRange ?? "week";
-    const minMagnitude = Number.parseFloat(req.query.minMagnitude ?? "2.5");
+    const timeRange = scalarQueries(req.query).timeRange ?? "week";
+    const minMagnitude = Number.parseFloat(scalarQueries(req.query).minMagnitude ?? "2.5");
 
     if (!["hour", "day", "week", "month"].includes(timeRange)) {
       reply.status(400).send({ message: "Invalid timeRange" });

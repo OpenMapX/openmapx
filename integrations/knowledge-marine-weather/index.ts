@@ -1,5 +1,5 @@
 import { fetchJson } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 
 const BASE = "https://marine-api.open-meteo.com/v1/marine";
 const FETCH_TIMEOUT_MS = 12_000;
@@ -180,8 +180,8 @@ async function fetchMarine(lat: number, lng: number): Promise<OpenMeteoMarineRes
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/marine", async (req, reply) => {
-    const lat = Number.parseFloat(req.query.lat ?? "");
-    const lng = Number.parseFloat(req.query.lng ?? "");
+    const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+    const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.status(400).send({ message: "Invalid coordinates" });
       return;

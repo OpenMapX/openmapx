@@ -2,11 +2,16 @@ import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { createHttpClient } from "../integration-clients";
 
-function jsonResponse(body: unknown, status = 200, statusText = "OK"): Response {
+function jsonResponse(
+  body: unknown,
+  status = 200,
+  statusText = "OK",
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
     statusText,
-    headers: { "Content-Type": "application/json" },
+    headers: { "Content-Type": "application/json", ...headers },
   });
 }
 
@@ -15,6 +20,99 @@ afterEach(() => {
 });
 
 describe("createHttpClient", () => {
+  it("returns bounded JSON status and only allowlisted normalized headers", async () => {
+    const fn = vi.fn((_input: RequestInfo | URL, _init?: RequestInit) =>
+      jsonResponse({ error: "quota" }, 429, "Too Many Requests", {
+        "Retry-After": "60",
+        "X-RateLimit-Remaining": "0",
+        "X-Upstream-Secret": "do-not-forward",
+      }),
+    );
+    vi.stubGlobal("fetch", fn);
+
+    const response = await createHttpClient(createNoopLogger()).getResponse<{ error: string }>(
+      "https://x.test/data",
+      {
+        maxBytes: 1_024,
+        contentTypes: ["application/json"],
+        responseHeaders: ["RETRY-AFTER", "x-ratelimit-remaining"],
+        redirect: "error",
+      },
+    );
+
+    expect(response).toEqual({
+      status: 429,
+      headers: { "retry-after": "60", "x-ratelimit-remaining": "0" },
+      body: { error: "quota" },
+    });
+    expect(fn.mock.calls[0]?.[1]?.redirect).toBe("error");
+  });
+
+  it("rejects response content types outside the explicit allowlist", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Response("<html/>", { headers: { "Content-Type": "text/html" } })),
+    );
+
+    await expect(
+      createHttpClient(createNoopLogger()).getResponse("https://x.test/data", {
+        maxBytes: 1_024,
+        contentTypes: ["application/json"],
+      }),
+    ).rejects.toThrow(/content type/i);
+  });
+
+  it("returns bounded binary bytes with status and allowlisted headers", async () => {
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]);
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        () =>
+          new Response(png, {
+            status: 206,
+            headers: {
+              "Content-Type": "image/png",
+              ETag: '"abc"',
+              "Content-Length": String(png.byteLength),
+            },
+          }),
+      ),
+    );
+
+    const response = await createHttpClient(createNoopLogger()).getBytes("https://x.test/tile", {
+      maxBytes: 8,
+      contentTypes: ["image/png"],
+      responseHeaders: ["etag"],
+    });
+
+    expect(response.status).toBe(206);
+    expect(response.headers).toEqual({ etag: '"abc"' });
+    expect([...response.bytes]).toEqual([...png]);
+  });
+
+  it("rejects declared and streamed binary bodies over maxBytes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(new Uint8Array([1]), {
+            headers: { "Content-Type": "image/png", "Content-Length": "100" },
+          }),
+        )
+        .mockResolvedValueOnce(
+          new Response(new Uint8Array([1, 2, 3, 4]), {
+            headers: { "Content-Type": "image/png" },
+          }),
+        ),
+    );
+    const client = createHttpClient(createNoopLogger());
+    const options = { maxBytes: 2, contentTypes: ["image/png"] } as const;
+
+    await expect(client.getBytes("https://x.test/declared", options)).rejects.toThrow(/too large/i);
+    await expect(client.getBytes("https://x.test/streamed", options)).rejects.toThrow(/too large/i);
+  });
+
   it("rejects a hung GET within the given timeoutMs", async () => {
     vi.stubGlobal(
       "fetch",

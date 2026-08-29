@@ -1,98 +1,106 @@
 import type Redis from "ioredis";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ProviderHealth, type ProviderHealthState } from "../index.js";
 
-/**
- * In-memory Redis fake. Implements only the surface ProviderHealth touches:
- *
- *   - GET / SET (with EX) / DEL
- *   - SCAN (single batch when COUNT is large enough)
- *   - MGET
- *   - defineCommand → registers a method that re-evaluates the Lua script in JS
- *     via a hand-rolled interpreter for the specific HEALTH_SCRIPT semantics
- *
- * We deliberately reimplement the script's semantics in TS so the tests don't
- * shell out to a real Redis. The TS reimplementation is kept tight: any state
- * shape mismatch between Lua and TS would surface as soon as ProviderHealth
- * reads the JSON back.
- */
 class FakeRedis {
-  private store = new Map<string, string>();
-  private commands = new Map<string, { numberOfKeys: number; lua: string }>();
+  readonly store = new Map<string, string>();
 
-  defineCommand(name: string, opts: { numberOfKeys: number; lua: string }): void {
-    this.commands.set(name, opts);
-    (this as unknown as Record<string, unknown>)[name] = (...args: unknown[]) =>
-      this.runCommand(name, args);
+  defineCommand(name: string): void {
+    (this as unknown as Record<string, unknown>)[name] = (...args: string[]) =>
+      this.transition(args);
   }
 
-  async runCommand(_name: string, args: unknown[]): Promise<string> {
-    // Mirrors ioredis `defineCommand({ numberOfKeys: 1 })`: the method is called
-    // as (key, ...ARGV) — ioredis injects the key count, callers never pass it.
-    //   [key, op, latencyMs, nowIso, reason,
-    //    windowSize, cooldownMs, cooldownUntilIso,
-    //    threshold, minSampleSize, emaAlpha, ttlSeconds]
+  private async transition(args: string[]): Promise<string> {
     const [
       key,
+      probeKey,
       op,
-      latencyMs,
+      outcome,
+      latencyRaw,
       nowIso,
-      reason,
-      windowSize,
       ,
-      cooldownUntilIso,
-      threshold,
-      minSampleSize,
-      emaAlpha,
-      ttlSeconds,
-    ] = args as string[];
-
-    const raw = this.store.get(key);
-    let state: ProviderHealthState;
-    if (raw) {
-      state = JSON.parse(raw) as ProviderHealthState;
-      if (!Array.isArray(state.window)) state.window = [];
+      message,
+      windowRaw,
+      minRaw,
+      degradedRaw,
+      openRaw,
+      alphaRaw,
+      ,
+      cooldownRaw,
+      countedRaw,
+    ] = args;
+    const raw = this.store.get(key as string);
+    const state: ProviderHealthState = raw
+      ? (JSON.parse(raw) as ProviderHealthState)
+      : {
+          schema: 2,
+          state: "healthy",
+          successCount: 0,
+          failureCount: 0,
+          countedFailureCount: 0,
+          consecutiveSuccesses: 0,
+          consecutiveFailures: 0,
+          reopenCount: 0,
+          lastSuccessAt: null,
+          lastFailureAt: null,
+          lastFailureOutcome: null,
+          lastOperatorMessage: null,
+          emaLatencyMs: 0,
+          window: [],
+          retryAt: null,
+        };
+    const latency = Number(latencyRaw);
+    const alpha = Number(alphaRaw);
+    state.emaLatencyMs =
+      state.emaLatencyMs === 0 ? latency : alpha * latency + (1 - alpha) * state.emaLatencyMs;
+    if (op === "success") {
+      state.successCount++;
+      state.consecutiveSuccesses++;
+      state.consecutiveFailures = 0;
+      state.lastSuccessAt = nowIso as string;
+      state.window.push({ outcome: "ok", at: nowIso as string, latencyMs: latency });
+      if (state.state === "open") {
+        state.state = "degraded";
+        state.retryAt = null;
+      }
+      if (state.consecutiveSuccesses >= 3) {
+        state.state = "healthy";
+        state.reopenCount = 0;
+        state.retryAt = null;
+      }
     } else {
-      state = { success: 0, failure: 0, emaLatencyMs: 0, window: [] };
-    }
-
-    const latency = Number(latencyMs);
-    const winSize = Number(windowSize);
-
-    if (op === "ok") {
-      state.success += 1;
-      state.window.push({ outcome: "ok", at: nowIso, latencyMs: latency });
-    } else {
-      state.failure += 1;
-      state.lastFailureAt = nowIso;
-      state.lastFailureReason = reason;
-      state.window.push({ outcome: "error", at: nowIso, latencyMs: latency });
-    }
-
-    while (state.window.length > winSize) state.window.shift();
-
-    const alpha = Number(emaAlpha);
-    if ((state.emaLatencyMs ?? 0) === 0) {
-      state.emaLatencyMs = latency;
-    } else {
-      state.emaLatencyMs = alpha * latency + (1 - alpha) * state.emaLatencyMs;
-    }
-
-    const minSamples = Number(minSampleSize);
-    const thresholdNum = Number(threshold);
-    if (state.window.length >= minSamples) {
-      const fails = state.window.reduce((acc, c) => acc + (c.outcome === "error" ? 1 : 0), 0);
-      const rate = fails / state.window.length;
-      if (rate > thresholdNum) {
-        state.disabledUntil = cooldownUntilIso;
-        state.disabledReason = `failure rate ${rate.toFixed(2)} over ${state.window.length} calls`;
+      state.failureCount++;
+      state.lastFailureAt = nowIso as string;
+      state.lastFailureOutcome = outcome as ProviderHealthState["lastFailureOutcome"];
+      state.lastOperatorMessage = message as string;
+      if (countedRaw === "1") {
+        state.countedFailureCount++;
+        state.consecutiveFailures++;
+        state.consecutiveSuccesses = 0;
+        state.window.push({ outcome: "error", at: nowIso as string, latencyMs: latency });
+        const failures = state.window.filter((entry) => entry.outcome === "error").length;
+        const rate = failures / state.window.length;
+        if (
+          state.consecutiveFailures >= 5 ||
+          (state.window.length >= Number(minRaw) && rate > Number(openRaw))
+        ) {
+          if (state.state === "open") state.reopenCount++;
+          const cooldowns = JSON.parse(cooldownRaw as string) as string[];
+          const cooldown = cooldowns[Math.min(state.reopenCount, cooldowns.length - 1)] as string;
+          state.state = "open";
+          state.retryAt = cooldown;
+        } else if (
+          state.consecutiveFailures >= 2 ||
+          (state.window.length >= 4 && rate >= Number(degradedRaw))
+        ) {
+          state.state = "degraded";
+        }
       }
     }
-
-    // TTL is currently ignored by the fake — tests don't need expiry.
-    void ttlSeconds;
+    while (state.window.length > Number(windowRaw)) state.window.shift();
+    this.store.delete(probeKey as string);
     const encoded = JSON.stringify(state);
-    this.store.set(key, encoded);
+    this.store.set(key as string, encoded);
     return encoded;
   }
 
@@ -100,194 +108,114 @@ class FakeRedis {
     return this.store.get(key) ?? null;
   }
 
-  async set(key: string, value: string, ..._args: unknown[]): Promise<"OK"> {
+  async set(key: string, value: string, ...args: Array<string | number>): Promise<"OK" | null> {
+    if (args.includes("NX") && this.store.has(key)) return null;
     this.store.set(key, value);
     return "OK";
   }
 
   async del(...keys: string[]): Promise<number> {
-    let n = 0;
-    for (const k of keys) {
-      if (this.store.delete(k)) n += 1;
-    }
-    return n;
+    return keys.reduce((count, key) => count + (this.store.delete(key) ? 1 : 0), 0);
   }
 
-  async mget(...keys: string[]): Promise<(string | null)[]> {
-    return keys.map((k) => this.store.get(k) ?? null);
+  async scan(): Promise<[string, string[]]> {
+    return ["0", [...this.store.keys()].filter((key) => key.startsWith("provider:health:"))];
   }
 
-  async scan(
-    _cursor: string,
-    _matchKw: string,
-    pattern: string,
-    _countKw: string,
-    _count: number,
-  ): Promise<[string, string[]]> {
-    const regex = new RegExp(`^${pattern.replace(/\*/g, ".*")}$`);
-    const keys = Array.from(this.store.keys()).filter((k) => regex.test(k));
-    return ["0", keys];
+  async mget(...keys: string[]): Promise<Array<string | null>> {
+    return keys.map((key) => this.store.get(key) ?? null);
   }
 }
 
-function createRedis(): Redis {
-  return new FakeRedis() as unknown as Redis;
-}
-
-/** A redis whose health-store command always rejects, to test best-effort recording. */
-function createThrowingRedis(): Redis {
-  const base = new FakeRedis();
-  (base as unknown as Record<string, unknown>).providerHealthApply = () =>
-    Promise.reject(new Error("redis down"));
-  return base as unknown as Redis;
+function asRedis(fake = new FakeRedis()): Redis {
+  return fake as unknown as Redis;
 }
 
 describe("ProviderHealth", () => {
-  let nowMs = 1_700_000_000_000;
-  const advance = (ms: number) => {
-    nowMs += ms;
-  };
+  it("degrades at two consecutive counted failures and at a 25% window rate", async () => {
+    const health = await ProviderHealth.init({ redis: asRedis() });
+    await health.recordFailure("consecutive", 10, "timeout");
+    expect((await health.getSnapshot("consecutive")).state).toBe("healthy");
+    await health.recordFailure("consecutive", 10, "connection");
+    expect((await health.getSnapshot("consecutive")).state).toBe("degraded");
 
-  beforeEach(() => {
-    nowMs = 1_700_000_000_000;
+    await health.recordSuccess("rate", 10);
+    await health.recordSuccess("rate", 10);
+    await health.recordSuccess("rate", 10);
+    await health.recordFailure("rate", 10, "invalid_payload");
+    expect((await health.getSnapshot("rate")).state).toBe("degraded");
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it("opens above 50% with enough samples or at five consecutive failures", async () => {
+    const health = await ProviderHealth.init({ redis: asRedis(), minSampleSize: 4 });
+    await health.recordSuccess("rate", 10);
+    await health.recordFailure("rate", 10, "timeout");
+    await health.recordFailure("rate", 10, "timeout");
+    await health.recordFailure("rate", 10, "timeout");
+    expect((await health.getSnapshot("rate")).state).toBe("open");
+
+    for (let index = 0; index < 5; index++) {
+      await health.recordFailure("streak", 10, "upstream_5xx");
+    }
+    expect((await health.getSnapshot("streak")).state).toBe("open");
   });
 
-  it("starts healthy for unseen providers", async () => {
-    const ph = await ProviderHealth.init({ redis: createRedis(), now: () => nowMs });
-    expect(await ph.isHealthy("acme")).toBe(true);
-    expect(await ph.getState("acme")).toBeNull();
+  it("does not count valid empty, policy, input, quota, or caller cancellation", async () => {
+    const health = await ProviderHealth.init({ redis: asRedis() });
+    for (const outcome of [
+      "valid_empty",
+      "policy",
+      "input",
+      "quota",
+      "caller_cancelled",
+    ] as const) {
+      await health.recordFailure("safe", 10, outcome, "operator detail");
+    }
+    const snapshot = await health.getSnapshot("safe");
+    expect(snapshot).toMatchObject({ state: "healthy", failureCount: 5, countedFailureCount: 0 });
+    expect(snapshot.lastOperatorMessage).toBe("operator detail");
   });
 
-  it("never throws when the health store is unavailable (best-effort recording)", async () => {
-    const ph = await ProviderHealth.init({ redis: createThrowingRedis(), now: () => nowMs });
-    await expect(ph.recordSuccess("acme", 100)).resolves.toBeUndefined();
-    await expect(ph.recordFailure("acme", 50, "boom")).resolves.toBeUndefined();
+  it("leases one half-open probe, escalates cooldowns, and recovers after three successes", async () => {
+    let now = 1_700_000_000_000;
+    const redis = new FakeRedis();
+    const options = {
+      redis: asRedis(redis),
+      now: () => now,
+      cooldownsMs: [100, 200, 400, 800, 1_600],
+    };
+    const first = await ProviderHealth.init(options);
+    const second = await ProviderHealth.init(options);
+    for (let index = 0; index < 5; index++) await first.recordFailure("acme", 10, "timeout");
+    const initial = await first.getSnapshot("acme");
+    expect(Date.parse(initial.retryAt as string) - now).toBe(100);
+
+    now += 101;
+    expect(await first.isHealthy("acme")).toBe(true);
+    expect(await second.isHealthy("acme")).toBe(false);
+    await first.recordFailure("acme", 10, "timeout");
+    const reopened = await first.getSnapshot("acme");
+    expect(Date.parse(reopened.retryAt as string) - now).toBe(200);
+
+    now += 201;
+    expect(await first.isHealthy("acme")).toBe(true);
+    await first.recordSuccess("acme", 20);
+    expect((await first.getSnapshot("acme")).state).toBe("degraded");
+    await first.recordSuccess("acme", 20);
+    await first.recordSuccess("acme", 20);
+    expect((await first.getSnapshot("acme")).state).toBe("healthy");
   });
 
-  it("records successes and failures with EMA latency", async () => {
-    const ph = await ProviderHealth.init({ redis: createRedis(), now: () => nowMs });
-    await ph.recordSuccess("acme", 100);
-    await ph.recordSuccess("acme", 200);
-    await ph.recordFailure("acme", 50, "timeout");
-
-    const s = await ph.getState("acme");
-    expect(s).toBeTruthy();
-    expect(s?.success).toBe(2);
-    expect(s?.failure).toBe(1);
-    expect(s?.window).toHaveLength(3);
-    expect(s?.lastFailureReason).toBe("timeout");
-    // EMA: 100 → (0.2*200 + 0.8*100) = 120 → (0.2*50 + 0.8*120) = 106
-    expect(s?.emaLatencyMs).toBeCloseTo(106, 1);
-    expect(s?.windowFailureRate).toBeCloseTo(1 / 3, 5);
-  });
-
-  it("caps the sliding window at the configured size", async () => {
-    const ph = await ProviderHealth.init({
-      redis: createRedis(),
-      windowSize: 5,
-      now: () => nowMs,
+  it("fails open with a diagnostic when Redis reads fail", async () => {
+    const redis = asRedis();
+    redis.get = async () => {
+      throw new Error("down");
+    };
+    const health = await ProviderHealth.init({ redis });
+    await expect(health.getSnapshot("acme")).resolves.toMatchObject({
+      state: "healthy",
+      diagnostic: "store_unavailable",
     });
-    for (let i = 0; i < 12; i++) await ph.recordSuccess("acme", 10);
-    const s = await ph.getState("acme");
-    expect(s?.window).toHaveLength(5);
-    expect(s?.success).toBe(12);
-  });
-
-  it("auto-disables when failure rate exceeds threshold AND sample size met", async () => {
-    const ph = await ProviderHealth.init({
-      redis: createRedis(),
-      minSampleSize: 4,
-      failureRateThreshold: 0.5,
-      cooldownMs: 60_000,
-      now: () => nowMs,
-    });
-
-    // 3 failures, 1 success — under min sample size, no disable yet
-    await ph.recordFailure("acme", 10, "boom");
-    await ph.recordFailure("acme", 10, "boom");
-    await ph.recordFailure("acme", 10, "boom");
-    expect(await ph.isHealthy("acme")).toBe(true);
-
-    // 4th call brings us to min sample size and rate > 0.5
-    await ph.recordFailure("acme", 10, "boom");
-    const s = await ph.getState("acme");
-    expect(s?.disabledUntil).toBeDefined();
-    expect(s?.disabledReason).toContain("failure rate");
-    expect(await ph.isHealthy("acme")).toBe(false);
-  });
-
-  it("respects minSampleSize before disabling", async () => {
-    const ph = await ProviderHealth.init({
-      redis: createRedis(),
-      minSampleSize: 20,
-      failureRateThreshold: 0.5,
-      now: () => nowMs,
-    });
-    // 100% failures but only 5 calls
-    for (let i = 0; i < 5; i++) await ph.recordFailure("acme", 10, "boom");
-    expect(await ph.isHealthy("acme")).toBe(true);
-    const s = await ph.getState("acme");
-    expect(s?.disabledUntil).toBeUndefined();
-  });
-
-  it("re-enables after cooldown expires", async () => {
-    const ph = await ProviderHealth.init({
-      redis: createRedis(),
-      minSampleSize: 3,
-      failureRateThreshold: 0.5,
-      cooldownMs: 60_000,
-      now: () => nowMs,
-    });
-    for (let i = 0; i < 4; i++) await ph.recordFailure("acme", 10, "boom");
-    expect(await ph.isHealthy("acme")).toBe(false);
-
-    advance(120_000); // 2 minutes — past cooldown
-    expect(await ph.isHealthy("acme")).toBe(true);
-    // The cooldown clear should have removed disabledUntil from the state too.
-    const s = await ph.getState("acme");
-    expect(s?.disabledUntil).toBeUndefined();
-  });
-
-  it("truncates failure reasons to 200 chars", async () => {
-    const ph = await ProviderHealth.init({ redis: createRedis(), now: () => nowMs });
-    const longReason = "x".repeat(500);
-    await ph.recordFailure("acme", 0, longReason);
-    const s = await ph.getState("acme");
-    expect(s?.lastFailureReason?.length).toBe(200);
-  });
-
-  it("getAll returns providers in alphabetical order", async () => {
-    const ph = await ProviderHealth.init({ redis: createRedis(), now: () => nowMs });
-    await ph.recordSuccess("zeta", 10);
-    await ph.recordSuccess("alpha", 10);
-    await ph.recordSuccess("mu", 10);
-    const all = await ph.getAll();
-    expect(Object.keys(all)).toEqual(["alpha", "mu", "zeta"]);
-  });
-
-  it("reset clears a provider's state", async () => {
-    const ph = await ProviderHealth.init({ redis: createRedis(), now: () => nowMs });
-    await ph.recordFailure("acme", 10, "boom");
-    expect(await ph.getState("acme")).toBeTruthy();
-    await ph.reset("acme");
-    expect(await ph.getState("acme")).toBeNull();
-  });
-
-  it("EMA latency converges towards a steady-state value", async () => {
-    const ph = await ProviderHealth.init({
-      redis: createRedis(),
-      emaAlpha: 0.2,
-      now: () => nowMs,
-    });
-    // First call seeds EMA at 1000ms, then 50 calls at 100ms should pull it close to 100ms.
-    await ph.recordSuccess("acme", 1000);
-    for (let i = 0; i < 50; i++) await ph.recordSuccess("acme", 100);
-    const s = await ph.getState("acme");
-    expect(s?.emaLatencyMs).toBeGreaterThan(99);
-    expect(s?.emaLatencyMs).toBeLessThan(110);
+    await expect(health.isHealthy("acme")).resolves.toBe(true);
   });
 });

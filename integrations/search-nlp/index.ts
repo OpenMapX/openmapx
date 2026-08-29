@@ -5,6 +5,7 @@ import type {
   IntegrationContext,
   NlpProvider,
 } from "@openmapx/integration-framework";
+import { scalarQueries } from "@openmapx/integration-framework";
 import { resolveBrandPredicates } from "./brand-resolution";
 import { createChain } from "./orchestrator";
 import {
@@ -237,124 +238,132 @@ export function setup(ctx: IntegrationContext): void {
   const intentTtl = readNumber(ctx, "intentCacheTtlSeconds") ?? DEFAULT_INTENT_TTL;
   const rateLimit = readNumber(ctx, "rateLimitPerIpPerHour") ?? DEFAULT_RATE_LIMIT;
 
-  ctx.registerRoute("POST", "/parse", async (req, reply) => {
-    const body = req.body as
-      | {
-          query?: unknown;
-          mapCenter?: unknown;
-          mapBbox?: unknown;
-          lang?: unknown;
-          cloudAccess?: unknown;
-        }
-      | null
-      | undefined;
+  ctx.registerRoute(
+    "POST",
+    "/parse",
+    async (req, reply) => {
+      const body = req.body as
+        | {
+            query?: unknown;
+            mapCenter?: unknown;
+            mapBbox?: unknown;
+            lang?: unknown;
+            cloudAccess?: unknown;
+          }
+        | null
+        | undefined;
 
-    const query = typeof body?.query === "string" ? body.query : undefined;
-    const mapCenter = body?.mapCenter as [number, number] | undefined;
-    const mapBbox = body?.mapBbox as
-      | { south: number; west: number; north: number; east: number }
-      | undefined;
-    const lang = typeof body?.lang === "string" ? body.lang : undefined;
-    const cloudAccess =
-      body?.cloudAccess === "consented" || body?.cloudAccess === "defer-to-server"
-        ? body.cloudAccess
-        : "deny";
+      const query = typeof body?.query === "string" ? body.query : undefined;
+      const mapCenter = body?.mapCenter as [number, number] | undefined;
+      const mapBbox = body?.mapBbox as
+        | { south: number; west: number; north: number; east: number }
+        | undefined;
+      const lang = typeof body?.lang === "string" ? body.lang : undefined;
+      const cloudAccess =
+        body?.cloudAccess === "consented" || body?.cloudAccess === "defer-to-server"
+          ? body.cloudAccess
+          : "deny";
 
-    if (
-      !query ||
-      !Array.isArray(mapCenter) ||
-      mapCenter.length !== 2 ||
-      typeof mapCenter[0] !== "number" ||
-      typeof mapCenter[1] !== "number" ||
-      !mapBbox ||
-      typeof mapBbox.south !== "number" ||
-      typeof mapBbox.west !== "number" ||
-      typeof mapBbox.north !== "number" ||
-      typeof mapBbox.east !== "number"
-    ) {
-      reply.status(400).send({ error: "query, mapCenter and mapBbox are required" });
-      return;
-    }
+      if (
+        !query ||
+        !Array.isArray(mapCenter) ||
+        mapCenter.length !== 2 ||
+        typeof mapCenter[0] !== "number" ||
+        typeof mapCenter[1] !== "number" ||
+        !mapBbox ||
+        typeof mapBbox.south !== "number" ||
+        typeof mapBbox.west !== "number" ||
+        typeof mapBbox.north !== "number" ||
+        typeof mapBbox.east !== "number"
+      ) {
+        reply.status(400).send({ error: "query, mapCenter and mapBbox are required" });
+        return;
+      }
 
-    // Per-IP hourly limit. The integration route abstraction does not expose
-    // the socket peer, so we key on a forwarded `ip` query value when present
-    // (the dispatcher in apps/api/server.ts enforces the real per-IP throttle
-    // against the trusted socket peer). Falls back to a shared "anon" bucket.
-    const ip = typeof req.query.ip === "string" && req.query.ip ? req.query.ip : "anon";
-    if (!(await rateLimitAllow(ctx, ip, rateLimit))) {
-      reply.header("Retry-After", "3600");
-      reply.status(429).send({ error: "rate_limited" });
-      return;
-    }
+      // Per-IP hourly limit. The integration route abstraction does not expose
+      // the socket peer, so we key on a forwarded `ip` query value when present
+      // (the dispatcher in apps/api/server.ts enforces the real per-IP throttle
+      // against the trusted socket peer). Falls back to a shared "anon" bucket.
+      const ip =
+        typeof scalarQueries(req.query).ip === "string" && scalarQueries(req.query).ip
+          ? scalarQueries(req.query).ip
+          : "anon";
+      if (!(await rateLimitAllow(ctx, ip, rateLimit))) {
+        reply.header("Retry-After", "3600");
+        reply.status(429).send({ error: "rate_limited" });
+        return;
+      }
 
-    const afterBreakers = await __filterOpenBreakers(providers, ctx);
-    // Cloud access is fail-closed. Consent mode needs an explicit positive
-    // authorization on every request; open mode additionally accepts a client
-    // request to defer to server policy. Strict mode always excludes cloud.
-    const strictPrivacy = privacyMode === "strict";
-    const cloudAllowed =
-      !strictPrivacy &&
-      (cloudAccess === "consented" ||
-        (privacyMode === "open" && cloudAccess === "defer-to-server"));
-    const active = cloudAllowed ? afterBreakers : applyLocalOnly(afterBreakers);
-    const chain = createChain(active, {
-      onProviderFailure: async (provider, error) => {
-        if (!provider.requiresNetwork) return;
-        await ctx.cache.set(breakerKey(provider.id), 1, BREAKER_TTL_SECONDS).catch(() => {});
-        ctx.log.warn(`[search-nlp] provider ${provider.id} failed`, (error as Error).message);
-      },
-    });
-    const parseCtx: ParseContext = { mapCenter, mapBbox, lang };
-
-    const chainId = active.map((provider) => provider.cacheKey).join("|");
-
-    let cached = true;
-    const key = intentCacheKey(query, mapCenter, roundDecimals, chainId, cloudAllowed);
-
-    try {
-      const result = await ctx.cache.withCache(key, intentTtl, async () => {
-        cached = false;
-        return chain.parse(query, parseCtx);
+      const afterBreakers = await __filterOpenBreakers(providers, ctx);
+      // Cloud access is fail-closed. Consent mode needs an explicit positive
+      // authorization on every request; open mode additionally accepts a client
+      // request to defer to server policy. Strict mode always excludes cloud.
+      const strictPrivacy = privacyMode === "strict";
+      const cloudAllowed =
+        !strictPrivacy &&
+        (cloudAccess === "consented" ||
+          (privacyMode === "open" && cloudAccess === "defer-to-server"));
+      const active = cloudAllowed ? afterBreakers : applyLocalOnly(afterBreakers);
+      const chain = createChain(active, {
+        onProviderFailure: async (provider, error) => {
+          if (!provider.requiresNetwork) return;
+          await ctx.cache.set(breakerKey(provider.id), 1, BREAKER_TTL_SECONDS).catch(() => {});
+          ctx.log.warn(`[search-nlp] provider ${provider.id} failed`, (error as Error).message);
+        },
       });
+      const parseCtx: ParseContext = { mapCenter, mapBbox, lang };
 
-      // Re-resolved on every request (cached or not) rather than baked into
-      // the cached intent, so a catalog update takes effect immediately and
-      // this stays a pure, side-effect-free step right before the response.
-      // No country is available on this request; suggestBrands ranks
-      // globally in that case, which only weakens disambiguation, never
-      // correctness (an exact-name match still requires no substitutable
-      // ambiguity).
-      const resolvedIntent = {
-        ...result.intent,
-        filter: resolveBrandPredicates(result.intent.filter, undefined),
-      };
+      const chainId = active.map((provider) => provider.cacheKey).join("|");
 
-      const resolvedBbox = await resolveSpatialConstraint(
-        resolvedIntent.spatial_constraint,
-        mapBbox,
-        mapCenter,
-        ctx,
-        lang,
-      );
+      let cached = true;
+      const key = intentCacheKey(query, mapCenter, roundDecimals, chainId, cloudAllowed);
 
-      reply.send({
-        intent: resolvedIntent,
-        resolvedBbox,
-        provider: result.provider.id,
-        providerLabel: result.provider.label,
-        cloud: result.provider.cloud,
-        cloudAvailable: !strictPrivacy && disclosure.cloudActive,
-        cloudConsentRequired: privacyMode === "consent",
-        cloudProviderLabels: providers
-          .filter((provider) => provider.requiresNetwork)
-          .map((provider) => provider.label),
-        cached,
-      });
-    } catch (err) {
-      ctx.log.error("[search-nlp] parse failed", (err as Error).message);
-      reply.status(502).send({ error: "nlp_unavailable" });
-    }
-  });
+      try {
+        const result = await ctx.cache.withCache(key, intentTtl, async () => {
+          cached = false;
+          return chain.parse(query, parseCtx);
+        });
+
+        // Re-resolved on every request (cached or not) rather than baked into
+        // the cached intent, so a catalog update takes effect immediately and
+        // this stays a pure, side-effect-free step right before the response.
+        // No country is available on this request; suggestBrands ranks
+        // globally in that case, which only weakens disambiguation, never
+        // correctness (an exact-name match still requires no substitutable
+        // ambiguity).
+        const resolvedIntent = {
+          ...result.intent,
+          filter: resolveBrandPredicates(result.intent.filter, undefined),
+        };
+
+        const resolvedBbox = await resolveSpatialConstraint(
+          resolvedIntent.spatial_constraint,
+          mapBbox,
+          mapCenter,
+          ctx,
+          lang,
+        );
+
+        reply.send({
+          intent: resolvedIntent,
+          resolvedBbox,
+          provider: result.provider.id,
+          providerLabel: result.provider.label,
+          cloud: result.provider.cloud,
+          cloudAvailable: !strictPrivacy && disclosure.cloudActive,
+          cloudConsentRequired: privacyMode === "consent",
+          cloudProviderLabels: providers
+            .filter((provider) => provider.requiresNetwork)
+            .map((provider) => provider.label),
+          cached,
+        });
+      } catch (err) {
+        ctx.log.error("[search-nlp] parse failed", (err as Error).message);
+        reply.status(502).send({ error: "nlp_unavailable" });
+      }
+    },
+    { rateLimitTier: "expensive" },
+  );
 
   for (const definition of definitions) {
     if (definition.type === "ollama") void ensureOllamaModel(ctx, definition);

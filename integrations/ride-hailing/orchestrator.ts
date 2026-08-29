@@ -97,7 +97,7 @@ export function createRideOrchestrator(ctx: IntegrationContext) {
       // reason with any URL query string stripped out.
       const reason = redactUrlsInReason(raw);
       ctx.log.warn(`ride provider call failed: ${provider.id}.${method}`, reason);
-      await ctx.providerHealth?.recordFailure(provider.id, latency, reason);
+      await ctx.providerHealth?.recordFailure(provider.id, latency, "connection", reason);
       ctx.metricsRecorder?.recordProviderCall(
         { providerId: provider.id, method, outcome: "error" },
         latency,

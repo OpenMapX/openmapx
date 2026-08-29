@@ -62,6 +62,14 @@ afterEach(() => {
 });
 
 const sampleState: ProviderHealthState = {
+  schema: 2,
+  state: "degraded",
+  successCount: 12,
+  failureCount: 3,
+  countedFailureCount: 3,
+  consecutiveSuccesses: 0,
+  consecutiveFailures: 1,
+  reopenCount: 0,
   success: 12,
   failure: 3,
   emaLatencyMs: 80,
@@ -70,7 +78,11 @@ const sampleState: ProviderHealthState = {
     { outcome: "error", at: "2026-05-21T00:00:30.000Z", latencyMs: 200 },
   ],
   lastFailureAt: "2026-05-21T00:00:30.000Z",
+  lastSuccessAt: "2026-05-21T00:00:00.000Z",
+  lastFailureOutcome: "connection",
+  lastOperatorMessage: "boom",
   lastFailureReason: "boom",
+  retryAt: null,
   windowFailureRate: 0.5,
 };
 

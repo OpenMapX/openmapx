@@ -15,8 +15,11 @@ import type { SearchSuggestionProvider } from "./contracts/search-suggestion-pro
 import type { StreetLevelProvider } from "./contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "./contracts/transit-provider.js";
 import type { WeatherProvider } from "./contracts/weather-provider.js";
+import type { OpaqueCursorCodec } from "./cursor";
 import type { LoadedIntegration } from "./loader";
 import type { IntegrationManifest } from "./manifest";
+import type { RouteQuery } from "./query";
+import type { UpstreamRuntime } from "./upstream-runtime";
 
 export interface HttpClientOptions {
   params?: Record<string, string | number | boolean | undefined>;
@@ -34,9 +37,32 @@ export interface HttpClientOptions {
   maxResponseBytes?: number;
 }
 
+export interface HttpResponse<T> {
+  status: number;
+  headers: Readonly<Record<string, string>>;
+  body: T;
+}
+
+export interface BinaryHttpResponse extends Omit<HttpResponse<never>, "body"> {
+  bytes: Uint8Array;
+}
+
+export interface ResponseOptions extends HttpClientOptions {
+  /** Hard ceiling applied before and while buffering the response body. */
+  maxBytes: number;
+  /** Exact, case-insensitive media types accepted after parameters are removed. */
+  contentTypes: readonly string[];
+  /** Response headers to expose. Names are matched case-insensitively and returned lowercase. */
+  responseHeaders?: readonly string[];
+  /** Reject redirects rather than following an untrusted upstream Location. */
+  redirect?: "error";
+}
+
 export interface HttpClient {
   get<T = unknown>(url: string, options?: HttpClientOptions): Promise<T>;
   post<T = unknown>(url: string, body?: unknown, options?: HttpClientOptions): Promise<T>;
+  getResponse<T = unknown>(url: string, options: ResponseOptions): Promise<HttpResponse<T>>;
+  getBytes(url: string, options: ResponseOptions): Promise<BinaryHttpResponse>;
 }
 
 export interface CacheClient {
@@ -97,7 +123,7 @@ export interface DatabaseClient {
 
 export type RouteHandler = (
   req: {
-    query: Record<string, string>;
+    query: RouteQuery;
     params: Record<string, string>;
     body: unknown;
     /**
@@ -127,6 +153,8 @@ export type RouteHandler = (
 export interface RouteOptions {
   /** Require a valid session; respond 401 before invoking the handler otherwise. */
   requireAuth?: boolean;
+  /** Host-owned limiter bucket. Every integration route uses exactly one tier. */
+  rateLimitTier?: "public" | "expensive" | "tile";
 }
 
 export interface HealthCheckResult {
@@ -195,6 +223,42 @@ export interface SecretsClient {
  * record success/failure (with timing) afterwards. Persistence + sliding
  * window failure rate live in the host implementation.
  */
+export type ProviderHealthCountedOutcome =
+  | "timeout"
+  | "connection"
+  | "upstream_5xx"
+  | "auth"
+  | "invalid_payload";
+
+export type ProviderHealthNonCountedOutcome =
+  | "valid_empty"
+  | "policy"
+  | "input"
+  | "quota"
+  | "caller_cancelled";
+
+export type ProviderHealthFailureOutcome =
+  | ProviderHealthCountedOutcome
+  | ProviderHealthNonCountedOutcome;
+
+export interface ProviderHealthSnapshot {
+  state: "healthy" | "degraded" | "open" | "half-open";
+  successCount: number;
+  failureCount: number;
+  countedFailureCount: number;
+  consecutiveSuccesses: number;
+  consecutiveFailures: number;
+  windowFailureRate: number | null;
+  emaLatencyMs: number;
+  lastSuccessAt: string | null;
+  lastFailureAt: string | null;
+  lastFailureOutcome: ProviderHealthFailureOutcome | null;
+  lastOperatorMessage: string | null;
+  retryAt: string | null;
+  ownsHalfOpenProbe: boolean;
+  diagnostic?: "store_unavailable" | "invalid_record";
+}
+
 export interface ProviderHealthHandle {
   /** Returns false when the provider is currently in cooldown. */
   isHealthy(providerId: string): Promise<boolean>;
@@ -205,7 +269,14 @@ export interface ProviderHealthHandle {
    * `latencyMs` is the wall-clock time elapsed before the failure surfaced
    * (so timeouts still contribute to the EMA).
    */
-  recordFailure(providerId: string, latencyMs: number, reason: string): Promise<void>;
+  recordFailure(
+    providerId: string,
+    latencyMs: number,
+    outcome: ProviderHealthFailureOutcome,
+    operatorMessage?: string,
+  ): Promise<void>;
+  /** Read the deterministic state and atomically claim an eligible half-open probe. */
+  getSnapshot(providerId: string): Promise<ProviderHealthSnapshot>;
 }
 
 /**
@@ -220,6 +291,27 @@ export interface ProviderHealthHandle {
  * skipped the call before invoking the provider).
  */
 export type ProviderCallOutcome = "ok" | "empty" | "error" | "skipped" | "timeout" | "cancelled";
+
+export interface AirQualityMetrics {
+  method: "current" | "forecast" | "stations" | "pollutants" | "raster-times" | "raster-tile";
+  outcome: "ok" | "partial" | "empty" | "unavailable" | "rejected" | "error";
+  cacheResult: "fresh" | "stale" | "stale-if-error" | "miss" | "bypass";
+  headlineClass: "official" | "computed-ground" | "raw-ground" | "hybrid" | "model" | "none";
+  rejectionCode:
+    | "none"
+    | "wrong-standard"
+    | "unverified-method"
+    | "invalid-schema"
+    | "invalid-time"
+    | "incomplete-window"
+    | "incoherent-evidence"
+    | "policy"
+    | "quota";
+  compatibilityUse: "none" | "legacy-openaq" | "legacy-open-meteo";
+  quotaTruncated: boolean;
+  evidenceCount: number;
+  latencyMs: number;
+}
 
 export type TransitDecisionOperation = "plan" | "routes" | "refresh" | "realtime";
 export type TransitDecisionReason =
@@ -285,6 +377,7 @@ export interface MetricsRecorder {
     trafficDelaySeconds?: number;
     baselineAvailable: boolean;
   }): void;
+  recordAirQuality?(metrics: AirQualityMetrics): void;
 }
 
 /**
@@ -347,6 +440,12 @@ export interface IntegrationContext {
    * places. Undefined when the host has not wired OTEL (tests, CLI scripts).
    */
   readonly metricsRecorder?: MetricsRecorder;
+
+  /** Host-signed, purpose-scoped cursor codec. Absent when no server signing secret is configured. */
+  readonly cursorCodec?: OpaqueCursorCodec;
+
+  /** Distributed cache/lease/quota runtime. Absent when no production store is configured. */
+  readonly upstreamRuntime?: UpstreamRuntime;
 
   /**
    * Typed registrar for transit providers — enforces the canonical

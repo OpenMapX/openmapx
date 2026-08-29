@@ -244,6 +244,40 @@ Disabling a source removes its *data* from results, but the `/privacy` and
 so the published licence and privacy metadata stays complete.
 :::
 
+## Upstream cache and provider circuits
+
+Quota-bound integrations use the shared Redis/Valkey upstream runtime. Cache
+records distinguish a fresh interval, a soft-stale interval that may be served
+while one lease holder refreshes, and a hard-stale interval usable only after a
+refresh error. None of these cache timestamps changes the observation or
+publication time shown to users. Refresh leases use owner-only release, and
+minute/hour quota windows are consumed in one atomic transaction.
+
+Production quota refresh is fail-closed when Redis is unavailable: the API may
+serve eligible stale evidence, but it does not start an uncoordinated refresh or
+guess at remaining quota. Operator logs report `store_unavailable`, corrupt
+records are discarded, and cache keys hash coordinate-derived material.
+
+Provider circuits have `healthy`, `degraded`, and `open` states. Two consecutive
+counted failures or a 25% recent failure rate degrades a provider; five
+consecutive failures or a failure rate above 50% opens it. Cooldowns increase
+through 5, 10, 20, 40, and 60 minutes. Exactly one process owns the half-open
+probe. Timeouts, connection errors, upstream 5xx responses, authentication
+failures, and invalid payloads count; valid empty results, policy/input
+rejections, quota denial, and caller cancellation do not. If the health store
+itself fails, requests remain enabled with a diagnostic instead of suppressing
+every provider.
+
+Each manifest may attach `owner`, terms and methodology links, a data-use class,
+credential owner, attribution, and a review date to a source. Treat the review
+date as an operational reminder: it is evidence of the last review, not a claim
+that external terms can never change.
+
+Integration routes consume one host rate-limit tier. Ordinary routes use
+`public`; upstream-heavy point or list work declares `expensive`; bursty tile
+proxies declare `tile`. Metrics expose only closed aggregate labels—never
+coordinates, station names, credentials, or arbitrary error text.
+
 ## AI-assisted search disclosure
 
 When [natural-language search](../features/natural-language-search.md) is active,

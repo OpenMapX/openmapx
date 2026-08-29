@@ -7,7 +7,7 @@ import {
   OverpassTimeoutError,
   validateOverpassFilter,
 } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { getChipTranslations, suggestPresets } from "@openmapx/presets";
 import { createPoiSearchOrchestrator } from "./orchestrator.js";
 
@@ -25,7 +25,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/search", async (req, reply) => {
-    const { category, south, west, north, east, lang } = req.query;
+    const { category, south, west, north, east, lang } = scalarQueries(req.query);
 
     const bbox = {
       south: Number.parseFloat(south),
@@ -64,7 +64,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/text", async (req, reply) => {
-    const { q, south, west, north, east, lang } = req.query;
+    const { q, south, west, north, east, lang } = scalarQueries(req.query);
 
     if (!q || q.trim().length < 2) {
       reply.send({ results: [], partial: false, truncated: false, total: 0 });
@@ -107,7 +107,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/filtered", async (req, reply) => {
-    const { category, tags, south, west, north, east, lang } = req.query as {
+    const { category, tags, south, west, north, east, lang } = scalarQueries(req.query) as {
       category?: string;
       tags?: string;
       south?: string;
@@ -184,7 +184,11 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/preset-suggest", async (req, reply) => {
-    const { q, lang, limit } = req.query as { q?: string; lang?: string; limit?: string };
+    const { q, lang, limit } = scalarQueries(req.query) as {
+      q?: string;
+      lang?: string;
+      limit?: string;
+    };
 
     if (!q || q.trim().length < 2) {
       reply.header("Cache-Control", "public, max-age=60");
@@ -204,7 +208,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/brand-suggest", async (req, reply) => {
-    const { q, country, limit } = req.query as {
+    const { q, country, limit } = scalarQueries(req.query) as {
       q?: string;
       country?: string;
       limit?: string;
@@ -289,7 +293,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/chip-translations", async (req, reply) => {
-    const { lang } = req.query as { lang?: string };
+    const { lang } = scalarQueries(req.query) as { lang?: string };
     const cacheKey = `chip-translations:${lang ?? "en"}`;
     const result = await ctx.cache.withCache(cacheKey, 3600, async () => ({
       translations: getChipTranslations(lang),

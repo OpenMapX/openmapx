@@ -4,7 +4,7 @@ import {
   RASTER_IMAGE_MEDIA_TYPES,
   readBoundedBinaryResponse,
 } from "@openmapx/core/server";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import {
   findNearestStation,
   loadStations as loadNoaaStations,
@@ -542,11 +542,11 @@ export function setup(ctx: IntegrationContext): void {
 
   // ---- Harbour list (JSONP → GeoJSON) ------------------------------------
   ctx.registerRoute("GET", "/harbors", async (req, reply) => {
-    const south = Number.parseFloat(req.query.south ?? "");
-    const north = Number.parseFloat(req.query.north ?? "");
-    const west = Number.parseFloat(req.query.west ?? "");
-    const east = Number.parseFloat(req.query.east ?? "");
-    const zoom = Number.parseInt(req.query.zoom ?? "10", 10);
+    const south = Number.parseFloat(scalarQueries(req.query).south ?? "");
+    const north = Number.parseFloat(scalarQueries(req.query).north ?? "");
+    const west = Number.parseFloat(scalarQueries(req.query).west ?? "");
+    const east = Number.parseFloat(scalarQueries(req.query).east ?? "");
+    const zoom = Number.parseInt(scalarQueries(req.query).zoom ?? "10", 10);
     if (
       !Number.isFinite(south) ||
       !Number.isFinite(north) ||
@@ -597,10 +597,10 @@ export function setup(ctx: IntegrationContext): void {
   // ---- Harbour detail (Overpass-enriched) --------------------------------
   ctx.registerRoute("GET", "/harbor/:id", async (req, reply) => {
     const id = req.params.id;
-    const lat = Number.parseFloat(req.query.lat ?? "");
-    const lng = Number.parseFloat(req.query.lng ?? "");
-    const nameParam = (req.query.name ?? "").trim();
-    const categoryParam = Number.parseInt(req.query.category ?? "", 10);
+    const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+    const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
+    const nameParam = (scalarQueries(req.query).name ?? "").trim();
+    const categoryParam = Number.parseInt(scalarQueries(req.query).category ?? "", 10);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.status(400).send({ message: "Missing or invalid lat/lng" });
       return;
@@ -670,10 +670,10 @@ export function setup(ctx: IntegrationContext): void {
   //   `types` — `tide-predictions,water-level,currents` filter (optional)
   //   `networks` — `noaa,ca-iwls,...` filter (optional; defaults to all)
   ctx.registerRoute("GET", "/stations", async (req, reply) => {
-    const west = Number.parseFloat(req.query.west ?? "");
-    const south = Number.parseFloat(req.query.south ?? "");
-    const east = Number.parseFloat(req.query.east ?? "");
-    const north = Number.parseFloat(req.query.north ?? "");
+    const west = Number.parseFloat(scalarQueries(req.query).west ?? "");
+    const south = Number.parseFloat(scalarQueries(req.query).south ?? "");
+    const east = Number.parseFloat(scalarQueries(req.query).east ?? "");
+    const north = Number.parseFloat(scalarQueries(req.query).north ?? "");
     if (
       !Number.isFinite(west) ||
       !Number.isFinite(south) ||
@@ -688,8 +688,8 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const typeFilter = parseStationTypes(req.query.types);
-    const networkFilter = parseNetworks(req.query.networks);
+    const typeFilter = parseStationTypes(scalarQueries(req.query).types);
+    const networkFilter = parseNetworks(scalarQueries(req.query).networks);
     const k4 = (n: number) => Math.round(n * 10000) / 10000;
     const cacheKey = [
       "stations:bbox-merged-v2",

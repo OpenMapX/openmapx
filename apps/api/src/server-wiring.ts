@@ -185,7 +185,6 @@ export const TILE_PUBLIC_PATTERNS = [
   /^\/api\/maptiler\//,
   /^\/api\/tiles\//,
   /^\/api\/traffic\//,
-  /^\/api\/integrations\/street-level-imagery-[a-z0-9-]+\/tiles\//,
   /^\/api\/offline\/packages\/(glyphs\/|omp2-[0-9a-f]{64}\/archive(?:$|\?))/,
 ];
 
@@ -196,10 +195,6 @@ export const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/places(\/|$|\?)/,
   /^\/api\/image-proxy(\/|$|\?)/,
   /^\/api\/winter-sports(\/|$)/,
-  /^\/api\/integrations\/search-nlp(\/|$|\?)/,
-  /^\/api\/integrations\/transit\/reachability\/(surface|check)(\/|$|\?)/,
-  /^\/api\/integrations\/food-delivery\/(resolve|[^/]+\/(open|url))(\/|$|\?)/,
-  /^\/api\/integrations\/restaurants\/menu(\/|$|\?)/,
   /^\/api\/offline\/packages\/prepare(\/|$|\?)/,
 ];
 
@@ -349,6 +344,10 @@ export function makeRateLimitTierHook(limits: RateLimitTiers) {
     // using a separate per-user expensive bucket. Do not stack the pre-auth IP
     // limiter or broad public floor on this privacy-sensitive route.
     if (isTimelineDayRequest(request)) return;
+
+    // Integration routes declare and consume exactly one tier after the
+    // dispatcher has matched the owning route.
+    if (url === "/api/integrations" || url.startsWith("/api/integrations/")) return;
 
     // Trust only the actual TCP peer here, never XFF.
     const peer = request.socket?.remoteAddress;

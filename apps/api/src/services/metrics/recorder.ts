@@ -1,5 +1,6 @@
 import type { MetricsRecorder } from "@openmapx/integration-framework";
 import {
+  recordAirQuality,
   recordProviderCall,
   recordRoutingRequest,
   recordTransitDecision,
@@ -29,6 +30,9 @@ export function getMetricsRecorder(): MetricsRecorder {
     },
     recordRoutingRequest(metrics) {
       recordRoutingRequest(metrics);
+    },
+    recordAirQuality(metrics) {
+      recordAirQuality(metrics);
     },
   };
 }

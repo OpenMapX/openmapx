@@ -82,6 +82,7 @@ import {
   getCachedIntegrationHealthSnapshot,
 } from "./services/integration-health";
 import { getMetricsRecorder } from "./services/metrics/recorder";
+import { cursorCodecFromEnvironment } from "./services/opaque-cursor";
 import {
   getProviderHealth,
   ProviderHealth,
@@ -89,6 +90,7 @@ import {
 } from "./services/provider-health/registry";
 import { getSecret, isSecretsConfigured } from "./services/secrets";
 import { getServiceRegistry, resolveRequiresForIntegration } from "./services/service-registry";
+import { createRedisUpstreamRuntime, type UpstreamRedisClient } from "./services/upstream-runtime";
 import { getEmailDisclosure } from "./utils/email";
 
 export type { ConfigSource, ConfigValueWithSource };
@@ -454,6 +456,13 @@ function buildIntegrationContext(args: {
     attributionIndex: getAttributionIndex() ?? undefined,
     providerHealth: getProviderHealth() ?? undefined,
     metricsRecorder: getMetricsRecorder(),
+    cursorCodec: cursorCodecFromEnvironment(),
+    upstreamRuntime: redis
+      ? createRedisUpstreamRuntime(redis as unknown as UpstreamRedisClient, {
+          namespace: process.env.OPENMAPX_UPSTREAM_NAMESPACE?.trim() || "default",
+          integrationId: id,
+        })
+      : undefined,
     getRequiredService(key: string) {
       return requiresMap.get(key) ?? null;
     },

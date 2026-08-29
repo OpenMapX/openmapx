@@ -399,9 +399,7 @@ describe("production hook wiring", () => {
     const csrfHook = serverSource.indexOf(
       'server.addHook("onRequest", makeCsrfGuardHook(trustedWebOrigins))',
     );
-    const rateLimitHook = serverSource.indexOf(
-      'server.addHook(\n  "onRequest",\n  makeRateLimitTierHook',
-    );
+    const rateLimitHook = serverSource.indexOf("makeRateLimitTierHook(rateLimitTiers)");
     const coreRoutes = serverSource.indexOf("await registerCoreRoutes(server");
 
     expect(securityHook).toBeGreaterThan(-1);

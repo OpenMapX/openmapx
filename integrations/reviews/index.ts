@@ -1,4 +1,4 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import {
   cacheKeyForSubject,
   fetchAggregate,
@@ -33,7 +33,7 @@ function parseSubject(query: Record<string, string>): ReviewSubject | null {
 export function setup(ctx: IntegrationContext): void {
   /** GET /reviews — list reviews for a subject (Redis-cached). */
   ctx.registerRoute("GET", "/reviews", async (req, reply) => {
-    const subject = parseSubject(req.query);
+    const subject = parseSubject(scalarQueries(req.query));
     if (!subject) {
       reply.status(400).send({ error: "Invalid subject: lat, lng, name required" });
       return;
@@ -56,7 +56,7 @@ export function setup(ctx: IntegrationContext): void {
 
   /** GET /aggregate — stars + counts for a subject (Redis-cached). */
   ctx.registerRoute("GET", "/aggregate", async (req, reply) => {
-    const subject = parseSubject(req.query);
+    const subject = parseSubject(scalarQueries(req.query));
     if (!subject) {
       reply.status(400).send({ error: "Invalid subject: lat, lng, name required" });
       return;

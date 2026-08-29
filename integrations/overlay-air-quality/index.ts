@@ -1,5 +1,9 @@
 import { USER_AGENT } from "@openmapx/core";
-import type { CacheClient, IntegrationContext } from "@openmapx/integration-framework";
+import {
+  type CacheClient,
+  type IntegrationContext,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 
 const OPENAQ_BASE = "https://api.openaq.org/v3";
 const PM25_PARAM_ID = 2;
@@ -286,10 +290,10 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const south = Number.parseFloat(req.query.south);
-    const west = Number.parseFloat(req.query.west);
-    const north = Number.parseFloat(req.query.north);
-    const east = Number.parseFloat(req.query.east);
+    const south = Number.parseFloat(scalarQueries(req.query).south);
+    const west = Number.parseFloat(scalarQueries(req.query).west);
+    const north = Number.parseFloat(scalarQueries(req.query).north);
+    const east = Number.parseFloat(scalarQueries(req.query).east);
 
     if ([south, west, north, east].some(Number.isNaN)) {
       reply.status(400).send({ message: "Invalid bbox coordinates" });

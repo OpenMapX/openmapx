@@ -84,7 +84,14 @@ async function invokeProvider(
     const reason = error instanceof Error ? error.message : "provider error";
     const cancelled = error instanceof ProviderCancelledError;
     const timedOut = error instanceof ProviderTimeoutError;
-    if (!cancelled) await ctx.providerHealth?.recordFailure(entry.provider.id, elapsed, reason);
+    if (!cancelled) {
+      await ctx.providerHealth?.recordFailure(
+        entry.provider.id,
+        elapsed,
+        timedOut ? "timeout" : "connection",
+        reason,
+      );
+    }
     ctx.metricsRecorder?.recordProviderCall(
       {
         providerId: entry.provider.id,

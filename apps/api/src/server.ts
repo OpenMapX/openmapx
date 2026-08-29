@@ -23,6 +23,7 @@ import {
   setIntegrationsReloadedHook,
   shutdownIntegrations,
 } from "./integration-host";
+import { setIntegrationRouteRateLimits } from "./integration-routes";
 import { redis } from "./redis";
 import { registerCoreRoutes } from "./routes/index";
 import {
@@ -216,16 +217,15 @@ await server.register(cors, corsOptions(trustedWebOrigins));
 
 server.addHook("onRequest", makeSecurityResponseHeaderHook());
 server.addHook("onRequest", makeCsrfGuardHook(trustedWebOrigins));
-server.addHook(
-  "onRequest",
-  makeRateLimitTierHook({
-    auth: authLimit.preHandler(),
-    tile: tilePublicApiLimit.preHandler(),
-    expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
-    status: makeStatusAwareRateLimit(statusPublicApiLimit),
-    public: makeTimelineAwareRateLimit(publicApiLimit),
-  }),
-);
+const rateLimitTiers = {
+  auth: authLimit.preHandler(),
+  tile: tilePublicApiLimit.preHandler(),
+  expensive: makeTimelineAwareRateLimit(expensivePublicApiLimit),
+  status: makeStatusAwareRateLimit(statusPublicApiLimit),
+  public: makeTimelineAwareRateLimit(publicApiLimit),
+};
+setIntegrationRouteRateLimits(rateLimitTiers);
+server.addHook("onRequest", makeRateLimitTierHook(rateLimitTiers));
 
 // Data-use policy: strip results sourced solely from policy-gated sources
 // (non-commercial / grey-area) out of API responses. Admin + the integration

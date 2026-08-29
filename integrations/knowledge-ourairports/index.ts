@@ -6,7 +6,11 @@ import {
   type SearchSuggestionProviderResult,
   type SearchSuggestionQuery,
 } from "@openmapx/core";
-import type { IntegrationContext, SearchSuggestionProvider } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  type SearchSuggestionProvider,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 import {
   type AirportRecord,
   type AirportSearchMatch,
@@ -218,13 +222,13 @@ export function setup(ctx: IntegrationContext): void {
   // keyword. Used by the SearchBar to surface airports in the autocomplete
   // dropdown alongside geocoder + transit results.
   ctx.registerRoute("GET", "/search", async (req, reply) => {
-    const q = (req.query.q ?? "").trim();
+    const q = (scalarQueries(req.query).q ?? "").trim();
     if (q.length < SEARCH_MIN_LEN) {
       reply.header("Cache-Control", "public, max-age=60");
       reply.send({ matches: [] });
       return;
     }
-    const parsedLimit = Number.parseInt(req.query.limit ?? "", 10);
+    const parsedLimit = Number.parseInt(scalarQueries(req.query).limit ?? "", 10);
     const limit =
       Number.isFinite(parsedLimit) && parsedLimit > 0
         ? Math.min(parsedLimit, SEARCH_MAX_LIMIT)
@@ -257,13 +261,13 @@ export function setup(ctx: IntegrationContext): void {
   // closest first, preferring scheduled-service airports. Powers the flights
   // feature's automatic origin/destination airport prefill.
   ctx.registerRoute("GET", "/nearest", async (req, reply) => {
-    const lat = Number.parseFloat(req.query.lat ?? "");
-    const lng = Number.parseFloat(req.query.lng ?? "");
+    const lat = Number.parseFloat(scalarQueries(req.query).lat ?? "");
+    const lng = Number.parseFloat(scalarQueries(req.query).lng ?? "");
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || lat < -90 || lat > 90) {
       reply.status(400).send({ error: "lat and lng must be valid coordinates" });
       return;
     }
-    const parsedLimit = Number.parseInt(req.query.limit ?? "", 10);
+    const parsedLimit = Number.parseInt(scalarQueries(req.query).limit ?? "", 10);
     const limit =
       Number.isFinite(parsedLimit) && parsedLimit > 0
         ? Math.min(parsedLimit, NEAREST_MAX_LIMIT)

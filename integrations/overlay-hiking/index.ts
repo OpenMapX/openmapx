@@ -4,7 +4,7 @@ import {
   MAX_RASTER_TILE_BYTES,
   RASTER_IMAGE_MEDIA_TYPES,
 } from "@openmapx/core/server";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { fetchRouteGeometry } from "./overpass-geometry.js";
 import { searchTrails, trailDetail, trailsByArea } from "./waymarked-trails.js";
 
@@ -71,8 +71,8 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/hiking/search", async (req, reply) => {
-    const query = req.query.query ?? "";
-    const limit = Math.min(Number(req.query.limit ?? 20), 100);
+    const query = scalarQueries(req.query).query ?? "";
+    const limit = Math.min(Number(scalarQueries(req.query).limit ?? 20), 100);
     if (!query.trim()) {
       reply.send([]);
       return;
@@ -94,11 +94,11 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/hiking/area", async (req, reply) => {
-    const south = Number(req.query.south);
-    const west = Number(req.query.west);
-    const north = Number(req.query.north);
-    const east = Number(req.query.east);
-    const limit = Math.min(Number(req.query.limit ?? 50), 200);
+    const south = Number(scalarQueries(req.query).south);
+    const west = Number(scalarQueries(req.query).west);
+    const north = Number(scalarQueries(req.query).north);
+    const east = Number(scalarQueries(req.query).east);
+    const limit = Math.min(Number(scalarQueries(req.query).limit ?? 50), 200);
 
     if ([south, west, north, east].some((v) => !Number.isFinite(v))) {
       reply.status(400).send({ message: "Invalid bbox coordinates" });
@@ -175,11 +175,11 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/hiking/shelters", async (req, reply) => {
-    const south = Number(req.query.south);
-    const west = Number(req.query.west);
-    const north = Number(req.query.north);
-    const east = Number(req.query.east);
-    const typeFilter = req.query.type ?? "";
+    const south = Number(scalarQueries(req.query).south);
+    const west = Number(scalarQueries(req.query).west);
+    const north = Number(scalarQueries(req.query).north);
+    const east = Number(scalarQueries(req.query).east);
+    const typeFilter = scalarQueries(req.query).type ?? "";
 
     if ([south, west, north, east].some((v) => !Number.isFinite(v))) {
       reply.status(400).send({ message: "Invalid bbox coordinates" });

@@ -1,10 +1,10 @@
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { getPhotoProviders, resolveOsmTags, searchPhotos } from "./orchestrator.js";
 
 export function setup(ctx: IntegrationContext): void {
   ctx.registerRoute("GET", "/search", async (req, reply) => {
-    const lat = Number.parseFloat(req.query.lat);
-    const lng = Number.parseFloat(req.query.lng);
+    const lat = Number.parseFloat(scalarQueries(req.query).lat);
+    const lng = Number.parseFloat(scalarQueries(req.query).lng);
 
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.status(400).send({ error: "Invalid coordinates" });
@@ -15,9 +15,9 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const limit = Math.min(Number.parseInt(req.query.limit ?? "20", 10) || 20, 50);
-    const name = req.query.name?.trim();
-    const placeId = req.query.placeId?.trim();
+    const limit = Math.min(Number.parseInt(scalarQueries(req.query).limit ?? "20", 10) || 20, 50);
+    const name = scalarQueries(req.query).name?.trim();
+    const placeId = scalarQueries(req.query).placeId?.trim();
 
     const nameKey = name ? `:${name.slice(0, 40)}` : "";
     const placeKey = placeId ? `:${placeId.slice(0, 40)}` : "";

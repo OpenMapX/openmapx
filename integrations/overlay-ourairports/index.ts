@@ -1,5 +1,5 @@
 import type { AirportType } from "@openmapx/core";
-import type { IntegrationContext } from "@openmapx/integration-framework";
+import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { queryAirportsInBbox, startBackgroundLoad } from "@openmapx/ourairports-data";
 
 const DEFAULT_BBOX_LIMIT = 1500;
@@ -98,15 +98,15 @@ export function setup(ctx: IntegrationContext): void {
   ctx.onShutdown(async () => releaseBackgroundLoad());
 
   ctx.registerRoute("GET", "/airports", async (req, reply) => {
-    const bbox = parseBbox(req.query);
+    const bbox = parseBbox(scalarQueries(req.query));
     if ("error" in bbox) {
       reply.status(400).send({ message: bbox.error });
       return;
     }
 
-    const types = parseTypes(req.query.types);
-    const scheduledOnly = req.query.scheduledOnly === "1";
-    const limitParam = Number.parseInt(req.query.limit ?? "", 10);
+    const types = parseTypes(scalarQueries(req.query).types);
+    const scheduledOnly = scalarQueries(req.query).scheduledOnly === "1";
+    const limitParam = Number.parseInt(scalarQueries(req.query).limit ?? "", 10);
     const limit =
       Number.isFinite(limitParam) && limitParam > 0
         ? Math.min(limitParam, MAX_BBOX_LIMIT)
