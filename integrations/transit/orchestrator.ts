@@ -27,6 +27,13 @@ import type {
   VehicleJourney,
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
+import type {
+  TransitReachabilityCapabilities,
+  TransitReachabilityCheckRequest,
+  TransitReachabilityCheckResult,
+  TransitReachabilitySurface,
+  TransitReachabilitySurfaceRequest,
+} from "@openmapx/mobility-core/transit-reachability";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
 import { enrichDeparturesWithRealtime } from "./realtime.js";
 
@@ -1034,41 +1041,40 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     return outcome.ok ? outcome.value : emptyResult<Facility[]>([]);
   }
 
-  async function getReachableStops(
-    lat: number,
-    lng: number,
-    maxMinutes: number,
-    modes?: string[],
-  ): Promise<MobilityResult<TransitStop[]>> {
-    // Use all healthy providers and merge results
-    const candidates = collectProviders().filter((p) => p.getReachableStops);
-    const allProviders = await filterHealthy(candidates);
+  async function reachabilityProvider(): Promise<TransitProvider | null> {
+    const candidates = collectProviders()
+      .filter((provider) => provider.getReachabilitySurface)
+      .sort(compareProviderPolicy);
+    const healthy = await filterHealthy(candidates);
+    return healthy[0] ?? null;
+  }
 
-    const results = await Promise.allSettled(
-      allProviders.map(async (p) => {
-        if (!p.getReachableStops) return null;
-        const fn = p.getReachableStops.bind(p);
-        const outcome = await timed(
-          providerHealth,
-          metricsRecorder,
-          p.id,
-          "getReachableStops",
-          () => fn(lat, lng, maxMinutes, modes),
-        );
-        return outcome.ok ? outcome.value : null;
-      }),
-    );
-    const ok = results
-      .map((r) => (r.status === "fulfilled" ? r.value : null))
-      .filter((v): v is MobilityResult<TransitStop[]> => v != null);
-    return {
-      data: ok.flatMap((r) => r.data),
-      attributions: mergeAttributions(
-        ctx.attributionIndex,
-        ...resultsWithData(ok).map((r) => r.attributions),
-      ),
-      freshness: mergeFreshness(...ok.map((r) => r.freshness)),
-    };
+  async function getReachabilityCapabilities(): Promise<TransitReachabilityCapabilities | null> {
+    const provider = await reachabilityProvider();
+    if (!provider?.getReachabilityCapabilities) return null;
+    return provider.getReachabilityCapabilities();
+  }
+
+  async function getReachabilitySurface(
+    request: TransitReachabilitySurfaceRequest,
+    signal?: AbortSignal,
+  ): Promise<MobilityResult<TransitReachabilitySurface>> {
+    const provider = await reachabilityProvider();
+    if (!provider?.getReachabilitySurface) {
+      throw new Error("transit reachability surface is unavailable");
+    }
+    return provider.getReachabilitySurface(request, signal);
+  }
+
+  async function checkReachabilityDestinations(
+    request: TransitReachabilityCheckRequest,
+    signal?: AbortSignal,
+  ): Promise<MobilityResult<TransitReachabilityCheckResult>> {
+    const provider = await reachabilityProvider();
+    if (!provider?.checkReachabilityDestinations) {
+      throw new Error("exact transit reachability is unavailable");
+    }
+    return provider.checkReachabilityDestinations(request, signal);
   }
 
   return {
@@ -1100,7 +1106,9 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     getLegGeometry,
     getVehicleJourney,
     getFacilities,
-    getReachableStops,
+    getReachabilityCapabilities,
+    getReachabilitySurface,
+    checkReachabilityDestinations,
   };
 }
 

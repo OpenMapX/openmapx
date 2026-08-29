@@ -13,6 +13,7 @@ const MOBILITY_CORE_TYPE_SUBPATHS = [
   "fuel",
   "ev-charging",
   "transit",
+  "transit-reachability",
 ];
 
 export function createRepoVitestAliases(repoRoot: string) {

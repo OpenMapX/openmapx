@@ -4763,15 +4763,49 @@
         "x-openmapx-source": "integrations/transit/index.ts"
       }
     },
-    "/api/integrations/transit/reachable": {
+    "/api/integrations/transit/reachability/capabilities": {
       "get": {
-        "operationId": "getApiIntegrationsTransitReachable",
+        "operationId": "getApiIntegrationsTransitReachabilityCapabilities",
         "responses": {
           "default": {
             "description": "Integration response"
           }
         },
-        "summary": "GET /reachable (transit)",
+        "summary": "GET /reachability/capabilities (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/reachability/check": {
+      "post": {
+        "operationId": "postApiIntegrationsTransitReachabilityCheck",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /reachability/check (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/reachability/surface": {
+      "post": {
+        "operationId": "postApiIntegrationsTransitReachabilitySurface",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /reachability/surface (transit)",
         "tags": [
           "integrations"
         ],

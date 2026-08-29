@@ -14,6 +14,13 @@ import type {
   VehicleJourney,
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
+import type {
+  TransitReachabilityCapabilities,
+  TransitReachabilityCheckRequest,
+  TransitReachabilityCheckResult,
+  TransitReachabilitySurface,
+  TransitReachabilitySurfaceRequest,
+} from "@openmapx/mobility-core/transit-reachability";
 import type { LineString } from "geojson";
 import type { HealthCheckResult } from "../context.js";
 import type { ProviderCallContext } from "../provider-execution.js";
@@ -61,6 +68,7 @@ export interface TransitCapabilities {
     byBbox: boolean;
   };
   facilities: boolean;
+  reachability?: { estimatedSurface: boolean; exactPointChecks: boolean };
 }
 
 export interface TransitPlanningMetadata {
@@ -230,12 +238,15 @@ export interface TransitProvider {
    * (e.g. transit-overpass for route geometry) can opt in incrementally.
    */
   getRoutesInBbox?(bbox: BBox, zoom?: number): Promise<MobilityResult<TransitRoute[]>>;
-  getReachableStops?(
-    lat: number,
-    lng: number,
-    maxMinutes: number,
-    modes?: string[],
-  ): Promise<MobilityResult<TransitStop[]>>;
+  getReachabilityCapabilities?(): Promise<TransitReachabilityCapabilities>;
+  getReachabilitySurface?(
+    request: TransitReachabilitySurfaceRequest,
+    signal?: AbortSignal,
+  ): Promise<MobilityResult<TransitReachabilitySurface>>;
+  checkReachabilityDestinations?(
+    request: TransitReachabilityCheckRequest,
+    signal?: AbortSignal,
+  ): Promise<MobilityResult<TransitReachabilityCheckResult>>;
 
   /**
    * Optional per-instance attribution. Returned alongside the manifest-level

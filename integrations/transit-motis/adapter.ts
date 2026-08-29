@@ -23,7 +23,6 @@ import {
   transfers as motisTransfers,
   trip as motisTrip,
   trips as motisTrips,
-  oneToAll,
   plan,
   routeDetails,
   stoptimes,
@@ -107,47 +106,6 @@ export async function getStops(instance: MotisInstance, bbox: BBox): Promise<Tra
     });
     if (!data || !Array.isArray(data)) return [];
     return data.map((place) => normalizeStop(instance, place));
-  } catch {
-    return [];
-  }
-}
-
-/**
- * Reachability query via the MOTIS `one-to-all` endpoint: every stop reachable
- * from `(lat,lng)` within `maxMinutes` by transit, each annotated with the
- * travel time and number of transfers. Powers transit isochrone / "reachable
- * by transit" overlays.
- */
-export async function getReachable(
-  instance: MotisInstance,
-  lat: number,
-  lng: number,
-  maxMinutes: number,
-  opts?: { modes?: string[]; time?: string; arriveBy?: boolean },
-): Promise<TransitStop[]> {
-  try {
-    const transitModes = opts?.modes && opts.modes.length > 0 ? (opts.modes as Mode[]) : undefined;
-    const { data } = await oneToAll({
-      client: instance.client,
-      query: {
-        one: `${lat},${lng}`,
-        maxTravelTime: maxMinutes,
-        ...(opts?.time ? { time: opts.time } : {}),
-        ...(opts?.arriveBy ? { arriveBy: true } : {}),
-        ...(transitModes ? { transitModes } : {}),
-      },
-    });
-    if (!data?.all?.length) return [];
-    return data.all
-      .filter((rp) => rp.place?.stopId)
-      .map((rp): TransitStop => {
-        const stop = normalizeStop(instance, rp.place as Place);
-        return {
-          ...stop,
-          reachMinutes: rp.duration ?? undefined,
-          reachTransfers: rp.k != null ? Math.max(0, rp.k - 1) : undefined,
-        };
-      });
   } catch {
     return [];
   }

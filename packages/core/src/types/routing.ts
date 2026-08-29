@@ -162,6 +162,8 @@ export interface IsochroneResult {
   origin: LngLat;
   mode: IsochroneTravelMode;
   contours: IsochroneContour[];
+  /** Runtime-resolved credits for the backend that answered this request. */
+  attributions?: import("@openmapx/mobility-core/attribution").Attribution[];
 }
 
 export interface RoutingOptions {

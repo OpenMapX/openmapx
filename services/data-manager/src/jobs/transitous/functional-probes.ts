@@ -15,6 +15,7 @@ import {
   healthUrl,
   mapInitialUrl,
   mapStopsUrl,
+  oneToManyIntermodalUrl,
   planUrl,
   rentalPlanUrl,
   rentalsUrl,
@@ -40,12 +41,24 @@ export interface ObservedRentalCapabilities {
   providerBboxes: Record<string, [number, number, number, number]>;
 }
 
+export interface ObservedReachabilityCapabilities {
+  motisVersion: string | null;
+  hasStreetRouting: boolean;
+  maxOneToManySize: number;
+  maxOneToAllTravelTimeMinutes: number;
+  maxPrePostTransitSeconds: number;
+  maxDirectSeconds: number;
+  oneToManyIntermodalVerified: boolean;
+  canaryDurationMs: number | null;
+}
+
 export interface FunctionalProbeReport {
   ok: boolean;
   outcomes: ProbeOutcome[];
   health?: HealthResponse;
   rentals?: ObservedRentalCapabilities;
   planningFeatures: { hasRoutedTransfers: boolean; hasElevation: boolean };
+  reachability: ObservedReachabilityCapabilities;
   failure?: ProbeOutcome;
 }
 
@@ -70,6 +83,34 @@ function decodeInitial(value: unknown): InitialResponse {
   }
   if (!isRecord(value.serverConfig)) throw new Error("initial response lacks serverConfig");
   return value as InitialResponse;
+}
+
+function finiteLimit(value: unknown): number {
+  return typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+}
+
+function observedReachability(initial: InitialResponse): ObservedReachabilityCapabilities {
+  const config = initial.serverConfig as unknown as JsonRecord;
+  return {
+    motisVersion: typeof config.motisVersion === "string" ? config.motisVersion : null,
+    hasStreetRouting: config.hasStreetRouting === true,
+    maxOneToManySize: finiteLimit(config.maxOneToManySize),
+    maxOneToAllTravelTimeMinutes: finiteLimit(config.maxOneToAllTravelTimeLimit),
+    maxPrePostTransitSeconds: finiteLimit(config.maxPrePostTransitTimeLimit),
+    maxDirectSeconds: finiteLimit(config.maxDirectTimeLimit),
+    oneToManyIntermodalVerified: false,
+    canaryDurationMs: null,
+  };
+}
+
+function decodeOneToManyIntermodal(value: unknown): void {
+  if (!isRecord(value)) throw new Error("one-to-many response is not an object");
+  if (!Array.isArray(value.street_durations) || value.street_durations.length !== 1) {
+    throw new Error("one-to-many street durations do not align with destinations");
+  }
+  if (!Array.isArray(value.transit_durations) || value.transit_durations.length !== 1) {
+    throw new Error("one-to-many transit durations do not align with destinations");
+  }
 }
 
 function decodeStops(value: unknown): StopsResponse {
@@ -181,6 +222,63 @@ async function execute<T>(
   }
 }
 
+async function executeOneToManyCanary(
+  baseUrl: string,
+  manifest: MotisCandidateManifest,
+  deadline: number,
+): Promise<ProbeOutcome> {
+  const url = oneToManyIntermodalUrl(baseUrl);
+  const start = Date.now();
+  try {
+    const remaining = deadline - start;
+    if (remaining <= 0) throw new Error("functional probe deadline exceeded");
+    const controller = new AbortController();
+    const timer = setTimeout(
+      () => controller.abort(new Error("request timed out")),
+      Math.min(DEFAULT_PROBE_TIMEOUT_MS, remaining),
+    );
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          one: `${manifest.canary.plan.fromLat},${manifest.canary.plan.fromLng}`,
+          many: [`${manifest.canary.plan.toLat},${manifest.canary.plan.toLng}`],
+          maxTravelTime: 15,
+          arriveBy: false,
+          pedestrianProfile: "FOOT",
+          pedestrianSpeed: 1.2,
+          preTransitModes: ["WALK"],
+          postTransitModes: ["WALK"],
+          directMode: "WALK",
+          maxPreTransitTime: 900,
+          maxPostTransitTime: 900,
+          maxDirectTime: 900,
+        }),
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+    const contentType = response.headers.get("content-type") ?? "";
+    if (!contentType.toLowerCase().includes("json")) {
+      throw new Error(`unexpected content-type ${contentType || "(none)"}`);
+    }
+    decodeOneToManyIntermodal(await response.json());
+    return { name: "one-to-many-intermodal", url, durationMs: Date.now() - start, ok: true };
+  } catch (error) {
+    return {
+      name: "one-to-many-intermodal",
+      url,
+      durationMs: Date.now() - start,
+      ok: false,
+      evidence: (error as Error).message.slice(0, 240),
+    };
+  }
+}
+
 const DEFAULT_RENTALS_WARMUP_MS = 180_000;
 const DEFAULT_RENTALS_POLL_INTERVAL_MS = 5_000;
 
@@ -244,6 +342,16 @@ export async function runFunctionalProbes(
   const outcomes: ProbeOutcome[] = [];
   let health: HealthResponse | undefined;
   let rentals: ObservedRentalCapabilities | undefined;
+  let reachability: ObservedReachabilityCapabilities = {
+    motisVersion: null,
+    hasStreetRouting: false,
+    maxOneToManySize: 0,
+    maxOneToAllTravelTimeMinutes: 0,
+    maxPrePostTransitSeconds: 0,
+    maxDirectSeconds: 0,
+    oneToManyIntermodalVerified: false,
+    canaryDurationMs: null,
+  };
   const planningFeatures = { hasRoutedTransfers: false, hasElevation: false };
   const specs: Array<{
     name: string;
@@ -266,7 +374,9 @@ export async function runFunctionalProbes(
       name: "initial",
       url: mapInitialUrl(baseUrl),
       decode: decodeInitial,
-      accept: () => undefined,
+      accept: (value) => {
+        reachability = observedReachability(value as InitialResponse);
+      },
     },
     {
       name: "stops",
@@ -340,11 +450,21 @@ export async function runFunctionalProbes(
         health,
         rentals,
         planningFeatures,
+        reachability,
       };
     }
     spec.accept(result.value);
   }
-  return { ok: true, outcomes, health, rentals, planningFeatures };
+  if (reachability.hasStreetRouting && reachability.maxOneToManySize > 0) {
+    const canary = await executeOneToManyCanary(baseUrl, manifest, deadline);
+    outcomes.push(canary);
+    reachability = {
+      ...reachability,
+      oneToManyIntermodalVerified: canary.ok,
+      canaryDurationMs: canary.durationMs,
+    };
+  }
+  return { ok: true, outcomes, health, rentals, planningFeatures, reachability };
 }
 
 export interface CapabilitySnapshot {
@@ -362,6 +482,7 @@ export interface CapabilitySnapshot {
   health: HealthResponse;
   rentals?: ObservedRentalCapabilities;
   planningFeatures: { hasRoutedTransfers: boolean; hasElevation: boolean };
+  reachability?: ObservedReachabilityCapabilities;
   probes: ProbeOutcome[];
 }
 
@@ -406,6 +527,7 @@ export function writeCapabilitySnapshot(
     health: report.health,
     rentals: report.rentals,
     planningFeatures: report.planningFeatures,
+    reachability: report.reachability,
     probes: report.outcomes,
   };
   const output = join(stagingDir, CAPABILITY_SNAPSHOT_FILENAME);

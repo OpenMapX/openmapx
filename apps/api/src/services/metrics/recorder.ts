@@ -1,5 +1,10 @@
 import type { MetricsRecorder } from "@openmapx/integration-framework";
-import { recordProviderCall, recordRoutingRequest, recordTransitDecision } from "./index.js";
+import {
+  recordProviderCall,
+  recordRoutingRequest,
+  recordTransitDecision,
+  recordTransitReachability,
+} from "./index.js";
 
 /**
  * Bridge between the integration-framework's structural `MetricsRecorder`
@@ -18,6 +23,9 @@ export function getMetricsRecorder(): MetricsRecorder {
     },
     recordTransitDecision(labels, value) {
       recordTransitDecision(labels, value);
+    },
+    recordTransitReachability(metrics) {
+      recordTransitReachability(metrics);
     },
     recordRoutingRequest(metrics) {
       recordRoutingRequest(metrics);

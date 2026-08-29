@@ -2278,7 +2278,18 @@
     "clickToPlace": "Click on the map to set origin",
     "dragToMove": "Drag the marker to move",
     "close": "Close travel time",
-    "onlyWithinReach": "Only within reach"
+    "onlyWithinReach": "Only within reach",
+    "estimatedSurface": "Estimated transit reachability · walking at {speed} m/s, up to {minutes} min at each end",
+    "showTransitStops": "Show reachable stops",
+    "fieldFallback": "This device cannot draw the estimated area; showing reachable stops instead.",
+    "exactFilterUnavailable": "Exact transit filtering needs a verified self-hosted MOTIS instance.",
+    "filterState": {
+      "off": "Transit filter off",
+      "pending": "Checking exact transit reachability… Results stay visible until complete.",
+      "applied": "Exact transit reachability filter applied.",
+      "unavailable": "Exact transit filtering is unavailable; all results remain visible.",
+      "failed": "Transit reachability check failed; all results remain visible."
+    }
   },
   "osmContributions": {
     "entry": "Improve this place",

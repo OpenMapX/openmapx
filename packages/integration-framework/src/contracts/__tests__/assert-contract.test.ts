@@ -134,6 +134,34 @@ describe("assertTransitProviderContract", () => {
       /provider: transit-broken[\s\S]*getDepartures/,
     );
   });
+
+  it("accepts surface-only and surface-plus-exact reachability providers", () => {
+    const fixture = (exactPointChecks: boolean) => ({
+      id: exactPointChecks ? "reach-exact" : "reach-surface",
+      prefix: "r:",
+      coverage: { all: true as const },
+      priority: 1,
+      role: "baseline" as const,
+      attribution: [],
+      capabilities: {
+        ...allFalseTransitCapabilities,
+        reachability: { estimatedSurface: true, exactPointChecks },
+      },
+      getReachabilitySurface: async () => ({ data: {}, attributions: [], freshness: {} }),
+      ...(exactPointChecks
+        ? {
+            checkReachabilityDestinations: async () => ({
+              data: {},
+              attributions: [],
+              freshness: {},
+            }),
+          }
+        : {}),
+    });
+
+    expect(() => assertTransitProviderContract(fixture(false))).not.toThrow();
+    expect(() => assertTransitProviderContract(fixture(true))).not.toThrow();
+  });
 });
 
 describe("assertRealtimeProviderContract", () => {

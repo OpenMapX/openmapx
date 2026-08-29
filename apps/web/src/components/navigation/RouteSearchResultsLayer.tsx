@@ -78,7 +78,7 @@ export function RouteSearchResultsLayer({
         paint: { "text-color": "#202124", "text-halo-color": "#ffffff", "text-halo-width": 1.4 },
       },
       "route-markers",
-      22,
+      23,
     );
   }, [mapRef, mapReady, styleVersion]);
 

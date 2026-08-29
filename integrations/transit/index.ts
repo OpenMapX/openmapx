@@ -24,6 +24,12 @@ import type {
   TripItinerary,
 } from "@openmapx/mobility-core/transit";
 import {
+  parseTransitReachabilityCheckRequest,
+  parseTransitReachabilitySurfaceRequest,
+  type TransitReachabilityCheckRequest,
+  type TransitReachabilitySurfaceRequest,
+} from "@openmapx/mobility-core/transit-reachability";
+import {
   createTransitOrchestrator,
   UnsupportedTransitPlanningCapabilitiesError,
 } from "./orchestrator.js";
@@ -33,6 +39,11 @@ import {
   verifyTransitPageToken,
 } from "./page-token.js";
 import { createPlaceTransit } from "./place-transit.js";
+import {
+  thinTransitReachabilitySurface,
+  transitCheckCacheKey,
+  transitSurfaceCacheKey,
+} from "./reachability.js";
 import { signRefreshHandle, verifyRefreshHandle } from "./refresh-token.js";
 
 /**
@@ -191,6 +202,31 @@ function utcDate(): string {
 
 function utcTime(): string {
   return new Date().toISOString().slice(11, 19);
+}
+
+function reachabilityFailure(error: unknown, signal?: AbortSignal) {
+  const raw = (error as { code?: unknown }).code;
+  const errorKind = [
+    "unavailable",
+    "timeout",
+    "invalid-response",
+    "unsupported",
+    "upstream",
+  ].includes(String(raw))
+    ? (raw as "unavailable" | "timeout" | "invalid-response" | "unsupported" | "upstream")
+    : signal?.aborted
+      ? "timeout"
+      : "upstream";
+  return {
+    errorKind,
+    outcome: signal?.aborted
+      ? ("cancelled" as const)
+      : errorKind === "timeout"
+        ? ("timeout" as const)
+        : errorKind === "unavailable" || errorKind === "unsupported"
+          ? ("unavailable" as const)
+          : ("error" as const),
+  };
 }
 
 export function setup(ctx: IntegrationContext): void {
@@ -831,29 +867,169 @@ export function setup(ctx: IntegrationContext): void {
     reply.send(envelope({ itinerary, fallbackOccurred }, resultAttributions, resultFreshness));
   });
 
-  // GET /reachable
-  ctx.registerRoute("GET", "/reachable", async (req, reply) => {
-    const point = parseWgs84Point(req.query.lng, req.query.lat);
-    if (!point) {
-      reply.status(400).send({ error: "Required: lat, lng" });
+  ctx.registerRoute("GET", "/reachability/capabilities", async (_req, reply) => {
+    const startedAt = Date.now();
+    const capabilities = await orchestrator.getReachabilityCapabilities();
+    if (!capabilities) {
+      ctx.metricsRecorder?.recordTransitReachability?.({
+        operation: "capabilities",
+        source: "none",
+        capabilityState: "runtime-unhealthy",
+        outcome: "unavailable",
+        cacheOutcome: "none",
+        errorKind: "unavailable",
+        latencyMs: Date.now() - startedAt,
+      });
+      reply.status(503).send({ error: "Transit reachability is unavailable" });
       return;
     }
-    const [lng, lat] = point;
-    const maxRaw = Number(req.query.maxTravelTime ?? 30);
-    const maxTravelTime = Number.isFinite(maxRaw) ? Math.min(Math.max(maxRaw, 1), 120) : 30;
-
-    const cacheKey = `reachable:${lat.toFixed(3)}:${lng.toFixed(3)}:${maxTravelTime}:${req.query.modes ?? ""}`;
-    const results = await ctx.cache.withCache(cacheKey, 300, async () => {
-      const res = await orchestrator.getReachableStops(
-        lat,
-        lng,
-        maxTravelTime,
-        req.query.modes?.split(",").map((m) => m.trim()),
-      );
-      return toEnvelope(res);
+    ctx.metricsRecorder?.recordTransitReachability?.({
+      operation: "capabilities",
+      source:
+        capabilities.exactPointCheckReason === "hosted-source" ? "transitous" : "self-hosted-motis",
+      capabilityState: capabilities.exactPointCheckReason,
+      outcome: "ok",
+      cacheOutcome: "none",
+      errorKind: "none",
+      latencyMs: Date.now() - startedAt,
     });
-    reply.header("Cache-Control", "public, max-age=300");
-    reply.send(results);
+    reply.header("Cache-Control", "no-store");
+    reply.send(capabilities);
+  });
+
+  ctx.registerRoute("POST", "/reachability/surface", async (req, reply) => {
+    const startedAt = Date.now();
+    let request: TransitReachabilitySurfaceRequest;
+    try {
+      request = parseTransitReachabilitySurfaceRequest(req.body);
+    } catch (error) {
+      reply.status(400).send({ error: (error as Error).message });
+      return;
+    }
+    try {
+      const capabilities = await orchestrator.getReachabilityCapabilities();
+      if (!capabilities?.estimatedSurface) {
+        ctx.metricsRecorder?.recordTransitReachability?.({
+          operation: "surface",
+          source: "none",
+          capabilityState: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
+          outcome: "unavailable",
+          cacheOutcome: "none",
+          errorKind: "unavailable",
+          latencyMs: Date.now() - startedAt,
+        });
+        reply.status(503).send({ error: "Transit reachability is unavailable" });
+        return;
+      }
+      const cacheKey = transitSurfaceCacheKey(request, capabilities.datasetEpoch);
+      let cacheMiss = false;
+      const result = await ctx.cache.withCache(cacheKey, 300, async () => {
+        cacheMiss = true;
+        const providerResult = await orchestrator.getReachabilitySurface(request, req.signal);
+        return {
+          ...providerResult,
+          data: thinTransitReachabilitySurface(providerResult.data),
+        };
+      });
+      ctx.metricsRecorder?.recordTransitReachability?.({
+        operation: "surface",
+        source: result.data.source,
+        capabilityState: result.data.capabilities.exactPointCheckReason,
+        outcome: "ok",
+        cacheOutcome: cacheMiss ? "miss" : "hit",
+        errorKind: "none",
+        latencyMs: Date.now() - startedAt,
+        rawSeedCount: result.data.thinning.originalSeedCount,
+        seedCount: result.data.thinning.seedCount,
+        gridMetres: result.data.thinning.gridMetres,
+      });
+      reply.header("Cache-Control", "public, max-age=300");
+      reply.send(toEnvelope(result));
+    } catch (error) {
+      const failure = reachabilityFailure(error, req.signal);
+      ctx.metricsRecorder?.recordTransitReachability?.({
+        operation: "surface",
+        source: "none",
+        capabilityState: "runtime-unhealthy",
+        ...failure,
+        cacheOutcome: "none",
+        latencyMs: Date.now() - startedAt,
+      });
+      reply
+        .status(failure.errorKind === "timeout" ? 504 : 502)
+        .send({ error: "Transit reachability failed" });
+    }
+  });
+
+  ctx.registerRoute("POST", "/reachability/check", async (req, reply) => {
+    const startedAt = Date.now();
+    let request: TransitReachabilityCheckRequest;
+    try {
+      request = parseTransitReachabilityCheckRequest(req.body);
+    } catch (error) {
+      reply.status(400).send({ error: (error as Error).message });
+      return;
+    }
+    try {
+      const capabilities = await orchestrator.getReachabilityCapabilities();
+      if (!capabilities?.exactPointChecks) {
+        ctx.metricsRecorder?.recordTransitReachability?.({
+          operation: "exact",
+          source: capabilities?.exactPointCheckReason === "hosted-source" ? "transitous" : "none",
+          capabilityState: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
+          outcome: "unavailable",
+          cacheOutcome: "none",
+          errorKind: "unavailable",
+          latencyMs: Date.now() - startedAt,
+          destinationCount: request.destinations.length,
+          batchCount: 0,
+        });
+        reply.status(409).send({
+          error: "Exact transit reachability is unavailable",
+          reason: capabilities?.exactPointCheckReason ?? "runtime-unhealthy",
+        });
+        return;
+      }
+      const cacheKey = transitCheckCacheKey(request, capabilities.datasetEpoch);
+      let cacheMiss = false;
+      const result = await ctx.cache.withCache(cacheKey, 300, () => {
+        cacheMiss = true;
+        return orchestrator.checkReachabilityDestinations(request, req.signal);
+      });
+      ctx.metricsRecorder?.recordTransitReachability?.({
+        operation: "exact",
+        source: "self-hosted-motis",
+        capabilityState: capabilities.exactPointCheckReason,
+        outcome: "ok",
+        cacheOutcome: cacheMiss ? "miss" : "hit",
+        errorKind: "none",
+        latencyMs: Date.now() - startedAt,
+        destinationCount: request.destinations.length,
+        batchCount: Math.ceil(
+          request.destinations.length / (capabilities.maxDestinationsPerBatch ?? 1),
+        ),
+      });
+      reply.header("Cache-Control", "private, max-age=0");
+      reply.send(toEnvelope(result));
+    } catch (error) {
+      const failure = reachabilityFailure(error, req.signal);
+      ctx.metricsRecorder?.recordTransitReachability?.({
+        operation: "exact",
+        source: "self-hosted-motis",
+        capabilityState: "runtime-unhealthy",
+        ...failure,
+        cacheOutcome: "none",
+        latencyMs: Date.now() - startedAt,
+        destinationCount: request.destinations.length,
+      });
+      if (failure.errorKind === "unsupported" || failure.errorKind === "unavailable") {
+        reply.status(409).send({ error: "Exact transit reachability is unavailable" });
+        return;
+      }
+      reply
+        .status(failure.errorKind === "timeout" ? 504 : 502)
+        .send({ error: "Exact transit check failed" });
+    }
   });
 
   // GET /alerts

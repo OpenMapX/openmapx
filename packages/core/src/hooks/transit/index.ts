@@ -13,7 +13,6 @@ export { useLinkedTransitStops } from "./useLinkedTransitStops";
 export type { MobilityEnvelopeQueryResult } from "./useMobilityEnvelope";
 export { wrapMobilityEnvelope } from "./useMobilityEnvelope";
 export { usePlaceStopInfrastructure } from "./usePlaceStopInfrastructure";
-export { useReachableStops } from "./useReachableStops";
 export {
   type TransitRefreshResult,
   useRefreshTransitItinerary,
@@ -35,6 +34,11 @@ export {
   type TransitPlanningCapabilityProvider,
   useTransitPlanningCapabilities,
 } from "./useTransitPlanningCapabilities";
+export { useTransitReachability } from "./useTransitReachability";
+export {
+  transitReachabilityDestinationKey,
+  useTransitReachabilityCheck,
+} from "./useTransitReachabilityCheck";
 export { useTransitRoute } from "./useTransitRoute";
 export { useTransitStops } from "./useTransitStops";
 export { useVehicleJourney } from "./useVehicleJourney";

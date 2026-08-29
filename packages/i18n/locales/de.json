@@ -2278,7 +2278,18 @@
     "clickToPlace": "Klicke auf die Karte, um den Startpunkt zu setzen",
     "dragToMove": "Marker ziehen zum Verschieben",
     "close": "Reisezeit schließen",
-    "onlyWithinReach": "Nur erreichbarer Bereich"
+    "onlyWithinReach": "Nur erreichbarer Bereich",
+    "estimatedSurface": "Geschätzte ÖPNV-Erreichbarkeit · Fußweg mit {speed} m/s, maximal {minutes} Min. an jedem Ende",
+    "showTransitStops": "Erreichbare Haltestellen anzeigen",
+    "fieldFallback": "Dieses Gerät kann die geschätzte Fläche nicht zeichnen; stattdessen werden erreichbare Haltestellen angezeigt.",
+    "exactFilterUnavailable": "Die exakte ÖPNV-Filterung benötigt eine geprüfte, selbst gehostete MOTIS-Instanz.",
+    "filterState": {
+      "off": "ÖPNV-Filter aus",
+      "pending": "Exakte ÖPNV-Erreichbarkeit wird geprüft… Ergebnisse bleiben bis zum Abschluss sichtbar.",
+      "applied": "Exakter ÖPNV-Erreichbarkeitsfilter angewendet.",
+      "unavailable": "Exakte ÖPNV-Filterung ist nicht verfügbar; alle Ergebnisse bleiben sichtbar.",
+      "failed": "ÖPNV-Erreichbarkeitsprüfung fehlgeschlagen; alle Ergebnisse bleiben sichtbar."
+    }
   },
   "osmContributions": {
     "entry": "Diesen Ort verbessern",

@@ -183,6 +183,16 @@ describe("makeRateLimitTierHook", () => {
     { url: "/api/offline/packages/prepare", tier: "expensive" },
     { url: "/api/isochrone?x=1", tier: "expensive" },
     { url: "/api/motis/plan", tier: "expensive" },
+    {
+      method: "POST",
+      url: "/api/integrations/transit/reachability/surface",
+      tier: "expensive",
+    },
+    {
+      method: "POST",
+      url: "/api/integrations/transit/reachability/check",
+      tier: "expensive",
+    },
     { url: "/api/integrations/food-delivery/resolve", tier: "expensive" },
     { url: "/api/integrations/food-delivery/ubereats/open", tier: "expensive" },
     { url: "/api/integrations/restaurants/menu?website=https://example.com", tier: "expensive" },

@@ -28,7 +28,7 @@ from pathlib import Path
 # needs an OSM input — so whenever the extract is present we copy it into
 # `out/` (assemble-staging links every config-referenced input from there) and
 # enable street routing in the emitted config.
-OSM_EXTRACT = "berlin-tiny.osm"
+OSM_EXTRACT = "berlin-tiny.osm.pbf"
 
 
 def dataset_identifier(zip_name: str) -> str:

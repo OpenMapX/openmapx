@@ -36,6 +36,10 @@ export function mapInitialUrl(base: string): string {
   return `${base}/api/v1/map/initial`;
 }
 
+export function oneToManyIntermodalUrl(base: string): string {
+  return `${base}/api/experimental/one-to-many-intermodal`;
+}
+
 export function mapStopsUrl(base: string, q: BboxQuery): string {
   return `${base}/api/v1/map/stops?min=${q.minLat},${q.minLng}&max=${q.maxLat},${q.maxLng}`;
 }

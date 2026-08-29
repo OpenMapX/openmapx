@@ -11,14 +11,26 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripLeg, TripPlan } from "@openmapx/mobility-core/transit";
+import type {
+  TransitReachabilityCapabilities,
+  TransitReachabilitySurface,
+} from "@openmapx/mobility-core/transit-reachability";
 import * as motis from "./adapter.js";
 import { attributionLocal, attributionTransitous } from "./attributions.js";
 import {
   type MotisInstance,
   motisLocalInstance,
+  motisLocalReachabilityInstance,
   setMotisLocalUrl,
   transitousInstance,
 } from "./instances.js";
+import {
+  checkMotisReachabilityDestinations,
+  getMotisReachabilitySeeds,
+  MotisReachabilityError,
+  type ObservedMotisReachabilityCapabilities,
+  resolveMotisReachabilityCapabilities,
+} from "./reachability.js";
 import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
 import { decodeMotisLineReference, decodeMotisRoutePatternId } from "./route-pattern-id.js";
 
@@ -32,6 +44,7 @@ interface ActiveMotisCapabilities {
   health?: { rt?: boolean };
   rentals?: { formFactors?: string[] };
   planningFeatures?: { hasRoutedTransfers?: boolean; hasElevation?: boolean };
+  reachability?: ObservedMotisReachabilityCapabilities;
 }
 
 let cachedCapabilities: ActiveMotisCapabilities | null = null;
@@ -84,6 +97,8 @@ interface MaybeStopShape {
   from?: unknown;
   to?: unknown;
   intermediateStops?: unknown;
+  seeds?: unknown;
+  stop?: unknown;
 }
 
 /**
@@ -155,6 +170,8 @@ export function extractFeedTags(data: unknown, feedTagsByLength: string[]): stri
     if (obj.from) visit(obj.from);
     if (obj.to) visit(obj.to);
     if (Array.isArray(obj.intermediateStops)) visit(obj.intermediateStops);
+    if (Array.isArray(obj.seeds)) visit(obj.seeds);
+    if (obj.stop) visit(obj.stop);
   };
   visit(data);
   return Array.from(tags);
@@ -335,6 +352,7 @@ export function setupLocal(ctx: IntegrationContext): void {
   // responses resolve feed-level attribution by looking up extracted feed
   // tags against it; without an index they fall back to ATTRIBUTION_LOCAL.
   const attributionIndex = ctx.attributionIndex;
+  const exactReachabilityEnabled = ctx.config.exactReachabilityEnabled === true;
   const requireActiveEpoch = (): string => {
     const epoch = activeMotisCapabilities()?.epoch;
     if (!epoch) {
@@ -390,6 +408,7 @@ export function setupLocal(ctx: IntegrationContext): void {
       vehicleJourney: true,
       alerts: { byStop: false, byRoute: false, byBbox: false },
       facilities: false,
+      reachability: { estimatedSurface: true, exactPointChecks: true },
     },
     // Rental form factors come from the live MOTIS `/rentals` endpoint (the
     // source of truth for what the engine can actually route), not the capability
@@ -571,14 +590,92 @@ export function setupLocal(ctx: IntegrationContext): void {
       requireHostedFallback();
       return wrapTransitousRT(await motis.getTrip(transitousInstance, cloudId));
     },
-    async getReachableStops(lat, lng, maxMinutes, modes) {
-      if (await isMotisReachableCached()) {
-        const local = await motis.getReachable(motisLocalInstance, lat, lng, maxMinutes, { modes });
-        return wrapLocalRT(local);
+    async getReachabilityCapabilities(): Promise<TransitReachabilityCapabilities> {
+      const localHealthy = await isMotisReachableCached();
+      if (localHealthy) {
+        const active = activeMotisCapabilities();
+        return resolveMotisReachabilityCapabilities({
+          source: "self-hosted-motis",
+          runtimeHealthy: true,
+          operatorEnabled: exactReachabilityEnabled,
+          datasetEpoch: active?.epoch,
+          observed: active?.reachability,
+        });
+      }
+      return resolveMotisReachabilityCapabilities({
+        source: hostedFallbackEnabled ? "transitous" : "self-hosted-motis",
+        runtimeHealthy: hostedFallbackEnabled,
+        operatorEnabled: false,
+      });
+    },
+    async getReachabilitySurface(request, signal) {
+      const localHealthy = await isMotisReachableCached();
+      if (localHealthy) {
+        try {
+          const active = activeMotisCapabilities();
+          const capabilities = resolveMotisReachabilityCapabilities({
+            source: "self-hosted-motis",
+            runtimeHealthy: true,
+            operatorEnabled: exactReachabilityEnabled,
+            datasetEpoch: active?.epoch,
+            observed: active?.reachability,
+          });
+          const seeds = await getMotisReachabilitySeeds(motisLocalInstance, request, signal);
+          const surface: TransitReachabilitySurface = {
+            queryTime: request.queryTime,
+            source: "self-hosted-motis",
+            capabilities,
+            seeds,
+            thinning: { originalSeedCount: seeds.length, seedCount: seeds.length, gridMetres: 0 },
+          };
+          return wrapLocal(surface);
+        } catch (error) {
+          ctx.log.warn(
+            `[transit-motis] local reachability surface failed: ${(error as Error).message}`,
+          );
+          if (signal?.aborted) throw error;
+        }
       }
       requireHostedFallback();
-      return wrapTransitousRT(
-        await motis.getReachable(transitousInstance, lat, lng, maxMinutes, { modes }),
+      const seeds = await getMotisReachabilitySeeds(transitousInstance, request, signal);
+      const capabilities = resolveMotisReachabilityCapabilities({
+        source: "transitous",
+        runtimeHealthy: true,
+        operatorEnabled: false,
+      });
+      return wrapTransitous({
+        queryTime: request.queryTime,
+        source: "transitous" as const,
+        capabilities,
+        seeds,
+        thinning: { originalSeedCount: seeds.length, seedCount: seeds.length, gridMetres: 0 },
+      });
+    },
+    async checkReachabilityDestinations(request, signal) {
+      if (!(await isMotisReachableCached())) {
+        throw new MotisReachabilityError("unavailable", "self-hosted MOTIS is unavailable");
+      }
+      const active = activeMotisCapabilities();
+      const capabilities = resolveMotisReachabilityCapabilities({
+        source: "self-hosted-motis",
+        runtimeHealthy: true,
+        operatorEnabled: exactReachabilityEnabled,
+        datasetEpoch: active?.epoch,
+        observed: active?.reachability,
+      });
+      if (!capabilities.exactPointChecks || !capabilities.maxDestinationsPerBatch) {
+        throw new MotisReachabilityError(
+          "unsupported",
+          `exact reachability is disabled: ${capabilities.exactPointCheckReason}`,
+        );
+      }
+      return wrapLocal(
+        await checkMotisReachabilityDestinations(
+          motisLocalReachabilityInstance,
+          request,
+          capabilities.maxDestinationsPerBatch,
+          signal,
+        ),
       );
     },
     async getVehicleRadar(bbox) {

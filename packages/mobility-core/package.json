@@ -97,6 +97,10 @@
       "types": "./src/types/transit.ts",
       "default": "./src/types/transit.ts"
     },
+    "./transit-reachability": {
+      "types": "./src/types/transit-reachability.ts",
+      "default": "./src/types/transit-reachability.ts"
+    },
     "./transit-delay": {
       "types": "./src/transit-delay.ts",
       "default": "./src/transit-delay.ts"

@@ -9,6 +9,7 @@ import {
   recordProviderCall,
   recordRoutingRequest,
   recordTransitDecision,
+  recordTransitReachability,
   resetMetricsForTests,
 } from "../index.js";
 
@@ -122,6 +123,30 @@ describe("metrics service", () => {
     expect(text).toContain('operation="directions"');
     expect(text).toContain('live_traffic="true"');
     expect(text).toContain('status="present"');
+  });
+
+  it("records reachability volume without destination or coordinate labels", async () => {
+    recordTransitReachability({
+      operation: "exact",
+      source: "self-hosted-motis",
+      capabilityState: "available",
+      outcome: "ok",
+      cacheOutcome: "miss",
+      errorKind: "none",
+      latencyMs: 321,
+      destinationCount: 200,
+      batchCount: 2,
+    });
+    const text = await getMetrics().renderPrometheus();
+    expect(text).toContain("transit_reachability_requests_total");
+    expect(text).toContain("transit_reachability_request_duration_ms");
+    expect(text).toContain("transit_reachability_destination_count");
+    expect(text).toContain("transit_reachability_batch_count");
+    expect(text).toContain('source="self-hosted-motis"');
+    expect(text).toContain('capability_state="available"');
+    expect(text).not.toContain("destination_id");
+    expect(text).not.toContain("latitude");
+    expect(text).not.toContain("longitude");
   });
 
   it("records personal timeline counts and latency with closed aggregate labels", async () => {

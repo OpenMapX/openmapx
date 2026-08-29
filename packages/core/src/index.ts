@@ -3,12 +3,28 @@
 // `./git-url` blocks stay explicit: navigation curates a subset of its
 // folder and git-url is a single file whose node-only siblings live in
 // `./server`.
+
+export {
+  MAX_TRANSIT_REACHABILITY_DESTINATIONS,
+  MAX_TRANSIT_REACHABILITY_MINUTES,
+  MAX_TRANSIT_REACHABILITY_THRESHOLDS,
+  TRANSIT_WALK_PROFILE,
+  type TransitExactPointCheckReason,
+  type TransitReachabilityCapabilities,
+  type TransitReachabilityCheckRequest,
+  type TransitReachabilityCheckResult,
+  type TransitReachabilityDestination,
+  type TransitReachabilityDestinationResult,
+  type TransitReachabilitySeed,
+  type TransitReachabilitySource,
+  type TransitReachabilitySurface,
+  type TransitReachabilitySurfaceRequest,
+} from "@openmapx/mobility-core/transit-reachability";
 export * from "./api";
 export * from "./auth";
 export * from "./constants";
 export * from "./domains";
 export * from "./feed-id";
-
 // Git URL allowlist (shared by community service repos + community integrations).
 // The `gitShallowClone*` helpers that use these live in `./server` — they import
 // `node:fs` and would break the client bundle if re-exported here.

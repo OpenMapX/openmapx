@@ -197,6 +197,7 @@ export const EXPENSIVE_PUBLIC_PATTERNS = [
   /^\/api\/image-proxy(\/|$|\?)/,
   /^\/api\/winter-sports(\/|$)/,
   /^\/api\/integrations\/search-nlp(\/|$|\?)/,
+  /^\/api\/integrations\/transit\/reachability\/(surface|check)(\/|$|\?)/,
   /^\/api\/integrations\/food-delivery\/(resolve|[^/]+\/(open|url))(\/|$|\?)/,
   /^\/api\/integrations\/restaurants\/menu(\/|$|\?)/,
   /^\/api\/offline\/packages\/prepare(\/|$|\?)/,

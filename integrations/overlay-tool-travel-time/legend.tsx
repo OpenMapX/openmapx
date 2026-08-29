@@ -18,11 +18,17 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import type { LngLat } from "@openmapx/core";
-import { useIsochrone, useReachableStops } from "@openmapx/core";
-import { useTranslations } from "next-intl";
 import {
-  resolveIsochroneMode,
+  type LngLat,
+  TRANSIT_WALK_PROFILE,
+  type TransitReachabilitySurfaceRequest,
+  useIsochrone,
+  useTransitReachability,
+} from "@openmapx/core";
+import { useTranslations } from "next-intl";
+import { useMemo } from "react";
+import {
+  resolveTravelTimeBackend,
   TRAVEL_TIME_PRESETS,
   type TravelTimeMode,
   useTravelTimeStore,
@@ -43,24 +49,39 @@ export function TravelTimeToolbar() {
   const selectedMinutes = useTravelTimeStore((s) => s.selectedMinutes);
   const anchored = useTravelTimeStore((s) => s.anchored);
   const onlyWithinReach = useTravelTimeStore((s) => s.onlyWithinReach);
+  const queryTime = useTravelTimeStore((s) => s.queryTime);
+  const showTransitStops = useTravelTimeStore((s) => s.showTransitStops);
+  const transitFieldUnsupported = useTravelTimeStore((s) => s.transitFieldUnsupported);
+  const transitFilterState = useTravelTimeStore((s) => s.transitFilterState);
   const setMode = useTravelTimeStore((s) => s.setMode);
   const toggleMinutes = useTravelTimeStore((s) => s.toggleMinutes);
   const setOrigin = useTravelTimeStore((s) => s.setOrigin);
   const setOnlyWithinReach = useTravelTimeStore((s) => s.setOnlyWithinReach);
+  const setShowTransitStops = useTravelTimeStore((s) => s.setShowTransitStops);
   const deactivate = useTravelTimeStore((s) => s.deactivate);
 
-  const { isTransit, isochroneMode } = resolveIsochroneMode(mode);
+  const backend = resolveTravelTimeBackend(mode);
+  const isTransit = backend.kind === "transit-reachability";
   const { isFetching: isochroneFetching } = useIsochrone({
     origin,
-    mode: isochroneMode,
+    mode: backend.kind === "street-isochrone" ? backend.mode : "walking",
     contourMinutes: selectedMinutes,
     enabled: isActive && !isTransit,
   });
-  const { isFetching: reachFetching } = useReachableStops({
-    origin,
-    maxMinutes: selectedMinutes.length ? Math.max(...selectedMinutes) : 30,
-    enabled: isActive && isTransit,
-  });
+  const transitRequest = useMemo<TransitReachabilitySurfaceRequest | null>(() => {
+    if (!origin || !queryTime || !isTransit || selectedMinutes.length === 0) return null;
+    return {
+      origin: { lng: origin[0], lat: origin[1] },
+      queryTime,
+      direction: "depart-at",
+      thresholdsMinutes: [Math.max(...selectedMinutes)],
+      walkProfileId: TRANSIT_WALK_PROFILE.id,
+    };
+  }, [isTransit, origin, queryTime, selectedMinutes]);
+  const { data: transitSurface, isFetching: reachFetching } = useTransitReachability(
+    transitRequest,
+    isActive && isTransit,
+  );
   const isFetching = isTransit ? reachFetching : isochroneFetching;
 
   if (!isActive) return null;
@@ -171,9 +192,34 @@ export function TravelTimeToolbar() {
         })}
       </Box>
 
-      {/* Transit reachability is point-based (no contour), so the "only within
-          reach" polygon filter doesn't apply — hide it in transit mode. */}
-      {anchored && !isTransit && (
+      {isTransit && (
+        <>
+          <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+            {t("estimatedSurface", {
+              speed: TRANSIT_WALK_PROFILE.speedMetresPerSecond,
+              minutes: TRANSIT_WALK_PROFILE.egressSeconds / 60,
+            })}
+          </Typography>
+          {transitFieldUnsupported && (
+            <Typography role="status" sx={{ fontSize: 11, color: "warning.main" }}>
+              {t("fieldFallback")}
+            </Typography>
+          )}
+          <FormControlLabel
+            control={
+              <Switch
+                size="small"
+                checked={showTransitStops}
+                onChange={(e) => setShowTransitStops(e.target.checked)}
+              />
+            }
+            label={<Typography sx={{ fontSize: 12 }}>{t("showTransitStops")}</Typography>}
+            sx={{ m: 0, alignSelf: "flex-start" }}
+          />
+        </>
+      )}
+
+      {anchored && (
         <>
           <Divider />
           <FormControlLabel
@@ -181,12 +227,27 @@ export function TravelTimeToolbar() {
               <Switch
                 size="small"
                 checked={onlyWithinReach}
+                disabled={
+                  isTransit &&
+                  transitSurface !== undefined &&
+                  !transitSurface.capabilities.exactPointChecks
+                }
                 onChange={(e) => setOnlyWithinReach(e.target.checked)}
               />
             }
             label={<Typography sx={{ fontSize: 12 }}>{t("onlyWithinReach")}</Typography>}
             sx={{ m: 0, alignSelf: "flex-start" }}
           />
+          {isTransit && transitSurface && !transitSurface.capabilities.exactPointChecks && (
+            <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+              {t("exactFilterUnavailable")}
+            </Typography>
+          )}
+          {isTransit && onlyWithinReach && (
+            <Typography aria-live="polite" sx={{ fontSize: 11, color: "text.secondary" }}>
+              {t(`filterState.${transitFilterState}`)}
+            </Typography>
+          )}
         </>
       )}
     </Paper>

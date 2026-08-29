@@ -1,15 +1,21 @@
 "use client";
 
-import type { LngLat } from "@openmapx/core";
-import { useIsochrone, useReachableStops } from "@openmapx/core";
+import {
+  type LngLat,
+  TRANSIT_WALK_PROFILE,
+  type TransitReachabilitySurfaceRequest,
+  useIsochrone,
+  useTransitReachability,
+} from "@openmapx/core";
 import type { MapMouseEvent } from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
 import { useMap } from "@/lib/MapContext";
-import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
-import { resolveIsochroneMode, type TravelTimeMode, useTravelTimeStore } from "./store";
+import { useMapAttributions } from "@/lib/useMapAttributions";
+import { resolveTravelTimeBackend, type TravelTimeMode, useTravelTimeStore } from "./store";
+import { TransitFieldLayer } from "./transit-field-layer";
 
 const SOURCE_ID = "travel-time-source";
 const FILL_LAYER = "travel-time-fill";
@@ -19,6 +25,7 @@ const REACH_LAYER = "travel-time-reach";
 const ORIGIN_SOURCE = "travel-time-origin-source";
 const ORIGIN_LAYER = "travel-time-origin";
 const ORIGIN_PULSE_LAYER = "travel-time-origin-pulse";
+const TRANSIT_FIELD_LAYER = "travel-time-transit-field";
 
 const LAYER_IDS = [FILL_LAYER, OUTLINE_LAYER, REACH_LAYER, ORIGIN_LAYER, ORIGIN_PULSE_LAYER];
 
@@ -52,6 +59,9 @@ export function TravelTimeLayer() {
   const mode = useTravelTimeStore((s) => s.mode);
   const selectedMinutes = useTravelTimeStore((s) => s.selectedMinutes);
   const anchored = useTravelTimeStore((s) => s.anchored);
+  const queryTime = useTravelTimeStore((s) => s.queryTime);
+  const showTransitStops = useTravelTimeStore((s) => s.showTransitStops);
+  const transitFieldUnsupported = useTravelTimeStore((s) => s.transitFieldUnsupported);
   const { publish: publishGeoJson } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -60,26 +70,42 @@ export function TravelTimeLayer() {
   });
 
   const draggingRef = useRef(false);
+  const transitFieldLayerRef = useRef<TransitFieldLayer | null>(null);
 
-  // Credit the Valhalla/OSM routing source whenever the isochrone overlay is on
-  // the map (manifest declares "Routing © Stadia Maps, © OpenStreetMap contributors").
-  useIntegrationAttribution("overlay-tool-travel-time", isActive);
-
-  const { isTransit, isochroneMode } = resolveIsochroneMode(mode);
-  const maxMinutes = selectedMinutes.length ? Math.max(...selectedMinutes) : 30;
+  const backend = resolveTravelTimeBackend(mode);
+  const isTransit = backend.kind === "transit-reachability";
 
   const { data: isochroneData } = useIsochrone({
     origin,
-    mode: isochroneMode,
+    mode: backend.kind === "street-isochrone" ? backend.mode : "walking",
     contourMinutes: selectedMinutes,
     enabled: isActive && !isTransit,
   });
 
-  const { data: reachableStops } = useReachableStops({
-    origin,
-    maxMinutes,
-    enabled: isActive && isTransit,
-  });
+  const transitRequest = useMemo<TransitReachabilitySurfaceRequest | null>(() => {
+    if (!origin || !queryTime || !isTransit || selectedMinutes.length === 0) return null;
+    return {
+      origin: { lng: origin[0], lat: origin[1] },
+      queryTime,
+      direction: "depart-at",
+      // The server needs only the largest budget. Lower visual bands are
+      // composited from the same remaining-time field without a refetch.
+      thresholdsMinutes: [Math.max(...selectedMinutes)],
+      walkProfileId: TRANSIT_WALK_PROFILE.id,
+    };
+  }, [isTransit, origin, queryTime, selectedMinutes]);
+  const { data: transitSurface, attributions: transitAttributions } = useTransitReachability(
+    transitRequest,
+    isActive && isTransit,
+  );
+  useMapAttributions(
+    "travel-time:street-isochrone",
+    isActive && !isTransit ? (isochroneData?.attributions ?? []) : [],
+  );
+  useMapAttributions(
+    "travel-time:transit-reachability",
+    isActive && isTransit ? transitAttributions : [],
+  );
 
   // Register interactive layers
   useEffect(() => {
@@ -120,7 +146,7 @@ export function TravelTimeLayer() {
           },
         },
         "route-markers",
-        17,
+        18,
       );
 
       addLayerInSlot(
@@ -136,10 +162,10 @@ export function TravelTimeLayer() {
           },
         },
         "route-markers",
-        18,
+        19,
       );
 
-      // Transit reachability: one dot per reachable stop, graduated by time band.
+      // Optional/fallback stop diagnostics, graduated by time band.
       addLayerInSlot(
         map,
         {
@@ -156,7 +182,7 @@ export function TravelTimeLayer() {
           },
         },
         "route-markers",
-        19,
+        20,
       );
 
       // Pulsing ring
@@ -175,7 +201,7 @@ export function TravelTimeLayer() {
           },
         },
         "route-markers",
-        20,
+        21,
       );
 
       // Origin dot
@@ -193,7 +219,7 @@ export function TravelTimeLayer() {
           },
         },
         "route-markers",
-        21,
+        22,
       );
     };
 
@@ -215,12 +241,51 @@ export function TravelTimeLayer() {
     };
   }, [mapRef, mapReady, styleVersion, isActive]);
 
+  // Own WebGL resources for the lifetime of this style/active transit layer.
+  // Data and threshold changes below update only the instance buffer.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady || !isActive || !isTransit) return;
+    const setUnsupported = useTravelTimeStore.getState().setTransitFieldUnsupported;
+    setUnsupported(null);
+    const layer = new TransitFieldLayer({
+      id: TRANSIT_FIELD_LAYER,
+      seeds: [],
+      thresholdsMinutes: [],
+      onUnsupported: setUnsupported,
+    });
+    transitFieldLayerRef.current = layer;
+    const setup = () => {
+      if (!map.getLayer(TRANSIT_FIELD_LAYER)) {
+        addLayerInSlot(map, layer, "route-markers", 17);
+      }
+    };
+    if (map.isStyleLoaded()) setup();
+    else map.once("styledata", setup);
+    return () => {
+      if (transitFieldLayerRef.current === layer) transitFieldLayerRef.current = null;
+      if (map.getStyle() && map.getLayer(TRANSIT_FIELD_LAYER)) map.removeLayer(TRANSIT_FIELD_LAYER);
+      unregisterLayerSlot(TRANSIT_FIELD_LAYER);
+    };
+  }, [isActive, isTransit, mapReady, mapRef, styleVersion]);
+
+  // The surface is an estimated continuous field rendered from MOTIS
+  // one-to-all seeds. The origin seed adds direct walking reach.
+  useEffect(() => {
+    void styleVersion;
+    const seeds = origin
+      ? [{ lng: origin[0], lat: origin[1], arrivalSeconds: 0 }, ...(transitSurface?.seeds ?? [])]
+      : [];
+    transitFieldLayerRef.current?.setData(seeds, selectedMinutes);
+  }, [origin, selectedMinutes, styleVersion, transitSurface]);
+
   // Update isochrone polygons
   useEffect(() => {
     void styleVersion;
     if (!mapReady || !isActive) return;
 
-    if (!isochroneData || isochroneData.contours.length === 0) {
+    if (isTransit || !isochroneData || isochroneData.contours.length === 0) {
       publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features: [] } }]);
       return;
     }
@@ -242,7 +307,7 @@ export function TravelTimeLayer() {
       }));
 
     publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features } }]);
-  }, [isActive, isochroneData, mapReady, publishGeoJson, styleVersion]);
+  }, [isActive, isTransit, isochroneData, mapReady, publishGeoJson, styleVersion]);
 
   // Update transit reachability dots (one-to-all). Each reachable stop is
   // coloured by the transit mode and faded by which selected time band it falls
@@ -251,7 +316,8 @@ export function TravelTimeLayer() {
     void styleVersion;
     if (!mapReady || !isActive) return;
 
-    if (!isTransit || !reachableStops?.length) {
+    const dotsVisible = showTransitStops || transitFieldUnsupported !== null;
+    if (!isTransit || !dotsVisible || !transitSurface?.seeds.length) {
       publishGeoJson([
         { sourceId: REACH_SOURCE, data: { type: "FeatureCollection", features: [] } },
       ]);
@@ -263,17 +329,16 @@ export function TravelTimeLayer() {
     const color = MODE_COLORS.transit;
 
     const features: GeoJSON.Feature[] = [];
-    for (const stop of reachableStops) {
-      const r = stop.reachMinutes;
-      if (r == null) continue;
+    for (const seed of transitSurface.seeds) {
+      const r = seed.arrivalSeconds / 60;
       const band = bandIndex(r, sortedAsc);
       if (band === -1) continue; // beyond the largest selected budget
       // Nearest band (index 0) most opaque.
       const opacity = bands <= 1 ? 0.8 : 0.85 - (band / (bands - 1)) * 0.5;
       features.push({
         type: "Feature",
-        geometry: { type: "Point", coordinates: [stop.lng, stop.lat] },
-        properties: { color, opacity, reachMinutes: r, name: stop.name },
+        geometry: { type: "Point", coordinates: [seed.lng, seed.lat] },
+        properties: { color, opacity, reachMinutes: r, name: seed.stop?.name ?? "" },
       });
     }
     publishGeoJson([{ sourceId: REACH_SOURCE, data: { type: "FeatureCollection", features } }]);
@@ -282,9 +347,11 @@ export function TravelTimeLayer() {
     isTransit,
     mapReady,
     publishGeoJson,
-    reachableStops,
     selectedMinutes,
+    showTransitStops,
     styleVersion,
+    transitFieldUnsupported,
+    transitSurface,
   ]);
 
   // Update origin marker

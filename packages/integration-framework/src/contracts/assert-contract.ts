@@ -13,7 +13,16 @@ import type { TransitCapabilities } from "./transit-provider.js";
  * a real capability flag and interface method.
  */
 const TRANSIT_CAPABILITY_METHODS: ReadonlyArray<
-  [keyof TransitCapabilities | `stops.${string}` | `routes.${string}` | `alerts.${string}`, string]
+  [
+    (
+      | keyof TransitCapabilities
+      | `stops.${string}`
+      | `routes.${string}`
+      | `alerts.${string}`
+      | `reachability.${string}`
+    ),
+    string,
+  ]
 > = [
   ["stops.lookup", "getStop"],
   ["stops.nearby", "getStopsNearby"],
@@ -35,6 +44,8 @@ const TRANSIT_CAPABILITY_METHODS: ReadonlyArray<
   ["alerts.byRoute", "getAlertsForRoute"],
   ["alerts.byBbox", "getAlertsForBbox"],
   ["facilities", "getFacilities"],
+  ["reachability.estimatedSurface", "getReachabilitySurface"],
+  ["reachability.exactPointChecks", "checkReachabilityDestinations"],
 ];
 
 /**

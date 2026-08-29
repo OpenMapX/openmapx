@@ -20,6 +20,7 @@ export type {
   RouteOptions,
   SecretsClient,
   TransferSafeguard,
+  TransitReachabilityMetrics,
 } from "./context";
 export {
   assertProviderSatisfiesContract,

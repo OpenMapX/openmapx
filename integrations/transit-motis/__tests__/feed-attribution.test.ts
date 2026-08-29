@@ -168,6 +168,15 @@ describe("transit-motis feed attribution", () => {
     expect(extractFeedTags(route, FEED_TAGS_BY_LENGTH).sort()).toEqual(["ch_SBB", "de_DELFI"]);
   });
 
+  it("extractFeedTags follows reachability surface seeds into stop metadata", () => {
+    expect(
+      extractFeedTags(
+        { seeds: [{ arrivalSeconds: 300, stop: { id: "ms:de_DELFI_stop-1" } }] },
+        FEED_TAGS_BY_LENGTH,
+      ),
+    ).toEqual(["de_DELFI"]);
+  });
+
   it("returns an empty tag list for shapes without recognisable ids", () => {
     expect(extractFeedTags(null, FEED_TAGS_BY_LENGTH)).toEqual([]);
     expect(extractFeedTags({}, FEED_TAGS_BY_LENGTH)).toEqual([]);

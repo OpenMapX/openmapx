@@ -64,6 +64,12 @@ export interface MetricsHandle {
   providerCallCounter: Counter;
   providerCallLatency: Histogram;
   transitDecisionCounter: Counter;
+  transitReachabilityCounter: Counter;
+  transitReachabilityLatency: Histogram;
+  transitReachabilitySeedCount: Histogram;
+  transitReachabilityDestinationCount: Histogram;
+  transitReachabilityBatchCount: Histogram;
+  transitReachabilityGridMetres: Histogram;
   routingRequestCounter: Counter;
   routingRequestLatency: Histogram;
   routingRouteCount: Histogram;
@@ -104,6 +110,27 @@ export function initMetrics(): MetricsHandle {
   });
   const transitDecisionCounter = meter.createCounter("transit_provider_decisions_total", {
     description: "Bounded transit orchestration decisions and avoided calls",
+  });
+  const transitReachabilityCounter = meter.createCounter("transit_reachability_requests_total", {
+    description: "Transit reachability requests by bounded capability and outcome labels",
+  });
+  const transitReachabilityLatency = meter.createHistogram(
+    "transit_reachability_request_duration_ms",
+    { description: "Transit reachability request duration", unit: "ms" },
+  );
+  const transitReachabilitySeedCount = meter.createHistogram("transit_reachability_seed_count", {
+    description: "Raw or thinned transit reachability seed count",
+  });
+  const transitReachabilityDestinationCount = meter.createHistogram(
+    "transit_reachability_destination_count",
+    { description: "Exact transit reachability destination count" },
+  );
+  const transitReachabilityBatchCount = meter.createHistogram("transit_reachability_batch_count", {
+    description: "Exact transit reachability sequential batch count",
+  });
+  const transitReachabilityGridMetres = meter.createHistogram("transit_reachability_grid_metres", {
+    description: "Estimated surface thinning grid size",
+    unit: "m",
   });
   const routingRequestCounter = meter.createCounter("routing_requests_total", {
     description: "End-to-end routing requests by operation, provider, and outcome",
@@ -167,6 +194,12 @@ export function initMetrics(): MetricsHandle {
     providerCallCounter,
     providerCallLatency,
     transitDecisionCounter,
+    transitReachabilityCounter,
+    transitReachabilityLatency,
+    transitReachabilitySeedCount,
+    transitReachabilityDestinationCount,
+    transitReachabilityBatchCount,
+    transitReachabilityGridMetres,
     routingRequestCounter,
     routingRequestLatency,
     routingRouteCount,
@@ -244,6 +277,60 @@ export function recordTransitDecision(labels: TransitDecisionLabels, value = 1):
     role: labels.role,
     reason: labels.reason,
   });
+}
+
+export interface TransitReachabilityMetricInput {
+  operation: "capabilities" | "surface" | "exact";
+  source: "self-hosted-motis" | "transitous" | "none";
+  capabilityState: string;
+  outcome: string;
+  cacheOutcome: "hit" | "miss" | "none";
+  errorKind: string;
+  latencyMs: number;
+  rawSeedCount?: number;
+  seedCount?: number;
+  gridMetres?: number;
+  destinationCount?: number;
+  batchCount?: number;
+}
+
+/** Record aggregate reachability telemetry; values and labels contain no coordinates or IDs. */
+export function recordTransitReachability(metrics: TransitReachabilityMetricInput): void {
+  const handle = getMetrics();
+  const labels = {
+    operation: metrics.operation,
+    source: metrics.source,
+    capability_state: metrics.capabilityState,
+    outcome: metrics.outcome,
+    cache_outcome: metrics.cacheOutcome,
+    error_kind: metrics.errorKind,
+  };
+  handle.transitReachabilityCounter.add(1, labels);
+  handle.transitReachabilityLatency.record(Math.max(0, metrics.latencyMs), labels);
+  if (metrics.rawSeedCount !== undefined) {
+    handle.transitReachabilitySeedCount.record(Math.max(0, metrics.rawSeedCount), {
+      ...labels,
+      stage: "raw",
+    });
+  }
+  if (metrics.seedCount !== undefined) {
+    handle.transitReachabilitySeedCount.record(Math.max(0, metrics.seedCount), {
+      ...labels,
+      stage: "thinned",
+    });
+  }
+  if (metrics.gridMetres !== undefined) {
+    handle.transitReachabilityGridMetres.record(Math.max(0, metrics.gridMetres), labels);
+  }
+  if (metrics.destinationCount !== undefined) {
+    handle.transitReachabilityDestinationCount.record(
+      Math.max(0, metrics.destinationCount),
+      labels,
+    );
+  }
+  if (metrics.batchCount !== undefined) {
+    handle.transitReachabilityBatchCount.record(Math.max(0, metrics.batchCount), labels);
+  }
 }
 
 export interface RoutingRequestMetrics {

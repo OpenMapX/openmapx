@@ -231,6 +231,27 @@ export type TransitDecisionReason =
   | "refresh_fallback"
   | "realtime_complete";
 
+export interface TransitReachabilityMetrics {
+  operation: "capabilities" | "surface" | "exact";
+  source: "self-hosted-motis" | "transitous" | "none";
+  capabilityState:
+    | "available"
+    | "operator-disabled"
+    | "hosted-source"
+    | "street-routing-disabled"
+    | "endpoint-unverified"
+    | "runtime-unhealthy";
+  outcome: "ok" | "unavailable" | "error" | "timeout" | "cancelled";
+  cacheOutcome: "hit" | "miss" | "none";
+  errorKind: "none" | "unavailable" | "timeout" | "invalid-response" | "unsupported" | "upstream";
+  latencyMs: number;
+  rawSeedCount?: number;
+  seedCount?: number;
+  gridMetres?: number;
+  destinationCount?: number;
+  batchCount?: number;
+}
+
 export interface MetricsRecorder {
   recordProviderCall(
     labels: { providerId: string; method: string; outcome: ProviderCallOutcome },
@@ -245,6 +266,7 @@ export interface MetricsRecorder {
     },
     value?: number,
   ): void;
+  recordTransitReachability?(metrics: TransitReachabilityMetrics): void;
   /**
    * Record the end-to-end result of a routing request. The host implementation
    * keeps these labels bounded to provider/mode/operation and uses the values

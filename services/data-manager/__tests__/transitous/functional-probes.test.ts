@@ -95,6 +95,67 @@ function validBody(url: string): unknown {
 }
 
 describe("typed MOTIS functional probes", () => {
+  it("observes server limits and verifies intermodal one-to-many without gating promotion", async () => {
+    const calls: Array<{ url: string; method: string }> = [];
+    globalThis.fetch = vi.fn(async (input: unknown, init?: RequestInit) => {
+      const url = String(input);
+      calls.push({ url, method: init?.method ?? "GET" });
+      if (url.includes("/map/initial")) {
+        return response({
+          lat: 1,
+          lon: 2,
+          zoom: 3,
+          serverConfig: {
+            motisVersion: "2.11.0",
+            hasStreetRouting: true,
+            maxOneToManySize: 128,
+            maxOneToAllTravelTimeLimit: 90,
+            maxPrePostTransitTimeLimit: 900,
+            maxDirectTimeLimit: 1800,
+          },
+        });
+      }
+      if (url.includes("one-to-many-intermodal")) {
+        return response({ street_durations: [{}], transit_durations: [[]] });
+      }
+      return response(validBody(url));
+    }) as typeof fetch;
+    const report = await runFunctionalProbes("http://motis", manifest(), Date.now() + 10_000);
+    expect(report.ok).toBe(true);
+    expect(report.reachability).toMatchObject({
+      motisVersion: "2.11.0",
+      hasStreetRouting: true,
+      maxOneToManySize: 128,
+      oneToManyIntermodalVerified: true,
+    });
+    expect(calls).toContainEqual({
+      url: "http://motis/api/experimental/one-to-many-intermodal",
+      method: "POST",
+    });
+  });
+
+  it("disables only exact reachability when the experimental canary fails", async () => {
+    globalThis.fetch = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("/map/initial")) {
+        return response({
+          lat: 1,
+          lon: 2,
+          zoom: 3,
+          serverConfig: { hasStreetRouting: true, maxOneToManySize: 128 },
+        });
+      }
+      if (url.includes("one-to-many-intermodal")) {
+        return new Response("unavailable", { status: 500 });
+      }
+      return response(validBody(url));
+    }) as typeof fetch;
+    const report = await runFunctionalProbes("http://motis", manifest(), Date.now() + 10_000);
+    expect(report.ok).toBe(true);
+    expect(report.reachability.oneToManyIntermodalVerified).toBe(false);
+    expect(report.outcomes.at(-1)).toMatchObject({ name: "one-to-many-intermodal", ok: false });
+  });
+
   it("accepts station-only or temporarily empty inventory when provider enumeration is valid", async () => {
     globalThis.fetch = vi.fn(async (input: unknown) =>
       response(validBody(String(input))),

@@ -1,4 +1,5 @@
-import { valhallaEndpoint } from "../../utils/valhalla-endpoint.js";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
+import { valhallaBaseUrl, valhallaEndpoint } from "../../utils/valhalla-endpoint.js";
 import type {
   IsochroneContour,
   IsochroneGeometry,
@@ -29,6 +30,40 @@ interface ValhallaIsochroneResponse {
   features: ValhallaIsochroneFeature[];
 }
 
+const OSM_ATTRIBUTION: Attribution = {
+  sourceId: "openstreetmap",
+  name: "OpenStreetMap contributors",
+  url: "https://www.openstreetmap.org/copyright",
+  attributionText:
+    '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap contributors</a>',
+};
+
+/** Credits the endpoint that actually answered, never the unused fallback. */
+export function valhallaIsochroneAttributions(baseUrl: string): Attribution[] {
+  let hostedByStadia = false;
+  try {
+    const hostname = new URL(baseUrl).hostname.toLowerCase();
+    hostedByStadia = hostname === "stadiamaps.com" || hostname.endsWith(".stadiamaps.com");
+  } catch {
+    // Endpoint validation happens elsewhere. Conservatively avoid claiming a
+    // third-party host when an unusual self-hosted URL reaches this helper.
+  }
+  const routing: Attribution = hostedByStadia
+    ? {
+        sourceId: "stadia-maps",
+        name: "Stadia Maps",
+        url: "https://stadiamaps.com/",
+        attributionText: 'Routing © <a href="https://stadiamaps.com/">Stadia Maps</a>',
+      }
+    : {
+        sourceId: "valhalla",
+        name: "Valhalla",
+        url: "https://github.com/valhalla/valhalla",
+        spdxLicense: "MIT",
+      };
+  return [routing, OSM_ATTRIBUTION];
+}
+
 function computeGeneralize(maxMinutes: number): number {
   if (maxMinutes <= 15) return 50;
   if (maxMinutes <= 30) return 100;
@@ -41,8 +76,9 @@ export const valhallaIsochroneProvider: IsochroneProvider = {
     mode: IsochroneTravelMode,
     contourMinutes: number[],
   ): Promise<IsochroneResult> {
+    const attributions = valhallaIsochroneAttributions(valhallaBaseUrl());
     if (contourMinutes.length === 0) {
-      return { origin, mode, contours: [] };
+      return { origin, mode, contours: [], attributions };
     }
 
     if (contourMinutes.length > 4) {
@@ -87,7 +123,7 @@ export const valhallaIsochroneProvider: IsochroneProvider = {
         }))
         .sort((a, b) => a.time - b.time);
 
-      return { origin, mode, contours };
+      return { origin, mode, contours, attributions };
     } finally {
       clearTimeout(timeout);
     }

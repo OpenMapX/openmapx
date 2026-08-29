@@ -34,7 +34,7 @@
       "apiKey": {
         "type": "string",
         "title": "Stadia Maps API key",
-        "description": "Used only to validate the Valhalla/Stadia backend in the health check. Required for the Stadia default; self-hosted Valhalla needs none. The isochrone requests themselves use the apps/api VALHALLA_API_KEY env. Also settable via INTEGRATION_OVERLAY_TOOL_TRAVEL_TIME_APIKEY.",
+        "description": "Used only to validate the Valhalla/Stadia street-mode backend in the health check. A registered self-hosted Valhalla service is preferred; Stadia is the final fallback and needs a key. Transit reachability never uses this backend. The isochrone requests themselves use the apps/api VALHALLA_API_KEY env. Also settable via INTEGRATION_OVERLAY_TOOL_TRAVEL_TIME_APIKEY.",
         "format": "password",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
@@ -70,12 +70,12 @@
   "dataSources": [
     {
       "sourceId": "valhalla",
-      "name": "Valhalla (Stadia Maps)",
+      "name": "Valhalla-compatible street isochrones (Stadia fallback)",
       "url": "https://stadiamaps.com/",
       "license": "MIT (Valhalla routing engine); Stadia Maps",
       "licenseUrl": "https://stadiamaps.com/terms-of-service/",
       "attribution": "Routing © <a href=\"https://stadiamaps.com/\">Stadia Maps</a>, © <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
-      "notes": "Default Valhalla host. Free tier requires an API key (VALHALLA_API_KEY) and is limited to non-commercial / evaluation use; commercial use needs a paid Stadia plan. A self-hosted or other Valhalla-compatible endpoint can be set via VALHALLA_URL (no key).",
+      "notes": "Endpoint resolution prefers the registered self-hosted Valhalla service, then VALHALLA_URL, and finally Stadia Maps. The Stadia fallback requires VALHALLA_API_KEY and its free tier is limited to non-commercial / evaluation use. This source is used only for street modes; transit reachability uses response-attributed MOTIS/Transitous data.",
       "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://stadiamaps.com/privacy/privacy-policy/",

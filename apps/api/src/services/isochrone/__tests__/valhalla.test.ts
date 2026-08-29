@@ -93,6 +93,19 @@ function makeIsochroneResponse(features: unknown[]) {
 const origin: [number, number] = [13.388, 52.517];
 
 describe("valhallaIsochroneProvider", () => {
+  it("attributes the actual self-hosted or Stadia endpoint", async () => {
+    const { valhallaIsochroneAttributions } = await import("../valhalla.js");
+
+    expect(
+      valhallaIsochroneAttributions("http://valhalla.internal:8002").map(
+        ({ sourceId }) => sourceId,
+      ),
+    ).toEqual(["valhalla", "openstreetmap"]);
+    expect(
+      valhallaIsochroneAttributions("https://api.stadiamaps.com").map(({ sourceId }) => sourceId),
+    ).toEqual(["stadia-maps", "openstreetmap"]);
+  });
+
   describe("isochrone()", () => {
     it("returns empty contours without API call when contourMinutes is empty", async () => {
       const { valhallaIsochroneProvider } = await import("../valhalla.js");

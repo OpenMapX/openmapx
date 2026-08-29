@@ -2,15 +2,15 @@ import { serviceUrl } from "../services/service-registry.js";
 import { envString } from "./env.js";
 
 /**
- * Default public Valhalla provider. The former FOSSGIS demo
+ * Final public Valhalla fallback. The former FOSSGIS demo
  * (valhalla1.openstreetmap.de) is unreliable; Stadia Maps hosts a
  * Valhalla-compatible API on the same endpoint paths and is the documented
- * default. It requires VALHALLA_API_KEY (free non-commercial tier). Self-hosted
+ * fallback. It requires VALHALLA_API_KEY (free non-commercial tier). Self-hosted
  * Valhalla works key-less via VALHALLA_URL / the `valhalla` service capability.
  */
 const DEFAULT_VALHALLA_URL = "https://api.stadiamaps.com";
 
-/** Resolved Valhalla base URL: service registry → VALHALLA_URL env → Stadia default. */
+/** Resolved Valhalla base URL: service registry → VALHALLA_URL env → Stadia fallback. */
 export function valhallaBaseUrl(): string {
   return serviceUrl("valhalla") ?? envString("VALHALLA_URL", DEFAULT_VALHALLA_URL);
 }

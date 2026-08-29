@@ -1,9 +1,9 @@
 {
-  "name": "Travel Time (Isochrone)",
-  "description": "Travel time isochrone visualization using existing routing APIs",
+  "name": "Travel Time",
+  "description": "Street-mode isochrone polygons and estimated MOTIS transit reachability bands. Transit responses carry their actual runtime attribution separately.",
   "dataSources": {
     "valhalla": {
-      "purpose": "Visualize travel time reachability from a point on the map (isochrone polygons)",
+      "purpose": "Visualize walking, cycling, and driving travel-time reachability from a point (street isochrone polygons only)",
       "dataSent": "Center coordinates (latitude, longitude), travel mode, contour time thresholds in minutes",
       "dataReceived": "GeoJSON isochrone polygons showing reachable area within specified time/distance thresholds"
     }

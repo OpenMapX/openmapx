@@ -42,7 +42,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
-import { tmpdir } from "node:os";
+import { networkInterfaces, tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
@@ -55,9 +55,19 @@ import {
   getStops,
   getStopTimetable,
 } from "@integrations/transit-motis/adapter";
-import { motisLocalInstance, setMotisLocalUrl } from "@integrations/transit-motis/instances";
+import {
+  motisLocalInstance,
+  motisLocalReachabilityInstance,
+  setMotisLocalUrl,
+} from "@integrations/transit-motis/instances";
+import {
+  checkMotisReachabilityDestinations,
+  getMotisReachabilitySeeds,
+} from "@integrations/transit-motis/reachability";
+import { transitousRunnerArgv } from "@openmapx/core/transitous-runner";
+import { TRANSIT_WALK_PROFILE } from "@openmapx/mobility-core/transit-reachability";
 import { execa } from "execa";
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { readCandidateManifest } from "../../src/jobs/transitous/candidate.js";
 import { buildJobContext, runTransitousPipeline } from "../../src/jobs/transitous/pipeline.js";
 import { run as runPromote } from "../../src/jobs/transitous/promote.js";
@@ -65,6 +75,60 @@ import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "../../src/jobs/transitous/sour
 import type { CommandRunner, StageName } from "../../src/jobs/transitous/types.js";
 import { StateStore } from "../../src/state.js";
 import { buildTinyGtfsFeeds } from "./fixtures/build-tiny-gtfs.js";
+
+const fixtureOpsState = vi.hoisted(() => ({
+  gbfsLock: {
+    commit: "1".repeat(40),
+    url: "https://example.test/unconfigured-e9-registry.csv",
+    sha256: "0".repeat(64),
+    lockedAt: "2026-07-15T00:00:00.000Z",
+    lockedBy: "e9-fixture",
+  },
+}));
+
+// Production routes host mutations through the private operations agent. This
+// isolated canary deliberately owns its four disposable containers, so model
+// the same typed boundary while executing those narrowly-scoped effects against
+// the fixture containers. Catalog pins are returned through the inspect
+// operations exactly as they are in production; no production guard is bypassed.
+vi.mock("../../src/ops-client.js", () => ({
+  runOpsOperation: vi.fn(
+    async (operation: { kind: string; candidateId?: string; preparedRunId?: string }) => {
+      const { execa: run } = await import("execa");
+      switch (operation.kind) {
+        case "transitousLock.inspect":
+          return {
+            active: {
+              ref: `main@${"a".repeat(40)}`,
+              submodules: {},
+              lockedAt: "2026-07-15T00:00:00.000Z",
+              lockedBy: "e9-fixture",
+            },
+            proposed: null,
+          };
+        case "gbfsCatalogLock.inspect":
+          return { ...fixtureOpsState.gbfsLock };
+        case "motis.staging.restart":
+          await run("docker", ["restart", "motis-staging"], { stdio: "pipe" });
+          return { changed: true };
+        case "motis.staging.stop":
+          await run("docker", ["stop", "motis-staging"], { reject: false, stdio: "pipe" });
+          return { changed: true };
+        case "motis.primary.promote":
+          await run("docker", ["restart", "motis"], { stdio: "pipe" });
+          return { activeRunId: operation.preparedRunId };
+        case "feedProxy.validateAndReload":
+          await run("docker", ["exec", "motis-feed-proxy", "nginx", "-t"], { stdio: "pipe" });
+          await run("docker", ["exec", "motis-feed-proxy", "nginx", "-s", "reload"], {
+            stdio: "pipe",
+          });
+          return { candidateId: operation.candidateId, reloaded: true };
+        default:
+          throw new Error(`Unexpected E9 ops operation: ${operation.kind}`);
+      }
+    },
+  ),
+}));
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const STUB_SCRIPTS_DIR = resolve(HERE, "fixtures", "stub-catalog-scripts");
@@ -83,6 +147,12 @@ const PRIMARY_SERVICE = "motis";
 const PRIMARY_PORT = 8081;
 const FEED_PROXY_SERVICE = "motis-feed-proxy";
 const GBFS_FIXTURE_SERVICE = "gbfs-fixture";
+const GBFS_FIXTURE_PORT = 18_083;
+// The existing human-readable XML is the source of this 400-byte PBF. MOTIS
+// 2.11's street importer accepts OSM PBF only; keeping the tiny generated
+// artifact as base64 avoids committing an opaque binary fixture.
+const BERLIN_TINY_OSM_PBF_BASE64 =
+  "AAAADQoJT1NNSGVhZGVyGFUQSBpReJzjkuJoWLR3RbJAw7I37SkSDd9OHW5nVmjY8nlyO7MSn39xbnByRmpuom6YgZ6ZEpdLal5xql9+SmpxEyNvfnFuZmmuvqGeoaWeAQAnRhqIAAAACwoHT1NNRGF0YRhoENcBGmN4nONi4WLgYhA6xyh0mpFLgAkK2KC0VhSXACMaEBJgQANSGCJKGCJaAkxoIk5iC7Z//cIM5f3/wAJleRk2TJ9T37BVYsE/rgfbeA/M4gGiBe/5Hxzl+H85Eat4EIZ1APJ9I7YAAAAMCgdPU01EYXRhGJ0BEOgBGpcBeJzjyuBi4GLPyEzPKE+s5GLJS8xN5eIuSi3OTEnNK8lMzOHid7VU8MsvKslQCC4pSk0tASoHCQXnlyKEBIEC4anFJQrO+Xl5qckl+UVgIddEZCGhGikFjlQhJkYmKSZmFiUuDkYBBgkGBQYNVicOJigAqkiDqmBDVSEGUyHFkQ5VwY6igolNBCiXAZXjQJXjEwEA2NEpHA==";
 // Generous wall-clock ceiling for the whole lifecycle scenario. It performs a
 // successful promotion, imports a deliberately rejected candidate, and then
 // performs a second successful promotion, so a tight budget would flake on a
@@ -179,6 +249,8 @@ function writeStagingCompose(
     `  ${GBFS_FIXTURE_SERVICE}:`,
     "    image: nginx:1.27-alpine",
     `    container_name: ${GBFS_FIXTURE_SERVICE}`,
+    "    ports:",
+    `      - "${GBFS_FIXTURE_PORT}:80"`,
     "    volumes:",
     `      - ${gbfsFixtureDir}:/usr/share/nginx/html:ro`,
     '    restart: "no"',
@@ -188,11 +260,10 @@ function writeStagingCompose(
   return composeFile;
 }
 
-function writeTinyGbfsFixture(directory: string): void {
+function writeTinyGbfsFixture(directory: string, base: string): void {
   mkdirSync(directory, { recursive: true });
   const writeJson = (name: string, value: unknown): void =>
     writeFileSync(join(directory, name), `${JSON.stringify(value, null, 2)}\n`);
-  const base = `http://${GBFS_FIXTURE_SERVICE}`;
   const timestamp = Math.floor(Date.now() / 1_000);
   writeJson("gbfs.json", {
     last_updated: timestamp,
@@ -318,6 +389,18 @@ function writeTinyGbfsFixture(directory: string): void {
       },
     },
   });
+}
+
+function dockerReachableHostAddress(): string {
+  const interfaces = networkInterfaces();
+  const preferredNames = ["en0", "eth0", ...Object.keys(interfaces).sort()];
+  for (const name of preferredNames) {
+    const address = interfaces[name]?.find(
+      (candidate) => candidate.family === "IPv4" && !candidate.internal,
+    )?.address;
+    if (address) return address;
+  }
+  throw new Error("E9 fixture could not find a non-loopback IPv4 address reachable from Docker");
 }
 
 async function composeDown(composeFile: string, cwd: string): Promise<void> {
@@ -463,6 +546,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
   let stagingDataDir: string | undefined;
   let motisDataDir: string | undefined;
   let gbfsFixtureDir: string | undefined;
+  let gbfsBaseUrl = "";
   let gbfsRegistryCsv = "";
 
   beforeAll(async () => {
@@ -526,7 +610,8 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     const fixturesDir = join(tmp, "tiny-gtfs");
     const built = await buildTinyGtfsFeeds(fixturesDir);
     gbfsFixtureDir = join(tmp, "tiny-gbfs");
-    writeTinyGbfsFixture(gbfsFixtureDir);
+    gbfsBaseUrl = `http://${dockerReachableHostAddress()}:${GBFS_FIXTURE_PORT}`;
+    writeTinyGbfsFixture(gbfsFixtureDir, gbfsBaseUrl);
 
     // Materialise a stub Transitous catalog. The data-manager's prepare
     // stage probes for `<catalog>/.git`; if present, no clone happens and
@@ -551,8 +636,11 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     // Tiny OSM extract covering the Berlin fixture area. The stub config
     // generator copies it into `out/` and enables `street_routing` — MOTIS 2.x
     // hard-refuses a config with a `gbfs:` section unless street routing (and
-    // therefore an OSM input) is enabled.
-    cpSync(resolve(HERE, "fixtures", "berlin-tiny.osm"), join(catalogDir, "berlin-tiny.osm"));
+    // therefore an OSM PBF input) is enabled.
+    writeFileSync(
+      join(catalogDir, "berlin-tiny.osm.pbf"),
+      Buffer.from(BERLIN_TINY_OSM_PBF_BASE64, "base64"),
+    );
 
     // Catalog feed files: one per region, each referencing the matching fixture
     // zip via a `file://` url. `type: url` is what the stub fetch.py understands.
@@ -594,7 +682,9 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
     const registryCommit = "1".repeat(40);
     gbfsRegistryCsv =
       `Country Code,Name,Location,System ID,URL,Auto-Discovery URL,Supported Versions,Authentication Info URL\n` +
-      `DE,OpenMapX E9 Rentals,Berlin,openmapx-e9-rentals,https://openmapx.example.test/e9,http://${GBFS_FIXTURE_SERVICE}/gbfs.json,2.3,\n`;
+      `DE,OpenMapX E9 Rentals,Berlin,openmapx-e9-rentals,https://openmapx.example.test/e9,${gbfsBaseUrl}/gbfs.json,2.3,\n`;
+    fixtureOpsState.gbfsLock.url = `https://raw.githubusercontent.com/MobilityData/gbfs/${registryCommit}/systems.csv`;
+    fixtureOpsState.gbfsLock.sha256 = createHash("sha256").update(gbfsRegistryCsv).digest("hex");
     mkdirSync(join(tmp, "infra", "docker"), { recursive: true });
     writeFileSync(
       join(tmp, "infra", "docker", "gbfs-catalog.lock.json"),
@@ -661,6 +751,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       }
       const fixtureDataDir = dataDir;
       const fixtureRepoRoot = tmp;
+      const fixtureCatalogDir = join(fixtureDataDir, ".transitous-catalog");
 
       const runner: CommandRunner = async (command, args, opts) => {
         if (command === "git") {
@@ -682,6 +773,15 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
           countries: ["de", "ch", "at"],
           feedsOverlayPath: join(fixtureDataDir, "feeds-overlay.json"),
           runner,
+          // Exercise the same closed typed argv mapping as the private runner,
+          // but execute the fixture's harmless Python scripts in-process. The
+          // test checkout contains only these four purpose-built stubs.
+          runScript: async (run) => {
+            await execa("python3", transitousRunnerArgv(run), {
+              cwd: fixtureCatalogDir,
+              stdio: "pipe",
+            });
+          },
           now: () => new Date().toISOString(),
         });
       const runFixturePipeline = async (
@@ -701,7 +801,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         // safeFetchJson validates DNS before invoking fetch. This fixture host
         // exists only on the Docker network, so explicitly declare it for the
         // test while preserving any operator-provided allowlist entries.
-        privateFeedHosts.add(GBFS_FIXTURE_SERVICE);
+        privateFeedHosts.add(new URL(gbfsBaseUrl).hostname);
         process.env.MOTIS_GBFS_CATALOG_ENABLED = "true";
         process.env.MOTIS_GBFS_CATALOG_MAX_ADDITIONS = "5";
         process.env.OPENMAPX_ALLOW_PRIVATE_FEED_HOSTS = [...privateFeedHosts].join(",");
@@ -710,7 +810,7 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
           if (url.includes("raw.githubusercontent.com/MobilityData/gbfs/")) {
             return new Response(gbfsRegistryCsv, { headers: { "content-type": "text/csv" } });
           }
-          if (url.startsWith(`http://${GBFS_FIXTURE_SERVICE}/`)) {
+          if (url.startsWith(`${gbfsBaseUrl}/`)) {
             const filename = new URL(url).pathname.slice(1);
             return new Response(readFileSync(join(gbfsFixtureDir as string, filename)), {
               headers: { "content-type": "application/json" },
@@ -770,6 +870,20 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       // that was selected, acquired, imported, and promoted with this epoch.
       const firstCandidate = readCandidateManifest(motisDataDir);
       expect(firstCandidate.epoch).toBe(firstCtx.jobId);
+      const capabilitySnapshot = JSON.parse(
+        readFileSync(join(motisDataDir, "mobility-capabilities.json"), "utf-8"),
+      ) as {
+        reachability?: {
+          hasStreetRouting?: boolean;
+          oneToManyIntermodalVerified?: boolean;
+          maxOneToManySize?: number;
+        };
+      };
+      expect(capabilitySnapshot.reachability).toMatchObject({
+        hasStreetRouting: true,
+        oneToManyIntermodalVerified: true,
+      });
+      expect(capabilitySnapshot.reachability?.maxOneToManySize ?? 0).toBeGreaterThan(0);
       const liveSourceManifestPath = join(motisDataDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
       const firstSourceManifestText = readFileSync(liveSourceManifestPath, "utf-8");
       const firstSourceManifest = JSON.parse(firstSourceManifestText) as {
@@ -811,6 +925,37 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
         platformCode: "1",
       });
       expect(hbfPlatform?.parentStationId).toBeTruthy();
+      const queryTime = new Date();
+      queryTime.setUTCSeconds(0, 0);
+      const reachabilityQuery = {
+        origin: { lng: 13.369, lat: 52.525 },
+        queryTime: queryTime.toISOString(),
+        direction: "depart-at" as const,
+        thresholdsMinutes: [90],
+        walkProfileId: TRANSIT_WALK_PROFILE.id,
+      };
+      const reachabilitySeeds = await getMotisReachabilitySeeds(
+        motisLocalInstance,
+        reachabilityQuery,
+      );
+      expect(reachabilitySeeds.length).toBeGreaterThan(0);
+      const exactReachability = await checkMotisReachabilityDestinations(
+        motisLocalReachabilityInstance,
+        {
+          ...reachabilityQuery,
+          destinations: [
+            {
+              id: "berlin-hbf",
+              lng: hbfPlatform?.lng ?? 13.369,
+              lat: hbfPlatform?.lat ?? 52.525,
+            },
+          ],
+        },
+        capabilitySnapshot.reachability?.maxOneToManySize ?? 1,
+      );
+      expect(exactReachability.results).toEqual([
+        expect.objectContaining({ id: "berlin-hbf", reachable: true }),
+      ]);
       const platforms = await getStopPlatforms(motisLocalInstance, hbfPlatform?.id ?? "");
       expect(platforms).toEqual(
         expect.arrayContaining([

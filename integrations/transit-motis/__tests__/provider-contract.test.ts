@@ -123,4 +123,17 @@ describe("transit-motis provider contract", () => {
 
     expect(() => assertTransitProviderContract(brokenProvider)).toThrow(/getDepartures/);
   });
+
+  it("requires the methods advertised by reachability capabilities", () => {
+    const brokenProvider = {
+      id: "transit-motis-broken-reachability",
+      capabilities: {
+        ...allFalse,
+        reachability: { estimatedSurface: true, exactPointChecks: true },
+      },
+    };
+    expect(() => assertTransitProviderContract(brokenProvider)).toThrow(
+      /getReachabilitySurface.*checkReachabilityDestinations/s,
+    );
+  });
 });

@@ -2,6 +2,7 @@ import { type Client, createClient } from "@hey-api/client-fetch";
 import { USER_AGENT_TRANSIT } from "@openmapx/core";
 
 const TIMEOUT_MS = 8_000;
+const REACHABILITY_TIMEOUT_MS = 30_000;
 
 // MOTIS declares array query params (transitModes, pre/postTransitModes, …) as
 // `explode: false` — comma-joined in a single param (`transitModes=TRAM,BUS`).
@@ -19,9 +20,10 @@ export interface MotisInstance {
   provider: string;
 }
 
-function withTimeout(client: Client): void {
+function withTimeout(client: Client, timeoutMs = TIMEOUT_MS): void {
   client.interceptors.request.use((request) => {
-    const signal = AbortSignal.timeout(TIMEOUT_MS);
+    const timeout = AbortSignal.timeout(timeoutMs);
+    const signal = request.signal ? AbortSignal.any([request.signal, timeout]) : timeout;
     return new Request(request, { signal });
   });
 }
@@ -48,9 +50,20 @@ export const motisLocalInstance: MotisInstance = (() => {
   return { client, prefix: "ms:", provider: "ms" };
 })();
 
+/** Dedicated longer-lived client for bounded, sequential exact reachability batches. */
+export const motisLocalReachabilityInstance: MotisInstance = (() => {
+  const client = createClient({
+    baseUrl: "http://localhost:8081",
+    querySerializer: QUERY_SERIALIZER,
+  });
+  withTimeout(client, REACHABILITY_TIMEOUT_MS);
+  return { client, prefix: "ms:", provider: "ms" };
+})();
+
 /** Update the local MOTIS base URL (called from setup() when service registry resolves it). */
 export function setMotisLocalUrl(url: string): void {
   motisLocalInstance.client.setConfig({ baseUrl: url });
+  motisLocalReachabilityInstance.client.setConfig({ baseUrl: url });
 }
 
 /** Update the Transitous cloud base URL + optional User-Agent override. */

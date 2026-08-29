@@ -196,9 +196,28 @@ the routing engine's knobs (mode allow-list, wheelchair routing, first- and
 last-mile access modes), so a planning provider can pass them through rather than
 re-deriving them.
 
-Two further optional methods sit outside the declared capability set —
-`getRoutesInBbox` and `getReachableStops` — for providers that want to opt into
-bbox route geometry or isochrone-style reachability incrementally.
+`getRoutesInBbox` remains an optional method outside the declared capability
+set. Transit reachability uses a separate contract because an estimated seed
+surface and an exact destination check have different accuracy, privacy, and
+runtime requirements:
+
+```ts
+getReachabilityCapabilities?(): Promise<TransitReachabilityCapabilities>;
+getReachabilitySurface?(
+  request: TransitReachabilitySurfaceRequest,
+  signal?: AbortSignal,
+): Promise<MobilityResult<TransitReachabilitySurface>>;
+checkReachabilityDestinations?(
+  request: TransitReachabilityCheckRequest,
+  signal?: AbortSignal,
+): Promise<MobilityResult<TransitReachabilityCheckResult>>;
+```
+
+The surface may fall back to Transitous and contains one-to-all stop seeds for
+an explicitly estimated client-rendered field. Exact destination checks must be
+capability-gated and self-hosted; never forward arbitrary destination batches to
+Transitous. See [Transit reachability](../administration/transit-reachability.md)
+for the operational contract.
 
 ### Per-feed attribution
 

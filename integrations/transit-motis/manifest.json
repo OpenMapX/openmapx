@@ -43,6 +43,12 @@
         "type": "boolean",
         "default": true,
         "description": "Allow hosted Transitous runtime fallback. Must be disabled for regional-sovereign deployments."
+      },
+      "exactReachabilityEnabled": {
+        "type": "boolean",
+        "default": false,
+        "title": "Exact Explore reachability",
+        "description": "Opt in to experimental exact POI checks on the verified self-hosted MOTIS instance. Destination coordinates are never sent to Transitous."
       }
     }
   },
