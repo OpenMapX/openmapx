@@ -27,6 +27,7 @@ const INTEGRATIONS_DIR = fileURLToPath(new URL("../../../../integrations", impor
 const ATTRIBUTION_WIRES = [
   "useIntegrationAttribution",
   "useIntegrationDomainAttribution",
+  "useSourceAttributions",
   "useMapAttributions",
   "useAttributionFromHooks",
   "AttributionStrip",

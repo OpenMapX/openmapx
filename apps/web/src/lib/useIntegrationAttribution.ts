@@ -66,3 +66,17 @@ export function useIntegrationDomainAttribution(domain: string, active: boolean)
   }, [active, members]);
   useMapAttributions(`domain:${domain}`, attributions);
 }
+
+/** Register the exact manifest sources named by a runtime evidence envelope. */
+export function useSourceAttributions(layerKey: string, sourceIds: readonly string[]): void {
+  const registry = useIntegrationRegistry();
+  const attributions = useMemo<Attribution[]>(() => {
+    const out: Attribution[] = [];
+    for (const sourceId of new Set(sourceIds)) {
+      const source = registry.findDataSource(sourceId);
+      if (source) out.push(dataSourceToAttribution(source));
+    }
+    return out;
+  }, [registry, sourceIds]);
+  useMapAttributions(`sources:${layerKey}`, attributions);
+}

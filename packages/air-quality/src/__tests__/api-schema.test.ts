@@ -96,9 +96,13 @@ describe("canonical air-quality API schemas", () => {
         intervalStart: "2026-08-30T10:00:00.000Z",
         intervalEnd: "2026-08-30T11:00:00.000Z",
         freshness: "fresh",
+        qualityStatus: "quality-assured",
         observedAt: "2026-08-30T11:00:00.000Z",
         stationClass: "reference",
         mobile: false,
+        completenessPercent: 100,
+        estimated: false,
+        gapFilled: false,
         owner: "Owner",
         providerId: "openaq",
         sourceIds: ["openaq"],
@@ -117,6 +121,17 @@ describe("canonical air-quality API schemas", () => {
       },
     };
     expect(airQualityStationsResponseSchema.parse(response)).toEqual(response);
+    expect(() =>
+      airQualityStationsResponseSchema.parse({
+        ...response,
+        features: [
+          {
+            ...feature,
+            properties: { ...feature.properties, completenessPercent: undefined },
+          },
+        ],
+      }),
+    ).toThrow();
     expect(() =>
       airQualityStationsResponseSchema.parse({
         ...response,

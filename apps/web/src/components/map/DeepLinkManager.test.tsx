@@ -68,5 +68,7 @@ describe("DeepLinkManager overlay application", () => {
 
     expect(isOverlayActive("air-quality")).toBe(true);
     expect(isOverlayActive("weather")).toBe(false);
+    expect(window.location.search).toContain("ov=air-quality");
+    expect(window.location.search).not.toContain("overlay-air-quality");
   });
 });

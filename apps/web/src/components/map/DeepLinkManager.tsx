@@ -1,7 +1,7 @@
 "use client";
 
+import { useAirQualityStore } from "@integrations/air-quality/store";
 import { useBuildingsStore } from "@integrations/overlay-3d-buildings/store";
-import { useAirQualityStore } from "@integrations/overlay-air-quality/store";
 import { useCyclingStore } from "@integrations/overlay-cycling/store";
 import { useEarthquakeStore } from "@integrations/overlay-earthquakes/store";
 import type { EnvironmentSensorType } from "@integrations/overlay-environment/store";

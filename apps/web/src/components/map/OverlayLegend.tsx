@@ -91,6 +91,9 @@ export function OverlayLegend({
             right: 0,
             height: 2,
             borderRadius: "12px 12px 0 0",
+            "@media (prefers-reduced-motion: reduce)": {
+              "& .MuiLinearProgress-bar": { animation: "none", transition: "none" },
+            },
           }}
         />
       )}

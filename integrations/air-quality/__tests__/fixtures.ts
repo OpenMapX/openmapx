@@ -1,4 +1,4 @@
-import type { ProviderEvidence } from "@openmapx/air-quality";
+import type { AirQualityUnit, ProviderEvidence } from "@openmapx/air-quality";
 import { observationId } from "@openmapx/air-quality/ids";
 import type {
   AirQualityProvider,
@@ -15,6 +15,7 @@ export function evidence(input: {
   providerId?: string;
   sourceId?: string;
   value?: number;
+  unit?: AirQualityUnit;
 }): ProviderEvidence {
   const providerId = input.providerId ?? "fixture-provider";
   const sourceId = input.sourceId ?? "fixture-source";
@@ -50,7 +51,7 @@ export function evidence(input: {
           startAt: new Date(end - 3_600_000).toISOString(),
           endAt: new Date(end).toISOString(),
           value: input.value ?? 12,
-          unit: "ug/m3" as const,
+          unit: input.unit ?? "ug/m3",
           valid: true,
           estimated: false,
           gapFilled: false,

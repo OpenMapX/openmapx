@@ -90,7 +90,8 @@ export function useMapAttributions(layerKey: string, attributions: Attribution[]
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: memoKey captures attributions
   useEffect(() => {
-    setLayer(layerKey, attributions.map(attributionToHtml));
+    if (attributions.length === 0) clearLayer(layerKey);
+    else setLayer(layerKey, attributions.map(attributionToHtml));
     return () => clearLayer(layerKey);
   }, [layerKey, memoKey, setLayer, clearLayer]);
 }

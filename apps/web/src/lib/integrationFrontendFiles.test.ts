@@ -89,4 +89,18 @@ describe("integration frontend modules", () => {
     // drop the flag.
     expect(missing).toEqual([]);
   });
+
+  it("assigns the air-quality overlay to exactly one canonical frontend owner", () => {
+    const owners = ["air-quality", "overlay-air-quality"].filter((id) => {
+      const frontend = readManifest(id)?.frontend;
+      return Boolean(
+        frontend?.mapLayer === true ||
+          frontend?.legend === true ||
+          frontend?.layerSelector ||
+          frontend?.overlay,
+      );
+    });
+
+    expect(owners).toEqual(["air-quality"]);
+  });
 });

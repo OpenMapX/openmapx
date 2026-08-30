@@ -5,6 +5,7 @@ import {
   type AirQualityStationFeature,
   type AirQualityStationsResponse,
   airQualityStationsResponseSchema,
+  convertConcentration,
   type Pollutant,
 } from "@openmapx/air-quality";
 import type { IntegrationContext, StationViewportQuery } from "@openmapx/integration-framework";
@@ -99,6 +100,8 @@ function toFeature(
   const coordinates = item.spatial.coordinates;
   const summary = item.pollutants.find((candidate) => candidate.pollutant === pollutant);
   if (!coordinates || !summary || item.observedAt === null) return null;
+  const mapValue = convertConcentration(summary.value, summary.unit, "ug/m3");
+  if (mapValue === null) return null;
   const localIndex = item.indices.find(({ standardId }) => standardId !== null) ?? null;
   const id = stationId(item);
   return {
@@ -109,14 +112,18 @@ function toFeature(
       stationId: id,
       name: item.spatial.name,
       pollutant,
-      value: summary.value,
-      unit: summary.unit,
+      value: mapValue,
+      unit: "ug/m3",
       intervalStart: summary.intervalStart,
       intervalEnd: summary.intervalEnd,
       freshness: item.freshness,
+      qualityStatus: item.qualityStatus,
       observedAt: item.observedAt,
       stationClass: item.spatial.stationClass,
       mobile: item.spatial.mobile,
+      completenessPercent: summary.completenessPercent,
+      estimated: summary.estimated,
+      gapFilled: summary.gapFilled,
       owner: item.sources.find(({ owner }) => owner !== null)?.owner ?? null,
       providerId: item.providerId,
       sourceIds: item.sourceIds,
@@ -224,6 +231,7 @@ export function createStationsService(ctx: IntegrationContext) {
     );
     const candidates: AirQualityEvidence[] = [];
     let invalidCount = 0;
+    const evaluatedAt = new Date().toISOString();
     for (const result of orchestration.results) {
       for (const raw of result.page.evidence) {
         const coordinates = raw.spatial.coordinates;
@@ -234,12 +242,12 @@ export function createStationsService(ctx: IntegrationContext) {
         const jurisdiction = resolvePointJurisdiction({
           latitude: coordinates[1],
           longitude: coordinates[0],
-          evaluatedAt: raw.observedAt ?? new Date().toISOString(),
+          evaluatedAt,
         });
         try {
           candidates.push(
             normalizeProviderEvidence(raw, {
-              targetAt: raw.observedAt ?? new Date().toISOString(),
+              targetAt: evaluatedAt,
               mode: "current",
               localStandardId: jurisdiction.localStandardId,
               comparisonStandardId: null,
@@ -283,6 +291,8 @@ export function createStationsService(ctx: IntegrationContext) {
       warnings.add("policy_excluded");
     if (orchestration.diagnostics.truncated || features.length > 2_000)
       warnings.add("quota_truncated");
+    if (features.some(({ properties }) => properties.freshness === "stale"))
+      warnings.add("stale_evidence");
     const created = await createStationSnapshot(ctx, {
       queryHash: query.queryHash,
       policyFingerprint: fingerprint,

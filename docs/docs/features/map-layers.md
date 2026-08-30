@@ -117,13 +117,17 @@ and layers enabled only by the context switch back off when it ends.
 | -------------------- | ----------------------------------------------------- | ------------------------------------- |
 | **Weather**          | Precipitation radar animation, plus temperature/cloud/wind/pressure tiles | RainViewer, OpenWeather, Open-Meteo |
 | **Weather alerts**   | Active severe-weather warnings                        | NOAA, Environment Canada, DWD, MeteoAlarm |
-| **Air quality**      | Air-quality index from monitoring stations            | OpenAQ                                |
+| **Air quality**      | Raw pollutant concentrations from monitoring stations | Canonical provider orchestration (including OpenAQ when configured) |
 | **Environment**      | Readings from community environmental sensors         | openSenseMap, Sensor.Community        |
 
 The weather overlay's radar loop works out of the box; its temperature, cloud,
 wind, and pressure tiles need an OpenWeather API key. The weather overlay here is
 the map-wide layer — the per-place forecast lives in the [weather](./weather.md)
 feature.
+
+The air-quality overlay uses a continuous numeric concentration scale rather
+than AQI health categories. See the [air-quality monitor map](./air-quality-map.md)
+for its pollutant, provenance, and degraded-data semantics.
 
 ### Daylight & time zones
 

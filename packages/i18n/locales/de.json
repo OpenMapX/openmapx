@@ -2166,6 +2166,71 @@
     "temporarilyUnavailable": "Stationsmessungen sind vorübergehend nicht verfügbar.",
     "attribution": "PM2,5-Konzentration via OpenAQ"
   },
+  "airQualityMap": {
+    "title": "Luftqualitäts-Messstationen",
+    "toggleOverlay": "Luftqualitäts-Messstationen umschalten",
+    "rawConcentrationNotice": "Rohe Messkonzentration – kein Luftqualitätsindex und keine Gesundheitskategorie.",
+    "mode": {
+      "label": "Layer-Modus",
+      "monitors": "Bodenmessstationen",
+      "eeaRaster": "Europäisches Raster (nicht verfügbar)"
+    },
+    "pollutant": {
+      "label": "Schadstoff",
+      "pm25": "Feinstaub (PM2,5)",
+      "pm10": "Feinstaub (PM10)",
+      "o3": "Ozon (O3)",
+      "no2": "Stickstoffdioxid (NO2)",
+      "so2": "Schwefeldioxid (SO2)",
+      "co": "Kohlenmonoxid (CO)",
+      "nh3": "Ammoniak (NH3)",
+      "no": "Stickstoffmonoxid (NO)"
+    },
+    "unit": { "ugm3": "Konzentration (µg/m³)" },
+    "status": {
+      "loading": "Messstations-Snapshot wird geladen…",
+      "quota": "Die Stationsabdeckung ist wegen eines ausgeschöpften Anfragelimits nicht verfügbar.",
+      "unavailable": "Messstationsdaten sind vorübergehend nicht verfügbar.",
+      "refreshFailedRetained": "Aktualisierung fehlgeschlagen; der vorherige Stations-Snapshot bleibt sichtbar.",
+      "stale": "Mindestens ein Messwert in diesem Snapshot ist veraltet.",
+      "partial": "Einige Messdatenanbieter sind nicht verfügbar oder ausgeschlossen.",
+      "truncated": "Dieser Kartenausschnitt enthält mehr geeignete Messstationen, als angezeigt werden können.",
+      "empty": "In diesem Kartenausschnitt sind keine geeigneten Messstationen verfügbar.",
+      "stationCount": "{count, plural, one {# Messstation im Ausschnitt} other {# Messstationen im Ausschnitt}}"
+    },
+    "popup": {
+      "concentration": "Rohe Konzentration",
+      "observed": "Beobachtet",
+      "interval": "Messintervall",
+      "freshness": "Aktualität",
+      "quality": "Qualität",
+      "stationClass": "Stationsklasse",
+      "completeness": "Vollständigkeit",
+      "provider": "Anbieter",
+      "sources": "Quellen",
+      "owner": "Dateneigentümer",
+      "mobile": "Mobil",
+      "fixed": "Stationär",
+      "estimated": "Geschätzt",
+      "gapFilled": "Lücken ergänzt",
+      "unknown": "Unbekannt"
+    },
+    "freshness": { "fresh": "Aktuell", "stale": "Veraltet", "unknown": "Unbekannt" },
+    "quality": {
+      "regulatoryCertified": "Behördlich zertifiziert",
+      "qualityAssured": "Qualitätsgesichert",
+      "preliminary": "Vorläufig",
+      "estimated": "Geschätzt",
+      "unknown": "Unbekannt"
+    },
+    "stationClass": {
+      "reference": "Referenz",
+      "regulatory": "Behördlich",
+      "indicative": "Indikativ",
+      "lowCost": "Kostengünstiger Sensor",
+      "unknown": "Unbekannt"
+    }
+  },
   "weather": {
     "weather": "Wetter",
     "weatherAt": "Wetter in {location}",

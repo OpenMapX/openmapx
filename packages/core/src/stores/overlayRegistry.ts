@@ -47,6 +47,25 @@ export function registerOverlayEntry(entry: OverlayEntry): void {
  * that have been dynamically registered via createOverlayStore({ overlayId }).
  */
 export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void {
+  const frontendOwners = new Map<string, string>();
+  for (const integration of integrations) {
+    const frontend = integration.frontend;
+    if (
+      !integration.enabled ||
+      !frontend ||
+      (!frontend.mapLayer && !frontend.legend && !frontend.layerSelector && !frontend.overlay)
+    )
+      continue;
+    const overlayId = integrationIdToOverlayId(integration.id);
+    const existing = frontendOwners.get(overlayId);
+    if (existing) {
+      throw new Error(
+        `Multiple enabled frontend owners resolve to overlay "${overlayId}": ${existing}, ${integration.id}`,
+      );
+    }
+    frontendOwners.set(overlayId, integration.id);
+  }
+
   // Clear any existing entries to avoid duplicates on re-init
   overlayEntries.length = 0;
 

@@ -100,6 +100,8 @@ export interface CreateFakeMapOptions {
   center?: { lng: number; lat: number };
   /** `getContainer().clientHeight`, which camera padding maths read (default 800). */
   containerHeight?: number;
+  /** Initial WGS84 viewport bounds, including wrapped west > east antimeridian views. */
+  bounds?: { west: number; south: number; east: number; north: number };
 }
 
 export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
@@ -321,12 +323,15 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       state.padding = padding;
     },
     getContainer: () => container,
-    getBounds: () => ({
-      getWest: () => -180,
-      getSouth: () => -90,
-      getEast: () => 180,
-      getNorth: () => 90,
-    }),
+    getBounds: () => {
+      const bounds = options.bounds ?? { west: -180, south: -90, east: 180, north: 90 };
+      return {
+        getWest: () => bounds.west,
+        getSouth: () => bounds.south,
+        getEast: () => bounds.east,
+        getNorth: () => bounds.north,
+      };
+    },
     getCanvas: () => canvas,
     getCanvasContainer: () => canvas,
     addControl: () => {},

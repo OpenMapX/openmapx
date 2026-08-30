@@ -66,6 +66,10 @@ each canonical ground or model series is rendered independently. OpenMapX does
 not draw a continuous line between unrelated sources or fill missing hourly
 categories from a daily publication.
 
+The separate [air-quality monitor map](./air-quality-map.md) plots raw station
+concentrations with freshness, quality, and provenance signals. Its continuous
+colors are deliberately not AQI health categories.
+
 Category names and status text are always printed alongside color. The section
 uses native or semantic keyboard controls, exposes disclosure state to assistive
 technology, retains visible focus, and removes nonessential transition motion

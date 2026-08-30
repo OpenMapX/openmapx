@@ -2166,6 +2166,71 @@
     "temporarilyUnavailable": "Station measurements are temporarily unavailable.",
     "attribution": "PM2.5 concentration via OpenAQ"
   },
+  "airQualityMap": {
+    "title": "Air-quality monitors",
+    "toggleOverlay": "Toggle air-quality monitors",
+    "rawConcentrationNotice": "Raw monitor concentration — not an AQI or health category.",
+    "mode": {
+      "label": "Layer mode",
+      "monitors": "Ground monitors",
+      "eeaRaster": "European raster (not available)"
+    },
+    "pollutant": {
+      "label": "Pollutant",
+      "pm25": "Fine particles (PM2.5)",
+      "pm10": "Particles (PM10)",
+      "o3": "Ozone (O3)",
+      "no2": "Nitrogen dioxide (NO2)",
+      "so2": "Sulfur dioxide (SO2)",
+      "co": "Carbon monoxide (CO)",
+      "nh3": "Ammonia (NH3)",
+      "no": "Nitric oxide (NO)"
+    },
+    "unit": { "ugm3": "Concentration (µg/m³)" },
+    "status": {
+      "loading": "Loading monitor snapshot…",
+      "quota": "Monitor coverage is unavailable because the request quota was exhausted.",
+      "unavailable": "Monitor measurements are temporarily unavailable.",
+      "refreshFailedRetained": "Refresh failed; the previous monitor snapshot remains visible.",
+      "stale": "One or more monitor readings in this snapshot are stale.",
+      "partial": "Some monitor providers are unavailable or excluded.",
+      "truncated": "This viewport contains more eligible monitors than can be displayed.",
+      "empty": "No qualifying monitors are available in this viewport.",
+      "stationCount": "{count, plural, one {# monitor in view} other {# monitors in view}}"
+    },
+    "popup": {
+      "concentration": "Raw concentration",
+      "observed": "Observed",
+      "interval": "Measurement interval",
+      "freshness": "Freshness",
+      "quality": "Quality",
+      "stationClass": "Station class",
+      "completeness": "Completeness",
+      "provider": "Provider",
+      "sources": "Sources",
+      "owner": "Data owner",
+      "mobile": "Mobile",
+      "fixed": "Fixed",
+      "estimated": "Estimated",
+      "gapFilled": "Gap-filled",
+      "unknown": "Unknown"
+    },
+    "freshness": { "fresh": "Fresh", "stale": "Stale", "unknown": "Unknown" },
+    "quality": {
+      "regulatoryCertified": "Regulatory certified",
+      "qualityAssured": "Quality assured",
+      "preliminary": "Preliminary",
+      "estimated": "Estimated",
+      "unknown": "Unknown"
+    },
+    "stationClass": {
+      "reference": "Reference",
+      "regulatory": "Regulatory",
+      "indicative": "Indicative",
+      "lowCost": "Low-cost",
+      "unknown": "Unknown"
+    }
+  },
   "weather": {
     "weather": "Weather",
     "weatherAt": "Weather at {location}",

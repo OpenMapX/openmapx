@@ -116,4 +116,81 @@ describe("canonical station route", () => {
     const invalid = await invoke(ctx, { ...base, pollutant: "pm10", cursor });
     expect(invalid).toMatchObject({ statusCode: 400, payload: { code: "INVALID_QUERY" } });
   });
+
+  it("reports stale evidence when any served station is stale", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const stale = {
+      ...evidence({ at: "2026-08-30T10:00:00.000Z", spatialId: "stale-station" }),
+      validUntil: "2026-08-30T11:00:00.000Z",
+    };
+    const ctx = context(async () => ({
+      evidence: [stale],
+      nextCursor: null,
+      truncated: false,
+      diagnostics: {
+        candidateCount: 1,
+        servedCount: 1,
+        skippedCount: 0,
+        quotaDeniedCount: 0,
+        failureCount: 0,
+      },
+    }));
+    setup(ctx);
+
+    const result = await invoke(ctx, {
+      south: "52",
+      west: "13",
+      north: "53",
+      east: "14",
+      zoom: "8",
+      pollutant: "pm25",
+    });
+
+    expect(result.payload).toMatchObject({
+      features: [{ properties: { freshness: "stale" } }],
+      meta: { warnings: expect.arrayContaining(["stale_evidence"]) },
+    });
+  });
+
+  it("projects only comparable µg/m³ values onto the shared concentration scale", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const ctx = context(async () => ({
+      evidence: [
+        evidence({ at: now, spatialId: "mass-station", value: 0.012, unit: "mg/m3" }),
+        evidence({
+          at: now,
+          spatialId: "volume-station",
+          longitude: 13.8,
+          value: 12,
+          unit: "ppb",
+        }),
+      ],
+      nextCursor: null,
+      truncated: false,
+      diagnostics: {
+        candidateCount: 2,
+        servedCount: 2,
+        skippedCount: 0,
+        quotaDeniedCount: 0,
+        failureCount: 0,
+      },
+    }));
+    setup(ctx);
+
+    const result = await invoke(ctx, {
+      south: "52",
+      west: "13",
+      north: "53",
+      east: "14",
+      zoom: "8",
+      pollutant: "pm25",
+    });
+
+    expect(result.payload).toMatchObject({
+      features: [{ properties: { value: 12, unit: "ug/m3" } }],
+      meta: { skippedCount: 1 },
+    });
+  });
 });
