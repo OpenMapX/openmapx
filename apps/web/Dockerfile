@@ -12,6 +12,7 @@ COPY packages/command-palette/package.json packages/command-palette/
 COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
+COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mangrove-react/package.json packages/mangrove-react/
@@ -40,6 +41,7 @@ COPY packages/command-palette/ packages/command-palette/
 COPY packages/core/ packages/core/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
 COPY packages/i18n/ packages/i18n/
+COPY packages/air-quality/ packages/air-quality/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/mangrove-react/ packages/mangrove-react/

@@ -1,0 +1,12 @@
+{
+  "source": "EPA May 2024 TAD, Section IV worked examples",
+  "examples": [
+    { "pollutant": "o3", "windowMinutes": 480, "concentration": 0.07853333, "expectedAqi": 126 },
+    { "pollutant": "pm25", "windowMinutes": 1440, "concentration": 35.9, "expectedAqi": 102 },
+    { "pollutant": "co", "windowMinutes": 480, "concentration": 8.4, "expectedAqi": 90 },
+    { "pollutant": "o3", "windowMinutes": 60, "concentration": 0.162, "expectedAqi": 147, "publishedReportedAqi": 148 }
+  ],
+  "knownPublicationDiscrepancies": [
+    "The TAD reports 148 for 0.162 ppm one-hour O3, but its mandated equation with the published 0.125–0.164 breakpoints yields 147.487..., which rounds to 147. OpenMapX follows the normative equation and records the example discrepancy."
+  ]
+}

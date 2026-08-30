@@ -119,6 +119,7 @@ vi.mock("@openmapx/poi-source-registry", () => ({
 import {
   getAllIntegrations,
   getIntegration,
+  getIntegrationProviders,
   initIntegrations,
   reloadIntegrations,
   shutdownIntegrations,
@@ -190,6 +191,58 @@ describe("initIntegrations — loader", () => {
     const ids = all.map((i) => i.id);
     expect(ids).toContain("alpha");
     expect(ids).toContain("beta");
+  });
+
+  it("discovers, validates, stores, and reloads air-quality providers", async () => {
+    const parent = mkdtempSync(join(tmpdir(), "omx-air-quality-provider-"));
+    const directory = join(parent, "air-quality-probe");
+    mkdirSync(directory, { recursive: true });
+    writeFileSync(
+      join(directory, "manifest.json"),
+      JSON.stringify({
+        id: "air-quality-probe",
+        version: "1.0.0",
+        author: "Test",
+        license: "MIT",
+        domains: ["air-quality"],
+        quality: "built-in",
+        dataSources: [
+          {
+            sourceId: "official-aq",
+            name: "Official AQ",
+            url: "https://example.test/data",
+            license: "Test",
+            providerCountry: "US",
+            providerPrivacyUrl: "https://example.test/privacy",
+          },
+        ],
+      }),
+    );
+    const backend = (priority: number) =>
+      [
+        "export function setup(ctx) {",
+        "  ctx.registerAirQualityProvider({",
+        "    id: 'official-aq-provider', sourceIds: ['official-aq'],",
+        `    priority: ${priority}, capabilities: new Set(['current', 'pollutants']),`,
+        "    coverage: { countries: ['US'] }, getCurrent: async () => [],",
+        "  });",
+        "}",
+      ].join("\n");
+    writeFileSync(join(directory, "index.js"), backend(10));
+    const app = makeApp();
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(
+        getIntegrationProviders<{ priority: number }>("air-quality-probe", "air-quality"),
+      ).toMatchObject([{ priority: 10 }]);
+      writeFileSync(join(directory, "index.js"), backend(2));
+      await reloadIntegrations();
+      expect(
+        getIntegrationProviders<{ priority: number }>("air-quality-probe", "air-quality"),
+      ).toMatchObject([{ priority: 2 }]);
+    } finally {
+      rmSync(parent, { recursive: true, force: true });
+    }
   });
 
   it("never imports a community backend bundle into the privileged API process", async () => {

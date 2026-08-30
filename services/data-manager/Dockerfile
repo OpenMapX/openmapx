@@ -49,6 +49,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
+COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mobility-core/package.json packages/mobility-core/
@@ -79,6 +80,7 @@ COPY packages/core/package.json packages/core/
 COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
+COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/mobility-core/package.json packages/mobility-core/
@@ -224,6 +226,8 @@ COPY packages/hey-api-client-fetch/ ./packages/hey-api-client-fetch/
 # integration code data-manager now ships and runs discovery against instead
 # of reading from the host bind-mount.
 COPY packages/place-ids/ ./packages/place-ids/
+COPY packages/air-quality/ ./packages/air-quality/
+COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
 COPY packages/integration-framework/ ./packages/integration-framework/
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY packages/mobility-core/ ./packages/mobility-core/

@@ -1,0 +1,8 @@
+{
+  "valid": [
+    { "value": 1, "displayValue": "1", "categoryId": "low-risk" },
+    { "value": 4, "displayValue": "4", "categoryId": "moderate-risk" },
+    { "value": 8, "displayValue": "8", "categoryId": "high-risk" },
+    { "value": null, "displayValue": "10+", "categoryId": "very-high-risk" }
+  ]
+}

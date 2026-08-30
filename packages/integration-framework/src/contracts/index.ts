@@ -1,3 +1,15 @@
+export type {
+  AirQualityCapability,
+  AirQualityProvider,
+  ForecastAirQualityQuery,
+  PointAirQualityQuery,
+  RasterTile,
+  RasterTileQuery,
+  RasterTimeAxis,
+  StationEvidencePage,
+  StationViewportQuery,
+} from "./air-quality-provider";
+export { assertAirQualityProviderContract } from "./air-quality-provider";
 export {
   assertProviderSatisfiesContract,
   assertRealtimeProviderContract,

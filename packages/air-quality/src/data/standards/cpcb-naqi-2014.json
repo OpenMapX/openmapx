@@ -1,0 +1,50 @@
+{
+  "standardId": "in-naqi-current",
+  "resolvedRevision": "cpcb-naqi-2014",
+  "retrievedAt": "2026-08-30",
+  "effectiveFrom": "2014-10-17T00:00:00Z",
+  "effectiveUntil": null,
+  "sources": [
+    {
+      "url": "https://cpcb.nic.in/displaypdf.php?id=bmF0aW9uYWwtYWlyLXF1YWxpdHktaW5kZXgvRklOQUwtUkVQT1JUX0FRSV8ucGRm",
+      "title": "National Air Quality Index, Central Pollution Control Board",
+      "anchors": [
+        "Equation 4, pages 8–9",
+        "Table 3.11, page 36",
+        "Sections 3.5 and 3.7, pages 38 and 45"
+      ]
+    }
+  ],
+  "transcriptionChecksum": "sha256:bf9a5bb74b3064db4a6f80179136c497d4c4b4fa1cfa9bc150c5da7899bf88b9",
+  "independentDerivation": {
+    "reviewer": "OpenMapX deterministic fixture derivation pass",
+    "reviewedAt": "2026-08-30",
+    "note": "The seven supported pollutant rows were independently transcribed from Table 3.11 and cross-checked against the pollutant-specific tables. Lead is intentionally absent. CPCB publishes each Severe concentration band with an open-ended '+' and no upper breakpoint for exact linear interpolation; those open-ended thresholds are recorded separately and the adapter rejects that unsettled numeric path."
+  },
+  "transcription": {
+    "indexBands": [[0, 50], [51, 100], [101, 200], [201, 300], [301, 400], [401, 500]],
+    "concentrationBands": {
+      "pm10": [[0, 50], [51, 100], [101, 250], [251, 350], [351, 430]],
+      "pm25": [[0, 30], [31, 60], [61, 90], [91, 120], [121, 250]],
+      "no2": [[0, 40], [41, 80], [81, 180], [181, 280], [281, 400]],
+      "o3": [[0, 50], [51, 100], [101, 168], [169, 208], [209, 748]],
+      "co": [[0, 1.0], [1.1, 2.0], [2.1, 10], [10.1, 17], [17.1, 34]],
+      "so2": [[0, 40], [41, 80], [81, 380], [381, 800], [801, 1600]],
+      "nh3": [[0, 200], [201, 400], [401, 800], [801, 1200], [1201, 1800]]
+    },
+    "severeOpenEndedAbove": {
+      "pm10": 430,
+      "pm25": 250,
+      "no2": 400,
+      "o3": 748,
+      "co": 34,
+      "so2": 1600,
+      "nh3": 1800
+    },
+    "units": { "co": "mg/m3", "default": "ug/m3" },
+    "windows": { "co": 480, "o3": 480, "default": 1440 },
+    "minimumHourlySamples": 16,
+    "minimumPollutants": 3,
+    "requiredParticle": ["pm25", "pm10"]
+  }
+}

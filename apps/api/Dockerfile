@@ -19,6 +19,7 @@ COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
 COPY packages/transitous-core/package.json packages/transitous-core/
+COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
@@ -47,6 +48,7 @@ COPY packages/hey-api-client-fetch/package.json packages/hey-api-client-fetch/
 COPY packages/i18n/package.json packages/i18n/
 COPY packages/cli/package.json packages/cli/
 COPY packages/transitous-core/package.json packages/transitous-core/
+COPY packages/air-quality/package.json packages/air-quality/
 COPY packages/integration-framework/package.json packages/integration-framework/
 COPY packages/mangrove-client/package.json packages/mangrove-client/
 COPY packages/noaa-coops-data/package.json packages/noaa-coops-data/
@@ -85,6 +87,7 @@ COPY packages/ev-charge-planner/ packages/ev-charge-planner/
 COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
+COPY packages/air-quality/ packages/air-quality/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
@@ -152,6 +155,7 @@ COPY packages/ev-charge-planner/ packages/ev-charge-planner/
 COPY packages/mobility-formats/ packages/mobility-formats/
 COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
 COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
+COPY packages/air-quality/ packages/air-quality/
 COPY packages/integration-framework/ packages/integration-framework/
 COPY packages/mangrove-client/ packages/mangrove-client/
 COPY packages/noaa-coops-data/ packages/noaa-coops-data/
@@ -166,6 +170,7 @@ COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
 COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev-charge-planner/node_modules
 COPY --from=prod-deps /app/packages/mobility-formats/node_modules ./packages/mobility-formats/node_modules
+COPY --from=prod-deps /app/packages/air-quality/node_modules ./packages/air-quality/node_modules
 COPY --from=prod-deps /app/packages/integration-framework/node_modules ./packages/integration-framework/node_modules
 COPY --from=prod-deps /app/packages/poi-source-registry/node_modules ./packages/poi-source-registry/node_modules
 COPY --from=prod-deps /app/packages/mangrove-client/node_modules ./packages/mangrove-client/node_modules

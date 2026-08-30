@@ -30,6 +30,7 @@ export type {
   TransferSafeguard,
   TransitReachabilityMetrics,
 } from "./context";
+export { assertAirQualityProviderContract } from "./contracts/air-quality-provider";
 export {
   assertProviderSatisfiesContract,
   assertRealtimeProviderContract,
@@ -38,6 +39,8 @@ export {
 } from "./contracts/assert-contract";
 export type {
   AiCloudProcessor,
+  AirQualityCapability,
+  AirQualityProvider,
   AutocompleteResult,
   CurrentWeather,
   DailyForecastPoint,
@@ -55,6 +58,7 @@ export type {
   DataSourceMeta,
   DataSourceResult,
   DirectionsResult,
+  ForecastAirQualityQuery,
   GeocodingProvider,
   GtfsCatalogFeed,
   GtfsCatalogProvider,
@@ -83,12 +87,16 @@ export type {
   ParseContext,
   PhotoProvider,
   PhotoQuery,
+  PointAirQualityQuery,
   PoiSearchOutcome,
   PoiSearchProvider,
   PoiSearchResult,
   PoiSearchReturn,
   PricingPlanEntry,
   ProviderAttribution,
+  RasterTile,
+  RasterTileQuery,
+  RasterTimeAxis,
   RealtimeCapabilities,
   RealtimeProvider,
   ReverseGeocodingResult,
@@ -139,6 +147,8 @@ export type {
   SearchResult,
   SearchSuggestionProvider,
   SpatialConstraint,
+  StationEvidencePage,
+  StationViewportQuery,
   StreetLevelCapabilities,
   StreetLevelCoverage,
   StreetLevelImage,

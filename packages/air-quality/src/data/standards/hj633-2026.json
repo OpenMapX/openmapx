@@ -1,0 +1,47 @@
+{
+  "standardId": "cn-hj633-2026",
+  "resolvedRevision": "hj633-2026",
+  "retrievedAt": "2026-08-30",
+  "effectiveFrom": "2026-03-01T00:00:00+08:00",
+  "effectiveUntil": null,
+  "sources": [
+    {
+      "url": "https://www.mee.gov.cn/ywgz/fgbz/bz/bzwb/jcffbz/202602/W020260225366493492011.pdf",
+      "title": "HJ 633-2026 Technical specifications on ambient air quality index",
+      "anchors": ["Sections 4.2.2–4.2.6, pages 2–3", "Table 3, page 3", "Section 5.3, page 4"]
+    },
+    {
+      "url": "https://www.mee.gov.cn/ywgz/fgbz/bz/bzwb/dqhjbh/dqhjzlbz/202602/t20260225_1144419.shtml",
+      "title": "GB 3095-2026 Ambient air quality standards",
+      "anchors": ["Effective date", "Concentration statistics and data validity"]
+    }
+  ],
+  "transcriptionChecksum": "sha256:9520f6aef60d54efa635c94862513c5a31d094b82a09fbc4ffa9f45b1acb9be9",
+  "independentDerivation": {
+    "reviewer": "OpenMapX deterministic fixture derivation pass",
+    "reviewedAt": "2026-08-30",
+    "note": "The photographed normative Table 3 was independently transcribed by row and column, then checked against boundary fixtures for daily and real-time modes."
+  },
+  "transcription": {
+    "iaqi": [0, 50, 100, 150, 200, 300, 400, 500],
+    "daily": {
+      "so2": [0, 50, 150, 475, 800, 1600, 2100, 2620],
+      "no2": [0, 40, 80, 180, 280, 565, 750, 940],
+      "co": [0, 2, 4, 14, 24, 36, 48, 60],
+      "o3": [0, 100, 160, 215, 265, 800, null, null],
+      "pm10": [0, 50, 120, 250, 350, 420, 500, 600],
+      "pm25": [0, 35, 60, 115, 150, 250, 350, 500]
+    },
+    "realtime": {
+      "so2": [0, 150, 500, 650, 800, null, null, null],
+      "no2": [0, 100, 200, 700, 1200, 2340, 3090, 3840],
+      "co": [0, 5, 10, 35, 60, 90, 120, 150],
+      "o3": [0, 160, 200, 300, 400, 800, 1000, 1200],
+      "pm10": [0, 50, 120, 250, 350, 420, 500, 600],
+      "pm25": [0, 35, 60, 115, 150, 250, 350, 500]
+    },
+    "precision": { "co": 1, "default": 0 },
+    "rounding": "ceiling",
+    "specialCaps": { "realtime-so2-above-800": 200, "daily-o3-above-800": 300 }
+  }
+}

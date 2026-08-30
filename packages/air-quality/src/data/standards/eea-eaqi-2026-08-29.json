@@ -1,0 +1,47 @@
+{
+  "standardId": "eu-eea-current",
+  "resolvedRevision": "eea-eaqi-2026-08-29",
+  "retrievedAt": "2026-08-29",
+  "effectiveFrom": "2025-07-01T00:00:00Z",
+  "effectiveUntil": null,
+  "sources": [
+    {
+      "url": "https://airindex.eea.europa.eu/AQI/?webgl=0",
+      "title": "European Air Quality Index",
+      "anchors": [
+        "Methodology",
+        "Bands of concentrations and index levels",
+        "Stations missing data for certain pollutants"
+      ]
+    },
+    {
+      "url": "https://www.eionet.europa.eu/etcs/etc-he/products/etc-he-products/etc-he-reports/etc-he-report-2024-17-eea-s-revision-of-the-european-air-quality-index-bands",
+      "title": "ETC HE Report 2024/17 – EEA's revision of the European air quality index bands",
+      "anchors": ["Index band derivation", "Conclusions"]
+    }
+  ],
+  "transcriptionChecksum": "sha256:90a0442a7b5bcd36e18ed28b78c7dc401bb746006f3559536bc246b99de06252",
+  "independentDerivation": {
+    "reviewer": "OpenMapX deterministic fixture derivation pass",
+    "reviewedAt": "2026-08-30",
+    "note": "A separate category lookup fixture was transcribed from the EEA table and checked across all threshold edges and station qualification cases."
+  },
+  "transcription": {
+    "categories": ["good", "fair", "moderate", "poor", "very-poor", "extremely-poor"],
+    "upperBoundsUgM3": {
+      "pm25": [5, 15, 50, 90, 140, null],
+      "pm10": [15, 45, 120, 195, 270, null],
+      "o3": [60, 100, 120, 160, 180, null],
+      "no2": [10, 25, 60, 100, 150, null],
+      "so2": [20, 40, 125, 190, 275, null]
+    },
+    "raster": {
+      "good": 1,
+      "fair": 2,
+      "moderate": 3,
+      "poor": 4,
+      "very-poor": 5,
+      "extremely-poor": 6
+    }
+  }
+}

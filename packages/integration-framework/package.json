@@ -37,6 +37,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@openmapx/air-quality": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",

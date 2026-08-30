@@ -1,0 +1,37 @@
+{
+  "standardId": "uk-daqi-current",
+  "resolvedRevision": "uk-daqi-2026-04-13",
+  "retrievedAt": "2026-08-30",
+  "effectiveFrom": "2026-04-13T00:00:00Z",
+  "effectiveUntil": null,
+  "sources": [
+    {
+      "url": "https://www.gov.uk/government/publications/health-effects-of-air-pollution/pollutant-concentrations-for-the-daily-air-quality-index-daqi",
+      "title": "Pollutant concentrations for the Daily Air Quality Index (DAQI)",
+      "anchors": ["Updated 13 April 2026", "PM2.5 through SO2 concentration tables"]
+    },
+    {
+      "url": "https://uk-air.defra.gov.uk/assets/documents/reports/cat14/1304251155_Update_on_Implementation_of_the_DAQI_April_2013_Final.pdf",
+      "title": "Update on Implementation of the Daily Air Quality Index",
+      "anchors": ["Data rounding and averaging, page 2"]
+    }
+  ],
+  "transcriptionChecksum": "sha256:b1690627ae8f6970025587393222044d7c4b3d499aaf2b885336b53f4222f4a6",
+  "independentDerivation": {
+    "reviewer": "OpenMapX deterministic fixture derivation pass",
+    "reviewedAt": "2026-08-30",
+    "note": "All fifty integer bands were independently represented as upper-bound fixtures and checked against the GOV.UK tables."
+  },
+  "transcription": {
+    "upperBoundsUgM3": {
+      "pm25": [11, 23, 35, 41, 47, 53, 58, 64, 70, null],
+      "pm10": [16, 33, 50, 58, 66, 75, 83, 91, 100, null],
+      "no2": [67, 134, 200, 267, 334, 400, 467, 534, 600, null],
+      "o3": [33, 66, 100, 120, 140, 160, 187, 213, 240, null],
+      "so2": [88, 177, 266, 354, 443, 532, 710, 887, 1064, null]
+    },
+    "windowMinutes": { "pm25": 1440, "pm10": 1440, "no2": 60, "o3": 480, "so2": 15 },
+    "minimumDataCapturePercent": 75,
+    "rounding": "nearest-integer-once-after-averaging"
+  }
+}

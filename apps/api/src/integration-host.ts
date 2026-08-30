@@ -13,6 +13,7 @@ import {
   rollbackRuntimeStaging as rollbackParkingRuntimeStaging,
 } from "@integrations/parking/runtime.js";
 import {
+  assertAirQualityProviderContract,
   type CacheClient,
   type CustomHealthCheckFn,
   type HttpClient,
@@ -485,6 +486,13 @@ function buildIntegrationContext(args: {
       const existing = providers.get("weather") ?? [];
       existing.push(provider);
       providers.set("weather", existing);
+    },
+    registerAirQualityProvider(provider) {
+      const allowedSourceIds = new Set(manifest.dataSources?.map(({ sourceId }) => sourceId) ?? []);
+      assertAirQualityProviderContract(provider, allowedSourceIds);
+      const existing = providers.get("air-quality") ?? [];
+      existing.push(provider);
+      providers.set("air-quality", existing);
     },
     registerGeocodingProvider(provider) {
       const existing = providers.get("geocoding") ?? [];

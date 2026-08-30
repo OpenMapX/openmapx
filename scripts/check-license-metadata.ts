@@ -43,6 +43,7 @@ const MIT = "MIT";
  */
 const APACHE_PACKAGES = new Set([
   "integration-framework",
+  "air-quality", // reusable evidence, standards, jurisdiction, and selection foundation
   "core", // Nearly all integrations depend on it; it is the shared foundation
   "extension-cli", // standalone Apache-2.0 authoring CLI (scaffold / package / validate)
   "presets", // integration-poi-search depends on it

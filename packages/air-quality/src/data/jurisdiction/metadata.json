@@ -1,0 +1,36 @@
+{
+  "resolverId": "natural-earth-air-quality",
+  "resolverRevision": "natural-earth-5.1.1-openmapx-2026-08-30",
+  "naturalEarthVersion": "5.1.1",
+  "scale": "1:10m",
+  "license": "Public domain",
+  "pointOfView": "default de-facto; disputed-area polygons resolve ambiguous",
+  "inputs": [
+    {
+      "role": "admin-0",
+      "path": "ne-admin0-5.1.1.zip",
+      "sha256": "ce1ac7036499a0edd641fbc093cd209a98f96a49d2eca8480aaacad35138a7f6",
+      "shapefile": "ne_10m_admin_0_countries.shp"
+    },
+    {
+      "role": "admin-1",
+      "path": "ne-admin1-5.1.1.zip",
+      "sha256": "efc59726337323058f9446210adc96673179cd344e053666ee3d28cb58ba2b05",
+      "shapefile": "ne_10m_admin_1_states_provinces.shp"
+    },
+    {
+      "role": "disputed",
+      "path": "ne-disputed-5.1.1.zip",
+      "sha256": "a250c1cf8ab68898399928a1fa1d5c242eb4de6335cb51a7f7a7f12a9f3c8438",
+      "shapefile": "ne_10m_admin_0_disputed_areas.shp"
+    }
+  ],
+  "featureCounts": {
+    "country": 49,
+    "subdivision": 13,
+    "ambiguous": 38
+  },
+  "artifactSha256": "23be1259a412edf6e0b5f566d9e0c10f972f54fe2d6ef97d5b2fa95c913ad895",
+  "command": "pnpm -C packages/air-quality generate:jurisdiction -- --admin0 <pinned-5.1.1.shp> --admin0-archive <pinned-5.1.1.zip> --admin1 <pinned-5.1.1.shp> --admin1-archive <pinned-5.1.1.zip> --disputed <pinned-5.1.1.shp> --disputed-archive <pinned-5.1.1.zip> --output src/data/jurisdiction/supported.geojson --metadata src/data/jurisdiction/metadata.json",
+  "eeaCoverageReviewDate": "2026-08-29"
+}

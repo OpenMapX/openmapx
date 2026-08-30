@@ -1,4 +1,5 @@
 import type { PoiSource } from "@openmapx/poi-source-registry";
+import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
 import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
@@ -466,6 +467,8 @@ export interface IntegrationContext {
   registerMobilityDataSource(provider: MobilityDataSourceProvider): void;
   /** Typed registrar for weather providers. Stored under the `weather` key. */
   registerWeatherProvider(provider: WeatherProvider): void;
+  /** Typed registrar for air-quality evidence providers. Stored under the `air-quality` key. */
+  registerAirQualityProvider(provider: AirQualityProvider): void;
   /** Typed registrar for geocoding providers. Stored under the `geocoding` key. */
   registerGeocodingProvider(provider: GeocodingProvider): void;
   /** Typed registrar for routing providers. Stored under the `routing` key. */

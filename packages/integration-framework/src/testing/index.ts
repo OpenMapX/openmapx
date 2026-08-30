@@ -18,6 +18,7 @@ import type {
   RouteOptions,
   SecretsClient,
 } from "../context.js";
+import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
 import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "../contracts/gtfs-catalog-provider.js";
 import type { KnowledgeProvider } from "../contracts/knowledge-provider.js";
@@ -157,6 +158,7 @@ export interface CapturedRegistrations {
   realtime: RealtimeProvider[];
   mobilityDataSource: MobilityDataSourceProvider[];
   weather: WeatherProvider[];
+  airQuality: AirQualityProvider[];
   geocoding: GeocodingProvider[];
   routing: RoutingProvider[];
   ride: RideProvider[];
@@ -205,6 +207,7 @@ export function createMockIntegrationContext(
     realtime: [],
     mobilityDataSource: [],
     weather: [],
+    airQuality: [],
     geocoding: [],
     routing: [],
     ride: [],
@@ -253,6 +256,9 @@ export function createMockIntegrationContext(
     },
     registerWeatherProvider: (p) => {
       registered.weather.push(p);
+    },
+    registerAirQualityProvider: (p) => {
+      registered.airQuality.push(p);
     },
     registerGeocodingProvider: (p) => {
       registered.geocoding.push(p);

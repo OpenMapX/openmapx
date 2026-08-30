@@ -1,0 +1,42 @@
+{
+  "standardId": "ca-aqhi-current",
+  "resolvedRevision": "eccc-aqhi-2026-08-29",
+  "retrievedAt": "2026-08-29",
+  "effectiveFrom": "2026-05-28T00:00:00Z",
+  "effectiveUntil": null,
+  "sources": [
+    {
+      "url": "https://www.canada.ca/en/environment-climate-change/services/air-quality-health-index/about.html",
+      "title": "About the Air Quality Health Index",
+      "anchors": [
+        "The AQHI scale",
+        "How we calculate AQHI for wildfire smoke events",
+        "How we calculate AQHI in your community",
+        "Forecast locations"
+      ]
+    },
+    {
+      "url": "https://www.canada.ca/en/services/health/healthy-living/environment/air-quality/wildfire-smoke.html",
+      "title": "Wildfire smoke, air quality and your health",
+      "anchors": ["How to check the air quality during wildfire smoke events"]
+    }
+  ],
+  "transcriptionChecksum": "sha256:78ad220786942fb4375c4c391277858f70315dcc793c0da7444b4e2b3a10b615",
+  "independentDerivation": {
+    "reviewer": "OpenMapX deterministic fixture derivation pass",
+    "reviewedAt": "2026-08-30",
+    "note": "Published-value validation cases were independently constructed for every risk range, conventional AQHI, PM2.5-only AQHI+, forecasts, and Québec program isolation."
+  },
+  "transcription": {
+    "scale": "1-10+",
+    "categories": {
+      "low-risk": [1, 3],
+      "moderate-risk": [4, 6],
+      "high-risk": [7, 10],
+      "very-high-risk": [11, null]
+    },
+    "methods": ["conventional-aqhi", "wildfire-aqhi-plus-pm25-hourly"],
+    "coverage": "published-community-only",
+    "quebecProgram": "ca-qc-info-smog"
+  }
+}

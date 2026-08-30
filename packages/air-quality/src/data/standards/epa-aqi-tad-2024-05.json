@@ -1,0 +1,81 @@
+{
+  "standardId": "us-epa-2024",
+  "resolvedRevision": "epa-aqi-tad-2024-05",
+  "retrievedAt": "2026-08-30",
+  "effectiveFrom": "2024-05-06T00:00:00Z",
+  "effectiveUntil": null,
+  "sources": [
+    {
+      "url": "https://nepis.epa.gov/Exe/ZyPURL.cgi?Dockey=P101AP0Q.TXT",
+      "title": "Technical Assistance Document for the Reporting of Daily Air Quality – the Air Quality Index (AQI), EPA-454/B-24-002",
+      "anchors": [
+        "Section IV, pages 13–17",
+        "Table 6, page 14",
+        "How the NowCast is calculated, pages 16–17"
+      ]
+    },
+    {
+      "url": "https://www.ecfr.gov/current/title-40/chapter-I/subchapter-C/part-58/appendix-Appendix%20G%20to%20Part%2058",
+      "title": "40 CFR Part 58 Appendix G – Uniform Air Quality Index (AQI) and Daily Reporting",
+      "anchors": ["Section 2.1", "Table 2"]
+    }
+  ],
+  "transcriptionChecksum": "sha256:ff6681e5b6c96409e51ed38c189434f4bc3210ca1b4143a9ecdbc6586937d1df",
+  "independentDerivation": {
+    "reviewer": "OpenMapX deterministic fixture derivation pass",
+    "reviewedAt": "2026-08-30",
+    "note": "Boundary fixtures and the EPA worked examples were derived in a separate data-first pass from Table 6 and Section IV, then compared with the production adapter."
+  },
+  "transcription": {
+    "precision": { "o3": 3, "pm25": 1, "pm10": 0, "co": 1, "so2": 0, "no2": 0 },
+    "bands": {
+      "o3-8h": [
+        [0, 0.054, 0, 50],
+        [0.055, 0.07, 51, 100],
+        [0.071, 0.085, 101, 150],
+        [0.086, 0.105, 151, 200],
+        [0.106, 0.2, 201, 300]
+      ],
+      "o3-1h": [
+        [0.125, 0.164, 101, 150],
+        [0.165, 0.204, 151, 200],
+        [0.205, 0.404, 201, 300],
+        [0.405, 0.604, 301, 500]
+      ],
+      "pm25-24h": [
+        [0, 9.0, 0, 50],
+        [9.1, 35.4, 51, 100],
+        [35.5, 55.4, 101, 150],
+        [55.5, 125.4, 151, 200],
+        [125.5, 225.4, 201, 300],
+        [225.5, 325.4, 301, 500]
+      ],
+      "pm10-24h": [
+        [0, 54, 0, 50],
+        [55, 154, 51, 100],
+        [155, 254, 101, 150],
+        [255, 354, 151, 200],
+        [355, 424, 201, 300],
+        [425, 604, 301, 500]
+      ],
+      "co-8h": [
+        [0, 4.4, 0, 50],
+        [4.5, 9.4, 51, 100],
+        [9.5, 12.4, 101, 150],
+        [12.5, 15.4, 151, 200],
+        [15.5, 30.4, 201, 300],
+        [30.5, 50.4, 301, 500]
+      ],
+      "so2-1h": [[0, 35, 0, 50], [36, 75, 51, 100], [76, 185, 101, 150], [186, 304, 151, 200]],
+      "so2-24h": [[305, 604, 201, 300], [605, 1004, 301, 500]],
+      "no2-1h": [
+        [0, 53, 0, 50],
+        [54, 100, 51, 100],
+        [101, 360, 101, 150],
+        [361, 649, 151, 200],
+        [650, 1249, 201, 300],
+        [1250, 2049, 301, 500]
+      ]
+    }
+  }
+}
