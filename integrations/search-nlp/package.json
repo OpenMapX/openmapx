@@ -16,6 +16,10 @@
       "default": "./types.ts"
     }
   },
+  "scripts": {
+    "eval:semantic-taxonomy": "tsx eval/run.ts",
+    "eval:semantic-residency": "tsx eval/measure-residency.ts"
+  },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.42",
     "@ai-sdk/google": "^4.0.51",
@@ -24,8 +28,12 @@
     "@openmapx/brands": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/presets": "workspace:^",
     "@openrouter/ai-sdk-provider": "^3.0.0",
     "ai": "^7.0.79",
     "zod": "^4.4.3"
+  },
+  "devDependencies": {
+    "tsx": "4.23.12"
   }
 }

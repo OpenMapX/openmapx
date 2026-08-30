@@ -108,7 +108,7 @@ function coveredRanges(text: string, patterns: RegExp[]): Array<[number, number]
  * lowercased form is a generic noun or stopword, at least one Title-case token
  * remains unaccounted for. Single-word queries are never suppressed.
  */
-function looksLikeProperName(originalQuery: string): boolean {
+export function looksLikeProperName(originalQuery: string): boolean {
   const q = originalQuery.trim();
   const tokens = q
     .split(/\s+/)

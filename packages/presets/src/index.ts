@@ -106,4 +106,9 @@ export type {
   EditorPresetText,
   OsmEditorGeometry,
 } from "./editor-types";
+export type {
+  SemanticCategoryDocument,
+  SemanticCategoryLanguage,
+} from "./semantic-category-catalog";
+export { buildSemanticCategoryCatalog } from "./semantic-category-catalog";
 export type { PresetMatch } from "./types";

@@ -1619,6 +1619,9 @@ importers:
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      '@openmapx/presets':
+        specifier: workspace:^
+        version: link:../../packages/presets
       '@openrouter/ai-sdk-provider':
         specifier: ^3.0.0
         version: 3.0.0(ai@7.0.79(zod@4.4.3))(zod@4.4.3)
@@ -1628,6 +1631,10 @@ importers:
       zod:
         specifier: ^4.4.3
         version: 4.4.3
+    devDependencies:
+      tsx:
+        specifier: 4.23.12
+        version: 4.23.12
 
   integrations/search-osm-aliases:
     dependencies:
