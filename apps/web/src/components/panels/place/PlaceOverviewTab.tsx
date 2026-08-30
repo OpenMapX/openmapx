@@ -1,6 +1,7 @@
 "use client";
 
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
+import AirIcon from "@mui/icons-material/Air";
 import AppsIcon from "@mui/icons-material/Apps";
 import ArticleIcon from "@mui/icons-material/Article";
 import CheckIcon from "@mui/icons-material/Check";
@@ -62,6 +63,7 @@ import { OsmContributionEntry } from "./contributions/OsmContributionEntry";
 import { DataSourceSections } from "./DataSourceSections";
 import { PlaceActionButtons } from "./PlaceActionButtons";
 import { PlaceAirportInfo } from "./PlaceAirportInfo";
+import { PlaceAirQuality } from "./PlaceAirQuality";
 import { PlaceCitySections } from "./PlaceCitySections";
 import { PlaceFoodActions } from "./PlaceFoodActions";
 import { PlaceHarborFacilities } from "./PlaceHarborFacilities";
@@ -163,16 +165,36 @@ function ExpandableDetailRow({
 }) {
   return (
     <Box
-      onClick={onToggle}
       sx={{
-        py: 1.25,
-        cursor: "pointer",
         mx: -2,
-        px: 2,
-        "&:hover": { bgcolor: "action.hover" },
       }}
     >
-      <Box sx={{ display: "flex", gap: 2, alignItems: "center" }}>
+      <Box
+        component="button"
+        type="button"
+        aria-expanded={expanded}
+        onClick={onToggle}
+        sx={{
+          width: "100%",
+          display: "flex",
+          gap: 2,
+          alignItems: "center",
+          py: 1.25,
+          px: 2,
+          border: 0,
+          bgcolor: "transparent",
+          color: "inherit",
+          font: "inherit",
+          textAlign: "left",
+          cursor: "pointer",
+          "&:hover": { bgcolor: "action.hover" },
+          "&:focus-visible": {
+            outline: "2px solid",
+            outlineColor: "primary.main",
+            outlineOffset: -2,
+          },
+        }}
+      >
         <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>{icon}</Box>
         <Box sx={{ flex: 1, minWidth: 0 }}>{label}</Box>
         {expanded ? (
@@ -181,7 +203,7 @@ function ExpandableDetailRow({
           <ExpandMoreIcon sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0 }} />
         )}
       </Box>
-      {expanded && <Box sx={{ pl: "38px" }}>{children}</Box>}
+      {expanded && <Box sx={{ pl: "54px", pr: 2 }}>{children}</Box>}
     </Box>
   );
 }
@@ -202,6 +224,7 @@ export function PlaceOverviewTab({
   const tSun = useTranslations("sunTimes");
   const tTides = useTranslations("tides");
   const tMarine = useTranslations("marineWeather");
+  const tAirQuality = useTranslations("airQuality");
   const { inSheet } = useMobileSheet();
   const ohText = useOpeningHoursText();
   const isCity = isCityOrSmaller(place);
@@ -212,6 +235,7 @@ export function PlaceOverviewTab({
   const shortCodeDisplay = city ? `${shortCode} ${city}` : null;
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [weatherExpanded, setWeatherExpanded] = useState(false);
+  const [airQualityExpanded, setAirQualityExpanded] = useState(false);
   const [sunTimesExpanded, setSunTimesExpanded] = useState(false);
   const [tidesExpanded, setTidesExpanded] = useState(false);
   const [marineExpanded, setMarineExpanded] = useState(false);
@@ -226,6 +250,17 @@ export function PlaceOverviewTab({
   const [labelDialogOpen, setLabelDialogOpen] = useState(false);
   const [labelName, setLabelName] = useState("");
   const [authOpen, setAuthOpen] = useState(false);
+  const airQualityCountryCode = /^[A-Za-z]{2}$/.test(place.countryCode ?? "")
+    ? place.countryCode?.toUpperCase()
+    : undefined;
+  const subdivisionCandidate = place.osmTags?.["ISO3166-2"] ?? place.airport?.isoRegion;
+  const normalizedSubdivision = subdivisionCandidate?.toUpperCase();
+  const airQualitySubdivisionCode =
+    normalizedSubdivision &&
+    /^[A-Z]{2}-[A-Z0-9]{1,3}$/.test(normalizedSubdivision) &&
+    (!airQualityCountryCode || normalizedSubdivision.startsWith(`${airQualityCountryCode}-`))
+      ? normalizedSubdivision
+      : undefined;
   const { data: session } = useSession();
   const updateLabelMutation = useUpdateLabel();
   const deleteLabelMutation = useDeleteLabel();
@@ -729,6 +764,31 @@ export function PlaceOverviewTab({
               lat={place.coordinates[1]}
               lng={place.coordinates[0]}
               enabled={weatherExpanded}
+            />
+          </ExpandableDetailRow>
+
+          {/* Canonical air quality (expandable, lazy). */}
+          <ExpandableDetailRow
+            icon={<AirIcon sx={{ fontSize: 22 }} />}
+            expanded={airQualityExpanded}
+            onToggle={() => setAirQualityExpanded((value) => !value)}
+            label={
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.primary",
+                }}
+              >
+                {tAirQuality("section")}
+              </Typography>
+            }
+          >
+            <PlaceAirQuality
+              lat={place.coordinates[1]}
+              lng={place.coordinates[0]}
+              enabled={airQualityExpanded}
+              countryCode={airQualityCountryCode}
+              subdivisionCode={airQualitySubdivisionCode}
             />
           </ExpandableDetailRow>
 

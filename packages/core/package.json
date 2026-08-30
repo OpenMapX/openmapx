@@ -116,6 +116,7 @@
     }
   },
   "dependencies": {
+    "@openmapx/air-quality": "workspace:*",
     "@better-auth/core": "1.7.1",
     "@better-auth/oauth-provider": "1.7.1",
     "@better-auth/passkey": "1.7.1",

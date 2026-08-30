@@ -37,6 +37,40 @@ quality and freshness; original units; method revision; source URLs, license,
 and attribution. Open-Meteo's own European and US AQI fields are shown only as
 provider-native methods. They are not labelled as reviewed OpenMapX standards.
 
+## Air quality at a place
+
+Expand **Air quality** below Weather in a place panel to load the canonical
+result for that location. The section is lazy: merely opening a place does not
+make an air-quality request. Its headline always remains the locally applicable
+program selected by the server. If no qualifying local index can be produced,
+the panel says so and shows the selected raw concentration instead of assigning
+it an invented category.
+
+Ground-monitor, model, and hybrid evidence stay in separate cards. Each card
+names its basis and quality status and shows the available observation or
+forecast time, validity, freshness, monitoring location or model grid, distance,
+station class, pollutant completeness, and estimated or gap-filled flags. Source
+owner, provider, license, direct attribution, and methodology links travel with
+the evidence. Preliminary, stale, partial, and provider-degraded results remain
+visible as such rather than being styled as fully verified readings.
+
+The comparison menu can request one of the other supported standards without
+replacing the local headline. The choice lasts only while the place panel is
+mounted; it is not put in the URL, browser storage, or user profile. If the
+requested method cannot be applied, the panel reports that the comparison is
+unavailable and, when known, explains which evidence requirement was missing.
+
+The optional **48-hour forecast** is fetched only after you expand it. Forecast
+frames explicitly say whether they are available, partial, or unavailable, and
+each canonical ground or model series is rendered independently. OpenMapX does
+not draw a continuous line between unrelated sources or fill missing hourly
+categories from a daily publication.
+
+Category names and status text are always printed alongside color. The section
+uses native or semantic keyboard controls, exposes disclosure state to assistive
+technology, retains visible focus, and removes nonessential transition motion
+when reduced motion is requested.
+
 ## Availability and degraded results
 
 `ok` means the available result is internally complete for what it reports.

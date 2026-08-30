@@ -1966,6 +1966,198 @@
     "hideSidebar": "Seitenleiste ausblenden"
   },
   "airQuality": {
+    "section": "Luftqualität",
+    "loading": "Luftqualität wird geladen…",
+    "currentHeading": "Aktuelle Luftqualität",
+    "requestError": "Luftqualitätsdaten konnten nicht geladen werden.",
+    "unavailable": "Für diesen Ort sind keine geeigneten Luftqualitätsdaten verfügbar.",
+    "noQualifyingLocalIndex": "Kein geeigneter lokaler Index",
+    "informationalOnly": "Die Luftqualitätsangaben dienen nur zur Information und sind nicht amtlich. Offizielle Hinweise gibt die genannte Behörde heraus.",
+    "provider": "Anbieter",
+    "owner": "Dateninhaber",
+    "methodology": "Methodik",
+    "metersAway": "m entfernt",
+    "forecastFor": "Vorhersage für",
+    "observedAt": "Beobachtet",
+    "validUntil": "Gültig bis",
+    "dominantPollutants": "Bestimmende Schadstoffe",
+    "completeness": "Vollständigkeit",
+    "timeUnknown": "Zeit nicht verfügbar",
+    "basis": {
+      "ground": "Messstationsdaten",
+      "model": "Modelldaten",
+      "hybrid": "Kombinierte Daten"
+    },
+    "spatial": {
+      "station": "Messstation",
+      "reportingArea": "Berichtsgebiet",
+      "community": "Gemeinde",
+      "gridCell": "Modell-Rasterzelle"
+    },
+    "stationClass": {
+      "reference": "Referenzstation",
+      "regulatory": "Amtliche Station",
+      "indicative": "Orientierende Station",
+      "lowCost": "Kostengünstiger Sensor",
+      "unknown": "Stationsklasse unbekannt"
+    },
+    "flag": {
+      "estimated": "Geschätzt",
+      "gapFilled": "Lücken ergänzt",
+      "mobile": "Mobiler Sensor"
+    },
+    "program": {
+      "usEpaAqi": "US EPA Air Quality Index",
+      "eeaEuropeanAqi": "Europäischer Luftqualitätsindex",
+      "ukDaqi": "Britischer täglicher Luftqualitätsindex",
+      "inNaqi": "Indischer nationaler Luftqualitätsindex",
+      "cnHj633": "Chinesischer Luftqualitätsindex HJ 633",
+      "caAqhi": "Kanadischer Air Quality Health Index",
+      "caQcInfoSmog": "Québec Info-Smog",
+      "unresolved": "Lokales Programm nicht bestimmt"
+    },
+    "standard": {
+      "usEpa2024": "US EPA AQI (2024)",
+      "euEeaCurrent": "Europäischer AQI",
+      "ukDaqiCurrent": "Britischer DAQI",
+      "inNaqiCurrent": "Indischer NAQI",
+      "cnHj6332026": "China HJ 633-2026",
+      "caAqhiCurrent": "Kanadischer AQHI",
+      "unresolved": "Lokaler Standard nicht bestimmt"
+    },
+    "pollutant": {
+      "pm25": "Feinstaub (PM2,5)",
+      "pm10": "Feinstaub (PM10)",
+      "o3": "Ozon (O3)",
+      "no2": "Stickstoffdioxid (NO2)",
+      "so2": "Schwefeldioxid (SO2)",
+      "co": "Kohlenmonoxid (CO)",
+      "nh3": "Ammoniak (NH3)",
+      "no": "Stickstoffmonoxid (NO)",
+      "unclassified": "Nicht klassifizierter Schadstoff"
+    },
+    "category": {
+      "good": "Gut",
+      "fair": "Akzeptabel",
+      "moderate": "Mäßig",
+      "satisfactory": "Zufriedenstellend",
+      "poor": "Schlecht",
+      "veryPoor": "Sehr schlecht",
+      "extremelyPoor": "Extrem schlecht",
+      "unhealthySensitive": "Ungesund für empfindliche Gruppen",
+      "unhealthy": "Ungesund",
+      "veryUnhealthy": "Sehr ungesund",
+      "hazardous": "Gefährlich",
+      "severe": "Schwerwiegend",
+      "unclassified": "Nicht klassifizierte Kategorie"
+    },
+    "ukDaqi": {
+      "level1": "Niedrig (1)",
+      "level2": "Niedrig (2)",
+      "level3": "Niedrig (3)",
+      "level4": "Mäßig (4)",
+      "level5": "Mäßig (5)",
+      "level6": "Mäßig (6)",
+      "level7": "Hoch (7)",
+      "level8": "Hoch (8)",
+      "level9": "Hoch (9)",
+      "level10": "Sehr hoch (10)"
+    },
+    "cn": {
+      "category": {
+        "excellent": "Ausgezeichnet",
+        "good": "Gut",
+        "lightlyPolluted": "Leicht belastet",
+        "moderatelyPolluted": "Mäßig belastet",
+        "heavilyPolluted": "Stark belastet",
+        "severelyPolluted": "Sehr stark belastet"
+      }
+    },
+    "ca": {
+      "category": {
+        "lowRisk": "Niedriges Risiko",
+        "moderateRisk": "Mäßiges Risiko",
+        "highRisk": "Hohes Risiko",
+        "veryHighRisk": "Sehr hohes Risiko"
+      }
+    },
+    "provenance": {
+      "rawGround": "Roher Messwert einer Bodenstation",
+      "rawModel": "Rohe Modellkonzentration",
+      "rawHybrid": "Rohe kombinierte Daten",
+      "computedGround": "Von OpenMapX aus Messwerten berechneter Index",
+      "computedModel": "Von OpenMapX aus Modelldaten berechneter Index",
+      "computedHybrid": "Von OpenMapX aus kombinierten Daten berechneter Index",
+      "officialGround": "Amtlich veröffentlichter Index aus Bodenmessungen",
+      "officialModel": "Amtlich veröffentlichter Modellindex",
+      "officialHybrid": "Amtlich veröffentlichter kombinierter Index",
+      "publishedGround": "Vom Anbieter veröffentlichter Index aus Bodenmessungen",
+      "publishedModel": "Vom Anbieter veröffentlichter Modellindex",
+      "publishedHybrid": "Vom Anbieter veröffentlichter kombinierter Index",
+      "unclassified": "Herkunft der Daten nicht klassifiziert"
+    },
+    "quality": {
+      "regulatoryCertified": "Amtlich zertifiziert",
+      "qualityAssured": "Qualitätsgesichert",
+      "preliminary": "Vorläufig",
+      "estimated": "Geschätzt",
+      "unknown": "Qualitätsstatus unbekannt",
+      "unclassified": "Qualitätsstatus nicht klassifiziert"
+    },
+    "freshness": {
+      "fresh": "Aktuell",
+      "stale": "Veraltet",
+      "unknown": "Aktualität unbekannt",
+      "unclassified": "Aktualität nicht klassifiziert"
+    },
+    "warning": {
+      "staleEvidence": "Einige Daten sind veraltet.",
+      "partialProviders": "Einige Anbieter sind nicht verfügbar.",
+      "quotaTruncated": "Der Datenumfang wurde durch ein Kontingent oder Antwortlimit begrenzt.",
+      "policyExcluded": "Eine konfigurierte Datenquelle ist durch Richtlinien ausgeschlossen.",
+      "duplicateConflict": "Widersprüchliche doppelte Daten wurden ausgelassen.",
+      "jurisdictionUnresolved": "Die zuständige Luftqualitätsregion konnte nicht bestimmt werden.",
+      "jurisdictionHintMismatch": "Der Ortshinweis stimmt nicht mit der ermittelten Region überein.",
+      "comparisonUnavailable": "Der angeforderte Vergleich ist nicht verfügbar.",
+      "staleCache": "Nach einem Anbieterausfall wurden zwischengespeicherte Daten verwendet.",
+      "rasterAxisChanged": "Die Zeitachse des Rasters hat sich beim Laden geändert.",
+      "unclassified": "Eine nicht klassifizierte Luftqualitätswarnung wurde gemeldet."
+    },
+    "requirement": {
+      "epaWindow": "Ein vollständiges EPA-Schadstoffzeitfenster ist erforderlich.",
+      "daqiWindow": "Ein vollständiges DAQI-Schadstoffzeitfenster ist erforderlich.",
+      "eeaStation": "Station und Schadstoff erfüllen die EEA-Qualifikationsregeln nicht.",
+      "naqiPollutants": "Der NAQI benötigt mindestens drei Schadstoffe, darunter PM2,5 oder PM10.",
+      "ecccPublished": "Ein von ECCC veröffentlichter AQHI für die Gemeinde ist erforderlich; OpenMapX berechnet ihn nicht lokal.",
+      "coherentSeries": "Schadstoffreihen müssen sich auf denselben Ort und Zeitraum beziehen.",
+      "hjEffectiveDate": "HJ 633-2026 gilt in China seit dem 1. März 2026.",
+      "hjDailyWindow": "Ein vollständiger täglicher Schadstoffwert nach HJ 633-2026 ist erforderlich.",
+      "hjHourlyWindow": "Ein vollständiger einstündiger Schadstoffwert nach HJ 633-2026 ist erforderlich.",
+      "naqiOpenEnded": "Das veröffentlichte schwere NAQI-Band enthält keinen exakten oberen Interpolationsgrenzwert.",
+      "naqiRounding": "Die veröffentlichte NAQI-Methode nennt für diese Bandlücke keine Rundungsregel.",
+      "unclassified": "Die Anforderungen dieses Standards wurden nicht erfüllt."
+    },
+    "comparison": {
+      "label": "Vergleichsstandard",
+      "auto": "Automatisch (lokaler Standard)",
+      "heading": "Vergleich",
+      "unavailable": "Kein geeigneter Vergleichsindex ist verfügbar."
+    },
+    "evidence": {
+      "heading": "Daten und Quellen"
+    },
+    "forecast": {
+      "show": "48-Stunden-Vorhersage anzeigen",
+      "hide": "48-Stunden-Vorhersage ausblenden",
+      "loading": "Vorhersage wird geladen…",
+      "error": "Die Luftqualitätsvorhersage konnte nicht geladen werden.",
+      "frames": "Vorhersagezeitpunkte"
+    },
+    "frame": {
+      "ok": "Verfügbar",
+      "partial": "Teilweise verfügbar",
+      "unavailable": "Nicht verfügbar"
+    },
     "pm25Concentration": "PM2,5-Konzentration",
     "toggleOverlay": "Luftqualitäts-Overlay umschalten",
     "microgramsPerCubicMeter": "µg/m³",

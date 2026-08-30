@@ -39,6 +39,27 @@ export {
 export { useActiveSidePanel } from "./useActiveSidePanel";
 export { useAdaptiveDebounce } from "./useAdaptiveDebounce";
 export { type AirportSearchHit, useAirportSearch } from "./useAirportSearch";
+export type {
+  AirQualityApiError,
+  AirQualityCurrentResponse,
+  AirQualityEvidence,
+  AirQualityForecastResponse,
+  AirQualityIndex,
+  AirQualityProgramId,
+  AirQualitySourceRef,
+  AirQualityStandardId,
+  AirQualityStationFeature,
+  AirQualityStationsResponse,
+  AirQualityWarningCode,
+  Pollutant,
+  PollutantWindowSummary,
+} from "./useAirQuality";
+export {
+  type AirQualityForecastQueryOptions,
+  type AirQualityQueryOptions,
+  useAirQuality,
+  useAirQualityForecast,
+} from "./useAirQuality";
 export { useAutocomplete } from "./useAutocomplete";
 export {
   type BrandLogoAttribution,

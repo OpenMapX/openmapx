@@ -1966,6 +1966,198 @@
     "hideSidebar": "Hide sidebar"
   },
   "airQuality": {
+    "section": "Air quality",
+    "loading": "Loading air quality…",
+    "currentHeading": "Current air quality",
+    "requestError": "Air-quality data could not be loaded.",
+    "unavailable": "No qualifying air-quality evidence is available for this place.",
+    "noQualifyingLocalIndex": "No qualifying local index",
+    "informationalOnly": "Air-quality information is informational and non-regulatory. Check the named authority for official notices.",
+    "provider": "Provider",
+    "owner": "Data owner",
+    "methodology": "Methodology",
+    "metersAway": "m away",
+    "forecastFor": "Forecast for",
+    "observedAt": "Observed",
+    "validUntil": "Valid until",
+    "dominantPollutants": "Dominant pollutants",
+    "completeness": "Completeness",
+    "timeUnknown": "Time unavailable",
+    "basis": {
+      "ground": "Ground monitor evidence",
+      "model": "Model evidence",
+      "hybrid": "Hybrid evidence"
+    },
+    "spatial": {
+      "station": "Station",
+      "reportingArea": "Reporting area",
+      "community": "Community",
+      "gridCell": "Model grid cell"
+    },
+    "stationClass": {
+      "reference": "Reference station",
+      "regulatory": "Regulatory station",
+      "indicative": "Indicative station",
+      "lowCost": "Low-cost sensor",
+      "unknown": "Station class unknown"
+    },
+    "flag": {
+      "estimated": "Estimated",
+      "gapFilled": "Gap-filled",
+      "mobile": "Mobile sensor"
+    },
+    "program": {
+      "usEpaAqi": "US EPA Air Quality Index",
+      "eeaEuropeanAqi": "European Air Quality Index",
+      "ukDaqi": "UK Daily Air Quality Index",
+      "inNaqi": "India National Air Quality Index",
+      "cnHj633": "China HJ 633 air quality index",
+      "caAqhi": "Canada Air Quality Health Index",
+      "caQcInfoSmog": "Québec Info-Smog",
+      "unresolved": "Local program unresolved"
+    },
+    "standard": {
+      "usEpa2024": "US EPA AQI (2024)",
+      "euEeaCurrent": "European AQI",
+      "ukDaqiCurrent": "UK DAQI",
+      "inNaqiCurrent": "India NAQI",
+      "cnHj6332026": "China HJ 633-2026",
+      "caAqhiCurrent": "Canada AQHI",
+      "unresolved": "Local standard unresolved"
+    },
+    "pollutant": {
+      "pm25": "Fine particles (PM2.5)",
+      "pm10": "Particles (PM10)",
+      "o3": "Ozone (O3)",
+      "no2": "Nitrogen dioxide (NO2)",
+      "so2": "Sulfur dioxide (SO2)",
+      "co": "Carbon monoxide (CO)",
+      "nh3": "Ammonia (NH3)",
+      "no": "Nitric oxide (NO)",
+      "unclassified": "Unclassified pollutant"
+    },
+    "category": {
+      "good": "Good",
+      "fair": "Fair",
+      "moderate": "Moderate",
+      "satisfactory": "Satisfactory",
+      "poor": "Poor",
+      "veryPoor": "Very poor",
+      "extremelyPoor": "Extremely poor",
+      "unhealthySensitive": "Unhealthy for sensitive groups",
+      "unhealthy": "Unhealthy",
+      "veryUnhealthy": "Very unhealthy",
+      "hazardous": "Hazardous",
+      "severe": "Severe",
+      "unclassified": "Unclassified category"
+    },
+    "ukDaqi": {
+      "level1": "Low (1)",
+      "level2": "Low (2)",
+      "level3": "Low (3)",
+      "level4": "Moderate (4)",
+      "level5": "Moderate (5)",
+      "level6": "Moderate (6)",
+      "level7": "High (7)",
+      "level8": "High (8)",
+      "level9": "High (9)",
+      "level10": "Very high (10)"
+    },
+    "cn": {
+      "category": {
+        "excellent": "Excellent",
+        "good": "Good",
+        "lightlyPolluted": "Lightly polluted",
+        "moderatelyPolluted": "Moderately polluted",
+        "heavilyPolluted": "Heavily polluted",
+        "severelyPolluted": "Severely polluted"
+      }
+    },
+    "ca": {
+      "category": {
+        "lowRisk": "Low risk",
+        "moderateRisk": "Moderate risk",
+        "highRisk": "High risk",
+        "veryHighRisk": "Very high risk"
+      }
+    },
+    "provenance": {
+      "rawGround": "Raw ground measurement",
+      "rawModel": "Raw model concentration",
+      "rawHybrid": "Raw hybrid evidence",
+      "computedGround": "OpenMapX-computed index from ground measurements",
+      "computedModel": "OpenMapX-computed index from model evidence",
+      "computedHybrid": "OpenMapX-computed index from hybrid evidence",
+      "officialGround": "Official published index from ground monitoring",
+      "officialModel": "Official published model index",
+      "officialHybrid": "Official published hybrid index",
+      "publishedGround": "Provider-published index from ground monitoring",
+      "publishedModel": "Provider-published model index",
+      "publishedHybrid": "Provider-published hybrid index",
+      "unclassified": "Unclassified evidence provenance"
+    },
+    "quality": {
+      "regulatoryCertified": "Regulatory certified",
+      "qualityAssured": "Quality assured",
+      "preliminary": "Preliminary",
+      "estimated": "Estimated",
+      "unknown": "Quality status unknown",
+      "unclassified": "Quality status unclassified"
+    },
+    "freshness": {
+      "fresh": "Fresh",
+      "stale": "Stale",
+      "unknown": "Freshness unknown",
+      "unclassified": "Freshness unclassified"
+    },
+    "warning": {
+      "staleEvidence": "Some evidence is stale.",
+      "partialProviders": "Some providers are unavailable.",
+      "quotaTruncated": "The evidence set was limited by a quota or response bound.",
+      "policyExcluded": "A configured data source is excluded by policy.",
+      "duplicateConflict": "Conflicting duplicate evidence was omitted.",
+      "jurisdictionUnresolved": "The local air-quality jurisdiction could not be resolved.",
+      "jurisdictionHintMismatch": "The place hint did not match the resolved jurisdiction.",
+      "comparisonUnavailable": "The requested comparison is unavailable.",
+      "staleCache": "Cached evidence was used after a provider failure.",
+      "rasterAxisChanged": "The raster time axis changed while loading.",
+      "unclassified": "An unclassified air-quality warning was reported."
+    },
+    "requirement": {
+      "epaWindow": "A complete EPA pollutant window is required.",
+      "daqiWindow": "A complete DAQI pollutant window is required.",
+      "eeaStation": "The station and pollutant do not meet EEA qualification rules.",
+      "naqiPollutants": "NAQI requires at least three pollutants, including PM2.5 or PM10.",
+      "ecccPublished": "A community-published ECCC AQHI is required; OpenMapX does not calculate it locally.",
+      "coherentSeries": "Pollutant series must refer to one coherent place and time window.",
+      "hjEffectiveDate": "HJ 633-2026 applies in China from 1 March 2026.",
+      "hjDailyWindow": "A complete HJ 633-2026 daily pollutant value is required.",
+      "hjHourlyWindow": "A complete HJ 633-2026 one-hour pollutant value is required.",
+      "naqiOpenEnded": "The published NAQI severe band does not provide an exact upper interpolation breakpoint.",
+      "naqiRounding": "The published NAQI method does not state a rounding rule for this band gap.",
+      "unclassified": "Requirements for this standard were not met."
+    },
+    "comparison": {
+      "label": "Comparison standard",
+      "auto": "Auto (local standard)",
+      "heading": "Comparison",
+      "unavailable": "No qualifying comparison index is available."
+    },
+    "evidence": {
+      "heading": "Evidence and sources"
+    },
+    "forecast": {
+      "show": "Show 48-hour forecast",
+      "hide": "Hide 48-hour forecast",
+      "loading": "Loading forecast…",
+      "error": "The air-quality forecast could not be loaded.",
+      "frames": "Forecast frames"
+    },
+    "frame": {
+      "ok": "Available",
+      "partial": "Partial",
+      "unavailable": "Unavailable"
+    },
     "pm25Concentration": "PM2.5 concentration",
     "toggleOverlay": "Toggle air quality overlay",
     "microgramsPerCubicMeter": "µg/m³",

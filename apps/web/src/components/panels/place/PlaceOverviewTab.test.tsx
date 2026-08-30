@@ -1,5 +1,6 @@
 import type { Place } from "@openmapx/core";
-import { render } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "@/test/query";
 
@@ -13,6 +14,14 @@ vi.mock("@openmapx/mangrove-react", () => ({
 }));
 
 vi.mock("./PlacePhotoGallery", () => ({ PlacePhotoGallery: () => null }));
+
+const airQualityProps = vi.fn();
+vi.mock("./PlaceAirQuality", () => ({
+  PlaceAirQuality: (props: Record<string, unknown>) => {
+    airQualityProps(props);
+    return <div data-testid="place-air-quality">air-quality-content</div>;
+  },
+}));
 
 /** Captures exactly what the overview hands the contribution entry. */
 const entryProps = vi.fn();
@@ -49,6 +58,8 @@ const ENRICHED = {
   osmTags: { amenity: "cafe", name: "Different OSM Name", "addr:street": "Hauptstraße" },
   category: "cafe",
   description: "An enriched description from a knowledge provider.",
+  countryCode: "de",
+  airport: { isoRegion: "DE-BE" },
 } as unknown as Place;
 
 function renderOverview(place: Place) {
@@ -93,5 +104,46 @@ describe("OSM contribution entry placement", () => {
     renderOverview({ ...ENRICHED, ids: {} } as unknown as Place);
     const props = entryProps.mock.calls[0]?.[0] as Record<string, unknown>;
     expect(props.osmId).toBeUndefined();
+  });
+
+  it("mounts an independent collapsed air-quality row beside Weather with normalized hints", () => {
+    airQualityProps.mockClear();
+    renderOverview(ENRICHED);
+
+    const weather = screen.getByRole("button", { name: "currentWeather" });
+    const airQuality = screen.getByRole("button", { name: "section" });
+    expect(weather).toHaveAttribute("aria-expanded", "false");
+    expect(airQuality).toHaveAttribute("aria-expanded", "false");
+    expect(airQualityProps).not.toHaveBeenCalled();
+
+    fireEvent.click(weather);
+    expect(weather).toHaveAttribute("aria-expanded", "true");
+    expect(airQuality).toHaveAttribute("aria-expanded", "false");
+    expect(airQualityProps).not.toHaveBeenCalled();
+
+    fireEvent.click(airQuality);
+    expect(airQuality).toHaveAttribute("aria-expanded", "true");
+    expect(weather).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("place-air-quality")).toBeVisible();
+    expect(airQualityProps).toHaveBeenLastCalledWith({
+      lat: 52.5,
+      lng: 13.4,
+      enabled: true,
+      countryCode: "DE",
+      subdivisionCode: "DE-BE",
+    });
+  });
+
+  it("expands the air-quality disclosure from the keyboard", async () => {
+    const user = userEvent.setup();
+    airQualityProps.mockClear();
+    renderOverview(ENRICHED);
+
+    const airQuality = screen.getByRole("button", { name: "section" });
+    airQuality.focus();
+    await user.keyboard("{Enter}");
+
+    expect(airQuality).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByTestId("place-air-quality")).toBeVisible();
   });
 });

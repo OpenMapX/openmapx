@@ -22,8 +22,9 @@ the upstream forecast service. Providers see your server, not your visitors.
   speed and direction, cloud cover, and a condition icon for a point on the map.
 - **Forecast** — hourly (up to 168 hours) and daily (up to 16 days) outlooks for
   a location, exposed by the API for any feature that needs them.
-- **Air quality** — regional standards, raw pollutant evidence, forecasts, and
-  station coverage through the separate [air-quality platform](./air-quality.md).
+- **Air quality** — a separate, lazy place section and map overlay for regional
+  standards, raw pollutant evidence, forecasts, and station coverage. See the
+  [air-quality platform](./air-quality.md); it is not calculated by Weather.
 - **Marine and tides** — wave height, swell, sea state, and surface currents for
   coastal points, plus high/low tide times and water levels from regional gauge
   networks. These appear only where there's data, so inland places stay clean.
@@ -91,11 +92,12 @@ configured a key — without one, that provider isn't registered at all, and the
 chain skips straight past it.
 
 The `weather-open-meteo-air-quality` integration is retained under its historic
-ID but no longer belongs to the weather chain. It registers modeled CAMS
-evidence with the canonical air-quality orchestrator. Its old `/aqi` route is a
-deprecated compatibility endpoint; new consumers use the canonical current and
-forecast APIs so provenance, regional calculation status, and degraded states
-remain visible.
+ID only for configuration and migration compatibility; it no longer belongs to
+the weather chain. It registers modeled CAMS evidence with the canonical
+air-quality orchestrator. Its old `/aqi` route is a deprecated compatibility
+endpoint. The place experience and station map use the canonical air-quality
+APIs so provenance, regional calculation status, and degraded states remain
+visible.
 
 :::note[License notes]
 Open-Meteo's free tier is licensed for non-commercial use only — commercial

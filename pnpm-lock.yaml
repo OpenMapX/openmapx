@@ -2054,6 +2054,9 @@ importers:
       '@better-auth/passkey':
         specifier: 1.7.1
         version: 1.7.1(2ea764a4cfbd2402b471dbfc108920e1)
+      '@openmapx/air-quality':
+        specifier: workspace:*
+        version: link:../air-quality
       '@tanstack/react-query':
         specifier: ^5.102.5
         version: 5.102.5(react@19.2.8)
