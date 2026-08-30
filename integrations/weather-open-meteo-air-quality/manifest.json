@@ -2,10 +2,9 @@
   "id": "weather-open-meteo-air-quality",
   "version": "1.0.0",
   "author": "OpenMapX",
-  "license": "MIT",
+  "license": "AGPL-3.0-or-later",
   "documentation": "https://open-meteo.com/en/docs/air-quality-api",
-  "domains": ["weather"],
-  "dependencies": ["weather"],
+  "domains": ["air-quality"],
   "frontend": {
     "mapLayer": false,
     "legend": false,
@@ -23,21 +22,25 @@
       }
     }
   },
-  "healthCheck": {
-    "type": "http",
-    "url": "https://air-quality-api.open-meteo.com/v1/air-quality?latitude=0&longitude=0&current=european_aqi"
-  },
   "quality": "built-in",
-  "category": "Weather",
+  "category": "Data Overlays",
   "dataSources": [
     {
       "sourceId": "open-meteo-air-quality",
       "name": "Open-Meteo Air Quality",
       "url": "https://air-quality-api.open-meteo.com/",
+      "owner": "Open-Meteo and Copernicus Atmosphere Monitoring Service",
+      "termsUrl": "https://open-meteo.com/en/terms",
+      "methodologyUrl": "https://open-meteo.com/en/docs/air-quality-api",
+      "dataUseClass": "non-commercial",
+      "credentialOwner": "none",
+      "reviewedAt": "2026-08-30",
+      "apiHosts": ["air-quality-api.open-meteo.com"],
       "license": "CC BY 4.0 (free tier: non-commercial only)",
       "licenseUrl": "https://open-meteo.com/en/terms",
+      "attribution": "Open-Meteo and CAMS ENSEMBLE data providers",
       "commercialUse": "no",
-      "notes": "Open-Meteo's free tier is licensed for non-commercial use only; commercial use requires a paid Open-Meteo API plan.",
+      "notes": "CAMS model evidence redistributed through Open-Meteo. The free API is non-commercial; commercial deployments require an eligible Open-Meteo plan. Attribution to Open-Meteo and CAMS ENSEMBLE data providers is required.",
       "providerCountry": "CH",
       "providerPrivacyUrl": "https://open-meteo.com/en/terms",
       "endUserExposure": "server-only",

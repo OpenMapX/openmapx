@@ -559,6 +559,18 @@ importers:
         specifier: ^6.0.3
         version: 6.0.3
 
+  integrations/air-quality:
+    dependencies:
+      '@openmapx/air-quality':
+        specifier: workspace:^
+        version: link:../../packages/air-quality
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
   integrations/bike-sharing:
     dependencies:
       '@openmapx/core':
@@ -1886,12 +1898,15 @@ importers:
 
   integrations/weather-open-meteo-air-quality:
     dependencies:
-      '@openmapx/core':
+      '@openmapx/air-quality':
         specifier: workspace:^
-        version: link:../../packages/core
+        version: link:../../packages/air-quality
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
 
   integrations/weather-openweathermap:
     dependencies:

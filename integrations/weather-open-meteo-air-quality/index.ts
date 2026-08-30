@@ -1,114 +1,86 @@
-import { fetchJson } from "@openmapx/core";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  type AirQualityMetrics,
+  type IntegrationContext,
+  QueryValidationError,
+  runWithProviderDeadline,
+  scalarQuery,
+} from "@openmapx/integration-framework";
 
-const OPEN_METEO_AQ_BASE = "https://air-quality-api.open-meteo.com/v1/air-quality";
-const FETCH_TIMEOUT_MS = 10_000;
-const CACHE_TTL = 900; // 15 minutes
+import { createOpenMeteoAirQualityProvider, getOpenMeteoLegacyCurrent } from "./provider.js";
 
-interface OpenMeteoAirQualityCurrent {
-  time: string;
-  pm10: number | null;
-  pm2_5: number | null;
-  carbon_monoxide: number | null;
-  nitrogen_dioxide: number | null;
-  sulphur_dioxide: number | null;
-  ozone: number | null;
-  european_aqi: number | null;
-  us_aqi: number | null;
-}
-
-interface OpenMeteoAirQualityResponse {
-  latitude: number;
-  longitude: number;
-  current: OpenMeteoAirQualityCurrent;
-}
-
-interface AirQualityResult {
-  pm25: number | null;
-  pm10: number | null;
-  no2: number | null;
-  o3: number | null;
-  so2: number | null;
-  co: number | null;
-  europeanAqi: number | null;
-  usAqi: number | null;
-  time: string;
-}
-
-function roundCoord(n: number): number {
-  return Math.round(n * 100) / 100;
+function coordinate(query: Record<string, string | string[] | undefined>, key: "lat" | "lng") {
+  const raw = scalarQuery(query, key);
+  if (raw === undefined || raw.trim() === "") throw new QueryValidationError(key, "is required");
+  const value = Number(raw);
+  if (!Number.isFinite(value)) throw new QueryValidationError(key, "must be finite");
+  return value;
 }
 
 export function setup(ctx: IntegrationContext): void {
+  ctx.registerAirQualityProvider(createOpenMeteoAirQualityProvider(ctx));
+
   ctx.registerRoute("GET", "/aqi", async (req, reply) => {
-    const lat = Number.parseFloat(scalarQueries(req.query).lat);
-    const lng = Number.parseFloat(scalarQueries(req.query).lng);
-
-    if (Number.isNaN(lat) || Number.isNaN(lng)) {
-      reply.status(400).send({ message: "lat and lng query parameters are required" });
-      return;
-    }
-
-    if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
-      reply.status(400).send({ message: "lat must be -90..90, lng must be -180..180" });
-      return;
-    }
-
-    // Open-Meteo's free tier is non-commercial only; honour the operator's
-    // data-use policy here since this route returns an untagged object the
-    // per-item response filter can't reach.
-    const disallowed = await ctx.getDisallowedIntegrationIds?.();
-    if (disallowed?.has(ctx.id)) {
-      reply.status(204).send(null);
-      return;
-    }
-
-    const roundedLat = roundCoord(lat);
-    const roundedLng = roundCoord(lng);
-    const cacheKey = `aqi:${roundedLat},${roundedLng}`;
-
-    const cached = await ctx.cache.get<AirQualityResult>(cacheKey);
-    if (cached) {
-      reply.send(cached);
-      return;
-    }
-
+    reply.header("Deprecation", "true");
+    reply.header("Sunset", "Sun, 28 Feb 2027 00:00:00 GMT");
+    reply.header("Link", '</api/integrations/air-quality/current>; rel="successor-version"');
+    const startedAt = Date.now();
+    let metricOutcome: AirQualityMetrics["outcome"] = "error";
+    let metricRejection: AirQualityMetrics["rejectionCode"] = "none";
+    let evidenceCount = 0;
     try {
-      const url = `${OPEN_METEO_AQ_BASE}?latitude=${roundedLat}&longitude=${roundedLng}&current=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide,sulphur_dioxide,ozone,european_aqi,us_aqi`;
-
-      const data = await fetchJson<OpenMeteoAirQualityResponse>(url, {
-        timeoutMs: FETCH_TIMEOUT_MS,
-        nullOnError: true,
-      });
-
-      if (!data) {
-        ctx.log.warn("Open-Meteo AQ API request failed");
-        reply.status(502).send({ message: "Upstream air quality API error" });
+      const latitude = coordinate(req.query, "lat");
+      const longitude = coordinate(req.query, "lng");
+      if (latitude < -90 || latitude > 90 || longitude < -180 || longitude > 180) {
+        metricOutcome = "rejected";
+        metricRejection = "invalid-schema";
+        reply.status(400).send({ message: "lat must be -90..90, lng must be -180..180" });
         return;
       }
-
-      const result: AirQualityResult = {
-        pm25: data.current.pm2_5,
-        pm10: data.current.pm10,
-        no2: data.current.nitrogen_dioxide,
-        o3: data.current.ozone,
-        so2: data.current.sulphur_dioxide,
-        co: data.current.carbon_monoxide,
-        europeanAqi: data.current.european_aqi,
-        usAqi: data.current.us_aqi,
-        time: data.current.time,
-      };
-
-      await ctx.cache.set(cacheKey, result, CACHE_TTL);
+      const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
+      const disallowedIntegrations = await ctx.getDisallowedIntegrationIds?.();
+      if (disallowed.has("open-meteo-air-quality") || disallowedIntegrations?.has(ctx.id)) {
+        metricOutcome = "rejected";
+        metricRejection = "policy";
+        reply
+          .status(503)
+          .send({ message: "Open-Meteo air quality is disabled by data-use policy" });
+        return;
+      }
+      const result = await runWithProviderDeadline(
+        (call) =>
+          getOpenMeteoLegacyCurrent(
+            ctx,
+            { latitude, longitude, evaluatedAt: new Date().toISOString() },
+            call,
+          ),
+        { signal: req.signal, timeoutMs: 3_000 },
+      );
+      metricOutcome = "ok";
+      evidenceCount = 1;
       reply.send(result);
-    } catch (err) {
-      if (err instanceof DOMException && err.name === "AbortError") {
-        ctx.log.warn("Open-Meteo AQ API request timed out");
-        reply.status(504).send({ message: "Upstream air quality API timeout" });
+    } catch (error) {
+      if (error instanceof QueryValidationError) {
+        metricOutcome = "rejected";
+        metricRejection = "invalid-schema";
+        reply.status(400).send({ message: "lat and lng query parameters are required" });
         return;
       }
-      ctx.log.error(`Open-Meteo AQ API fetch failed: ${err}`);
-      reply.status(502).send({ message: "Failed to fetch air quality data" });
+      ctx.log.warn(
+        `Open-Meteo air-quality compatibility request failed: ${error instanceof Error ? error.message : "unknown error"}`,
+      );
+      reply.status(502).send({ message: "Upstream air quality API error" });
+    } finally {
+      ctx.metricsRecorder?.recordAirQuality?.({
+        method: "current",
+        outcome: metricOutcome,
+        cacheResult: "bypass",
+        headlineClass: evidenceCount > 0 ? "model" : "none",
+        rejectionCode: metricRejection,
+        compatibilityUse: "legacy-open-meteo",
+        quotaTruncated: false,
+        evidenceCount,
+        latencyMs: Date.now() - startedAt,
+      });
     }
   });
 }

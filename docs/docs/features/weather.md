@@ -22,8 +22,8 @@ the upstream forecast service. Providers see your server, not your visitors.
   speed and direction, cloud cover, and a condition icon for a point on the map.
 - **Forecast** — hourly (up to 168 hours) and daily (up to 16 days) outlooks for
   a location, exposed by the API for any feature that needs them.
-- **Air quality** — particulate, gas, and AQI readings (European and US scales)
-  from a dedicated air-quality endpoint.
+- **Air quality** — regional standards, raw pollutant evidence, forecasts, and
+  station coverage through the separate [air-quality platform](./air-quality.md).
 - **Marine and tides** — wave height, swell, sea state, and surface currents for
   coastal points, plus high/low tide times and water levels from regional gauge
   networks. These appear only where there's data, so inland places stay clean.
@@ -74,8 +74,8 @@ repeat views are cheap.
 
 ### Forecast providers
 
-OpenMapX ships five weather integrations. Four are forecast providers in the
-chain; the fifth supplies air quality through its own route.
+OpenMapX ships four weather forecast providers. Air quality is a separate
+evidence platform and provider domain.
 
 | Provider | Integration | Upstream | Coverage | API key | Priority |
 | --- | --- | --- | --- | --- | :-: |
@@ -83,7 +83,6 @@ chain; the fifth supplies air quality through its own route.
 | **OpenWeather** | `weather-openweathermap` | OpenWeatherMap | Global | **Yes** | 5 |
 | **MET Norway** | `weather-met-norway` | MET Norway Locationforecast | Global | No | 8 |
 | **Open-Meteo** | `weather-open-meteo` | Open-Meteo | Global | No | 10 |
-| **Air quality** | `weather-open-meteo-air-quality` | Open-Meteo Air Quality | Global | No | — |
 
 Lower priority numbers are tried first. With the defaults, a point in Germany is
 answered by Bright Sky; everywhere else falls to MET Norway, and Open-Meteo is
@@ -91,10 +90,12 @@ the last-resort global fallback. OpenWeather slots in between when you've
 configured a key — without one, that provider isn't registered at all, and the
 chain skips straight past it.
 
-The air-quality integration isn't part of the forecast chain. It registers a
-separate endpoint that returns particulate matter, nitrogen dioxide, ozone,
-sulphur dioxide, carbon monoxide, and both the European and US AQI for a point,
-sourced from Open-Meteo's air-quality model.
+The `weather-open-meteo-air-quality` integration is retained under its historic
+ID but no longer belongs to the weather chain. It registers modeled CAMS
+evidence with the canonical air-quality orchestrator. Its old `/aqi` route is a
+deprecated compatibility endpoint; new consumers use the canonical current and
+forecast APIs so provenance, regional calculation status, and degraded states
+remain visible.
 
 :::note[License notes]
 Open-Meteo's free tier is licensed for non-commercial use only — commercial

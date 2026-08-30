@@ -1,13 +1,20 @@
 import { createHash } from "node:crypto";
 import { mkdtemp, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import type { Feature, FeatureCollection, Geometry } from "geojson";
-import * as shapefile from "shapefile";
 
 import { JURISDICTION_BOUNDARY_ALIASES, JURISDICTION_PROGRAMS } from "./registry";
+
+// shapefile is CommonJS and does not publish declarations. Keeping its narrow
+// runtime boundary here also lets consumers compile this generator without
+// relying on the package-local ambient declaration being in their TS program.
+const shapefile = createRequire(import.meta.url)("shapefile") as {
+  read(path: string): Promise<FeatureCollection<Geometry, SourceFeatureProperties>>;
+};
 
 export interface SourceFeatureProperties {
   [key: string]: unknown;

@@ -2167,6 +2167,57 @@
         "x-openmapx-auth": "public"
       }
     },
+    "/api/integrations/air-quality/current": {
+      "get": {
+        "operationId": "getApiIntegrationsAirQualityCurrent",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /current (air-quality)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "air-quality",
+        "x-openmapx-source": "integrations/air-quality/index.ts"
+      }
+    },
+    "/api/integrations/air-quality/forecast": {
+      "get": {
+        "operationId": "getApiIntegrationsAirQualityForecast",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /forecast (air-quality)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "air-quality",
+        "x-openmapx-source": "integrations/air-quality/index.ts"
+      }
+    },
+    "/api/integrations/air-quality/stations": {
+      "get": {
+        "operationId": "getApiIntegrationsAirQualityStations",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /stations (air-quality)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "air-quality",
+        "x-openmapx-source": "integrations/air-quality/index.ts"
+      }
+    },
     "/api/integrations/crowd-reports/enroll": {
       "post": {
         "operationId": "postApiIntegrationsCrowdReportsEnroll",

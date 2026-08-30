@@ -118,3 +118,50 @@ pnpm -C packages/air-quality generate:jurisdiction -- --admin0 /path/ne_10m_admi
 ```
 
 Review the generated feature counts and artifact checksum. Regeneration is a reviewed data change, not a dependency-update side effect.
+
+## Canonical orchestration boundary
+
+The built-in `integrations/air-quality` module owns `/current`, `/forecast`, and
+`/stations`. It discovers enabled `air-quality` registrations on every request,
+so activation and hot reload do not leave a captured provider list. It evaluates
+source policy and health before invoking a provider, dispatches eligible
+siblings concurrently, and isolates timeout, quota, authentication, transport,
+empty, and malformed-payload outcomes.
+
+Current and station providers have an effective three-second deadline; forecast
+providers have four seconds; the parent request stops provider work at five
+seconds. A provider is capped at four current evidence objects or 120 forecast
+intervals. Canonical envelopes are capped at 32 current or 1,024 forecast
+evidence objects and two MiB. Truncation removes whole evidence/features and is
+reported; it never slices provenance fields.
+
+Normalization is the trust boundary. Provider payloads are strict runtime
+schemas, source IDs must have matching attribution and origin records, time and
+spatial identities must cohere, and official published-standard claims pass the
+registered adapter's validator. Unknown provider-native methods remain visible
+with `standardId: null` and can never win the local-standard sort.
+
+Point response caches bind a non-rendering coordinate digest, resolved standard
+revision, comparison request, provider generation, policy exclusions, and
+health suppression. Serving stale-if-error preserves the evidence timestamps
+and adds `stale_cache`; it does not relabel old evidence as newly observed.
+Station pagination stores an ordered, projected snapshot for five minutes in
+the distributed runtime (maximum 2,000 features/eight MiB). Signed cursors hold
+only snapshot ID, query hash, schema revision, and offset.
+
+## Open-Meteo modeled evidence
+
+`weather-open-meteo-air-quality` now registers a global modeled provider rather
+than a weather-domain dependency. It requests bounded current/hourly fields via
+the framework HTTP client and preserves the returned CAMS grid coordinate,
+hourly cadence, near-surface level, UTC/time-zone metadata, model basis, and
+Open-Meteo/CAMS attribution. Current cache windows are 15 minutes/one hour/three
+hours (soft/hard/stale-if-error); forecast windows are 30 minutes/two hours/six
+hours.
+
+The upstream `european_aqi` and `us_aqi` fields are retained as published
+methods `open-meteo-european-aqi` and `open-meteo-us-aqi`, revision
+`open-meteo-air-quality-v1`, with both standard fields null. Their names are not
+proof of conformance with OpenMapX's reviewed EEA and EPA adapters. Regional
+indices are independently computed only when the returned pollutant windows
+meet those adapters' requirements.

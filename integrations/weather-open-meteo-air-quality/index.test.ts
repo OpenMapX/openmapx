@@ -1,69 +1,40 @@
 import type { RouteHandler } from "@openmapx/integration-framework";
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createMockIntegrationContext,
+  fakeHttpClient,
+  type MockIntegrationContext,
+} from "@openmapx/integration-framework/testing";
+import { describe, expect, it } from "vitest";
+
 import { setup } from "./index.js";
 
-// The /aqi route pulls Open-Meteo's `current` block and renames each pollutant
-// to the app's camelCase field (pm2_5 → pm25, nitrogen_dioxide → no2, …),
-// passing the European/US AQI indices through unchanged. These tests pin that
-// remap, null passthrough, the coordinate validation branches, and the upstream
-// error handling.
-
-interface FakeReply {
-  send: (p: unknown) => FakeReply;
-  status: (n: number) => FakeReply;
-  header: (k: string, v: string) => FakeReply;
-  type: (c: string) => FakeReply;
-  payload: unknown;
-  statusCode: number;
-}
-
-function makeReply(): FakeReply {
-  const reply: FakeReply = {
-    payload: undefined,
-    statusCode: 200,
-    send(p) {
-      reply.payload = p;
-      return reply;
-    },
-    status(n) {
-      reply.statusCode = n;
-      return reply;
-    },
-    header() {
-      return reply;
-    },
-    type() {
-      return reply;
-    },
+function body() {
+  const units = {
+    time: "iso8601",
+    interval: "seconds",
+    pm10: "μg/m³",
+    pm2_5: "μg/m³",
+    carbon_monoxide: "μg/m³",
+    nitrogen_dioxide: "μg/m³",
+    sulphur_dioxide: "μg/m³",
+    ozone: "μg/m³",
+    european_aqi: "EAQI",
+    us_aqi: "USAQI",
   };
-  return reply;
-}
-
-function mockOk(data: unknown) {
-  return Response.json(data);
-}
-
-function getHandler(): RouteHandler {
-  const ctx = createMockIntegrationContext();
-  setup(ctx);
-  const route = ctx.registered.routes.find((r) => r.path === "/aqi");
-  if (!route) throw new Error("/aqi route was not registered");
-  return route.handler;
-}
-
-async function invoke(query: Record<string, string>): Promise<FakeReply> {
-  const reply = makeReply();
-  await getHandler()({ query, params: {}, body: undefined, headers: {} }, reply);
-  return reply;
-}
-
-function apiBody() {
+  const time = Array.from({ length: 25 }, (_, index) =>
+    new Date(Date.parse("2026-08-29T12:00:00Z") + index * 3_600_000).toISOString().slice(0, 16),
+  );
+  const values = time.map(() => 10);
   return {
-    latitude: 52.52,
-    longitude: 13.4,
+    latitude: 52.5,
+    longitude: 13.375,
+    utc_offset_seconds: 0,
+    timezone: "GMT",
+    timezone_abbreviation: "GMT",
+    current_units: units,
     current: {
-      time: "2026-06-14T12:00",
+      time: "2026-08-30T12:00",
+      interval: 3_600,
       pm10: 18.4,
       pm2_5: 9.7,
       carbon_monoxide: 142,
@@ -73,29 +44,65 @@ function apiBody() {
       european_aqi: 31,
       us_aqi: 42,
     },
+    hourly_units: units,
+    hourly: {
+      time,
+      pm10: values,
+      pm2_5: values,
+      carbon_monoxide: values,
+      nitrogen_dioxide: values,
+      sulphur_dioxide: values,
+      ozone: values,
+      european_aqi: values,
+      us_aqi: values,
+    },
   };
 }
 
-let mockFetch: ReturnType<typeof vi.fn>;
+function reply() {
+  const state: {
+    statusCode: number;
+    payload: unknown;
+    headers: Record<string, string>;
+  } = { statusCode: 200, payload: undefined, headers: {} };
+  return {
+    state,
+    send(data: unknown) {
+      state.payload = data;
+    },
+    status(code: number) {
+      state.statusCode = code;
+      return { send: (data: unknown) => (state.payload = data) };
+    },
+    header(name: string, value: string) {
+      state.headers[name] = value;
+    },
+    type() {},
+  };
+}
 
-beforeEach(() => {
-  mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-});
+function context(): MockIntegrationContext {
+  return createMockIntegrationContext({
+    id: "weather-open-meteo-air-quality",
+    http: fakeHttpClient({ "air-quality": body() }),
+  });
+}
 
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
+async function invoke(ctx: MockIntegrationContext, query: Record<string, string>) {
+  setup(ctx);
+  const handler = ctx.registered.routes.find(({ path }) => path === "/aqi")
+    ?.handler as RouteHandler;
+  const output = reply();
+  await handler({ query, params: {}, body: undefined, headers: {} }, output);
+  return output.state;
+}
 
-describe("GET /aqi air-quality route", () => {
-  it("renames pollutant fields and passes the AQI indices and units through", async () => {
-    mockFetch.mockResolvedValueOnce(mockOk(apiBody()));
-
-    const reply = await invoke({ lat: "52.52", lng: "13.4" });
-
-    expect(reply.statusCode).toBe(200);
-    expect(reply.payload).toEqual({
+describe("legacy Open-Meteo AQI compatibility route", () => {
+  it("preserves the exact legacy body and advertises the canonical successor", async () => {
+    const ctx = context();
+    const result = await invoke(ctx, { lat: "52.52", lng: "13.4" });
+    expect(result.statusCode).toBe(200);
+    expect(result.payload).toEqual({
       pm25: 9.7,
       pm10: 18.4,
       no2: 12.5,
@@ -104,53 +111,44 @@ describe("GET /aqi air-quality route", () => {
       co: 142,
       europeanAqi: 31,
       usAqi: 42,
-      time: "2026-06-14T12:00",
+      time: "2026-08-30T12:00",
+    });
+    expect(result.headers).toMatchObject({
+      Deprecation: "true",
+      Sunset: "Sun, 28 Feb 2027 00:00:00 GMT",
+      Link: '</api/integrations/air-quality/current>; rel="successor-version"',
+    });
+    expect(ctx.registered.airQuality).toHaveLength(1);
+  });
+
+  it("returns the intentional policy migration response instead of 204", async () => {
+    const ctx = context();
+    Object.assign(ctx, {
+      getDisallowedSourceIds: async () => new Set(["open-meteo-air-quality"]),
+    });
+    const result = await invoke(ctx, { lat: "52.52", lng: "13.4" });
+    expect(result).toMatchObject({
+      statusCode: 503,
+      payload: { message: "Open-Meteo air quality is disabled by data-use policy" },
     });
   });
 
-  it("requests the current pollutant + AQI fields at rounded coordinates", async () => {
-    mockFetch.mockResolvedValueOnce(mockOk(apiBody()));
-
-    await invoke({ lat: "52.5234", lng: "13.4012" });
-
-    const url = String(mockFetch.mock.calls[0]?.[0]);
-    expect(url).toContain("latitude=52.52&longitude=13.4");
-    expect(url).toContain("current=pm10,pm2_5,carbon_monoxide,nitrogen_dioxide");
-    expect(url).toContain("european_aqi,us_aqi");
-  });
-
-  it("passes null pollutant readings through unchanged", async () => {
-    const body = apiBody();
-    body.current.pm2_5 = null as unknown as number;
-    body.current.european_aqi = null as unknown as number;
-    mockFetch.mockResolvedValueOnce(mockOk(body));
-
-    const reply = await invoke({ lat: "52.52", lng: "13.4" });
-
-    expect(reply.payload).toMatchObject({ pm25: null, europeanAqi: null });
-  });
-
-  it("400s on non-numeric coordinates without calling upstream", async () => {
-    const reply = await invoke({ lat: "x", lng: "13.4" });
-
-    expect(reply.statusCode).toBe(400);
-    expect(reply.payload).toEqual({ message: "lat and lng query parameters are required" });
-    expect(mockFetch).not.toHaveBeenCalled();
-  });
-
-  it("400s on out-of-range coordinates", async () => {
-    const reply = await invoke({ lat: "120", lng: "13.4" });
-
-    expect(reply.statusCode).toBe(400);
-    expect(reply.payload).toEqual({ message: "lat must be -90..90, lng must be -180..180" });
-  });
-
-  it("502s when the upstream returns a non-OK HTTP status", async () => {
-    mockFetch.mockResolvedValueOnce({ ok: false, status: 500 } as Response);
-
-    const reply = await invoke({ lat: "52.52", lng: "13.4" });
-
-    expect(reply.statusCode).toBe(502);
-    expect(reply.payload).toEqual({ message: "Upstream air quality API error" });
+  it("keeps legacy validation and upstream failure shapes", async () => {
+    const invalid = await invoke(context(), { lat: "x", lng: "13.4" });
+    expect(invalid).toMatchObject({
+      statusCode: 400,
+      payload: { message: "lat and lng query parameters are required" },
+    });
+    const ctx = createMockIntegrationContext({
+      id: "weather-open-meteo-air-quality",
+      http: fakeHttpClient({
+        "air-quality": { status: 500, headers: {}, body: { error: true } },
+      }),
+    });
+    const failed = await invoke(ctx, { lat: "52.52", lng: "13.4" });
+    expect(failed).toMatchObject({
+      statusCode: 502,
+      payload: { message: "Upstream air quality API error" },
+    });
   });
 });

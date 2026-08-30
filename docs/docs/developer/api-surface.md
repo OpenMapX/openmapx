@@ -191,3 +191,43 @@ does not replace the mutation guard.
 Regenerate and read the diff before committing it. If the diff shows a change
 you did not intend — a route you did not think you touched, or an auth level
 moving to something weaker — that is the gate doing its job.
+
+## Canonical air-quality routes
+
+The built-in `air-quality` integration owns three public, expensive-tier routes.
+They return `Cache-Control: private, max-age=0`; provider and distributed caches
+reduce upstream work without turning location-specific responses into shared
+browser-cache entries.
+
+| Route | Required query | Optional query | Bounds |
+| --- | --- | --- | --- |
+| `GET /api/integrations/air-quality/current` | `lat`, `lng` | `countryCode`, `subdivisionCode`, `comparisonStandard` | WGS84 coordinates; uppercase ISO hints |
+| `GET /api/integrations/air-quality/forecast` | `lat`, `lng` | current options plus `hours` | `hours` defaults to 48 and is 1–120 |
+| `GET /api/integrations/air-quality/stations` | `south`, `west`, `north`, `east` | `zoom`, `pollutant`, `limit`, `cursor` | viewport at most 20° latitude × 30° longitude; antimeridian supported; zoom 0–22; limit 1–500 |
+
+Every scalar key may occur once. Invalid/repeated values return HTTP 400 with
+`{ code: "INVALID_QUERY", message, details? }`. A valid request with no evidence
+is HTTP 200 with `status: "unavailable"`, never 204. `partial` means useful
+evidence was returned while a provider, comparison, freshness, policy, or size
+condition degraded the result.
+
+Current responses name `primaryEvidenceId` independently from
+`primaryIndexId`. Raw fallback deliberately sets the evidence ID and leaves the
+index ID null. A requested comparison standard is secondary and cannot replace
+the standard resolved from the location. Forecasts return a bounded evidence
+table, stable provider series, and validity-start frames; categories are never
+interpolated. Stations are GeoJSON Points, thinned deterministically to one
+winner per zoom-derived Web Mercator cell.
+
+Station cursors are signed, purpose- and query-bound references into an
+immutable five-minute snapshot. They do not contain station data. Tampered or
+cross-query cursors are HTTP 400; an expired snapshot/cursor or changed source
+policy is HTTP 409 `CURSOR_EXPIRED`. Non-2xx canonical responses use only the
+closed codes `INVALID_QUERY`, `DOMAIN_DISABLED`, `CURSOR_EXPIRED`,
+`FRAME_UNAVAILABLE`, `UPSTREAM_INVALID_RESPONSE`, and
+`NORMALIZED_RESPONSE_TOO_LARGE`.
+
+The deprecated `GET /api/integrations/weather-open-meteo-air-quality/aqi`
+route preserves its nine-field body. It now advertises `Deprecation`, `Sunset`,
+and a canonical successor `Link`. Source-policy exclusion is intentionally HTTP
+503 with exactly `{ "message": "Open-Meteo air quality is disabled by data-use policy" }`.

@@ -1,0 +1,28 @@
+{
+  "id": "air-quality",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "documentation": "https://openmapx.de/docs/features/air-quality",
+  "domains": ["air-quality", "map-overlay"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "dataSources": []
+}
