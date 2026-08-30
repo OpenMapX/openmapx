@@ -45,6 +45,28 @@ export interface SemanticCaseOutcome {
   policyCorrect: boolean;
 }
 
+export interface SemanticConfusionCell {
+  expected: string;
+  predicted: string;
+  count: number;
+}
+
+export interface SemanticCorpusSummary {
+  generatedSmoke: {
+    total: number;
+    byLanguage: Record<"en" | "de", number>;
+  };
+  authored: {
+    total: number;
+    bySplit: Record<"development" | "test", number>;
+    byLanguage: Record<"en" | "de", number>;
+    byKind: Record<SemanticTaxonomyCaseV1["strata"]["kind"], number>;
+    byExpectedStatus: Record<"category" | "abstain", number>;
+    p0: number;
+    byCategoryFamily: Record<string, number>;
+  };
+}
+
 export interface SemanticResidencySummary {
   valid: boolean;
   evidenceChecksum: string;
@@ -57,9 +79,12 @@ export interface SemanticResidencySummary {
 
 export interface SemanticEvaluationReport {
   calibration: SemanticCalibration;
+  corpus: SemanticCorpusSummary;
   directLabel: MetricSlice;
+  directLabelMissIds: readonly string[];
   heldoutTopOne: MetricSlice & { byLanguage: Record<"en" | "de", MetricSlice> };
   macroCategoryFamilyAccuracy: number;
+  macroCategoryFamilyAccuracyByLanguage: Record<"en" | "de", number>;
   negatives: {
     total: number;
     activations: number;
@@ -75,15 +100,21 @@ export interface SemanticEvaluationReport {
     available: boolean;
     failedCases: number;
     plausibleCases: number;
+    coverage: MetricSlice;
+    plausibleUnchangedCases: number;
     plausibleMutationCount: number;
     incrementalRecovery: MetricSlice;
   };
   latency: {
+    warmQueryEmbeddingP50Ms: number;
     warmQueryEmbeddingP95Ms: number;
+    warmQueryEmbeddingP99Ms: number;
     bypassP95ByStratum: Record<string, number>;
     worstBypassP95Ms: number;
   };
   residency?: SemanticResidencySummary;
+  confusionMatrix: readonly SemanticConfusionCell[];
+  policyOutcomeCounts: Readonly<Record<string, number>>;
   outcomes: readonly SemanticCaseOutcome[];
 }
 
@@ -129,10 +160,10 @@ function precision(correct: number, accepted: number): number | null {
   return accepted === 0 ? null : correct / accepted;
 }
 
-function percentile95(values: readonly number[]): number {
+function percentile(values: readonly number[], quantile: number): number {
   if (values.length === 0) return Number.POSITIVE_INFINITY;
   const sorted = [...values].sort((left, right) => left - right);
-  return sorted[Math.ceil(sorted.length * 0.95) - 1] ?? Number.POSITIVE_INFINITY;
+  return sorted[Math.ceil(sorted.length * quantile) - 1] ?? Number.POSITIVE_INFINITY;
 }
 
 interface PolicySummary {
@@ -140,6 +171,7 @@ interface PolicySummary {
   categoryId?: string;
   correct: boolean;
   intent: SearchIntent;
+  outcomeKey: string;
 }
 
 function applyPolicy(
@@ -166,6 +198,7 @@ function applyPolicy(
     categoryId,
     correct: decision.applied && categoryId !== undefined && acceptable(item.testCase, categoryId),
     intent: decision.intent,
+    outcomeKey: decision.outcome.status === "matched" ? "matched" : decision.outcome.reason,
   };
 }
 
@@ -308,6 +341,74 @@ function metricSlice(items: readonly EvaluatedCase[], predicate: (item: Evaluate
   return { total: items.length, correct, rate: rate(correct, items.length) };
 }
 
+function countBy<T extends string>(values: readonly T[]): Record<T, number> {
+  const counts = {} as Record<T, number>;
+  for (const value of values) counts[value] = (counts[value] ?? 0) + 1;
+  return counts;
+}
+
+function macroFamilyAccuracy(items: readonly EvaluatedCase[]): number {
+  const familySlices = new Map<string, EvaluatedCase[]>();
+  for (const item of items) {
+    const family = item.testCase.strata.categoryFamily;
+    familySlices.set(family, [...(familySlices.get(family) ?? []), item]);
+  }
+  return rate(
+    [...familySlices.values()].reduce(
+      (sum, familyItems) =>
+        sum +
+        metricSlice(familyItems, (item) => acceptable(item.testCase, item.score.top.categoryId))
+          .rate,
+      0,
+    ),
+    familySlices.size,
+  );
+}
+
+function corpusSummary(
+  cases: readonly EvaluatedCase[],
+  directIds: ReadonlySet<string>,
+): SemanticCorpusSummary {
+  const generatedSmoke = cases.filter(({ testCase }) => directIds.has(testCase.id));
+  const authored = cases.filter(({ testCase }) => !directIds.has(testCase.id));
+  const byKind: SemanticCorpusSummary["authored"]["byKind"] = {
+    direct: 0,
+    paraphrase: 0,
+    "semantic-only": 0,
+    structured: 0,
+    negative: 0,
+  };
+  for (const { testCase } of authored) byKind[testCase.strata.kind]++;
+  const byCategoryFamily = countBy(authored.map(({ testCase }) => testCase.strata.categoryFamily));
+  return {
+    generatedSmoke: {
+      total: generatedSmoke.length,
+      byLanguage: {
+        en: generatedSmoke.filter(({ testCase }) => testCase.lang === "en").length,
+        de: generatedSmoke.filter(({ testCase }) => testCase.lang === "de").length,
+      },
+    },
+    authored: {
+      total: authored.length,
+      bySplit: {
+        development: authored.filter(({ testCase }) => testCase.split === "development").length,
+        test: authored.filter(({ testCase }) => testCase.split === "test").length,
+      },
+      byLanguage: {
+        en: authored.filter(({ testCase }) => testCase.lang === "en").length,
+        de: authored.filter(({ testCase }) => testCase.lang === "de").length,
+      },
+      byKind,
+      byExpectedStatus: {
+        category: authored.filter(({ testCase }) => testCase.expected.status === "category").length,
+        abstain: authored.filter(({ testCase }) => testCase.expected.status === "abstain").length,
+      },
+      p0: authored.filter(({ testCase }) => testCase.strata.p0).length,
+      byCategoryFamily,
+    },
+  };
+}
+
 export function evaluateWithCalibration(
   cases: readonly EvaluatedCase[],
   selected: SemanticCalibration,
@@ -329,15 +430,13 @@ export function evaluateWithCalibration(
       return [lang, metricSlice(items, rawCorrect)];
     }),
   ) as Record<"en" | "de", MetricSlice>;
-  const familySlices = new Map<string, EvaluatedCase[]>();
-  for (const item of positives) {
-    const family = item.testCase.strata.categoryFamily;
-    familySlices.set(family, [...(familySlices.get(family) ?? []), item]);
-  }
-  const macroCategoryFamilyAccuracy = rate(
-    [...familySlices.values()].reduce((sum, items) => sum + metricSlice(items, rawCorrect).rate, 0),
-    familySlices.size,
-  );
+  const macroCategoryFamilyAccuracy = macroFamilyAccuracy(positives);
+  const macroCategoryFamilyAccuracyByLanguage = Object.fromEntries(
+    (["en", "de"] as const).map((lang) => [
+      lang,
+      macroFamilyAccuracy(positives.filter(({ testCase }) => testCase.lang === lang)),
+    ]),
+  ) as Record<"en" | "de", number>;
   const acceptedSlices = Object.fromEntries(
     (["en", "de"] as const).map((lang) => {
       const items = positives.filter(({ testCase }) => testCase.lang === lang);
@@ -390,6 +489,26 @@ export function evaluateWithCalibration(
     return result.correct;
   });
 
+  const confusion = new Map<string, SemanticConfusionCell>();
+  for (const item of heldout) {
+    const expected =
+      item.testCase.expected.status === "category"
+        ? item.testCase.expected.acceptableCategoryIds.join("|")
+        : `abstain:${item.testCase.expected.reasonFamily}`;
+    const predicted = item.score.top.categoryId;
+    const key = `${expected}\u0000${predicted}`;
+    const cell = confusion.get(key) ?? { expected, predicted, count: 0 };
+    cell.count++;
+    confusion.set(key, cell);
+  }
+  const confusionMatrix = [...confusion.values()].sort(
+    (left, right) =>
+      left.expected.localeCompare(right.expected) || left.predicted.localeCompare(right.predicted),
+  );
+  const policyOutcomeCounts = countBy(
+    heldout.map((item) => (policy.get(item.testCase.id) as PolicySummary).outcomeKey),
+  );
+
   const outcomes = heldout.map((item): SemanticCaseOutcome => {
     const result = policy.get(item.testCase.id) as PolicySummary;
     return {
@@ -405,9 +524,14 @@ export function evaluateWithCalibration(
 
   return {
     calibration: selected,
+    corpus: corpusSummary(cases, directIds),
     directLabel: metricSlice(direct, rawCorrect),
+    directLabelMissIds: direct
+      .filter((item) => !rawCorrect(item))
+      .map(({ testCase }) => testCase.id),
     heldoutTopOne: { ...metricSlice(positives, rawCorrect), byLanguage },
     macroCategoryFamilyAccuracy,
+    macroCategoryFamilyAccuracyByLanguage,
     negatives: {
       total: negatives.length,
       activations: negativeActivations,
@@ -434,6 +558,12 @@ export function evaluateWithCalibration(
       available: withParser.length === heldout.length && heldout.length > 0,
       failedCases: withParser.filter(({ parserBaselineFailed }) => parserBaselineFailed).length,
       plausibleCases: parserPlausible.length,
+      coverage: {
+        total: withParser.length,
+        correct: parserPlausible.length,
+        rate: rate(parserPlausible.length, withParser.length),
+      },
+      plausibleUnchangedCases: parserPlausible.length - parserMutationCount,
       plausibleMutationCount: parserMutationCount,
       incrementalRecovery: {
         total: parserMisses.length,
@@ -442,10 +572,23 @@ export function evaluateWithCalibration(
       },
     },
     latency: {
-      warmQueryEmbeddingP95Ms: percentile95(heldout.map(({ latencyMs }) => latencyMs)),
+      warmQueryEmbeddingP50Ms: percentile(
+        heldout.map(({ latencyMs }) => latencyMs),
+        0.5,
+      ),
+      warmQueryEmbeddingP95Ms: percentile(
+        heldout.map(({ latencyMs }) => latencyMs),
+        0.95,
+      ),
+      warmQueryEmbeddingP99Ms: percentile(
+        heldout.map(({ latencyMs }) => latencyMs),
+        0.99,
+      ),
       bypassP95ByStratum: {},
       worstBypassP95Ms: Number.POSITIVE_INFINITY,
     },
+    confusionMatrix,
+    policyOutcomeCounts,
     outcomes,
   };
 }

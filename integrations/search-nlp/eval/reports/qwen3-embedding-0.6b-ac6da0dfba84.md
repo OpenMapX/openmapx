@@ -7,10 +7,94 @@
 - Resolution policy: 1
 - Behavior checksum: `d76062111eafdccf1e5ccbb4a79178e808ee859985dc7e2e853d6949bbb0a042`
 - Catalog checksum: `7daf63059444204a60ad077a6f200964c3d39164be7218d2754614b243e9152f`
-- Minimum score: 0.5791104718902661
-- Minimum margin: 0.13513005083795082
+- Minimum score: 0.5812382139084729
+- Minimum margin: 0.1344769661146084
 - Parser baseline: `gemma3:4b-it-qat`
 - Reference: Apple M1 Pro (10-core), 16 GB RAM
+
+## Corpus counts
+
+| Slice | Count |
+| --- | ---: |
+| Generated direct-label smoke | 104 |
+| Generated smoke English | 52 |
+| Generated smoke German | 52 |
+| Authored total | 328 |
+| Authored development | 228 |
+| Authored held-out | 100 |
+| Authored English | 163 |
+| Authored German | 165 |
+| Authored positives | 208 |
+| Authored abstentions | 120 |
+| Authored P0 | 80 |
+
+### Authored strata
+
+| Stratum | Count |
+| --- | ---: |
+| kind:direct | 0 |
+| kind:paraphrase | 0 |
+| kind:semantic-only | 104 |
+| kind:structured | 104 |
+| kind:negative | 120 |
+| category-family:activities | 4 |
+| category-family:aeds | 4 |
+| category-family:airports | 4 |
+| category-family:ambulance_stations | 4 |
+| category-family:atms | 4 |
+| category-family:bakeries | 4 |
+| category-family:banks | 4 |
+| category-family:bars | 4 |
+| category-family:beaches | 4 |
+| category-family:bicycle_rental | 4 |
+| category-family:blood_donation | 4 |
+| category-family:bookstores | 4 |
+| category-family:cafes | 4 |
+| category-family:camping | 4 |
+| category-family:car_rental | 4 |
+| category-family:car_repair | 4 |
+| category-family:churches | 4 |
+| category-family:cinemas | 4 |
+| category-family:dentists | 4 |
+| category-family:doctors | 4 |
+| category-family:dog_parks | 4 |
+| category-family:drinking_water | 4 |
+| category-family:fire_stations | 4 |
+| category-family:gyms | 4 |
+| category-family:hairdressers | 4 |
+| category-family:hospitals | 4 |
+| category-family:hotels | 4 |
+| category-family:kindergartens | 4 |
+| category-family:laundromats | 4 |
+| category-family:libraries | 4 |
+| category-family:markets | 4 |
+| category-family:mosques | 4 |
+| category-family:museums | 4 |
+| category-family:nightlife | 4 |
+| category-family:opticians | 4 |
+| category-family:parking | 4 |
+| category-family:parks | 4 |
+| category-family:pharmacies | 4 |
+| category-family:police | 4 |
+| category-family:post_offices | 4 |
+| category-family:recycling | 4 |
+| category-family:restaurants | 4 |
+| category-family:schools | 4 |
+| category-family:shopping_malls | 4 |
+| category-family:supermarkets | 4 |
+| category-family:swimming | 4 |
+| category-family:synagogues | 4 |
+| category-family:temples | 4 |
+| category-family:toilets | 4 |
+| category-family:transit | 4 |
+| category-family:veterinarians | 4 |
+| category-family:viewpoints | 4 |
+| category-family:negative:proper-name | 20 |
+| category-family:negative:brand | 20 |
+| category-family:negative:address-code | 20 |
+| category-family:negative:ambiguous | 20 |
+| category-family:negative:no-place-type | 20 |
+| category-family:negative:unsupported-category | 20 |
 
 ## Quality gates
 
@@ -20,27 +104,93 @@
 | Held-out English top-one | 93.75% |
 | Held-out German top-one | 96.88% |
 | Macro category-family accuracy | 95.31% |
+| Macro category-family accuracy, English | 93.75% |
+| Macro category-family accuracy, German | 96.88% |
 | Negative activation | 2.78% (1/36) |
 | P0 false activations | 0 |
 | Accepted English precision | 100.00% |
 | Accepted German precision | 100.00% |
-| Safe held-out coverage | 4.69% (3/64) |
-| Keyword-miss recovery | 5.00% (3/60) |
-| Gemma-miss incremental recovery | 9.09% (2/22) |
-| Gemma parse failures using production keyword fallback | 25 |
+| Safe held-out coverage | 6.25% (4/64) |
+| Keyword-miss recovery | 6.67% (4/60) |
+| Gemma/default-chain plausible coverage | 81.00% (81/100) |
+| Gemma-miss incremental recovery | 12.50% (2/16) |
+| Gemma parse failures using production keyword fallback | 19 |
+| Gemma plausible intents unchanged | 81/81 |
 | Gemma plausible-intent mutations | 0 |
-| Warm query-embedding p95 | 634.63 ms |
-| Worst resolver bypass p95 | 12.49 ms |
+| Warm query-embedding p50 | 251.87 ms |
+| Warm query-embedding p95 | 482.60 ms |
+| Warm query-embedding p99 | 607.12 ms |
+| Worst resolver bypass p95 | 12.89 ms |
+
+Direct-label miss IDs: `direct:atms:en`, `direct:mosques:de`, `direct:parks:en`, `direct:parks:de`, `direct:veterinarians:de`
+
+## Policy outcome and abstention-reason counts
+
+| Outcome/reason | Count |
+| --- | ---: |
+| address-code | 6 |
+| already-plausible | 5 |
+| below-margin | 31 |
+| below-score | 21 |
+| brand | 4 |
+| matched | 5 |
+| not-eligible | 1 |
+| proper-name | 27 |
+
+## Confusion matrix
+
+| Expected | Raw top category | Count |
+| --- | --- | ---: |
+| abstain:address-code | activities | 1 |
+| abstain:address-code | banks | 1 |
+| abstain:address-code | post_offices | 1 |
+| abstain:address-code | schools | 1 |
+| abstain:address-code | shopping_malls | 2 |
+| abstain:ambiguous | activities | 5 |
+| abstain:ambiguous | shopping_malls | 1 |
+| abstain:brand | drinking_water | 1 |
+| abstain:brand | shopping_malls | 5 |
+| abstain:no-place-type | activities | 3 |
+| abstain:no-place-type | shopping_malls | 2 |
+| abstain:no-place-type | transit | 1 |
+| abstain:proper-name | activities | 1 |
+| abstain:proper-name | cafes | 1 |
+| abstain:proper-name | hotels | 1 |
+| abstain:proper-name | libraries | 1 |
+| abstain:proper-name | museums | 1 |
+| abstain:proper-name | nightlife | 1 |
+| abstain:unsupported-category | car_rental | 4 |
+| abstain:unsupported-category | drinking_water | 2 |
+| atms | atms | 4 |
+| bookstores | bookstores | 4 |
+| car_repair | car_repair | 4 |
+| hairdressers | hairdressers | 4 |
+| hotels | hotels | 4 |
+| laundromats | laundromats | 4 |
+| libraries | libraries | 3 |
+| libraries | schools | 1 |
+| mosques | mosques | 4 |
+| parks|activities | activities | 1 |
+| parks|activities | parks | 3 |
+| pharmacies | pharmacies | 4 |
+| recycling | recycling | 4 |
+| supermarkets | restaurants | 1 |
+| supermarkets | shopping_malls | 1 |
+| supermarkets | supermarkets | 2 |
+| swimming | swimming | 4 |
+| synagogues | synagogues | 4 |
+| veterinarians | veterinarians | 4 |
+| viewpoints | viewpoints | 4 |
 
 ## Resolver bypass latency
 
 | Stratum | p95 ms |
 | --- | ---: |
-| already-plausible | 10.00 |
+| already-plausible | 10.10 |
 | coordinate-address | 0.00 |
-| english-proper-name | 10.07 |
-| exact-brand | 11.08 |
-| german-proper-name | 12.49 |
+| english-proper-name | 9.56 |
+| exact-brand | 10.17 |
+| german-proper-name | 12.89 |
 | letter-free | 0.00 |
 | shape-empty | 0.00 |
 | shape-overlength | 0.00 |
@@ -57,7 +207,6 @@
 - direct-label top-one accuracy is below 100%
 - safe coverage is below 60%
 - keyword recovery is below 25%
-- warm embedding p95 exceeds 500 ms
 - worst bypass p95 is not below 1 ms
 
 ## Held-out outcomes
@@ -93,7 +242,7 @@ Only frozen query IDs are included. Query text, parser output, and embeddings ar
 | positive:libraries:en:semantic | category | libraries | — | no |
 | positive:libraries:en:structured | category | libraries | — | no |
 | positive:libraries:de:semantic | category | schools | — | no |
-| positive:libraries:de:structured | category | libraries | — | no |
+| positive:libraries:de:structured | category | libraries | libraries | yes |
 | positive:mosques:en:semantic | category | mosques | — | no |
 | positive:mosques:en:structured | category | mosques | — | no |
 | positive:mosques:de:semantic | category | mosques | — | no |
@@ -137,7 +286,7 @@ Only frozen query IDs are included. Query text, parser output, and embeddings ar
 | negative:proper-name:05 | abstain | libraries | — | yes |
 | negative:proper-name:06 | abstain | nightlife | — | yes |
 | negative:brand:01 | abstain | shopping_malls | — | yes |
-| negative:brand:02 | abstain | restaurants | — | yes |
+| negative:brand:02 | abstain | shopping_malls | — | yes |
 | negative:brand:03 | abstain | shopping_malls | — | yes |
 | negative:brand:04 | abstain | drinking_water | — | yes |
 | negative:brand:05 | abstain | shopping_malls | — | yes |
@@ -154,7 +303,7 @@ Only frozen query IDs are included. Query text, parser output, and embeddings ar
 | negative:ambiguous:04 | abstain | activities | — | yes |
 | negative:ambiguous:05 | abstain | activities | activities | no |
 | negative:ambiguous:06 | abstain | activities | — | yes |
-| negative:no-place-type:01 | abstain | restaurants | — | yes |
+| negative:no-place-type:01 | abstain | activities | — | yes |
 | negative:no-place-type:02 | abstain | activities | — | yes |
 | negative:no-place-type:03 | abstain | shopping_malls | — | yes |
 | negative:no-place-type:04 | abstain | shopping_malls | — | yes |

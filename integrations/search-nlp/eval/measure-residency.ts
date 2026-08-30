@@ -30,6 +30,24 @@ export interface SemanticResidencyEvidenceV1 {
   evidenceChecksum: string;
 }
 
+export interface SemanticResidentModel {
+  name: string;
+  digest: string;
+  sizeBytes: number;
+}
+
+export interface SemanticResidencyRuntime {
+  inspectContainerLimitBytes(containerId: string): Promise<number>;
+  startStats(
+    containerId: string,
+    onSample: (bytes: number, capturedAtMs: number) => void,
+  ): { stop(): Promise<void> };
+  listResidentModels(endpoint: string): Promise<SemanticResidentModel[]>;
+  runEmbedding(endpoint: string): Promise<void>;
+  runParser(endpoint: string): Promise<void>;
+  now(): Date;
+}
+
 interface ResidencyExpected {
   endpoint: string;
   referenceLabel: string;
@@ -107,7 +125,7 @@ export function validateSemanticResidencyEvidence(
   }
   if (
     (evidence.concurrentInferenceRounds ?? 0) < MINIMUM_ROUNDS ||
-    (evidence.activeConcurrentSamples ?? 0) < MINIMUM_ROUNDS
+    (evidence.activeConcurrentSamples ?? 0) < (evidence.concurrentInferenceRounds ?? MINIMUM_ROUNDS)
   ) {
     throw new Error("Residency concurrency evidence is incomplete");
   }
@@ -147,8 +165,9 @@ export function validateSemanticResidencyEvidence(
   return evidence as SemanticResidencyEvidenceV1;
 }
 
-function parseBytes(input: string): number {
-  const match = input.trim().match(/^([0-9.]+)\s*(B|KiB|MiB|GiB|TiB)/i);
+export function parseDockerStatsMemory(input: string): number {
+  const used = input.split("/")[0] ?? "";
+  const match = used.trim().match(/^([0-9.]+)\s*(B|KiB|MiB|GiB|TiB)/i);
   if (!match) throw new Error("Docker stats memory sample is malformed");
   const value = Number(match[1]);
   const unit = match[2]?.toLowerCase();
@@ -190,6 +209,133 @@ function residentModels(
   });
 }
 
+function createSystemResidencyRuntime(): SemanticResidencyRuntime {
+  return {
+    async inspectContainerLimitBytes(containerId) {
+      const inspect = await promisify(execFile)("docker", [
+        "inspect",
+        containerId,
+        "--format",
+        "{{.HostConfig.Memory}}",
+      ]);
+      return Number(inspect.stdout.trim());
+    },
+    startStats(containerId, onSample) {
+      const stats: ChildProcessWithoutNullStreams = spawn(
+        "docker",
+        ["stats", "--format", "{{.MemUsage}}", containerId],
+        { stdio: ["pipe", "pipe", "pipe"] },
+      );
+      let buffer = "";
+      let stopping = false;
+      let closed = false;
+      let failure: Error | undefined;
+      let finishClose: (() => void) | undefined;
+      const close = new Promise<void>((resolve) => {
+        finishClose = resolve;
+      });
+      stats.stdout.setEncoding("utf8");
+      stats.stdout.on("data", (chunk: string) => {
+        buffer += chunk;
+        const lines = buffer.split(/\r?\n/);
+        buffer = lines.pop() ?? "";
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          try {
+            onSample(parseDockerStatsMemory(line), Date.now());
+          } catch (error) {
+            failure = error instanceof Error ? error : new Error("Docker stats parsing failed");
+          }
+        }
+      });
+      stats.stderr.setEncoding("utf8");
+      stats.stderr.on("data", () => undefined);
+      stats.once("error", (error) => {
+        failure = error;
+        closed = true;
+        finishClose?.();
+      });
+      stats.once("close", (code, signal) => {
+        closed = true;
+        if (!stopping) {
+          failure = new Error(`Docker stats exited unexpectedly (${code ?? signal ?? "unknown"})`);
+        } else if (code !== 0 && signal !== "SIGTERM") {
+          failure = new Error(`Docker stats termination failed (${code ?? signal ?? "unknown"})`);
+        }
+        finishClose?.();
+      });
+      return {
+        async stop() {
+          stopping = true;
+          if (!closed) stats.kill("SIGTERM");
+          await close;
+          if (failure) throw failure;
+        },
+      };
+    },
+    async listResidentModels(endpoint) {
+      return residentModels(await jsonRequest(endpoint, "/api/ps"));
+    },
+    async runEmbedding(endpoint) {
+      const value = object(
+        await jsonRequest(endpoint, "/api/embed", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: SEMANTIC_MODEL,
+            input: [EMBEDDING_PROMPT],
+            dimensions: SEMANTIC_DIMENSIONS,
+            truncate: false,
+            keep_alive: "30m",
+          }),
+        }),
+      );
+      const vectors = value?.embeddings;
+      if (
+        !Array.isArray(vectors) ||
+        !Array.isArray(vectors[0]) ||
+        vectors[0].length !== SEMANTIC_DIMENSIONS
+      ) {
+        throw new Error("Embedding workload response is malformed");
+      }
+    },
+    async runParser(endpoint) {
+      const value = object(
+        await jsonRequest(endpoint, "/api/chat", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            model: DEFAULT_PARSER_BASELINE_MODEL,
+            messages: [{ role: "user", content: PARSER_PROMPT }],
+            stream: false,
+            keep_alive: "30m",
+            options: { temperature: 0, num_predict: 32 },
+          }),
+        }),
+      );
+      if (typeof object(value?.message)?.content !== "string") {
+        throw new Error("Parser workload response is malformed");
+      }
+    },
+    now: () => new Date(),
+  };
+}
+
+function requireResidentTargets(models: readonly SemanticResidentModel[]): {
+  qwen: SemanticResidentModel;
+  parser: SemanticResidentModel;
+} {
+  const qwen = models.find(({ name }) => name === SEMANTIC_MODEL);
+  const parser = models.find(({ name }) => name === DEFAULT_PARSER_BASELINE_MODEL);
+  if (!qwen || !parser) throw new Error("Both target models must be resident");
+  for (const model of [qwen, parser]) {
+    if (!model.digest || !Number.isSafeInteger(model.sizeBytes) || model.sizeBytes <= 0) {
+      throw new Error("Resident target model identity is malformed");
+    }
+  }
+  return { qwen, parser };
+}
+
 async function runForAtLeast(
   durationMs: number,
   operation: () => Promise<void>,
@@ -206,7 +352,7 @@ async function runForAtLeast(
   } while (Date.now() < until);
 }
 
-async function waitForFirstSample(samples: readonly number[], timeoutMs = 10_000): Promise<void> {
+async function waitForFirstSample(samples: readonly unknown[], timeoutMs = 10_000): Promise<void> {
   const started = Date.now();
   while (samples.length === 0) {
     if (Date.now() - started > timeoutMs) throw new Error("Docker stats produced no sample");
@@ -220,65 +366,41 @@ export async function collectSemanticResidencyEvidence(options: {
   referenceLabel: string;
   roundDurationMs?: number;
   rounds?: number;
+  runtime?: SemanticResidencyRuntime;
 }): Promise<SemanticResidencyEvidenceV1> {
   if (!isPrivateEndpoint(options.endpoint)) throw new Error("Residency endpoint must be private");
   if (!/^[a-f0-9]{12,64}$/i.test(options.containerId)) throw new Error("Container id is invalid");
   if (!options.referenceLabel.trim()) throw new Error("Reference label is required");
-  const execFileAsync = promisify(execFile);
-  const inspect = await execFileAsync("docker", [
-    "inspect",
-    options.containerId,
-    "--format",
-    "{{.HostConfig.Memory}}",
-  ]);
-  const containerLimitBytes = Number(inspect.stdout.trim());
+  const rounds = options.rounds ?? MINIMUM_ROUNDS;
+  const duration = options.roundDurationMs ?? 5_000;
+  if (!Number.isSafeInteger(rounds) || rounds < MINIMUM_ROUNDS) {
+    throw new Error(`Residency requires at least ${MINIMUM_ROUNDS} rounds`);
+  }
+  if (!Number.isFinite(duration) || duration < 0) {
+    throw new Error("Residency round duration is invalid");
+  }
+  const runtime = options.runtime ?? createSystemResidencyRuntime();
+  const containerLimitBytes = await runtime.inspectContainerLimitBytes(options.containerId);
   if (!Number.isSafeInteger(containerLimitBytes) || containerLimitBytes <= 0) {
     throw new Error("Container memory limit is missing");
   }
   if (containerLimitBytes > MAX_CONTAINER_LIMIT_BYTES)
     throw new Error("Container limit exceeds 8 GiB");
 
+  const beforeTargets = requireResidentTargets(await runtime.listResidentModels(options.endpoint));
+
   let parserInFlight = false;
   let embedderInFlight = false;
-  const samples: number[] = [];
-  const activeSamples: number[] = [];
-  let statsError: Error | undefined;
-  const stats: ChildProcessWithoutNullStreams = spawn(
-    "docker",
-    ["stats", "--format", "{{.MemUsage}}", options.containerId],
-    { stdio: ["pipe", "pipe", "pipe"] },
-  );
-  let buffer = "";
-  let stoppingStats = false;
-  stats.stdout.setEncoding("utf8");
-  stats.stdout.on("data", (chunk: string) => {
-    buffer += chunk;
-    const lines = buffer.split(/\r?\n/);
-    buffer = lines.pop() ?? "";
-    for (const line of lines) {
-      if (!line.trim()) continue;
-      try {
-        const bytes = parseBytes(line.split("/")[0] ?? "");
-        samples.push(bytes);
-        if (parserInFlight && embedderInFlight) activeSamples.push(bytes);
-      } catch (error) {
-        statsError = error instanceof Error ? error : new Error("Docker stats parsing failed");
-      }
+  const samples: Array<{ bytes: number; capturedAtMs: number }> = [];
+  const activeSamples: Array<{ bytes: number; capturedAtMs: number }> = [];
+  const stats = runtime.startStats(options.containerId, (bytes, capturedAtMs) => {
+    if (!Number.isSafeInteger(bytes) || bytes < 0 || !Number.isFinite(capturedAtMs)) {
+      throw new Error("Docker stats sample is invalid");
     }
+    const sample = { bytes, capturedAtMs };
+    samples.push(sample);
+    if (parserInFlight && embedderInFlight) activeSamples.push(sample);
   });
-  stats.stderr.setEncoding("utf8");
-  stats.stderr.on("data", () => undefined);
-  stats.once("error", (error) => {
-    statsError = error;
-  });
-  stats.once("exit", (code, signal) => {
-    if (!stoppingStats && code !== 0) {
-      statsError = new Error(`Docker stats exited unexpectedly (${code ?? signal ?? "unknown"})`);
-    }
-  });
-
-  const rounds = options.rounds ?? MINIMUM_ROUNDS;
-  const duration = options.roundDurationMs ?? 5_000;
   let verifiedRounds = 0;
   try {
     await waitForFirstSample(samples);
@@ -287,51 +409,14 @@ export async function collectSemanticResidencyEvidence(options: {
       await Promise.all([
         runForAtLeast(
           duration,
-          async () => {
-            const value = object(
-              await jsonRequest(options.endpoint, "/api/embed", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  model: SEMANTIC_MODEL,
-                  input: [EMBEDDING_PROMPT],
-                  dimensions: SEMANTIC_DIMENSIONS,
-                  truncate: false,
-                  keep_alive: "30m",
-                }),
-              }),
-            );
-            const vectors = value?.embeddings;
-            if (
-              !Array.isArray(vectors) ||
-              !Array.isArray(vectors[0]) ||
-              vectors[0].length !== SEMANTIC_DIMENSIONS
-            )
-              throw new Error("Embedding workload response is malformed");
-          },
+          () => runtime.runEmbedding(options.endpoint),
           (active) => {
             embedderInFlight = active;
           },
         ),
         runForAtLeast(
           duration,
-          async () => {
-            const value = object(
-              await jsonRequest(options.endpoint, "/api/chat", {
-                method: "POST",
-                headers: { "content-type": "application/json" },
-                body: JSON.stringify({
-                  model: DEFAULT_PARSER_BASELINE_MODEL,
-                  messages: [{ role: "user", content: PARSER_PROMPT }],
-                  stream: false,
-                  keep_alive: "30m",
-                  options: { temperature: 0, num_predict: 32 },
-                }),
-              }),
-            );
-            if (typeof object(value?.message)?.content !== "string")
-              throw new Error("Parser workload response is malformed");
-          },
+          () => runtime.runParser(options.endpoint),
           (active) => {
             parserInFlight = active;
           },
@@ -342,21 +427,22 @@ export async function collectSemanticResidencyEvidence(options: {
       verifiedRounds++;
     }
   } finally {
-    stoppingStats = true;
-    stats.kill("SIGTERM");
-    await new Promise<void>((resolve) => {
-      if (stats.exitCode !== null || stats.signalCode !== null) resolve();
-      else stats.once("exit", () => resolve());
-    });
+    await stats.stop();
   }
-  if (statsError) throw statsError;
-  const models = residentModels(await jsonRequest(options.endpoint, "/api/ps"));
-  const peakWorkingSetBytes = Math.max(...activeSamples);
+  const models = await runtime.listResidentModels(options.endpoint);
+  const afterTargets = requireResidentTargets(models);
+  if (
+    afterTargets.qwen.digest !== beforeTargets.qwen.digest ||
+    afterTargets.parser.digest !== beforeTargets.parser.digest
+  ) {
+    throw new Error("Resident target model identity changed during measurement");
+  }
+  const peakWorkingSetBytes = Math.max(...activeSamples.map(({ bytes }) => bytes));
   const headroomBytes = containerLimitBytes - peakWorkingSetBytes;
   if (headroomBytes < MINIMUM_HEADROOM_BYTES) throw new Error("Active headroom is below 1 GiB");
   const base: Omit<SemanticResidencyEvidenceV1, "evidenceChecksum"> = {
     version: 1,
-    capturedAt: new Date().toISOString(),
+    capturedAt: runtime.now().toISOString(),
     referenceLabel: options.referenceLabel,
     endpoint: options.endpoint,
     containerId: options.containerId,

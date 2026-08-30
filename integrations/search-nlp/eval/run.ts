@@ -1,7 +1,7 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
-import type { CacheClient } from "@openmapx/integration-framework";
+import { createPassthroughCache } from "@openmapx/integration-framework/testing";
 import { buildSemanticCategoryCatalog } from "@openmapx/presets";
 import { createOllamaEmbeddingClient } from "../ollama-embeddings.js";
 import { isPrivateEndpoint } from "../provider-config.js";
@@ -39,26 +39,8 @@ type Verdict = "PASS" | "PROVISIONAL" | "FAIL";
 
 const EVALUATION_CONTEXT: ParseContext = {
   mapCenter: [6.0839, 50.7753],
-  mapBbox: { south: 50.7, west: 5.9, north: 50.9, east: 6.3 },
+  mapBbox: { south: 50.7, west: 5.95, north: 50.85, east: 6.2 },
 };
-
-function memoryCache(): CacheClient {
-  const values = new Map<string, unknown>();
-  return {
-    async get<T>(key: string) {
-      return (values.get(key) as T | undefined) ?? null;
-    },
-    async set(key, value) {
-      values.set(key, value);
-    },
-    async del(key) {
-      values.delete(key);
-    },
-    async withCache(_key, _ttl, fn, signal) {
-      return fn(signal ?? new AbortController().signal);
-    },
-  };
-}
 
 function parseArgs(argv: readonly string[]): Record<string, string> {
   const parsed: Record<string, string> = {};
@@ -99,6 +81,21 @@ export function renderSemanticEvaluationReport(input: {
     .sort(([left], [right]) => left.localeCompare(right))
     .map(([stratum, p95]) => `| ${stratum} | ${number(p95)} |`)
     .join("\n");
+  const authoredStratumRows = Object.entries(report.corpus.authored.byKind)
+    .map(([stratum, count]) => `| kind:${stratum} | ${count} |`)
+    .concat(
+      Object.entries(report.corpus.authored.byCategoryFamily).map(
+        ([stratum, count]) => `| category-family:${stratum} | ${count} |`,
+      ),
+    )
+    .join("\n");
+  const confusionRows = report.confusionMatrix
+    .map(({ expected, predicted, count }) => `| ${expected} | ${predicted} | ${count} |`)
+    .join("\n");
+  const policyOutcomeRows = Object.entries(report.policyOutcomeCounts)
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([reason, count]) => `| ${reason} | ${count} |`)
+    .join("\n");
   const outcomeRows = report.outcomes
     .map(
       (outcome) =>
@@ -125,6 +122,28 @@ export function renderSemanticEvaluationReport(input: {
 - Parser baseline: \`${input.parserBaselineModel}\`
 - Reference: ${input.referenceLabel}
 
+## Corpus counts
+
+| Slice | Count |
+| --- | ---: |
+| Generated direct-label smoke | ${report.corpus.generatedSmoke.total} |
+| Generated smoke English | ${report.corpus.generatedSmoke.byLanguage.en} |
+| Generated smoke German | ${report.corpus.generatedSmoke.byLanguage.de} |
+| Authored total | ${report.corpus.authored.total} |
+| Authored development | ${report.corpus.authored.bySplit.development} |
+| Authored held-out | ${report.corpus.authored.bySplit.test} |
+| Authored English | ${report.corpus.authored.byLanguage.en} |
+| Authored German | ${report.corpus.authored.byLanguage.de} |
+| Authored positives | ${report.corpus.authored.byExpectedStatus.category} |
+| Authored abstentions | ${report.corpus.authored.byExpectedStatus.abstain} |
+| Authored P0 | ${report.corpus.authored.p0} |
+
+### Authored strata
+
+| Stratum | Count |
+| --- | ---: |
+${authoredStratumRows}
+
 ## Quality gates
 
 | Metric | Result |
@@ -133,17 +152,37 @@ export function renderSemanticEvaluationReport(input: {
 | Held-out English top-one | ${percent(report.heldoutTopOne.byLanguage.en.rate)} |
 | Held-out German top-one | ${percent(report.heldoutTopOne.byLanguage.de.rate)} |
 | Macro category-family accuracy | ${percent(report.macroCategoryFamilyAccuracy)} |
+| Macro category-family accuracy, English | ${percent(report.macroCategoryFamilyAccuracyByLanguage.en)} |
+| Macro category-family accuracy, German | ${percent(report.macroCategoryFamilyAccuracyByLanguage.de)} |
 | Negative activation | ${percent(report.negatives.activationRate)} (${report.negatives.activations}/${report.negatives.total}) |
 | P0 false activations | ${report.negatives.p0FalseActivations} |
 | Accepted English precision | ${percent(report.acceptedPositive.byLanguage.en.precision)} |
 | Accepted German precision | ${percent(report.acceptedPositive.byLanguage.de.precision)} |
 | Safe held-out coverage | ${percent(report.safeCoverage.rate)} (${report.safeCoverage.correct}/${report.safeCoverage.total}) |
 | Keyword-miss recovery | ${percent(report.keywordRecovery.rate)} (${report.keywordRecovery.correct}/${report.keywordRecovery.total}) |
+| Gemma/default-chain plausible coverage | ${percent(report.parserBaseline.coverage.rate)} (${report.parserBaseline.coverage.correct}/${report.parserBaseline.coverage.total}) |
 | Gemma-miss incremental recovery | ${percent(report.parserBaseline.incrementalRecovery.rate)} (${report.parserBaseline.incrementalRecovery.correct}/${report.parserBaseline.incrementalRecovery.total}) |
 | Gemma parse failures using production keyword fallback | ${report.parserBaseline.failedCases} |
+| Gemma plausible intents unchanged | ${report.parserBaseline.plausibleUnchangedCases}/${report.parserBaseline.plausibleCases} |
 | Gemma plausible-intent mutations | ${report.parserBaseline.plausibleMutationCount} |
+| Warm query-embedding p50 | ${number(report.latency.warmQueryEmbeddingP50Ms)} ms |
 | Warm query-embedding p95 | ${number(report.latency.warmQueryEmbeddingP95Ms)} ms |
+| Warm query-embedding p99 | ${number(report.latency.warmQueryEmbeddingP99Ms)} ms |
 | Worst resolver bypass p95 | ${number(report.latency.worstBypassP95Ms)} ms |
+
+Direct-label miss IDs: ${report.directLabelMissIds.length > 0 ? report.directLabelMissIds.map((id) => `\`${id}\``).join(", ") : "none"}
+
+## Policy outcome and abstention-reason counts
+
+| Outcome/reason | Count |
+| --- | ---: |
+${policyOutcomeRows}
+
+## Confusion matrix
+
+| Expected | Raw top category | Count |
+| --- | --- | ---: |
+${confusionRows}
 
 ## Resolver bypass latency
 
@@ -204,29 +243,56 @@ function emptyIntent(): SearchIntent {
   };
 }
 
+export interface SemanticBypassWorkload {
+  name: string;
+  query: string;
+  lang: "en" | "de";
+  intent: SearchIntent;
+}
+
+export const SEMANTIC_BYPASS_WORKLOADS: readonly SemanticBypassWorkload[] = [
+  { name: "shape-empty", query: "", lang: "en", intent: emptyIntent() },
+  { name: "shape-overlength", query: "a".repeat(161), lang: "en", intent: emptyIntent() },
+  { name: "letter-free", query: "12345", lang: "en", intent: emptyIntent() },
+  { name: "url", query: "https://example.com/cafe", lang: "en", intent: emptyIntent() },
+  {
+    name: "coordinate-address",
+    query: "50.7753, 6.0839",
+    lang: "en",
+    intent: emptyIntent(),
+  },
+  { name: "uppercase-code", query: "FRA", lang: "en", intent: emptyIntent() },
+  { name: "exact-brand", query: "Starbucks", lang: "en", intent: emptyIntent() },
+  { name: "english-proper-name", query: "Hotel Adlon", lang: "en", intent: emptyIntent() },
+  { name: "german-proper-name", query: "Café Central", lang: "de", intent: emptyIntent() },
+  {
+    name: "already-plausible",
+    query: "library near me",
+    lang: "en",
+    intent: plausibleIntent(),
+  },
+];
+
 export function measureSemanticBypassLatency(
   selected: SemanticCalibration,
-  iterations = 1_000,
+  options: {
+    warmupIterations?: number;
+    batches?: number;
+    batchSize?: number;
+    now?: () => number;
+  } = {},
 ): Record<string, number> {
   const catalog = buildSemanticCategoryCatalog();
-  const workloads: Array<{ name: string; query: string; lang: string; intent: SearchIntent }> = [
-    { name: "shape-empty", query: "", lang: "en", intent: emptyIntent() },
-    { name: "shape-overlength", query: "a".repeat(161), lang: "en", intent: emptyIntent() },
-    { name: "letter-free", query: "12345", lang: "en", intent: emptyIntent() },
-    { name: "url", query: "https://example.com/cafe", lang: "en", intent: emptyIntent() },
-    { name: "coordinate-address", query: "50.7753, 6.0839", lang: "en", intent: emptyIntent() },
-    { name: "uppercase-code", query: "FRA", lang: "en", intent: emptyIntent() },
-    { name: "exact-brand", query: "Starbucks", lang: "en", intent: emptyIntent() },
-    { name: "english-proper-name", query: "Hotel Adlon", lang: "en", intent: emptyIntent() },
-    { name: "german-proper-name", query: "Café Central", lang: "de", intent: emptyIntent() },
-    { name: "already-plausible", query: "library near me", lang: "en", intent: plausibleIntent() },
-  ];
+  const warmupIterations = options.warmupIterations ?? 1_000;
+  const batches = options.batches ?? 100;
+  const batchSize = options.batchSize ?? 1_000;
+  const now = options.now ?? performance.now.bind(performance);
+  if (warmupIterations < 0 || batches < 1 || batchSize < 1) {
+    throw new Error("Bypass benchmark dimensions are invalid");
+  }
   const result: Record<string, number> = {};
-  for (const workload of workloads) {
-    planSemanticResolution({ ...workload, calibration: selected, catalog, shadow: false });
-    const durations: number[] = [];
-    for (let index = 0; index < iterations; index++) {
-      const started = performance.now();
+  for (const workload of SEMANTIC_BYPASS_WORKLOADS) {
+    for (let index = 0; index < warmupIterations; index++) {
       const decision = planSemanticResolution({
         query: workload.query,
         lang: workload.lang,
@@ -235,11 +301,27 @@ export function measureSemanticBypassLatency(
         catalog,
         shadow: false,
       });
-      durations.push(performance.now() - started);
       if (decision.kind !== "decided")
         throw new Error(`Bypass stratum ${workload.name} reached scoring`);
     }
-    result[workload.name] = percentile95(durations);
+    const batchAverages: number[] = [];
+    for (let batch = 0; batch < batches; batch++) {
+      const started = now();
+      for (let index = 0; index < batchSize; index++) {
+        const decision = planSemanticResolution({
+          query: workload.query,
+          lang: workload.lang,
+          intent: workload.intent,
+          calibration: selected,
+          catalog,
+          shadow: false,
+        });
+        if (decision.kind !== "decided")
+          throw new Error(`Bypass stratum ${workload.name} reached scoring`);
+      }
+      batchAverages.push((now() - started) / batchSize);
+    }
+    result[workload.name] = percentile95(batchAverages);
   }
   return result;
 }
@@ -288,7 +370,7 @@ async function main(): Promise<void> {
   }
 
   const client = createOllamaEmbeddingClient({ endpoint });
-  const index = createSemanticCategoryIndex({ client, cache: memoryCache() });
+  const index = createSemanticCategoryIndex({ client, cache: createPassthroughCache() });
   const signal = AbortSignal.timeout(30 * 60_000);
   const prepared = await index.prepare(signal);
   const corpus = [...SEMANTIC_TAXONOMY_CASES, ...GENERATED_DIRECT_SMOKE_CASES];
