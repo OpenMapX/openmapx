@@ -30,8 +30,6 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
   "integrations/hotels/official.ts":
     "manual per-hop redirect loop with SSRF re-check + binary HTML byte cap",
   "integrations/knowledge-tides-norway/index.ts": "Kartverket tide feeds are XML, not JSON",
-  "integrations/overlay-air-quality/index.ts":
-    "reads response headers (rate-limit remaining/reset) and status even on non-2xx",
   "integrations/overlay-hiking/index.ts":
     "tile proxy: forwards the binary PNG tile body and status verbatim",
   "integrations/overlay-nautical/index.ts":

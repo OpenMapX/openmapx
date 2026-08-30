@@ -38,6 +38,13 @@ export interface StationEvidencePage {
   evidence: ProviderEvidence[];
   nextCursor: string | null;
   truncated: boolean;
+  diagnostics: {
+    candidateCount: number;
+    servedCount: number;
+    skippedCount: number;
+    quotaDeniedCount: number;
+    failureCount: number;
+  };
 }
 
 export interface RasterTimeAxis {

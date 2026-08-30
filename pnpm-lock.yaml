@@ -1031,12 +1031,18 @@ importers:
 
   integrations/overlay-air-quality:
     dependencies:
+      '@openmapx/air-quality':
+        specifier: workspace:^
+        version: link:../../packages/air-quality
       '@openmapx/core':
         specifier: workspace:^
         version: link:../../packages/core
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
     devDependencies:
       '@types/react':
         specifier: ^19.2.18

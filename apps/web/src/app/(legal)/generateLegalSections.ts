@@ -42,6 +42,7 @@ export const DOMAIN_TO_SECTION_KEY: Record<string, string> = {
   "poi-search": "poiSearch",
   "search-suggestions": "searchSuggestions",
   weather: "weather",
+  "air-quality": "airQuality",
   reviews: "reviews",
   "live-transit": "liveTransit",
   "gtfs-catalog": "transitDataCatalogs",

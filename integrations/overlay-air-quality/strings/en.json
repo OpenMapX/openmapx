@@ -1,11 +1,11 @@
 {
   "name": "OpenAQ Air Quality",
-  "description": "Real-time air quality measurements (PM2.5, AQI)",
+  "description": "Recent PM2.5 concentrations from OpenAQ monitoring stations",
   "dataSources": {
     "openaq": {
-      "purpose": "Air quality monitoring stations with PM2.5 readings, converted to AQI scores",
-      "dataSent": "Bounding box coordinates; location ID for detail lookup",
-      "dataReceived": "Station locations with coordinates, latest PM2.5 readings, provider info, license metadata"
+      "purpose": "Air quality monitoring locations and sensor-specific pollutant evidence",
+      "dataSent": "Bounding box or radius coordinates; location and sensor IDs for latest and hourly measurements",
+      "dataReceived": "Station and sensor metadata, hourly pollutant measurements, data owner, provider, attribution, and source-specific license"
     }
   }
 }

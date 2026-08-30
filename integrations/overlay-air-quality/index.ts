@@ -1,331 +1,164 @@
-import { USER_AGENT } from "@openmapx/core";
-import {
-  type CacheClient,
-  type IntegrationContext,
-  scalarQueries,
+import type {
+  QuotaDecision,
+  UpstreamCacheRead,
+  UpstreamRuntime,
 } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  QueryValidationError,
+  runWithProviderDeadline,
+  scalarQuery,
+} from "@openmapx/integration-framework";
+import { projectLegacyStations } from "./compatibility.js";
+import { createOpenAQClient, OpenAQClientError } from "./openaq-client.js";
+import { createOpenAQProvider } from "./provider.js";
 
-const OPENAQ_BASE = "https://api.openaq.org/v3";
-const PM25_PARAM_ID = 2;
-const FETCH_TIMEOUT_MS = 15_000;
-const MAX_LATEST_FETCHES = 100;
-const CONCURRENCY = 5;
-const LOCATION_CACHE_TTL = 900; // 15 minutes
-const STATION_CACHE_TTL = 900;
+const SUNSET = "Mon, 01 Mar 2027 00:00:00 GMT";
+const SUCCESSOR = '</api/integrations/air-quality/stations>; rel="successor-version"';
+const MAX_BBOX_SPAN = 15;
 
-interface OpenAQLatest {
-  datetime: { utc: string; local: string };
-  value: number;
-  coordinates: { latitude: number; longitude: number } | null;
-  sensorsId: number;
-  locationsId: number;
+// A missing distributed runtime may never turn into an ungoverned upstream call.
+const unavailableRuntime: UpstreamRuntime = {
+  async read<T>(): Promise<UpstreamCacheRead<T>> {
+    return { state: "miss", diagnostic: "store_unavailable" };
+  },
+  async write(): Promise<void> {
+    throw new Error("Distributed upstream runtime is unavailable");
+  },
+  async acquireLease(): Promise<null> {
+    return null;
+  },
+  async releaseLease(): Promise<void> {},
+  async consumeQuota(): Promise<QuotaDecision> {
+    return { allowed: false, remaining: {}, retryAt: null, diagnostic: "store_unavailable" };
+  },
+};
+
+function numberQuery(query: Parameters<typeof scalarQuery>[0], key: string): number {
+  const raw = scalarQuery(query, key);
+  if (raw === undefined || raw.trim() === "") throw new QueryValidationError(key, "is required");
+  const value = Number(raw);
+  if (!Number.isFinite(value)) throw new QueryValidationError(key, "must be finite");
+  return value;
 }
 
-interface OpenAQLocationLicense {
-  id: number;
-  name: string;
-  attribution: { name: string; url: string } | null;
+export function parseLegacyBbox(query: Parameters<typeof scalarQuery>[0]): {
+  south: number;
+  west: number;
+  north: number;
+  east: number;
+} {
+  const south = numberQuery(query, "south");
+  const west = numberQuery(query, "west");
+  const north = numberQuery(query, "north");
+  const east = numberQuery(query, "east");
+  if (
+    south < -90 ||
+    north > 90 ||
+    west < -180 ||
+    west > 180 ||
+    east < -180 ||
+    east > 180 ||
+    south >= north
+  )
+    throw new QueryValidationError("bbox", "is outside WGS84 bounds");
+  const longitudeSpan = west <= east ? east - west : 180 - west + (east + 180);
+  if (north - south > MAX_BBOX_SPAN || longitudeSpan > MAX_BBOX_SPAN)
+    throw new QueryValidationError("bbox", "is too large");
+  return { south, west, north, east };
 }
 
-interface OpenAQLocationSensor {
-  id: number;
-  name: string;
-  parameter: { id: number; name: string; units: string; displayName: string | null };
-}
-
-interface OpenAQLocationInstrument {
-  id: number;
-  name: string;
-  sensors: OpenAQLocationSensor[];
-}
-
-interface OpenAQLocation {
-  id: number;
-  name: string;
-  locality: string | null;
-  coordinates: { latitude: number; longitude: number };
-  country: { code: string; name: string } | null;
-  provider: { id: number; name: string } | null;
-  owner: { id: number; name: string } | null;
-  instruments: OpenAQLocationInstrument[];
-  licenses: OpenAQLocationLicense[];
-}
-
-interface OpenAQResponse<T> {
-  meta: { found: number; limit: number; page: number };
-  results: T[];
-}
-
-interface AirQualityStation {
-  id: number;
-  name: string;
-  lat: number;
-  lng: number;
-  aqi: number;
-  pm25: number;
-  lastUpdated: string;
-  attribution: { name: string; url: string } | null;
-  license: string | null;
-}
-
-function pm25ToAqi(pm: number): number {
-  const bp: [number, number, number, number][] = [
-    [0, 12.0, 0, 50],
-    [12.1, 35.4, 51, 100],
-    [35.5, 55.4, 101, 150],
-    [55.5, 150.4, 151, 200],
-    [150.5, 250.4, 201, 300],
-    [250.5, 500.4, 301, 500],
-  ];
-  if (pm < 0) return 0;
-  for (const [cLow, cHigh, iLow, iHigh] of bp) {
-    if (pm <= cHigh) return Math.round(((iHigh - iLow) / (cHigh - cLow)) * (pm - cLow) + iLow);
-  }
-  return 500;
-}
-
-interface FetchResult<T> {
-  data: T | null;
-  rateLimitRemaining: number | null;
-  rateLimitReset: number | null;
-  status: number;
-}
-
-async function fetchOpenAQ<T>(path: string, apiKey: string): Promise<FetchResult<T>> {
-  try {
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-    const res = await fetch(`${OPENAQ_BASE}${path}`, {
-      headers: {
-        "X-API-Key": apiKey,
-        "User-Agent": USER_AGENT,
-      },
-      signal: controller.signal,
-    });
-    clearTimeout(timer);
-
-    const rem = res.headers.get("x-ratelimit-remaining");
-    const rst = res.headers.get("x-ratelimit-reset");
-
-    return {
-      data: res.ok ? ((await res.json()) as T) : null,
-      rateLimitRemaining: rem ? Number.parseInt(rem, 10) : null,
-      rateLimitReset: rst ? Number.parseInt(rst, 10) : null,
-      status: res.status,
-    };
-  } catch {
-    return { data: null, rateLimitRemaining: null, rateLimitReset: null, status: 0 };
-  }
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForReset(result: FetchResult<unknown>, retries: number): Promise<boolean> {
-  if (result.status !== 429 || retries >= 2) return false;
-  const resetAt = result.rateLimitReset;
-  const waitMs = resetAt ? Math.max(0, resetAt * 1000 - Date.now()) + 1000 : 60_000;
-  await sleep(Math.min(waitMs, 120_000));
-  return true;
-}
-
-interface LocationMeta {
-  id: number;
-  name: string;
-  lat: number;
-  lng: number;
-  attribution: { name: string; url: string } | null;
-  license: string | null;
-}
-
-function locationCacheKey(south: number, west: number, north: number, east: number): string {
-  const r = (n: number) => (Math.round(n * 10) / 10).toFixed(1);
-  return `loc:${r(south)},${r(west)},${r(north)},${r(east)}`;
-}
-
-async function fetchLocationsInBbox(
-  apiKey: string,
-  cache: CacheClient,
-  south: number,
-  west: number,
-  north: number,
-  east: number,
-): Promise<LocationMeta[]> {
-  const cacheKey = locationCacheKey(south, west, north, east);
-
-  const cached = await cache.get<LocationMeta[]>(cacheKey);
-  if (cached) return cached;
-
-  const locations: LocationMeta[] = [];
-  let page = 1;
-  const limit = 200;
-  const maxPages = 5;
-
-  while (page <= maxPages) {
-    let result: FetchResult<OpenAQResponse<OpenAQLocation>>;
-    let retries = 0;
-
-    do {
-      result = await fetchOpenAQ<OpenAQResponse<OpenAQLocation>>(
-        `/locations?bbox=${west},${south},${east},${north}&parameters_id=${PM25_PARAM_ID}&mobile=false&limit=${limit}&page=${page}`,
-        apiKey,
-      );
-    } while (await waitForReset(result, retries++));
-
-    if (!result.data?.results?.length) break;
-
-    for (const loc of result.data.results) {
-      const licenseEntry = loc.licenses.find((l) => l.attribution);
-      locations.push({
-        id: loc.id,
-        name: loc.name,
-        lat: loc.coordinates.latitude,
-        lng: loc.coordinates.longitude,
-        attribution: licenseEntry?.attribution ?? null,
-        license: licenseEntry?.name ?? null,
-      });
-    }
-
-    if (result.data.results.length < limit) break;
-    await sleep(1000);
-    page++;
-  }
-
-  if (locations.length > 0) {
-    await cache.set(cacheKey, locations, LOCATION_CACHE_TTL);
-  }
-
-  return locations;
-}
-
-interface StationValue {
-  pm25: number;
-  aqi: number;
-  lastUpdated: string;
-}
-
-async function fetchLatestForLocation(
-  apiKey: string,
-  cache: CacheClient,
-  locationId: number,
-): Promise<StationValue | null> {
-  const valCacheKey = `val:${locationId}`;
-
-  const cached = await cache.get<StationValue>(valCacheKey);
-  if (cached) return cached;
-
-  let result: FetchResult<OpenAQResponse<OpenAQLatest>>;
-  let retries = 0;
-
-  do {
-    result = await fetchOpenAQ<OpenAQResponse<OpenAQLatest>>(
-      `/locations/${locationId}/latest`,
-      apiKey,
-    );
-  } while (await waitForReset(result, retries++));
-
-  if (!result.data?.results?.length) return null;
-
-  for (const r of result.data.results) {
-    if (r.value >= 0) {
-      const value: StationValue = {
-        pm25: r.value,
-        aqi: pm25ToAqi(r.value),
-        lastUpdated: r.datetime.utc,
-      };
-      await cache.set(valCacheKey, value, STATION_CACHE_TTL);
-      return value;
-    }
-  }
-
-  return null;
-}
-
-async function resolveLatestValues(
-  apiKey: string,
-  cache: CacheClient,
-  locations: LocationMeta[],
-): Promise<Map<number, StationValue>> {
-  const result = new Map<number, StationValue>();
-  const uncached: LocationMeta[] = [];
-
-  for (const loc of locations) {
-    const cached = await cache.get<StationValue>(`val:${loc.id}`);
-    if (cached) {
-      result.set(loc.id, cached);
-    } else {
-      uncached.push(loc);
-    }
-  }
-
-  const toFetch = uncached.slice(0, MAX_LATEST_FETCHES);
-
-  for (let i = 0; i < toFetch.length; i += CONCURRENCY) {
-    const batch = toFetch.slice(i, i + CONCURRENCY);
-    const batchResults = await Promise.allSettled(
-      batch.map((loc) => fetchLatestForLocation(apiKey, cache, loc.id)),
-    );
-
-    for (let j = 0; j < batch.length; j++) {
-      const r = batchResults[j];
-      if (r.status === "fulfilled" && r.value) {
-        result.set(batch[j].id, r.value);
-      }
-    }
-
-    if (i + CONCURRENCY < toFetch.length) {
-      await sleep(1500);
-    }
-  }
-
-  return result;
+function deprecationHeaders(reply: { header: (name: string, value: string) => void }): void {
+  reply.header("Deprecation", "true");
+  reply.header("Sunset", SUNSET);
+  reply.header("Link", SUCCESSOR);
 }
 
 export function setup(ctx: IntegrationContext): void {
+  const apiKey = ctx.config.openAqApiKey as string | undefined;
+  const client = apiKey
+    ? createOpenAQClient({
+        http: ctx.http,
+        upstreamRuntime: ctx.upstreamRuntime ?? unavailableRuntime,
+        apiKey,
+      })
+    : null;
+  const provider = client ? createOpenAQProvider(ctx, client) : null;
+  if (provider) ctx.registerAirQualityProvider(provider);
+
   ctx.registerRoute("GET", "/air-quality/stations", async (req, reply) => {
-    const apiKey = ctx.config.openAqApiKey as string | undefined;
-    if (!apiKey) {
+    deprecationHeaders(reply);
+    if (!provider) {
       reply.status(503).send({ message: "Air quality is not configured" });
       return;
     }
 
-    const south = Number.parseFloat(scalarQueries(req.query).south);
-    const west = Number.parseFloat(scalarQueries(req.query).west);
-    const north = Number.parseFloat(scalarQueries(req.query).north);
-    const east = Number.parseFloat(scalarQueries(req.query).east);
-
-    if ([south, west, north, east].some(Number.isNaN)) {
-      reply.status(400).send({ message: "Invalid bbox coordinates" });
-      return;
+    let bbox: ReturnType<typeof parseLegacyBbox>;
+    try {
+      bbox = parseLegacyBbox(req.query);
+    } catch (error) {
+      if (error instanceof QueryValidationError) {
+        reply.status(400).send({ message: "Invalid bbox coordinates" });
+        return;
+      }
+      throw error;
     }
 
-    const MAX_BBOX_SPAN = 15;
-    if (north - south > MAX_BBOX_SPAN || east - west > MAX_BBOX_SPAN) {
-      reply.status(400).send({ message: "Bounding box too large" });
-      return;
-    }
-
-    const locations = await fetchLocationsInBbox(apiKey, ctx.cache, south, west, north, east);
-    const values = await resolveLatestValues(apiKey, ctx.cache, locations);
-
-    const stations: AirQualityStation[] = [];
-    for (const loc of locations) {
-      const val = values.get(loc.id);
-      if (!val) continue;
-      stations.push({
-        id: loc.id,
-        name: loc.name,
-        lat: loc.lat,
-        lng: loc.lng,
-        aqi: val.aqi,
-        pm25: val.pm25,
-        lastUpdated: val.lastUpdated,
-        attribution: loc.attribution,
-        license: loc.license,
+    const startedAt = Date.now();
+    try {
+      const page = await runWithProviderDeadline(
+        (call) =>
+          provider.getStations?.({ ...bbox, zoom: 8, pollutant: "pm25", limit: 100 }, call) ??
+          Promise.resolve({
+            evidence: [],
+            nextCursor: null,
+            truncated: false,
+            diagnostics: {
+              candidateCount: 0,
+              servedCount: 0,
+              skippedCount: 0,
+              quotaDeniedCount: 0,
+              failureCount: 0,
+            },
+          }),
+        { signal: req.signal, timeoutMs: provider.timeoutMs ?? 3_000 },
+      );
+      const stations = projectLegacyStations(page.evidence);
+      const quotaTruncated = page.diagnostics.quotaDeniedCount > 0;
+      if (quotaTruncated) reply.header("X-OpenMapX-Air-Quality-Status", "quota-truncated");
+      else if (page.diagnostics.failureCount > 0)
+        reply.header("X-OpenMapX-Air-Quality-Status", "upstream-unavailable");
+      else if (page.truncated) reply.header("X-OpenMapX-Air-Quality-Status", "coverage-truncated");
+      ctx.metricsRecorder?.recordAirQuality?.({
+        method: "stations",
+        outcome: page.truncated ? "partial" : stations.length > 0 ? "ok" : "empty",
+        cacheResult: "bypass",
+        headlineClass: stations.length > 0 ? "raw-ground" : "none",
+        rejectionCode: quotaTruncated ? "quota" : "none",
+        compatibilityUse: "legacy-openaq",
+        quotaTruncated,
+        evidenceCount: page.evidence.length,
+        latencyMs: Date.now() - startedAt,
+      });
+      reply.send(stations);
+    } catch (error) {
+      const quota = error instanceof OpenAQClientError && error.code === "quota_exhausted";
+      ctx.metricsRecorder?.recordAirQuality?.({
+        method: "stations",
+        outcome: quota ? "unavailable" : "error",
+        cacheResult: "miss",
+        headlineClass: "none",
+        rejectionCode: quota ? "quota" : "none",
+        compatibilityUse: "legacy-openaq",
+        quotaTruncated: quota,
+        evidenceCount: 0,
+        latencyMs: Date.now() - startedAt,
+      });
+      reply.status(quota ? 429 : 502).send({
+        message: quota
+          ? "Air quality request quota is exhausted"
+          : "Upstream air quality API error",
       });
     }
-
-    reply.send(stations);
   });
 }

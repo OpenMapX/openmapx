@@ -1734,6 +1734,7 @@
       "poiSearch": "Interessenpunkt-Suche",
       "searchSuggestions": "Code- und Alias-Suche",
       "weather": "Wetter",
+      "airQuality": "Luftqualität",
       "reviews": "Bewertungen",
       "liveTransit": "Live-Nahverkehr",
       "transitDataCatalogs": "Nahverkehrsdaten-Kataloge",
@@ -1755,6 +1756,7 @@
       "poiSearch": "Interessenpunkt-Suche",
       "searchSuggestions": "Code- und Alias-Suche",
       "weather": "Wetter",
+      "airQuality": "Luftqualität",
       "reviews": "Bewertungen",
       "liveTransit": "Live-Nahverkehr",
       "transitDataCatalogs": "Nahverkehrsdaten-Kataloge",
@@ -1964,15 +1966,13 @@
     "hideSidebar": "Seitenleiste ausblenden"
   },
   "airQuality": {
-    "airQualityIndex": "Luftqualitätsindex",
+    "pm25Concentration": "PM2,5-Konzentration",
     "toggleOverlay": "Luftqualitäts-Overlay umschalten",
-    "good": "Gut",
-    "moderate": "Mäßig",
-    "unhealthyForSome": "Ungesund für Empfindliche",
-    "unhealthy": "Ungesund",
-    "veryUnhealthy": "Sehr ungesund",
-    "hazardous": "Gefährlich",
-    "attribution": "Luftqualitätsindex (PM2,5)"
+    "microgramsPerCubicMeter": "µg/m³",
+    "quotaUnavailable": "Die Stationsabdeckung ist durch das OpenAQ-Anfragelimit eingeschränkt.",
+    "coverageLimited": "Der aktuelle Kartenausschnitt enthält mehr Stationen, als gleichzeitig angezeigt werden können.",
+    "temporarilyUnavailable": "Stationsmessungen sind vorübergehend nicht verfügbar.",
+    "attribution": "PM2,5-Konzentration via OpenAQ"
   },
   "weather": {
     "weather": "Wetter",

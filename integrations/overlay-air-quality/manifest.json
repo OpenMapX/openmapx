@@ -4,7 +4,7 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://openaq.org/",
-  "domains": ["map-overlay"],
+  "domains": ["air-quality"],
   "frontend": {
     "mapLayer": true,
     "legend": true,
@@ -51,14 +51,6 @@
       }
     }
   },
-  "healthCheck": {
-    "type": "http",
-    "urlTemplate": "https://api.openaq.org/v3/locations?bbox=-0.1,-0.1,0.1,0.1&parameters_id=2&limit=1&page=1",
-    "headers": {
-      "X-API-Key": "${openAqApiKey}"
-    },
-    "requiredConfigKeys": ["openAqApiKey"]
-  },
   "quality": "built-in",
   "category": "Data Overlays",
   "dataSources": [
@@ -66,9 +58,18 @@
       "sourceId": "openaq",
       "name": "OpenAQ",
       "url": "https://api.openaq.org/",
-      "license": "CC BY 4.0 (varies per source)",
+      "owner": "OpenAQ, Inc.",
+      "termsUrl": "https://docs.openaq.org/about/terms",
+      "methodologyUrl": "https://docs.openaq.org/resources/measurements",
+      "dataUseClass": "attribution",
+      "credentialOwner": "instance-operator",
+      "reviewedAt": "2026-08-30",
+      "apiHosts": ["api.openaq.org"],
+      "license": "Varies by contributing source",
       "licenseUrl": "https://docs.openaq.org/resources/licenses",
-      "commercialUse": "yes",
+      "attribution": "OpenAQ and the contributing data owner",
+      "notes": "Each location carries its own source license and attribution; callers must retain both.",
+      "commercialUse": "conditional",
       "providerCountry": "US",
       "providerPrivacyUrl": "https://openaq.org/privacy/",
       "endUserExposure": "server-only",

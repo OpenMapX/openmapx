@@ -1,0 +1,24 @@
+{
+  "meta": { "name": "openaq-api", "website": "/", "page": 2, "limit": 2, "found": 3 },
+  "results": [
+    {
+      "id": 3002,
+      "name": "Mobile study",
+      "locality": null,
+      "timezone": "UTC",
+      "country": { "id": 155, "code": "US", "name": "United States" },
+      "owner": { "id": 600, "name": "Research owner" },
+      "provider": { "id": 601, "name": "Research provider" },
+      "isMobile": true,
+      "isMonitor": false,
+      "instruments": [{ "id": 100, "name": "Research instrument" }],
+      "sensors": [{ "id": 6002, "name": "pm25 µg/m³", "parameter": { "id": 2, "name": "pm25", "units": "µg/m³", "displayName": "PM2.5" } }],
+      "coordinates": { "latitude": 35.15, "longitude": -106.6 },
+      "licenses": null,
+      "bounds": [-106.6, 35.15, -106.6, 35.15],
+      "distance": 1800,
+      "datetimeFirst": null,
+      "datetimeLast": { "utc": "2026-08-30T09:00:00Z", "local": "2026-08-30T09:00:00Z" }
+    }
+  ]
+}

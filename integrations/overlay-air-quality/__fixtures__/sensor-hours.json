@@ -1,0 +1,8 @@
+{
+  "meta": { "name": "openaq-api", "website": "/", "page": 1, "limit": 100, "found": 3 },
+  "results": [
+    { "value": 9.75, "flagInfo": { "hasFlags": false }, "parameter": { "id": 2, "name": "pm25", "units": "µg/m³", "displayName": "PM2.5" }, "period": { "label": "1 hour", "interval": "01:00:00", "datetimeFrom": { "utc": "2026-08-30T10:00:00Z", "local": "2026-08-30T04:00:00-06:00" }, "datetimeTo": { "utc": "2026-08-30T11:00:00Z", "local": "2026-08-30T05:00:00-06:00" } }, "coordinates": { "latitude": 35.1353, "longitude": -106.584702 }, "summary": null, "coverage": { "expectedCount": 1, "expectedInterval": "01:00:00", "observedCount": 1, "observedInterval": "01:00:00", "percentComplete": 100, "percentCoverage": 100, "datetimeFrom": null, "datetimeTo": null } },
+    { "value": 8.5, "flagInfo": { "hasFlags": true }, "parameter": { "id": 2, "name": "pm25", "units": "µg/m³", "displayName": "PM2.5" }, "period": { "label": "1 hour", "interval": "01:00:00", "datetimeFrom": { "utc": "2026-08-30T08:00:00Z", "local": "2026-08-30T02:00:00-06:00" }, "datetimeTo": { "utc": "2026-08-30T09:00:00Z", "local": "2026-08-30T03:00:00-06:00" } }, "coordinates": { "latitude": 35.1353, "longitude": -106.584702 }, "summary": null, "coverage": null },
+    { "value": 9.1, "flagInfo": { "hasFlags": false }, "parameter": { "id": 2, "name": "pm25", "units": "µg/m³", "displayName": "PM2.5" }, "period": { "label": "1 hour", "interval": "01:00:00", "datetimeFrom": { "utc": "2026-08-30T09:00:00Z", "local": "2026-08-30T03:00:00-06:00" }, "datetimeTo": { "utc": "2026-08-30T10:00:00Z", "local": "2026-08-30T04:00:00-06:00" } }, "coordinates": { "latitude": 35.1353, "longitude": -106.584702 }, "summary": null, "coverage": null }
+  ]
+}

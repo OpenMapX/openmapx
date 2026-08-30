@@ -38,7 +38,7 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
-import { AirQualityLayer } from "../map-layer";
+import { AirQualityLayer, buildGeoJson, buildStationPopupHtml } from "../map-layer";
 
 const AQ_LAYER_ID = "air-quality-layer";
 const MIN_ZOOM = manifest.frontend.overlay.minZoom;
@@ -48,7 +48,7 @@ const registry = new IntegrationRegistry([
     id: "overlay-air-quality",
     name: "Air quality",
     enabled: true,
-    domains: ["map-overlay"],
+    domains: ["air-quality"],
     isBuiltIn: true,
     frontend: { overlay: { minZoom: MIN_ZOOM } },
   },
@@ -66,7 +66,7 @@ beforeEach(() => {
   fake = createFakeMap();
   fetchMock.mockClear();
   vi.stubGlobal("fetch", fetchMock);
-  useAirQualityStore.setState({ layerVisible: true, loading: false });
+  useAirQualityStore.setState({ layerVisible: true, loading: false, error: null });
 });
 
 afterEach(() => {
@@ -76,6 +76,31 @@ afterEach(() => {
 });
 
 describe("AirQualityLayer zoom gate", () => {
+  it("renders PM2.5 concentration independently of nullable legacy AQI", () => {
+    const station = {
+      id: 2178,
+      name: "Del Norte",
+      lat: 35.1353,
+      lng: -106.584702,
+      aqi: null,
+      pm25: 137.25,
+      lastUpdated: "2026-08-30T11:00:00Z",
+      attribution: { name: "Data owner", url: null },
+      license: "Public domain",
+    };
+    const feature = buildGeoJson([station]).features[0];
+    expect(feature.properties).toMatchObject({ aqi: null, pm25: 137.25 });
+    const popup = buildStationPopupHtml({
+      ...feature.properties,
+      attributionName: "Data owner",
+      attributionUrl: "",
+    });
+    expect(popup).toContain("137.3 µg/m³");
+    expect(popup).toContain("2026-08-30T11:00:00Z");
+    expect(popup).not.toContain("Good");
+    expect(popup).not.toContain("AQI");
+  });
+
   it("fetches viewport stations at or above the manifest minZoom", () => {
     render(<AirQualityLayer />, { wrapper });
 
@@ -93,6 +118,15 @@ describe("AirQualityLayer zoom gate", () => {
       slot: "overlay-points",
       order: 0,
     });
+    expect(fake.state.layers.get(AQ_LAYER_ID)?.paint?.["circle-radius"]).toEqual([
+      "interpolate",
+      ["linear"],
+      ["min", ["get", "pm25"], 100],
+      0,
+      5,
+      100,
+      14,
+    ]);
   });
 
   it("skips fetching below minZoom but keeps the layer clamped to it", () => {
@@ -145,5 +179,23 @@ describe("AirQualityLayer zoom gate", () => {
     });
 
     expect(useAirQualityStore.getState().loading).toBe(false);
+  });
+
+  it("surfaces quota and upstream failures instead of silently clearing the map", async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 429, json: async () => [] });
+    render(<AirQualityLayer />, { wrapper });
+    await act(async () => {});
+    expect(useAirQualityStore.getState().error).toBe("quota");
+  });
+
+  it("does not mislabel bounded viewport coverage as quota exhaustion", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      headers: { get: () => "coverage-truncated" },
+      json: async () => [],
+    });
+    render(<AirQualityLayer />, { wrapper });
+    await act(async () => {});
+    expect(useAirQualityStore.getState().error).toBe("coverage");
   });
 });

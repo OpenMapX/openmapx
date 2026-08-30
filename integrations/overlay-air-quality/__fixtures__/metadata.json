@@ -1,0 +1,19 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-08-30",
+  "source": "OpenAQ v3 official OpenAPI 3.0.0 and documentation examples",
+  "endpoints": [
+    "/v3/locations",
+    "/v3/locations/{location_id}",
+    "/v3/locations/{location_id}/latest",
+    "/v3/sensors/{sensor_id}/hours",
+    "/v3/licenses"
+  ],
+  "removedFields": [
+    "API key",
+    "request IP",
+    "precise user query",
+    "unrelated sensors and measurements"
+  ],
+  "notes": "Values are reduced from the official Del Norte examples; IDs and public station metadata are retained to exercise joins. Fixtures are not live smoke output."
+}

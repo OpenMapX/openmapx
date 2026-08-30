@@ -16,54 +16,29 @@ import { useAirQualityStore } from "./store";
 const AQ_SOURCE_ID = "openaq-air-quality";
 const AQ_LAYER_ID = "air-quality-layer";
 
-/** AQI color scale (US EPA standard). */
-const AQI_COLORS: [number, string][] = [
-  [0, "#009966"],
-  [51, "#ffde33"],
-  [101, "#ff9933"],
-  [151, "#cc0033"],
-  [201, "#660099"],
-  [301, "#7e0023"],
+/** Neutral sequential scale for PM2.5 concentration; these are not health categories. */
+export const PM25_COLORS: [number, string][] = [
+  [0, "#2c7bb6"],
+  [10, "#00a6ca"],
+  [25, "#00ccbc"],
+  [50, "#90eb9d"],
+  [75, "#f9d057"],
+  [100, "#f29e2e"],
 ];
-
-const AQI_LABELS: [number, string][] = [
-  [0, "Good"],
-  [51, "Moderate"],
-  [101, "Unhealthy for sensitive groups"],
-  [151, "Unhealthy"],
-  [201, "Very unhealthy"],
-  [301, "Hazardous"],
-];
-
-function aqiLabel(aqi: number): string {
-  let label = "Good";
-  for (const [threshold, l] of AQI_LABELS) {
-    if (aqi >= threshold) label = l;
-  }
-  return label;
-}
-
-function aqiColor(aqi: number): string {
-  let color = AQI_COLORS[0][1];
-  for (const [threshold, c] of AQI_COLORS) {
-    if (aqi >= threshold) color = c;
-  }
-  return color;
-}
 
 interface AQStation {
   id: number;
   name: string;
   lat: number;
   lng: number;
-  aqi: number;
+  aqi: number | null;
   pm25: number;
   lastUpdated: string;
-  attribution: { name: string; url: string } | null;
+  attribution: { name: string; url: string | null } | null;
   license: string | null;
 }
 
-function buildGeoJson(stations: AQStation[]) {
+export function buildGeoJson(stations: AQStation[]) {
   return {
     type: "FeatureCollection" as const,
     features: stations.map((s) => ({
@@ -83,6 +58,27 @@ function buildGeoJson(stations: AQStation[]) {
   };
 }
 
+export function buildStationPopupHtml(p: Record<string, string | number | null>): string {
+  const pm25 = Number(p.pm25);
+  const attrName = escapeHtml(String(p.attributionName || ""));
+  const attrUrl = sanitizeUrl(String(p.attributionUrl || ""));
+  const license = escapeHtml(String(p.license || ""));
+  const attrLink = attrUrl
+    ? `<a href="${attrUrl}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${attrName}</a>`
+    : attrName;
+  const attrHtml = attrName
+    ? `${attrLink}${license ? ` (${license})` : ""} via <a href="https://openaq.org" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">OpenAQ</a>`
+    : `<a href="https://openaq.org" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">OpenAQ</a>`;
+  return `
+    <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:200px">
+      <div style="font-size:14px;font-weight:600;margin-bottom:8px">${escapeHtml(String(p.name))}</div>
+      <div style="font-size:20px;font-weight:700;color:#222">${pm25.toFixed(1)} µg/m³</div>
+      <div style="font-size:12px;color:#777;margin-top:2px">PM2.5 concentration</div>
+      <div style="font-size:11px;color:#777;margin-top:6px">${escapeHtml(String(p.lastUpdated || ""))}</div>
+      <div style="font-size:11px;color:#999;border-top:1px solid #eee;padding-top:6px;margin-top:6px">${attrHtml}</div>
+    </div>`;
+}
+
 export function AirQualityLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
@@ -92,6 +88,7 @@ export function AirQualityLayer() {
   // overlay left on while zooming out can't pull stations for a continent.
   const minZoom = useOverlayMinZoom("air-quality");
   const setLoading = useAirQualityStore((s) => s.setLoading);
+  const setError = useAirQualityStore((s) => s.setError);
   useIntegrationAttribution("overlay-air-quality", layerVisible);
   useOverlayExclusion("air-quality", layerVisible);
   const fetchedRef = useRef(false);
@@ -113,20 +110,29 @@ export function AirQualityLayer() {
 
     const request = beginRequest();
     setLoading(true);
+    setError(null);
     try {
       const res = await fetch(url, { signal: request.signal });
-      if (!request.isCurrent() || !res.ok) return;
+      if (!request.isCurrent()) return;
+      if (!res.ok) {
+        setError(res.status === 429 ? "quota" : "unavailable");
+        return;
+      }
+      const providerStatus = res.headers?.get?.("x-openmapx-air-quality-status");
+      if (providerStatus === "quota-truncated") setError("quota");
+      else if (providerStatus === "coverage-truncated") setError("coverage");
+      else if (providerStatus === "upstream-unavailable") setError("unavailable");
       const stations = (await res.json()) as AQStation[];
       if (!request.isCurrent()) return;
       const geojson = buildGeoJson(stations);
 
       publishGeoJson([{ sourceId: AQ_SOURCE_ID, data: geojson }]);
-    } catch {
-      // Silent fetch failure
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "AbortError")) setError("unavailable");
     } finally {
       if (request.isLatest()) setLoading(false);
     }
-  }, [beginRequest, env, mapRef, publishGeoJson, setLoading, minZoom]);
+  }, [beginRequest, env, mapRef, publishGeoJson, setError, setLoading, minZoom]);
 
   useEffect(() => {
     void styleVersion;
@@ -160,10 +166,9 @@ export function AirQualityLayer() {
       }
 
       if (!map.getLayer(AQ_LAYER_ID)) {
-        const colorExpr: unknown[] = ["step", ["get", "aqi"]];
-        colorExpr.push(AQI_COLORS[0][1]);
-        for (let i = 1; i < AQI_COLORS.length; i++) {
-          colorExpr.push(AQI_COLORS[i][0], AQI_COLORS[i][1]);
+        const colorExpr: unknown[] = ["interpolate", ["linear"], ["get", "pm25"]];
+        for (const [concentration, color] of PM25_COLORS) {
+          colorExpr.push(concentration, color);
         }
 
         addLayerInSlot(
@@ -174,7 +179,15 @@ export function AirQualityLayer() {
             source: AQ_SOURCE_ID,
             minzoom: minZoom,
             paint: {
-              "circle-radius": ["interpolate", ["linear"], ["zoom"], 3, 4, 8, 8, 12, 14],
+              "circle-radius": [
+                "interpolate",
+                ["linear"],
+                ["min", ["get", "pm25"], 100],
+                0,
+                5,
+                100,
+                14,
+              ],
               "circle-color": colorExpr as maplibregl.ExpressionSpecification,
               "circle-opacity": 0.75,
               "circle-stroke-color": "#ffffff",
@@ -229,35 +242,7 @@ export function AirQualityLayer() {
       if (!f) return;
       const p = f.properties as Record<string, string | number>;
       const coords = (f.geometry as { coordinates: number[] }).coordinates as [number, number];
-      const aqi = Number(p.aqi);
-      const pm25 = Number(p.pm25);
-      const label = aqiLabel(aqi);
-      const color = aqiColor(aqi);
-
-      const attrName = escapeHtml(String(p.attributionName || ""));
-      const attrUrl = sanitizeUrl(String(p.attributionUrl || ""));
-      const license = escapeHtml(String(p.license || ""));
-      const attrLink = attrUrl
-        ? `<a href="${attrUrl}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${attrName}</a>`
-        : attrName;
-      const attrHtml = attrName
-        ? `${attrLink}${license ? ` (${license})` : ""} via <a href="https://openaq.org" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">OpenAQ</a>`
-        : `<a href="https://openaq.org" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">OpenAQ</a>`;
-
-      const html = `
-        <div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:200px">
-          <div style="font-size:14px;font-weight:600;margin-bottom:8px">${escapeHtml(String(p.name))}</div>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            <span style="display:inline-flex;align-items:center;justify-content:center;background:${color};color:#fff;font-weight:700;font-size:18px;border-radius:6px;min-width:48px;height:36px;padding:0 8px">${aqi}</span>
-            <div>
-              <div style="font-size:13px;font-weight:500;color:#333">${label}</div>
-              <div style="font-size:12px;color:#777">PM2.5: ${pm25.toFixed(1)} µg/m³</div>
-            </div>
-          </div>
-          <div style="font-size:11px;color:#999;border-top:1px solid #eee;padding-top:6px;margin-top:2px">
-            ${attrHtml}
-          </div>
-        </div>`;
+      const html = buildStationPopupHtml(p);
 
       popupRef.current?.remove();
       popupRef.current = new maplibregl.Popup({
