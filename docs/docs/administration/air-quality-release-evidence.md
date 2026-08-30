@@ -64,5 +64,32 @@ not a substituted manual claim.
 
 ## Verification log
 
-The final command, duration, exit code, date, and exact HEAD are appended here
-only after the complete closeout command sequence has actually run.
+The implementation was verified on 30 August 2026 at code revision
+`337bd463` (`feat(air-quality): close release evidence and provider gates`).
+This evidence record is the documentation-only follow-up to that revision.
+
+| Command | Duration | Exit | Result |
+| --- | ---: | ---: | --- |
+| Focused air-quality Vitest suite | — | 0 | 41 files and 308 tests passed |
+| Closeout-focused Vitest suite | — | 0 | 8 files and 74 tests passed |
+| Policy-contract Vitest suite | — | 0 | 4 files and 37 tests passed |
+| `pnpm test` | 187.34 s wall clock | 0 | 1,240 files passed, 10 skipped; 13,495 tests passed, 50 skipped |
+| `pnpm check-types` | 36.05 s | 0 | 29 tasks passed across 133 workspaces |
+| `pnpm lint` | 14.62 s | 0 | Passed; 20 existing Biome warnings and 216 existing translation warnings remain non-blocking |
+| `pnpm check:policy` | 16.46 s | 0 | All policy checks passed, including the air-quality release gates |
+| Translation checks | 6.09 s | 0 | Passed with the existing non-blocking warnings |
+| OpenAPI checks | 5.81 s | 0 | Passed for 315 operations |
+| `pnpm check-dead-code` | — | 0 | Passed |
+| Documentation typecheck | 1.54 s | 0 | Passed |
+| Documentation production build | 4.99 s | 0 | Passed |
+| `git diff --check` | — | 0 | Passed |
+
+The exact root `pnpm build` built the API, data manager, operations agent,
+extension CLI, and transit runner, then failed in the web Turbopack PostCSS
+worker because the execution environment denied binding its local IPC port
+with `EPERM`. Re-running with elevated sandbox permissions produced the same
+environmental failure. No production code was changed to hide it. The
+supported `pnpm -C apps/web exec next build --webpack` fallback completed in
+10.2 minutes, including TypeScript validation, all 30 static pages, and output
+tracing. `pnpm -C apps/web build:sw` and
+`pnpm -C apps/web build:copy-assets` also passed.
