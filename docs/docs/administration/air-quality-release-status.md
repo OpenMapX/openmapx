@@ -16,9 +16,11 @@ rows are checked against the structured front matter in each linked record by
 | EEA raster | blocked | [EEA raster](./air-quality-status/eea-raster.md) |
 | AirNow | blocked | [AirNow](./air-quality-status/airnow.md) |
 | EEA ground observations | blocked | [EEA ground](./air-quality-status/eea-ground.md) |
-| UK-AIR | blocked | [UK-AIR](./air-quality-status/uk-air.md) |
-| ECCC AQHI | blocked | [ECCC](./air-quality-status/eccc.md) |
+| UK-AIR | shipped | [UK-AIR](./air-quality-status/uk-air.md) |
+| ECCC named-community evidence | shipped | [ECCC](./air-quality-status/eccc.md) |
 
 `blocked` means the optional plan's mandatory STOP condition was reached. No
 provider code is present for a blocked row, and the record names the evidence
 needed to revisit it. This does not block the shipped canonical platform.
+The ECCC shipped row is intentionally secondary evidence: it does not claim a
+local AQHI method or community coverage relationship.

@@ -1,0 +1,26 @@
+<?xml version="1.0"?>
+<rss version="2.0">
+  <channel>
+    <title>UK Air Pollution - Current levels</title>
+    <link>http://uk-air.defra.gov.uk/</link>
+    <lastBuildDate>Sun, 30 Aug 2026 10:35:08 +0000</lastBuildDate>
+    <item>
+      <title>London Bloomsbury</title>
+      <link>http://uk-air.defra.gov.uk/data/site-data?f_site_id=CLL2&amp;view=last_hour</link>
+      <description><![CDATA[Location: 51&deg;31&acute;20.24&quot;N    0&deg;07&acute;33.20&quot;W <br />Current Pollution level is Low at index 2]]></description>
+      <pubDate>Sun, 30 Aug 2026 10:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>Camden Kerbside</title>
+      <link>http://uk-air.defra.gov.uk/data/site-data?f_site_id=CA1&amp;view=last_hour</link>
+      <description><![CDATA[Location: 51&deg;32&acute;39.24&quot;N    0&deg;10&acute;30.82&quot;W <br />Current Pollution level is Low at index 1]]></description>
+      <pubDate>Sun, 30 Aug 2026 10:00:00 +0000</pubDate>
+    </item>
+    <item>
+      <title>Edinburgh St Leonards</title>
+      <link>http://uk-air.defra.gov.uk/data/site-data?f_site_id=ED3&amp;view=last_hour</link>
+      <description><![CDATA[Location: 55&deg;56&acute;44.12&quot;N    3&deg;10&acute;55.87&quot;W <br />Current Pollution level is Low at index 2]]></description>
+      <pubDate>Sun, 30 Aug 2026 10:00:00 +0000</pubDate>
+    </item>
+  </channel>
+</rss>

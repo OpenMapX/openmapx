@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "AQ_FCST-FDGEM-202608301100-202608301000",
+      "geometry": { "type": "Point", "coordinates": [-79.9177778, 43.5055556] },
+      "properties": {
+        "id": "AQ_FCST-FDGEM-202608301100-202608301000",
+        "aqhi_type": "AQHI-Forecast",
+        "forecast_type": "original",
+        "location_name_en": "Milton",
+        "location_name_fr": "Milton",
+        "location_id": "FDGEM",
+        "publication_datetime": "2026-08-30T10:00:00Z",
+        "forecast_datetime": "2026-08-30T11:00:00Z",
+        "aqhi": 2
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "AQ_FCST-FDGEM-202608301200-202608301000",
+      "geometry": { "type": "Point", "coordinates": [-79.9177778, 43.5055556] },
+      "properties": {
+        "id": "AQ_FCST-FDGEM-202608301200-202608301000",
+        "aqhi_type": "AQHI-Forecast",
+        "forecast_type": "original",
+        "location_name_en": "Milton",
+        "location_name_fr": "Milton",
+        "location_id": "FDGEM",
+        "publication_datetime": "2026-08-30T10:00:00Z",
+        "forecast_datetime": "2026-08-30T12:00:00Z",
+        "aqhi": 2
+      }
+    }
+  ],
+  "numberMatched": 2,
+  "numberReturned": 2,
+  "timeStamp": "2026-08-30T11:33:18.513311Z"
+}

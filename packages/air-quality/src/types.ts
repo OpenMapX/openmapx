@@ -150,7 +150,8 @@ export interface AirQualitySpatialSupport {
     | "provider-point-lookup"
     | "point-in-polygon"
     | "zcta-reporting-area-association"
-    | "nearest-station";
+    | "nearest-station"
+    | "nearest-community";
 }
 
 export interface AirQualitySourceRef {

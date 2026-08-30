@@ -1,0 +1,11 @@
+{
+  "name": "ECCC-Luftqualität nahe gelegener Gemeinden",
+  "description": "Offizielle kanadische AQHI-Beobachtungen und -Vorhersagen benannter Gemeinden als nicht flächendeckende Sekundärdaten",
+  "dataSources": {
+    "eccc-aqhi-geomet": {
+      "purpose": "Nahe offizielle ECCC-Luftqualitätsbeobachtungen und -Vorhersagen benannter Gemeinden finden und unverändert übernehmen",
+      "dataSent": "Eine serverseitig aus den angefragten Koordinaten abgeleitete Begrenzungsbox und das angefragte Vorhersagezeitfenster",
+      "dataReceived": "Öffentliche Gemeinde-IDs, zweisprachige Namen, Koordinaten, numerische AQHI-Werte, Beobachtungs- oder Vorhersagezeiten und Veröffentlichungszeiten der Vorhersage. 5–10 Min. gecacht."
+    }
+  }
+}

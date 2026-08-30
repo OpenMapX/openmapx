@@ -3,6 +3,90 @@ import fixtures from "../__fixtures__/uk-daqi.json";
 import { calculateDaqiLevel, ukDaqiCurrentAdapter } from "../standards/uk-daqi-current";
 
 describe("UK DAQI 2026", () => {
+  it("validates an official station-published DAQI without recomputing pollutant windows", () => {
+    const result = ukDaqiCurrentAdapter.validatePublished?.(
+      {
+        indexId: "idx",
+        methodId: "uk-daqi",
+        methodRevision: "uk-air-rss-current-site-levels-v1",
+        claimedStandardId: "uk-daqi-current",
+        value: 4,
+        displayValue: "4",
+        categoryId: "moderate-4",
+        dominantPollutants: [],
+      },
+      {
+        spatial: {
+          kind: "station",
+          id: "UKA-AURN-BLOO",
+          name: "London Bloomsbury",
+          coordinates: [-0.125889, 51.522289],
+          timeZone: null,
+          distanceMeters: 1_000,
+          stationClass: "regulatory",
+          mobile: false,
+          coversRequestedPoint: true,
+          coverageMethod: "nearest-station",
+        },
+        observedAt: "2026-08-30T10:00:00.000Z",
+        forecastFor: null,
+        publishedAt: "2026-08-30T10:35:08.000Z",
+        validUntil: "2026-08-30T12:00:00.000Z",
+        subdivisionCode: "GB-ENG",
+      },
+    );
+
+    expect(result).toMatchObject({
+      ok: true,
+      index: {
+        standardId: "uk-daqi-current",
+        standardRevision: "uk-daqi-2026-04-13",
+        methodId: "uk-daqi",
+        value: 4,
+        categoryId: "moderate-4",
+        authority: "official-agency",
+        derivation: "published-index",
+        basis: "ground",
+      },
+    });
+  });
+
+  it("rejects a station-published DAQI whose category or validity contract is inconsistent", () => {
+    const base = {
+      indexId: "idx",
+      methodId: "uk-daqi",
+      methodRevision: "uk-air-rss-current-site-levels-v1",
+      claimedStandardId: "uk-daqi-current" as const,
+      value: 4,
+      displayValue: "4",
+      categoryId: "low-1",
+      dominantPollutants: [],
+    };
+    const context = {
+      spatial: {
+        kind: "station" as const,
+        id: "UKA-AURN-BLOO",
+        name: "London Bloomsbury",
+        coordinates: [-0.125889, 51.522289] as [number, number],
+        timeZone: null,
+        distanceMeters: 1_000,
+        stationClass: "regulatory" as const,
+        mobile: false,
+        coversRequestedPoint: true,
+        coverageMethod: "nearest-station" as const,
+      },
+      observedAt: "2026-08-30T10:00:00.000Z",
+      forecastFor: null,
+      publishedAt: "2026-08-30T10:35:08.000Z",
+      validUntil: "2026-08-30T09:00:00.000Z",
+      subdivisionCode: "GB-ENG",
+    };
+
+    expect(ukDaqiCurrentAdapter.validatePublished?.(base, context)).toMatchObject({
+      ok: false,
+    });
+  });
+
   it("matches every independently transcribed anchor", () => {
     for (const [pollutant, cases] of Object.entries(fixtures.anchors)) {
       for (const [value, expected] of cases)

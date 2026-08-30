@@ -1,7 +1,8 @@
 import manifestData from "../data/standards/uk-daqi-2026-04-13.json";
-import type { PollutantSeries } from "../types";
+import type { PollutantSeries, PublishedIndexInput } from "../types";
 import type {
   CategoryDefinition,
+  PublishedValidationContext,
   StandardAdapter,
   StandardCalculationInput,
   StandardCalculationResult,
@@ -13,6 +14,71 @@ import {
   rejectIncoherentCalculation,
   rejectIncoherentCompleteness,
 } from "./common";
+
+function validatePublished(
+  input: PublishedIndexInput,
+  context: PublishedValidationContext,
+): StandardCalculationResult {
+  const observedAt = context.observedAt === null ? Number.NaN : Date.parse(context.observedAt);
+  const publishedAt = context.publishedAt === null ? Number.NaN : Date.parse(context.publishedAt);
+  const validUntil = context.validUntil === null ? Number.NaN : Date.parse(context.validUntil);
+  const expectedCategory =
+    Number.isInteger(input.value) && input.value !== null && input.value >= 1 && input.value <= 10
+      ? DAQI_CATEGORIES[input.value - 1]?.id
+      : null;
+  const schemaValid =
+    input.methodId === "uk-daqi" &&
+    input.methodRevision.trim().length > 0 &&
+    input.claimedStandardId === "uk-daqi-current" &&
+    expectedCategory !== null &&
+    input.categoryId === expectedCategory &&
+    input.displayValue === String(input.value) &&
+    input.dominantPollutants.length === 0 &&
+    context.spatial.kind === "station" &&
+    context.spatial.coordinates !== null &&
+    context.spatial.mobile === false &&
+    context.forecastFor === null;
+  if (!schemaValid)
+    return {
+      ok: false,
+      reason: "unverified_method",
+      missingRequirements: [
+        "Published UK-AIR DAQI value, category, or station contract is inconsistent",
+      ],
+    };
+  if (
+    !Number.isFinite(observedAt) ||
+    !Number.isFinite(publishedAt) ||
+    !Number.isFinite(validUntil) ||
+    observedAt > publishedAt ||
+    publishedAt >= validUntil
+  )
+    return {
+      ok: false,
+      reason: "invalid_time",
+      missingRequirements: ["UK-AIR observation, publication, and validity times are inconsistent"],
+    };
+  return {
+    ok: true,
+    index: {
+      indexId: input.indexId,
+      standardId: "uk-daqi-current",
+      standardRevision: "uk-daqi-2026-04-13",
+      methodId: "uk-daqi",
+      methodRevision: input.methodRevision,
+      effectiveDate: "2026-04-13",
+      value: input.value,
+      displayValue: input.displayValue,
+      categoryId: input.categoryId,
+      dominantPollutants: [],
+      authority: "official-agency",
+      qualityStatus: "preliminary",
+      basis: "ground",
+      derivation: "published-index",
+      inputObservationIds: [],
+    },
+  };
+}
 
 export type DaqiPollutant = "pm25" | "pm10" | "no2" | "o3" | "so2";
 
@@ -152,6 +218,7 @@ export const ukDaqiCurrentAdapter: StandardAdapter = {
   supportedModes: new Set(["current", "history", "forecast"]),
   categories: DAQI_CATEGORIES,
   sourceManifest: manifestData as StandardSourceManifest,
+  validatePublished,
   calculate,
   summarizeCompleteness(input) {
     const incoherent = rejectIncoherentCompleteness(input);

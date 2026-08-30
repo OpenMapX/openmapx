@@ -1,0 +1,11 @@
+{
+  "name": "ECCC nearby-community air quality",
+  "description": "Official Canadian named-community AQHI observations and forecasts as non-covering secondary evidence",
+  "dataSources": {
+    "eccc-aqhi-geomet": {
+      "purpose": "Find and preserve nearby official ECCC named-community air-quality observations and forecasts",
+      "dataSent": "A server-derived bounding box around the requested coordinates and the requested forecast time window",
+      "dataReceived": "Public community IDs, bilingual names, coordinates, AQHI numeric values, observation or forecast times, and forecast publication times. Cached 5–10 min."
+    }
+  }
+}

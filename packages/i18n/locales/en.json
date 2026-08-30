@@ -1982,6 +1982,9 @@
     "validUntil": "Valid until",
     "dominantPollutants": "Dominant pollutants",
     "completeness": "Completeness",
+    "coverage": {
+      "notForRequestedPoint": "Does not establish coverage for this point"
+    },
     "timeUnknown": "Time unavailable",
     "basis": {
       "ground": "Ground monitor evidence",

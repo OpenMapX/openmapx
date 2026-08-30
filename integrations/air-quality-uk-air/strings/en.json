@@ -1,0 +1,11 @@
+{
+  "name": "UK-AIR station DAQI",
+  "description": "Official preliminary station-level Daily Air Quality Index for the United Kingdom",
+  "dataSources": {
+    "uk-air-current-site-levels": {
+      "purpose": "Find a nearby official UK-AIR station and preserve its published current DAQI",
+      "dataSent": "No user or location data; the server requests one fixed nationwide RSS feed",
+      "dataReceived": "Public station IDs, names, coordinates, current DAQI values, observation times, and feed publication time. Cached 2 min."
+    }
+  }
+}

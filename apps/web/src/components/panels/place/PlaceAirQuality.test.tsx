@@ -309,6 +309,59 @@ describe("PlaceAirQuality", () => {
     expect(screen.getByText("airQuality.informationalOnly")).toBeVisible();
   });
 
+  it("shows non-covering official evidence even when no record qualifies as a headline", () => {
+    const secondary = evidence({
+      observationId: "evidence-eccc-community",
+      providerId: "eccc-aqhi",
+      pollutants: [],
+      indices: [
+        index({
+          indexId: "index-eccc-unverified",
+          standardId: null,
+          standardRevision: null,
+          methodId: "eccc-geomet-aqhi-observation-method-unspecified",
+          value: 2.7,
+          displayValue: "2.7",
+          categoryId: "eccc-published-aqhi-method-unspecified",
+          dominantPollutants: [],
+          inputObservationIds: ["evidence-eccc-community"],
+        }),
+      ],
+      spatial: {
+        kind: "community",
+        id: "ECCC-FCWYG",
+        name: "Toronto Downtown",
+        coordinates: [-79.3969444, 43.6758333],
+        timeZone: null,
+        distanceMeters: 1_200,
+        stationClass: null,
+        mobile: null,
+        coversRequestedPoint: false,
+        coverageMethod: "nearest-community",
+      },
+    });
+    hooks.current = {
+      data: response({
+        status: "partial",
+        primaryEvidenceId: null,
+        primaryIndexId: null,
+        evidence: [secondary],
+      }),
+      isLoading: false,
+      isError: false,
+      error: null,
+    };
+
+    renderSection();
+
+    expect(screen.queryByText("airQuality.unavailable")).not.toBeInTheDocument();
+    expect(screen.getByText("airQuality.noQualifyingLocalIndex")).toBeVisible();
+    expect(screen.getByRole("heading", { name: "airQuality.evidence.heading" })).toBeVisible();
+    expect(screen.getByText(/2\.7/)).toBeVisible();
+    expect(screen.getByText(/Toronto Downtown/)).toBeVisible();
+    expect(screen.getByText("airQuality.coverage.notForRequestedPoint")).toBeVisible();
+  });
+
   it.each([
     ["ground", "openmapx-computed-index", "openmapx", "airQuality.provenance.computedGround"],
     ["ground", null, null, "airQuality.provenance.rawGround"],
@@ -506,6 +559,47 @@ describe("PlaceAirQuality", () => {
     expect(within(frames).getByText("airQuality.frame.partial")).toBeVisible();
     expect(within(frames).getByText("airQuality.frame.unavailable")).toBeVisible();
     expect(screen.getAllByText("Fixture authority attribution").length).toBeGreaterThan(0);
+  });
+
+  it("shows community, distance, and non-coverage context for secondary forecasts", () => {
+    const data = forecast();
+    const model = data.evidence.find(({ observationId }) => observationId === "forecast-model");
+    if (!model) throw new Error("forecast model fixture missing");
+    model.indices = [
+      index({
+        indexId: "forecast-eccc-unverified",
+        standardId: null,
+        standardRevision: null,
+        methodId: "eccc-geomet-aqhi-forecast-method-unspecified",
+        value: 2.7,
+        displayValue: "2.7",
+        categoryId: "eccc-published-aqhi-method-unspecified",
+        dominantPollutants: [],
+        inputObservationIds: ["forecast-model"],
+      }),
+    ];
+    model.pollutants = [];
+    model.spatial = {
+      kind: "community",
+      id: "ECCC-FCWYG",
+      name: "Toronto Downtown",
+      coordinates: [-79.3969444, 43.6758333],
+      timeZone: null,
+      distanceMeters: 1_200,
+      stationClass: null,
+      mobile: null,
+      coversRequestedPoint: false,
+      coverageMethod: "nearest-community",
+    };
+    hooks.forecast = { data, isLoading: false, isError: false, error: null };
+
+    renderSection();
+    fireEvent.click(screen.getByRole("button", { name: "airQuality.forecast.show" }));
+
+    const series = screen.getByTestId("air-quality-forecast-model-series");
+    expect(within(series).getByText(/Toronto Downtown/)).toBeVisible();
+    expect(within(series).getByText(/1200/)).toBeVisible();
+    expect(within(series).getByText("airQuality.coverage.notForRequestedPoint")).toBeVisible();
   });
 
   it("keeps semantic headings and keyboard controls in a logical focus order", async () => {

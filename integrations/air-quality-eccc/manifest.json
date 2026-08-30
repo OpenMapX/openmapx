@@ -1,0 +1,52 @@
+{
+  "id": "air-quality-eccc",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "documentation": "https://eccc-msc.github.io/open-data/msc-data/aqhi/readme_aqhi_en/",
+  "domains": ["air-quality"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "dataSources": [
+    {
+      "sourceId": "eccc-aqhi-geomet",
+      "name": "ECCC GeoMet AQHI observations and forecasts",
+      "url": "https://api.weather.gc.ca/collections/aqhi-observations-realtime",
+      "owner": "Environment and Climate Change Canada",
+      "termsUrl": "https://eccc-msc.github.io/open-data/licence/readme_en/",
+      "methodologyUrl": "https://eccc-msc.github.io/open-data/msc-data/aqhi/readme_aqhi_en/",
+      "dataUseClass": "attribution",
+      "credentialOwner": "none",
+      "reviewedAt": "2026-08-30",
+      "apiHosts": ["api.weather.gc.ca", "open.canada.ca"],
+      "license": "Open Government Licence – Canada",
+      "licenseUrl": "https://open.canada.ca/en/open-government-licence-canada",
+      "attribution": "Environment and Climate Change Canada",
+      "commercialUse": "yes",
+      "notes": "Official named-community values. GeoMet does not expose a point-to-community coverage association or conventional-versus-AQHI+ method flag, so OpenMapX keeps the standard unclaimed and the nearest community non-covering.",
+      "providerCountry": "CA",
+      "providerPrivacyUrl": "https://www.canada.ca/en/transparency/privacy.html",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

@@ -1,0 +1,13 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-08-30",
+  "source": "UK-AIR official current site pollution levels RSS feed",
+  "endpoint": "https://uk-air.defra.gov.uk/assets/rss/current_site_levels.xml",
+  "reviewer": "OpenMapX provider-contract fixture review",
+  "snapshotChecksum": "sha256:d19410bf20c1a39a0aae348fdd1a799e91b45ec1861b6b645078453b258cd8ac",
+  "checksums": {
+    "current-site-levels.xml": "sha256:d19410bf20c1a39a0aae348fdd1a799e91b45ec1861b6b645078453b258cd8ac"
+  },
+  "removedFields": ["unrelated monitoring sites"],
+  "notes": "The bounded excerpt retains exact public station names, site IDs, DMS coordinates, publication times, and agency-published DAQI values needed to exercise the live contract."
+}

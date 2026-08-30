@@ -87,4 +87,60 @@ describe("canonical forecast route", () => {
       meta: { warnings: ["partial_providers"] },
     });
   });
+
+  it("marks a frame partial when it contains valid secondary evidence but no headline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const secondary = evidence({
+      at: now,
+      forecast: true,
+      providerId: "eccc-aqhi",
+      sourceId: "eccc-aqhi-geomet",
+      spatialId: "ECCC-FCWYG",
+    });
+    secondary.series = [];
+    secondary.publishedIndices = [
+      {
+        indexId: "idx_1_1234567890123456789012345678901234567890123",
+        methodId: "eccc-geomet-aqhi-forecast-method-unspecified",
+        methodRevision: "eccc-geomet-aqhi-collections-2026-08-30",
+        claimedStandardId: null,
+        value: 2.7,
+        displayValue: "2.7",
+        categoryId: "eccc-published-aqhi-method-unspecified",
+        dominantPollutants: [],
+      },
+    ];
+    secondary.spatial = {
+      kind: "community",
+      id: "ECCC-FCWYG",
+      name: "Toronto Downtown",
+      coordinates: [-79.3969444, 43.6758333],
+      timeZone: null,
+      distanceMeters: 1_200,
+      stationClass: null,
+      mobile: null,
+      coversRequestedPoint: false,
+      coverageMethod: "nearest-community",
+    };
+    const ctx = context(async () => [secondary]);
+    setup(ctx);
+    const handler = ctx.registered.routes.find(({ path }) => path === "/forecast")?.handler;
+    const output = fakeReply();
+    await handler?.(
+      {
+        query: { lat: "43.67", lng: "-79.39", hours: "2", country: "CA" },
+        params: {},
+        body: undefined,
+        headers: {},
+      },
+      output.reply,
+    );
+
+    expect(output.state.payload).toMatchObject({
+      status: "partial",
+      evidence: [{ spatial: { coversRequestedPoint: false } }],
+      frames: [{ frameAt: now, status: "partial", primary: null }],
+    });
+  });
 });

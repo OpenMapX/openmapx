@@ -581,6 +581,30 @@ importers:
         specifier: 19.2.8
         version: 19.2.8
 
+  integrations/air-quality-eccc:
+    dependencies:
+      '@openmapx/air-quality':
+        specifier: workspace:^
+        version: link:../../packages/air-quality
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      zod:
+        specifier: ^4.4.3
+        version: 4.4.3
+
+  integrations/air-quality-uk-air:
+    dependencies:
+      '@openmapx/air-quality':
+        specifier: workspace:^
+        version: link:../../packages/air-quality
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-formats':
+        specifier: workspace:^
+        version: link:../../packages/mobility-formats
+
   integrations/bike-sharing:
     dependencies:
       '@openmapx/core':

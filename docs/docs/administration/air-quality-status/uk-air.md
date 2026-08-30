@@ -1,25 +1,26 @@
 ---
 title: Air quality — UK-AIR
 air_quality_component: uk-air
-status: blocked
-code_path: "none"
-manifest_paths: "none"
-manifest_source_ids: "none"
+status: shipped
+code_path: "integrations/air-quality-uk-air,packages/air-quality/src/standards/uk-daqi-current.ts"
+manifest_paths: "integrations/air-quality-uk-air/manifest.json"
+manifest_source_ids: "uk-air-current-site-levels"
 standard_revision: "uk-daqi-2026-04-13"
 terms_record: "https://uk-air.defra.gov.uk/about-these-pages"
-fixture_metadata: "none"
-focused_test: "not-run-stop-gate"
+fixture_metadata: "integrations/air-quality-uk-air/__fixtures__/metadata.json"
+focused_test: "pnpm exec vitest run --project node integrations/air-quality-uk-air packages/air-quality/src/__tests__/uk-daqi-current.test.ts"
 live_smoke_date: "2026-08-30"
 legal_approval: "not-required"
-blocker: "The official SOS exposes all five pollutant identifiers, but sampled live SO2 series are hourly rather than the 15-minute maximum required by DAQI and values carry no per-sample quality flag."
+blocker: "none"
 ---
 
 # UK-AIR
 
-**Status:** blocked
-**Owner:** optional UK-AIR implementation plan
+**Status:** shipped
+**Owner:** safe optional-provider addendum
 
-The capability and one bounded time series were reviewed on 30 August 2026.
-The service is OGL-licensed, but its current contract cannot produce coherent
-DAQI inputs without inventing cadence or quality. See the
-[provider review](../../developer/air-quality-uk-air.md).
+OpenMapX consumes UK-AIR's explicit current-site DAQI publication and validates
+its value, category, station identity, and time contract. The nearest station
+is eligible only within 25 km and remains labelled preliminary. The SOS
+concentration path is still unsuitable for recomputation because its sampled
+SO2 cadence and quality semantics do not satisfy the DAQI adapter.

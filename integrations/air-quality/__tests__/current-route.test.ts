@@ -59,6 +59,56 @@ describe("canonical current route", () => {
     });
   });
 
+  it("marks secondary-only evidence partial, including when that evidence is stale", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(now);
+    const secondary = evidence({
+      at: "2026-08-30T09:00:00.000Z",
+      providerId: "eccc-aqhi",
+      sourceId: "eccc-aqhi-geomet",
+      spatialId: "ECCC-FCWYG",
+    });
+    secondary.series = [];
+    secondary.publishedIndices = [
+      {
+        indexId: "idx_1_1234567890123456789012345678901234567890123",
+        methodId: "eccc-geomet-aqhi-observation-method-unspecified",
+        methodRevision: "eccc-geomet-aqhi-collections-2026-08-30",
+        claimedStandardId: null,
+        value: 2.7,
+        displayValue: "2.7",
+        categoryId: "eccc-published-aqhi-method-unspecified",
+        dominantPollutants: [],
+      },
+    ];
+    secondary.spatial = {
+      kind: "community",
+      id: "ECCC-FCWYG",
+      name: "Toronto Downtown",
+      coordinates: [-79.3969444, 43.6758333],
+      timeZone: null,
+      distanceMeters: 1_200,
+      stationClass: null,
+      mobile: null,
+      coversRequestedPoint: false,
+      coverageMethod: "nearest-community",
+    };
+
+    const result = await invoke(context(provider(async () => [secondary])), {
+      lat: "43.67",
+      lng: "-79.39",
+      country: "CA",
+    });
+
+    expect(result.payload).toMatchObject({
+      status: "partial",
+      primaryEvidenceId: null,
+      primaryIndexId: null,
+      evidence: [{ freshness: "stale" }],
+      meta: { warnings: expect.arrayContaining(["stale_evidence"]) },
+    });
+  });
+
   it("uses HTTP 200 unavailable for valid no-data and reports policy exclusion", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(now);

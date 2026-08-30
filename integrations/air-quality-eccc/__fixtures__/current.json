@@ -1,0 +1,40 @@
+{
+  "type": "FeatureCollection",
+  "features": [
+    {
+      "type": "Feature",
+      "id": "AQ_OBS-FCWYG-20260830100000",
+      "geometry": { "type": "Point", "coordinates": [-79.3969444, 43.6758333] },
+      "properties": {
+        "id": "AQ_OBS-FCWYG-20260830100000",
+        "aqhi_type": "AQHI-Observation",
+        "observation_type": "original",
+        "location_name_en": "Toronto Downtown",
+        "location_name_fr": "centre-ville de Toronto",
+        "location_id": "FCWYG",
+        "observation_datetime": "2026-08-30T10:00:00Z",
+        "aqhi": 2.7,
+        "latest": true
+      }
+    },
+    {
+      "type": "Feature",
+      "id": "AQ_OBS-FDCHU-20260830100000",
+      "geometry": { "type": "Point", "coordinates": [-79.9027778, 43.2644444] },
+      "properties": {
+        "id": "AQ_OBS-FDCHU-20260830100000",
+        "aqhi_type": "AQHI-Observation",
+        "observation_type": "original",
+        "location_name_en": "Hamilton West",
+        "location_name_fr": "Hamilton Ouest",
+        "location_id": "FDCHU",
+        "observation_datetime": "2026-08-30T10:00:00Z",
+        "aqhi": 2.21,
+        "latest": true
+      }
+    }
+  ],
+  "numberMatched": 2,
+  "numberReturned": 2,
+  "timeStamp": "2026-08-30T11:25:17.133477Z"
+}

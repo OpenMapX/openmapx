@@ -1,0 +1,12 @@
+{
+  "name": "@openmapx/integration-air-quality-uk-air",
+  "license": "AGPL-3.0-or-later",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@openmapx/air-quality": "workspace:^",
+    "@openmapx/integration-framework": "workspace:^",
+    "@openmapx/mobility-formats": "workspace:^"
+  }
+}

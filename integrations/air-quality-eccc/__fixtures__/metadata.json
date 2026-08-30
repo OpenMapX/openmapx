@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "retrievedAt": "2026-08-30",
+  "source": "Environment and Climate Change Canada GeoMet AQHI OGC API collections",
+  "endpoints": [
+    "https://api.weather.gc.ca/collections/aqhi-observations-realtime/items",
+    "https://api.weather.gc.ca/collections/aqhi-forecasts-realtime/items"
+  ],
+  "reviewer": "OpenMapX provider-contract fixture review",
+  "snapshotChecksum": "sha256:b6bed535f84457e60faca51a37325fc61d49e9f15f465df7c6c69333d7474f33",
+  "checksums": {
+    "current.json": "sha256:b6bed535f84457e60faca51a37325fc61d49e9f15f465df7c6c69333d7474f33",
+    "forecast.json": "sha256:53ef7b64db09de23726b71cd0dc2f8fa610ea2b4da011f878af3a007fbe1c49b"
+  },
+  "removedFields": [
+    "pagination links",
+    "localized display-time strings",
+    "special-note fields",
+    "unrelated communities"
+  ],
+  "notes": "The fixtures retain official IDs, bilingual community names, coordinates, current/forecast values, and validity anchors. GeoMet supplies neither a point-to-community coverage association nor an explicit conventional-versus-AQHI+ method flag."
+}

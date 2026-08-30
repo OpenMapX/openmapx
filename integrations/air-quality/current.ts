@@ -4,6 +4,7 @@ import {
   type AirQualityRejectionReason,
   type AirQualityWarningCode,
   airQualityCurrentResponseSchema,
+  airQualityEvidenceSchema,
   registerBuiltinStandardAdapters,
   resolveStandard,
   selectAirQuality,
@@ -95,21 +96,26 @@ export function deduplicateCanonicalEvidence(input: readonly AirQualityEvidence[
   };
 }
 
-function hasEcccCommunityMatch(raw: readonly unknown[]): boolean {
-  return raw.some((value) => {
-    if (!value || typeof value !== "object") return false;
-    const item = value as {
-      spatial?: { kind?: unknown };
-      sourceIds?: unknown;
-      providerId?: unknown;
-    };
-    const identifiers = [
-      ...(Array.isArray(item.sourceIds) ? item.sourceIds : []),
-      item.providerId,
-    ].map(String);
+export function hasEcccCommunityMatch(values: readonly unknown[]): boolean {
+  return values.some((value) => {
+    const parsed = airQualityEvidenceSchema.safeParse(value);
+    if (!parsed.success) return false;
+    const item = parsed.data;
     return (
-      item.spatial?.kind === "community" &&
-      identifiers.some((id) => /eccc|environment-canada/i.test(id))
+      item.providerId === "eccc-aqhi" &&
+      item.sourceIds.includes("eccc-aqhi-geomet") &&
+      item.dataAuthority === "official-agency" &&
+      item.freshness === "fresh" &&
+      item.spatial.kind === "community" &&
+      item.spatial.coversRequestedPoint &&
+      ["point-in-polygon", "provider-point-lookup"].includes(item.spatial.coverageMethod) &&
+      item.indices.some(
+        (index) =>
+          index.standardId === "ca-aqhi-current" &&
+          ["eccc-aqhi", "eccc-aqhi-plus-pm25-hourly"].includes(index.methodId) &&
+          index.authority === "official-agency" &&
+          index.derivation === "published-index",
+      )
     );
   });
 }
@@ -198,12 +204,6 @@ function reselectCachedCurrent(
   providerPriorities: Readonly<Record<string, number>>,
 ): AirQualityCurrentResponse {
   registerBuiltinStandardAdapters();
-  const jurisdiction = resolvePointJurisdiction(query, {
-    ecccCommunityMatch: hasEcccCommunityMatch(cached.evidence),
-  });
-  const resolution = jurisdiction.localStandardId
-    ? resolveStandard(jurisdiction.localStandardId, query.evaluatedAt)
-    : null;
   const target = Date.parse(query.evaluatedAt);
   const evidence = cached.evidence.map((item): AirQualityEvidence => {
     const validUntil = Date.parse(item.validUntil ?? "");
@@ -221,6 +221,12 @@ function reselectCachedCurrent(
         : [...new Set<AirQualityWarningCode>([...item.warnings, "stale_evidence"])].sort(),
     };
   });
+  const jurisdiction = resolvePointJurisdiction(query, {
+    ecccCommunityMatch: hasEcccCommunityMatch(evidence),
+  });
+  const resolution = jurisdiction.localStandardId
+    ? resolveStandard(jurisdiction.localStandardId, query.evaluatedAt)
+    : null;
   const selected = selectAirQuality({
     evidence,
     localStandardId: jurisdiction.localStandardId,
@@ -327,8 +333,23 @@ export function createCurrentService(ctx: IntegrationContext) {
 
     const orchestration = await orchestrator.current(point, signal, preflight);
     const raw = orchestration.results.flatMap(({ evidence }) => evidence);
+    const validatedCommunityCandidates = raw.flatMap((value) => {
+      try {
+        return [
+          normalizeProviderEvidence(value, {
+            targetAt: query.evaluatedAt,
+            mode: "current",
+            localStandardId: null,
+            comparisonStandardId: null,
+            subdivisionCode: initialJurisdiction.subdivisionCode,
+          }).evidence,
+        ];
+      } catch {
+        return [];
+      }
+    });
     const jurisdiction = resolvePointJurisdiction(query, {
-      ecccCommunityMatch: hasEcccCommunityMatch(raw),
+      ecccCommunityMatch: hasEcccCommunityMatch(validatedCommunityCandidates),
     });
     const localResolution = jurisdiction.localStandardId
       ? resolveStandard(jurisdiction.localStandardId, query.evaluatedAt)
@@ -406,6 +427,7 @@ export function createCurrentService(ctx: IntegrationContext) {
         orchestration.diagnostics.providersPolicyExcluded.length > 0 ||
         truncated ||
         deduplicated.conflictingIds.length > 0 ||
+        selected.primaryEvidenceId === null ||
         primary?.freshness === "stale" ||
         uniqueWarnings.includes("comparison_unavailable");
       return {

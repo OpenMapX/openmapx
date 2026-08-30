@@ -195,6 +195,14 @@ function EvidenceContext({ evidence }: { evidence: AirQualityEvidence }) {
         </Typography>
       )}
       <Stack direction="row" useFlexGap sx={{ gap: 0.75, flexWrap: "wrap" }}>
+        {evidence.spatial.coversRequestedPoint === false && (
+          <Chip
+            size="small"
+            color="warning"
+            variant="outlined"
+            label={t("airQuality.coverage.notForRequestedPoint")}
+          />
+        )}
         {estimated && <Chip size="small" label={t("airQuality.flag.estimated")} />}
         {gapFilled && <Chip size="small" label={t("airQuality.flag.gapFilled")} />}
         {completeness.length > 0 && (
@@ -233,6 +241,13 @@ function EvidenceCard({ evidence }: { evidence: AirQualityEvidence }) {
         {t(freshnessPresentation(evidence.freshness).labelKey)}
       </Typography>
       <Stack spacing={0.3} sx={{ mt: 0.75 }}>
+        {evidence.pollutants.length === 0 &&
+          evidence.indices.map((index) => (
+            <Typography key={index.indexId} variant="body2">
+              {t(standardLabelKey(index.standardId))}: {index.displayValue} ·{" "}
+              {t(categoryPresentation(index.standardId, index.categoryId).labelKey)}
+            </Typography>
+          ))}
         {evidence.pollutants.map((pollutant) => (
           <Typography key={`${pollutant.pollutant}:${pollutant.intervalEnd}`} variant="body2">
             {pollutantPresentation(pollutant.pollutant).symbol}: {pollutant.value}{" "}
@@ -446,6 +461,7 @@ function ForecastContent({ response }: { response: AirQualityForecastResponse })
                       {t("airQuality.noQualifyingLocalIndex")}
                     </Typography>
                   )}
+                  <EvidenceContext evidence={item} />
                 </Box>
               );
             })}
@@ -500,7 +516,7 @@ export function PlaceAirQuality({ lat, lng, enabled = true, countryCode, subdivi
   }
   if (current.isError) return <Alert severity="error">{t("airQuality.requestError")}</Alert>;
   const response = current.data;
-  if (!response || response.status === "unavailable" || !response.primaryEvidenceId) {
+  if (!response || response.evidence.length === 0) {
     return (
       <Typography role="status" variant="body2" color="text.secondary" sx={{ py: 1 }}>
         {t("airQuality.unavailable")}
@@ -511,6 +527,11 @@ export function PlaceAirQuality({ lat, lng, enabled = true, countryCode, subdivi
   return (
     <Box sx={{ py: 1 }}>
       <Headline response={response} />
+      {!response.primaryEvidenceId && (
+        <Alert severity="info" sx={{ mb: 1 }}>
+          {t("airQuality.noQualifyingLocalIndex")}
+        </Alert>
+      )}
       {response.meta.warnings.length > 0 && (
         <Alert severity="warning" sx={{ mt: 1 }}>
           {response.meta.warnings.map((warning) => (

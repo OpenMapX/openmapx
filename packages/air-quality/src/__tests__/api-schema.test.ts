@@ -4,6 +4,7 @@ import {
   airQualityApiErrorSchema,
   airQualityCurrentResponseSchema,
   airQualityForecastResponseSchema,
+  airQualitySpatialSupportSchema,
   airQualityStationsResponseSchema,
 } from "../api";
 
@@ -42,6 +43,43 @@ const current = {
 } as const;
 
 describe("canonical air-quality API schemas", () => {
+  it("represents a nearest named community without pretending it is a station association", () => {
+    expect(
+      airQualitySpatialSupportSchema.parse({
+        kind: "community",
+        id: "ECCC-FCWYG",
+        name: "Toronto Downtown",
+        coordinates: [-79.3969444, 43.6758333],
+        timeZone: null,
+        distanceMeters: 1_200,
+        stationClass: null,
+        mobile: null,
+        coversRequestedPoint: false,
+        coverageMethod: "nearest-community",
+      }),
+    ).toMatchObject({ coverageMethod: "nearest-community" });
+
+    for (const invalid of [
+      { kind: "community", coversRequestedPoint: true },
+      { kind: "station", coversRequestedPoint: false },
+    ]) {
+      expect(() =>
+        airQualitySpatialSupportSchema.parse({
+          kind: invalid.kind,
+          id: "ECCC-FCWYG",
+          name: "Toronto Downtown",
+          coordinates: [-79.3969444, 43.6758333],
+          timeZone: null,
+          distanceMeters: 1_200,
+          stationClass: null,
+          mobile: null,
+          coversRequestedPoint: invalid.coversRequestedPoint,
+          coverageMethod: "nearest-community",
+        }),
+      ).toThrow();
+    }
+  });
+
   it("accepts the exact empty current envelope and rejects unknown closed codes", () => {
     expect(airQualityCurrentResponseSchema.parse(current)).toEqual(current);
     expect(() =>

@@ -173,11 +173,11 @@ export function createForecastService(ctx: IntegrationContext) {
           : [];
         if (comparisonAll.length > 32) comparisonTruncated = true;
         const comparison = comparisonAll.slice(0, 32);
-        const unavailable =
-          frame.evidenceIds.length === 0 || frame.selection.primaryEvidenceId === null;
+        const unavailable = frame.evidenceIds.length === 0;
         const partial =
           !unavailable &&
-          (globallyDegraded ||
+          (frame.selection.primaryEvidenceId === null ||
+            globallyDegraded ||
             primaryEvidence?.freshness === "stale" ||
             comparisonTruncated ||
             (query.comparisonStandard !== undefined && comparison.length === 0));

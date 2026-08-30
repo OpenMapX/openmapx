@@ -135,9 +135,21 @@ export const airQualitySpatialSupportSchema = z
       "point-in-polygon",
       "zcta-reporting-area-association",
       "nearest-station",
+      "nearest-community",
     ]),
   })
-  .strict();
+  .strict()
+  .superRefine((value, context) => {
+    if (
+      value.coverageMethod === "nearest-community" &&
+      (value.kind !== "community" || value.coversRequestedPoint)
+    )
+      context.addIssue({
+        code: "custom",
+        path: ["coverageMethod"],
+        message: "nearest-community is non-covering community evidence",
+      });
+  });
 
 export const airQualityIndexSchema = z
   .object({

@@ -1,0 +1,52 @@
+{
+  "id": "air-quality-uk-air",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "documentation": "https://uk-air.defra.gov.uk/latest/currentlevels",
+  "domains": ["air-quality"],
+  "frontend": {
+    "mapLayer": false,
+    "legend": false,
+    "panel": false
+  },
+  "backend": {
+    "routes": false
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      }
+    }
+  },
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "dataSources": [
+    {
+      "sourceId": "uk-air-current-site-levels",
+      "name": "UK-AIR current site pollution levels",
+      "url": "https://uk-air.defra.gov.uk/assets/rss/current_site_levels.xml",
+      "owner": "UK Department for Environment, Food & Rural Affairs",
+      "termsUrl": "https://uk-air.defra.gov.uk/about-these-pages",
+      "methodologyUrl": "https://uk-air.defra.gov.uk/air-pollution/daqi",
+      "dataUseClass": "attribution",
+      "credentialOwner": "none",
+      "reviewedAt": "2026-08-30",
+      "apiHosts": ["uk-air.defra.gov.uk", "www.nationalarchives.gov.uk"],
+      "license": "Open Government Licence v3.0",
+      "licenseUrl": "https://www.nationalarchives.gov.uk/doc/open-government-licence/version/3/",
+      "attribution": "Department for Environment, Food & Rural Affairs (Defra), UK-AIR",
+      "commercialUse": "yes",
+      "notes": "Official preliminary station-level DAQI from the current-site RSS feed. OpenMapX does not recompute DAQI from this feed and only associates a site with a request within 25 km.",
+      "providerCountry": "GB",
+      "providerPrivacyUrl": "https://uk-air.defra.gov.uk/about-these-pages",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

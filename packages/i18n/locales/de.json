@@ -1982,6 +1982,9 @@
     "validUntil": "Gültig bis",
     "dominantPollutants": "Bestimmende Schadstoffe",
     "completeness": "Vollständigkeit",
+    "coverage": {
+      "notForRequestedPoint": "Belegt keine Abdeckung für diesen Ort"
+    },
     "timeUnknown": "Zeit nicht verfügbar",
     "basis": {
       "ground": "Messstationsdaten",

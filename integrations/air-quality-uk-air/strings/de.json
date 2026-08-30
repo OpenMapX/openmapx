@@ -1,0 +1,11 @@
+{
+  "name": "UK-AIR-Stations-DAQI",
+  "description": "Offizieller vorläufiger Stationswert des täglichen Luftqualitätsindex für das Vereinigte Königreich",
+  "dataSources": {
+    "uk-air-current-site-levels": {
+      "purpose": "Eine nahe offizielle UK-AIR-Station finden und ihren veröffentlichten aktuellen DAQI übernehmen",
+      "dataSent": "Keine Nutzer- oder Standortdaten; der Server ruft ausschließlich einen festen landesweiten RSS-Feed ab",
+      "dataReceived": "Öffentliche Stations-IDs, Namen, Koordinaten, aktuelle DAQI-Werte, Beobachtungszeiten und Veröffentlichungszeit des Feeds. 2 Min. gecacht."
+    }
+  }
+}

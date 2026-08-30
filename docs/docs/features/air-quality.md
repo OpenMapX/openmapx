@@ -31,6 +31,12 @@ answer is a raw concentration, the evidence ID is present and the index ID is
 null. OpenMapX does not turn a partial window into a different index merely to
 avoid an empty badge.
 
+In the UK, an official UK-AIR station DAQI can headline only when the station is
+within 25 km. In Canada, ECCC's nearest named-community values are retained as
+secondary evidence because the current GeoMet contract does not prove that the
+community covers the requested point or identify conventional AQHI versus
+AQHI+ per record.
+
 Each record discloses whether it is ground, model, or hybrid evidence; who owns
 and republishes it; the observation/forecast/validity times; spatial support;
 quality and freshness; original units; method revision; source URLs, license,
