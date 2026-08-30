@@ -111,6 +111,13 @@ export function validateSemanticResidencyEvidence(
   ) {
     throw new Error("Residency concurrency evidence is incomplete");
   }
+  if (
+    (evidence.activeConcurrentSamples ?? 0) > (evidence.samples ?? 0) ||
+    (evidence.peakWorkingSetBytes ?? 0) + (evidence.headroomBytes ?? 0) !==
+      evidence.containerLimitBytes
+  ) {
+    throw new Error("Residency byte or sample arithmetic is inconsistent");
+  }
   if (!Array.isArray(evidence.residentModels)) throw new Error("Resident model list is missing");
   const models = evidence.residentModels.map((item) => object(item)).filter(Boolean);
   const qwen = models.find((model) => model?.name === SEMANTIC_MODEL);
@@ -124,7 +131,8 @@ export function validateSemanticResidencyEvidence(
     if (
       typeof model?.name !== "string" ||
       typeof model.digest !== "string" ||
-      (!Number.isSafeInteger(model.size) && !Number.isSafeInteger(model.sizeBytes))
+      (!Number.isSafeInteger(model.size) && !Number.isSafeInteger(model.sizeBytes)) ||
+      ((model.size as number | undefined) ?? (model.sizeBytes as number | undefined) ?? 0) <= 0
     ) {
       throw new Error("Resident model entry is malformed");
     }
@@ -241,6 +249,7 @@ export async function collectSemanticResidencyEvidence(options: {
     { stdio: ["pipe", "pipe", "pipe"] },
   );
   let buffer = "";
+  let stoppingStats = false;
   stats.stdout.setEncoding("utf8");
   stats.stdout.on("data", (chunk: string) => {
     buffer += chunk;
@@ -259,6 +268,14 @@ export async function collectSemanticResidencyEvidence(options: {
   });
   stats.stderr.setEncoding("utf8");
   stats.stderr.on("data", () => undefined);
+  stats.once("error", (error) => {
+    statsError = error;
+  });
+  stats.once("exit", (code, signal) => {
+    if (!stoppingStats && code !== 0) {
+      statsError = new Error(`Docker stats exited unexpectedly (${code ?? signal ?? "unknown"})`);
+    }
+  });
 
   const rounds = options.rounds ?? MINIMUM_ROUNDS;
   const duration = options.roundDurationMs ?? 5_000;
@@ -325,6 +342,7 @@ export async function collectSemanticResidencyEvidence(options: {
       verifiedRounds++;
     }
   } finally {
+    stoppingStats = true;
     stats.kill("SIGTERM");
     await new Promise<void>((resolve) => {
       if (stats.exitCode !== null || stats.signalCode !== null) resolve();
@@ -355,9 +373,10 @@ export async function collectSemanticResidencyEvidence(options: {
 
 function parseArgs(argv: readonly string[]): Record<string, string> {
   const parsed: Record<string, string> = {};
-  for (let index = 0; index < argv.length; index += 2) {
-    const key = argv[index];
-    const value = argv[index + 1];
+  const values = argv[0] === "--" ? argv.slice(1) : argv;
+  for (let index = 0; index < values.length; index += 2) {
+    const key = values[index];
+    const value = values[index + 1];
     if (!key?.startsWith("--") || !value) throw new Error("Invalid residency arguments");
     parsed[key.slice(2)] = value;
   }

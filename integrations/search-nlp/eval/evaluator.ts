@@ -19,6 +19,7 @@ export interface EvaluatedCase {
   score: SemanticScoreResult;
   keywordIntent: SearchIntent;
   parserBaselineIntent?: SearchIntent;
+  parserBaselineFailed?: boolean;
   latencyMs: number;
 }
 
@@ -72,6 +73,7 @@ export interface SemanticEvaluationReport {
   keywordRecovery: MetricSlice;
   parserBaseline: {
     available: boolean;
+    failedCases: number;
     plausibleCases: number;
     plausibleMutationCount: number;
     incrementalRecovery: MetricSlice;
@@ -430,6 +432,7 @@ export function evaluateWithCalibration(
     },
     parserBaseline: {
       available: withParser.length === heldout.length && heldout.length > 0,
+      failedCases: withParser.filter(({ parserBaselineFailed }) => parserBaselineFailed).length,
       plausibleCases: parserPlausible.length,
       plausibleMutationCount: parserMutationCount,
       incrementalRecovery: {

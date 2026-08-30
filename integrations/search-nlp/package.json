@@ -17,8 +17,8 @@
     }
   },
   "scripts": {
-    "eval:semantic-taxonomy": "tsx eval/run.ts",
-    "eval:semantic-residency": "tsx eval/measure-residency.ts"
+    "eval:semantic-taxonomy": "tsx --tsconfig ../../tsconfig.base.json eval/run.ts",
+    "eval:semantic-residency": "tsx --tsconfig ../../tsconfig.base.json eval/measure-residency.ts"
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^4.0.42",

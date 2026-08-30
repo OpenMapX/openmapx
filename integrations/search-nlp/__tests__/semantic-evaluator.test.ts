@@ -132,6 +132,7 @@ function evaluated(options: {
   kind?: SemanticTaxonomyCaseV1["strata"]["kind"];
   keywordIntent?: SearchIntent;
   parserBaselineIntent?: SearchIntent;
+  parserBaselineFailed?: boolean;
 }): EvaluatedCase {
   const topScore = options.score ?? 0.9;
   const margin = options.margin ?? 0.2;
@@ -161,6 +162,7 @@ function evaluated(options: {
     },
     keywordIntent: options.keywordIntent ?? emptyIntent(),
     parserBaselineIntent: options.parserBaselineIntent ?? emptyIntent(),
+    parserBaselineFailed: options.parserBaselineFailed,
     latencyMs: 100,
   };
 }
@@ -287,6 +289,7 @@ describe("semantic evaluator", () => {
         lang: "de",
         split: "test",
         expected: { status: "category", acceptableCategoryIds: ["libraries"] },
+        parserBaselineFailed: true,
       }),
       evaluated({
         id: "guarded-positive",
@@ -317,6 +320,7 @@ describe("semantic evaluator", () => {
     expect(report.safeCoverage).toMatchObject({ total: 3, correct: 2 });
     expect(report.keywordRecovery).toMatchObject({ total: 3, correct: 2 });
     expect(report.negatives.p0FalseActivations).toBe(0);
+    expect(report.parserBaseline.failedCases).toBe(1);
     expect(report.outcomes.find(({ id }) => id === "guarded-positive")).toMatchObject({
       applied: false,
       policyCorrect: false,
@@ -502,6 +506,18 @@ describe("semantic evaluator", () => {
     ).toThrow();
     expect(() =>
       validateSemanticResidencyEvidence({ ...evidence, headroomBytes: 1 }, expected),
+    ).toThrow();
+    expect(() =>
+      validateSemanticResidencyEvidence(
+        { ...evidence, activeConcurrentSamples: evidence.samples + 1 },
+        expected,
+      ),
+    ).toThrow();
+    expect(() =>
+      validateSemanticResidencyEvidence(
+        { ...evidence, peakWorkingSetBytes: base.peakWorkingSetBytes - 1 },
+        expected,
+      ),
     ).toThrow();
     expect(() =>
       validateSemanticResidencyEvidence({ ...evidence, evidenceChecksum: "bad" }, expected),

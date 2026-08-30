@@ -62,9 +62,10 @@ function memoryCache(): CacheClient {
 
 function parseArgs(argv: readonly string[]): Record<string, string> {
   const parsed: Record<string, string> = {};
-  for (let index = 0; index < argv.length; index += 2) {
-    const key = argv[index];
-    const value = argv[index + 1];
+  const values = argv[0] === "--" ? argv.slice(1) : argv;
+  for (let index = 0; index < values.length; index += 2) {
+    const key = values[index];
+    const value = values[index + 1];
     if (!key?.startsWith("--") || !value) throw new Error("Invalid evaluator arguments");
     parsed[key.slice(2)] = value;
   }
@@ -139,6 +140,7 @@ export function renderSemanticEvaluationReport(input: {
 | Safe held-out coverage | ${percent(report.safeCoverage.rate)} (${report.safeCoverage.correct}/${report.safeCoverage.total}) |
 | Keyword-miss recovery | ${percent(report.keywordRecovery.rate)} (${report.keywordRecovery.correct}/${report.keywordRecovery.total}) |
 | Gemma-miss incremental recovery | ${percent(report.parserBaseline.incrementalRecovery.rate)} (${report.parserBaseline.incrementalRecovery.correct}/${report.parserBaseline.incrementalRecovery.total}) |
+| Gemma parse failures using production keyword fallback | ${report.parserBaseline.failedCases} |
 | Gemma plausible-intent mutations | ${report.parserBaseline.plausibleMutationCount} |
 | Warm query-embedding p95 | ${number(report.latency.warmQueryEmbeddingP95Ms)} ms |
 | Worst resolver bypass p95 | ${number(report.latency.worstBypassP95Ms)} ms |
@@ -325,9 +327,22 @@ async function main(): Promise<void> {
     cloudProcessors: [],
     cacheKey: "evaluation-only",
   });
+  let parserCaseNumber = 0;
+  const parserCaseTotal = evaluated.filter(
+    (item) => item.testCase.split === "test" && item.testCase.strata.kind !== "direct",
+  ).length;
   for (const item of evaluated) {
     if (item.testCase.split !== "test" || item.testCase.strata.kind === "direct") continue;
-    item.parserBaselineIntent = await parser.parseQuery(item.testCase.query, EVALUATION_CONTEXT);
+    parserCaseNumber++;
+    try {
+      item.parserBaselineIntent = await parser.parseQuery(item.testCase.query, EVALUATION_CONTEXT);
+    } catch {
+      item.parserBaselineIntent = item.keywordIntent;
+      item.parserBaselineFailed = true;
+    }
+    if (parserCaseNumber % 10 === 0 || parserCaseNumber === parserCaseTotal) {
+      process.stdout.write(`Gemma baseline ${parserCaseNumber}/${parserCaseTotal}\n`);
+    }
   }
 
   let report = evaluateWithCalibration(evaluated, selected);
