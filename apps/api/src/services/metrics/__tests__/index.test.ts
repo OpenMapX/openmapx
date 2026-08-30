@@ -5,6 +5,7 @@ import {
   getMetrics,
   initMetrics,
   recordAirQuality,
+  recordAirQualityProviderCall,
   recordOsmContributionOperation,
   recordPersonalTimelineRequest,
   recordProviderCall,
@@ -13,6 +14,7 @@ import {
   recordTransitReachability,
   resetMetricsForTests,
 } from "../index.js";
+import { getMetricsRecorder } from "../recorder.js";
 
 /**
  * G3 metrics unit tests. The implementation lazy-initialises a singleton
@@ -120,6 +122,52 @@ describe("metrics service", () => {
     expect(text).toContain('rejection_code="incomplete-window"');
     expect(text).not.toContain("latitude");
     expect(text).not.toContain("station_name");
+  });
+
+  it("records provider calls, cache ownership, suppression, latency, and raster age", async () => {
+    recordAirQualityProviderCall({
+      providerId: "openaq",
+      method: "current",
+      outcome: "ok",
+      cacheResult: "provider-managed",
+      suppression: "none",
+      latencyMs: 19,
+    });
+    recordAirQualityProviderCall({
+      providerId: "open-meteo-air-quality",
+      method: "current",
+      outcome: "skipped",
+      cacheResult: "bypass",
+      suppression: "health",
+      latencyMs: 0,
+    });
+    getMetricsRecorder().recordAirQualityRasterAge?.({ state: "stale", ageSeconds: 721 });
+    const text = await getMetrics().renderPrometheus();
+    expect(text).toContain("air_quality_provider_calls_total");
+    expect(text).toContain("air_quality_provider_call_duration_ms");
+    expect(text).toContain('provider_id="openaq"');
+    expect(text).toContain('cache_result="provider-managed"');
+    expect(text).toContain('suppression="health"');
+    expect(text).toContain("air_quality_raster_age_seconds");
+    expect(text).toContain('state="stale"');
+  });
+
+  it("cannot expose coordinate, station, user, or credential-shaped provider labels", async () => {
+    const sensitive = "user@example.test:52.52,13.405:secret";
+    recordAirQualityProviderCall({
+      providerId: sensitive,
+      method: "stations",
+      outcome: "error",
+      cacheResult: "unknown",
+      suppression: "none",
+      latencyMs: 1,
+    });
+    const text = await getMetrics().renderPrometheus();
+    expect(text).not.toContain(sensitive);
+    expect(text).toContain('provider_id="invalid"');
+    expect(text).not.toContain("station_name");
+    expect(text).not.toContain("latitude");
+    expect(text).not.toContain("credential");
   });
 
   it("records routing latency, route counts, and traffic baseline coverage", async () => {

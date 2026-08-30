@@ -15,5 +15,15 @@
     "precise user query",
     "unrelated sensors and measurements"
   ],
+  "reviewer": "OpenMapX provider-contract fixture review",
+  "snapshotChecksum": "sha256:e94097c56e688f82891d445491ddbde4d9f0e96b69a18e4c00945539160a1119",
+  "checksums": {
+    "latest.json": "sha256:33fd0a7604243233ac86ce14c3c734f04cae2b95f40f75ca2db6cc69551bfc7f",
+    "license.json": "sha256:539b075adbe7fc0e5c2f31f82b02acce21cc20ad65ea060b5ca14faf74ed7d35",
+    "location-detail.json": "sha256:18a2f302fc16291e7f6e6f4240b713ef790d52d2ab1ea0728d923d6ea9f45eaf",
+    "locations-page-1.json": "sha256:bd259467120a0f2c0f742606244647bd9f379a088d6c81e48b9b11ab8e63300a",
+    "locations-page-2.json": "sha256:af8b224b141925a0a9e52cb87f1e3f5a257a18e6ec75dc9694ac2e3bdf7690a3",
+    "sensor-hours.json": "sha256:08a093ac1dbfa13ec84a6c68939d50f54458386e67aa30129990a997125ddab1"
+  },
   "notes": "Values are reduced from the official Del Norte examples; IDs and public station metadata are retained to exercise joins. Fixtures are not live smoke output."
 }

@@ -136,6 +136,26 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
         runnable.push(item);
       }
     }
+    for (const providerId of policyExcluded) {
+      ctx.metricsRecorder?.recordAirQualityProviderCall?.({
+        providerId,
+        method: capability,
+        outcome: "skipped",
+        cacheResult: "bypass",
+        suppression: "policy",
+        latencyMs: 0,
+      });
+    }
+    for (const providerId of unhealthy) {
+      ctx.metricsRecorder?.recordAirQualityProviderCall?.({
+        providerId,
+        method: capability,
+        outcome: "skipped",
+        cacheResult: "bypass",
+        suppression: "health",
+        latencyMs: 0,
+      });
+    }
     return {
       candidates,
       runnable,
@@ -182,14 +202,14 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
               await ctx.providerHealth
                 ?.recordFailure(provider.id, latencyMs, "valid_empty")
                 .catch(() => undefined);
-            ctx.metricsRecorder?.recordProviderCall(
-              {
-                providerId: provider.id,
-                method,
-                outcome: bounded.length > 0 ? "ok" : "empty",
-              },
+            ctx.metricsRecorder?.recordAirQualityProviderCall?.({
+              providerId: provider.id,
+              method,
+              outcome: bounded.length > 0 ? "ok" : "empty",
+              cacheResult: "provider-managed",
+              suppression: "none",
               latencyMs,
-            );
+            });
             return {
               ok: true as const,
               provider,
@@ -207,19 +227,19 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
                 error instanceof Error ? error.message : undefined,
               )
               .catch(() => undefined);
-            ctx.metricsRecorder?.recordProviderCall(
-              {
-                providerId: provider.id,
-                method,
-                outcome:
-                  code === "provider_timeout"
-                    ? "timeout"
-                    : code === "cancelled"
-                      ? "cancelled"
-                      : "error",
-              },
+            ctx.metricsRecorder?.recordAirQualityProviderCall?.({
+              providerId: provider.id,
+              method,
+              outcome:
+                code === "provider_timeout"
+                  ? "timeout"
+                  : code === "cancelled"
+                    ? "cancelled"
+                    : "error",
+              cacheResult: "provider-managed",
+              suppression: "none",
               latencyMs,
-            );
+            });
             return { ok: false as const, provider, code };
           }
         }),
@@ -280,14 +300,14 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
               await ctx.providerHealth
                 ?.recordFailure(provider.id, latencyMs, "valid_empty")
                 .catch(() => undefined);
-            ctx.metricsRecorder?.recordProviderCall(
-              {
-                providerId: provider.id,
-                method: "stations",
-                outcome: page.evidence.length > 0 ? "ok" : "empty",
-              },
+            ctx.metricsRecorder?.recordAirQualityProviderCall?.({
+              providerId: provider.id,
+              method: "stations",
+              outcome: page.evidence.length > 0 ? "ok" : "empty",
+              cacheResult: "provider-managed",
+              suppression: "none",
               latencyMs,
-            );
+            });
             return { ok: true as const, provider, page };
           } catch (error) {
             const code = parent.signal.aborted ? "provider_timeout" : failureCode(error);
@@ -295,19 +315,19 @@ export function createAirQualityOrchestrator(ctx: IntegrationContext) {
             await ctx.providerHealth
               ?.recordFailure(provider.id, latencyMs, healthOutcome(code))
               .catch(() => undefined);
-            ctx.metricsRecorder?.recordProviderCall(
-              {
-                providerId: provider.id,
-                method: "stations",
-                outcome:
-                  code === "provider_timeout"
-                    ? "timeout"
-                    : code === "cancelled"
-                      ? "cancelled"
-                      : "error",
-              },
+            ctx.metricsRecorder?.recordAirQualityProviderCall?.({
+              providerId: provider.id,
+              method: "stations",
+              outcome:
+                code === "provider_timeout"
+                  ? "timeout"
+                  : code === "cancelled"
+                    ? "cancelled"
+                    : "error",
+              cacheResult: "provider-managed",
+              suppression: "none",
               latencyMs,
-            );
+            });
             return { ok: false as const, provider, code };
           }
         }),

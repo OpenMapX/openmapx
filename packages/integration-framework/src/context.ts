@@ -314,6 +314,27 @@ export interface AirQualityMetrics {
   latencyMs: number;
 }
 
+export interface AirQualityProviderCallMetrics {
+  providerId: string;
+  method: "current" | "forecast" | "stations" | "raster-times" | "raster-tile";
+  outcome: ProviderCallOutcome;
+  cacheResult:
+    | "fresh"
+    | "stale"
+    | "stale-if-error"
+    | "miss"
+    | "bypass"
+    | "provider-managed"
+    | "unknown";
+  suppression: "none" | "health" | "policy";
+  latencyMs: number;
+}
+
+export interface AirQualityRasterMetrics {
+  state: "current" | "stale" | "unavailable";
+  ageSeconds: number;
+}
+
 export type TransitDecisionOperation = "plan" | "routes" | "refresh" | "realtime";
 export type TransitDecisionReason =
   | "selected"
@@ -379,6 +400,8 @@ export interface MetricsRecorder {
     baselineAvailable: boolean;
   }): void;
   recordAirQuality?(metrics: AirQualityMetrics): void;
+  recordAirQualityProviderCall?(metrics: AirQualityProviderCallMetrics): void;
+  recordAirQualityRasterAge?(metrics: AirQualityRasterMetrics): void;
 }
 
 /**

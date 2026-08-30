@@ -6,18 +6,19 @@ sidebar_position: 20
 
 # Air-quality release status
 
-This ledger separates implemented code from operator-ready release status. A
-component stays `deferred` until its implementation plan's closeout has passed
-tests, policy/license review, documentation, and deployment evidence.
+This ledger separates implemented code from operator-ready release status. Its
+rows are checked against the structured front matter in each linked record by
+`pnpm check-air-quality-release-gates`.
 
 | Component | Status | Record |
 | --- | --- | --- |
-| Canonical API and Open-Meteo/OpenAQ providers | deferred | [Base platform](./air-quality-status/base.md) |
-| EEA raster | deferred | [EEA raster](./air-quality-status/eea-raster.md) |
-| AirNow | deferred | [AirNow](./air-quality-status/airnow.md) |
-| EEA ground observations | deferred | [EEA ground](./air-quality-status/eea-ground.md) |
-| UK-AIR | deferred | [UK-AIR](./air-quality-status/uk-air.md) |
-| ECCC AQHI | deferred | [ECCC](./air-quality-status/eccc.md) |
+| Canonical API and Open-Meteo/OpenAQ providers | shipped | [Base platform](./air-quality-status/base.md) |
+| EEA raster | blocked | [EEA raster](./air-quality-status/eea-raster.md) |
+| AirNow | blocked | [AirNow](./air-quality-status/airnow.md) |
+| EEA ground observations | blocked | [EEA ground](./air-quality-status/eea-ground.md) |
+| UK-AIR | blocked | [UK-AIR](./air-quality-status/uk-air.md) |
+| ECCC AQHI | blocked | [ECCC](./air-quality-status/eccc.md) |
 
-`deferred` is intentional: it is not a claim that the component is absent, only
-that the full release gate has not yet been closed.
+`blocked` means the optional plan's mandatory STOP condition was reached. No
+provider code is present for a blocked row, and the record names the evidence
+needed to revisit it. This does not block the shipped canonical platform.

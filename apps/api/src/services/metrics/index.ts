@@ -1,4 +1,8 @@
-import type { AirQualityMetrics } from "@openmapx/integration-framework";
+import type {
+  AirQualityMetrics,
+  AirQualityProviderCallMetrics,
+  AirQualityRasterMetrics,
+} from "@openmapx/integration-framework";
 import { type Counter, type Histogram, metrics } from "@opentelemetry/api";
 import { PrometheusSerializer } from "@opentelemetry/exporter-prometheus";
 import {
@@ -84,6 +88,9 @@ export interface MetricsHandle {
   airQualityRequestCounter: Counter;
   airQualityRequestLatency: Histogram;
   airQualityEvidenceCount: Histogram;
+  airQualityProviderCallCounter: Counter;
+  airQualityProviderCallLatency: Histogram;
+  airQualityRasterAge: Histogram;
   /** Render the current metric state as Prometheus text format. */
   renderPrometheus(): Promise<string>;
   /** Shut the meter provider down (idempotent). */
@@ -176,6 +183,17 @@ export function initMetrics(): MetricsHandle {
   const airQualityEvidenceCount = meter.createHistogram("air_quality_evidence_count", {
     description: "Number of evidence records returned by a canonical request",
   });
+  const airQualityProviderCallCounter = meter.createCounter("air_quality_provider_calls_total", {
+    description: "Air-quality provider calls and bounded preflight suppressions",
+  });
+  const airQualityProviderCallLatency = meter.createHistogram(
+    "air_quality_provider_call_duration_ms",
+    { description: "Air-quality provider call duration", unit: "ms" },
+  );
+  const airQualityRasterAge = meter.createHistogram("air_quality_raster_age_seconds", {
+    description: "Age of a served air-quality raster frame",
+    unit: "s",
+  });
 
   const osmContributionCounter = meter.createCounter("osm_contribution_operations_total", {
     description: "OpenStreetMap contribution operations by operation and outcome",
@@ -227,6 +245,9 @@ export function initMetrics(): MetricsHandle {
     airQualityRequestCounter,
     airQualityRequestLatency,
     airQualityEvidenceCount,
+    airQualityProviderCallCounter,
+    airQualityProviderCallLatency,
+    airQualityRasterAge,
     renderPrometheus,
     close,
   };
@@ -287,6 +308,27 @@ export function recordAirQuality(metric: AirQualityMetrics): void {
   handle.airQualityRequestCounter.add(1, labels);
   handle.airQualityRequestLatency.record(Math.max(0, metric.latencyMs), labels);
   handle.airQualityEvidenceCount.record(Math.max(0, Math.floor(metric.evidenceCount)), labels);
+}
+
+function boundedProviderId(providerId: string): string {
+  return /^[a-z0-9][a-z0-9-]{0,63}$/.test(providerId) ? providerId : "invalid";
+}
+
+export function recordAirQualityProviderCall(metric: AirQualityProviderCallMetrics): void {
+  const labels = {
+    provider_id: boundedProviderId(metric.providerId),
+    method: metric.method,
+    outcome: metric.outcome,
+    cache_result: metric.cacheResult,
+    suppression: metric.suppression,
+  };
+  const handle = getMetrics();
+  handle.airQualityProviderCallCounter.add(1, labels);
+  handle.airQualityProviderCallLatency.record(Math.max(0, metric.latencyMs), labels);
+}
+
+export function recordAirQualityRasterAge(input: AirQualityRasterMetrics): void {
+  getMetrics().airQualityRasterAge.record(Math.max(0, input.ageSeconds), { state: input.state });
 }
 
 export interface TransitDecisionLabels {

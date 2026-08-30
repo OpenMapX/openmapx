@@ -93,17 +93,28 @@ describe("canonical air-quality orchestrator", () => {
 
   it("applies per-source policy before dispatch", async () => {
     const call = vi.fn(async () => []);
+    const recordAirQualityProviderCall = vi.fn();
     const ctx = context([integration(provider("model", call))]);
     Object.assign(ctx, {
       getDisallowedSourceIds: async () => new Set(["model-source"]),
+      metricsRecorder: { recordAirQualityProviderCall },
     });
     const result = await createAirQualityOrchestrator(ctx).current(query);
     expect(call).not.toHaveBeenCalled();
     expect(result.diagnostics.providersPolicyExcluded).toEqual(["model"]);
+    expect(recordAirQualityProviderCall).toHaveBeenCalledWith({
+      providerId: "model",
+      method: "current",
+      outcome: "skipped",
+      cacheResult: "bypass",
+      suppression: "policy",
+      latencyMs: 0,
+    });
   });
 
   it("suppresses an open provider without a half-open claim", async () => {
     const call = vi.fn(async () => []);
+    const recordAirQualityProviderCall = vi.fn();
     const snapshot = {
       state: "open",
       ownsHalfOpenProbe: false,
@@ -116,12 +127,21 @@ describe("canonical air-quality orchestrator", () => {
         recordSuccess: vi.fn(),
         recordFailure: vi.fn(),
       },
+      metricsRecorder: { recordAirQualityProviderCall },
     });
     const result = await createAirQualityOrchestrator(ctx).current(query);
     expect(call).not.toHaveBeenCalled();
     expect(result.diagnostics.providersFailed).toEqual([
       { providerId: "open", code: "provider_unhealthy" },
     ]);
+    expect(recordAirQualityProviderCall).toHaveBeenCalledWith({
+      providerId: "open",
+      method: "current",
+      outcome: "skipped",
+      cacheResult: "bypass",
+      suppression: "health",
+      latencyMs: 0,
+    });
   });
 
   it("isolates a failed sibling and records successful/failed providers", async () => {
@@ -129,13 +149,20 @@ describe("canonical air-quality orchestrator", () => {
     const bad = provider("bad", async () => {
       throw new Error("connection reset");
     });
-    const result = await createAirQualityOrchestrator(
-      context([integration(good), integration(bad)]),
-    ).current(query);
+    const recordAirQualityProviderCall = vi.fn();
+    const ctx = context([integration(good), integration(bad)]);
+    Object.assign(ctx, { metricsRecorder: { recordAirQualityProviderCall } });
+    const result = await createAirQualityOrchestrator(ctx).current(query);
     expect(result.diagnostics.providersServed).toEqual(["good"]);
     expect(result.diagnostics.providersFailed).toEqual([
       { providerId: "bad", code: "upstream_failure" },
     ]);
+    expect(recordAirQualityProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "good", method: "current", outcome: "empty" }),
+    );
+    expect(recordAirQualityProviderCall).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "bad", method: "current", outcome: "error" }),
+    );
   });
 
   it("bounds a provider that ignores cancellation", async () => {

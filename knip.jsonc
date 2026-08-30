@@ -17,6 +17,8 @@
         "scripts/check-legal-urls.ts",
         "scripts/check-license-metadata.ts",
         "scripts/check-toolchain-pins.ts",
+        "scripts/bench-air-quality.ts",
+        "scripts/benchmark-motis-reachability.ts",
         "scripts/ev-vehicles/generate.ts"
       ],
       "ignoreFiles": ["docs/**"]
@@ -91,6 +93,11 @@
     "packages/i18n": {
       // Root locale scripts invoke this workspace through `pnpm exec tsx`.
       "ignoreDependencies": ["tsx"]
+    },
+    "packages/air-quality": {
+      // The pinned Natural Earth generator loads this CommonJS package through
+      // createRequire(), which static import analysis cannot discover.
+      "ignoreDependencies": ["shapefile"]
     },
     "packages/presets": {
       // The schema is loaded with a template-literal dynamic import.

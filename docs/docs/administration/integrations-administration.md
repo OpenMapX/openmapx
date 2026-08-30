@@ -278,6 +278,41 @@ Integration routes consume one host rate-limit tier. Ordinary routes use
 proxies declare `tile`. Metrics expose only closed aggregate labels—never
 coordinates, station names, credentials, or arbitrary error text.
 
+### Air-quality metrics
+
+The existing authenticated/internal `GET /api/internal/metrics` endpoint exports
+the canonical air-quality instruments through the shared Prometheus renderer:
+
+| Instrument | Important bounded labels | Meaning |
+| --- | --- | --- |
+| `air_quality_requests_total` | method, outcome, cache result, headline class, rejection code, compatibility use, quota truncation | End-to-end canonical and legacy route outcomes |
+| `air_quality_request_duration_ms` | same as request counter | End-to-end latency |
+| `air_quality_evidence_count` | same as request counter | Returned evidence or station-feature count |
+| `air_quality_provider_calls_total` | provider ID, method, outcome, cache ownership, suppression | Provider dispatches plus policy/health preflight skips |
+| `air_quality_provider_call_duration_ms` | same as provider counter | Provider-call latency |
+| `air_quality_raster_age_seconds` | current, stale, unavailable | Served raster age when a raster provider is released |
+
+`cache_result="provider-managed"` means the provider owns its internal cache and
+the provider contract does not leak a per-call cache decision. The canonical
+request instrument still records the combined response cache state. A health or
+policy suppression is represented as a skipped provider call with zero latency;
+it is not disguised as an upstream error. Provider IDs are validated integration
+identifiers, and all other labels come from closed enums.
+
+Suggested starting alerts (tune them to local traffic and maintenance windows):
+
+- page when canonical `unavailable|error` outcomes exceed 5% for 10 minutes and
+  at least 20 requests were made;
+- warn when one provider's `error|timeout` outcomes exceed 25% for 15 minutes;
+- warn on sustained `suppression="health"` for a provider that should be active;
+- warn when `quota_truncated="true"` or `cache_result="stale-if-error"` persists
+  for 15 minutes;
+- if a raster addendum is eventually shipped, warn when its current-frame age
+  exceeds twice the provider's documented update cadence.
+
+These are documentation examples only. OpenMapX does not create an external
+dashboard, notification channel, or alert rule without operator authorization.
+
 ## AI-assisted search disclosure
 
 When [natural-language search](../features/natural-language-search.md) is active,

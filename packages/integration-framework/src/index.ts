@@ -1,5 +1,7 @@
 export type {
   AirQualityMetrics,
+  AirQualityProviderCallMetrics,
+  AirQualityRasterMetrics,
   AiSearchDisclosure,
   AttributionIndexHandle,
   BinaryHttpResponse,
