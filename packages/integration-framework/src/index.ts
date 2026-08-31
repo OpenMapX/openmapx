@@ -268,6 +268,10 @@ export {
   type SharedMobilityProviderConfig,
   type SharedMobilityProviderDefinition,
 } from "./shared-mobility-provider-factory";
+export {
+  createStagedRuntimeContext,
+  type StagedRuntimeContext,
+} from "./staged-runtime-context";
 // `useIntegrationRegistry` and `IntegrationRegistryContext` live in the
 // `/react` subpath — pulling them into this barrel would force every
 // consumer (CLI, API, server-side code) to ship `react` even when they
