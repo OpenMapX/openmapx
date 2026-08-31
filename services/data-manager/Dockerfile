@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.7
+# syntax=docker/dockerfile:1.19
 #
 # IMPORTANT: build context MUST be the repo root. This Dockerfile reaches
 # outside its own directory to pick up:
@@ -103,16 +103,7 @@ FROM deps AS builder
 WORKDIR /app
 
 COPY tsconfig.base.json ./
-COPY packages/db-schema/ packages/db-schema/
-COPY packages/hardlinks/ packages/hardlinks/
-COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
-COPY packages/mobility-formats/ packages/mobility-formats/
-COPY packages/poi-source-registry/ packages/poi-source-registry/
-COPY packages/transitous-core/ packages/transitous-core/
-COPY packages/core/ packages/core/
-COPY packages/mobility-core/ packages/mobility-core/
-COPY packages/cli/ packages/cli/
-COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
+COPY --exclude=*/package.json packages/ packages/
 COPY services/data-manager/ services/data-manager/
 
 WORKDIR /app/services/data-manager

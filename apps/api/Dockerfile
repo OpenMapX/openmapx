@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1.19
+
 FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS base
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
@@ -79,25 +81,7 @@ WORKDIR /app
 
 COPY --from=deps /app ./
 
-COPY packages/core/ packages/core/
-COPY packages/db-schema/ packages/db-schema/
-COPY packages/hardlinks/ packages/hardlinks/
-COPY packages/mobility-core/ packages/mobility-core/
-COPY packages/ev-charge-planner/ packages/ev-charge-planner/
-COPY packages/mobility-formats/ packages/mobility-formats/
-COPY packages/motis-feed-proxy-config/ packages/motis-feed-proxy-config/
-COPY packages/hey-api-client-fetch/ packages/hey-api-client-fetch/
-COPY packages/air-quality/ packages/air-quality/
-COPY packages/integration-framework/ packages/integration-framework/
-COPY packages/mangrove-client/ packages/mangrove-client/
-COPY packages/noaa-coops-data/ packages/noaa-coops-data/
-COPY packages/openconditions-contrib-client/ packages/openconditions-contrib-client/
-COPY packages/ourairports-data/ packages/ourairports-data/
-COPY packages/place-ids/ packages/place-ids/
-COPY packages/poi-source-registry/ packages/poi-source-registry/
-COPY packages/presets/ packages/presets/
-COPY packages/brands/ packages/brands/
-COPY packages/transitous-core/ packages/transitous-core/
+COPY --exclude=*/package.json packages/ packages/
 COPY apps/api/ apps/api/
 COPY tsconfig.base.json ./
 COPY turbo.json ./
