@@ -4,17 +4,17 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/mobility-core/shared-mobility";
-import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CacheClient } from "../context";
 import type { IntegrationDataSource } from "../manifest";
+import { buildSharedMobilityMapContext } from "../shared-mobility/context";
 import { createSharedMobilityProvider } from "../shared-mobility-provider-factory";
 
 vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
   enrichEnturMobilityItems: vi.fn(),
 }));
 
-vi.mock("@openmapx/mobility-core/shared-mobility-context", () => ({
+vi.mock("../shared-mobility/context", () => ({
   buildSharedMobilityMapContext: vi.fn(),
 }));
 
@@ -163,9 +163,11 @@ describe("createSharedMobilityProvider", () => {
     expect(missingDetail.data).toBeNull();
     expect(stationDetail.attributions.map((item) => item.sourceId)).toEqual(["gbfs"]);
     expect(enrichEnturMobilityItems).toHaveBeenNthCalledWith(1, [expect.any(Object)], [], {
+      transport: expect.any(Object),
       scope: "detail",
     });
     expect(enrichEnturMobilityItems).toHaveBeenNthCalledWith(2, [], [expect.any(Object)], {
+      transport: expect.any(Object),
       scope: "detail",
     });
   });
@@ -180,7 +182,12 @@ describe("createSharedMobilityProvider", () => {
 
     const result = await shared.provider.getMapContext?.(BBOX, {}, options);
 
-    expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(BBOX, FORM_FACTORS, options);
+    expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(
+      BBOX,
+      FORM_FACTORS,
+      expect.any(Object),
+      options,
+    );
     expect(result?.data).toBe(context);
     expect(result?.freshness.hasRealtimeData).toBe(false);
   });

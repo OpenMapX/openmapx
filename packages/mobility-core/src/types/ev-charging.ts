@@ -1,4 +1,5 @@
-import type { BoundingBox, DataSourceAttribution } from "@openmapx/core";
+import type { DataSourceAttribution } from "./attribution.js";
+import type { BoundingBox } from "./geometry.js";
 
 export type EvChargingStatus = "operational" | "not-operational" | "planned" | "unknown";
 

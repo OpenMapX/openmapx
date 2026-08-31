@@ -3,11 +3,9 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
-// The core package sits at the bottom of the layering: integration-framework
-// depends on core, every integration depends on core + framework, and core
-// depends on neither. These tests lock that boundary in place so a future
-// change can't quietly re-introduce the package-level dependency cycle by
-// importing domain types back up from an integration or the framework.
+// Mobility-core owns lower-level domain types. Core may depend on it, while
+// integration-framework and integrations remain above core. These tests keep
+// the upper layers from leaking back into core.
 
 const SRC_DIR = join(fileURLToPath(new URL(".", import.meta.url)), "..");
 

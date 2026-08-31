@@ -33,6 +33,14 @@
       "types": "./src/types/freshness.ts",
       "default": "./src/types/freshness.ts"
     },
+    "./geo": {
+      "types": "./src/geo.ts",
+      "default": "./src/geo.ts"
+    },
+    "./geometry": {
+      "types": "./src/types/geometry.ts",
+      "default": "./src/types/geometry.ts"
+    },
     "./fptf-journey": {
       "types": "./src/fptf-journey.ts",
       "default": "./src/fptf-journey.ts"
@@ -57,9 +65,13 @@
       "types": "./src/license.ts",
       "default": "./src/license.ts"
     },
-    "./mapper": {
-      "types": "./src/mapper.ts",
-      "default": "./src/mapper.ts"
+    "./identified": {
+      "types": "./src/types/identified.ts",
+      "default": "./src/types/identified.ts"
+    },
+    "./json-transport": {
+      "types": "./src/json-transport.ts",
+      "default": "./src/json-transport.ts"
     },
     "./motis-alerts": {
       "types": "./src/motis-alerts.ts",
@@ -72,10 +84,6 @@
     "./mobility-context-geometry": {
       "types": "./src/mobility-context-geometry.ts",
       "default": "./src/mobility-context-geometry.ts"
-    },
-    "./shared-mobility-context": {
-      "types": "./src/shared-mobility-context.ts",
-      "default": "./src/shared-mobility-context.ts"
     },
     "./shared-mobility-orchestrator": {
       "types": "./src/shared-mobility-orchestrator.ts",
@@ -92,6 +100,10 @@
     "./policy": {
       "types": "./src/policy.ts",
       "default": "./src/policy.ts"
+    },
+    "./polyline": {
+      "types": "./src/polyline.ts",
+      "default": "./src/polyline.ts"
     },
     "./result": {
       "types": "./src/types/result.ts",
@@ -117,7 +129,6 @@
   "dependencies": {
     "@hey-api/client-fetch": "workspace:*",
     "@motis-project/motis-client": "^2.11.0",
-    "@openmapx/core": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^",
     "@openmapx/transitous-core": "workspace:^",
     "spdx-license-list": "^6.12.0"

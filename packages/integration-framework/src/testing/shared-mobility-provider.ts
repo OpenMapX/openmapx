@@ -1,15 +1,25 @@
 import type { BoundingBox, DataSourceMapContextSelection, DataSourceResult } from "@openmapx/core";
 import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import { fetchSwissSharedMobilityDataForBbox } from "@openmapx/mobility-core/gbfs-provider-base";
-import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
   VehicleFormFactor,
 } from "@openmapx/mobility-core/shared-mobility";
-import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
+import { buildSharedMobilityMapContext } from "../shared-mobility/context.js";
+
+const mapperMocks = vi.hoisted(() => ({
+  mapStationToResult: vi.fn(),
+  mapStationToDetail: vi.fn(),
+  mapVehicleToResult: vi.fn(),
+  mapVehicleToDetail: vi.fn(),
+  stripMobilityKindPrefix: (id: string) =>
+    id.startsWith("s:") || id.startsWith("v:") ? id.slice(2) : id,
+}));
+
+export const { mapStationToResult, mapVehicleToResult } = mapperMocks;
 
 vi.mock("@openmapx/mobility-core/gbfs-provider-base", () => ({
   fetchGbfsData: vi.fn(),
@@ -20,7 +30,7 @@ vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
   enrichEnturMobilityItems: vi.fn(),
 }));
 
-vi.mock("@openmapx/mobility-core/shared-mobility-context", () => ({
+vi.mock("../shared-mobility/context.js", () => ({
   buildSharedMobilityMapContext: vi.fn(),
 }));
 
@@ -33,14 +43,7 @@ vi.mock("@openmapx/mobility-core/dedup", () => ({
   dedupVehicles: vi.fn(),
 }));
 
-vi.mock("@openmapx/mobility-core/mapper", () => ({
-  mapStationToResult: vi.fn(),
-  mapStationToDetail: vi.fn(),
-  mapVehicleToResult: vi.fn(),
-  mapVehicleToDetail: vi.fn(),
-  stripMobilityKindPrefix: (id: string) =>
-    id.startsWith("s:") || id.startsWith("v:") ? id.slice(2) : id,
-}));
+vi.mock("../shared-mobility/mapper.js", () => mapperMocks);
 
 import { dedupStations, dedupVehicles } from "@openmapx/mobility-core/dedup";
 
@@ -142,6 +145,7 @@ export function sharedMobilityProviderContract(
       const result = await options.provider.search(createSharedMobilityBbox());
 
       expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle], {
+        transport: expect.any(Object),
         scope: "map",
       });
       expect(mapStationToResult).toHaveBeenCalledWith(station);
@@ -157,6 +161,7 @@ export function sharedMobilityProviderContract(
       expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(
         bbox,
         new Set(options.formFactors),
+        expect.any(Object),
         options.mapContextOptions,
       );
     });

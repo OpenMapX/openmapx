@@ -141,6 +141,7 @@
   },
   "dependencies": {
     "@openmapx/air-quality": "workspace:*",
+    "@openmapx/mobility-core": "workspace:^",
     "@better-auth/core": "1.7.1",
     "@better-auth/oauth-provider": "1.7.1",
     "@better-auth/passkey": "1.7.1",

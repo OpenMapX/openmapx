@@ -20,6 +20,10 @@
       "types": "./src/shared-mobility-provider-factory.ts",
       "default": "./src/shared-mobility-provider-factory.ts"
     },
+    "./shared-mobility": {
+      "types": "./src/shared-mobility/ids.ts",
+      "default": "./src/shared-mobility/ids.ts"
+    },
     "./installer": {
       "types": "./src/installer.ts",
       "default": "./src/installer.ts"

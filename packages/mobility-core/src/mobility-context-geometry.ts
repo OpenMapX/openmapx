@@ -1,4 +1,4 @@
-import type { BoundingBox } from "@openmapx/core";
+import type { BoundingBox } from "./types/geometry.js";
 
 export type MobilityContextGeometry =
   | { type: "Polygon"; coordinates: number[][][] }

@@ -1,4 +1,4 @@
-import { USER_AGENT } from "@openmapx/core";
+import type { MobilityHttpTransport } from "./json-transport.js";
 
 const DEFAULT_NOMINATIM_URL = process.env.NOMINATIM_URL ?? "https://nominatim.openstreetmap.org";
 let nominatimUrl = DEFAULT_NOMINATIM_URL;
@@ -14,6 +14,7 @@ const CITY_NAME_TTL_MS = 24 * 60 * 60 * 1000;
 export async function reverseGeocodeCity(
   lat: number,
   lng: number,
+  transport: MobilityHttpTransport,
   lang?: string,
 ): Promise<string | null> {
   const effectiveLang = lang ?? "en";
@@ -30,15 +31,12 @@ export async function reverseGeocodeCity(
     url.searchParams.set("zoom", "10");
     url.searchParams.set("accept-language", effectiveLang);
 
-    const res = await fetch(url.toString(), {
-      headers: { "User-Agent": USER_AGENT },
-      signal: AbortSignal.timeout(5000),
-    });
-    if (!res.ok) return null;
-
-    const result = (await res.json()) as {
+    const result = await transport.fetchJson<{
       address?: { city?: string; town?: string; village?: string };
-    };
+    }>(url.toString(), {
+      headers: { "User-Agent": transport.userAgent },
+      timeoutMs: 5_000,
+    });
     const city = result?.address?.city ?? result?.address?.town ?? result?.address?.village ?? null;
 
     cityNameCache.set(key, { city, expiresAt: Date.now() + CITY_NAME_TTL_MS });

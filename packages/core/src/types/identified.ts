@@ -21,7 +21,9 @@
  * provider id like `ocm` or `tfl`, etc.). Values are opaque strings in
  * whatever format the scheme's system uses (`node/12345`, `Q4176`, …).
  */
-export type Ids = Record<string, string>;
+import type { Ids } from "@openmapx/mobility-core/identified";
+
+export type { Ids } from "@openmapx/mobility-core/identified";
 
 /**
  * An item with at least one external identifier. Consumers should use the

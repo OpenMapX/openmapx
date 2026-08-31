@@ -10,6 +10,7 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
 import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { searchCityBikes } from "./citybikes-client.js";
@@ -40,7 +41,7 @@ const META: DataSourceMeta = {
   osmFilters: CATEGORY_FILTERS.bicycle_rental,
 };
 
-async function loadBikeInventory(bbox: BoundingBox) {
+async function loadBikeInventory(bbox: BoundingBox, transport: MobilityHttpTransport) {
   return orchestrateSharedMobility(bbox, {
     category: "bike",
     formFactors: BIKE_FORM_FACTORS,
@@ -64,12 +65,13 @@ async function loadBikeInventory(bbox: BoundingBox) {
       {
         id: "direct-gbfs",
         kind: "fallback",
-        fetch: (bounds) => fetchGbfsData(bounds, BIKE_FORM_FACTORS),
+        fetch: (bounds) => fetchGbfsData(bounds, BIKE_FORM_FACTORS, transport),
       },
       {
         id: "swiss-gbfs",
         kind: "fallback",
-        fetch: (bounds) => fetchSwissSharedMobilityDataForBbox(bounds, BIKE_FORM_FACTORS),
+        fetch: (bounds) =>
+          fetchSwissSharedMobilityDataForBbox(bounds, BIKE_FORM_FACTORS, transport),
       },
       {
         id: "db-bike",

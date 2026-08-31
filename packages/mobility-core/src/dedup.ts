@@ -4,7 +4,7 @@
  * A secondary fuzzy check catches near-misses: within 50m + name similarity > 0.6.
  */
 
-import { diceSimilarity, haversineMeters } from "@openmapx/core";
+import { diceSimilarity, haversineMeters } from "./geo.js";
 import { DEDUP } from "./policy.js";
 import type {
   PricingDetail,

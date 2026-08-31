@@ -1,14 +1,15 @@
 import { createHash } from "node:crypto";
-import type { BoundingBox } from "@openmapx/core";
 import { TTL, withCache } from "./cache.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import { filterCatalogByBbox, loadCatalog, normalizeFormFactor } from "./gbfs-catalog.js";
+import type { MobilityHttpTransport } from "./json-transport.js";
 import {
   applicableMobilityRules,
   classifyMobilityRules,
   normalizeAndClipMobilityGeometry,
 } from "./mobility-context-geometry.js";
 import { normalizeRentalReturnConstraint } from "./rental-constraints.js";
+import type { BoundingBox } from "./types/geometry.js";
 import type {
   PricingDetail,
   SharedMobilityAreaGeometry,
@@ -533,8 +534,8 @@ function mapRentalMethods(methods: Array<string | null> | null | undefined): str
   return labels.length > 0 ? labels.join(", ") : undefined;
 }
 
-async function loadEnturSystemIds(): Promise<Set<string>> {
-  const catalog = await loadCatalog();
+async function loadEnturSystemIds(transport: MobilityHttpTransport): Promise<Set<string>> {
+  const catalog = await loadCatalog(transport);
   return new Set(
     catalog
       .filter((entry) => isEnturGbfsUrl(entry.autoDiscoveryUrl))
@@ -545,9 +546,9 @@ async function loadEnturSystemIds(): Promise<Set<string>> {
 export async function enrichEnturMobilityItems(
   stations: SharedMobilityStation[],
   vehicles: SharedMobilityVehicle[],
-  options: { scope?: "map" | "detail" } = {},
+  options: { transport: MobilityHttpTransport; scope?: "map" | "detail" },
 ): Promise<void> {
-  const enturSystemIds = await loadEnturSystemIds();
+  const enturSystemIds = await loadEnturSystemIds(options.transport);
 
   const stationIds = [
     ...new Set(
@@ -823,8 +824,9 @@ async function fetchEnturGeofencing(systemIds: string[]): Promise<EnturGeofencin
 async function resolveEnturGeofencingSystemIds(
   bbox: BoundingBox,
   systemIds: string[] | undefined,
+  transport: MobilityHttpTransport,
 ): Promise<string[]> {
-  const catalog = await loadCatalog();
+  const catalog = await loadCatalog(transport);
   const enturSystemIds = new Set(
     catalog
       .filter((entry) => isEnturGbfsUrl(entry.autoDiscoveryUrl))
@@ -852,13 +854,21 @@ async function resolveEnturGeofencingSystemIds(
 
 export async function buildEnturGeofencingMapContext(
   bbox: BoundingBox,
-  options?: { systemIds?: string[]; vehicleTypeIds?: string[] },
+  options: {
+    transport: MobilityHttpTransport;
+    systemIds?: string[];
+    vehicleTypeIds?: string[];
+  },
 ): Promise<SharedMobilityMapContext | null> {
-  const systemIds = await resolveEnturGeofencingSystemIds(bbox, options?.systemIds);
+  const systemIds = await resolveEnturGeofencingSystemIds(
+    bbox,
+    options.systemIds,
+    options.transport,
+  );
   if (systemIds.length === 0) return null;
 
   const geofencing = await fetchEnturGeofencing(systemIds);
-  const vehicleTypeIds = new Set(options?.vehicleTypeIds ?? []);
+  const vehicleTypeIds = new Set(options.vehicleTypeIds ?? []);
   const features: SharedMobilityMapContext["geojson"]["features"] = [];
 
   for (const system of geofencing) {

@@ -14,12 +14,15 @@ vi.mock("../providers/de-nw-mobidrom-scooter-client.js", () => ({
   searchDeNwMobidromScooter: vi.fn(),
 }));
 
+import {
+  mapStationToResult,
+  mapVehicleToResult,
+} from "@openmapx/integration-framework/test/shared-mobility-provider";
 import { dedupStations } from "@openmapx/mobility-core/dedup";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { searchDeNwMobidromScooter } from "../providers/de-nw-mobidrom-scooter-client.js";
 import { searchFelyx } from "../providers/felyx-client.js";
@@ -129,7 +132,12 @@ describe("scooterSharingProvider.search", () => {
 
     await scooterSharingProvider.search(makeBbox());
 
-    expect(fetchGbfsData).toHaveBeenCalledWith(makeBbox(), expect.any(Set), "other");
+    expect(fetchGbfsData).toHaveBeenCalledWith(
+      makeBbox(),
+      expect.any(Set),
+      expect.any(Object),
+      "other",
+    );
     const formFactors = vi.mocked(fetchGbfsData).mock.calls[0][1] as Set<string>;
     expect(formFactors.has("scooter_standing")).toBe(true);
     expect(formFactors.has("scooter_seated")).toBe(true);
@@ -162,7 +170,7 @@ describe("scooterSharingProvider.search", () => {
     const bbox = makeBbox();
     await scooterSharingProvider.search(bbox);
 
-    expect(searchDeNwMobidromScooter).toHaveBeenCalledWith(bbox);
+    expect(searchDeNwMobidromScooter).toHaveBeenCalledWith(bbox, expect.any(Object));
   });
 });
 

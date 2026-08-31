@@ -1,6 +1,6 @@
-import type { BoundingBox } from "@openmapx/core";
 import { dedupStations } from "./dedup.js";
 import { fetchMotisRentals } from "./motis-rentals.js";
+import type { BoundingBox } from "./types/geometry.js";
 import type {
   MotisRentalSnapshot,
   SharedMobilityStation,

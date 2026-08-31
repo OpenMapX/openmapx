@@ -10,6 +10,7 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
 import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { mergeRegionalStations } from "./merge-stations.js";
@@ -38,7 +39,7 @@ const META: DataSourceMeta = {
 
 const CAR_FORM_FACTORS = new Set<VehicleFormFactor>(["car"]);
 
-async function loadCarInventory(bbox: BoundingBox) {
+async function loadCarInventory(bbox: BoundingBox, transport: MobilityHttpTransport) {
   return orchestrateSharedMobility(bbox, {
     category: "car",
     formFactors: CAR_FORM_FACTORS,
@@ -47,12 +48,12 @@ async function loadCarInventory(bbox: BoundingBox) {
       {
         id: "direct-gbfs",
         kind: "fallback",
-        fetch: (bounds) => fetchGbfsData(bounds, CAR_FORM_FACTORS),
+        fetch: (bounds) => fetchGbfsData(bounds, CAR_FORM_FACTORS, transport),
       },
       {
         id: "swiss-gbfs",
         kind: "fallback",
-        fetch: (bounds) => fetchSwissSharedMobilityDataForBbox(bounds, CAR_FORM_FACTORS),
+        fetch: (bounds) => fetchSwissSharedMobilityDataForBbox(bounds, CAR_FORM_FACTORS, transport),
       },
       {
         id: "regional",

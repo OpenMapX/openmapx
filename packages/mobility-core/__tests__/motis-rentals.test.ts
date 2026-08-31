@@ -1,5 +1,4 @@
 import type { RentalsResponse } from "@motis-project/motis-client";
-import { encodePolyline } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createMotisRentalId,
@@ -10,6 +9,7 @@ import {
   setSharedMobilityMotisUrl,
   setSharedMobilityTransitousUrl,
 } from "../src/motis-rentals.js";
+import { encodePolyline } from "../src/polyline.js";
 
 const outer = [
   [13.36, 52.51],

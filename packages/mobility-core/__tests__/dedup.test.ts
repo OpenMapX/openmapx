@@ -1,14 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@openmapx/core", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("@openmapx/core")>();
+vi.mock("../src/geo.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/geo.js")>();
   return { ...actual, haversineMeters: vi.fn(), diceSimilarity: vi.fn() };
 });
 
-import type { SharedMobilityStation } from "@openmapx/core";
-import { diceSimilarity, haversineMeters } from "@openmapx/core";
 import { dedupStations, dedupVehicles } from "../src/dedup.js";
-import type { SharedMobilityVehicle } from "../src/types/shared-mobility.js";
+import { diceSimilarity, haversineMeters } from "../src/geo.js";
+import type { SharedMobilityStation, SharedMobilityVehicle } from "../src/types/shared-mobility.js";
 
 const mockHaversine = vi.mocked(haversineMeters);
 const mockDice = vi.mocked(diceSimilarity);

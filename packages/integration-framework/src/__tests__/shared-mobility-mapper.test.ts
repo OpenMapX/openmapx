@@ -1,11 +1,14 @@
-import type { SharedMobilityStation, SharedMobilityVehicle } from "@openmapx/core";
+import type {
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+} from "@openmapx/mobility-core/shared-mobility";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
-} from "../src/mapper.js";
+} from "../shared-mobility/mapper.js";
 
 afterEach(() => {
   vi.restoreAllMocks();

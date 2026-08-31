@@ -1,4 +1,3 @@
-import type { SharedMobilityStation } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/cache.js", () => ({
@@ -34,6 +33,20 @@ import {
   isEnturGbfsUrl,
 } from "../src/entur-mobility.js";
 import { filterCatalogByBbox, loadCatalog } from "../src/gbfs-catalog.js";
+import type { MobilityHttpTransport } from "../src/json-transport.js";
+import type { SharedMobilityStation } from "../src/types/shared-mobility.js";
+
+const transport: MobilityHttpTransport = {
+  userAgent: "OpenMapX/test",
+  async fetchJson<T>(): Promise<T> {
+    throw new Error("Unexpected JSON request");
+  },
+  async fetchText(): Promise<string> {
+    throw new Error("Unexpected text request");
+  },
+  hostMatchesAllowlist: () => false,
+  privateFeedHostAllowlist: () => [],
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -139,6 +152,7 @@ describe("buildEnturGeofencingMapContext", () => {
 
     const bbox = { west: 10, south: 60, east: 11, north: 61 };
     const context = await buildEnturGeofencingMapContext(bbox, {
+      transport,
       systemIds: ["voi-oslo"],
       vehicleTypeIds: ["scooter"],
     });
@@ -204,6 +218,7 @@ describe("buildEnturGeofencingMapContext", () => {
     const context = await buildEnturGeofencingMapContext(
       { west: 10, south: 60, east: 11, north: 61 },
       {
+        transport,
         systemIds: ["voi-oslo"],
         vehicleTypeIds: ["car"],
       },
@@ -285,7 +300,10 @@ describe("buildEnturGeofencingMapContext", () => {
       }),
     );
 
-    const context = await buildEnturGeofencingMapContext(bbox, { vehicleTypeIds: ["bike"] });
+    const context = await buildEnturGeofencingMapContext(bbox, {
+      transport,
+      vehicleTypeIds: ["bike"],
+    });
 
     expect(filterCatalogByBbox).toHaveBeenCalledWith(expect.any(Array), bbox);
     expect(context?.geojson.features[0].properties?.systemId).toBe("oslobysykkel");
@@ -307,7 +325,7 @@ describe("buildEnturGeofencingMapContext", () => {
 
     const context = await buildEnturGeofencingMapContext(
       { west: 6, south: 50, east: 7, north: 51 },
-      { systemIds: ["esel_ac", "dott-aachen", "nextbike_an"] },
+      { transport, systemIds: ["esel_ac", "dott-aachen", "nextbike_an"] },
     );
 
     expect(context).toBeNull();
@@ -333,7 +351,7 @@ describe("enrichEnturMobilityItems", () => {
     });
     vi.stubGlobal("fetch", fetchSpy);
 
-    await enrichEnturMobilityItems([makeStation()], [], { scope: "map" });
+    await enrichEnturMobilityItems([makeStation()], [], { transport, scope: "map" });
 
     const requestBody = String(fetchSpy.mock.calls[0]?.[1]?.body);
     expect(requestBody).not.toContain("pricingPlans");
@@ -412,7 +430,7 @@ describe("enrichEnturMobilityItems", () => {
       }),
     ];
 
-    await enrichEnturMobilityItems(stations, []);
+    await enrichEnturMobilityItems(stations, [], { transport });
 
     expect(stations[0].pricingSummary).toBe("1.50 EUR unlock");
     expect(stations[0].pricingDetails).toEqual([

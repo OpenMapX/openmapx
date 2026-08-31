@@ -7,11 +7,6 @@
  * identical key namespace under `section.*`, `row.*`, `value.*`, `summary.*`
  * and `format.*` so the same shared mapper produces locale-correct text in
  * each context.
- *
- * mobility-core does not depend on `@openmapx/integration-framework`; the
- * I18nToken shape is mirrored via {@link I18nTokenLike} to keep the
- * dependency graph one-way. The browser-side resolver only checks for `$t`,
- * so structural compatibility is sufficient.
  */
 
 import type {
@@ -19,32 +14,27 @@ import type {
   DataSourceDetail,
   DataSourceDetailSection,
   DataSourceResult,
+  I18nToken,
   OsmIdentity,
   PricingPlanEntry,
+  Translatable,
 } from "@openmapx/core";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "./types/shared-mobility.js";
+import type {
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+} from "@openmapx/mobility-core/shared-mobility";
+import { STATION_ID_PREFIX, VEHICLE_ID_PREFIX } from "./ids.js";
 
-/**
- * Structural mirror of `I18nToken` from
- * `@openmapx/integration-framework/strings`. Inlined here to avoid a
- * `mobility-core` → `integration-framework` import cycle. The runtime
- * resolver only checks for the `$t` property.
- */
-interface I18nTokenLike {
-  $t: string;
-  values?: Record<string, string | number>;
-}
+export { stripMobilityKindPrefix } from "./ids.js";
 
-type Translatable = I18nTokenLike | string | number;
-
-function t(key: string, values?: Record<string, string | number>): I18nTokenLike {
+function t(key: string, values?: Record<string, string | number>): I18nToken {
   return values ? { $t: key, values } : { $t: key };
 }
 
 const T = {
   section: {
-    availability: { $t: "shared.section.availability" } as I18nTokenLike,
-    pricing: { $t: "shared.section.pricing" } as I18nTokenLike,
+    availability: { $t: "shared.section.availability" } as I18nToken,
+    pricing: { $t: "shared.section.pricing" } as I18nToken,
     transit: t("section.transit"),
     vehicleDetails: t("section.vehicleDetails"),
     vehicleClasses: t("section.vehicleClasses"),
@@ -55,9 +45,9 @@ const T = {
     notes: t("section.notes"),
   },
   row: {
-    type: { $t: "shared.row.type" } as I18nTokenLike,
-    status: { $t: "shared.row.status" } as I18nTokenLike,
-    capacity: { $t: "shared.row.capacity" } as I18nTokenLike,
+    type: { $t: "shared.row.type" } as I18nToken,
+    status: { $t: "shared.row.status" } as I18nToken,
+    capacity: { $t: "shared.row.capacity" } as I18nToken,
     availableVehicles: t("row.availableVehicles"),
     emptySlots: t("row.emptySlots"),
     totalCapacity: t("row.totalCapacity"),
@@ -133,15 +123,15 @@ function stationVariant(station: SharedMobilityStation): string {
   return "available";
 }
 
-function formFactorToken(formFactor: string): I18nTokenLike {
+function formFactorToken(formFactor: string): I18nToken {
   return t(`value.formFactor.${formFactor}`);
 }
 
-function propulsionToken(propulsion: string): I18nTokenLike {
+function propulsionToken(propulsion: string): I18nToken {
   return t(`value.propulsionKind.${propulsion}`);
 }
 
-function returnConstraintToken(constraint: string): I18nTokenLike {
+function returnConstraintToken(constraint: string): I18nToken {
   return t(`value.returnConstraint.${constraint}`);
 }
 
@@ -200,19 +190,6 @@ function mapContextSelection(
  * place resolver, so it can branch on station vs free-floating vehicle
  * without an extra lookup. See `createDataSourceResolver`.
  */
-export const STATION_ID_PREFIX = "s:";
-export const VEHICLE_ID_PREFIX = "v:";
-
-/**
- * Strip the kind prefix added by {@link mapStationToResult} / {@link mapVehicleToResult}.
- * Use in `getDetail(itemId)` before looking the item up in the provider's raw-id cache.
- */
-export function stripMobilityKindPrefix(id: string): string {
-  if (id.startsWith(STATION_ID_PREFIX)) return id.slice(STATION_ID_PREFIX.length);
-  if (id.startsWith(VEHICLE_ID_PREFIX)) return id.slice(VEHICLE_ID_PREFIX.length);
-  return id;
-}
-
 export function mapStationToResult(station: SharedMobilityStation): DataSourceResult {
   const variant = stationVariant(station);
   return {
@@ -244,9 +221,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   const sections: DataSourceDetailSection[] = [];
 
   // Availability table
-  const rows: [I18nTokenLike, Translatable][] = [
-    [T.row.availableVehicles, station.availableVehicles],
-  ];
+  const rows: [I18nToken, Translatable][] = [[T.row.availableVehicles, station.availableVehicles]];
   if (station.emptySlots !== undefined) {
     rows.push([T.row.emptySlots, station.emptySlots]);
   }
@@ -281,7 +256,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Transit info
   if (station.transitInfo?.lines || station.transitInfo?.stops) {
-    const transitRows: [I18nTokenLike, Translatable][] = [];
+    const transitRows: [I18nToken, Translatable][] = [];
     if (station.transitInfo.lines) {
       transitRows.push([T.row.busLines, station.transitInfo.lines]);
     }
@@ -298,7 +273,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Vehicle type details (structured — from GBFS)
   if (station.vehicleTypeDetails && station.vehicleTypeDetails.length > 0) {
-    const vtRows: [I18nTokenLike, Translatable | Translatable[]][] = [];
+    const vtRows: [I18nToken, Translatable | Translatable[]][] = [];
     for (const vt of station.vehicleTypeDetails) {
       const labelText: string | undefined =
         (vt.make && vt.model ? `${vt.make} ${vt.model}` : vt.name) || undefined;
@@ -369,7 +344,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
 
   // Rental links
   if (station.rentalUris) {
-    const linkRows: [I18nTokenLike, Translatable][] = [];
+    const linkRows: [I18nToken, Translatable][] = [];
     if (station.rentalUris.web) linkRows.push([T.row.web, station.rentalUris.web]);
     if (station.rentalUris.android) linkRows.push([T.row.android, station.rentalUris.android]);
     if (station.rentalUris.ios) linkRows.push([T.row.ios, station.rentalUris.ios]);
@@ -384,7 +359,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
     }
   }
 
-  const providerRows: [I18nTokenLike, Translatable][] = [];
+  const providerRows: [I18nToken, Translatable][] = [];
   if (station.providerName) providerRows.push([T.row.provider, station.providerName]);
   if (station.providerGroupName) {
     providerRows.push([T.row.providerGroup, station.providerGroupName]);
@@ -403,7 +378,7 @@ export function mapStationToDetail(station: SharedMobilityStation): DataSourceDe
   }
 
   if (station.rentalApps) {
-    const appRows: [I18nTokenLike, Translatable][] = [];
+    const appRows: [I18nToken, Translatable][] = [];
     if (station.rentalApps.ios?.storeUri)
       appRows.push([T.row.iosApp, station.rentalApps.ios.storeUri]);
     if (station.rentalApps.android?.storeUri) {
@@ -508,7 +483,7 @@ function vehicleVariant(vehicle: SharedMobilityVehicle): string {
   return "available";
 }
 
-function vehicleSummary(vehicle: SharedMobilityVehicle): I18nTokenLike | undefined {
+function vehicleSummary(vehicle: SharedMobilityVehicle): I18nToken | undefined {
   // The summary glues battery + range + (optional) text. Compound combos go
   // through the consuming integration's `summary.batteryRange` template so the
   // separator/unit are locale-correct; single-piece summaries use the per-unit
@@ -563,7 +538,7 @@ export function mapVehicleToResult(vehicle: SharedMobilityVehicle): DataSourceRe
 export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDetail {
   const sections: DataSourceDetailSection[] = [];
 
-  const rows: [I18nTokenLike, Translatable][] = [];
+  const rows: [I18nToken, Translatable][] = [];
   rows.push([T.row.type, formFactorToken(vehicle.formFactor)]);
   if (vehicle.propulsion) {
     rows.push([T.row.propulsion, propulsionToken(vehicle.propulsion)]);
@@ -597,7 +572,7 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
   });
 
   if (vehicle.rentalUris || vehicle.rentalApps) {
-    const linkRows: [I18nTokenLike, Translatable][] = [];
+    const linkRows: [I18nToken, Translatable][] = [];
     if (vehicle.rentalUris?.web) linkRows.push([T.row.web, vehicle.rentalUris.web]);
     if (vehicle.rentalUris?.ios) linkRows.push([T.row.ios, vehicle.rentalUris.ios]);
     if (vehicle.rentalUris?.android) linkRows.push([T.row.android, vehicle.rentalUris.android]);
@@ -617,7 +592,7 @@ export function mapVehicleToDetail(vehicle: SharedMobilityVehicle): DataSourceDe
     }
   }
 
-  const providerRows: [I18nTokenLike, Translatable][] = [];
+  const providerRows: [I18nToken, Translatable][] = [];
   if (vehicle.providerName) providerRows.push([T.row.provider, vehicle.providerName]);
   if (vehicle.providerGroupName) {
     providerRows.push([T.row.providerGroup, vehicle.providerGroupName]);

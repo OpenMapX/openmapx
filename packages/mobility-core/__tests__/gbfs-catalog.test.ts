@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { MobilityHttpTransport } from "../src/json-transport.js";
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -14,56 +15,49 @@ describe("loadCatalog", () => {
       "DE,Nextbike Berlin,Berlin,nextbike-berlin,https://nextbike.de/,https://example.test/nextbike/gbfs",
     ].join("\n");
 
-    const fetchMock = vi.fn(async (url: string | URL) => {
-      if (String(url).includes("systems.csv")) {
+    const transport: MobilityHttpTransport = {
+      userAgent: "OpenMapX/test",
+      fetchText: vi.fn(async () => csv),
+      async fetchJson<T>() {
         return {
-          ok: true,
-          text: async () => csv,
-        };
-      }
-      if (String(url).includes("manifest.json")) {
-        return {
-          ok: true,
-          json: async () => ({
-            data: {
-              datasets: [
-                {
-                  system_id: "voioslo",
-                  versions: [
-                    {
-                      version: "2.3",
-                      url: "https://api.entur.io/mobility/v2/gbfs/v2/voioslo/gbfs",
-                    },
-                    {
-                      version: "3.0",
-                      url: "https://api.entur.io/mobility/v2/gbfs/v3/voioslo/gbfs",
-                    },
-                  ],
-                },
-                {
-                  system_id: "oslobysykkel",
-                  versions: [
-                    {
-                      version: "3.0",
-                      url: "https://api.entur.io/mobility/v2/gbfs/v3/oslobysykkel/gbfs",
-                    },
-                  ],
-                },
-              ],
-            },
-            version: "3.0",
-            ttl: 3600,
-            last_updated: "2026-04-22T08:00:00Z",
-          }),
-        };
-      }
-      throw new Error(`Unexpected URL ${String(url)}`);
-    });
+          data: {
+            datasets: [
+              {
+                system_id: "voioslo",
+                versions: [
+                  {
+                    version: "2.3",
+                    url: "https://api.entur.io/mobility/v2/gbfs/v2/voioslo/gbfs",
+                  },
+                  {
+                    version: "3.0",
+                    url: "https://api.entur.io/mobility/v2/gbfs/v3/voioslo/gbfs",
+                  },
+                ],
+              },
+              {
+                system_id: "oslobysykkel",
+                versions: [
+                  {
+                    version: "3.0",
+                    url: "https://api.entur.io/mobility/v2/gbfs/v3/oslobysykkel/gbfs",
+                  },
+                ],
+              },
+            ],
+          },
+          version: "3.0",
+          ttl: 3600,
+          last_updated: "2026-04-22T08:00:00Z",
+        } as T;
+      },
+      hostMatchesAllowlist: vi.fn(),
+      privateFeedHostAllowlist: vi.fn(() => []),
+    };
 
-    vi.stubGlobal("fetch", fetchMock);
     const { loadCatalog } = await import("../src/gbfs-catalog.js");
 
-    const entries = await loadCatalog();
+    const entries = await loadCatalog(transport);
 
     expect(entries).toEqual(
       expect.arrayContaining([

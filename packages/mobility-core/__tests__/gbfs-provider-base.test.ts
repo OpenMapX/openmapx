@@ -26,7 +26,20 @@ import {
   fetchSwissSharedMobilityData,
   fetchSwissSharedMobilityDataForBbox,
 } from "../src/gbfs-provider-base.js";
+import type { MobilityHttpTransport } from "../src/json-transport.js";
 import { reverseGeocodeCity } from "../src/nominatim.js";
+
+const transport: MobilityHttpTransport = {
+  userAgent: "OpenMapX/test",
+  async fetchJson<T>(): Promise<T> {
+    throw new Error("Unexpected JSON request");
+  },
+  async fetchText(): Promise<string> {
+    throw new Error("Unexpected text request");
+  },
+  hostMatchesAllowlist: () => false,
+  privateFeedHostAllowlist: () => [],
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -64,6 +77,7 @@ describe("fetchGbfsData", () => {
     const result = await fetchGbfsData(
       { south: 59.9, west: 10.7, north: 59.95, east: 10.8 },
       new Set(["scooter_standing"]),
+      transport,
       "other",
     );
 
@@ -71,6 +85,7 @@ describe("fetchGbfsData", () => {
     expect(fetchGbfsSystem).toHaveBeenCalledWith(
       "https://api.entur.io/mobility/v2/gbfs/v3/voioslo/gbfs",
       { "ET-Client-Name": "openmapx-server" },
+      { transport },
     );
     expect(logSpy).not.toHaveBeenCalled();
   });
@@ -133,6 +148,7 @@ describe("fetchGbfsData", () => {
     const result = await fetchGbfsData(
       { south: 52.4, west: 13.3, north: 52.6, east: 13.5 },
       new Set(["bicycle"]),
+      transport,
     );
 
     expect(result.stations).toHaveLength(1);
@@ -143,6 +159,7 @@ describe("fetchGbfsData", () => {
     expect(fetchGbfsSystem).toHaveBeenCalledWith(
       "https://example.com/late-local/gbfs.json",
       undefined,
+      { transport },
     );
     const lateLocalCalls = vi
       .mocked(fetchGbfsSystem)
@@ -186,6 +203,7 @@ describe("fetchGbfsData", () => {
     const result = await fetchGbfsData(
       { south: 34.0, west: -118.5, north: 34.2, east: -118.1 },
       new Set(["bicycle"]),
+      transport,
     );
 
     expect(result).toEqual({ stations: [], vehicles: [] });
@@ -215,10 +233,13 @@ describe("fetchSwissSharedMobilityData", () => {
     const result = await fetchSwissSharedMobilityData(
       { south: 46.9, west: 7.3, north: 47.0, east: 7.5 },
       new Set(["bicycle"]),
+      transport,
     );
 
     expect(result).toEqual({ stations: [], vehicles: [] });
-    expect(fetchGbfsSystem).toHaveBeenCalledWith("https://sharedmobility.ch/gbfs.json", undefined);
+    expect(fetchGbfsSystem).toHaveBeenCalledWith("https://sharedmobility.ch/gbfs.json", undefined, {
+      transport,
+    });
     expect(loadCatalog).not.toHaveBeenCalled();
     expect(logSpy).not.toHaveBeenCalled();
   });
@@ -231,10 +252,13 @@ describe("fetchSwissSharedMobilityData", () => {
     const result = await fetchSwissSharedMobilityData(
       { south: 46.9, west: 7.3, north: 47.0, east: 7.5 },
       new Set(["bicycle"]),
+      transport,
     );
 
     expect(result).toEqual({ stations: [], vehicles: [] });
-    expect(fetchGbfsSystem).toHaveBeenCalledWith("https://sharedmobility.ch/gbfs.json", undefined);
+    expect(fetchGbfsSystem).toHaveBeenCalledWith("https://sharedmobility.ch/gbfs.json", undefined, {
+      transport,
+    });
     expect(logSpy).not.toHaveBeenCalled();
   });
 });
@@ -246,6 +270,7 @@ describe("fetchSwissSharedMobilityDataForBbox", () => {
     const result = await fetchSwissSharedMobilityDataForBbox(
       { south: 48.0, west: 11.0, north: 49.0, east: 12.0 },
       new Set(["bicycle"]),
+      transport,
     );
 
     expect(result).toEqual({ stations: [], vehicles: [] });

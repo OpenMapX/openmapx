@@ -3,8 +3,6 @@
  * Handles catalog lookup, system probing, and station/vehicle extraction.
  */
 
-import type { BoundingBox, LngLat } from "@openmapx/core";
-import { bboxContains } from "@openmapx/core";
 import { cacheGet, cacheSet, TTL } from "./cache.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import {
@@ -16,8 +14,11 @@ import {
   sortByRelevance,
 } from "./gbfs-catalog.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
+import { bboxContains } from "./geo.js";
+import type { MobilityHttpTransport } from "./json-transport.js";
 import { reverseGeocodeCity } from "./nominatim.js";
 import { normalizeRentalReturnConstraint } from "./rental-constraints.js";
+import type { BoundingBox, LngLat } from "./types/geometry.js";
 import type {
   PricingDetail,
   SharedMobilityStation,
@@ -136,9 +137,10 @@ async function mapSettledWithConcurrency<T, R>(
 export async function fetchGbfsData(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
+  transport: MobilityHttpTransport,
   unknownFormFactor: VehicleFormFactor = "bicycle",
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
-  const catalog = await loadCatalog();
+  const catalog = await loadCatalog(transport);
   const candidates = filterCatalogByBbox(catalog, bbox);
 
   // Exclude operators that are defunct
@@ -153,7 +155,7 @@ export async function fetchGbfsData(
   // Reverse-geocode bbox center to determine city for prioritization
   const centerLat = (bbox.south + bbox.north) / 2;
   const centerLon = (bbox.west + bbox.east) / 2;
-  const city = await reverseGeocodeCity(centerLat, centerLon);
+  const city = await reverseGeocodeCity(centerLat, centerLon, transport);
 
   // Sort for deterministic probing/fetching order, then cap the fan-out so
   // large countries cannot trigger hundreds of full GBFS fetches per search.
@@ -164,7 +166,11 @@ export async function fetchGbfsData(
     probeCandidates,
     SYSTEM_PROBE_CONCURRENCY,
     async (entry) => {
-      const probe = await settleWithin(probeSystem(entry), SYSTEM_PROBE_TIMEOUT_MS, null);
+      const probe = await settleWithin(
+        probeSystem(entry, transport),
+        SYSTEM_PROBE_TIMEOUT_MS,
+        null,
+      );
       if (!probe) return null;
       if (!bboxOverlaps(probe.bbox, bbox)) return null;
       if (!probeVehicleTypesMatchTarget(probe.vehicleTypes, targetFormFactors, unknownFormFactor)) {
@@ -190,6 +196,7 @@ export async function fetchGbfsData(
           entry.systemId,
           entry.autoDiscoveryUrl,
           entry.name,
+          transport,
           bbox,
           targetFormFactors,
           unknownFormFactor,
@@ -222,12 +229,14 @@ export async function fetchGbfsData(
 export async function fetchSwissSharedMobilityData(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
+  transport: MobilityHttpTransport,
   unknownFormFactor: VehicleFormFactor = "bicycle",
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
   const result = await fetchSystemData(
     SWISS_SHARED_MOBILITY_SYSTEM_ID,
     SWISS_SHARED_MOBILITY_DISCOVERY_URL,
     "sharedmobility.ch",
+    transport,
     bbox,
     targetFormFactors,
     unknownFormFactor,
@@ -238,18 +247,20 @@ export async function fetchSwissSharedMobilityData(
 export async function fetchSwissSharedMobilityDataForBbox(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
+  transport: MobilityHttpTransport,
   unknownFormFactor: VehicleFormFactor = "bicycle",
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
   if (!bboxOverlapsSwitzerland(bbox)) {
     return { stations: [], vehicles: [] };
   }
-  return fetchSwissSharedMobilityData(bbox, targetFormFactors, unknownFormFactor);
+  return fetchSwissSharedMobilityData(bbox, targetFormFactors, transport, unknownFormFactor);
 }
 
 async function fetchSystemData(
   systemId: string,
   autoDiscoveryUrl: string,
   systemName: string,
+  transport: MobilityHttpTransport,
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
   unknownFormFactor: VehicleFormFactor,
@@ -275,7 +286,9 @@ async function fetchSystemData(
 
   const systemData =
     prefetchedSystemData ??
-    (await fetchGbfsSystem(autoDiscoveryUrl, getGbfsDiscoveryHeaders(autoDiscoveryUrl)));
+    (await fetchGbfsSystem(autoDiscoveryUrl, getGbfsDiscoveryHeaders(autoDiscoveryUrl), {
+      transport,
+    }));
   if (!systemData) {
     return null;
   }

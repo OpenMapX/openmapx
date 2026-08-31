@@ -1,13 +1,9 @@
+import type { DataSourceAttribution } from "@openmapx/mobility-core/attribution";
 import type { OsmFilter } from "../utils/overpass.service";
 import type { LngLat } from "./geometry";
 import type { I18nToken, Translatable } from "./i18nToken";
 
-export interface DataSourceAttribution {
-  text: string;
-  url: string;
-  license?: string;
-  licenseUrl?: string;
-}
+export type { DataSourceAttribution } from "@openmapx/mobility-core/attribution";
 
 export interface DataSourceBranding {
   name?: string;

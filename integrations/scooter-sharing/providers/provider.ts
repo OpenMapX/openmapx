@@ -10,6 +10,7 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
 import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { searchDeNwMobidromScooter } from "./de-nw-mobidrom-scooter-client.js";
@@ -46,7 +47,7 @@ const SCOOTER_FORM_FACTORS = new Set<VehicleFormFactor>([
   "moped",
 ]);
 
-async function loadScooterInventory(bbox: BoundingBox) {
+async function loadScooterInventory(bbox: BoundingBox, transport: MobilityHttpTransport) {
   return orchestrateSharedMobility(bbox, {
     category: "scooter",
     formFactors: SCOOTER_FORM_FACTORS,
@@ -55,13 +56,13 @@ async function loadScooterInventory(bbox: BoundingBox) {
       {
         id: "direct-gbfs",
         kind: "fallback",
-        fetch: (bounds) => fetchGbfsData(bounds, SCOOTER_FORM_FACTORS, "other"),
+        fetch: (bounds) => fetchGbfsData(bounds, SCOOTER_FORM_FACTORS, transport, "other"),
       },
       {
         id: "swiss-gbfs",
         kind: "fallback",
         fetch: (bounds) =>
-          fetchSwissSharedMobilityDataForBbox(bounds, SCOOTER_FORM_FACTORS, "other"),
+          fetchSwissSharedMobilityDataForBbox(bounds, SCOOTER_FORM_FACTORS, transport, "other"),
       },
       {
         id: "felyx",
@@ -71,7 +72,7 @@ async function loadScooterInventory(bbox: BoundingBox) {
       {
         id: "nrw-mobidrom",
         kind: "proprietary",
-        fetch: searchDeNwMobidromScooter,
+        fetch: (bounds) => searchDeNwMobidromScooter(bounds, transport),
       },
     ],
   });

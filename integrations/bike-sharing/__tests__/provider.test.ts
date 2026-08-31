@@ -22,12 +22,15 @@ vi.mock("../providers/db-bike-client.js", () => ({
   searchDbBikes: vi.fn(),
 }));
 
+import {
+  mapStationToResult,
+  mapVehicleToResult,
+} from "@openmapx/integration-framework/test/shared-mobility-provider";
 import { dedupStations } from "@openmapx/mobility-core/dedup";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { searchCityBikes } from "../providers/citybikes-client.js";
 import { searchDbBikes } from "../providers/db-bike-client.js";

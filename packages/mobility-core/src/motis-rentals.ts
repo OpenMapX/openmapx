@@ -12,7 +12,8 @@ import type {
   RentalZoneRestrictions,
 } from "@motis-project/motis-client";
 import { rentals } from "@motis-project/motis-client";
-import { decodePolyline, type LngLat } from "@openmapx/core";
+import { decodePolyline } from "./polyline.js";
+import type { LngLat } from "./types/geometry.js";
 import type {
   MotisRentalSnapshot,
   RentalReturnConstraint,

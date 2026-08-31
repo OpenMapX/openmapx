@@ -5,24 +5,40 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
+import { USER_AGENT } from "@openmapx/core";
+import {
+  hostMatchesAllowlist,
+  privateFeedHostAllowlist,
+  safeFetchJson,
+  safeFetchText,
+} from "@openmapx/core/utils/safe-download";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
 import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
+import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
+import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
+import type { SharedMobilityInventory } from "@openmapx/mobility-core/shared-mobility-orchestrator";
+import type { CacheClient } from "./context";
+import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider";
+import { createManifestAttribution, type IntegrationDataSource } from "./manifest";
+import { buildSharedMobilityMapContext } from "./shared-mobility/context.js";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
   stripMobilityKindPrefix,
-} from "@openmapx/mobility-core/mapper";
-import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
-import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
-import type { SharedMobilityInventory } from "@openmapx/mobility-core/shared-mobility-orchestrator";
-import type { CacheClient } from "./context";
-import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider";
-import { createManifestAttribution, type IntegrationDataSource } from "./manifest";
+} from "./shared-mobility/mapper.js";
+
+const mobilityHttpTransport: MobilityHttpTransport = {
+  userAgent: USER_AGENT,
+  fetchJson: (url, options) => safeFetchJson(url, options),
+  fetchText: (url, options) => safeFetchText(url, options),
+  hostMatchesAllowlist,
+  privateFeedHostAllowlist,
+};
 
 export interface SharedMobilityProviderConfig {
   id: string;
@@ -36,7 +52,10 @@ export interface SharedMobilityProviderConfig {
     maxL1Items: number;
     maxSnapshotItems?: number;
   };
-  loadInventory(bbox: BoundingBox): Promise<SharedMobilityInventory>;
+  loadInventory(
+    bbox: BoundingBox,
+    transport: MobilityHttpTransport,
+  ): Promise<SharedMobilityInventory>;
 }
 
 export interface SharedMobilityProviderDefinition {
@@ -72,10 +91,13 @@ export function createSharedMobilityProvider(
       return [];
     },
     async search(bbox: BoundingBox): Promise<MobilityResult<DataSourceResult[]>> {
-      const inventory = await config.loadInventory(bbox);
+      const inventory = await config.loadInventory(bbox, mobilityHttpTransport);
 
       try {
-        await enrichEnturMobilityItems(inventory.stations, inventory.vehicles, { scope: "map" });
+        await enrichEnturMobilityItems(inventory.stations, inventory.vehicles, {
+          transport: mobilityHttpTransport,
+          scope: "map",
+        });
       } catch (error) {
         console.warn(`[${config.id}] Entur enrichment failed`, error);
       }
@@ -96,6 +118,7 @@ export function createSharedMobilityProvider(
 
       const isStation = "availableVehicles" in cached;
       await enrichEnturMobilityItems(isStation ? [cached] : [], isStation ? [] : [cached], {
+        transport: mobilityHttpTransport,
         scope: "detail",
       }).catch(() => undefined);
       const attributions = attribution.forResults([cached], (item) => item.sources);
@@ -110,7 +133,12 @@ export function createSharedMobilityProvider(
       options?: DataSourceMapContextSelection,
     ) {
       return wrapStatic(
-        await buildSharedMobilityMapContext(bbox, config.formFactors, options),
+        await buildSharedMobilityMapContext(
+          bbox,
+          config.formFactors,
+          mobilityHttpTransport,
+          options,
+        ),
         attribution.all(),
       );
     },

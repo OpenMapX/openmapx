@@ -14,12 +14,15 @@ vi.mock("../providers/merge-stations.js", () => ({
   mergeRegionalStations: vi.fn((items: unknown[]) => items),
 }));
 
+import {
+  mapStationToResult,
+  mapVehicleToResult,
+} from "@openmapx/integration-framework/test/shared-mobility-provider";
 import { dedupStations } from "@openmapx/mobility-core/dedup";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
 import { carSharingProvider } from "../providers/provider.js";

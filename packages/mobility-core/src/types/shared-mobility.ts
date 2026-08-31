@@ -1,4 +1,5 @@
-import type { Ids, LngLat } from "@openmapx/core";
+import type { LngLat } from "./geometry.js";
+import type { Ids } from "./identified.js";
 
 export interface SharedMobilityBranding {
   name?: string;

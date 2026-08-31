@@ -3,7 +3,6 @@
  * GBFS feeds worldwide. Similar to the transit dynamic registry pattern.
  */
 
-import { type BoundingBox, USER_AGENT } from "@openmapx/core";
 import {
   type GbfsV30Manifest,
   listGbfsManifestDatasetVersions,
@@ -13,6 +12,8 @@ import { MOBILITYDATA_GBFS_CATALOG_URL } from "@openmapx/transitous-core";
 import { TTL, withCache } from "./cache.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
+import type { MobilityHttpTransport } from "./json-transport.js";
+import type { BoundingBox } from "./types/geometry.js";
 import type { GbfsCatalogEntry, VehicleFormFactor } from "./types/shared-mobility.js";
 
 // Runtime fallback stays enabled until the MOTIS-first rollout (Plan 006), but
@@ -47,7 +48,7 @@ const systemBboxCache = new Map<
  * Loads the GBFS systems catalog from MobilityData.
  * Caches in memory and Redis.
  */
-export async function loadCatalog(): Promise<GbfsCatalogEntry[]> {
+export async function loadCatalog(transport: MobilityHttpTransport): Promise<GbfsCatalogEntry[]> {
   if (catalogEntries && Date.now() - catalogLoadedAt < CATALOG_REFRESH_MS) {
     return catalogEntries;
   }
@@ -56,11 +57,11 @@ export async function loadCatalog(): Promise<GbfsCatalogEntry[]> {
     CATALOG_CACHE_KEY,
     TTL.sharedMobility.catalog,
     async () => {
-      const res = await fetch(CATALOG_URL, {
-        headers: { "User-Agent": USER_AGENT },
+      const text = await transport.fetchText(CATALOG_URL, {
+        headers: { "User-Agent": transport.userAgent },
+        timeoutMs: 15_000,
+        maxBytes: 8 * 1024 * 1024,
       });
-      if (!res.ok) throw new Error(`Failed to fetch GBFS catalog: ${res.status}`);
-      const text = await res.text();
       return parseCatalogCsv(text);
     },
   );
@@ -70,14 +71,14 @@ export async function loadCatalog(): Promise<GbfsCatalogEntry[]> {
     TTL.sharedMobility.catalog,
     async () => {
       try {
-        const res = await fetch(ENTUR_GBFS_MANIFEST_URL, {
+        const manifest = await transport.fetchJson<GbfsV30Manifest>(ENTUR_GBFS_MANIFEST_URL, {
           headers: {
-            "User-Agent": USER_AGENT,
+            "User-Agent": transport.userAgent,
             "ET-Client-Name": ENTUR_CLIENT_NAME,
           },
+          timeoutMs: 15_000,
+          maxBytes: 8 * 1024 * 1024,
         });
-        if (!res.ok) return [];
-        const manifest = (await res.json()) as GbfsV30Manifest;
         return parseEnturManifest(manifest);
       } catch {
         return [];
@@ -271,7 +272,10 @@ const inflightProbes = new Map<string, Promise<GbfsSystemProbe | null>>();
  * Probe a GBFS system to determine its geographic coverage and vehicle types.
  * Results are cached in memory. Concurrent probes for the same system are coalesced.
  */
-export async function probeSystem(entry: GbfsCatalogEntry): Promise<GbfsSystemProbe | null> {
+export async function probeSystem(
+  entry: GbfsCatalogEntry,
+  transport: MobilityHttpTransport,
+): Promise<GbfsSystemProbe | null> {
   const cached = systemBboxCache.get(entry.systemId);
   if (cached && cached.expiresAt > Date.now()) {
     return { bbox: cached.bbox, vehicleTypes: cached.vehicleTypes };
@@ -280,15 +284,20 @@ export async function probeSystem(entry: GbfsCatalogEntry): Promise<GbfsSystemPr
   const existing = inflightProbes.get(entry.systemId);
   if (existing) return existing;
 
-  const promise = probeSystemInner(entry).finally(() => {
+  const promise = probeSystemInner(entry, transport).finally(() => {
     inflightProbes.delete(entry.systemId);
   });
   inflightProbes.set(entry.systemId, promise);
   return promise;
 }
 
-async function probeSystemInner(entry: GbfsCatalogEntry): Promise<GbfsSystemProbe | null> {
-  const system = await fetchGbfsSystem(entry.autoDiscoveryUrl, getGbfsDiscoveryHeaders(entry));
+async function probeSystemInner(
+  entry: GbfsCatalogEntry,
+  transport: MobilityHttpTransport,
+): Promise<GbfsSystemProbe | null> {
+  const system = await fetchGbfsSystem(entry.autoDiscoveryUrl, getGbfsDiscoveryHeaders(entry), {
+    transport,
+  });
   if (!system) return null;
 
   // Determine bbox from stations

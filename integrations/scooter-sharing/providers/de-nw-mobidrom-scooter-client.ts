@@ -16,6 +16,7 @@
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
 import { normalizeFormFactor, normalizeGbfsPropulsion } from "@openmapx/mobility-core/gbfs-catalog";
 import { fetchGbfsSystem } from "@openmapx/mobility-core/gbfs-client";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
@@ -174,7 +175,7 @@ function prettifyOperator(systemId: string): string {
     .join(" ");
 }
 
-async function loadAllFeeds(): Promise<FeedCache> {
+async function loadAllFeeds(transport: MobilityHttpTransport): Promise<FeedCache> {
   if (feedCache && Date.now() - feedCache.fetchedAt < FEED_CACHE_MS) return feedCache;
   if (inflightFeed) return inflightFeed;
 
@@ -193,6 +194,7 @@ async function loadAllFeeds(): Promise<FeedCache> {
         if (!gbfsUrl) return null;
         const system = await fetchGbfsSystem(gbfsUrl, authHeaders, {
           credentialHosts: CREDENTIAL_HOSTS,
+          transport,
         });
         if (!system) return null;
         return { entry, system };
@@ -285,10 +287,11 @@ function bboxOverlaps(a: BoundingBox, b: BoundingBox): boolean {
  */
 export async function searchDeNwMobidromScooter(
   bbox: BoundingBox,
+  transport: MobilityHttpTransport,
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
   if (!bboxOverlaps(bbox, COVERAGE_BBOX)) return { stations: [], vehicles: [] };
 
-  const feed = await loadAllFeeds();
+  const feed = await loadAllFeeds(transport);
   return {
     stations: feed.stations.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0])),
     vehicles: feed.vehicles.filter((v) => bboxContains(bbox, v.coordinates[1], v.coordinates[0])),

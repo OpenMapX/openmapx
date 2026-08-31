@@ -3,18 +3,19 @@ import type {
   DataSourceMapContext,
   DataSourceMapContextSelection,
 } from "@openmapx/core";
-import { buildEnturGeofencingMapContext } from "./entur-mobility.js";
+import { buildEnturGeofencingMapContext } from "@openmapx/mobility-core/entur-mobility";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import {
   applicableMobilityRules,
   classifyMobilityRules,
   normalizeAndClipMobilityGeometry,
-} from "./mobility-context-geometry.js";
-import { fetchMotisRentals } from "./motis-rentals.js";
+} from "@openmapx/mobility-core/mobility-context-geometry";
+import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import type {
   MotisRentalSnapshot,
   SharedMobilityRestriction,
   VehicleFormFactor,
-} from "./types/shared-mobility.js";
+} from "@openmapx/mobility-core/shared-mobility";
 
 function selected(value: string, values: ReadonlySet<string>): boolean {
   return values.size === 0 || values.has(value);
@@ -132,6 +133,7 @@ function buildMotisFeatures(
 export async function buildSharedMobilityMapContext(
   bbox: BoundingBox,
   categoryFormFactors: ReadonlySet<VehicleFormFactor>,
+  transport: MobilityHttpTransport,
   options: DataSourceMapContextSelection = {},
 ): Promise<DataSourceMapContext | null> {
   const formFactors = (options.formFactors ?? [...categoryFormFactors]).filter((factor) =>
@@ -163,6 +165,7 @@ export async function buildSharedMobilityMapContext(
     (options.systemIds?.length ? uncoveredSystemIds.length > 0 : motisFeatures.length === 0);
   const entur = needsEntur
     ? await buildEnturGeofencingMapContext(bbox, {
+        transport,
         systemIds: options.systemIds?.length ? uncoveredSystemIds : undefined,
         vehicleTypeIds: options.vehicleTypeIds,
       })

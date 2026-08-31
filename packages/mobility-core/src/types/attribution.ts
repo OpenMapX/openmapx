@@ -24,3 +24,10 @@ export interface Attribution {
   /** Free-form per-source notes (e.g. "via Transitous feed proxy"). */
   notes?: string;
 }
+
+export interface DataSourceAttribution {
+  text: string;
+  url: string;
+  license?: string;
+  licenseUrl?: string;
+}

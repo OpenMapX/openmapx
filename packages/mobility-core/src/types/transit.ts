@@ -1,5 +1,5 @@
-import type { Ids } from "@openmapx/core";
 import type { Attribution } from "./attribution.js";
+import type { Ids } from "./identified.js";
 
 export type TransportMode =
   | "bus"

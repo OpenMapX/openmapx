@@ -1,3 +1,4 @@
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { fetchMotisRentals, buildEnturGeofencingMapContext } = vi.hoisted(() => ({
@@ -5,10 +6,18 @@ const { fetchMotisRentals, buildEnturGeofencingMapContext } = vi.hoisted(() => (
   buildEnturGeofencingMapContext: vi.fn(),
 }));
 
-vi.mock("../src/motis-rentals.js", () => ({ fetchMotisRentals }));
-vi.mock("../src/entur-mobility.js", () => ({ buildEnturGeofencingMapContext }));
+vi.mock("@openmapx/mobility-core/motis-rentals", () => ({ fetchMotisRentals }));
+vi.mock("@openmapx/mobility-core/entur-mobility", () => ({ buildEnturGeofencingMapContext }));
 
-import { buildSharedMobilityMapContext } from "../src/shared-mobility-context.js";
+import { buildSharedMobilityMapContext } from "../shared-mobility/context.js";
+
+const transport: MobilityHttpTransport = {
+  userAgent: "test",
+  fetchJson: vi.fn(),
+  fetchText: vi.fn(),
+  hostMatchesAllowlist: vi.fn(),
+  privateFeedHostAllowlist: vi.fn(() => []),
+};
 
 const bbox = { west: 0, south: 0, east: 10, north: 10 };
 const area = {
@@ -116,7 +125,7 @@ beforeEach(() => {
 
 describe("buildSharedMobilityMapContext", () => {
   it("uses complete MOTIS zones and station areas without an Entur call", async () => {
-    const context = await buildSharedMobilityMapContext(bbox, new Set(["bicycle"]), {
+    const context = await buildSharedMobilityMapContext(bbox, new Set(["bicycle"]), transport, {
       providerIds: ["provider-stable"],
       vehicleTypeIds: ["type-bike"],
       systemIds: ["provider-native"],
@@ -135,7 +144,7 @@ describe("buildSharedMobilityMapContext", () => {
   });
 
   it("filters provider-local rules by selected type", async () => {
-    const context = await buildSharedMobilityMapContext(bbox, new Set(["bicycle"]), {
+    const context = await buildSharedMobilityMapContext(bbox, new Set(["bicycle"]), transport, {
       providerIds: ["provider-stable"],
       vehicleTypeIds: ["other-type"],
       systemIds: ["provider-native"],
@@ -162,10 +171,11 @@ describe("buildSharedMobilityMapContext", () => {
         ],
       },
     });
-    const context = await buildSharedMobilityMapContext(bbox, new Set(["bicycle"]), {
+    const context = await buildSharedMobilityMapContext(bbox, new Set(["bicycle"]), transport, {
       systemIds: ["provider-native", "entur-only"],
     });
     expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, {
+      transport,
       systemIds: ["entur-only"],
       vehicleTypeIds: undefined,
     });
@@ -197,11 +207,12 @@ describe("buildSharedMobilityMapContext", () => {
       },
     });
 
-    const context = await buildSharedMobilityMapContext(bbox, new Set(["bicycle"]), {
+    const context = await buildSharedMobilityMapContext(bbox, new Set(["bicycle"]), transport, {
       systemIds: ["provider-native"],
     });
 
     expect(buildEnturGeofencingMapContext).toHaveBeenCalledWith(bbox, {
+      transport,
       systemIds: ["provider-native"],
       vehicleTypeIds: undefined,
     });

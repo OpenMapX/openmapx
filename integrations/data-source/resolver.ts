@@ -9,18 +9,17 @@
  * Free-floating shared-mobility vehicles are explicitly excluded from the
  * Overpass snap: a scooter sitting on the sidewalk would otherwise inherit
  * the website / opening hours / wheelchair tags of the nearest matching
- * OSM POI. The mobility-core mappers tag these items with a `v:` id
- * prefix; stations get `s:` (see `STATION_ID_PREFIX`/`VEHICLE_ID_PREFIX`
- * in `@openmapx/mobility-core/mapper`).
+ * OSM POI. Shared-mobility results tag these items with a `v:` id prefix;
+ * stations use `s:`.
  */
 
 import { createPlace } from "@openmapx/core";
 import type { MobilityDataSourceProvider, OsmIdentity } from "@openmapx/integration-framework";
+import { VEHICLE_ID_PREFIX } from "@openmapx/integration-framework/shared-mobility";
 import {
   lookupAddressByCoords,
   lookupByOsmFilters,
 } from "@openmapx/integration-geocoding/place-lookup";
-import { VEHICLE_ID_PREFIX } from "@openmapx/mobility-core/mapper";
 import type { PlaceResolver } from "@openmapx/place-ids";
 
 async function fetchIdentity(
