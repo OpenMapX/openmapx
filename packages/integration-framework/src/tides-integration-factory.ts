@@ -1,36 +1,24 @@
+import type { TidesPayload } from "@openmapx/core";
 import { haversineKm } from "@openmapx/core";
 import type { PlaceResolverContext } from "@openmapx/place-ids";
 import { registerPlaceResolver } from "@openmapx/place-ids";
 import type { IntegrationContext } from "./context";
 import { scalarQuery } from "./query";
 
+export type {
+  MetObservation,
+  TideCurvePoint,
+  TideEvent,
+  TideResponseStation,
+  TidesPayload as TidesResponse,
+  WaterLevelObservation,
+} from "@openmapx/core";
+
 /**
- * Shared shell for the coastal water-level / tide knowledge integrations
- * (IOC, Pegelonline, Kartverket/Norway, DFO IWLS/Canada). Every one of those
- * `integrations/knowledge-tides-*` index files repeats an identical skeleton:
- *
- *   - a `registerPlaceResolver(scheme, …)` that loads the catalog, finds a
- *     station by id, and emits a "Tide Station" place;
- *   - a `GET /tides` route that branches on `?station=` vs `?lat=&lng=`,
- *     short-circuits via a per-day `nearest:<lat>,<lng>:<day>` cache (with a
- *     `{ notFound: true }` sentinel + 204 responses), runs `findNearest`, calls
- *     the provider's `buildTidesResponse`, and sets a `Cache-Control` header.
- *
- * Only the genuinely provider-specific pieces are passed in via `config`:
- * the scheme, the catalog loader, the response builder, the station→place
- * mapping, the search radius, the sentinel TTL, the `Cache-Control` max-age,
- * and the 502 message. The cache-key buckets, datum/unit conversion, the
- * observation curve mappers and `TidesResponse` field assembly all live inside
- * each provider's `loadStations` / `buildTidesResponse`, so this factory never
- * touches them — guaranteeing byte-identical cache keys, TTLs and payloads.
- *
- * `haversineKm` and the `round4` coordinate-cache-key rounding are owned here
- * because they were byte-identical across all providers.
- *
- * The response type `R` is opaque to the factory; it only ever stores it in
- * the cache and forwards it to the client, so per-provider response shapes
- * (e.g. Canada's `currentLevel.quality` / `station.timezoneCorrHours`) pass
- * through untouched.
+ * Shared route and place-resolver shell for coastal water-level integrations.
+ * Providers supply their station catalog, place construction, data pipeline,
+ * cache policy, and error message while the framework owns coordinate lookup,
+ * negative caching, and the canonical response contract.
  */
 
 /** A station record carrying at least coordinates — provider types extend this. */
@@ -39,7 +27,7 @@ export interface TideStationBase {
   lng: number;
 }
 
-export interface TidesIntegrationConfig<S extends TideStationBase, R> {
+export interface TidesIntegrationConfig<S extends TideStationBase> {
   /** Place-id scheme this integration owns (e.g. "ioc", "pegel"). */
   readonly scheme: string;
 
@@ -65,8 +53,12 @@ export interface TidesIntegrationConfig<S extends TideStationBase, R> {
   /** Build the place object for the resolver. Returns the host place type. */
   createPlace(station: S, resolveCtx: PlaceResolverContext): unknown;
 
-  /** Build the tides response for a resolved station. Fully provider-specific. */
-  buildTidesResponse(ctx: IntegrationContext, station: S, distanceKm: number): Promise<R | null>;
+  /** Build the canonical tide payload from provider-specific source data. */
+  buildTidesResponse(
+    ctx: IntegrationContext,
+    station: S,
+    distanceKm: number,
+  ): Promise<TidesPayload | null>;
 
   /** Search radius for `findNearest` (km). */
   readonly maxStationDistanceKm: number;
@@ -87,9 +79,9 @@ export interface TidesIntegrationConfig<S extends TideStationBase, R> {
    * Optional hook run on a warm `nearest:` cache hit, BEFORE the response is
    * sent. Lets a provider mutate the cached payload (Canada re-fetches the
    * live `currentLevel` so warm hits don't pin a stale level for the full
-   * TTL). Receives the cached response object; mutate in place and/or return.
+   * TTL). Receives the cached response object and may mutate it in place.
    */
-  onWarmNearestHit?(ctx: IntegrationContext, cached: R): Promise<void> | void;
+  onWarmNearestHit?(ctx: IntegrationContext, cached: TidesPayload): Promise<void> | void;
 }
 
 function round4(n: number): number {
@@ -114,9 +106,9 @@ function findNearest<S extends TideStationBase>(
  * Wire a tide knowledge integration's place resolver + `/tides` route onto the
  * given context. Call once from the integration's `setup(ctx)`.
  */
-export function createTidesIntegration<S extends TideStationBase, R>(
+export function createTidesIntegration<S extends TideStationBase>(
   ctx: IntegrationContext,
-  config: TidesIntegrationConfig<S, R>,
+  config: TidesIntegrationConfig<S>,
 ): void {
   const findByParam =
     config.findStationByParam ??
@@ -157,14 +149,14 @@ export function createTidesIntegration<S extends TideStationBase, R>(
       // yesterday's events under today's label until the TTL expires.
       const dayKey = new Date().toISOString().slice(0, 10);
       const cacheKey = `nearest:${round4(lat)},${round4(lng)}:${dayKey}`;
-      const cached = await ctx.cache.get<R | { notFound: true }>(cacheKey);
+      const cached = await ctx.cache.get<TidesPayload | { notFound: true }>(cacheKey);
       if (cached) {
         if ("notFound" in (cached as object)) {
           reply.status(204).send(null);
           return;
         }
         if (config.onWarmNearestHit) {
-          await config.onWarmNearestHit(ctx, cached as R);
+          await config.onWarmNearestHit(ctx, cached as TidesPayload);
         }
         reply.header("Cache-Control", `public, max-age=${config.cacheControlMaxAge}`);
         reply.send(cached);

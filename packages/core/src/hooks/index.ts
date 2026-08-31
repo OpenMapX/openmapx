@@ -164,11 +164,4 @@ export {
 } from "./useSavedPlaces";
 export { useSearchSuggestions } from "./useSearchSuggestions";
 export { type SunTimesResponse, useSunTimes } from "./useSunTimes";
-export {
-  type MetObservation,
-  type TideCurvePoint,
-  type TideEvent,
-  type TidesResponse,
-  useTides,
-  type WaterLevelObservation,
-} from "./useTides";
+export { useTides } from "./useTides";

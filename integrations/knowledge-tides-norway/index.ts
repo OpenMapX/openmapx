@@ -1,5 +1,11 @@
 import { createPlace, type Place, USER_AGENT } from "@openmapx/core";
-import { createTidesIntegration, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  createTidesIntegration,
+  type IntegrationContext,
+  type TideCurvePoint,
+  type TideEvent,
+  type TidesResponse,
+} from "@openmapx/integration-framework";
 
 /**
  * Norwegian tide-prediction knowledge integration. Wraps Kartverket
@@ -7,9 +13,8 @@ import { createTidesIntegration, type IntegrationContext } from "@openmapx/integ
  * tide predictions (PRE) and observations (OBS) for ~30 permanent stations
  * along Norway + Svalbard.
  *
- * Output matches `knowledge-noaa-tides`'s `TidesResponse`. Values are
- * converted from centimeters (Sehavnivå's unit, referenced to chart datum
- * CD) to feet for parity with the existing widget.
+ * Values are converted from centimeters (Sehavnivå's unit, referenced to
+ * chart datum CD) to feet for the shared tide response.
  *
  * Free + commercial use under NLOD 2.0.
  *
@@ -30,21 +35,6 @@ export interface CachedStation {
   name: string;
   lat: number;
   lng: number;
-}
-
-interface TideEvent {
-  time: string; // "YYYY-MM-DD HH:mm" UTC
-  type: "H" | "L";
-  valueFt: number;
-}
-
-interface TidesResponse {
-  station: { id: string; name: string; lat: number; lng: number; distanceKm: number };
-  events: TideEvent[];
-  curve: Array<{ time: string; valueFt: number }>;
-  datum: "MLLW";
-  units: "english";
-  timeZone: "lst_ldt";
 }
 
 export function isoTimeFromKartverket(stamp: string): string {
@@ -130,9 +120,7 @@ export async function fetchHilo(station: CachedStation): Promise<TideEvent[]> {
   return events;
 }
 
-export async function fetchCurve(
-  station: CachedStation,
-): Promise<Array<{ time: string; valueFt: number }>> {
+export async function fetchCurve(station: CachedStation): Promise<TideCurvePoint[]> {
   const { from, to } = buildDateWindow();
   const url =
     `${BASE}?lat=${station.lat}&lon=${station.lng}` +
@@ -141,7 +129,7 @@ export async function fetchCurve(
     `&lang=en&interval=30&dst=0&tide_request=locationdata`;
   const xml = await fetchText(url);
   if (!xml) return [];
-  const curve: Array<{ time: string; valueFt: number }> = [];
+  const curve: TideCurvePoint[] = [];
   const re = /<waterlevel\s+value="([\d.-]+)"\s+time="([^"]+)"\s+flag="pre"\s*\/>/g;
   for (const m of xml.matchAll(re)) {
     const cm = Number.parseFloat(m[1]);
@@ -186,7 +174,7 @@ async function buildTidesResponse(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  createTidesIntegration<CachedStation, TidesResponse>(ctx, {
+  createTidesIntegration<CachedStation>(ctx, {
     scheme: "kartverket",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.code === id),

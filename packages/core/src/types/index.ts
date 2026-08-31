@@ -244,6 +244,16 @@ export type {
   StreetLevelTiledAsset,
 } from "./streetLevel";
 export type {
+  MetObservation,
+  TideCurvePoint,
+  TideEvent,
+  TideProvider,
+  TideResponseStation,
+  TidesPayload,
+  TidesResponse,
+  WaterLevelObservation,
+} from "./tides";
+export type {
   CurrentWeather,
   DailyForecastPoint,
   HourlyForecastPoint,

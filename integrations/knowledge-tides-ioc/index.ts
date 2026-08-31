@@ -5,7 +5,12 @@ import {
   findTideExtrema,
   type Place,
 } from "@openmapx/core";
-import { createTidesIntegration, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  createTidesIntegration,
+  type IntegrationContext,
+  type TideEvent,
+  type TidesResponse,
+} from "@openmapx/integration-framework";
 
 /**
  * Global tide-gauge observation knowledge integration. Wraps the IOC Sea
@@ -14,11 +19,10 @@ import { createTidesIntegration, type IntegrationContext } from "@openmapx/integ
  *  - `service.php?query=stationlist&format=json` — ~700 active gauges worldwide
  *  - `service.php?query=data&code=<station>&period=<days>` — observations
  *
- * IOC publishes observations only (no harmonic predictions). The integration
- * still emits a TidesResponse so the existing `PlaceTidesContent` widget
- * renders: current level + curve + derived high/low events from the past
- * 24 h of observations. Forecast event sections self-hide because the
- * derived events all lie in the past.
+ * IOC publishes observations only (no harmonic predictions). Its tide
+ * response contains the current level, curve, and derived high/low events
+ * from the past 24 h of observations. Forecast event sections self-hide
+ * because the derived events all lie in the past.
  *
  * Units: m by default; converted to feet for parity with NOAA. Free +
  * commercial use under UNESCO-IOC public-data policy.
@@ -57,22 +61,6 @@ interface CachedStation {
   lat: number;
   lng: number;
   country?: string;
-}
-
-interface TideEvent {
-  time: string;
-  type: "H" | "L";
-  valueFt: number;
-}
-
-interface TidesResponse {
-  station: { id: string; name: string; lat: number; lng: number; distanceKm: number };
-  events: TideEvent[];
-  curve: Array<{ time: string; valueFt: number }>;
-  datum: "MLLW";
-  units: "english";
-  timeZone: "lst_ldt";
-  currentLevel?: { time: string; valueFt: number };
 }
 
 export function reformatIocTime(stime: string): string {
@@ -208,7 +196,7 @@ async function buildTidesResponse(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  createTidesIntegration<CachedStation, TidesResponse>(ctx, {
+  createTidesIntegration<CachedStation>(ctx, {
     scheme: "ioc",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.code === id),

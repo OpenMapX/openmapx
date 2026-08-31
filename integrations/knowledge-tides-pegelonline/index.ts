@@ -5,7 +5,12 @@ import {
   findTideExtrema,
   type Place,
 } from "@openmapx/core";
-import { createTidesIntegration, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  createTidesIntegration,
+  type IntegrationContext,
+  type TideEvent,
+  type TidesResponse,
+} from "@openmapx/integration-framework";
 
 /**
  * German coastal water-level observations from WSV Pegelonline. Wraps:
@@ -52,22 +57,6 @@ interface CachedStation {
   name: string;
   lat: number;
   lng: number;
-}
-
-interface TideEvent {
-  time: string;
-  type: "H" | "L";
-  valueFt: number;
-}
-
-interface TidesResponse {
-  station: { id: string; name: string; lat: number; lng: number; distanceKm: number };
-  events: TideEvent[];
-  curve: Array<{ time: string; valueFt: number }>;
-  datum: "MLLW";
-  units: "english";
-  timeZone: "lst_ldt";
-  currentLevel?: { time: string; valueFt: number };
 }
 
 export function reformatPegelTime(stamp: string): string {
@@ -184,7 +173,7 @@ async function buildTidesResponse(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  createTidesIntegration<CachedStation, TidesResponse>(ctx, {
+  createTidesIntegration<CachedStation>(ctx, {
     scheme: "pegel",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.uuid === id),

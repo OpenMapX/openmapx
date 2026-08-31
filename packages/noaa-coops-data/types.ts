@@ -28,41 +28,8 @@ export interface NoaaStation {
   tidal?: boolean;
 }
 
-/** A single high or low tide event for a station. */
-export interface TideEvent {
-  /** Local time of the event, `YYYY-MM-DD HH:mm` in the station's `lst_ldt` time zone. */
-  time: string;
-  /** "H" for high, "L" for low. */
-  type: "H" | "L";
-  /** Water level above the datum, in feet (NOAA's default for `units=english`). */
-  valueFt: number;
-}
-
-/** Latest 6-min observed water-level sample. */
-export interface WaterLevelReading {
-  /** Local time `YYYY-MM-DD HH:mm` in the station's `lst_ldt` time zone. */
-  time: string;
-  valueFt: number;
-  /** NOAA quality flag — "p" preliminary, "v" verified. Surface "p" to the user. */
-  quality?: "p" | "v" | string;
-}
-
-/** Latest met readings — only populated for stations that publish them. */
-export interface MetReadings {
-  /** Air temperature in °F. */
-  airTempF?: number;
-  /** Water temperature in °F. */
-  waterTempF?: number;
-  /** Wind speed in knots. */
-  windKnots?: number;
-  /** Wind direction in degrees (0–360). */
-  windDirDeg?: number;
-  /** Wind gust in knots. */
-  windGustKnots?: number;
-  /** Barometric pressure in millibars. */
-  pressureMb?: number;
-  /** Relative humidity (%). */
-  humidityPct?: number;
-  /** Time of latest sample (string from NOAA, station-local lst_ldt). */
-  time?: string;
-}
+export type {
+  MetObservation as MetReadings,
+  TideEvent,
+  WaterLevelObservation as WaterLevelReading,
+} from "@openmapx/integration-framework";

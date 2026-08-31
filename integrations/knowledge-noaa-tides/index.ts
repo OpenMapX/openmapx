@@ -1,5 +1,10 @@
 import { createPlace, type Place } from "@openmapx/core";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  scalarQueries,
+  type TideCurvePoint,
+  type TidesResponse,
+} from "@openmapx/integration-framework";
 import {
   fetchHighLowPredictions,
   fetchLatestMet,
@@ -10,7 +15,6 @@ import {
   loadStations,
   type MetReadings,
   type NoaaStation,
-  type TideEvent,
   type WaterLevelReading,
 } from "@openmapx/noaa-coops-data";
 import { registerPlaceResolver } from "@openmapx/place-ids";
@@ -42,28 +46,6 @@ function todayKey(): string {
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}-${String(
     now.getUTCDate(),
   ).padStart(2, "0")}`;
-}
-
-interface TidesResponse {
-  station: {
-    id: string;
-    name: string;
-    lat: number;
-    lng: number;
-    distanceKm: number;
-    /** Hours offset from UTC for the station's standard time. */
-    timezoneCorrHours?: number;
-  };
-  events: TideEvent[];
-  /** 30-min sampled tide curve for the chart, same TZ as `events`. */
-  curve: Array<{ time: string; valueFt: number }>;
-  datum: "MLLW";
-  units: "english";
-  timeZone: "lst_ldt";
-  /** Latest 6-min water-level observation, if the station publishes one. */
-  currentLevel?: WaterLevelReading;
-  /** Latest met readings, if the station publishes them. */
-  met?: MetReadings;
 }
 
 /**
@@ -117,10 +99,8 @@ async function buildTidesResponse(
 
   // Curve + live observations run in parallel; the latter is cached
   // separately because it has a shorter TTL.
-  const curveCached = await cache.get<Array<{ time: string; valueFt: number }>>(
-    `curve:${station.id}:${todayKey()}`,
-  );
-  const curvePromise: Promise<Array<{ time: string; valueFt: number }> | null> = curveCached
+  const curveCached = await cache.get<TideCurvePoint[]>(`curve:${station.id}:${todayKey()}`);
+  const curvePromise: Promise<TideCurvePoint[] | null> = curveCached
     ? Promise.resolve(curveCached)
     : fetchTideCurve(station.id, log).then((c) => {
         const compact = c?.map((e) => ({ time: e.time, valueFt: e.valueFt })) ?? [];

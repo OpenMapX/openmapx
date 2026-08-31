@@ -1,5 +1,11 @@
 import { fetchJson as coreFetchJson, createPlace, type Place } from "@openmapx/core";
-import { createTidesIntegration, type IntegrationContext } from "@openmapx/integration-framework";
+import {
+  createTidesIntegration,
+  type IntegrationContext,
+  type TideCurvePoint,
+  type TideEvent,
+  type TidesResponse,
+} from "@openmapx/integration-framework";
 
 /**
  * Canadian tide-prediction + observation knowledge integration. Wraps the
@@ -7,9 +13,8 @@ import { createTidesIntegration, type IntegrationContext } from "@openmapx/integ
  * a 30-min curve, and the latest observed water level for any Canadian
  * place near a CHS station.
  *
- * Output shape matches `knowledge-noaa-tides`'s `TidesResponse` so the
- * existing `PlaceTidesContent` widget renders unchanged. Values are
- * converted from meters (the IWLS unit) to feet for parity with NOAA.
+ * Values are converted from meters (the IWLS unit) to feet for the shared
+ * tide response consumed by `PlaceTidesContent`.
  *
  * Free + commercial use under Open Government Licence — Canada 2.0.
  *
@@ -58,32 +63,6 @@ interface CachedStation {
 interface IwlsDataPoint {
   eventDate: string; // ISO UTC, e.g. "2026-05-18T03:20:00Z"
   value: number; // meters
-}
-
-interface TideEvent {
-  /** ISO-8601 UTC, e.g. "2026-05-18T03:20:00Z". The shared place-panel
-   *  parser detects the `Z` and converts to the user's browser-local zone. */
-  time: string;
-  type: "H" | "L";
-  valueFt: number;
-}
-
-interface TidesResponse {
-  station: {
-    id: string;
-    name: string;
-    lat: number;
-    lng: number;
-    distanceKm: number;
-    timezoneCorrHours?: number;
-  };
-  events: TideEvent[];
-  curve: Array<{ time: string; valueFt: number }>;
-  datum: "MLLW";
-  units: "english";
-  timeZone: "lst_ldt";
-  currentLevel?: { time: string; valueFt: number; quality?: string };
-  met?: never;
 }
 
 export function normalizeIwlsTimestamp(iso: string): string {
@@ -174,9 +153,7 @@ export async function fetchHiloEvents(stationId: string): Promise<TideEvent[]> {
   return events;
 }
 
-export async function fetchCurve(
-  stationId: string,
-): Promise<Array<{ time: string; valueFt: number }>> {
+export async function fetchCurve(stationId: string): Promise<TideCurvePoint[]> {
   // 30-min sampled curve over the next 24h.
   const start = new Date();
   start.setUTCHours(0, 0, 0, 0);
@@ -275,7 +252,7 @@ async function buildTidesResponse(
 }
 
 export function setup(ctx: IntegrationContext): void {
-  createTidesIntegration<CachedStation, TidesResponse>(ctx, {
+  createTidesIntegration<CachedStation>(ctx, {
     scheme: "ca-iwls",
     loadStations,
     findStationById: (stations, id) => stations.find((s) => s.id === id || s.code === id),

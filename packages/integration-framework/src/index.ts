@@ -285,8 +285,14 @@ export {
 } from "./strategies";
 export {
   createTidesIntegration,
+  type MetObservation,
+  type TideCurvePoint,
+  type TideEvent,
+  type TideResponseStation,
   type TideStationBase,
   type TidesIntegrationConfig,
+  type TidesResponse,
+  type WaterLevelObservation,
 } from "./tides-integration-factory";
 export { defineTransitProvider, type TransitProviderScaffold } from "./transit-provider-factory";
 export type {

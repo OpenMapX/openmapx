@@ -1,68 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiClient } from "../api/client";
-
-export interface TideEvent {
-  /** Local time `YYYY-MM-DD HH:mm` in the station's lst_ldt time zone. */
-  time: string;
-  type: "H" | "L";
-  /** Water level above MLLW, in feet. */
-  valueFt: number;
-}
-
-export interface TideCurvePoint {
-  time: string;
-  valueFt: number;
-}
-
-export interface WaterLevelObservation {
-  time: string;
-  valueFt: number;
-  quality?: "p" | "v" | string;
-}
-
-export interface MetObservation {
-  airTempF?: number;
-  waterTempF?: number;
-  windKnots?: number;
-  windDirDeg?: number;
-  windGustKnots?: number;
-  pressureMb?: number;
-  humidityPct?: number;
-  time?: string;
-}
-
-/** Identifies which integration produced a TidesResponse, so the UI can show
- *  the correct attribution (each tide provider has different license terms). */
-export interface TideProvider {
-  /** Manifest id of the responding integration, e.g. "knowledge-tides-canada". */
-  integrationId: string;
-  /** `dataSources[].sourceId` of the upstream API, e.g. "dfo-iwls". */
-  sourceId: string;
-}
-
-export interface TidesResponse {
-  station: {
-    id: string;
-    name: string;
-    lat: number;
-    lng: number;
-    distanceKm: number;
-    timezoneCorrHours?: number;
-  };
-  events: TideEvent[];
-  /** 30-min tide curve for charting. Empty when the upstream returned no data. */
-  curve: TideCurvePoint[];
-  datum: "MLLW";
-  units: "english";
-  timeZone: "lst_ldt";
-  /** Latest 6-min observed water level, when the station publishes one. */
-  currentLevel?: WaterLevelObservation;
-  /** Latest met readings (wind, pressure, air/water temp), when published. */
-  met?: MetObservation;
-  /** Which integration responded — set client-side so the panel attribution
-   *  reflects the actual provider rather than always crediting NOAA. */
-  provider: TideProvider;
-}
+import type { TideProvider, TidesPayload, TidesResponse } from "../types/tides";
 
 /**
  * Knowledge integrations that publish a `/tides?lat=&lng=` endpoint returning
@@ -110,7 +48,7 @@ export function useTides(lat: number | null, lng: number | null, enabled = true)
     queryFn: async () => {
       for (const { endpoint, provider } of TIDE_PROVIDERS) {
         const result = await apiClient
-          .getOptional<Omit<TidesResponse, "provider">>(endpoint, {
+          .getOptional<TidesPayload>(endpoint, {
             lat: String(lat),
             lng: String(lng),
           })
