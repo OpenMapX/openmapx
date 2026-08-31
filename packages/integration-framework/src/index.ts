@@ -264,11 +264,6 @@ export {
 export { QueryValidationError, type RouteQuery, scalarQueries, scalarQuery } from "./query";
 export { IntegrationRegistry } from "./registry";
 export {
-  createSharedMobilityProvider,
-  type SharedMobilityProviderConfig,
-  type SharedMobilityProviderDefinition,
-} from "./shared-mobility-provider-factory";
-export {
   createStagedRuntimeContext,
   type StagedRuntimeContext,
 } from "./staged-runtime-context";

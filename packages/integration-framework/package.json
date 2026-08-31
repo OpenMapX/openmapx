@@ -16,6 +16,10 @@
       "types": "./src/react.ts",
       "default": "./src/react.ts"
     },
+    "./shared-mobility-provider": {
+      "types": "./src/shared-mobility-provider-factory.ts",
+      "default": "./src/shared-mobility-provider-factory.ts"
+    },
     "./installer": {
       "types": "./src/installer.ts",
       "default": "./src/installer.ts"

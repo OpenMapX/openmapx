@@ -5,7 +5,7 @@
 
 import type { BoundingBox, DataSourceMeta } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
-import { createSharedMobilityProvider } from "@openmapx/integration-framework";
+import { createSharedMobilityProvider } from "@openmapx/integration-framework/shared-mobility-provider";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
