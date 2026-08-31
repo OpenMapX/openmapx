@@ -1,7 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
-import type { ServiceAlert, VehiclePosition } from "@openmapx/mobility-core/transit";
+import type { LiveTransitVehicle, ServiceAlert } from "@openmapx/mobility-core/transit";
 import type { HealthCheckResult } from "../context.js";
 
 export interface RealtimeCapabilities {
@@ -43,7 +43,7 @@ export interface RealtimeProvider {
   readonly capabilities: RealtimeCapabilities;
   readonly attribution: Attribution[];
 
-  getVehiclePositions?(bbox: BBox): Promise<MobilityResult<VehiclePosition[]>>;
+  getVehiclePositions?(bbox: BBox): Promise<MobilityResult<LiveTransitVehicle[]>>;
   getAlertsForStop?(stopId: string): Promise<MobilityResult<ServiceAlert[]>>;
   getAlertsForRoute?(routeId: string): Promise<MobilityResult<ServiceAlert[]>>;
   getAlertsForBbox?(bbox: BBox): Promise<MobilityResult<ServiceAlert[]>>;

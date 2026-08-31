@@ -1,4 +1,3 @@
-import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
 import { type BBox, fetchJson } from "@openmapx/core";
 import {
   createManifestAttribution,
@@ -8,7 +7,12 @@ import {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
-import type { AlertSeverity, ServiceAlert, TransportMode } from "@openmapx/mobility-core/transit";
+import type {
+  AlertSeverity,
+  LiveTransitVehicle,
+  ServiceAlert,
+  TransportMode,
+} from "@openmapx/mobility-core/transit";
 
 interface GraphQlResponse<T> {
   data?: T;
@@ -267,6 +271,7 @@ function toLiveVehicle(vehicle: EnturVehicle): LiveTransitVehicle | null {
     displayLabel,
     secondaryLabel,
     codespaceId,
+    positionKind: "observed",
     tripId,
     routeId,
     lat: vehicle.location.latitude,
@@ -443,12 +448,6 @@ export function setup(ctx: IntegrationContext): void {
       alerts: { byStop: false, byRoute: false, byBbox: true },
       tripUpdates: false,
     },
-    /**
-     * Returns Entur realtime vehicles. The runtime payload elements are
-     * `LiveTransitVehicle` (a structural superset of the framework's
-     * `VehiclePosition`); structural typing keeps the richer integration-side
-     * fields (`sourceId`, `displayLabel`, etc.) intact through the contract.
-     */
     async getVehiclePositions(bbox: BBox) {
       const data = await getEnturVehicles(bbox);
       return withAttribution(

@@ -1,7 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext, RealtimeProvider } from "@openmapx/integration-framework";
-import type { ServiceAlert } from "@openmapx/mobility-core/transit";
-import type { LiveTransitSnapshot, LiveTransitVehicle } from "./types.js";
+import type { LiveTransitVehicle, ServiceAlert } from "@openmapx/mobility-core/transit";
+import type { LiveTransitSnapshot } from "./types.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -24,7 +24,7 @@ function dedupeById<T extends { id: string }>(items: T[]): T[] {
 export function preferObservedByTrip(vehicles: LiveTransitVehicle[]): LiveTransitVehicle[] {
   const observedTripIds = new Set<string>();
   for (const vehicle of vehicles) {
-    if (vehicle.tripId && vehicle.positionKind !== "interpolated") {
+    if (vehicle.tripId && vehicle.positionKind === "observed") {
       observedTripIds.add(vehicle.tripId);
     }
   }
@@ -76,10 +76,7 @@ export function createLiveTransitOrchestrator(ctx: IntegrationContext) {
     const vehicles = results.flatMap((result) =>
       result.status === "fulfilled" ? result.value : [],
     );
-    // The realtime contract returns the framework's `VehiclePosition[]`;
-    // the underlying providers actually produce the richer `LiveTransitVehicle`
-    // shape at runtime (structural superset), so we cast back here.
-    return preferObservedByTrip(dedupeById(vehicles as LiveTransitVehicle[]));
+    return preferObservedByTrip(dedupeById(vehicles));
   }
 
   async function getAlerts(bbox: BBox): Promise<ServiceAlert[]> {

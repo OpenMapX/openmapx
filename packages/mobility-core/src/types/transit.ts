@@ -515,6 +515,20 @@ export interface VehiclePosition {
   updatedAt: string;
 }
 
+export type LiveTransitPositionKind = "observed" | "interpolated";
+
+/** A map-ready vehicle position produced by a realtime integration. */
+export interface LiveTransitVehicle extends VehiclePosition {
+  /** Manifest data-source id used for attribution and source filtering. */
+  sourceId: string;
+  mode: TransportMode;
+  displayLabel: string;
+  secondaryLabel?: string;
+  codespaceId?: string;
+  /** Whether the coordinate is a feed observation or a schedule-derived estimate. */
+  positionKind: LiveTransitPositionKind;
+}
+
 export interface RouteLive {
   vehicles: VehiclePosition[];
   alerts: ServiceAlert[];

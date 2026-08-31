@@ -8,6 +8,7 @@ import {
   useOverlayExclusion,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
+import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 import type { GeoJSONFeatureDiff, GeoJSONSourceDiff, MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -25,7 +26,7 @@ import {
 import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
 import { isFreshVehicleObservation } from "./freshness";
 import { useLiveTransitStore } from "./store";
-import type { LiveTransitSnapshot, LiveTransitVehicle } from "./types.js";
+import type { LiveTransitSnapshot } from "./types.js";
 
 const SOURCE_ID = "live-transit-source";
 const ICON_LAYER = "live-transit-icon";
@@ -161,7 +162,7 @@ function toFeature(vehicle: ParsedVehicle): VehicleFeature {
       updatedAt: vehicle.updatedAt,
       alertCount: vehicle.alerts.length,
       alertSeverity: vehicle.alerts[0]?.severity ?? "",
-      positionKind: vehicle.positionKind ?? "observed",
+      positionKind: vehicle.positionKind,
       tripId: vehicle.tripId ?? "",
     },
   };

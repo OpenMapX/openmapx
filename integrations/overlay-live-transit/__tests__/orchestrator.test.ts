@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
-import { preferObservedByTrip } from "../orchestrator.js";
-import type { LiveTransitVehicle } from "../types.js";
+import type { RealtimeProvider } from "@openmapx/integration-framework";
+import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
+import { describe, expect, it, vi } from "vitest";
+import { createLiveTransitOrchestrator, preferObservedByTrip } from "../orchestrator.js";
 
 function vehicle(partial: Partial<LiveTransitVehicle> & { id: string }): LiveTransitVehicle {
   return {
@@ -8,11 +9,38 @@ function vehicle(partial: Partial<LiveTransitVehicle> & { id: string }): LiveTra
     sourceId: "test",
     mode: "bus",
     displayLabel: partial.id,
+    positionKind: "observed",
     lat: 0,
     lng: 0,
     ...partial,
-  } as LiveTransitVehicle;
+  };
 }
+
+describe("createLiveTransitOrchestrator", () => {
+  it("consumes the canonical realtime-provider vehicle contract", async () => {
+    const expected = vehicle({ id: "gps:contract", positionKind: "observed" });
+    const provider: RealtimeProvider = {
+      id: "contract-provider",
+      coverage: { all: true },
+      priority: 1,
+      capabilities: {
+        vehiclePositions: true,
+        alerts: { byStop: false, byRoute: false, byBbox: false },
+        tripUpdates: false,
+      },
+      attribution: [],
+      async getVehiclePositions() {
+        return { data: [expected], attributions: [], freshness: {} as never };
+      },
+    };
+    const orchestrator = createLiveTransitOrchestrator({
+      getIntegrationsByDomain: () => [{ providers: new Map([["live-transit", [provider]]]) }],
+      log: { warn: vi.fn() },
+    } as never);
+
+    await expect(orchestrator.getVehicles([0, 0, 1, 1])).resolves.toEqual([expected]);
+  });
+});
 
 describe("preferObservedByTrip", () => {
   it("drops an interpolated vehicle when an observed fix exists for the same trip", () => {
@@ -27,10 +55,10 @@ describe("preferObservedByTrip", () => {
     expect(preferObservedByTrip([interpolated])).toEqual([interpolated]);
   });
 
-  it("treats an undefined positionKind as observed (never dropped)", () => {
-    const legacy = vehicle({ id: "gps:3", tripId: "trip-3" });
+  it("keeps an observed vehicle when an interpolated position shares its trip", () => {
+    const observed = vehicle({ id: "gps:3", tripId: "trip-3", positionKind: "observed" });
     const interpolated = vehicle({ id: "ms:3", tripId: "trip-3", positionKind: "interpolated" });
-    expect(preferObservedByTrip([legacy, interpolated])).toEqual([legacy]);
+    expect(preferObservedByTrip([observed, interpolated])).toEqual([observed]);
   });
 
   it("never drops vehicles that have no tripId", () => {

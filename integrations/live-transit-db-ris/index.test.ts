@@ -97,6 +97,7 @@ describe("getVehiclePositions", () => {
         mode: "rail",
         displayLabel: "ICE 521",
         secondaryLabel: "Köln Hbf -> Berlin Hbf",
+        positionKind: "observed",
         tripId: "ris:j-live",
         lat: GERMANY_CENTER.lat,
         lng: GERMANY_CENTER.lng,

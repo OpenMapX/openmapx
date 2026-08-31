@@ -1,4 +1,3 @@
-import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
 import type { BBox } from "@openmapx/core";
 import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import {
@@ -10,6 +9,7 @@ import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
+import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 
 const attribution = createManifestAttribution();
 let risClient = createRisClient({}, mobilityHttpTransport);
@@ -98,6 +98,7 @@ function toLiveVehicle(
     mode: "rail",
     displayLabel: journeyName,
     secondaryLabel,
+    positionKind: "observed",
     tripId: `ris:${entry.journeyID}`,
     lat: entry.latitude,
     lng: entry.longitude,
@@ -160,12 +161,6 @@ export function setup(ctx: IntegrationContext): void {
       alerts: { byStop: false, byRoute: false, byBbox: false },
       tripUpdates: false,
     },
-    /**
-     * Returns DB RIS Maps realtime journey positions. The runtime payload
-     * elements are `LiveTransitVehicle` (a structural superset of the
-     * framework's `VehiclePosition`); structural typing preserves the richer
-     * integration-side fields (`sourceId`, `displayLabel`, etc.).
-     */
     async getVehiclePositions(bbox: BBox) {
       const data = await getDbLiveTransitVehicles(bbox, administrationIds);
       return withAttribution(data, attribution.all(), freshnessNow({ hasRealtimeData: true }));

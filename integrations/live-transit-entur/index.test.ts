@@ -76,6 +76,7 @@ describe("getVehiclePositions", () => {
         displayLabel: "5",
         secondaryLabel: "Vestli",
         codespaceId: "RUT",
+        positionKind: "observed",
         tripId: "entur:2026-03-10|RUT:ServiceJourney:7",
         routeId: "entur:RUT:Line:5",
         lat: 59.91,

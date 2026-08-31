@@ -1,3 +1,4 @@
+import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
 import {
   assertProviderSatisfiesContract,
@@ -166,6 +167,17 @@ describe("assertTransitProviderContract", () => {
 
 describe("assertRealtimeProviderContract", () => {
   it("passes for a complete realtime provider declaring vehiclePositions: true", () => {
+    const vehicle: LiveTransitVehicle = {
+      id: "vehicle:1",
+      provider: "rt-ok",
+      sourceId: "rt-ok",
+      mode: "tram",
+      displayLabel: "M4",
+      positionKind: "interpolated",
+      lat: 52.5,
+      lng: 13.4,
+      updatedAt: "2026-08-31T12:00:00.000Z",
+    };
     const provider = {
       id: "rt-ok",
       coverage: { all: true as const },
@@ -176,7 +188,11 @@ describe("assertRealtimeProviderContract", () => {
         alerts: { byStop: false, byRoute: false, byBbox: false },
         tripUpdates: false,
       },
-      getVehiclePositions: async () => ({ data: [], attributions: [], freshness: {} as never }),
+      getVehiclePositions: async () => ({
+        data: [vehicle],
+        attributions: [],
+        freshness: {} as never,
+      }),
     };
     expect(() => assertRealtimeProviderContract(provider)).not.toThrow();
   });

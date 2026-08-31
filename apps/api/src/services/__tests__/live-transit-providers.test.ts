@@ -130,6 +130,7 @@ describe("live-transit-db-ris provider", () => {
         mode: "rail",
         displayLabel: "ICE 612",
         secondaryLabel: "Frankfurt(Main)Hbf -> Muenchen Hbf",
+        positionKind: "observed",
         speed: 40,
       }),
     ]);
@@ -280,6 +281,7 @@ describe("live-transit-entur provider", () => {
         displayLabel: "R14",
         secondaryLabel: "Asker-Oslo S-Kongsvinger",
         codespaceId: "VYG",
+        positionKind: "observed",
         routeId: "entur:VYG:Line:R14",
         tripId: "entur:2026-04-21|VYG:ServiceJourney:1035_442947-R",
       }),

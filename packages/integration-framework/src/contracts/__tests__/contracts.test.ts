@@ -1,5 +1,6 @@
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
+import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
 import { createMockIntegrationContext } from "../../testing/index.js";
 import type {
@@ -101,8 +102,8 @@ describe("TransitProvider contract", () => {
 });
 
 describe("RealtimeProvider contract", () => {
-  it("accepts a provider with vehiclePositions: true and getVehiclePositions defined", () => {
-    const provider: RealtimeProvider = {
+  it("accepts a provider with vehiclePositions: true and getVehiclePositions defined", async () => {
+    const provider = {
       id: "rt-vehicles",
       coverage: { bbox: [-180, -90, 180, 90] },
       priority: 5,
@@ -112,9 +113,23 @@ describe("RealtimeProvider contract", () => {
         tripUpdates: false,
       },
       attribution: noAttribution,
-      async getVehiclePositions(_bbox): Promise<MobilityResult<[]>> {
+      async getVehiclePositions(_bbox): Promise<MobilityResult<LiveTransitVehicle[]>> {
         return {
-          data: [],
+          data: [
+            {
+              id: "vehicle:1",
+              provider: "rt-vehicles",
+              sourceId: "rt-vehicles",
+              mode: "bus",
+              displayLabel: "42",
+              secondaryLabel: "Central Station",
+              codespaceId: "TEST",
+              positionKind: "observed",
+              lat: 52.5,
+              lng: 13.4,
+              updatedAt: "2026-08-31T12:00:00.000Z",
+            },
+          ],
           attributions: [],
           freshness: {
             fetchedAt: new Date().toISOString(),
@@ -123,8 +138,13 @@ describe("RealtimeProvider contract", () => {
           },
         };
       },
-    };
+    } satisfies RealtimeProvider;
     expect(provider.capabilities.vehiclePositions).toBe(true);
+
+    type ContractResult = Awaited<ReturnType<NonNullable<RealtimeProvider["getVehiclePositions"]>>>;
+    const contractResult: ContractResult = await provider.getVehiclePositions([13, 52, 14, 53]);
+    const canonicalResult: MobilityResult<LiveTransitVehicle[]> = contractResult;
+    expect(canonicalResult.data[0]?.positionKind).toBe("observed");
   });
 });
 

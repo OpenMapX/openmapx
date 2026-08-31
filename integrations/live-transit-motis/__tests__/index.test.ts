@@ -5,6 +5,7 @@ vi.mock("@motis-project/motis-client", () => ({
   stoptimes: vi.fn(),
   trip: vi.fn(),
 }));
+vi.mock("@integrations/transit-motis/adapter.js", () => ({ getVehicleRadar: vi.fn() }));
 
 interface CtxHandle {
   ctx: IntegrationContext;
@@ -87,6 +88,37 @@ describe("live-transit-motis provider", () => {
     expect(typeof provider.getVehiclePositions).toBe("function");
     expect(provider.getAlertsForRoute).toBeUndefined();
     expect(provider.getAlertsForBbox).toBeUndefined();
+  });
+
+  it("maps radar positions to the canonical live-transit vehicle contract", async () => {
+    const { getVehicleRadar } = await import("@integrations/transit-motis/adapter.js");
+    vi.mocked(getVehicleRadar).mockResolvedValueOnce([
+      {
+        id: "ms:vehicle-1",
+        provider: "transit-motis-local",
+        tripId: "ms:trip-1",
+        mode: "rail",
+        label: "ICE 612",
+        lat: 50.1,
+        lng: 8.6,
+        updatedAt: "2026-08-31T12:00:00.000Z",
+      },
+    ]);
+
+    const mod = await loadModule();
+    const { ctx, getProvider } = createCtx();
+    mod.setup(ctx);
+    const result = await getProvider().getVehiclePositions?.([8, 49, 9, 51]);
+
+    expect(result?.data).toEqual([
+      expect.objectContaining({
+        id: "ms:vehicle-1",
+        sourceId: "motis-rt",
+        mode: "rail",
+        displayLabel: "ICE 612",
+        positionKind: "interpolated",
+      }),
+    ]);
   });
 
   it("maps MOTIS alerts on a stop to ServiceAlerts", async () => {

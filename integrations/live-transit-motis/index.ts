@@ -1,5 +1,4 @@
 import { type Client, createClient } from "@hey-api/client-fetch";
-import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
 import { getVehicleRadar } from "@integrations/transit-motis/adapter.js";
 import { motisLocalInstance } from "@integrations/transit-motis/instances.js";
 import {
@@ -20,6 +19,7 @@ import {
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { mapMotisAlert, mapMotisAlertSeverity } from "@openmapx/mobility-core/motis-alerts";
 import { withAttribution } from "@openmapx/mobility-core/result";
+import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 
 const attribution = createManifestAttribution();
 
@@ -182,7 +182,7 @@ async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]
     sourceId: SOURCE_ID,
     mode: vehicle.mode ?? "bus",
     displayLabel: vehicle.label ?? "Transit",
-    positionKind: "interpolated" as const,
+    positionKind: "interpolated",
   }));
 }
 
