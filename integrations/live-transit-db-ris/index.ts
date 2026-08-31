@@ -1,10 +1,6 @@
-import {
-  isRisConfigured,
-  risPost,
-  setRisCredentials,
-} from "@integrations/geocoding-db-ris/ris-client.js";
 import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
 import type { BBox } from "@openmapx/core";
+import { createRisClient, type RisCredentials } from "@openmapx/core/ris-client";
 import {
   createManifestAttribution,
   type IntegrationContext,
@@ -14,6 +10,11 @@ import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { withAttribution } from "@openmapx/mobility-core/result";
 
 const attribution = createManifestAttribution();
+let risClient = createRisClient();
+
+export function setRisCredentials(credentials: RisCredentials): void {
+  risClient = createRisClient(credentials);
+}
 
 interface RisTransportInfo {
   journeyName?: string;
@@ -106,12 +107,12 @@ async function getDbLiveTransitVehicles(
   bbox: BBox,
   administrationIds: string[],
 ): Promise<LiveTransitVehicle[]> {
-  if (!isRisConfigured()) return [];
+  if (!risClient.isConfigured()) return [];
 
   const body = { administrationIDs: administrationIds };
   const [liveResult, emulatedResult] = await Promise.allSettled([
-    risPost<RisPositionsResponse>("maps", "/journey-positions/", body),
-    risPost<RisEmulatedResponse>("maps", "/journey-positions/emulated", body),
+    risClient.post<RisPositionsResponse>("maps", "/journey-positions/", body),
+    risClient.post<RisEmulatedResponse>("maps", "/journey-positions/emulated", body),
   ]);
 
   const liveEntries = liveResult.status === "fulfilled" ? (liveResult.value.positions ?? []) : [];

@@ -1,8 +1,7 @@
 import type { Place } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { dbRisGeocodingService, lookupDbStation } from "./provider.js";
-import { setRisCredentials } from "./ris-client.js";
+import { dbRisGeocodingService, lookupDbStation, setRisCredentials } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
   ctx.onActivate(() => {

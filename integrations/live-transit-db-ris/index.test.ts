@@ -1,7 +1,6 @@
-import { setRisCredentials } from "@integrations/geocoding-db-ris/ris-client.js";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { setup } from "./index.js";
+import { setRisCredentials, setup } from "./index.js";
 
 const GERMANY_CENTER = { lat: 52.52, lng: 13.405 };
 const OUTSIDE = { lat: 0, lng: 0 };

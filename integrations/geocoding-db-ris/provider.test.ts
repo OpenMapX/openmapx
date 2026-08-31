@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { dbRisGeocodingService, lookupDbStation } from "./provider.js";
-import { setRisCredentials } from "./ris-client.js";
+import { dbRisGeocodingService, lookupDbStation, setRisCredentials } from "./provider.js";
 import type { RisStopPlace } from "./stations-types.js";
 
 let mockFetch: ReturnType<typeof vi.fn>;

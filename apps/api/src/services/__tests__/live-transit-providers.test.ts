@@ -4,10 +4,9 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { streamedJsonResponse } from "../../test/streamed-response.js";
 
-vi.mock("@integrations/geocoding-db-ris/ris-client.js", () => ({
-  isRisConfigured: vi.fn(() => true),
-  risPost: vi.fn(),
-  setRisCredentials: vi.fn(),
+const { risPost } = vi.hoisted(() => ({ risPost: vi.fn() }));
+vi.mock("@openmapx/core/ris-client", () => ({
+  createRisClient: () => ({ isConfigured: () => true, post: risPost }),
 }));
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -73,8 +72,7 @@ describe("live-transit-db-ris provider", () => {
   });
 
   it("merges live and emulated RIS positions and filters to the requested bbox", async () => {
-    const { risPost } = await import("@integrations/geocoding-db-ris/ris-client.js");
-    vi.mocked(risPost)
+    risPost
       .mockResolvedValueOnce({
         positions: [
           {
@@ -140,8 +138,7 @@ describe("live-transit-db-ris provider", () => {
   });
 
   it("falls back to the journey id when RIS transport metadata is empty", async () => {
-    const { risPost } = await import("@integrations/geocoding-db-ris/ris-client.js");
-    vi.mocked(risPost)
+    risPost
       .mockResolvedValueOnce({
         positions: [
           {

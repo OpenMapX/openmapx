@@ -34,6 +34,10 @@
       "types": "./src/redis-secret.ts",
       "default": "./src/redis-secret.ts"
     },
+    "./ris-client": {
+      "types": "./src/ris-client.ts",
+      "default": "./src/ris-client.ts"
+    },
     "./server-env": {
       "types": "./src/server-env.ts",
       "default": "./src/server-env.ts"

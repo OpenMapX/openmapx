@@ -6,8 +6,8 @@
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
+import { createRisClient, type RisCredentials } from "@openmapx/core/ris-client";
 import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
-import { isRisConfigured, risGet } from "./ris-client.js";
 import {
   buildStationDetail,
   stopPlaceToAutocompleteResult,
@@ -22,9 +22,15 @@ import type {
   RisStopPlacesResponse,
 } from "./stations-types.js";
 
+let risClient = createRisClient();
+
+export function setRisCredentials(credentials: RisCredentials): void {
+  risClient = createRisClient(credentials);
+}
+
 async function searchStopPlaces(query: string, limit = 6): Promise<RisStopPlace[]> {
   const encoded = encodeURIComponent(query);
-  const data = await risGet<RisStopPlacesResponse>(
+  const data = await risClient.get<RisStopPlacesResponse>(
     "stations",
     `/stop-places/by-name/${encoded}?limit=${limit}`,
   );
@@ -32,7 +38,7 @@ async function searchStopPlaces(query: string, limit = 6): Promise<RisStopPlace[
 }
 
 async function getStopPlaceByEva(evaNumber: string): Promise<RisStopPlace> {
-  return risGet<RisStopPlace>("stations", `/stop-places/${evaNumber}`);
+  return risClient.get<RisStopPlace>("stations", `/stop-places/${evaNumber}`);
 }
 
 async function getStopPlacesByPosition(
@@ -41,7 +47,7 @@ async function getStopPlacesByPosition(
   radius = 500,
   limit = 5,
 ): Promise<RisStopPlace[]> {
-  const data = await risGet<RisStopPlacesResponse>(
+  const data = await risClient.get<RisStopPlacesResponse>(
     "stations",
     `/stop-places/by-position?latitude=${lat}&longitude=${lng}&radius=${radius}&limit=${limit}`,
   );
@@ -49,15 +55,15 @@ async function getStopPlacesByPosition(
 }
 
 async function getPlatforms(evaNumber: string): Promise<RisPlatformsResponse> {
-  return risGet<RisPlatformsResponse>("stations", `/platforms/${evaNumber}`);
+  return risClient.get<RisPlatformsResponse>("stations", `/platforms/${evaNumber}`);
 }
 
 async function getConnectingTimes(evaNumber: string): Promise<RisConnectingTimesResponse> {
-  return risGet<RisConnectingTimesResponse>("stations", `/connecting-times/${evaNumber}`);
+  return risClient.get<RisConnectingTimesResponse>("stations", `/connecting-times/${evaNumber}`);
 }
 
 async function getLocalServices(evaNumber: string): Promise<RisLocalServicesResponse> {
-  return risGet<RisLocalServicesResponse>(
+  return risClient.get<RisLocalServicesResponse>(
     "stations",
     `/local-services/by-key?keyType=EVA&key=${evaNumber}`,
   );
@@ -65,7 +71,7 @@ async function getLocalServices(evaNumber: string): Promise<RisLocalServicesResp
 
 export const dbRisGeocodingService: GeocodingProviderImpl = {
   async geocode(query: string, lang?: string): Promise<SearchResult[]> {
-    if (!isRisConfigured()) return [];
+    if (!risClient.isConfigured()) return [];
     try {
       const stops = await searchStopPlaces(query, 10);
       return stops.map((s) => stopPlaceToSearchResult(s, lang));
@@ -75,7 +81,7 @@ export const dbRisGeocodingService: GeocodingProviderImpl = {
   },
 
   async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
-    if (!isRisConfigured()) return [];
+    if (!risClient.isConfigured()) return [];
     try {
       const stops = await searchStopPlaces(query, 6);
       return stops.map((s) => stopPlaceToAutocompleteResult(s, lang));
@@ -89,7 +95,7 @@ export const dbRisGeocodingService: GeocodingProviderImpl = {
     lng: number,
     lang?: string,
   ): Promise<ReverseGeocodingResult | null> {
-    if (!isRisConfigured()) return null;
+    if (!risClient.isConfigured()) return null;
     try {
       const stops = await getStopPlacesByPosition(lat, lng, 200, 1);
       if (!stops[0]) return null;

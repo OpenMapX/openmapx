@@ -7,6 +7,7 @@
  */
 
 import { decodePolyline } from "@openmapx/core";
+import { createRisClient, type RisCredentials } from "@openmapx/core/ris-client";
 import type {
   GeoJSONLineString,
   TransportMode,
@@ -14,9 +15,13 @@ import type {
   TripLeg,
   TripPlan,
 } from "@openmapx/mobility-core/transit";
-import { isRisConfigured, risPost } from "./ris-client.js";
 
 const PREFIX = "ris:";
+let risClient = createRisClient();
+
+export function setRisCredentials(credentials: RisCredentials): void {
+  risClient = createRisClient(credentials);
+}
 
 // RIS API types (internal)
 
@@ -222,7 +227,7 @@ export function mapTrip(trip: RisTrip): TripItinerary {
 // Public API
 
 export function isConfigured(): boolean {
-  return isRisConfigured();
+  return risClient.isConfigured();
 }
 
 /**
@@ -284,7 +289,7 @@ export async function planJourney(
     }
 
     try {
-      const res = await risPost<RisRoutingResponse>("routing", "/multimodal", body);
+      const res = await risClient.post<RisRoutingResponse>("routing", "/multimodal", body);
       const trips = res.trips ?? [];
       if (trips.length === 0) break;
 

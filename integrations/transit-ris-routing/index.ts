@@ -1,6 +1,5 @@
 import { defineTransitProvider, type IntegrationContext } from "@openmapx/integration-framework";
 import * as ris from "./provider.js";
-import { setRisCredentials } from "./ris-client.js";
 
 const { attribution, wrapRT, init } = defineTransitProvider();
 
@@ -9,7 +8,7 @@ export function setup(ctx: IntegrationContext): void {
   const clientId = ctx.config.clientId as string | undefined;
   const apiKey = ctx.config.apiKey as string | undefined;
   ctx.onActivate(() => {
-    setRisCredentials({ clientId, apiKey });
+    ris.setRisCredentials({ clientId, apiKey });
   });
   if (!clientId?.trim() || !apiKey?.trim()) return;
 

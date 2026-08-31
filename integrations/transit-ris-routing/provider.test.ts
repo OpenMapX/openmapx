@@ -7,8 +7,8 @@ import {
   parseDuration,
   planJourney,
   risCanHonor,
+  setRisCredentials,
 } from "./provider.js";
-import { setRisCredentials } from "./ris-client.js";
 
 type LegInput = Parameters<typeof mapLeg>[0];
 type TripInput = Parameters<typeof mapTrip>[0];
