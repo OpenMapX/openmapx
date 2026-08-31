@@ -1,10 +1,13 @@
 import { readBoundedJsonResponse } from "../utils/fetchJson";
+import {
+  DEFAULT_NDJSON_STREAM_LIMITS,
+  readBoundedNdjsonStream,
+  type StreamReadLimits,
+} from "./bounded-ndjson";
 import type { DatasetMetadata } from "./types";
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
-const DEFAULT_STREAM_IDLE_TIMEOUT_MS = 5 * 60_000;
 const DEFAULT_JSON_MAX_BYTES = 8 * 1024 * 1024;
-const DEFAULT_STREAM_MAX_BYTES = 8 * 1024 * 1024;
 
 export interface DataManagerClientOptions {
   baseUrl: string;
@@ -169,9 +172,10 @@ export class DataManagerClient {
     this.fetchImpl = opts.fetch ?? globalThis.fetch;
     this.requestSignal = opts.signal;
     this.requestTimeoutMs = opts.requestTimeoutMs ?? DEFAULT_REQUEST_TIMEOUT_MS;
-    this.streamIdleTimeoutMs = opts.streamIdleTimeoutMs ?? DEFAULT_STREAM_IDLE_TIMEOUT_MS;
+    this.streamIdleTimeoutMs =
+      opts.streamIdleTimeoutMs ?? DEFAULT_NDJSON_STREAM_LIMITS.idleTimeoutMs;
     this.maxJsonBytes = opts.maxJsonBytes ?? DEFAULT_JSON_MAX_BYTES;
-    this.maxStreamBytes = opts.maxStreamBytes ?? DEFAULT_STREAM_MAX_BYTES;
+    this.maxStreamBytes = opts.maxStreamBytes ?? DEFAULT_NDJSON_STREAM_LIMITS.maxBytes;
     this.authToken =
       opts.authToken ??
       (typeof process !== "undefined"
@@ -689,35 +693,6 @@ export class DataManagerClient {
   }
 }
 
-interface StreamReadLimits {
-  maxBytes: number;
-  idleTimeoutMs: number;
-}
-
-async function readStreamChunk(
-  reader: ReadableStreamDefaultReader<Uint8Array>,
-  label: string,
-  idleTimeoutMs: number,
-): Promise<ReadableStreamReadResult<Uint8Array>> {
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
-  try {
-    return await Promise.race([
-      reader.read(),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(
-          () => reject(new Error(`${label}: stream idle timeout`)),
-          idleTimeoutMs,
-        );
-      }),
-    ]);
-  } catch (error) {
-    await reader.cancel().catch(() => {});
-    throw error;
-  } finally {
-    if (timeoutId !== undefined) clearTimeout(timeoutId);
-  }
-}
-
 /**
  * Parse an NDJSON progress stream from Overture endpoints. Each line is:
  *
@@ -729,57 +704,21 @@ async function readNdjsonOperationStream(
   res: { ok: boolean; body: ReadableStream<Uint8Array> | null; status?: number },
   label: string,
   onProgress?: (msg: string) => void,
-  limits: StreamReadLimits = {
-    maxBytes: DEFAULT_STREAM_MAX_BYTES,
-    idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-  },
+  limits: StreamReadLimits = DEFAULT_NDJSON_STREAM_LIMITS,
 ): Promise<{ ok: boolean; [key: string]: unknown }> {
-  if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status ?? "?"}`);
-  if (!res.body) throw new Error(`${label}: server returned no body stream`);
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let totalBytes = 0;
-  let final: { ok: boolean; [key: string]: unknown } | null = null;
-
-  const handleLine = (line: string) => {
-    if (!line) return;
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(line) as Record<string, unknown>;
-    } catch {
-      return;
-    }
-    if (msg.event === "progress") {
-      onProgress?.(String(msg.message ?? ""));
-    } else if (msg.event === "done") {
-      final = { ok: Boolean(msg.ok), ...msg };
-    } else if (msg.event === "error") {
-      throw new Error(String(msg.message ?? `${label} failed`));
-    }
-  };
-
-  while (true) {
-    const { done, value } = await readStreamChunk(reader, label, limits.idleTimeoutMs);
-    if (done) break;
-    totalBytes += value.byteLength;
-    if (totalBytes > limits.maxBytes) {
-      await reader.cancel().catch(() => {});
-      throw new Error(`${label}: response too large (exceeded ${limits.maxBytes} bytes)`);
-    }
-    buffer += decoder.decode(value, { stream: true });
-    while (true) {
-      const newlineIdx = buffer.indexOf("\n");
-      if (newlineIdx < 0) break;
-      handleLine(buffer.slice(0, newlineIdx).trim());
-      buffer = buffer.slice(newlineIdx + 1);
-    }
-  }
-  handleLine(buffer.trim());
-
-  if (!final) throw new Error(`${label}: stream ended without a 'done' event`);
-  return final;
+  return readBoundedNdjsonStream(
+    res,
+    label,
+    (message) => {
+      if (message.event === "progress") {
+        onProgress?.(String(message.message ?? ""));
+      } else if (message.event === "done") {
+        return { ok: Boolean(message.ok), ...message };
+      }
+      return undefined;
+    },
+    limits,
+  );
 }
 
 /**
@@ -799,64 +738,27 @@ async function readProgressStream(
   label: string,
   onProgress?: (bytes: number, totalBytes?: number) => void,
   opts: { pathField?: string } = {},
-  limits: StreamReadLimits = {
-    maxBytes: DEFAULT_STREAM_MAX_BYTES,
-    idleTimeoutMs: DEFAULT_STREAM_IDLE_TIMEOUT_MS,
-  },
+  limits: StreamReadLimits = DEFAULT_NDJSON_STREAM_LIMITS,
 ): Promise<{ ok: boolean; path: string; sizeBytes: number }> {
-  if (!res.ok) throw new Error(`${label} failed: HTTP ${res.status ?? "?"}`);
-  if (!res.body) throw new Error(`${label}: server returned no body stream`);
-
-  const reader = res.body.getReader();
-  const decoder = new TextDecoder();
-  let buffer = "";
-  let responseBytes = 0;
-  let final: { ok: boolean; path: string; sizeBytes: number } | null = null;
-
   const pathField = opts.pathField ?? "path";
-
-  const handleLine = (line: string) => {
-    if (!line) return;
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(line) as Record<string, unknown>;
-    } catch {
-      return;
-    }
-    if (msg.event === "progress") {
-      onProgress?.(
-        Number(msg.bytes) || 0,
-        typeof msg.totalBytes === "number" ? msg.totalBytes : undefined,
-      );
-    } else if (msg.event === "done") {
-      final = {
-        ok: Boolean(msg.ok),
-        path: String(msg[pathField] ?? msg.path ?? ""),
-        sizeBytes: Number(msg.sizeBytes) || 0,
-      };
-    } else if (msg.event === "error") {
-      throw new Error(String(msg.message ?? `${label} failed`));
-    }
-  };
-
-  while (true) {
-    const { done, value } = await readStreamChunk(reader, label, limits.idleTimeoutMs);
-    if (done) break;
-    responseBytes += value.byteLength;
-    if (responseBytes > limits.maxBytes) {
-      await reader.cancel().catch(() => {});
-      throw new Error(`${label}: response too large (exceeded ${limits.maxBytes} bytes)`);
-    }
-    buffer += decoder.decode(value, { stream: true });
-    while (true) {
-      const newlineIdx = buffer.indexOf("\n");
-      if (newlineIdx < 0) break;
-      handleLine(buffer.slice(0, newlineIdx).trim());
-      buffer = buffer.slice(newlineIdx + 1);
-    }
-  }
-  handleLine(buffer.trim());
-
-  if (!final) throw new Error(`${label}: stream ended without a 'done' event`);
-  return final;
+  return readBoundedNdjsonStream(
+    res,
+    label,
+    (message) => {
+      if (message.event === "progress") {
+        onProgress?.(
+          Number(message.bytes) || 0,
+          typeof message.totalBytes === "number" ? message.totalBytes : undefined,
+        );
+      } else if (message.event === "done") {
+        return {
+          ok: Boolean(message.ok),
+          path: String(message[pathField] ?? message.path ?? ""),
+          sizeBytes: Number(message.sizeBytes) || 0,
+        };
+      }
+      return undefined;
+    },
+    limits,
+  );
 }
