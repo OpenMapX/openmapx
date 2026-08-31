@@ -19,13 +19,18 @@ const INTEGRATIONS_DIR = fileURLToPath(new URL("../../../../../integrations", im
 
 /**
  * `layerStack.ts` is the one module allowed to call `addLayer` directly.
- * `AreaPickerMap.tsx` and `OfflineMapView.tsx` construct their own standalone
- * `new maplibregl.Map(...)` instances for offline-region selection/preview —
- * they never touch the shared `MapContext` map every migrated layer draws on,
- * so there is no shared stack for them to race and nothing for `addLayerInSlot`
- * to anchor them against.
+ * `AreaPickerMap.tsx`, `OfflineMapView.tsx`, and `SharedMapView.tsx` construct
+ * their own standalone `new maplibregl.Map(...)` instances (offline-region
+ * selection/preview and the public share page) — they never touch the shared
+ * `MapContext` map every migrated layer draws on, so there is no shared stack
+ * for them to race and nothing for `addLayerInSlot` to anchor them against.
  */
-const ALLOWED = new Set(["layerStack.ts", "AreaPickerMap.tsx", "OfflineMapView.tsx"]);
+const ALLOWED = new Set([
+  "layerStack.ts",
+  "AreaPickerMap.tsx",
+  "OfflineMapView.tsx",
+  "SharedMapView.tsx",
+]);
 
 function sourceFiles(dir: string, out: string[] = []): string[] {
   for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -92,10 +97,11 @@ const UNMIGRATED = new Set([
   // The primitive and the helper it replaces.
   "mapLayerGroup.ts",
   "layerStyleUtils.ts",
-  // Standalone `new maplibregl.Map(...)` instances for offline region select and
-  // preview — no shared stack, nothing to race.
+  // Standalone `new maplibregl.Map(...)` instances for offline region select,
+  // preview, and the public share page — no shared stack, nothing to race.
   "AreaPickerMap.tsx",
   "OfflineMapView.tsx",
+  "SharedMapView.tsx",
   // Awaiting the follow-up migration.
   "RasterBaseLayer.tsx",
   "RouteSearchResultsLayer.tsx",

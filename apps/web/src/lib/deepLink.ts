@@ -196,6 +196,34 @@ export function buildLocationShareUrl(currentHref: string, target: LocationShare
   return url.toString();
 }
 
+export interface DirectionsShareTarget {
+  waypoints: { coords: LngLat; label?: string }[];
+  mode?: string;
+  avoidHighways?: boolean;
+  avoidTolls?: boolean;
+  avoidFerries?: boolean;
+}
+
+/** Deep link into the main app's directions panel (the `wp` param is lat,lng order). */
+export function buildDirectionsDeepLinkUrl(origin: string, target: DirectionsShareTarget): string {
+  const url = new URL("/", origin);
+  url.searchParams.set("panel", PANEL.DIRECTIONS);
+  if (target.mode && target.mode !== "driving") url.searchParams.set("mode", target.mode);
+  const avoid = [
+    target.avoidHighways ? "highways" : "",
+    target.avoidTolls ? "tolls" : "",
+    target.avoidFerries ? "ferries" : "",
+  ].filter(Boolean);
+  if (avoid.length > 0) url.searchParams.set("avoid", avoid.join(","));
+  for (const waypoint of target.waypoints) {
+    url.searchParams.append(
+      "wp",
+      formatLabeledPoint({ coords: waypoint.coords, label: waypoint.label ?? "" }),
+    );
+  }
+  return url.toString();
+}
+
 export function parseCameraParam(value: string | null): CameraDeepLink | null {
   if (!value) return null;
   const parts = value.split(",");

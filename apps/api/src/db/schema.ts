@@ -80,6 +80,8 @@ export { type ServiceConfigRow, serviceConfig } from "./service-config-schema";
 export { type ServiceRepositoryRow, serviceRepository } from "./service-repository-schema";
 // Encrypted per-service operator secrets (container track)
 export { serviceSecret } from "./service-secret-schema";
+// Revocable public share links for saved lists and routes
+export { shareLink, shareLinkRelations } from "./share-link-schema";
 // System settings
 export { systemSettings } from "./system-settings-schema";
 // Encrypted per-user Dawarich timeline connection

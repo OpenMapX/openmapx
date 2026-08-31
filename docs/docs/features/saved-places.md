@@ -55,6 +55,23 @@ Export is server-side and dependency-free — it reads your own saved places and
 runs the converters in the API, so it works on any deployment that has the user
 database, with no extra service or credentials.
 
+## Sharing a list
+
+Any list can be published through a **share link** — a short URL
+(`https://<your-host>/s/…`) that anyone can open without an account. Open a
+list, press **Share**, and choose the link type:
+
+- **Live** — viewers always see the current list, including later edits.
+- **Snapshot** — viewers see the list exactly as it was when the link was
+  created.
+
+Links can be given an optional expiry (1, 7, or 30 days), **reset** (the old
+URL stops working and a new one is issued), or **deleted** at any time —
+revocation is immediate. Manage every link you've created under **Account
+settings → Shared links**. Share pages are excluded from search-engine
+indexing and never expose your account details, only the list name, icon, and
+its places.
+
 ## Related features
 
 - **[Places & enrichment](./places.md)** — the place card and its **Save**

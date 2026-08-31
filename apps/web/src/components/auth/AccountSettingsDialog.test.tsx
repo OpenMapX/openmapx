@@ -10,6 +10,7 @@ vi.mock("@/lib/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({ date: (value: Date) => value.toISOString() }),
 }));
 vi.mock("./MangroveAccountSection", () => ({ MangroveAccountSection: () => null }));
+vi.mock("./SharedLinksSection", () => ({ SharedLinksSection: () => null }));
 vi.mock("./TimelineConnectionSection", async () => {
   const { forwardRef, useState } = await import("react");
   return {

@@ -137,6 +137,15 @@ Deutschlandticket-only controls belong to transit journey planning, not
 ground routing. See [Public transit](./public-transit.md).
 :::
 
+### Sharing a route
+
+Signed-in users can turn the current ground route (driving, walking, cycling,
+motorcycle) into a revocable **share link**: the Share button offers "Create
+share link" next to the classic copy-the-URL option. The link stores only the
+route *inputs* — waypoints, mode, and avoid options — so viewers always get a
+fresh route from the routing engine, and it can be reset or deleted at any
+time from **Account settings → Shared links**.
+
 ## Elevation
 
 For cycling and walking routes, Valhalla samples elevation at regular intervals

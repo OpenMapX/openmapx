@@ -270,3 +270,20 @@ export const osmContributionLimiters = [
   osmContributionPublishLimit,
   osmContributionNoteLimit,
 ] as const;
+
+/**
+ * Public share-link resolution. One indexed SELECT per hit, but the endpoint
+ * is anonymous and token-guessing must stay expensive on top of the token's
+ * 256-bit entropy. Uses the default composite (`req.ip` + socket peer) key.
+ */
+export const shareResolveLimit = new RateLimiter({ max: 60, windowMs: 60_000 });
+
+/**
+ * Share-link minting/rotation for a signed-in user. Registered after the auth
+ * hook so `userDigestKeyFn` sees `request.userId`.
+ */
+export const shareMintLimit = new RateLimiter({
+  max: 20,
+  windowMs: 600_000,
+  keyFn: userDigestKeyFn,
+});

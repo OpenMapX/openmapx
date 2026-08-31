@@ -25,6 +25,9 @@ const ALLOWED: Record<string, string[]> = {
   "app/(legal)/terms/content.en.tsx": ["row.url", "row.licenseUrl"],
   "app/(legal)/terms/content.de.tsx": ["row.url", "row.licenseUrl"],
   "app/(legal)/licenses/page.tsx": ["notice.licenseUrl", "notice.projectUrl"],
+  // Both are relative in-app deep links built from validated numeric
+  // coordinates and enum modes; no third-party value reaches the binding.
+  "app/s/[token]/SharedViewClient.tsx": ["placeAppUrl(place)", "openUrl"],
   "components/admin/AdminSidebar.tsx": ["item.href"],
   "components/admin/AdminTopBar.tsx": ["crumb.href"],
   "components/admin/shared/AdminPageHeader.tsx": ["backHref"],

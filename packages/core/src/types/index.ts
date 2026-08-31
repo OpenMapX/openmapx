@@ -236,6 +236,16 @@ export type {
   SearchSuggestionsResponse,
 } from "./searchSuggestion";
 export type {
+  CreateShareInput,
+  OwnerShare,
+  PublicListShare,
+  PublicRouteShare,
+  PublicShare,
+  PublicSharePlace,
+  RouteSharePayload,
+  RouteShareWaypoint,
+} from "./share";
+export type {
   StreetLevelCapabilities,
   StreetLevelCoverage,
   StreetLevelImage,

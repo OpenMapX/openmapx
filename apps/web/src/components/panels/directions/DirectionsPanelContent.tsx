@@ -13,6 +13,8 @@ import Button from "@mui/material/Button";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
 import IconButton from "@mui/material/IconButton";
+import Menu from "@mui/material/Menu";
+import MenuItem from "@mui/material/MenuItem";
 import Snackbar from "@mui/material/Snackbar";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
@@ -45,6 +47,7 @@ import {
   useMenuStore,
   useOptimizeRoute,
   useRouteInGermany,
+  useSession,
   useSettingsStore,
   useSidebarStore,
   useTransitPlan,
@@ -64,6 +67,7 @@ import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RidePanel } from "@/components/panels/directions/RidePanel";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
+import { ShareRouteDialog } from "@/components/panels/directions/ShareRouteDialog";
 import {
   type TimeMode,
   TimeModePicker,
@@ -87,6 +91,7 @@ export function DirectionsPanelContent() {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tp = useTranslations("place");
+  const tShare = useTranslations("share");
   const locale = useLocale();
   const fmt = useDateTimeFormat();
   const { snapTo } = useMobileSheet();
@@ -224,9 +229,22 @@ export function DirectionsPanelContent() {
     };
   }, [isOpen, myLocationLabel, setWaypoint, requestFix]);
 
-  const handleShare = async () => {
+  const [shareMenuAnchor, setShareMenuAnchor] = useState<HTMLElement | null>(null);
+  const [shareRouteDialogOpen, setShareRouteDialogOpen] = useState(false);
+  const { data: session } = useSession();
+
+  const handleCopyCurrentView = async () => {
+    setShareMenuAnchor(null);
     const result = await shareCurrentUrl();
     if (result === "copied") setSnackbar(tp("linkCopied"));
+  };
+
+  const handleShare = (event: React.MouseEvent<HTMLElement>) => {
+    if (!session?.user?.id) {
+      void handleCopyCurrentView();
+      return;
+    }
+    setShareMenuAnchor(event.currentTarget);
   };
 
   // Per-waypoint input text (synced from store labels)
@@ -1346,6 +1364,27 @@ export function DirectionsPanelContent() {
         autoHideDuration={3000}
         onClose={() => setSnackbar(null)}
         message={snackbar}
+      />
+      <Menu
+        anchorEl={shareMenuAnchor}
+        open={Boolean(shareMenuAnchor)}
+        onClose={() => setShareMenuAnchor(null)}
+      >
+        <MenuItem onClick={() => void handleCopyCurrentView()}>
+          {tShare("copyCurrentView")}
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            setShareMenuAnchor(null);
+            setShareRouteDialogOpen(true);
+          }}
+        >
+          {tShare("createShareLink")}
+        </MenuItem>
+      </Menu>
+      <ShareRouteDialog
+        open={shareRouteDialogOpen}
+        onClose={() => setShareRouteDialogOpen(false)}
       />
     </Box>
   );

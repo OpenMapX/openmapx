@@ -43,12 +43,12 @@ import {
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
-import { shareCurrentUrl } from "@/lib/deepLink";
 import { exportSavedList } from "@/lib/exportSavedList";
 import { resolveListIcon } from "@/lib/listIcon";
 import { useMap } from "@/lib/MapContext";
 import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 import { PlaceThumbnail } from "./PlaceThumbnail";
+import { ShareListDialog } from "./ShareListDialog";
 
 export function SavedListDetail() {
   const t = useTranslations("saved");
@@ -79,6 +79,7 @@ export function SavedListDetail() {
   const [noteValue, setNoteValue] = useState("");
   const [snackbarOpen, setSnackbarOpen] = useState(false);
   const [snackbarMessage, setSnackbarMessage] = useState(tCommon("copied"));
+  const [shareDialogOpen, setShareDialogOpen] = useState(false);
 
   const handleMenuOpen = (e: React.MouseEvent<HTMLElement>) => {
     setMenuAnchor(e.currentTarget);
@@ -181,13 +182,7 @@ export function SavedListDetail() {
     setIconAnchor(null);
   };
 
-  const handleShare = async () => {
-    const result = await shareCurrentUrl({ title: resolveListName(list.name) });
-    if (result === "copied") {
-      setSnackbarMessage(tCommon("copied"));
-      setSnackbarOpen(true);
-    }
-  };
+  const handleShare = () => setShareDialogOpen(true);
 
   const handleExport = async (format: "gpx" | "geojson" | "kml") => {
     handleMenuClose();
@@ -522,6 +517,14 @@ export function SavedListDetail() {
         message={snackbarMessage}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
       />
+      {selectedListId && (
+        <ShareListDialog
+          open={shareDialogOpen}
+          listId={selectedListId}
+          listName={resolveListName(list.name)}
+          onClose={() => setShareDialogOpen(false)}
+        />
+      )}
     </Box>
   );
 }

@@ -163,5 +163,6 @@ export {
   useUpdatePlace,
 } from "./useSavedPlaces";
 export { useSearchSuggestions } from "./useSearchSuggestions";
+export { useCreateShare, useRevokeShare, useRotateShare, useShares } from "./useShares";
 export { type SunTimesResponse, useSunTimes } from "./useSunTimes";
 export { useTides } from "./useTides";

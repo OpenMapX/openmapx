@@ -38,6 +38,7 @@ import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 import type { AccountSettingsSection } from "@/stores/accountSettingsStore";
 import { MangroveAccountSection } from "./MangroveAccountSection";
+import { SharedLinksSection } from "./SharedLinksSection";
 import { TimelineConnectionSection } from "./TimelineConnectionSection";
 
 interface AccountSettingsDialogProps {
@@ -72,12 +73,19 @@ export function AccountSettingsDialog({
   const [deletePassword, setDeletePassword] = useState("");
   const [confirmUnlinkProvider, setConfirmUnlinkProvider] = useState<string | null>(null);
   const timelineHeadingRef = useRef<HTMLHeadingElement>(null);
+  const sharingHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const focusInitialSection = () => {
-    if (initialSection !== "timeline") return;
+    const heading =
+      initialSection === "timeline"
+        ? timelineHeadingRef.current
+        : initialSection === "sharing"
+          ? sharingHeadingRef.current
+          : null;
+    if (!heading) return;
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
-    timelineHeadingRef.current?.focus({ preventScroll: true });
-    timelineHeadingRef.current?.scrollIntoView({
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView({
       block: "start",
       behavior: reducedMotion ? "auto" : "smooth",
     });
@@ -1081,6 +1089,10 @@ export function AccountSettingsDialog({
         <Divider sx={{ my: 2 }} />
 
         <TimelineConnectionSection key={user.id} ref={timelineHeadingRef} ownerId={user.id} />
+
+        <Divider sx={{ my: 2 }} />
+
+        <SharedLinksSection ref={sharingHeadingRef} />
 
         <Divider sx={{ my: 2 }} />
 

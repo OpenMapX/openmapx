@@ -97,6 +97,8 @@ export const API_ENDPOINTS = {
   savedPlaces: "/api/saved/places",
   savedLabels: "/api/saved/labels",
   savedCheck: "/api/saved/check",
+  // Public resolve is `${base}/${token}`; rotate is `${base}/${id}/rotate`.
+  shares: "/api/shares",
   capabilities: "/api/capabilities",
   timelineConnection: "/api/timeline/connection",
   timelineConnectionTest: "/api/timeline/connection/test",

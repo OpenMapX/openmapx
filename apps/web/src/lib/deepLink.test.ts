@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  buildDirectionsDeepLinkUrl,
   buildLocationShareUrl,
   DEEPLINK_UPDATE_EVENT,
   formatCameraParam,
@@ -184,5 +185,37 @@ describe("deepLink helpers", () => {
       text: undefined,
       url: window.location.href,
     });
+  });
+});
+
+describe("buildDirectionsDeepLinkUrl", () => {
+  it("encodes waypoints/mode/avoid in the deep-link vocabulary and round-trips", () => {
+    const url = buildDirectionsDeepLinkUrl("https://maps.example", {
+      waypoints: [
+        { coords: [13.405, 52.52], label: "Berlin" },
+        { coords: [9.99, 53.55], label: "Hamburg" },
+      ],
+      mode: "cycling",
+      avoidFerries: true,
+    });
+    const parsed = new URL(url);
+    expect(parsed.pathname).toBe("/");
+    expect(parsed.searchParams.get("panel")).toBe("directions");
+    expect(parsed.searchParams.get("mode")).toBe("cycling");
+    expect(parsed.searchParams.get("avoid")).toBe("ferries");
+    expect(parsed.searchParams.getAll("wp")).toEqual(["52.52,13.405,Berlin", "53.55,9.99,Hamburg"]);
+    const roundTrip = parseDeepLinkSearch(parsed.search);
+    expect(roundTrip.directions?.waypoints).toHaveLength(2);
+    expect(roundTrip.directions?.waypoints[0].coords).toEqual([13.405, 52.52]);
+  });
+
+  it("omits mode for driving and avoid when empty", () => {
+    const url = buildDirectionsDeepLinkUrl("https://maps.example", {
+      waypoints: [{ coords: [0, 0] }, { coords: [1, 1] }],
+      mode: "driving",
+    });
+    const parsed = new URL(url);
+    expect(parsed.searchParams.has("mode")).toBe(false);
+    expect(parsed.searchParams.has("avoid")).toBe(false);
   });
 });

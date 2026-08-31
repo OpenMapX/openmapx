@@ -28,6 +28,7 @@ import { osmContributionsRoute } from "./osm-contributions";
 import { placesRoute } from "./places";
 import { reviewsKeypairRoute } from "./reviews-keypair";
 import { savedRoute } from "./saved";
+import { sharesRoute } from "./shares";
 import { statusRoute } from "./status";
 import { streetLevelRoute } from "./street-level-imagery";
 import { tilesRoute } from "./tiles";
@@ -80,6 +81,7 @@ export async function registerCoreRoutes(
   await server.register(winterSportsRoute, { prefix: "/api" });
   await server.register(reviewsKeypairRoute, { prefix: "/api" });
   await server.register(savedRoute, { prefix: "/api" });
+  await server.register(sharesRoute, { prefix: "/api" });
   await server.register(osmContributionsRoute(), { prefix: "/api" });
   await server.register(timelineRoute, { prefix: "/api" });
   await server.register(meRoute, { prefix: "/api" });

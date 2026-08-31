@@ -57,6 +57,9 @@ const privateNoStoreRouteSources = [
   "/mobile-auth",
   "/auth/:path*",
   "/delete-account",
+  // Share pages embed per-token data server-side; revocation must not be
+  // outlived by an HTTP cache.
+  "/s/:path*",
 ] as const;
 const privateNoStoreHeaders = [{ key: "Cache-Control", value: "private, no-store" }];
 const privateRootResetCallbackRules = [
