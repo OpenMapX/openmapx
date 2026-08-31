@@ -10,6 +10,7 @@
  * separate file keeps both changes conflict-free.
  */
 
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
@@ -35,6 +36,18 @@ import {
   shutdownIntegrations,
 } from "./integration-host.js";
 import { isSecretsConfigured } from "./services/secrets.js";
+
+describe("integration-host boundaries", () => {
+  it("has no integration-specific runtime lifecycle imports", () => {
+    const source = readFileSync(
+      join(fileURLToPath(import.meta.url), "../integration-host.ts"),
+      "utf8",
+    );
+
+    expect(source).not.toMatch(/@integrations\/(?:parking|ev-charging)\/runtime/);
+    expect(source).not.toMatch(/(?:Parking|Ev)RuntimeStaging/);
+  });
+});
 
 afterEach(async () => {
   try {

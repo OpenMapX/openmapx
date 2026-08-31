@@ -1,3 +1,9 @@
+export {
+  type ActivationTransactionScope,
+  createActivationTransactionScope,
+  type IntegrationActivation,
+  runImmediateActivation,
+} from "./activation-transaction";
 export type {
   AirQualityMetrics,
   AirQualityProviderCallMetrics,
@@ -265,7 +271,10 @@ export { QueryValidationError, type RouteQuery, scalarQueries, scalarQuery } fro
 export { IntegrationRegistry } from "./registry";
 export {
   createStagedRuntimeContext,
+  createStagedRuntimeValue,
   type StagedRuntimeContext,
+  type StagedRuntimeValue,
+  stageRuntimeGeneration,
 } from "./staged-runtime-context";
 // `useIntegrationRegistry` and `IntegrationRegistryContext` live in the
 // `/react` subpath — pulling them into this barrel would force every

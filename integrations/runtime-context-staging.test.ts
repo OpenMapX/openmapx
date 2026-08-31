@@ -85,4 +85,22 @@ describe.each(runtimes)("$name runtime context generation staging", (runtime) =>
 
     expect(applied).toEqual([]);
   });
+
+  it("restores committed runtime state when a later activation fails", () => {
+    const applied: string[] = [];
+    runtime.init(context("old"));
+    runtime.begin();
+    runtime.init(context("new"));
+    runtime.stageCommit(
+      () => applied.push("new-generation"),
+      () => applied.push("old-generation"),
+    );
+
+    runtime.commit();
+    expect(runtime.get().id).toBe("new");
+    runtime.rollback();
+
+    expect(runtime.get().id).toBe("old");
+    expect(applied).toEqual(["new-generation", "old-generation"]);
+  });
 });

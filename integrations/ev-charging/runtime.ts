@@ -3,6 +3,8 @@ import {
   type IntegrationContext,
 } from "@openmapx/integration-framework";
 
+export const evRuntime = createStagedRuntimeContext<IntegrationContext>("ev-charging");
+
 export const {
   init: initRuntime,
   begin: beginRuntimeStaging,
@@ -10,4 +12,4 @@ export const {
   commit: commitRuntimeStaging,
   rollback: rollbackRuntimeStaging,
   get: getRuntimeContext,
-} = createStagedRuntimeContext<IntegrationContext>("ev-charging");
+} = evRuntime;

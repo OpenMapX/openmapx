@@ -542,8 +542,9 @@ export interface IntegrationContext {
    * Publish a synchronous process-wide runtime mutation with this integration
    * generation. During a hot reload the host defers the callback until every
    * integration has staged successfully; during initial startup it runs now.
+   * A rollback restores the prior state if the candidate generation is discarded.
    */
-  onActivate(activate: () => void): void;
+  onActivate(activate: () => void, rollback?: () => void): void;
   onShutdown(cleanup: () => Promise<void>): void;
 
   /** Query all enabled integrations registered under a domain. */

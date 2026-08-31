@@ -3,19 +3,11 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import {
-  beginRuntimeStaging as beginEvRuntimeStaging,
-  commitRuntimeStaging as commitEvRuntimeStaging,
-  rollbackRuntimeStaging as rollbackEvRuntimeStaging,
-} from "@integrations/ev-charging/runtime.js";
-import {
-  beginRuntimeStaging as beginParkingRuntimeStaging,
-  commitRuntimeStaging as commitParkingRuntimeStaging,
-  rollbackRuntimeStaging as rollbackParkingRuntimeStaging,
-} from "@integrations/parking/runtime.js";
-import {
+  type ActivationTransactionScope,
   assertAirQualityProviderContract,
   type CacheClient,
   type CustomHealthCheckFn,
+  createActivationTransactionScope,
   type HttpClient,
   type IntegrationContext,
   IntegrationEventBus,
@@ -426,7 +418,7 @@ function buildIntegrationContext(args: {
   integration: LoadedIntegration;
   eventBus: IntegrationEventBus;
   integrationsByDomain: (domain: string) => LoadedIntegration[];
-  activationHandlers?: Array<() => void>;
+  activationScope: ActivationTransactionScope;
 }): IntegrationContext {
   const {
     id,
@@ -441,7 +433,7 @@ function buildIntegrationContext(args: {
     shutdownHandlers,
     eventBus: contextEventBus,
     integrationsByDomain,
-    activationHandlers,
+    activationScope,
   } = args;
   const { integration } = args;
   return {
@@ -578,9 +570,8 @@ function buildIntegrationContext(args: {
     on(event: string, handler: (data: unknown) => void) {
       return contextEventBus.on(event as never, handler as never);
     },
-    onActivate(activate: () => void) {
-      if (activationHandlers) activationHandlers.push(activate);
-      else activate();
+    onActivate(activate: () => void, rollback?: () => void) {
+      activationScope.register(activate, rollback);
     },
     onShutdown(cleanup: () => Promise<void>) {
       shutdownHandlers.push(cleanup);
@@ -775,6 +766,7 @@ export async function initIntegrations(
         ),
     });
 
+    const activationScope = createActivationTransactionScope({ activateOnRegister: true });
     const ctx = buildIntegrationContext({
       id,
       manifest,
@@ -789,6 +781,7 @@ export async function initIntegrations(
       integration,
       eventBus,
       integrationsByDomain: getIntegrationsByDomain,
+      activationScope,
     });
 
     // Try to load the integration's setup function
@@ -804,10 +797,14 @@ export async function initIntegrations(
         }
       }
 
+      activationScope.complete();
       integrations.set(id, integration);
       log.info(`Integration ${id} v${manifest.version ?? "unknown"} loaded successfully`);
       eventBus.emit({ type: "integration.loaded", integrationId: id });
     } catch (err) {
+      for (const rollbackError of activationScope.rollback()) {
+        fastify.log.warn(rollbackError, `Failed to roll back activation for integration ${id}`);
+      }
       fastify.log.error(err, `Failed to load integration ${id}`);
       integration.enabled = false;
       integrations.set(id, integration);
@@ -1056,15 +1053,13 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
   const previousEventBus = eventBus;
   const stagedEventBus = new IntegrationEventBus();
   const next = new Map<string, LoadedIntegration>();
-  const activationHandlers: Array<() => void> = [];
+  const activationScope = createActivationTransactionScope();
   let stagedManifestDataSources: ManifestDataSource[] = [];
 
   try {
     beginIntegrationRouteStaging();
     beginPoiSourceRegistryStaging();
     beginPlaceResolverStaging();
-    beginParkingRuntimeStaging();
-    beginEvRuntimeStaging();
 
     // Re-discover and re-setup (topological sort by dependencies, same as cold start).
     const discovered = await discoverManifests(_integrationDirs);
@@ -1190,7 +1185,7 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
           Array.from(next.values()).filter(
             (candidate) => candidate.enabled && candidate.manifest.domains.includes(domain),
           ),
-        activationHandlers,
+        activationScope,
       });
 
       try {
@@ -1224,21 +1219,21 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
 
     // No awaits in this block: request handlers see the entire old graph or the
     // entire new graph, never a mixture of registry/routes/POI/event generations.
-    for (const activate of activationHandlers) activate();
+    activationScope.activate();
     integrations.clear();
     for (const [id, integration] of next) integrations.set(id, integration);
     commitIntegrationRouteStaging();
     commitPoiSourceRegistryStaging();
     commitPlaceResolverStaging();
-    commitParkingRuntimeStaging();
-    commitEvRuntimeStaging();
     eventBus = stagedEventBus;
+    activationScope.complete();
   } catch (err) {
+    for (const rollbackError of activationScope.rollback()) {
+      _fastify.log.warn(rollbackError, "Failed to roll back staged integration activation");
+    }
     rollbackIntegrationRouteStaging();
     rollbackPoiSourceRegistryStaging();
     rollbackPlaceResolverStaging();
-    rollbackParkingRuntimeStaging();
-    rollbackEvRuntimeStaging();
     stagedEventBus.removeAll();
     for (const integration of next.values()) {
       for (const handler of integration.shutdownHandlers) {

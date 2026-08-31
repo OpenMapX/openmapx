@@ -3,6 +3,8 @@ import {
   type IntegrationContext,
 } from "@openmapx/integration-framework";
 
+export const parkingRuntime = createStagedRuntimeContext<IntegrationContext>("parking");
+
 export const {
   init: initRuntime,
   begin: beginRuntimeStaging,
@@ -10,4 +12,4 @@ export const {
   commit: commitRuntimeStaging,
   rollback: rollbackRuntimeStaging,
   get: getRuntimeContext,
-} = createStagedRuntimeContext<IntegrationContext>("parking");
+} = parkingRuntime;

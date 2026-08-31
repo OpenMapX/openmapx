@@ -5,6 +5,7 @@ import type {
   MobilityHttpTransport,
 } from "@openmapx/mobility-core/json-transport";
 import type { PoiSource } from "@openmapx/poi-source-registry";
+import { runImmediateActivation } from "../activation-transaction.js";
 import type {
   BinaryHttpResponse,
   CacheClient,
@@ -350,7 +351,7 @@ export function createMockIntegrationContext(
     },
     emit: noop,
     on: () => () => undefined,
-    onActivate: (activate) => activate(),
+    onActivate: runImmediateActivation,
     onShutdown: noop,
     getIntegrationsByDomain: () => [],
     getRequiredService: () => null,

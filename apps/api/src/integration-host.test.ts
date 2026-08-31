@@ -11,12 +11,18 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
+  beginRuntimeStaging as beginEvRuntimeStaging,
+  commitRuntimeStaging as commitEvRuntimeStaging,
   getRuntimeContext as getEvRuntimeContext,
   initRuntime as initEvRuntime,
+  rollbackRuntimeStaging as rollbackEvRuntimeStaging,
 } from "@integrations/ev-charging/runtime.js";
 import {
+  beginRuntimeStaging as beginParkingRuntimeStaging,
+  commitRuntimeStaging as commitParkingRuntimeStaging,
   getRuntimeContext as getParkingRuntimeContext,
   initRuntime as initParkingRuntime,
+  rollbackRuntimeStaging as rollbackParkingRuntimeStaging,
 } from "@integrations/parking/runtime.js";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { getPlaceResolver, registerPlaceResolver } from "@openmapx/place-ids";
@@ -656,16 +662,48 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
     g.__omxProcessStateSetup = (ctx: IntegrationContext) => {
       generation += 1;
       const registeredGeneration = generation;
+      const previousActiveGeneration = g.__omxActiveProcessStateGeneration;
+      const record = (event: string): void => {
+        (g.__omxActivationEvents as string[] | undefined)?.push(event);
+      };
       const generationContext = {
         ...ctx,
         id: `process-state-generation-${registeredGeneration}`,
       } as IntegrationContext;
+      beginParkingRuntimeStaging();
       initParkingRuntime(generationContext);
+      ctx.onActivate(commitParkingRuntimeStaging, rollbackParkingRuntimeStaging);
+      beginEvRuntimeStaging();
       initEvRuntime(generationContext);
+      ctx.onActivate(commitEvRuntimeStaging, rollbackEvRuntimeStaging);
       registerPlaceResolver("process-state-probe", async () => registeredGeneration);
-      ctx.onActivate(() => {
-        g.__omxActiveProcessStateGeneration = registeredGeneration;
-      });
+      ctx.onActivate(
+        () => record(`activate:${registeredGeneration}:first`),
+        () => record(`rollback:${registeredGeneration}:first`),
+      );
+      ctx.onActivate(
+        () => {
+          record(`activate:${registeredGeneration}:second`);
+          if (g.__omxProcessStateActivationFail) {
+            throw new Error("injected process-state activation failure");
+          }
+        },
+        () => record(`rollback:${registeredGeneration}:second`),
+      );
+      ctx.onActivate(
+        () => record(`activate:${registeredGeneration}:third`),
+        () => record(`rollback:${registeredGeneration}:third`),
+      );
+      ctx.onActivate(
+        () => {
+          record(`activate:${registeredGeneration}:active`);
+          g.__omxActiveProcessStateGeneration = registeredGeneration;
+        },
+        () => {
+          record(`rollback:${registeredGeneration}:active`);
+          g.__omxActiveProcessStateGeneration = previousActiveGeneration;
+        },
+      );
     };
     return () => generation;
   }
@@ -786,6 +824,71 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
     }
   });
 
+  it("activates cold-start and reload transactions in registration order", async () => {
+    const parent = writeProcessStateFixture();
+    const g = globalThis as Record<string, unknown>;
+    const app = makeApp();
+    g.__omxActivationEvents = [];
+    installProcessStateProbe(g);
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      expect(g.__omxActivationEvents).toEqual([
+        "activate:1:first",
+        "activate:1:second",
+        "activate:1:third",
+        "activate:1:active",
+      ]);
+
+      g.__omxActivationEvents = [];
+      await reloadIntegrations();
+
+      expect(g.__omxActivationEvents).toEqual([
+        "activate:2:first",
+        "activate:2:second",
+        "activate:2:third",
+        "activate:2:active",
+      ]);
+      expect(g.__omxActiveProcessStateGeneration).toBe(2);
+    } finally {
+      delete g.__omxActivationEvents;
+      delete g.__omxProcessStateSetup;
+      delete g.__omxProcessStateActivationFail;
+      delete g.__omxActiveProcessStateGeneration;
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("rolls back immediate cold-start activations when setup later fails", async () => {
+    const parent = writeProcessStateFixture();
+    const g = globalThis as Record<string, unknown>;
+    const app = makeApp();
+    g.__omxActivationEvents = [];
+    g.__omxProcessStateFail = true;
+    installProcessStateProbe(g);
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+
+      expect(getIntegration("process-state-probe")?.enabled).toBe(false);
+      expect(g.__omxActivationEvents).toEqual([
+        "activate:1:first",
+        "activate:1:second",
+        "activate:1:third",
+        "activate:1:active",
+        "rollback:1:active",
+        "rollback:1:third",
+        "rollback:1:second",
+        "rollback:1:first",
+      ]);
+      expect(g.__omxActiveProcessStateGeneration).toBeUndefined();
+    } finally {
+      delete g.__omxActivationEvents;
+      delete g.__omxProcessStateSetup;
+      delete g.__omxProcessStateFail;
+      delete g.__omxActiveProcessStateGeneration;
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
   it("rolls back staged place resolvers and parking/EV contexts after setup fails", async () => {
     const parent = writeProcessStateFixture();
     const g = globalThis as Record<string, unknown>;
@@ -793,6 +896,7 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
     const currentGeneration = installProcessStateProbe(g);
     try {
       await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      g.__omxActivationEvents = [];
       g.__omxProcessStateFail = true;
 
       await expect(reloadIntegrations()).rejects.toThrow("injected process-state failure");
@@ -802,12 +906,54 @@ describe("reloadIntegrations — concurrency and mid-reload visibility", () => {
       expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
       expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
       expect(g.__omxActiveProcessStateGeneration).toBe(1);
+      expect(g.__omxActivationEvents).toEqual([
+        "rollback:2:active",
+        "rollback:2:third",
+        "rollback:2:second",
+        "rollback:2:first",
+      ]);
     } finally {
       delete g.__omxProcessStateSetup;
       delete g.__omxProcessStateGateArmed;
       delete g.__omxProcessStateEntered;
       delete g.__omxProcessStateRelease;
       delete g.__omxProcessStateFail;
+      delete g.__omxActivationEvents;
+      delete g.__omxActiveProcessStateGeneration;
+      rmSync(parent, { recursive: true, force: true });
+    }
+  });
+
+  it("rolls back completed and staged transactions once when activation fails", async () => {
+    const parent = writeProcessStateFixture();
+    const g = globalThis as Record<string, unknown>;
+    const app = makeApp();
+    installProcessStateProbe(g);
+    try {
+      await initIntegrations(app, [{ directory: parent, isBuiltIn: true }]);
+      g.__omxActivationEvents = [];
+      g.__omxProcessStateActivationFail = true;
+
+      await expect(reloadIntegrations()).rejects.toThrow(
+        "injected process-state activation failure",
+      );
+
+      expect(g.__omxActivationEvents).toEqual([
+        "activate:2:first",
+        "activate:2:second",
+        "rollback:2:active",
+        "rollback:2:third",
+        "rollback:2:second",
+        "rollback:2:first",
+      ]);
+      expect(await resolvedProcessStateGeneration()).toBe(1);
+      expect(getParkingRuntimeContext().id).toBe("process-state-generation-1");
+      expect(getEvRuntimeContext().id).toBe("process-state-generation-1");
+      expect(g.__omxActiveProcessStateGeneration).toBe(1);
+    } finally {
+      delete g.__omxActivationEvents;
+      delete g.__omxProcessStateSetup;
+      delete g.__omxProcessStateActivationFail;
       delete g.__omxActiveProcessStateGeneration;
       rmSync(parent, { recursive: true, force: true });
     }
