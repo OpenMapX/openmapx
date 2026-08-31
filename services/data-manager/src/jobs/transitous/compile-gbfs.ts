@@ -1,12 +1,5 @@
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  mkdirSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { privateFeedHostAllowlist, safeFetchJson } from "@openmapx/core/utils/safe-download";
 import {
@@ -17,6 +10,7 @@ import {
   parseMobilityDataGbfsCsv,
 } from "@openmapx/transitous-core";
 import { runOpsOperation } from "../../ops-client.js";
+import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { readFeedOverlay } from "../transitous-feeds-overlay.js";
 import type { StageFn, StageResult } from "./types.js";
@@ -249,13 +243,11 @@ function writeValidationCache(
   registrySha256: string,
   results: ValidationResult[],
 ): void {
-  const temporary = `${path}.tmp-${process.pid}`;
-  writeFileSync(
-    temporary,
-    `${JSON.stringify({ schemaVersion: 1, registrySha256, results }, null, 2)}\n`,
-    "utf-8",
+  atomicWriteJsonSync(
+    path,
+    { schemaVersion: 1, registrySha256, results },
+    { durability: "visibility" },
   );
-  renameSync(temporary, path);
 }
 
 function injectAdditions(catalogDir: string, additions: CompiledGbfsAddition[]): void {
@@ -286,9 +278,7 @@ function injectAdditions(catalogDir: string, additions: CompiledGbfsAddition[]):
     sources.sort((a, b) =>
       String((a as { name?: unknown }).name).localeCompare(String((b as { name?: unknown }).name)),
     );
-    const temporary = `${path}.tmp-${process.pid}`;
-    writeFileSync(temporary, `${JSON.stringify({ ...parsed, sources }, null, 2)}\n`, "utf-8");
-    renameSync(temporary, path);
+    atomicWriteJsonSync(path, { ...parsed, sources }, { durability: "visibility" });
   }
 }
 
@@ -437,9 +427,7 @@ export const run: StageFn = async (ctx) => {
     };
     const output = join(catalogDir, "out", "gbfs-source-index.json");
     mkdirSync(join(catalogDir, "out"), { recursive: true });
-    const temporary = `${output}.tmp-${process.pid}`;
-    writeFileSync(temporary, `${JSON.stringify(index, null, 2)}\n`, "utf-8");
-    renameSync(temporary, output);
+    atomicWriteJsonSync(output, index, { durability: "visibility" });
     ctx.state.gbfsCompilation = {
       output,
       healthy: healthy.length,

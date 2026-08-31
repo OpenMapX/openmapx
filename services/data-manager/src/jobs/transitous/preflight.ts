@@ -1,5 +1,6 @@
-import { existsSync, mkdirSync, renameSync, statfsSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, statfsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
 import { writeTransitSourceManifest } from "./source-manifest.js";
 import type { StageFn, StageResult } from "./types.js";
@@ -235,10 +236,11 @@ export const run: StageFn = async (ctx) => {
     ),
   });
   const statusPath = join(ctx.dataDir, "motis", "preflight.json");
-  mkdirSync(join(ctx.dataDir, "motis"), { recursive: true });
-  const temporary = `${statusPath}.tmp-${process.pid}`;
-  writeFileSync(temporary, `${JSON.stringify({ checkedAt: ctx.now(), ...result }, null, 2)}\n`);
-  renameSync(temporary, statusPath);
+  atomicWriteJsonSync(
+    statusPath,
+    { checkedAt: ctx.now(), ...result },
+    { durability: "visibility", createParentDirectory: true },
+  );
   if (result.ok) writeTransitSourceManifest(ctx);
   return finish(result.ok ? "ok" : "error", result);
 };

@@ -1,8 +1,9 @@
 import { createReadStream } from "node:fs";
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
-import { dirname, join } from "node:path";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { runOpsOperation } from "../../ops-client.js";
+import { atomicWriteFile } from "../../utils/atomic-write.js";
 
 /** Hard-coded output filename of `valhalla_ways_to_edges` — no output flag exists. */
 const WAY_EDGES_FILENAME = "way_edges.txt";
@@ -131,14 +132,11 @@ export async function refreshWaysToEdges(
   }
 
   const outputPath = deps.outputPath ?? defaultOutputPath();
-  await mkdir(dirname(outputPath), { recursive: true });
-  // Write + atomic rename so the live writer's every-2-min `loadWaysToEdges`
-  // never reads a half-written map (truncate-then-write would expose torn JSON
-  // during the ~large serialize), and so an overlapping refresh — the startup
-  // bootstrap racing the 05:00 guard — can't interleave two writers on one path.
-  const tmpPath = `${outputPath}.tmp`;
-  await writeFile(tmpPath, JSON.stringify(result), "utf8");
-  await rename(tmpPath, outputPath);
+  // The map is rebuildable; readers need atomic visibility without blocking on fsync.
+  await atomicWriteFile(outputPath, JSON.stringify(result), {
+    durability: "visibility",
+    createParentDirectory: true,
+  });
 
   const wayCount = Object.keys(result).length;
   deps.logger?.info("ways-to-edges: refreshed", { wayCount, edgeCount, outputPath });
