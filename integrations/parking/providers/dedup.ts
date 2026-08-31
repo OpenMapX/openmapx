@@ -1,4 +1,4 @@
-import { haversineMeters as haversineMetersCore } from "@openmapx/core";
+import { clusterSpatialItems, haversineMeters as haversineMetersCore } from "@openmapx/core";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
 import { getParkingSourcePrefix, getParkingSourcePriority } from "./source-priority.js";
 
@@ -18,16 +18,6 @@ const ALWAYS_MERGE_M = 40;
 const NEVER_MERGE_M = 150;
 /** At medium distances (40–150m), names must agree to this Jaccard-over-min score. */
 const NAME_SIM_THRESHOLD = 0.5;
-
-/**
- * Bucket cell size in degrees, applied to both latitude and longitude.
- * The longitude neighbour range is derived dynamically from latitude (see
- * `lngNeighborRange`) because a degree of longitude shrinks toward the poles.
- */
-const BUCKET_DEG = 0.002;
-const METERS_PER_DEG_LAT = 111_320;
-/** Clamp cos(lat) to keep the neighbour range bounded near the poles. */
-const MIN_LAT_COS = 0.01;
 
 // Haversine distance
 
@@ -121,69 +111,6 @@ function shouldCluster(a: ParkingFacility, b: ParkingFacility): boolean {
   if (d >= NEVER_MERGE_M) return false;
   if (d <= ALWAYS_MERGE_M) return true;
   return nameSimilarity(a.name, b.name) >= NAME_SIM_THRESHOLD;
-}
-
-// Union-find
-
-class UnionFind {
-  private parent: number[];
-  private rank: number[];
-
-  constructor(n: number) {
-    this.parent = Array.from({ length: n }, (_, i) => i);
-    this.rank = new Array(n).fill(0);
-  }
-
-  find(x: number): number {
-    if (this.parent[x] !== x) this.parent[x] = this.find(this.parent[x]);
-    return this.parent[x];
-  }
-
-  union(a: number, b: number): void {
-    const ra = this.find(a);
-    const rb = this.find(b);
-    if (ra === rb) return;
-    if (this.rank[ra] < this.rank[rb]) this.parent[ra] = rb;
-    else if (this.rank[ra] > this.rank[rb]) this.parent[rb] = ra;
-    else {
-      this.parent[rb] = ra;
-      this.rank[ra]++;
-    }
-  }
-}
-
-// Spatial bucketing
-
-function bucketKey(f: ParkingFacility): string {
-  const [lng, lat] = f.coordinates;
-  const bx = Math.floor(lng / BUCKET_DEG);
-  const by = Math.floor(lat / BUCKET_DEG);
-  return `${bx},${by}`;
-}
-
-/**
- * How many longitude buckets away we must scan to be sure any pair within
- * NEVER_MERGE_M is visited. A degree of longitude is 111.32 km * cos(lat)
- * wide, so at 50°N a 0.002° bucket is only ~143m across — less than the
- * 150m threshold. In that case ±1 isn't enough; this widens the search.
- */
-function lngNeighborRange(lat: number): number {
-  const cosLat = Math.max(Math.cos((lat * Math.PI) / 180), MIN_LAT_COS);
-  const maxLngDiffDeg = NEVER_MERGE_M / (METERS_PER_DEG_LAT * cosLat);
-  // +1 to absorb cell-boundary offsets (points at opposite edges of their buckets).
-  return Math.ceil(maxLngDiffDeg / BUCKET_DEG) + 1;
-}
-
-function neighborKeys(key: string, lat: number): string[] {
-  const [bx, by] = key.split(",").map(Number);
-  const lngRange = lngNeighborRange(lat);
-  const out: string[] = [];
-  for (let dx = -lngRange; dx <= lngRange; dx++) {
-    for (let dy = -1; dy <= 1; dy++) {
-      out.push(`${bx + dx},${by + dy}`);
-    }
-  }
-  return out;
 }
 
 // Field-level merge helpers
@@ -380,72 +307,9 @@ function mergeCluster(cluster: ParkingFacility[]): ParkingFacility {
  * choices see every member at once.
  */
 export function deduplicateParking(facilities: ParkingFacility[]): ParkingFacility[] {
-  const n = facilities.length;
-  if (n === 0) return [];
-
-  const buckets = new Map<string, number[]>();
-  for (let i = 0; i < n; i++) {
-    const key = bucketKey(facilities[i]);
-    const arr = buckets.get(key);
-    if (arr) arr.push(i);
-    else buckets.set(key, [i]);
-  }
-
-  const uf = new UnionFind(n);
-  // Track each cluster's current members so we can enforce that every pair
-  // within a cluster passes `shouldCluster`. Without this check, a chain
-  // A↔B, B↔C could union A and C even when they lie beyond NEVER_MERGE_M.
-  const clusterMembers = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) clusterMembers.set(i, [i]);
-
-  for (let i = 0; i < n; i++) {
-    const selfKey = bucketKey(facilities[i]);
-    for (const nKey of neighborKeys(selfKey, facilities[i].coordinates[1])) {
-      const candidates = buckets.get(nKey);
-      if (!candidates) continue;
-      for (const j of candidates) {
-        if (j <= i) continue;
-        if (!shouldCluster(facilities[i], facilities[j])) continue;
-        const ri = uf.find(i);
-        const rj = uf.find(j);
-        if (ri === rj) continue;
-        const ma = clusterMembers.get(ri);
-        const mb = clusterMembers.get(rj);
-        if (!ma || !mb) continue;
-        // All pairs across the two clusters must also pass shouldCluster.
-        // Cluster sizes are typically tiny (~1–5) so this is cheap.
-        let ok = true;
-        for (const a of ma) {
-          for (const b of mb) {
-            if (!shouldCluster(facilities[a], facilities[b])) {
-              ok = false;
-              break;
-            }
-          }
-          if (!ok) break;
-        }
-        if (!ok) continue;
-        uf.union(i, j);
-        const newRoot = uf.find(i);
-        const merged = [...ma, ...mb];
-        if (newRoot !== ri) clusterMembers.delete(ri);
-        if (newRoot !== rj) clusterMembers.delete(rj);
-        clusterMembers.set(newRoot, merged);
-      }
-    }
-  }
-
-  const clusters = new Map<number, ParkingFacility[]>();
-  for (let i = 0; i < n; i++) {
-    const root = uf.find(i);
-    const existing = clusters.get(root);
-    if (existing) existing.push(facilities[i]);
-    else clusters.set(root, [facilities[i]]);
-  }
-
-  const out: ParkingFacility[] = [];
-  for (const cluster of clusters.values()) {
-    out.push(cluster.length === 1 ? cluster[0] : mergeCluster(cluster));
-  }
-  return out;
+  return clusterSpatialItems(facilities, {
+    coordinates: (facility) => facility.coordinates,
+    searchRadiusMeters: NEVER_MERGE_M,
+    shouldJoin: shouldCluster,
+  }).map((cluster) => (cluster.length === 1 ? cluster[0] : mergeCluster(cluster)));
 }

@@ -1,4 +1,4 @@
-import type { DataSourceResult } from "@openmapx/core";
+import { clusterSpatialItems, type DataSourceResult } from "@openmapx/core";
 import type {
   EvChargingConnector,
   EvChargingStation,
@@ -18,9 +18,6 @@ function stationPriority(station: EvChargingStation): number {
 const ALWAYS_MERGE_M = 20;
 const SOFT_MERGE_M = 90;
 const NEVER_MERGE_M = 150;
-const BUCKET_DEG = 0.002;
-const METERS_PER_DEG_LAT = 111_320;
-const MIN_LAT_COS = 0.01;
 
 const NAME_STOPWORDS = new Set([
   "ev",
@@ -116,54 +113,6 @@ function shouldCluster(a: EvChargingStation, b: EvChargingStation): boolean {
     return nameScore >= 0.45 || operatorScore >= 0.75 || addressScore >= 0.6;
   }
   return nameScore >= 0.65 && (operatorScore >= 0.5 || addressScore >= 0.5);
-}
-
-class UnionFind {
-  private parent: number[];
-  private rank: number[];
-
-  constructor(n: number) {
-    this.parent = Array.from({ length: n }, (_, i) => i);
-    this.rank = new Array(n).fill(0);
-  }
-
-  find(x: number): number {
-    if (this.parent[x] !== x) this.parent[x] = this.find(this.parent[x]);
-    return this.parent[x];
-  }
-
-  union(a: number, b: number): void {
-    const ra = this.find(a);
-    const rb = this.find(b);
-    if (ra === rb) return;
-    if (this.rank[ra] < this.rank[rb]) this.parent[ra] = rb;
-    else if (this.rank[ra] > this.rank[rb]) this.parent[rb] = ra;
-    else {
-      this.parent[rb] = ra;
-      this.rank[ra]++;
-    }
-  }
-}
-
-function bucketKey(station: EvChargingStation): string {
-  const [lng, lat] = station.coordinates;
-  return `${Math.floor(lng / BUCKET_DEG)},${Math.floor(lat / BUCKET_DEG)}`;
-}
-
-function lngNeighborRange(lat: number): number {
-  const cosLat = Math.max(Math.cos((lat * Math.PI) / 180), MIN_LAT_COS);
-  const maxLngDiffDeg = NEVER_MERGE_M / (METERS_PER_DEG_LAT * cosLat);
-  return Math.ceil(maxLngDiffDeg / BUCKET_DEG) + 1;
-}
-
-function neighborKeys(key: string, lat: number): string[] {
-  const [bx, by] = key.split(",").map(Number);
-  const lngRange = lngNeighborRange(lat);
-  const out: string[] = [];
-  for (let dx = -lngRange; dx <= lngRange; dx++) {
-    for (let dy = -1; dy <= 1; dy++) out.push(`${bx + dx},${by + dy}`);
-  }
-  return out;
 }
 
 function pickByPriority<T>(
@@ -344,67 +293,11 @@ function mergeCluster(cluster: EvChargingStation[]): EvChargingStation {
 }
 
 export function deduplicateChargingStations(stations: EvChargingStation[]): EvChargingStation[] {
-  const n = stations.length;
-  if (n === 0) return [];
-
-  const buckets = new Map<string, number[]>();
-  for (let i = 0; i < n; i++) {
-    const key = bucketKey(stations[i]);
-    const arr = buckets.get(key);
-    if (arr) arr.push(i);
-    else buckets.set(key, [i]);
-  }
-
-  const uf = new UnionFind(n);
-  const clusterMembers = new Map<number, number[]>();
-  for (let i = 0; i < n; i++) clusterMembers.set(i, [i]);
-
-  for (let i = 0; i < n; i++) {
-    const selfKey = bucketKey(stations[i]);
-    for (const nKey of neighborKeys(selfKey, stations[i].coordinates[1])) {
-      const candidates = buckets.get(nKey);
-      if (!candidates) continue;
-      for (const j of candidates) {
-        if (j <= i) continue;
-        if (!shouldCluster(stations[i], stations[j])) continue;
-        const ri = uf.find(i);
-        const rj = uf.find(j);
-        if (ri === rj) continue;
-        const ma = clusterMembers.get(ri);
-        const mb = clusterMembers.get(rj);
-        if (!ma || !mb) continue;
-        let ok = true;
-        for (const a of ma) {
-          for (const b of mb) {
-            if (!shouldCluster(stations[a], stations[b])) {
-              ok = false;
-              break;
-            }
-          }
-          if (!ok) break;
-        }
-        if (!ok) continue;
-        uf.union(i, j);
-        const root = uf.find(i);
-        const merged = [...ma, ...mb];
-        if (root !== ri) clusterMembers.delete(ri);
-        if (root !== rj) clusterMembers.delete(rj);
-        clusterMembers.set(root, merged);
-      }
-    }
-  }
-
-  const clusters = new Map<number, EvChargingStation[]>();
-  for (let i = 0; i < n; i++) {
-    const root = uf.find(i);
-    const existing = clusters.get(root);
-    if (existing) existing.push(stations[i]);
-    else clusters.set(root, [stations[i]]);
-  }
-
-  return Array.from(clusters.values()).map((cluster) =>
-    cluster.length === 1 ? cluster[0] : mergeCluster(cluster),
-  );
+  return clusterSpatialItems(stations, {
+    coordinates: (station) => station.coordinates,
+    searchRadiusMeters: NEVER_MERGE_M,
+    shouldJoin: shouldCluster,
+  }).map((cluster) => (cluster.length === 1 ? cluster[0] : mergeCluster(cluster)));
 }
 
 /**

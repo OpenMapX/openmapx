@@ -237,6 +237,10 @@ export {
   twilightBands,
 } from "./solar";
 export {
+  clusterSpatialItems,
+  type SpatialClusteringOptions,
+} from "./spatialClustering";
+export {
   bearingDegrees,
   type DirectionSector,
   directionSector,
