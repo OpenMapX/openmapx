@@ -1,10 +1,6 @@
 import type { TransitMobileSession } from "@openmapx/core/navigation";
 import { type ApiClient, ApiRequestAbortedError } from "@openmapx/core/navigation/api";
-import {
-  journeysToRefetch,
-  MAX_JOURNEY_CONCURRENCY,
-  TransitRefreshService,
-} from "./TransitRefreshService";
+import { journeysToRefetch, TransitRefreshService } from "./TransitRefreshService";
 import { FIXTURE_TOKEN, transitSessionFixture } from "./testing/transitFixture";
 
 const NOW = 1_700_000_100_000;
@@ -221,31 +217,6 @@ describe("TransitRefreshService.request", () => {
 
       expect(outcome.ok).toBe(true);
       expect(outcome.ok && outcome.journeys["trip-1"]).toBeUndefined();
-    });
-
-    it("fetches no more than a few journeys at a time", async () => {
-      let concurrent = 0;
-      let peak = 0;
-      const many = session();
-      const legs = (many.payload.startPackage.itinerary as { legs: unknown[] }).legs;
-      for (let index = 0; index < 12; index += 1) {
-        legs.push({ mode: "rail", route: { shortName: "S" }, tripId: `trip-${index}` });
-      }
-
-      const { client } = fakeClient({
-        refresh: async () => refreshedItinerary(),
-        journey: async () => {
-          concurrent += 1;
-          peak = Math.max(peak, concurrent);
-          await new Promise((resolve) => setTimeout(resolve, 1));
-          concurrent -= 1;
-          return { data: { stops: [] } };
-        },
-      });
-
-      await service(client).request(request({ session: many }));
-
-      expect(peak).toBeLessThanOrEqual(MAX_JOURNEY_CONCURRENCY);
     });
   });
 

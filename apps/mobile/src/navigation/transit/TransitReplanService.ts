@@ -7,10 +7,9 @@ import {
   type ApiRequestOptions,
   createApiClient,
   fetchTransitPlan,
-  fetchVehicleJourney,
   isApiRequestAbortedError,
 } from "@openmapx/core/navigation/api";
-import { MAX_JOURNEY_CONCURRENCY } from "./TransitRefreshService";
+import { fetchJourneyCaptures } from "./journeyCaptures";
 
 /**
  * Finding a new way when the planned one stopped working.
@@ -108,6 +107,16 @@ export function replanParams(request: ReplanRequest): Record<string, unknown> {
   };
 }
 
+export function journeysToCapture(itinerary: unknown): string[] {
+  const legs = ((itinerary as { legs?: LegLike[] })?.legs ?? []) as LegLike[];
+  const tripIds: string[] = [];
+  for (const leg of legs) {
+    if (leg.mode === "walking" || !leg.route || !leg.tripId) continue;
+    if (!tripIds.includes(leg.tripId)) tripIds.push(leg.tripId);
+  }
+  return tripIds;
+}
+
 export class TransitReplanService {
   private readonly client: ApiClient;
   private readonly inFlight = new Map<string, AbortController>();
@@ -145,7 +154,11 @@ export class TransitReplanService {
         ?.itineraries?.[0];
       if (!itinerary) return { ...base, ok: false, code: "no-result" };
 
-      const journeys = await this.fetchJourneys(itinerary, options);
+      const journeys = await fetchJourneyCaptures(
+        journeysToCapture(itinerary),
+        this.client,
+        options,
+      );
 
       // Built through exactly the builder a first-time plan uses. A replacement
       // is a whole package or nothing: combining a new itinerary with old
@@ -176,39 +189,6 @@ export class TransitReplanService {
     } finally {
       this.inFlight.delete(requestId);
     }
-  }
-
-  /** Ridden stop lists for the new plan, a few at a time. */
-  private async fetchJourneys(
-    itinerary: unknown,
-    options: ApiRequestOptions,
-  ): Promise<Record<string, readonly unknown[] | undefined>> {
-    const legs = ((itinerary as { legs?: LegLike[] })?.legs ?? []) as LegLike[];
-    const tripIds: string[] = [];
-    for (const leg of legs) {
-      if (leg.mode === "walking" || !leg.route || !leg.tripId) continue;
-      if (!tripIds.includes(leg.tripId)) tripIds.push(leg.tripId);
-    }
-
-    const journeys: Record<string, readonly unknown[] | undefined> = {};
-    for (let start = 0; start < tripIds.length; start += MAX_JOURNEY_CONCURRENCY) {
-      const batch = tripIds.slice(start, start + MAX_JOURNEY_CONCURRENCY);
-      const results = await Promise.all(
-        batch.map(async (tripId) => {
-          try {
-            const envelope = await fetchVehicleJourney({ tripId }, this.client, options);
-            const stops = (envelope as { data?: { stops?: unknown[] } })?.data?.stops;
-            return [tripId, Array.isArray(stops) ? stops : undefined] as const;
-          } catch {
-            // A missing stop list becomes an explicit `missing` capture in the
-            // builder, not a failed replan.
-            return [tripId, undefined] as const;
-          }
-        }),
-      );
-      for (const [tripId, stops] of results) journeys[tripId] = stops;
-    }
-    return journeys;
   }
 }
 

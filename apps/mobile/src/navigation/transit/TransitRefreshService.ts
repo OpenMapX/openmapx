@@ -3,12 +3,14 @@ import {
   type ApiClient,
   type ApiRequestOptions,
   createApiClient,
-  fetchVehicleJourney,
   isApiRequestAbortedError,
   refreshTransitItinerary,
 } from "@openmapx/core/navigation/api";
+import { fetchJourneyCaptures } from "./journeyCaptures";
 import type { RefreshFailure } from "./refreshState";
 import { REQUEST_TIMEOUT_MS } from "./refreshState";
+
+export { MAX_JOURNEY_CONCURRENCY } from "./journeyCaptures";
 
 /**
  * Rotating the live-data token, from outside the coordinator's queue.
@@ -53,9 +55,6 @@ export interface RefreshServiceDeps {
   client?: ApiClient;
   now: () => number;
 }
-
-/** How many ridden stop lists to refetch at once after an itinerary refresh. */
-export const MAX_JOURNEY_CONCURRENCY = 4;
 
 interface LegLike {
   mode?: string;
@@ -132,7 +131,7 @@ export class TransitRefreshService {
         return { ...base, ok: false, failure: "rejected" };
       }
 
-      const journeys = await this.fetchJourneys(session, options);
+      const journeys = await fetchJourneyCaptures(journeysToRefetch(session), this.client, options);
       return { ...base, ok: true, itinerary, journeys };
     } catch (error) {
       if (isApiRequestAbortedError(error)) {
@@ -150,38 +149,5 @@ export class TransitRefreshService {
     } finally {
       this.inFlight.delete(requestId);
     }
-  }
-
-  /**
-   * Refetches the ridden stop lists, a few at a time.
-   *
-   * A journey that fails keeps its previous capture rather than discarding it:
-   * a stale stop list is still a stop list, and the rotating token has already
-   * been spent by the itinerary call, so failing the whole refresh here would
-   * throw away a token for nothing.
-   */
-  private async fetchJourneys(
-    session: TransitMobileSession,
-    options: ApiRequestOptions,
-  ): Promise<Record<string, readonly unknown[] | undefined>> {
-    const tripIds = journeysToRefetch(session);
-    const journeys: Record<string, readonly unknown[] | undefined> = {};
-
-    for (let start = 0; start < tripIds.length; start += MAX_JOURNEY_CONCURRENCY) {
-      const batch = tripIds.slice(start, start + MAX_JOURNEY_CONCURRENCY);
-      const results = await Promise.all(
-        batch.map(async (tripId) => {
-          try {
-            const envelope = await fetchVehicleJourney({ tripId }, this.client, options);
-            const stops = (envelope as { data?: { stops?: unknown[] } })?.data?.stops;
-            return [tripId, Array.isArray(stops) ? stops : undefined] as const;
-          } catch {
-            return [tripId, undefined] as const;
-          }
-        }),
-      );
-      for (const [tripId, stops] of results) journeys[tripId] = stops;
-    }
-    return journeys;
   }
 }

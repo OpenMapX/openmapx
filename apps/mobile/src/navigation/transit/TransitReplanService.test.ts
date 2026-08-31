@@ -1,6 +1,7 @@
 import type { TransitMobileSession } from "@openmapx/core/navigation";
 import { type ApiClient, ApiRequestAbortedError } from "@openmapx/core/navigation/api";
 import {
+  journeysToCapture,
   MAX_CONSECUTIVE_FAILURES,
   RETRY_DELAYS_MS,
   replanDestination,
@@ -106,6 +107,22 @@ describe("replanParams", () => {
 
   it("carries the session's locale", () => {
     expect(replanParams(request({ session: session({ locale: "de" }) })).lang).toBe("de");
+  });
+});
+
+describe("journeysToCapture", () => {
+  it("selects each ridden trip once and skips walking legs", () => {
+    expect(
+      journeysToCapture({
+        legs: [
+          { mode: "walking" },
+          { mode: "rail", route: {}, tripId: "trip-a" },
+          { mode: "rail", route: {}, tripId: "trip-a" },
+          { mode: "bus", route: {}, tripId: "trip-b" },
+          { mode: "rail", tripId: "missing-route" },
+        ],
+      }),
+    ).toEqual(["trip-a", "trip-b"]);
   });
 });
 
