@@ -28,6 +28,10 @@
       "types": "./src/testing/index.ts",
       "default": "./src/testing/index.ts"
     },
+    "./test/shared-mobility-provider": {
+      "types": "./src/testing/shared-mobility-provider.ts",
+      "default": "./src/testing/shared-mobility-provider.ts"
+    },
     "./impersonate": {
       "types": "./src/impersonate.ts",
       "default": "./src/impersonate.ts"

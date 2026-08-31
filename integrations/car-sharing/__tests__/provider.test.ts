@@ -1,44 +1,13 @@
-import type {
-  BoundingBox,
-  DataSourceResult,
-  SharedMobilityStation,
-  SharedMobilityVehicle,
-} from "@openmapx/core";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createSharedMobilityProviderFixtures,
+  createSharedMobilityBbox as makeBbox,
+  sharedMobilityProviderContract,
+} from "@openmapx/integration-framework/test/shared-mobility-provider";
+import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../providers/registry.js", () => ({
   searchRegionalClients: vi.fn(),
-}));
-
-vi.mock("@openmapx/mobility-core/gbfs-provider-base", () => ({
-  fetchGbfsData: vi.fn(),
-  fetchSwissSharedMobilityDataForBbox: vi.fn().mockResolvedValue({ stations: [], vehicles: [] }),
-}));
-
-vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
-  enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("@openmapx/mobility-core/shared-mobility-context", () => ({
-  buildSharedMobilityMapContext: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock("@openmapx/mobility-core/motis-rentals", () => ({
-  fetchMotisRentals: vi.fn(),
-}));
-
-vi.mock("@openmapx/mobility-core/dedup", () => ({
-  dedupStations: vi.fn((items: unknown[]) => items),
-  dedupVehicles: vi.fn((items: unknown[]) => items),
-}));
-
-vi.mock("@openmapx/mobility-core/mapper", () => ({
-  mapStationToResult: vi.fn(),
-  mapStationToDetail: vi.fn(),
-  mapVehicleToResult: vi.fn(),
-  mapVehicleToDetail: vi.fn(),
-  stripMobilityKindPrefix: (id: string) =>
-    id.startsWith("s:") || id.startsWith("v:") ? id.slice(2) : id,
 }));
 
 vi.mock("../providers/merge-stations.js", () => ({
@@ -46,72 +15,18 @@ vi.mock("../providers/merge-stations.js", () => ({
 }));
 
 import { dedupStations } from "@openmapx/mobility-core/dedup";
-import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
 import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
-import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
 import { carSharingProvider } from "../providers/provider.js";
 import { searchRegionalClients } from "../providers/registry.js";
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  vi.mocked(dedupStations).mockImplementation((items) => items);
-  vi.mocked(mergeRegionalStations).mockImplementation((items) => items);
-  vi.mocked(fetchSwissSharedMobilityDataForBbox).mockResolvedValue({
-    stations: [],
-    vehicles: [],
-  });
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-function makeBbox(): BoundingBox {
-  return { south: 48.0, west: 11.0, north: 49.0, east: 12.0 };
-}
-
-function makeStation(id: string, source: string): SharedMobilityStation {
-  return {
-    id,
-    name: `Station ${id}`,
-    coordinates: [11.5, 48.5],
-    availableVehicles: 3,
-    vehicleTypes: ["car"],
-    isActive: true,
-    sources: [source],
-  };
-}
-
-function makeVehicle(id: string, source: string): SharedMobilityVehicle {
-  return {
-    id,
-    coordinates: [11.5, 48.5],
-    formFactor: "car",
-    isReserved: false,
-    isDisabled: false,
-    sources: [source],
-  };
-}
-
-function makeResult(id: string): DataSourceResult {
-  return {
-    id,
-    name: `Station ${id}`,
-    coordinates: [11.5, 48.5],
-    source: "car-sharing",
-    variant: "available",
-    status: "available",
-  };
-}
-
-// search()
+const fixtures = createSharedMobilityProviderFixtures("car-sharing", "car");
+const { makeResult, makeStation, makeVehicle } = fixtures;
 
 describe("carSharingProvider.search", () => {
   it("regional stations merged first via mergeRegionalStations", async () => {
@@ -185,7 +100,6 @@ describe("carSharingProvider.search", () => {
 
     const results = (await carSharingProvider.search(makeBbox())).data;
 
-    // 1 regional + 1 GBFS station + 1 MOTIS vehicle
     expect(results).toHaveLength(3);
   });
 
@@ -213,32 +127,18 @@ describe("carSharingProvider.search", () => {
     const results = (await carSharingProvider.search(makeBbox())).data;
     expect(results).toEqual([]);
   });
+});
 
-  it("runs Entur enrichment on deduplicated stations and vehicles", async () => {
-    vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
-    vi.mocked(mapVehicleToResult).mockImplementation((v) => makeResult(v.id));
-    const station = makeStation("gbfs-station", "gbfs");
-    const vehicle = makeVehicle("gbfs-vehicle", "gbfs");
-
+sharedMobilityProviderContract({
+  name: "car sharing",
+  provider: carSharingProvider,
+  fixtures,
+  formFactors: ["car"],
+  mapContextOptions: { systemIds: ["bilkollektivet"], vehicleTypeIds: ["car"] },
+  arrangeInventory({ station, vehicle }) {
     vi.mocked(searchRegionalClients).mockResolvedValue([]);
     vi.mocked(mergeRegionalStations).mockReturnValue([]);
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [vehicle] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([station]);
-
-    await carSharingProvider.search(makeBbox());
-
-    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle], { scope: "map" });
-  });
-});
-
-describe("carSharingProvider configuration", () => {
-  it("delegates map context to the MOTIS-first shared builder", async () => {
-    const bbox = makeBbox();
-    const options = { systemIds: ["bilkollektivet"], vehicleTypeIds: ["car"] };
-
-    await carSharingProvider.getMapContext(bbox, {}, options);
-
-    expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(bbox, new Set(["car"]), options);
-  });
+  },
 });

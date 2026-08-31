@@ -1,10 +1,10 @@
-import type {
-  BoundingBox,
-  DataSourceResult,
-  SharedMobilityStation,
-  SharedMobilityVehicle,
-} from "@openmapx/core";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  createSharedMobilityProviderFixtures,
+  createSharedMobilityBbox as makeBbox,
+  sharedMobilityProviderContract,
+} from "@openmapx/integration-framework/test/shared-mobility-provider";
+import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../providers/felyx-client.js", () => ({
   searchFelyx: vi.fn(),
@@ -14,102 +14,19 @@ vi.mock("../providers/de-nw-mobidrom-scooter-client.js", () => ({
   searchDeNwMobidromScooter: vi.fn(),
 }));
 
-vi.mock("@openmapx/mobility-core/gbfs-provider-base", () => ({
-  fetchGbfsData: vi.fn(),
-  fetchSwissSharedMobilityDataForBbox: vi.fn().mockResolvedValue({ stations: [], vehicles: [] }),
-}));
-
-vi.mock("@openmapx/mobility-core/entur-mobility", () => ({
-  enrichEnturMobilityItems: vi.fn().mockResolvedValue(undefined),
-}));
-
-vi.mock("@openmapx/mobility-core/shared-mobility-context", () => ({
-  buildSharedMobilityMapContext: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock("@openmapx/mobility-core/motis-rentals", () => ({
-  fetchMotisRentals: vi.fn(),
-}));
-
-vi.mock("@openmapx/mobility-core/dedup", () => ({
-  dedupStations: vi.fn((items: unknown[]) => items),
-  dedupVehicles: vi.fn((items: unknown[]) => items),
-}));
-
-vi.mock("@openmapx/mobility-core/mapper", () => ({
-  mapStationToResult: vi.fn(),
-  mapStationToDetail: vi.fn(),
-  mapVehicleToResult: vi.fn(),
-  mapVehicleToDetail: vi.fn(),
-  stripMobilityKindPrefix: (id: string) =>
-    id.startsWith("s:") || id.startsWith("v:") ? id.slice(2) : id,
-}));
-
 import { dedupStations } from "@openmapx/mobility-core/dedup";
-import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
 import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
-import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { searchDeNwMobidromScooter } from "../providers/de-nw-mobidrom-scooter-client.js";
 import { searchFelyx } from "../providers/felyx-client.js";
 import { scooterSharingProvider } from "../providers/provider.js";
 
-beforeEach(() => {
-  vi.clearAllMocks();
-  vi.mocked(fetchSwissSharedMobilityDataForBbox).mockResolvedValue({
-    stations: [],
-    vehicles: [],
-  });
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-function makeBbox(): BoundingBox {
-  return { south: 48.0, west: 11.0, north: 49.0, east: 12.0 };
-}
-
-function makeStation(id: string, source: string): SharedMobilityStation {
-  return {
-    id,
-    name: `Station ${id}`,
-    coordinates: [11.5, 48.5],
-    availableVehicles: 4,
-    vehicleTypes: ["scooter_standing"],
-    isActive: true,
-    sources: [source],
-  };
-}
-
-function makeVehicle(id: string, source: string): SharedMobilityVehicle {
-  return {
-    id,
-    coordinates: [11.5, 48.5],
-    formFactor: "scooter_standing",
-    isReserved: false,
-    isDisabled: false,
-    sources: [source],
-  };
-}
-
-function makeResult(id: string): DataSourceResult {
-  return {
-    id,
-    name: `Item ${id}`,
-    coordinates: [11.5, 48.5],
-    source: "scooter-sharing",
-    variant: "available",
-    status: "available",
-  };
-}
-
-// search()
+const fixtures = createSharedMobilityProviderFixtures("scooter-sharing", "scooter_standing");
+const { makeResult, makeStation, makeVehicle } = fixtures;
 
 describe("scooterSharingProvider.search", () => {
   it("GBFS + NRW + MOTIS stations deduplicated together", async () => {
@@ -175,7 +92,6 @@ describe("scooterSharingProvider.search", () => {
 
     const results = (await scooterSharingProvider.search(makeBbox())).data;
 
-    // 1 station + 1 vehicle
     expect(results).toHaveLength(2);
   });
 
@@ -189,7 +105,6 @@ describe("scooterSharingProvider.search", () => {
 
     const results = (await scooterSharingProvider.search(makeBbox())).data;
 
-    // Only Felyx vehicle survives
     expect(results).toHaveLength(1);
     expect(results[0].id).toBe("felyx-v1-solo");
   });
@@ -249,36 +164,18 @@ describe("scooterSharingProvider.search", () => {
 
     expect(searchDeNwMobidromScooter).toHaveBeenCalledWith(bbox);
   });
+});
 
-  it("runs Entur enrichment on deduplicated stations and vehicles", async () => {
-    vi.mocked(mapStationToResult).mockImplementation((s) => makeResult(s.id));
-    vi.mocked(mapVehicleToResult).mockImplementation((v) => makeResult(v.id));
-    const station = makeStation("gbfs-station", "gbfs");
-    const vehicle = makeVehicle("gbfs-vehicle", "gbfs");
-
+sharedMobilityProviderContract({
+  name: "scooter sharing",
+  provider: scooterSharingProvider,
+  fixtures,
+  formFactors: ["scooter_standing", "scooter_seated", "moped"],
+  mapContextOptions: { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] },
+  arrangeInventory({ station, vehicle }) {
     vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [vehicle] });
     vi.mocked(searchFelyx).mockResolvedValue([]);
     vi.mocked(searchDeNwMobidromScooter).mockResolvedValue({ stations: [], vehicles: [] });
     vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([station]);
-
-    await scooterSharingProvider.search(makeBbox());
-
-    expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle], { scope: "map" });
-  });
-});
-
-describe("scooterSharingProvider configuration", () => {
-  it("delegates map context to the MOTIS-first shared builder", async () => {
-    const bbox = makeBbox();
-    const options = { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] };
-
-    await scooterSharingProvider.getMapContext(bbox, {}, options);
-
-    expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(
-      bbox,
-      new Set(["scooter_standing", "scooter_seated", "moped"]),
-      options,
-    );
-  });
+  },
 });
