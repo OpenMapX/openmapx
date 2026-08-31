@@ -5,7 +5,7 @@
  */
 
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
-import type { SharedMobilityVehicle } from "./types.js";
+import type { SharedMobilityVehicle } from "@openmapx/mobility-core/shared-mobility";
 
 const FELYX_URL = "https://felyx.frontend.fleetbird.eu/api/prod/v1.06/map/cars/";
 const FETCH_TIMEOUT_MS = 8_000;

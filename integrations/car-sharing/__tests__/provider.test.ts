@@ -51,12 +51,7 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import {
-  mapStationToDetail,
-  mapStationToResult,
-  mapVehicleToDetail,
-  mapVehicleToResult,
-} from "@openmapx/mobility-core/mapper";
+import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
@@ -237,61 +232,7 @@ describe("carSharingProvider.search", () => {
   });
 });
 
-// getDetail()
-
-describe("carSharingProvider.getDetail", () => {
-  it("station cache hit calls mapStationToDetail", async () => {
-    // Use unique IDs to avoid cache collisions with other tests
-    const station = makeStation("cs-cached-station", "de-cambio");
-    vi.mocked(searchRegionalClients).mockResolvedValue([station]);
-    vi.mocked(mergeRegionalStations).mockReturnValue([station]);
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(mapStationToResult).mockReturnValue(makeResult("cs-cached-station"));
-    await carSharingProvider.search(makeBbox());
-
-    const detail = {
-      id: "cs-cached-station",
-      sources: ["de-cambio"],
-      name: "Station",
-      coordinates: [11.5, 48.5] as [number, number],
-      sections: [],
-    };
-    vi.mocked(mapStationToDetail).mockReturnValue(detail);
-
-    const result = (await carSharingProvider.getDetail("cs-cached-station")).data;
-    expect(mapStationToDetail).toHaveBeenCalledWith(station);
-    expect(result).toBe(detail);
-  });
-
-  it("vehicle cache hit calls mapVehicleToDetail", async () => {
-    const vehicle = makeVehicle("cs-gbfs-v1", "gbfs");
-    vi.mocked(searchRegionalClients).mockRejectedValue(new Error("skip"));
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [vehicle] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([]);
-    vi.mocked(mapVehicleToResult).mockReturnValue(makeResult("cs-gbfs-v1"));
-    await carSharingProvider.search(makeBbox());
-
-    const detail = {
-      id: "cs-gbfs-v1",
-      sources: ["gbfs"],
-      name: "Car",
-      coordinates: [11.5, 48.5] as [number, number],
-      sections: [],
-    };
-    vi.mocked(mapVehicleToDetail).mockReturnValue(detail);
-
-    const result = (await carSharingProvider.getDetail("cs-gbfs-v1")).data;
-    expect(mapVehicleToDetail).toHaveBeenCalledWith(vehicle);
-    expect(result).toBe(detail);
-  });
-
-  it("cache miss returns null", async () => {
-    const result = (await carSharingProvider.getDetail("totally-unknown-cs-id")).data;
-    expect(result).toBeNull();
-  });
-
+describe("carSharingProvider configuration", () => {
   it("delegates map context to the MOTIS-first shared builder", async () => {
     const bbox = makeBbox();
     const options = { systemIds: ["bilkollektivet"], vehicleTypeIds: ["car"] };

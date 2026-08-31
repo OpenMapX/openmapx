@@ -51,12 +51,7 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import {
-  mapStationToDetail,
-  mapStationToResult,
-  mapVehicleToDetail,
-  mapVehicleToResult,
-} from "@openmapx/mobility-core/mapper";
+import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { searchDeNwMobidromScooter } from "../providers/de-nw-mobidrom-scooter-client.js";
@@ -273,64 +268,7 @@ describe("scooterSharingProvider.search", () => {
   });
 });
 
-// getDetail()
-
-describe("scooterSharingProvider.getDetail", () => {
-  it("station cache hit calls mapStationToDetail", async () => {
-    const station = makeStation("sc-cached-s1", "gbfs");
-
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [station], vehicles: [] });
-    vi.mocked(searchFelyx).mockResolvedValue([]);
-    vi.mocked(searchDeNwMobidromScooter).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([station]);
-    vi.mocked(mapStationToResult).mockReturnValue(makeResult("sc-cached-s1"));
-    await scooterSharingProvider.search(makeBbox());
-
-    const detail = {
-      id: "sc-cached-s1",
-      sources: ["gbfs"],
-      name: "Station",
-      coordinates: [11.5, 48.5] as [number, number],
-      sections: [],
-    };
-    vi.mocked(mapStationToDetail).mockReturnValue(detail);
-
-    const result = (await scooterSharingProvider.getDetail("sc-cached-s1")).data;
-    expect(mapStationToDetail).toHaveBeenCalledWith(station);
-    expect(result).toBe(detail);
-  });
-
-  it("vehicle cache hit calls mapVehicleToDetail", async () => {
-    const vehicle = makeVehicle("sc-felyx-v1", "felyx");
-
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(searchFelyx).mockResolvedValue([vehicle]);
-    vi.mocked(searchDeNwMobidromScooter).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([]);
-    vi.mocked(mapVehicleToResult).mockReturnValue(makeResult("sc-felyx-v1"));
-    await scooterSharingProvider.search(makeBbox());
-
-    const detail = {
-      id: "sc-felyx-v1",
-      sources: ["felyx"],
-      name: "Scooter",
-      coordinates: [11.5, 48.5] as [number, number],
-      sections: [],
-    };
-    vi.mocked(mapVehicleToDetail).mockReturnValue(detail);
-
-    const result = (await scooterSharingProvider.getDetail("sc-felyx-v1")).data;
-    expect(mapVehicleToDetail).toHaveBeenCalledWith(vehicle);
-    expect(result).toBe(detail);
-  });
-
-  it("cache miss returns null", async () => {
-    const result = (await scooterSharingProvider.getDetail("totally-unknown-sc-id")).data;
-    expect(result).toBeNull();
-  });
-
+describe("scooterSharingProvider configuration", () => {
   it("delegates map context to the MOTIS-first shared builder", async () => {
     const bbox = makeBbox();
     const options = { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] };

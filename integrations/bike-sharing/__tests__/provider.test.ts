@@ -59,12 +59,7 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import {
-  mapStationToDetail,
-  mapStationToResult,
-  mapVehicleToDetail,
-  mapVehicleToResult,
-} from "@openmapx/mobility-core/mapper";
+import { mapStationToResult, mapVehicleToResult } from "@openmapx/mobility-core/mapper";
 import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { searchCityBikes } from "../providers/citybikes-client.js";
@@ -293,67 +288,7 @@ describe("bikeSharingProvider.search", () => {
   });
 });
 
-// getDetail()
-
-describe("bikeSharingProvider.getDetail", () => {
-  it("station cache hit calls mapStationToDetail", async () => {
-    // Populate cache via search
-    const station = makeStation("bs-cached-station", "nextbike");
-    vi.mocked(searchNextbike).mockResolvedValue([station]);
-    vi.mocked(searchCityBikes).mockResolvedValue([]);
-    vi.mocked(searchDonkey).mockResolvedValue([]);
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(searchDbBikes).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([station]);
-    vi.mocked(mapStationToResult).mockReturnValue(makeResult("bs-cached-station"));
-    await bikeSharingProvider.search(makeBbox());
-
-    const detail = {
-      id: "bs-cached-station",
-      sources: ["nextbike"],
-      name: "Station",
-      coordinates: [11.5, 48.5] as [number, number],
-      sections: [],
-    };
-    vi.mocked(mapStationToDetail).mockReturnValue(detail);
-
-    const result = (await bikeSharingProvider.getDetail("bs-cached-station")).data;
-    expect(mapStationToDetail).toHaveBeenCalledWith(station);
-    expect(result).toBe(detail);
-  });
-
-  it("vehicle cache hit calls mapVehicleToDetail", async () => {
-    const vehicle = makeVehicle("bs-db-vehicle-1", "db");
-    vi.mocked(searchNextbike).mockResolvedValue([]);
-    vi.mocked(searchCityBikes).mockResolvedValue([]);
-    vi.mocked(searchDonkey).mockResolvedValue([]);
-    vi.mocked(fetchGbfsData).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(searchDbBikes).mockResolvedValue({ stations: [], vehicles: [vehicle] });
-    vi.mocked(fetchMotisRentals).mockResolvedValue({ stations: [], vehicles: [] });
-    vi.mocked(dedupStations).mockReturnValue([]);
-    vi.mocked(mapVehicleToResult).mockReturnValue(makeResult("bs-db-vehicle-1"));
-    await bikeSharingProvider.search(makeBbox());
-
-    const detail = {
-      id: "bs-db-vehicle-1",
-      sources: ["db"],
-      name: "Bike",
-      coordinates: [11.5, 48.5] as [number, number],
-      sections: [],
-    };
-    vi.mocked(mapVehicleToDetail).mockReturnValue(detail);
-
-    const result = (await bikeSharingProvider.getDetail("bs-db-vehicle-1")).data;
-    expect(mapVehicleToDetail).toHaveBeenCalledWith(vehicle);
-    expect(result).toBe(detail);
-  });
-
-  it("cache miss returns null", async () => {
-    const result = (await bikeSharingProvider.getDetail("totally-unknown-id-xyz")).data;
-    expect(result).toBeNull();
-  });
-
+describe("bikeSharingProvider configuration", () => {
   it("delegates map context to the MOTIS-first shared builder", async () => {
     const bbox = makeBbox();
     const options = { systemIds: ["voioslo"], vehicleTypeIds: ["scooter"] };

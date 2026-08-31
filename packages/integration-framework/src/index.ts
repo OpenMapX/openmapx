@@ -263,6 +263,11 @@ export {
 } from "./provider-execution";
 export { QueryValidationError, type RouteQuery, scalarQueries, scalarQuery } from "./query";
 export { IntegrationRegistry } from "./registry";
+export {
+  createSharedMobilityProvider,
+  type SharedMobilityProviderConfig,
+  type SharedMobilityProviderDefinition,
+} from "./shared-mobility-provider-factory";
 // `useIntegrationRegistry` and `IntegrationRegistryContext` live in the
 // `/react` subpath — pulling them into this barrel would force every
 // consumer (CLI, API, server-side code) to ship `react` even when they

@@ -9,8 +9,8 @@ import {
   fetchJson as coreFetchJson,
   type LngLat,
 } from "@openmapx/core";
+import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { TTL, withCache } from "./cache.js";
-import type { SharedMobilityStation } from "./types.js";
 
 const CITYBIKES_BASE = "https://api.citybik.es";
 const HEADERS = {

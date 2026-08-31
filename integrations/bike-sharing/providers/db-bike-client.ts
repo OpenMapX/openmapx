@@ -12,13 +12,16 @@ import {
   type LngLat,
 } from "@openmapx/core";
 import type {
+  SharedMobilityStation,
+  SharedMobilityVehicle,
+} from "@openmapx/mobility-core/shared-mobility";
+import type {
   GbfsV23FreeBikeStatus,
   GbfsV23StationInformation,
   GbfsV23StationStatus,
   GbfsV23SystemInformation,
   GbfsV23VehicleTypes,
 } from "@openmapx/mobility-formats";
-import type { SharedMobilityStation, SharedMobilityVehicle } from "./types.js";
 
 const BASE_URL = "https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de";
 const PROVIDER_IDS = [

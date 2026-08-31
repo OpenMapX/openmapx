@@ -5,7 +5,10 @@
  */
 
 import { type BoundingBox, fetchJson, type LngLat } from "@openmapx/core";
-import type { SharedMobilityStation, VehicleFormFactor } from "./types.js";
+import type {
+  SharedMobilityStation,
+  VehicleFormFactor,
+} from "@openmapx/mobility-core/shared-mobility";
 
 const FETCH_TIMEOUT_MS = 8_000;
 

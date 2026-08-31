@@ -5,8 +5,8 @@
  */
 
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
+import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { TTL, withCache } from "./cache.js";
-import type { SharedMobilityStation } from "./types.js";
 
 const NEXTBIKE_URL = "https://maps.nextbike.net/maps/nextbike-live.json";
 const FETCH_TIMEOUT_MS = 10_000;
