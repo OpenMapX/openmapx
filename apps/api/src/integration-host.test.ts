@@ -20,101 +20,17 @@ import {
 } from "@integrations/parking/runtime.js";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { getPlaceResolver, registerPlaceResolver } from "@openmapx/place-ids";
-import Fastify, { type FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  getIntegrationHealthMocks,
+  createIntegrationHostTestApp as makeApp,
+} from "./__tests__/support/integration-host-environment.js";
 
 // The fixtures directory that contains our test integrations.
 // import.meta.url points to this file: apps/api/src/integration-host.test.ts
 // One level up is apps/api/src/, then __tests__/fixtures/integrations.
 const FIXTURES_DIR = join(fileURLToPath(import.meta.url), "../__tests__/fixtures/integrations");
-
-// Module mocks must be declared before any imports of the modules they replace.
-// Each mock covers one or more internal dependencies that would otherwise
-// require live infrastructure (DB, Redis, attribution service, etc.).
-
-vi.mock("./redis.js", () => ({ redis: null }));
-
-vi.mock("./db.js", () => ({
-  db: {
-    select: vi.fn().mockReturnValue({
-      from: vi.fn().mockReturnValue({
-        where: vi.fn().mockReturnValue({
-          limit: vi.fn().mockResolvedValue([]),
-        }),
-      }),
-    }),
-  },
-  sql: { unsafe: vi.fn().mockResolvedValue([]) },
-}));
-
-vi.mock("./db/schema.js", () => ({
-  integrationConfig: { integrationId: "integrationId", config: "config" },
-  integrationSecret: {},
-}));
-
-vi.mock("./services/attribution/index.js", () => ({
-  AttributionIndex: {
-    init: vi.fn().mockResolvedValue({
-      setIntegrationManifests: vi.fn(),
-      reload: vi.fn().mockResolvedValue(undefined),
-      close: vi.fn(),
-    }),
-  },
-  defaultMotisLicenseFile: vi.fn().mockReturnValue(null),
-  getAttributionIndex: vi.fn().mockReturnValue(null),
-  setAttributionIndex: vi.fn(),
-}));
-
-vi.mock("./services/capability-bindings.js", () => ({
-  loadAllBindingsByIntegration: vi.fn().mockResolvedValue(new Map()),
-}));
-
-vi.mock("./services/service-registry.js", () => ({
-  getServiceRegistry: vi.fn().mockImplementation(() => {
-    throw new Error("service registry unavailable (test mock)");
-  }),
-  resolveRequiresForIntegration: vi.fn().mockReturnValue(new Map()),
-}));
-
-const integrationHealthMocks = vi.hoisted(() => ({
-  executeAllIntegrationHealthChecks: vi.fn().mockResolvedValue([]),
-  getCachedIntegrationHealthSnapshot: vi.fn().mockReturnValue({
-    updatedAt: null,
-    results: [],
-  }),
-}));
-
-vi.mock("./services/integration-health.js", () => integrationHealthMocks);
-
-vi.mock("./services/provider-health/registry.js", () => ({
-  getProviderHealth: vi.fn().mockReturnValue(null),
-  ProviderHealth: { init: vi.fn().mockResolvedValue({ close: vi.fn() }) },
-  setProviderHealth: vi.fn(),
-}));
-
-vi.mock("./services/metrics/recorder.js", () => ({
-  getMetricsRecorder: vi.fn().mockReturnValue(null),
-}));
-
-vi.mock("./services/secrets.js", () => ({
-  isSecretsConfigured: vi.fn().mockReturnValue(true),
-  resolveVaultSecrets: vi.fn().mockResolvedValue({}),
-  getSecret: vi.fn().mockReturnValue(undefined),
-}));
-
-vi.mock("./utils/require-auth.js", () => ({
-  requireAuth: vi.fn().mockImplementation(async () => {
-    const { httpError } = await import("@openmapx/integration-framework");
-    throw httpError(401, "Authentication required");
-  }),
-}));
-
-vi.mock("@openmapx/poi-source-registry", () => ({
-  beginPoiSourceRegistryStaging: vi.fn(),
-  commitPoiSourceRegistryStaging: vi.fn(),
-  registerPoiSources: vi.fn(),
-  rollbackPoiSourceRegistryStaging: vi.fn(),
-}));
 
 import {
   getAllIntegrations,
@@ -128,10 +44,7 @@ import { setIntegrationRouteRateLimits } from "./integration-routes.js";
 import { isSecretsConfigured } from "./services/secrets.js";
 import { resolveRequiresForIntegration } from "./services/service-registry.js";
 
-// Helper: build a minimal Fastify instance suitable for testing.
-function makeApp(): FastifyInstance {
-  return Fastify({ logger: false });
-}
+const integrationHealthMocks = getIntegrationHealthMocks();
 
 // Clear module-level state (the integration map, route list, _fastify ref) by
 // shutting down after every test so tests don't bleed into each other.
