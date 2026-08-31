@@ -1,7 +1,6 @@
 "use client";
 
 import type { SvgIconComponent } from "@mui/icons-material";
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import ConfirmationNumberOutlinedIcon from "@mui/icons-material/ConfirmationNumberOutlined";
 import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
@@ -17,7 +16,6 @@ import TramIcon from "@mui/icons-material/Tram";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
@@ -46,6 +44,7 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
 import {
   LegBadge,
   LegRemarks,
@@ -275,48 +274,11 @@ export function TransitDetailsView({
 
   return (
     <Box>
-      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, px: 1.5, pt: 2, pb: 1 }}>
-        <IconButton size="small" onClick={onBack} sx={{ mt: 0.25, flexShrink: 0 }}>
-          <ArrowBackIcon sx={{ fontSize: 20 }} />
-        </IconButton>
-        <Box>
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            {t("from")}{" "}
-            <Box
-              component="span"
-              sx={{
-                fontWeight: 600,
-                color: "text.primary",
-              }}
-            >
-              {originLabel || t("origin")}
-            </Box>
-          </Typography>
-          <br />
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            {t("to")}{" "}
-            <Box
-              component="span"
-              sx={{
-                fontWeight: 600,
-                color: "text.primary",
-              }}
-            >
-              {destinationLabel || t("destination")}
-            </Box>
-          </Typography>
-        </Box>
-      </Box>
+      <DirectionsDetailHeader
+        originLabel={originLabel}
+        destinationLabel={destinationLabel}
+        onBack={onBack}
+      />
       <Divider />
       {/* Summary */}
       <Box sx={{ px: 2, py: 1.5 }}>

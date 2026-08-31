@@ -1,17 +1,16 @@
 "use client";
 
-import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
-import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import type { Route } from "@openmapx/core";
 import { formatDistance, formatDuration } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ElevationProfile } from "@/components/elevation/ElevationProfile";
+import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
 import { StepRow } from "@/components/panels/directions/StepRow";
 
 export function DetailsView({
@@ -36,68 +35,16 @@ export function DetailsView({
       ? `${(route.distance / 1609.34).toFixed(1)} mi`
       : formatDistance(route.distance);
 
-  // Build via string from intermediate waypoints
   const intermediateLabels = waypointLabels ? waypointLabels.slice(1, -1).filter(Boolean) : [];
-  const viaStr =
-    intermediateLabels.length > 0 ? t("via", { stops: intermediateLabels.join(", ") }) : undefined;
 
   return (
     <Box>
-      <Box sx={{ display: "flex", alignItems: "flex-start", gap: 1, px: 1.5, pt: 2, pb: 1 }}>
-        <IconButton size="small" onClick={onBack} sx={{ mt: 0.25, flexShrink: 0 }}>
-          <ArrowBackIcon sx={{ fontSize: 20 }} />
-        </IconButton>
-        <Box>
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            {t("from")}{" "}
-            <Box
-              component="span"
-              sx={{
-                fontWeight: 600,
-                color: "text.primary",
-              }}
-            >
-              {originLabel || t("origin")}
-            </Box>
-          </Typography>
-          <br />
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            {t("to")}{" "}
-            <Box
-              component="span"
-              sx={{
-                fontWeight: 600,
-                color: "text.primary",
-              }}
-            >
-              {destinationLabel || t("destination")}
-            </Box>
-          </Typography>
-          {viaStr && (
-            <>
-              <br />
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                {viaStr}
-              </Typography>
-            </>
-          )}
-        </Box>
-      </Box>
+      <DirectionsDetailHeader
+        originLabel={originLabel}
+        destinationLabel={destinationLabel}
+        viaLabels={intermediateLabels}
+        onBack={onBack}
+      />
       <Divider />
       <Box sx={{ px: 2, py: 1.5 }}>
         <Typography

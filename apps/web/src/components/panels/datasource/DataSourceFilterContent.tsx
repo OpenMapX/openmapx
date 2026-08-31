@@ -7,7 +7,6 @@ import CancelIcon from "@mui/icons-material/Cancel";
 import CheckCircleOutlineIcon from "@mui/icons-material/CheckCircleOutlined";
 import ErrorOutlineIcon from "@mui/icons-material/ErrorOutlined";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import LockIcon from "@mui/icons-material/Lock";
 import LockOpenIcon from "@mui/icons-material/LockOpen";
 import ScheduleIcon from "@mui/icons-material/Schedule";
@@ -20,15 +19,10 @@ import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import IconButton from "@mui/material/IconButton";
-import List from "@mui/material/List";
-import ListItemButton from "@mui/material/ListItemButton";
-import ListItemIcon from "@mui/material/ListItemIcon";
-import ListItemText from "@mui/material/ListItemText";
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
 import TextField from "@mui/material/TextField";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { DataSourceFilterDef, DataSourceResult } from "@openmapx/core";
 import {
@@ -46,6 +40,10 @@ import {
 import { isI18nToken } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
+import {
+  type GroupedMultiSelectGroup,
+  GroupedMultiSelectSection,
+} from "@/components/panels/datasource/GroupedMultiSelectSection";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { translateDataSourceLabel, translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
@@ -189,6 +187,23 @@ function accessGroupIndex(label: string): number {
     if (ACCESS_GROUPS[i].patterns.some((p) => lower.includes(p))) return i;
   }
   return ACCESS_GROUPS.length - 1;
+}
+
+function buildFilterOptionGroups(
+  options: NonNullable<DataSourceFilterDef["options"]>,
+  groups: Array<{ label: string; icon: React.ReactNode }>,
+  groupIndex: (label: string) => number,
+): GroupedMultiSelectGroup[] {
+  return groups
+    .map((group, index) => {
+      const matchingOptions = options.filter((option) => groupIndex(option.label) === index);
+      return {
+        ...group,
+        optionIds: matchingOptions.map((option) => option.id),
+        optionLabels: matchingOptions.map((option) => option.label),
+      };
+    })
+    .filter((group) => group.optionIds.length > 0);
 }
 
 /** Derive unique operator names from raw (pre-client-filter) results. */
@@ -661,6 +676,36 @@ export function DataSourceFilterContent() {
 
 /** Connector Type Section -- common chips + expandable "Show all" */
 
+function FilterOptionChip({
+  label,
+  selected,
+  icon,
+  onClick,
+}: {
+  label: string;
+  selected: boolean;
+  icon?: React.ReactElement;
+  onClick: () => void;
+}) {
+  return (
+    <Chip
+      label={label}
+      size="small"
+      variant={selected ? "filled" : "outlined"}
+      {...(icon ? { icon } : {})}
+      onClick={onClick}
+      sx={{
+        fontSize: 12,
+        ...(selected && {
+          bgcolor: BRAND,
+          color: "#fff",
+          "&:hover": { bgcolor: "var(--omx-brand-hover)" },
+        }),
+      }}
+    />
+  );
+}
+
 function ConnectorTypeSection({
   filterDef,
   currentValue,
@@ -697,20 +742,11 @@ function ConnectorTypeSection({
         {commonOptions.map((opt) => {
           const isSelected = selected.includes(opt.id);
           return (
-            <Chip
+            <FilterOptionChip
               key={String(opt.id)}
               label={opt.label}
-              size="small"
-              variant={isSelected ? "filled" : "outlined"}
+              selected={isSelected}
               onClick={() => onToggle(filterDef.id, opt.id)}
-              sx={{
-                fontSize: 12,
-                ...(isSelected && {
-                  bgcolor: BRAND,
-                  color: "#fff",
-                  "&:hover": { bgcolor: "var(--omx-brand-hover)" },
-                }),
-              }}
             />
           );
         })}
@@ -752,20 +788,11 @@ function ConnectorTypeSection({
               {otherOptions.map((opt) => {
                 const isSelected = selected.includes(opt.id);
                 return (
-                  <Chip
+                  <FilterOptionChip
                     key={String(opt.id)}
                     label={opt.label}
-                    size="small"
-                    variant={isSelected ? "filled" : "outlined"}
+                    selected={isSelected}
                     onClick={() => onToggle(filterDef.id, opt.id)}
-                    sx={{
-                      fontSize: 12,
-                      ...(isSelected && {
-                        bgcolor: BRAND,
-                        color: "#fff",
-                        "&:hover": { bgcolor: "var(--omx-brand-hover)" },
-                      }),
-                    }}
                   />
                 );
               })}
@@ -817,21 +844,12 @@ function ChipFilterSection({
           const isSelected = selected.includes(opt.id);
           const icon = renderIcon?.(opt.id);
           return (
-            <Chip
+            <FilterOptionChip
               key={String(opt.id)}
               label={translateDataSourceLabel(opt.label, t)}
-              size="small"
-              variant={isSelected ? "filled" : "outlined"}
-              {...(icon ? { icon } : {})}
+              selected={isSelected}
+              icon={icon}
               onClick={() => onToggle(filterDef.id, opt.id)}
-              sx={{
-                fontSize: 12,
-                ...(isSelected && {
-                  bgcolor: BRAND,
-                  color: "#fff",
-                  "&:hover": { bgcolor: "var(--omx-brand-hover)" },
-                }),
-              }}
             />
           );
         })}
@@ -907,81 +925,20 @@ function AccessTypeSection({
   if (filterDef.type !== "multi-select" || !filterDef.options) return null;
 
   const selected = (currentValue as (string | number)[] | undefined) ?? [];
-
-  // Group options by access group, keeping original labels for tooltip
-  const opts = filterDef.options ?? [];
-  const groups = ACCESS_GROUPS.map((group, gi) => {
-    const matchingOptions = opts.filter((opt) => accessGroupIndex(opt.label) === gi);
-    return {
-      ...group,
-      label: t(group.labelKey),
-      optionIds: matchingOptions.map((o) => o.id),
-      optionLabels: matchingOptions.map((o) => o.label),
-    };
-  }).filter((g) => g.optionIds.length > 0);
+  const groups = buildFilterOptionGroups(
+    filterDef.options,
+    ACCESS_GROUPS.map((group) => ({ ...group, label: t(group.labelKey) })),
+    accessGroupIndex,
+  );
 
   return (
-    <Box sx={{ mb: 2 }}>
-      <Typography
-        variant="body2"
-        sx={{
-          fontWeight: 600,
-          mb: 0.5,
-        }}
-      >
-        {filterDef.label}
-      </Typography>
-      <List dense disablePadding>
-        {groups.map((group) => {
-          const allSelected = group.optionIds.every((id) => selected.includes(id));
-          return (
-            <ListItemButton
-              key={group.label}
-              onClick={() => onToggleGroup(filterDef.id, group.optionIds)}
-              selected={allSelected}
-              sx={{
-                borderRadius: 1,
-                mb: 0.25,
-                py: 0.5,
-                ...(allSelected && {
-                  bgcolor: `${BRAND}14`,
-                  "&.Mui-selected": {
-                    bgcolor: `${BRAND}14`,
-                    "&:hover": { bgcolor: `${BRAND}22` },
-                  },
-                }),
-              }}
-            >
-              <ListItemIcon
-                sx={{
-                  minWidth: 32,
-                  color: allSelected ? BRAND : "text.secondary",
-                }}
-              >
-                {group.icon}
-              </ListItemIcon>
-              <ListItemText
-                primary={group.label}
-                slotProps={{
-                  primary: {
-                    variant: "body2",
-                    sx: {
-                      fontWeight: allSelected ? 600 : 400,
-                      color: allSelected ? BRAND : "text.primary",
-                    },
-                  },
-                }}
-              />
-              {group.optionLabels.length > 1 && (
-                <Tooltip title={group.optionLabels.join(", ")} placement="right" arrow>
-                  <InfoOutlinedIcon sx={{ fontSize: 16, color: "text.disabled", ml: 0.5 }} />
-                </Tooltip>
-              )}
-            </ListItemButton>
-          );
-        })}
-      </List>
-    </Box>
+    <GroupedMultiSelectSection
+      label={filterDef.label}
+      groups={groups}
+      selected={selected}
+      onToggle={(optionIds) => onToggleGroup(filterDef.id, optionIds)}
+      tintIcons
+    />
   );
 }
 
@@ -1000,74 +957,19 @@ function StatusSection({
   if (filterDef.type !== "multi-select" || !filterDef.options) return null;
 
   const selected = (currentValue as (string | number)[] | undefined) ?? [];
-
-  // Group OCM status options into the 3 consolidated groups, keeping labels for tooltip
-  const opts = filterDef.options ?? [];
-  const groups = STATUS_GROUPS.map((group, gi) => {
-    const matchingOptions = opts.filter((opt) => statusGroupIndex(opt.label) === gi);
-    return {
-      ...group,
-      label: t(group.labelKey),
-      optionIds: matchingOptions.map((o) => o.id),
-      optionLabels: matchingOptions.map((o) => o.label),
-    };
-  }).filter((g) => g.optionIds.length > 0);
+  const groups = buildFilterOptionGroups(
+    filterDef.options,
+    STATUS_GROUPS.map((group) => ({ ...group, label: t(group.labelKey) })),
+    statusGroupIndex,
+  );
 
   return (
-    <Box sx={{ mb: 2 }}>
-      <Typography
-        variant="body2"
-        sx={{
-          fontWeight: 600,
-          mb: 0.5,
-        }}
-      >
-        {filterDef.label}
-      </Typography>
-      <List dense disablePadding>
-        {groups.map((group) => {
-          const allSelected = group.optionIds.every((id) => selected.includes(id));
-          return (
-            <ListItemButton
-              key={group.label}
-              onClick={() => onToggleGroup(filterDef.id, group.optionIds)}
-              selected={allSelected}
-              sx={{
-                borderRadius: 1,
-                mb: 0.25,
-                py: 0.5,
-                ...(allSelected && {
-                  bgcolor: `${BRAND}14`,
-                  "&.Mui-selected": {
-                    bgcolor: `${BRAND}14`,
-                    "&:hover": { bgcolor: `${BRAND}22` },
-                  },
-                }),
-              }}
-            >
-              <ListItemIcon sx={{ minWidth: 32 }}>{group.icon}</ListItemIcon>
-              <ListItemText
-                primary={group.label}
-                slotProps={{
-                  primary: {
-                    variant: "body2",
-                    sx: {
-                      fontWeight: allSelected ? 600 : 400,
-                      color: allSelected ? BRAND : "text.primary",
-                    },
-                  },
-                }}
-              />
-              {group.optionLabels.length > 1 && (
-                <Tooltip title={group.optionLabels.join(", ")} placement="right" arrow>
-                  <InfoOutlinedIcon sx={{ fontSize: 16, color: "text.disabled", ml: 0.5 }} />
-                </Tooltip>
-              )}
-            </ListItemButton>
-          );
-        })}
-      </List>
-    </Box>
+    <GroupedMultiSelectSection
+      label={filterDef.label}
+      groups={groups}
+      selected={selected}
+      onToggle={(optionIds) => onToggleGroup(filterDef.id, optionIds)}
+    />
   );
 }
 
