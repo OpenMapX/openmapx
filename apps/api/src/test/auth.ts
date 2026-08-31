@@ -4,8 +4,7 @@ import type { AdminSession } from "../utils/require-admin.js";
 
 /**
  * A minimal `AdminSession` fixture satisfying every field admin routes read
- * (user.id for audit actor, user.email, user.role). Canonical home — the older
- * `routes/__tests__/admin-test-helpers.ts` re-exports this.
+ * (user.id for audit actor, user.email, user.role).
  */
 export function mockAdminSession(): AdminSession {
   return {

@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { mockAdminSession } from "./admin-test-helpers.js";
+import { mockAdminSession } from "../../test/auth.js";
 
 const fakeSession = mockAdminSession();
 vi.mock("../../utils/require-admin.js", () => ({

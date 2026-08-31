@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockAdminSession } from "./admin-test-helpers.js";
+import { mockAdminSession } from "../../test/auth.js";
 
 // The public /legal-config route reuses resolveSettings() from admin-settings,
 // so importing it pulls in that module's import-time dependencies. Mock the

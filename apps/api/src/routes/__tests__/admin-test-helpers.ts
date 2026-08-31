@@ -2,8 +2,6 @@ import Fastify, { type FastifyInstance, type FastifyPluginAsync } from "fastify"
 import { vi } from "vitest";
 import { mockAdminSession } from "../../test/auth.js";
 
-export { mockAdminSession };
-
 export function installAdminRouteMocks() {
   const session = mockAdminSession();
   const requireAdmin = vi.fn().mockResolvedValue(session);

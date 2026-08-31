@@ -4,8 +4,8 @@ import {
   createStatusSnapshotStore,
   type StatusSnapshotStore,
 } from "../../services/status-snapshot.js";
+import { mockAdminSession } from "../../test/auth.js";
 import { requireAdmin } from "../../utils/require-admin.js";
-import { mockAdminSession } from "./admin-test-helpers.js";
 
 const mocks = vi.hoisted(() => ({
   getAllIntegrations: vi.fn(),
