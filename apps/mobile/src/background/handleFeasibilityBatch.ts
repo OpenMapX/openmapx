@@ -1,6 +1,10 @@
 import type { MobileLocale } from "../../config/nativeCopy";
 import type { LocationFix } from "../location/LocationDriver";
+import { type RawLocation, sanitiseRawLocations } from "../location/rawLocation";
 import { accuracyBucket, type FeasibilityProbeState } from "../storage/feasibilityRepository";
+
+export type { RawLocation } from "../location/rawLocation";
+export { MAX_FIX_AGE_MS, MAX_FIX_SKEW_MS } from "../location/rawLocation";
 
 /**
  * The body of the global TaskManager callback, extracted so it can be driven
@@ -15,19 +19,6 @@ import { accuracyBucket, type FeasibilityProbeState } from "../storage/feasibili
  *     after the commit;
  *   - nothing rejects, because a throwing OS task callback can spin.
  */
-
-/** Shape of `expo-location`'s task payload, narrowed to what the probe reads. */
-export interface RawLocation {
-  timestamp: number;
-  coords: {
-    latitude: number;
-    longitude: number;
-    accuracy?: number | null;
-    speed?: number | null;
-    heading?: number | null;
-    altitude?: number | null;
-  };
-}
 
 export interface FeasibilityBatchInput {
   locations: readonly RawLocation[];
@@ -54,10 +45,6 @@ export type FeasibilityEffect = {
   locale: MobileLocale;
 };
 
-/** A fix older than this relative to now is treated as a replayed artefact. */
-export const MAX_FIX_AGE_MS = 5 * 60_000;
-/** Tolerated forward clock skew between the OS fix clock and `Date.now()`. */
-export const MAX_FIX_SKEW_MS = 2 * 60_000;
 const MAX_ERROR_CODE_LENGTH = 64;
 
 /** The one sentence the probe speaks, kept short and location-free by design. */
@@ -65,34 +52,6 @@ const PROBE_UTTERANCE: Record<MobileLocale, string> = {
   en: "OpenMapX background check.",
   de: "OpenMapX-Hintergrundprüfung.",
 };
-
-function toFix(raw: RawLocation, nowMs: number): LocationFix | null {
-  if (!raw || typeof raw !== "object") return null;
-  const { timestamp, coords } = raw;
-  if (!Number.isFinite(timestamp) || timestamp <= 0) return null;
-  if (timestamp < nowMs - MAX_FIX_AGE_MS) return null;
-  if (timestamp > nowMs + MAX_FIX_SKEW_MS) return null;
-  if (!coords || typeof coords !== "object") return null;
-
-  const { latitude, longitude, accuracy } = coords;
-  if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) return null;
-  if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) return null;
-  // A fix without a usable accuracy cannot be judged against the engine's
-  // accuracy cap later, so it is refused rather than assumed good.
-  if (typeof accuracy !== "number" || !Number.isFinite(accuracy) || accuracy < 0) return null;
-
-  return {
-    coords: [longitude, latitude],
-    accuracy,
-    timestampMs: timestamp,
-    ...(typeof coords.speed === "number" && Number.isFinite(coords.speed) && coords.speed >= 0
-      ? { speedMps: coords.speed }
-      : {}),
-    ...(typeof coords.heading === "number" && Number.isFinite(coords.heading)
-      ? { headingDegrees: coords.heading }
-      : {}),
-  };
-}
 
 export interface SanitisedBatch {
   accepted: LocationFix[];
@@ -109,25 +68,9 @@ export function sanitiseBatch(
   nowMs: number,
   lastAcceptedTimestampMs: number | null,
 ): SanitisedBatch {
-  const accepted: LocationFix[] = [];
-  let rejectedCount = 0;
-
-  const candidates: LocationFix[] = [];
-  for (const raw of locations) {
-    const fix = toFix(raw, nowMs);
-    if (fix) candidates.push(fix);
-    else rejectedCount += 1;
-  }
-  candidates.sort((a, b) => a.timestampMs - b.timestampMs);
-
-  let watermark = lastAcceptedTimestampMs ?? Number.NEGATIVE_INFINITY;
-  for (const fix of candidates) {
-    // Equal timestamps are duplicates of the same instant, not new information.
-    if (fix.timestampMs <= watermark) continue;
-    watermark = fix.timestampMs;
-    accepted.push(fix);
-  }
-  return { accepted, rejectedCount };
+  const batch = sanitiseRawLocations(locations, nowMs, lastAcceptedTimestampMs);
+  const accepted: LocationFix[] = batch.accepted;
+  return { accepted, rejectedCount: batch.rejectedCount };
 }
 
 export async function handleFeasibilityBatch(
