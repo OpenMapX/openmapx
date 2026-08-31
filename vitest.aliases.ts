@@ -2,8 +2,8 @@ import { resolve } from "node:path";
 
 /**
  * Subpaths whose source files live under `packages/mobility-core/src/types/`.
- * Everything else (cache, policy, dedup, gbfs-*, mapper, motis-rentals,
- * nominatim, entur-mobility) lives at `packages/mobility-core/src/`.
+ * Most other public modules live directly under `packages/mobility-core/src/`.
+ * Server-only modules with deeper paths have explicit aliases below.
  */
 const MOBILITY_CORE_TYPE_SUBPATHS = [
   "attribution",
@@ -64,6 +64,10 @@ export function createRepoVitestAliases(repoRoot: string) {
       replacement: resolve(repoRoot, "packages/mobility-core/src/types/shared-mobility.ts"),
     },
     ...mobilityCoreTypeAliases,
+    {
+      find: /^@openmapx\/mobility-core\/ris-client(?:\.js)?$/,
+      replacement: resolve(repoRoot, "packages/mobility-core/src/server/ris-client.ts"),
+    },
     // Everything else under the package resolves to `src/<sub>.ts`.
     {
       find: /^@openmapx\/mobility-core\/(.+?)(?:\.js)?$/,

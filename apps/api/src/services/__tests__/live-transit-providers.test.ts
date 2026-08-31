@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { streamedJsonResponse } from "../../test/streamed-response.js";
 
 const { risPost } = vi.hoisted(() => ({ risPost: vi.fn() }));
-vi.mock("@openmapx/core/ris-client", () => ({
+vi.mock("@openmapx/mobility-core/ris-client", () => ({
   createRisClient: () => ({ isConfigured: () => true, post: risPost }),
 }));
 

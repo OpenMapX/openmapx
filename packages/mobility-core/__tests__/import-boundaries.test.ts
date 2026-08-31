@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
@@ -9,6 +9,7 @@ const CORE_ROOT = fileURLToPath(new URL("../../core/", import.meta.url));
 interface PackageManifest {
   dependencies?: Record<string, string>;
   devDependencies?: Record<string, string>;
+  exports?: Record<string, unknown>;
   peerDependencies?: Record<string, string>;
 }
 
@@ -82,5 +83,14 @@ describe("mobility package boundaries", () => {
     expect(packageReferences(MOBILITY_ROOT, "@integrations/")).toEqual([]);
     expect(packageReferences(CORE_ROOT, "@openmapx/integration-framework")).toEqual([]);
     expect(packageReferences(CORE_ROOT, "@integrations/")).toEqual([]);
+  });
+
+  it("keeps the provider-specific RIS client in the server-side mobility layer", () => {
+    const mobilityManifest = readManifest(MOBILITY_ROOT);
+    const coreManifest = readManifest(CORE_ROOT);
+
+    expect(mobilityManifest.exports?.["./ris-client"]).toBeDefined();
+    expect(coreManifest.exports?.["./ris-client"]).toBeUndefined();
+    expect(existsSync(join(CORE_ROOT, "src/ris-client.ts"))).toBe(false);
   });
 });

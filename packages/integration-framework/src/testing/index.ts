@@ -1,5 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import type {
+  MobilityHttpRequestOptions,
+  MobilityHttpTransport,
+} from "@openmapx/mobility-core/json-transport";
 import type { PoiSource } from "@openmapx/poi-source-registry";
 import type {
   BinaryHttpResponse,
@@ -34,6 +38,45 @@ import type { SearchSuggestionProvider } from "../contracts/search-suggestion-pr
 import type { StreetLevelProvider } from "../contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
+
+export interface FakeMobilityHttpRequest {
+  kind: "json" | "text";
+  url: string;
+  options?: MobilityHttpRequestOptions;
+}
+
+export interface FakeMobilityHttpTransport extends MobilityHttpTransport {
+  readonly calls: FakeMobilityHttpRequest[];
+}
+
+export function fakeMobilityHttpTransport(
+  responder: (request: FakeMobilityHttpRequest) => unknown | Promise<unknown>,
+): FakeMobilityHttpTransport {
+  const calls: FakeMobilityHttpRequest[] = [];
+  return {
+    calls,
+    userAgent: "OpenMapX/test",
+    async fetchJson<T>(url: string, options?: MobilityHttpRequestOptions): Promise<T> {
+      const request: FakeMobilityHttpRequest = { kind: "json", url, options };
+      calls.push(request);
+      return (await responder(request)) as T;
+    },
+    async fetchText(url: string, options?: MobilityHttpRequestOptions): Promise<string> {
+      const request: FakeMobilityHttpRequest = { kind: "text", url, options };
+      calls.push(request);
+      const response = await responder(request);
+      if (typeof response !== "string") {
+        throw new TypeError("fakeMobilityHttpTransport: text response must be a string");
+      }
+      return response;
+    },
+    hostMatchesAllowlist: (hostname, pattern) =>
+      pattern.startsWith("*.")
+        ? hostname.endsWith(pattern.slice(1)) && hostname !== pattern.slice(2)
+        : hostname === pattern,
+    privateFeedHostAllowlist: () => [],
+  };
+}
 
 /**
  * Shared test harness for integration code. Deliberately free of any test

@@ -3,8 +3,11 @@ export interface MobilityHttpRequestOptions {
   timeoutMs?: number;
   signal?: AbortSignal;
   headers?: Record<string, string>;
+  method?: string;
+  body?: string;
   allowPrivateHosts?: string[];
   allowedRedirectHosts?: string[];
+  allowedRedirectOrigin?: string;
 }
 
 export interface MobilityHttpTransport {

@@ -5,13 +5,7 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import { USER_AGENT } from "@openmapx/core";
-import {
-  hostMatchesAllowlist,
-  privateFeedHostAllowlist,
-  safeFetchJson,
-  safeFetchText,
-} from "@openmapx/core/utils/safe-download";
+import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
 import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
@@ -31,14 +25,6 @@ import {
   mapVehicleToResult,
   stripMobilityKindPrefix,
 } from "./shared-mobility/mapper.js";
-
-const mobilityHttpTransport: MobilityHttpTransport = {
-  userAgent: USER_AGENT,
-  fetchJson: (url, options) => safeFetchJson(url, options),
-  fetchText: (url, options) => safeFetchText(url, options),
-  hostMatchesAllowlist,
-  privateFeedHostAllowlist,
-};
 
 export interface SharedMobilityProviderConfig {
   id: string;

@@ -7,7 +7,9 @@
  */
 
 import { decodePolyline } from "@openmapx/core";
-import { createRisClient, type RisCredentials } from "@openmapx/core/ris-client";
+import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
+import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
 import type {
   GeoJSONLineString,
   TransportMode,
@@ -17,10 +19,13 @@ import type {
 } from "@openmapx/mobility-core/transit";
 
 const PREFIX = "ris:";
-let risClient = createRisClient();
+let risClient = createRisClient({}, mobilityHttpTransport);
 
-export function setRisCredentials(credentials: RisCredentials): void {
-  risClient = createRisClient(credentials);
+export function setRisCredentials(
+  credentials: RisCredentials,
+  transport: MobilityHttpTransport = mobilityHttpTransport,
+): void {
+  risClient = createRisClient(credentials, transport);
 }
 
 // RIS API types (internal)

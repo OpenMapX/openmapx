@@ -109,6 +109,10 @@
       "types": "./src/types/result.ts",
       "default": "./src/types/result.ts"
     },
+    "./ris-client": {
+      "types": "./src/server/ris-client.ts",
+      "default": "./src/server/ris-client.ts"
+    },
     "./transit": {
       "types": "./src/types/transit.ts",
       "default": "./src/types/transit.ts"

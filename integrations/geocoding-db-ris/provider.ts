@@ -6,8 +6,10 @@
  */
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
-import { createRisClient, type RisCredentials } from "@openmapx/core/ris-client";
+import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
+import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
 import {
   buildStationDetail,
   stopPlaceToAutocompleteResult,
@@ -22,10 +24,13 @@ import type {
   RisStopPlacesResponse,
 } from "./stations-types.js";
 
-let risClient = createRisClient();
+let risClient = createRisClient({}, mobilityHttpTransport);
 
-export function setRisCredentials(credentials: RisCredentials): void {
-  risClient = createRisClient(credentials);
+export function setRisCredentials(
+  credentials: RisCredentials,
+  transport: MobilityHttpTransport = mobilityHttpTransport,
+): void {
+  risClient = createRisClient(credentials, transport);
 }
 
 async function searchStopPlaces(query: string, limit = 6): Promise<RisStopPlace[]> {

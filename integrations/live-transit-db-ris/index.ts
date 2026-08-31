@@ -1,19 +1,24 @@
 import type { LiveTransitVehicle } from "@integrations/overlay-live-transit/types.js";
 import type { BBox } from "@openmapx/core";
-import { createRisClient, type RisCredentials } from "@openmapx/core/ris-client";
+import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import {
   createManifestAttribution,
   type IntegrationContext,
   type RealtimeProvider,
 } from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import { withAttribution } from "@openmapx/mobility-core/result";
+import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
 
 const attribution = createManifestAttribution();
-let risClient = createRisClient();
+let risClient = createRisClient({}, mobilityHttpTransport);
 
-export function setRisCredentials(credentials: RisCredentials): void {
-  risClient = createRisClient(credentials);
+export function setRisCredentials(
+  credentials: RisCredentials,
+  transport: MobilityHttpTransport = mobilityHttpTransport,
+): void {
+  risClient = createRisClient(credentials, transport);
 }
 
 interface RisTransportInfo {

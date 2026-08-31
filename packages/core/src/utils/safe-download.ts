@@ -534,6 +534,10 @@ export interface SafeFetchJsonOptions {
   maxRedirects?: number;
   /** Extra headers (e.g. `User-Agent`) to send on the first request. */
   headers?: Record<string, string>;
+  /** HTTP method forwarded to the bounded request transport. */
+  method?: string;
+  /** String request body forwarded to the bounded request transport. */
+  body?: string;
   /**
    * Return the decoded body without parsing it. Use when an untrusted body must
    * have its digest verified before it is allowed to reach `JSON.parse`.
@@ -749,6 +753,8 @@ export async function safeFetchJsonResponse<T = unknown>(
     const fetchImplementation = opts.fetchImplementation;
     response = await fetchWithRedirects(url, {
       headers: opts.headers,
+      method: opts.method,
+      body: opts.body,
       maxRedirects,
       timeoutMs: Math.max(1, operationDeadlineAt - Date.now()),
       signal: operationSignal,

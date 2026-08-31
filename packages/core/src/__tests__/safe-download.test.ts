@@ -351,6 +351,29 @@ function stubFetchSequence(...responses: Response[]): ReturnType<typeof vi.fn> {
 }
 
 describe("safeFetchJson", () => {
+  it("forwards a bounded JSON request method and body", async () => {
+    lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
+    stubFetchSequence(
+      makeResponse({
+        status: 200,
+        headers: { "content-type": "application/json" },
+        bodyText: JSON.stringify({ ok: true }),
+      }),
+    );
+
+    await safeFetchJson("https://ex.test/query", {
+      method: "POST",
+      body: '{"query":"value"}',
+      headers: { "Content-Type": "application/json" },
+      allowedRedirectOrigin: "https://ex.test",
+    });
+
+    const [url, init] = undiciFetchMock.mock.calls[0] ?? [];
+    expect(url).toBe("https://ex.test/query");
+    expect(init).toMatchObject({ method: "POST", body: '{"query":"value"}' });
+    expect(new Headers((init as RequestInit).headers).get("content-type")).toBe("application/json");
+  });
+
   it("resolves parsed JSON on the happy path and closes its pinned transport afterward", async () => {
     lookupMock.mockResolvedValue([{ address: "93.184.216.34", family: 4 }]);
     stubFetchSequence(

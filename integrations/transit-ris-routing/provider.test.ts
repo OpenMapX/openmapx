@@ -1,3 +1,7 @@
+import {
+  type FakeMobilityHttpTransport,
+  fakeMobilityHttpTransport,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   isConfigured,
@@ -14,7 +18,7 @@ type LegInput = Parameters<typeof mapLeg>[0];
 type TripInput = Parameters<typeof mapTrip>[0];
 
 function mockOk(data: unknown) {
-  return Response.json(data);
+  return data;
 }
 
 describe("parseDuration", () => {
@@ -172,24 +176,28 @@ describe("mapTrip", () => {
 });
 
 describe("planJourney", () => {
+  let mockFetch: ReturnType<typeof vi.fn>;
+  let transport: FakeMobilityHttpTransport;
+
   beforeEach(() => {
-    setRisCredentials({ clientId: "cid", apiKey: "key" });
+    mockFetch = vi.fn();
+    transport = fakeMobilityHttpTransport(mockFetch);
+    setRisCredentials({ clientId: "cid", apiKey: "key" }, transport);
   });
 
   afterEach(() => {
-    setRisCredentials({});
+    setRisCredentials({}, transport);
     vi.restoreAllMocks();
-    vi.unstubAllGlobals();
   });
 
   it("returns null when credentials are not configured", async () => {
-    setRisCredentials({});
+    setRisCredentials({}, transport);
     expect(isConfigured()).toBe(false);
     expect(await planJourney(50, 6, 51, 7, "2026-03-10", "10:00")).toBeNull();
   });
 
   it("posts a routing request and maps the first trip's endpoints into a plan", async () => {
-    const mockFetch = vi.fn().mockResolvedValueOnce(
+    mockFetch.mockResolvedValueOnce(
       mockOk({
         trips: [
           {
@@ -213,7 +221,6 @@ describe("planJourney", () => {
         ],
       }),
     );
-    vi.stubGlobal("fetch", mockFetch);
 
     const plan = await planJourney(50.9, 6.9, 50.1, 8.6, "2026-03-10", "10:00");
 
@@ -221,13 +228,12 @@ describe("planJourney", () => {
     expect(plan?.from).toEqual({ name: "Köln Hbf", lat: 50.9, lng: 6.9 });
     expect(plan?.to).toEqual({ name: "Frankfurt Hbf", lat: 50.1, lng: 8.6 });
     expect(plan?.itineraries).toHaveLength(1);
-    const [, init] = mockFetch.mock.calls[0] ?? [];
-    const body = JSON.parse((init as RequestInit).body as string);
+    const body = JSON.parse(transport.calls[0]?.options?.body ?? "");
     expect(body).toMatchObject({ provider: "HAFAS", departureTime: "2026-03-10T10:00" });
   });
 
   it("returns null when the routing response has no trips", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValueOnce(mockOk({ trips: [] })));
+    mockFetch.mockResolvedValueOnce(mockOk({ trips: [] }));
     expect(await planJourney(50, 6, 51, 7, "2026-03-10", "10:00")).toBeNull();
   });
 });

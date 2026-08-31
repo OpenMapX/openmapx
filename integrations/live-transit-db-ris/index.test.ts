@@ -1,4 +1,8 @@
-import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
+import {
+  createMockIntegrationContext,
+  type FakeMobilityHttpTransport,
+  fakeMobilityHttpTransport,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setRisCredentials, setup } from "./index.js";
 
@@ -6,7 +10,7 @@ const GERMANY_CENTER = { lat: 52.52, lng: 13.405 };
 const OUTSIDE = { lat: 0, lng: 0 };
 
 function mockOk(data: unknown) {
-  return Response.json(data);
+  return data;
 }
 
 /** Run setup() with credentials and return the registered realtime provider. */
@@ -17,6 +21,7 @@ function registerProvider() {
     manifest: { dataSources: [] } as never,
   });
   setup(ctx);
+  setRisCredentials({ clientId: "cid", apiKey: "key" }, transport);
   const provider = ctx.registered.realtime[0];
   if (!provider) throw new Error("no realtime provider registered");
   return provider;
@@ -40,22 +45,22 @@ function liveEntry(overrides: Record<string, unknown> = {}) {
 }
 
 let mockFetch: ReturnType<typeof vi.fn>;
+let transport: FakeMobilityHttpTransport;
 
 beforeEach(() => {
   mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
+  transport = fakeMobilityHttpTransport(mockFetch);
 });
 
 afterEach(() => {
-  setRisCredentials({});
+  setRisCredentials({}, transport);
   vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
 /** First POST is /journey-positions/ (live), second is .../emulated. */
 function mockPositions(live: unknown, emulated: unknown) {
-  mockFetch.mockImplementation((url: string) =>
-    Promise.resolve(mockOk(url.includes("/emulated") ? emulated : live)),
+  mockFetch.mockImplementation((request: { url: string }) =>
+    Promise.resolve(mockOk(request.url.includes("/emulated") ? emulated : live)),
   );
 }
 

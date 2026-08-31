@@ -1,15 +1,16 @@
+import {
+  type FakeMobilityHttpTransport,
+  fakeMobilityHttpTransport,
+} from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { dbRisGeocodingService, lookupDbStation, setRisCredentials } from "./provider.js";
 import type { RisStopPlace } from "./stations-types.js";
 
 let mockFetch: ReturnType<typeof vi.fn>;
+let transport: FakeMobilityHttpTransport;
 
 function mockOk(data: unknown) {
-  return Response.json(data);
-}
-
-function mockError(status = 500) {
-  return { ok: false, status, statusText: "err", json: async () => ({}) } as Response;
+  return data;
 }
 
 const KOELN_HBF: RisStopPlace = {
@@ -22,14 +23,13 @@ const KOELN_HBF: RisStopPlace = {
 
 beforeEach(() => {
   mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-  setRisCredentials({ clientId: "cid", apiKey: "key" });
+  transport = fakeMobilityHttpTransport(mockFetch);
+  setRisCredentials({ clientId: "cid", apiKey: "key" }, transport);
 });
 
 afterEach(() => {
-  setRisCredentials({});
+  setRisCredentials({}, transport);
   vi.restoreAllMocks();
-  vi.unstubAllGlobals();
 });
 
 describe("dbRisGeocodingService.geocode", () => {
@@ -48,19 +48,19 @@ describe("dbRisGeocodingService.geocode", () => {
         rawCategory: "railway/station",
       },
     ]);
-    const url = String(mockFetch.mock.calls[0]?.[0]);
+    const url = transport.calls[0]?.url ?? "";
     expect(url).toContain("/stop-places/by-name/");
     expect(url).toContain("limit=10");
   });
 
   it("returns an empty array when credentials are not configured", async () => {
-    setRisCredentials({});
+    setRisCredentials({}, transport);
     expect(await dbRisGeocodingService.geocode("Köln")).toEqual([]);
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
   it("swallows upstream errors and returns an empty array", async () => {
-    mockFetch.mockResolvedValueOnce(mockError(503));
+    mockFetch.mockRejectedValueOnce(new Error("HTTP 503"));
     expect(await dbRisGeocodingService.geocode("Köln")).toEqual([]);
   });
 });
@@ -89,7 +89,7 @@ describe("dbRisGeocodingService.autocomplete", () => {
         rawCategory: "railway/station",
       },
     ]);
-    expect(String(mockFetch.mock.calls[0]?.[0])).toContain("limit=6");
+    expect(transport.calls[0]?.url).toContain("limit=6");
   });
 });
 
@@ -100,7 +100,7 @@ describe("dbRisGeocodingService.reverseGeocode", () => {
     const result = await dbRisGeocodingService.reverseGeocode(50.9431, 6.9589, "en");
 
     expect(result).toEqual({ address: "Cologne Central", city: "Cologne" });
-    const url = String(mockFetch.mock.calls[0]?.[0]);
+    const url = transport.calls[0]?.url ?? "";
     expect(url).toContain("/stop-places/by-position");
     expect(url).toContain("latitude=50.9431");
     expect(url).toContain("radius=200");
@@ -152,9 +152,9 @@ describe("lookupDbStation", () => {
   it("tolerates failures in the optional detail endpoints", async () => {
     mockFetch
       .mockResolvedValueOnce(mockOk(KOELN_HBF))
-      .mockResolvedValueOnce(mockError(500))
-      .mockResolvedValueOnce(mockError(500))
-      .mockResolvedValueOnce(mockError(500));
+      .mockRejectedValueOnce(new Error("HTTP 500"))
+      .mockRejectedValueOnce(new Error("HTTP 500"))
+      .mockRejectedValueOnce(new Error("HTTP 500"));
 
     const result = await lookupDbStation("8000207");
     const detail = result.dataSourceDetail as { sections: unknown[] };
