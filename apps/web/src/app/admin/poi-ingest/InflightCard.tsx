@@ -5,11 +5,8 @@ import CircularProgress from "@mui/material/CircularProgress";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
+import { formatPoiAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import type { PoiIngestStateSummary } from "@/lib/admin/poiIngestHooks";
-
-function formatTime(iso: string): string {
-  return iso.slice(0, 16).replace("T", " ");
-}
 
 export function InflightCard({ state }: { state: PoiIngestStateSummary }) {
   const inflight = state.inflight;
@@ -87,7 +84,7 @@ export function InflightCard({ state }: { state: PoiIngestStateSummary }) {
                   color: "text.secondary",
                 }}
               >
-                started {formatTime(job.startedAt)}
+                started {formatPoiAdminTimestamp(job.startedAt)}
               </Typography>
             </Box>
           ))}

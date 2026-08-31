@@ -10,12 +10,8 @@ import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
+import { formatPoiAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import type { PoiIngestStateSummary } from "@/lib/admin/poiIngestHooks";
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  return iso.slice(0, 16).replace("T", " ");
-}
 
 function truncate(text: string, max: number): string {
   if (text.length <= max) return text;
@@ -85,10 +81,14 @@ export function RecentFailuresTable({
                   )}
                 </TableCell>
                 <TableCell>
-                  <Typography variant="caption">{formatTime(row.lastStaticIngestAt)}</Typography>
+                  <Typography variant="caption">
+                    {formatPoiAdminTimestamp(row.lastStaticIngestAt)}
+                  </Typography>
                 </TableCell>
                 <TableCell>
-                  <Typography variant="caption">{formatTime(row.lastLiveIngestAt)}</Typography>
+                  <Typography variant="caption">
+                    {formatPoiAdminTimestamp(row.lastLiveIngestAt)}
+                  </Typography>
                 </TableCell>
               </TableRow>
             ))}

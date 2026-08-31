@@ -21,6 +21,7 @@ import { useMemo, useState } from "react";
 import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
+import { formatPoiAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { useClientPagination } from "@/components/admin/shared/tableHooks";
 import {
   type PoiIngestStateSummary,
@@ -28,11 +29,6 @@ import {
   usePoiIngestSources,
   useTriggerPoiIngest,
 } from "@/lib/admin/poiIngestHooks";
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  return iso.slice(0, 16).replace("T", " ");
-}
 
 function statusColor(status: string): "success" | "warning" | "error" | "default" | "primary" {
   if (status === "active" || status === "ok" || status === "success") return "success";
@@ -244,14 +240,16 @@ export function PoiSourceTable({
                     </TableCell>
                     <TableCell>
                       <Typography variant="caption">
-                        {formatTime(row.lastStaticIngestAt)}
+                        {formatPoiAdminTimestamp(row.lastStaticIngestAt)}
                       </Typography>
                     </TableCell>
                     <TableCell align="right">
                       {row.lastLiveRowCount === null ? "—" : row.lastLiveRowCount.toLocaleString()}
                     </TableCell>
                     <TableCell>
-                      <Typography variant="caption">{formatTime(row.lastLiveIngestAt)}</Typography>
+                      <Typography variant="caption">
+                        {formatPoiAdminTimestamp(row.lastLiveIngestAt)}
+                      </Typography>
                     </TableCell>
                     <TableCell align="right" onClick={(e) => e.stopPropagation()}>
                       <Stack

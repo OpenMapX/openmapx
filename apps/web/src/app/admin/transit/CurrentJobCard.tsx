@@ -14,6 +14,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
+import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
 import {
   type TransitStateSummary,
@@ -21,21 +22,6 @@ import {
   useSyncTransit,
   useTransitJobDetail,
 } from "@/lib/admin/transitHooks";
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 function durationSecs(startedAtIso: string): number {
   const started = new Date(startedAtIso).getTime();
@@ -188,7 +174,8 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
               color: "text.secondary",
             }}
           >
-            Started {formatTime(inflight.startedAt)} · {durationSecs(inflight.startedAt)}s elapsed
+            Started {formatTransitAdminTimestamp(inflight.startedAt)} ·{" "}
+            {durationSecs(inflight.startedAt)}s elapsed
           </Typography>
           <RunningJobDetail jobId={inflight.jobId} />
         </Stack>
@@ -202,7 +189,7 @@ export function CurrentJobCard({ state }: { state: TransitStateSummary }) {
           }}
         >
           <SummaryMetric label="Last sync">
-            <Typography variant="body2">{formatTime(state.lastSyncAt)}</Typography>
+            <Typography variant="body2">{formatTransitAdminTimestamp(state.lastSyncAt)}</Typography>
           </SummaryMetric>
           <SummaryMetric label="Last status">
             <JobStatusChip status={state.lastSyncStatus} />

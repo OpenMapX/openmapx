@@ -17,24 +17,10 @@ import Typography from "@mui/material/Typography";
 import { useMemo, useState } from "react";
 import { AdminTablePagination } from "@/components/admin/shared/AdminTablePagination";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
+import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { type TransitStateSummary, useTransitFeeds } from "@/lib/admin/transitHooks";
 
 const PAGE_SIZE = 50;
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 function statusColor(status: string): "default" | "success" | "warning" | "error" | "primary" {
   if (status === "ok" || status === "success") return "success";
@@ -216,8 +202,8 @@ export function FeedsTable({ state }: { state: TransitStateSummary }) {
                       "—"
                     )}
                   </TableCell>
-                  <TableCell>{formatTime(feed.lastFetchedAt)}</TableCell>
-                  <TableCell>{formatTime(feed.lastImportedAt)}</TableCell>
+                  <TableCell>{formatTransitAdminTimestamp(feed.lastFetchedAt)}</TableCell>
+                  <TableCell>{formatTransitAdminTimestamp(feed.lastImportedAt)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

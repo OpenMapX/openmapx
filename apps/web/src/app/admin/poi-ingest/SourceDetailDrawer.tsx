@@ -22,16 +22,12 @@ import TableRow from "@mui/material/TableRow";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
+import { formatPoiAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import {
   type PoiSourceDetail,
   usePoiIngestSourceDetail,
   useTriggerPoiIngest,
 } from "@/lib/admin/poiIngestHooks";
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  return iso.slice(0, 16).replace("T", " ");
-}
 
 function statusColor(status: string): "success" | "warning" | "error" | "default" | "primary" {
   if (status === "active" || status === "ok" || status === "success") return "success";
@@ -140,7 +136,9 @@ function FeedStateSection({ detail }: { detail: PoiSourceDetail }) {
           Last static ingest
         </Typography>
         <Box>
-          <Typography variant="body2">{formatTime(feedState.lastStaticIngestAt)}</Typography>
+          <Typography variant="body2">
+            {formatPoiAdminTimestamp(feedState.lastStaticIngestAt)}
+          </Typography>
           <Typography
             variant="caption"
             sx={{
@@ -179,7 +177,9 @@ function FeedStateSection({ detail }: { detail: PoiSourceDetail }) {
           Last live ingest
         </Typography>
         <Box>
-          <Typography variant="body2">{formatTime(feedState.lastLiveIngestAt)}</Typography>
+          <Typography variant="body2">
+            {formatPoiAdminTimestamp(feedState.lastLiveIngestAt)}
+          </Typography>
           <Typography
             variant="caption"
             sx={{
@@ -315,10 +315,10 @@ function RecentJobsSection({ detail }: { detail: PoiSourceDetail }) {
                 />
               </TableCell>
               <TableCell>
-                <Typography variant="caption">{formatTime(job.startedAt)}</Typography>
+                <Typography variant="caption">{formatPoiAdminTimestamp(job.startedAt)}</Typography>
               </TableCell>
               <TableCell>
-                <Typography variant="caption">{formatTime(job.finishedAt)}</Typography>
+                <Typography variant="caption">{formatPoiAdminTimestamp(job.finishedAt)}</Typography>
               </TableCell>
               <TableCell align="right">
                 <Typography variant="caption">{durationLabel(job.durationMs)}</Typography>

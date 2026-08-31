@@ -13,24 +13,10 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { useAdminToast } from "@/components/admin/shared/AdminToast";
+import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { ConfirmDialog } from "@/components/admin/shared/ConfirmDialog";
 import type { TransitStateSummary } from "@/lib/admin/transitHooks";
 import { useBumpTransitous } from "@/lib/admin/transitHooks";
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 export function LockfileCard({ state }: { state: TransitStateSummary }) {
   const hasLock = !!state.transitousRef;
@@ -119,7 +105,9 @@ export function LockfileCard({ state }: { state: TransitStateSummary }) {
           >
             Locked at
           </Typography>
-          <Typography variant="body2">{formatTime(state.transitousLockedAt)}</Typography>
+          <Typography variant="body2">
+            {formatTransitAdminTimestamp(state.transitousLockedAt)}
+          </Typography>
         </Box>
         <Box>
           <Typography

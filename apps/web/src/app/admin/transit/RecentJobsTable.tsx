@@ -16,24 +16,10 @@ import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import { AdminTableSurface } from "@/components/admin/shared/AdminTableSurface";
+import { formatTransitAdminTimestamp } from "@/components/admin/shared/adminTimestamp";
 import { DataManagerJobStages } from "@/components/admin/shared/DataManagerJobStages";
 import { JobStatusChip } from "@/components/admin/shared/JobStatusChip";
 import { useTransitJobDetail, useTransitJobs } from "@/lib/admin/transitHooks";
-
-function formatTime(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
 
 function durationLabel(startedAt: string, finishedAt: string | null): string {
   if (!finishedAt) return "—";
@@ -125,7 +111,7 @@ function JobDetailDrawer({ jobId, onClose }: { jobId: string; onClose: () => voi
               />
               <Chip
                 size="small"
-                label={`started ${formatTime(data.startedAt)}`}
+                label={`started ${formatTransitAdminTimestamp(data.startedAt)}`}
                 variant="outlined"
               />
               {data.finishedAt && (
@@ -206,8 +192,8 @@ export function RecentJobsTable() {
                       {job.id.slice(0, 8)}…
                     </Typography>
                   </TableCell>
-                  <TableCell>{formatTime(job.startedAt)}</TableCell>
-                  <TableCell>{formatTime(job.finishedAt)}</TableCell>
+                  <TableCell>{formatTransitAdminTimestamp(job.startedAt)}</TableCell>
+                  <TableCell>{formatTransitAdminTimestamp(job.finishedAt)}</TableCell>
                   <TableCell>
                     <JobStatusChip status={job.status} />
                   </TableCell>

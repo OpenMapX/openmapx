@@ -5,6 +5,7 @@ import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
+import { syncHeatmapLayer } from "@/components/map/layers/heatmapLayer";
 import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
 import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/lib/EnvProvider";
@@ -343,82 +344,16 @@ export function EarthquakeLayer() {
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
-    if (!map || !mapReady || !layerVisible || !map.getSource(SOURCE_ID)) return;
+    if (!map || !mapReady || !layerVisible) return;
 
-    try {
-      if (showHeatmap && !map.getLayer(HEATMAP_LAYER_ID)) {
-        addLayerInSlot(
-          map,
-          {
-            id: HEATMAP_LAYER_ID,
-            type: "heatmap",
-            source: SOURCE_ID,
-            paint: {
-              "heatmap-weight": [
-                "interpolate",
-                ["linear"],
-                ["get", "mag"],
-                0,
-                0,
-                8,
-                1,
-              ] as maplibregl.ExpressionSpecification,
-              "heatmap-intensity": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                0,
-                1,
-                9,
-                3,
-              ] as maplibregl.ExpressionSpecification,
-              "heatmap-color": [
-                "interpolate",
-                ["linear"],
-                ["heatmap-density"],
-                0,
-                "rgba(0,0,0,0)",
-                0.2,
-                "#ffffb2",
-                0.4,
-                "#fecc5c",
-                0.6,
-                "#fd8d3c",
-                0.8,
-                "#f03b20",
-                1.0,
-                "#bd0026",
-              ] as maplibregl.ExpressionSpecification,
-              "heatmap-radius": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                0,
-                4,
-                9,
-                30,
-              ] as maplibregl.ExpressionSpecification,
-              "heatmap-opacity": [
-                "interpolate",
-                ["linear"],
-                ["zoom"],
-                7,
-                1,
-                12,
-                0,
-              ] as maplibregl.ExpressionSpecification,
-            },
-          },
-          "overlay-heat",
-          1,
-        );
-      } else if (!showHeatmap && map.getLayer(HEATMAP_LAYER_ID)) {
-        map.removeLayer(HEATMAP_LAYER_ID);
-        unregisterLayerSlot(HEATMAP_LAYER_ID);
-      }
-    } catch {
-      // Layer or source may not be ready
-    }
+    syncHeatmapLayer(map, {
+      enabled: showHeatmap,
+      layerId: HEATMAP_LAYER_ID,
+      sourceId: SOURCE_ID,
+      weightProperty: "mag",
+      weightMax: 8,
+      order: 1,
+    });
   }, [mapRef, mapReady, styleVersion, layerVisible, showHeatmap]);
 
   // Auto-refresh
