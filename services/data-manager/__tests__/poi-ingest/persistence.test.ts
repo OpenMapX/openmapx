@@ -1,9 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type {
-  PoiIngestResult,
-  PoiIngestStageResult,
-  PoiJobLogger,
-} from "../../src/jobs/poi-ingest/types.js";
+import type { PoiIngestResult } from "../../src/jobs/poi-ingest/types.js";
 
 interface InsertCall {
   table: unknown;
@@ -114,28 +110,6 @@ vi.mock("../../src/db/index.js", () => {
   };
 });
 
-function makeLogger(): PoiJobLogger & {
-  infos: Array<[string, Record<string, unknown> | undefined]>;
-  warns: Array<[string, Record<string, unknown> | undefined]>;
-  errors: Array<[string, Record<string, unknown> | undefined]>;
-  debugs: Array<[string, Record<string, unknown> | undefined]>;
-} {
-  const infos: Array<[string, Record<string, unknown> | undefined]> = [];
-  const warns: Array<[string, Record<string, unknown> | undefined]> = [];
-  const errors: Array<[string, Record<string, unknown> | undefined]> = [];
-  const debugs: Array<[string, Record<string, unknown> | undefined]> = [];
-  return {
-    info: (msg, extra) => infos.push([msg, extra]),
-    warn: (msg, extra) => warns.push([msg, extra]),
-    error: (msg, extra) => errors.push([msg, extra]),
-    debug: (msg, extra) => debugs.push([msg, extra]),
-    infos,
-    warns,
-    errors,
-    debugs,
-  };
-}
-
 function baseResult(overrides: Partial<PoiIngestResult> = {}): PoiIngestResult {
   return {
     sourceId: "bnetza-ev",
@@ -209,130 +183,6 @@ describe("finalizePoiJobRow", () => {
     expect(setVals.finishedAt).toBeInstanceOf(Date);
     expect(setVals.finishedAt.getTime()).toBeGreaterThanOrEqual(before);
     expect(setVals.finishedAt.getTime()).toBeLessThanOrEqual(after);
-  });
-});
-
-describe("makePoiPersistingOnStageComplete", () => {
-  const stageResult: PoiIngestStageResult = {
-    stage: "fetch",
-    status: "ok",
-    startedAt: "2026-05-24T00:00:00.000Z",
-    finishedAt: "2026-05-24T00:00:01.000Z",
-    durationMs: 1000,
-    message: "ok",
-    artifacts: { bytes: 1234 },
-  };
-
-  it("inserts a job_stages row with the provided fields", async () => {
-    const { makePoiPersistingOnStageComplete } = await import(
-      "../../src/jobs/poi-ingest/persistence.js"
-    );
-    const logger = makeLogger();
-    const hook = makePoiPersistingOnStageComplete("job-abc", logger);
-
-    await hook(stageResult);
-
-    expect(insertCalls).toHaveLength(1);
-    const vals = insertCalls[0]?.values as Record<string, unknown>;
-    expect(vals).toMatchObject({
-      jobId: "job-abc",
-      stage: "fetch",
-      status: "ok",
-      durationMs: 1000,
-      message: "ok",
-      error: null,
-      artifacts: { bytes: 1234 },
-    });
-    expect(vals.startedAt).toBeInstanceOf(Date);
-    expect(vals.finishedAt).toBeInstanceOf(Date);
-    expect(logger.warns).toHaveLength(0);
-  });
-
-  it("swallows DB errors and logs a warning", async () => {
-    const { makePoiPersistingOnStageComplete } = await import(
-      "../../src/jobs/poi-ingest/persistence.js"
-    );
-    const logger = makeLogger();
-    insertShouldThrow = new Error("connection refused");
-    const hook = makePoiPersistingOnStageComplete("job-abc", logger);
-
-    await expect(hook(stageResult)).resolves.toBeUndefined();
-
-    expect(logger.warns).toHaveLength(1);
-    expect(logger.warns[0]?.[0]).toContain("poi-ingest: failed to persist stage result for fetch");
-    expect(logger.warns[0]?.[0]).toContain("connection refused");
-  });
-
-  it("scrubs all persisted diagnostic fields without mutating the stage result", async () => {
-    const { makePoiPersistingOnStageComplete } = await import(
-      "../../src/jobs/poi-ingest/persistence.js"
-    );
-    const logger = makeLogger();
-    const hook = makePoiPersistingOnStageComplete("job-abc", logger);
-    const result: PoiIngestStageResult = {
-      stage: "fetch",
-      status: "error",
-      startedAt: "2026-05-24T00:00:00.000Z",
-      finishedAt: "2026-05-24T00:00:01.000Z",
-      durationMs: 1000,
-      message: "GET https://user:MESSAGE-PASSWORD@example.org/feed?token=MESSAGE-TOKEN failed",
-      error: {
-        message: "Authorization: Bearer ERROR-BEARER-TOKEN",
-        stack: "at GET (https://example.org/feed?key=STACK-TOKEN)",
-      },
-      artifacts: {
-        request: { url: "https://user:ARTIFACT-PASSWORD@example.org/feed?key=ARTIFACT-TOKEN" },
-      },
-    };
-
-    await hook(result);
-
-    const persisted = insertCalls[0]?.values as Record<string, unknown>;
-    const serialized = JSON.stringify(persisted);
-    expect(serialized).not.toMatch(
-      /MESSAGE-PASSWORD|MESSAGE-TOKEN|ERROR-BEARER-TOKEN|STACK-TOKEN|ARTIFACT-PASSWORD|ARTIFACT-TOKEN/,
-    );
-    expect(serialized).toContain("example.org");
-    expect(serialized).toContain("[redacted]");
-    expect(result.message).toContain("MESSAGE-TOKEN");
-    expect(result.error?.stack).toContain("STACK-TOKEN");
-  });
-
-  it("scrubs a database error before passing it to a non-Pino logger", async () => {
-    const { makePoiPersistingOnStageComplete } = await import(
-      "../../src/jobs/poi-ingest/persistence.js"
-    );
-    const logger = makeLogger();
-    insertShouldThrow = new Error(
-      "connection https://db-user:DB-PASSWORD@db.example.org/openmapx?token=DB-TOKEN refused",
-    );
-    const hook = makePoiPersistingOnStageComplete("job-abc", logger);
-
-    await hook(stageResult);
-
-    expect(logger.warns[0]?.[0]).toContain("db.example.org");
-    expect(logger.warns[0]?.[0]).not.toMatch(/DB-PASSWORD|DB-TOKEN|db-user/);
-  });
-
-  it("normalises missing optional fields to null", async () => {
-    const { makePoiPersistingOnStageComplete } = await import(
-      "../../src/jobs/poi-ingest/persistence.js"
-    );
-    const logger = makeLogger();
-    const hook = makePoiPersistingOnStageComplete("job-abc", logger);
-
-    await hook({
-      stage: "swap",
-      status: "skipped",
-      startedAt: "2026-05-24T00:00:00.000Z",
-      finishedAt: "2026-05-24T00:00:00.000Z",
-      durationMs: 0,
-    });
-
-    const vals = insertCalls[0]?.values as Record<string, unknown>;
-    expect(vals.message).toBeNull();
-    expect(vals.error).toBeNull();
-    expect(vals.artifacts).toBeNull();
   });
 });
 

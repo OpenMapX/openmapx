@@ -1,7 +1,8 @@
-import { jobStages, jobs, poiFeedState } from "@openmapx/db-schema";
+import { poiFeedState } from "@openmapx/db-schema";
 import { sql as drizzleSql, eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
-import { scrubDiagnosticValue, scrubSecrets } from "../../utils/scrub-secrets.js";
+import { scrubSecrets } from "../../utils/scrub-secrets.js";
+import { createJobRow, finalizeJobRow, makePersistingOnStageComplete } from "../persistence.js";
 import type {
   PoiIngestKind,
   PoiIngestResult,
@@ -18,18 +19,11 @@ export interface CreatePoiJobRowOptions {
 
 /** Insert a new `data_manager.jobs` row in `running` state and return its id. */
 export async function createPoiJobRow(opts: CreatePoiJobRowOptions): Promise<string> {
-  const inserted = await db
-    .insert(jobs)
-    .values({
-      kind: `poi-ingest:${opts.kind}`,
-      status: "running",
-      triggeredBy: opts.triggeredBy ?? null,
-      metadata: { sourceId: opts.sourceId, ...(opts.metadata ?? {}) },
-    })
-    .returning({ id: jobs.id });
-  const row = inserted[0];
-  if (!row) throw new Error("Failed to create data_manager.jobs row");
-  return row.id;
+  return createJobRow({
+    kind: `poi-ingest:${opts.kind}`,
+    triggeredBy: opts.triggeredBy,
+    metadata: { sourceId: opts.sourceId, ...(opts.metadata ?? {}) },
+  });
 }
 
 /** Mark the POI ingest job as finished with its aggregated status. */
@@ -37,7 +31,7 @@ export async function finalizePoiJobRow(
   jobId: string,
   status: PoiIngestResult["status"],
 ): Promise<void> {
-  await db.update(jobs).set({ status, finishedAt: new Date() }).where(eq(jobs.id, jobId));
+  await finalizeJobRow(jobId, status);
 }
 
 /**
@@ -50,36 +44,7 @@ export function makePoiPersistingOnStageComplete(
   jobId: string,
   logger: PoiJobLogger,
 ): (result: PoiIngestStageResult) => Promise<void> {
-  return async (result) => {
-    try {
-      const diagnostics = scrubDiagnosticValue({
-        message: result.message ?? null,
-        error: result.error ?? null,
-        artifacts: result.artifacts ?? null,
-      }) as {
-        message: string | null;
-        error: PoiIngestStageResult["error"] | null;
-        artifacts: Record<string, unknown> | null;
-      };
-      await db.insert(jobStages).values({
-        jobId,
-        stage: result.stage,
-        status: result.status,
-        startedAt: new Date(result.startedAt),
-        finishedAt: new Date(result.finishedAt),
-        durationMs: result.durationMs,
-        message: diagnostics.message,
-        error: diagnostics.error,
-        artifacts: diagnostics.artifacts,
-      });
-    } catch (err) {
-      logger.warn(
-        scrubSecrets(
-          `poi-ingest: failed to persist stage result for ${result.stage}: ${(err as Error).message}`,
-        ),
-      );
-    }
-  };
+  return makePersistingOnStageComplete(jobId, logger, "poi-ingest");
 }
 
 export interface UpsertPoiFeedStateOptions {
