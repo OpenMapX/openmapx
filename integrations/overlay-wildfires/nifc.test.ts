@@ -1,6 +1,10 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildNifcUrl, loadNifc, normalizeNifcFeature } from "./nifc.js";
+import {
+  INVALID_WILDFIRE_POLYGON_GEOMETRIES,
+  VALID_WILDFIRE_POLYGON_GEOMETRIES,
+} from "./polygon-geometry.test-data.js";
 import { type NormalizedViewport, WildfireSourceError } from "./types.js";
 
 const BOUNDS: NormalizedViewport = {
@@ -23,7 +27,7 @@ const POLYGON = {
   ],
 };
 
-function nifcFeature(properties: Record<string, unknown>, geometry = POLYGON) {
+function nifcFeature(properties: Record<string, unknown>, geometry: unknown = POLYGON) {
   return {
     type: "Feature" as const,
     id: properties.OBJECTID as string | number,
@@ -130,11 +134,18 @@ describe("normalizeNifcFeature", () => {
     });
   });
 
-  it.each(["Polygon", "MultiPolygon"])("accepts %s geometry", (type) => {
-    const geometry =
-      type === "Polygon"
-        ? POLYGON
-        : { type: "MultiPolygon" as const, coordinates: [POLYGON.coordinates] };
+  it.each(VALID_WILDFIRE_POLYGON_GEOMETRIES)("accepts $name geometry", ({ geometry }) => {
+    expect(
+      normalizeNifcFeature(
+        nifcFeature(
+          { OBJECTID: 1, attr_IncidentName: "Fire", attr_IncidentTypeCategory: "WF" },
+          geometry,
+        ),
+      )?.geometry,
+    ).toEqual(geometry);
+  });
+
+  it.each(INVALID_WILDFIRE_POLYGON_GEOMETRIES)("rejects $name geometry", ({ geometry }) => {
     expect(
       normalizeNifcFeature(
         nifcFeature(
@@ -142,152 +153,8 @@ describe("normalizeNifcFeature", () => {
           geometry,
         ),
       ),
-    ).not.toBeNull();
-  });
-
-  it("retains valid polygon holes and multipolygon members", () => {
-    const polygonWithHole = {
-      type: "Polygon" as const,
-      coordinates: [
-        [
-          [-120, 35],
-          [-119, 35],
-          [-119, 36],
-          [-120, 35],
-        ],
-        [
-          [-119.8, 35.2],
-          [-119.4, 35.2],
-          [-119.4, 35.6],
-          [-119.8, 35.2],
-        ],
-      ],
-    };
-    const multipolygon = {
-      type: "MultiPolygon" as const,
-      coordinates: [
-        POLYGON.coordinates,
-        [
-          [
-            [-118, 34],
-            [-117, 34],
-            [-117, 35],
-            [-118, 34],
-          ],
-        ],
-      ],
-    };
-
-    expect(
-      normalizeNifcFeature(
-        nifcFeature(
-          { OBJECTID: 2, attr_IncidentName: "Hole", attr_IncidentTypeCategory: "WF" },
-          polygonWithHole,
-        ),
-      )?.geometry,
-    ).toEqual(polygonWithHole);
-    expect(
-      normalizeNifcFeature(
-        nifcFeature(
-          { OBJECTID: 3, attr_IncidentName: "Multi", attr_IncidentTypeCategory: "WF" },
-          multipolygon,
-        ),
-      )?.geometry,
-    ).toEqual(multipolygon);
-  });
-
-  it.each([
-    { type: "Polygon", coordinates: [[POLYGON.coordinates]] },
-    { type: "MultiPolygon", coordinates: [POLYGON.coordinates[0]] },
-  ])("rejects finite geometry with invalid type nesting: %j", (geometry) => {
-    expect(
-      normalizeNifcFeature(
-        nifcFeature(
-          { OBJECTID: 4, attr_IncidentName: "Bad nesting", attr_IncidentTypeCategory: "WF" },
-          geometry as never,
-        ),
-      ),
     ).toBeNull();
   });
-
-  it.each([
-    [
-      [
-        [-120, 35],
-        [-119, 35],
-        [-120, 35],
-      ],
-    ],
-    [
-      [
-        [-120, 35],
-        [-119, 35],
-        [-119, 36],
-        [-120, 36],
-      ],
-    ],
-  ])("rejects too-short or unclosed linear rings: %j", (ring) => {
-    expect(
-      normalizeNifcFeature(
-        nifcFeature(
-          { OBJECTID: 5, attr_IncidentName: "Bad ring", attr_IncidentTypeCategory: "WF" },
-          { type: "Polygon", coordinates: [ring] } as never,
-        ),
-      ),
-    ).toBeNull();
-  });
-
-  it.each([[[-181, 35]], [[-120, 91]], [[Number.NaN, 35]], [[-120, Number.POSITIVE_INFINITY]]])(
-    "rejects out-of-range or non-finite positions: %j",
-    (position) => {
-      expect(
-        normalizeNifcFeature(
-          nifcFeature(
-            { OBJECTID: 6, attr_IncidentName: "Bad position", attr_IncidentTypeCategory: "WF" },
-            {
-              type: "Polygon",
-              coordinates: [[position, [-119, 35], [-119, 36], position]],
-            } as never,
-          ),
-        ),
-      ).toBeNull();
-    },
-  );
-
-  it.each([
-    [180, 0],
-    [-180, 0],
-    [0, 90],
-    [0, -90],
-  ])("accepts valid 4326 boundary position [%i, %i]", (longitude, latitude) => {
-    const position = [longitude, latitude];
-    const geometry = {
-      type: "Polygon" as const,
-      coordinates: [[position, [0, 0], [longitude, 0], position]],
-    };
-    expect(
-      normalizeNifcFeature(
-        nifcFeature(
-          { OBJECTID: 7, attr_IncidentName: "Boundary", attr_IncidentTypeCategory: "WF" },
-          geometry,
-        ),
-      ),
-    ).not.toBeNull();
-  });
-
-  it.each([null, { type: "Point", coordinates: [-120, 35] }, { type: "Polygon", coordinates: [] }])(
-    "rejects invalid geometry %j",
-    (geometry) => {
-      expect(
-        normalizeNifcFeature(
-          nifcFeature(
-            { OBJECTID: 1, attr_IncidentName: "Fire", attr_IncidentTypeCategory: "WF" },
-            geometry as never,
-          ),
-        ),
-      ).toBeNull();
-    },
-  );
 
   it("omits null numeric values and containment outside 0..100", () => {
     const result = normalizeNifcFeature(

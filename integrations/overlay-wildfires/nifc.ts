@@ -1,5 +1,7 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { dedupeByFeatureId, nifcOffsetForZoom, splitAntimeridian } from "./bounds.js";
+import { finiteNumber, isRecord, nonEmptyString } from "./normalization.js";
+import { isWildfirePolygonGeometry, type WildfirePolygonGeometry } from "./polygon-geometry.js";
 import {
   isAbortError,
   type NifcProperties,
@@ -36,28 +38,11 @@ type RawNifcFeature = {
   geometry?: unknown;
 };
 
-type NifcGeometry = GeoJSON.Polygon | GeoJSON.MultiPolygon;
-type NormalizedNifcFeature = GeoJSON.Feature<NifcGeometry, NifcProperties>;
+type NormalizedNifcFeature = GeoJSON.Feature<WildfirePolygonGeometry, NifcProperties>;
 
 interface NifcCollection {
   features: unknown[];
   exceededTransferLimit: boolean;
-}
-
-function hasObjectProperties(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function finiteNumber(value: unknown): number | undefined {
-  if (value === null || value === undefined || value === "") return undefined;
-  const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) ? number : undefined;
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const result = value.trim();
-  return result.length > 0 ? result : undefined;
 }
 
 function epochToIso(value: unknown): string | undefined {
@@ -66,43 +51,6 @@ function epochToIso(value: unknown): string | undefined {
   const date = new Date(epoch);
   if (!Number.isFinite(date.getTime())) return undefined;
   return date.toISOString();
-}
-
-function isPosition(value: unknown): value is number[] {
-  if (!Array.isArray(value) || value.length < 2) return false;
-  if (!value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))) {
-    return false;
-  }
-  return value[0] >= -180 && value[0] <= 180 && value[1] >= -90 && value[1] <= 90;
-}
-
-function positionsEqual(first: number[], second: number[]): boolean {
-  return (
-    first.length === second.length &&
-    first.every((coordinate, index) => coordinate === second[index])
-  );
-}
-
-function isLinearRing(value: unknown): value is number[][] {
-  if (!Array.isArray(value) || value.length < 4 || !value.every(isPosition)) return false;
-  return positionsEqual(value[0], value[value.length - 1]);
-}
-
-function isPolygonCoordinates(value: unknown): value is number[][][] {
-  return Array.isArray(value) && value.length > 0 && value.every(isLinearRing);
-}
-
-function isMultiPolygonCoordinates(value: unknown): value is number[][][][] {
-  return Array.isArray(value) && value.length > 0 && value.every(isPolygonCoordinates);
-}
-
-function validGeometry(value: unknown): value is NifcGeometry {
-  if (!hasObjectProperties(value) || (value.type !== "Polygon" && value.type !== "MultiPolygon")) {
-    return false;
-  }
-  return value.type === "Polygon"
-    ? isPolygonCoordinates(value.coordinates)
-    : isMultiPolygonCoordinates(value.coordinates);
 }
 
 function stableId(
@@ -131,11 +79,11 @@ export function buildNifcUrl(bounds: NormalizedViewport): string {
 }
 
 export function normalizeNifcFeature(input: unknown): NormalizedNifcFeature | null {
-  if (!hasObjectProperties(input) || input.type !== "Feature") return null;
+  if (!isRecord(input) || input.type !== "Feature") return null;
   const geometry = input.geometry;
-  if (!validGeometry(geometry)) return null;
+  if (!isWildfirePolygonGeometry(geometry)) return null;
   const feature = input as RawNifcFeature;
-  if (!hasObjectProperties(feature.properties)) return null;
+  if (!isRecord(feature.properties)) return null;
   const raw = feature.properties;
   const id = stableId(feature, raw);
   if (!id || raw.attr_IncidentTypeCategory !== "WF") return null;
@@ -231,7 +179,7 @@ async function fetchNifcCollection(
       });
     }
     if (
-      !hasObjectProperties(payload) ||
+      !isRecord(payload) ||
       payload.type !== "FeatureCollection" ||
       !Array.isArray(payload.features)
     ) {
@@ -243,8 +191,7 @@ async function fetchNifcCollection(
     return {
       features: payload.features,
       exceededTransferLimit:
-        hasObjectProperties(payload.properties) &&
-        payload.properties.exceededTransferLimit === true,
+        isRecord(payload.properties) && payload.properties.exceededTransferLimit === true,
     };
   } finally {
     clearTimeout(timer);
@@ -262,7 +209,7 @@ export async function loadNifc(
   const normalized = collections.map((collection) => {
     const features: NormalizedNifcFeature[] = [];
     for (const feature of collection.features) {
-      if (hasObjectProperties(feature) && hasObjectProperties(feature.properties)) {
+      if (isRecord(feature) && isRecord(feature.properties)) {
         const category = feature.properties.attr_IncidentTypeCategory;
         if (category === "RX" || category === "CX") continue;
       }

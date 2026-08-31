@@ -7,6 +7,10 @@ import {
   normalizeSmokeDensity,
   parseHmsUtc,
 } from "./noaa-smoke.js";
+import {
+  INVALID_WILDFIRE_POLYGON_GEOMETRIES,
+  VALID_WILDFIRE_POLYGON_GEOMETRIES,
+} from "./polygon-geometry.test-data.js";
 import { WildfireSourceError } from "./types.js";
 
 const POLYGON = {
@@ -132,46 +136,15 @@ describe("normalizeNoaaSmokeFeature", () => {
     });
   });
 
-  it("rejects unknown density and non-polygon geometry", () => {
+  it("rejects unknown density", () => {
     expect(normalizeNoaaSmokeFeature(smokeFeature({ Density: "Unknown" }))).toBeNull();
-    expect(
-      normalizeNoaaSmokeFeature(smokeFeature({}, { type: "Point", coordinates: [-120, 35] })),
-    ).toBeNull();
   });
 
-  it.each(["Polygon", "MultiPolygon"])("accepts valid %s geometry", (type) => {
-    const geometry =
-      type === "Polygon"
-        ? POLYGON
-        : { type: "MultiPolygon" as const, coordinates: [POLYGON.coordinates] };
-    expect(normalizeNoaaSmokeFeature(smokeFeature({}, geometry))).not.toBeNull();
+  it.each(VALID_WILDFIRE_POLYGON_GEOMETRIES)("accepts $name geometry", ({ geometry }) => {
+    expect(normalizeNoaaSmokeFeature(smokeFeature({}, geometry))).toMatchObject({ geometry });
   });
 
-  it.each([
-    { type: "Polygon", coordinates: [] },
-    {
-      type: "Polygon",
-      coordinates: [
-        [
-          [-120, 35],
-          [-119, 35],
-          [-119, 36],
-          [-120, 36],
-        ],
-      ],
-    },
-    {
-      type: "Polygon",
-      coordinates: [
-        [
-          [-181, 35],
-          [-119, 35],
-          [-119, 36],
-          [-181, 35],
-        ],
-      ],
-    },
-  ])("rejects invalid smoke geometry %j", (geometry) => {
+  it.each(INVALID_WILDFIRE_POLYGON_GEOMETRIES)("rejects $name geometry", ({ geometry }) => {
     expect(normalizeNoaaSmokeFeature(smokeFeature({}, geometry))).toBeNull();
   });
 });

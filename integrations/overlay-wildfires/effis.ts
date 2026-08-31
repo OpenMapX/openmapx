@@ -1,5 +1,7 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { dedupeByFeatureId, splitAntimeridian } from "./bounds.js";
+import { finiteNumber, isRecord, nonEmptyString } from "./normalization.js";
+import { isWildfirePolygonGeometry, type WildfirePolygonGeometry } from "./polygon-geometry.js";
 import {
   type EffisProperties,
   isAbortError,
@@ -14,36 +16,19 @@ const FETCH_TIMEOUT_MS = 30_000;
 const MAX_FEATURES = 2_000;
 const REQUESTED_FEATURES = MAX_FEATURES + 1;
 
-type EffisGeometry = GeoJSON.Polygon | GeoJSON.MultiPolygon;
 type RawEffisFeature = {
   type?: unknown;
   id?: unknown;
   properties?: unknown;
   geometry?: unknown;
 };
-type NormalizedEffisFeature = GeoJSON.Feature<EffisGeometry, EffisProperties>;
+type NormalizedEffisFeature = GeoJSON.Feature<WildfirePolygonGeometry, EffisProperties>;
 
 export class EffisSourceError extends WildfireSourceError {
   constructor(message: string, options: Omit<WildfireSourceErrorOptions, "provider">) {
     super(message, { provider: "effis", ...options });
     this.name = "EffisSourceError";
   }
-}
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function finiteNumber(value: unknown): number | undefined {
-  if (value === null || value === undefined || value === "") return undefined;
-  const number = typeof value === "number" ? value : Number(value);
-  return Number.isFinite(number) ? number : undefined;
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const result = value.trim();
-  return result ? result : undefined;
 }
 
 function optionalString(value: unknown): string | undefined {
@@ -59,45 +44,6 @@ function sourceDateToIso(value: unknown): string | undefined {
     : string;
   const date = new Date(normalized);
   return Number.isFinite(date.getTime()) ? date.toISOString() : undefined;
-}
-
-function isPosition(value: unknown): value is number[] {
-  if (!Array.isArray(value) || value.length < 2) return false;
-  if (!value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))) {
-    return false;
-  }
-  return value[0] >= -180 && value[0] <= 180 && value[1] >= -90 && value[1] <= 90;
-}
-
-function positionsEqual(first: number[], second: number[]): boolean {
-  return (
-    first.length === second.length &&
-    first.every((coordinate, index) => coordinate === second[index])
-  );
-}
-
-function isLinearRing(value: unknown): value is number[][] {
-  return (
-    Array.isArray(value) &&
-    value.length >= 4 &&
-    value.every(isPosition) &&
-    positionsEqual(value[0], value[value.length - 1])
-  );
-}
-
-function isPolygonCoordinates(value: unknown): value is number[][][] {
-  return Array.isArray(value) && value.length > 0 && value.every(isLinearRing);
-}
-
-function isMultiPolygonCoordinates(value: unknown): value is number[][][][] {
-  return Array.isArray(value) && value.length > 0 && value.every(isPolygonCoordinates);
-}
-
-function validGeometry(value: unknown): value is EffisGeometry {
-  if (!isObject(value) || (value.type !== "Polygon" && value.type !== "MultiPolygon")) return false;
-  return value.type === "Polygon"
-    ? isPolygonCoordinates(value.coordinates)
-    : isMultiPolygonCoordinates(value.coordinates);
 }
 
 function stableId(
@@ -130,9 +76,11 @@ export function buildEffisUrl(bounds: NormalizedViewport): string {
 }
 
 export function normalizeEffisFeature(input: unknown): NormalizedEffisFeature | null {
-  if (!isObject(input) || input.type !== "Feature" || !validGeometry(input.geometry)) return null;
+  if (!isRecord(input) || input.type !== "Feature" || !isWildfirePolygonGeometry(input.geometry)) {
+    return null;
+  }
   const feature = input as RawEffisFeature;
-  if (!isObject(feature.properties)) return null;
+  if (!isRecord(feature.properties)) return null;
   const raw = feature.properties;
   const id = stableId(feature, raw);
   const areaHectares = finiteNumber(raw.AREA_HA);
@@ -229,7 +177,7 @@ async function fetchEffisCollection(
       });
     }
     if (
-      !isObject(payload) ||
+      !isRecord(payload) ||
       payload.type !== "FeatureCollection" ||
       !Array.isArray(payload.features)
     ) {

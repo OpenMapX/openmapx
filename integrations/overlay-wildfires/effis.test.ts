@@ -1,6 +1,10 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildEffisUrl, EffisSourceError, loadEffis, normalizeEffisFeature } from "./effis.js";
+import {
+  INVALID_WILDFIRE_POLYGON_GEOMETRIES,
+  VALID_WILDFIRE_POLYGON_GEOMETRIES,
+} from "./polygon-geometry.test-data.js";
 import type { NormalizedViewport } from "./types.js";
 
 const BOUNDS: NormalizedViewport = {
@@ -25,7 +29,7 @@ const POLYGON = {
 
 function effisFeature(
   properties: Record<string, unknown>,
-  geometry = POLYGON,
+  geometry: unknown = POLYGON,
   topLevelId: string | number | undefined = properties.ID as string | number | undefined,
 ) {
   return {
@@ -100,35 +104,14 @@ describe("normalizeEffisFeature", () => {
     expect(result?.properties.locality).toBeUndefined();
   });
 
-  it.each([
-    { type: "Point", coordinates: [10, 45] },
-    { type: "Polygon", coordinates: [] },
-    {
-      type: "Polygon",
-      coordinates: [
-        [
-          [10, 45],
-          [11, 45],
-          [11, 46],
-          [10, 46],
-        ],
-      ],
-    },
-    {
-      type: "Polygon",
-      coordinates: [
-        [
-          [181, 45],
-          [11, 45],
-          [11, 46],
-          [181, 45],
-        ],
-      ],
-    },
-  ])("rejects invalid burned-area geometry: %j", (geometry) => {
-    expect(
-      normalizeEffisFeature(effisFeature({ ID: 1, AREA_HA: "1" }, geometry as never)),
-    ).toBeNull();
+  it.each(VALID_WILDFIRE_POLYGON_GEOMETRIES)("accepts $name geometry", ({ geometry }) => {
+    expect(normalizeEffisFeature(effisFeature({ ID: 1, AREA_HA: 1 }, geometry))).toMatchObject({
+      geometry,
+    });
+  });
+
+  it.each(INVALID_WILDFIRE_POLYGON_GEOMETRIES)("rejects $name geometry", ({ geometry }) => {
+    expect(normalizeEffisFeature(effisFeature({ ID: 1, AREA_HA: "1" }, geometry))).toBeNull();
   });
 
   it.each([undefined, null, "", "not a number", Number.POSITIVE_INFINITY])(
@@ -137,17 +120,6 @@ describe("normalizeEffisFeature", () => {
       expect(normalizeEffisFeature(effisFeature({ ID: 1, AREA_HA: area }))).toBeNull();
     },
   );
-
-  it("accepts a valid multipolygon", () => {
-    expect(
-      normalizeEffisFeature(
-        effisFeature(
-          { ID: 1, AREA_HA: 1 },
-          { type: "MultiPolygon", coordinates: [POLYGON.coordinates] },
-        ),
-      ),
-    ).not.toBeNull();
-  });
 });
 
 describe("loadEffis", () => {

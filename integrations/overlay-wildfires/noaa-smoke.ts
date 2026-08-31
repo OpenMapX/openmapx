@@ -1,4 +1,6 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
+import { isRecord, nonEmptyString } from "./normalization.js";
+import { isWildfirePolygonGeometry, type WildfirePolygonGeometry } from "./polygon-geometry.js";
 import {
   isAbortError,
   type NoaaSmokeProperties,
@@ -14,63 +16,13 @@ const MAX_FEATURES = 2_000;
 const MAX_PAGES = MAX_FEATURES / PAGE_SIZE;
 const NOAA_HMS_FIELDS = ["FID", "Satellite", "Start", "End_", "Density"].join(",");
 
-type NoaaSmokeGeometry = GeoJSON.Polygon | GeoJSON.MultiPolygon;
 type RawNoaaSmokeFeature = {
   type?: unknown;
   id?: unknown;
   properties?: unknown;
   geometry?: unknown;
 };
-type NormalizedNoaaSmokeFeature = GeoJSON.Feature<NoaaSmokeGeometry, NoaaSmokeProperties>;
-
-function isObject(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function nonEmptyString(value: unknown): string | undefined {
-  if (typeof value !== "string") return undefined;
-  const result = value.trim();
-  return result ? result : undefined;
-}
-
-function isPosition(value: unknown): value is number[] {
-  if (!Array.isArray(value) || value.length < 2) return false;
-  if (!value.every((coordinate) => typeof coordinate === "number" && Number.isFinite(coordinate))) {
-    return false;
-  }
-  return value[0] >= -180 && value[0] <= 180 && value[1] >= -90 && value[1] <= 90;
-}
-
-function positionsEqual(first: number[], second: number[]): boolean {
-  return (
-    first.length === second.length &&
-    first.every((coordinate, index) => coordinate === second[index])
-  );
-}
-
-function isLinearRing(value: unknown): value is number[][] {
-  return (
-    Array.isArray(value) &&
-    value.length >= 4 &&
-    value.every(isPosition) &&
-    positionsEqual(value[0], value[value.length - 1])
-  );
-}
-
-function isPolygonCoordinates(value: unknown): value is number[][][] {
-  return Array.isArray(value) && value.length > 0 && value.every(isLinearRing);
-}
-
-function isMultiPolygonCoordinates(value: unknown): value is number[][][][] {
-  return Array.isArray(value) && value.length > 0 && value.every(isPolygonCoordinates);
-}
-
-function validGeometry(value: unknown): value is NoaaSmokeGeometry {
-  if (!isObject(value) || (value.type !== "Polygon" && value.type !== "MultiPolygon")) return false;
-  return value.type === "Polygon"
-    ? isPolygonCoordinates(value.coordinates)
-    : isMultiPolygonCoordinates(value.coordinates);
-}
+type NormalizedNoaaSmokeFeature = GeoJSON.Feature<WildfirePolygonGeometry, NoaaSmokeProperties>;
 
 function stableId(
   feature: RawNoaaSmokeFeature,
@@ -129,11 +81,11 @@ export function normalizeSmokeDensity(value: unknown): NoaaSmokeProperties["dens
 }
 
 export function normalizeNoaaSmokeFeature(input: unknown): NormalizedNoaaSmokeFeature | null {
-  if (!isObject(input) || input.type !== "Feature") return null;
+  if (!isRecord(input) || input.type !== "Feature") return null;
   const geometry = input.geometry;
-  if (!validGeometry(geometry)) return null;
+  if (!isWildfirePolygonGeometry(geometry)) return null;
   const feature = input as RawNoaaSmokeFeature;
-  if (!isObject(feature.properties)) return null;
+  if (!isRecord(feature.properties)) return null;
   const raw = feature.properties;
   const id = stableId(feature, raw);
   const density = normalizeSmokeDensity(raw.Density);
@@ -206,14 +158,14 @@ async function fetchNoaaSmokePage(
       cause: error,
     });
   }
-  if (isObject(payload) && "error" in payload) {
+  if (isRecord(payload) && "error" in payload) {
     throw new WildfireSourceError("NOAA ArcGIS error response", {
       provider: "noaa-hms",
       kind: "upstream-payload",
     });
   }
   if (
-    !isObject(payload) ||
+    !isRecord(payload) ||
     payload.type !== "FeatureCollection" ||
     !Array.isArray(payload.features)
   ) {
@@ -225,7 +177,7 @@ async function fetchNoaaSmokePage(
   return {
     features: payload.features,
     exceededTransferLimit:
-      isObject(payload.properties) && payload.properties.exceededTransferLimit === true,
+      isRecord(payload.properties) && payload.properties.exceededTransferLimit === true,
   };
 }
 
