@@ -6,6 +6,7 @@ import {
   formatSpokenDistance,
   isReroutingTooOften,
   type LngLat,
+  type NavigationRouteOptions,
   type NavTickState,
   navOptionsForMode,
   type PreparedRouteMatcher,
@@ -17,6 +18,7 @@ import {
   type Route,
   remainingWaypoints,
   shouldRerouteForClosure,
+  type TravelMode,
   useNavigationStore,
   useSettingsStore,
   VOICE_TIMING_MULTIPLIER,
@@ -59,6 +61,17 @@ const COAST_MAX_MS = 120_000;
 const COAST_MAX_METERS = 3000;
 const COAST_TICK_MS = 250;
 
+interface RerouteExecutionRequest {
+  trigger: "off-route" | "closure";
+  route: Route;
+  matcher: PreparedRouteMatcher;
+  origin: LngLat;
+  alongMeters: number;
+  destinationWaypoints: LngLat[];
+  mode: TravelMode;
+  routeOptions: NavigationRouteOptions;
+}
+
 /** Wires GPS fixes → processFix → navigationStore + side effects (voice, reroute). */
 export function useNavigationEngine(incidentResource: NavIncidentResource): void {
   const t = useTranslations("navigation");
@@ -67,6 +80,8 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
 
   const tickRef = useRef<NavTickState>(freshTick());
   const reroutingRef = useRef(false);
+  const rerouteAttemptRef = useRef(0);
+  const mountedRef = useRef(false);
   const lastHandledRetryNonceRef = useRef(0);
   // Recent successful-reroute times (ms) + cooldown deadline for the churn guard.
   const rerouteTimesRef = useRef<number[]>([]);
@@ -107,6 +122,91 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
     matcherRef.current = prepared;
     return prepared;
   }, []);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      rerouteAttemptRef.current++;
+      reroutingRef.current = false;
+      if (useNavigationStore.getState().status === "rerouting") {
+        useNavigationStore.setState({ status: "navigating" });
+      }
+    };
+  }, []);
+
+  const executeReroute = useCallback(
+    (request: RerouteExecutionRequest): boolean => {
+      const now = Date.now();
+      if (reroutingRef.current || now < rerouteCooldownUntilRef.current) return false;
+
+      const attempt = ++rerouteAttemptRef.current;
+      const navigationStartedAtMs = useNavigationStore.getState().navigationStartedAtMs;
+      const isCurrentAttempt = () => {
+        const state = useNavigationStore.getState();
+        return (
+          mountedRef.current &&
+          rerouteAttemptRef.current === attempt &&
+          state.navigationStartedAtMs === navigationStartedAtMs &&
+          state.route === request.route &&
+          state.status !== "idle" &&
+          state.status !== "arrived"
+        );
+      };
+
+      reroutingRef.current = true;
+      haptics.warn();
+      useNavigationStore.getState().beginReroute();
+      const waypoints = remainingWaypoints(
+        request.matcher,
+        request.destinationWaypoints,
+        request.origin,
+        request.alongMeters,
+      );
+      fetchDirections({
+        waypoints,
+        mode: request.mode,
+        lang: locale,
+        ...request.routeOptions,
+        ...(request.trigger === "closure" ? { avoidClosures: true } : {}),
+      })
+        .then((response) => {
+          if (!isCurrentAttempt()) return;
+          const next = response.routes?.[response.activeRouteIndex ?? 0];
+          if (!next) {
+            useNavigationStore.setState({ status: "navigating" });
+            useNavigationStore.getState().signalRerouteFailed();
+            return;
+          }
+
+          const completedAt = Date.now();
+          rerouteTimesRef.current = pruneRerouteTimes(
+            [...rerouteTimesRef.current, completedAt],
+            completedAt,
+            REROUTE_CHURN_WINDOW_MS,
+          );
+          if (isReroutingTooOften(rerouteTimesRef.current, REROUTE_CHURN_MAX)) {
+            rerouteCooldownUntilRef.current = completedAt + REROUTE_CHURN_COOLDOWN_MS;
+            rerouteTimesRef.current = [];
+          }
+          tickRef.current = freshTick();
+          useNavigationStore.getState().applyReroute(next, response.provider);
+        })
+        .catch((error) => {
+          if (!isCurrentAttempt()) return;
+          useNavigationStore.setState({ status: "navigating" });
+          if (isConnectivityFailure(error, useNavigationStore.getState().connectivity)) {
+            useNavigationStore.getState().setRerouteUnavailable(true);
+          }
+          useNavigationStore.getState().signalRerouteFailed();
+        })
+        .finally(() => {
+          if (rerouteAttemptRef.current === attempt) reroutingRef.current = false;
+        });
+      return true;
+    },
+    [locale],
+  );
 
   const speakCue = useCallback(
     (cue: VoiceCue) => {
@@ -217,78 +317,26 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
       if (result.needsReroute && connectivity === "offline") {
         store.setRerouteUnavailable(true);
       }
-      if (
-        result.needsReroute &&
-        canAttemptReroute &&
-        !reroutingRef.current &&
-        !useNavRecordingStore.getState().replaying &&
-        Date.now() >= rerouteCooldownUntilRef.current
-      ) {
-        if (retryRequested) lastHandledRetryNonceRef.current = rerouteRetryNonce;
-        reroutingRef.current = true;
-        haptics.warn();
-        store.beginReroute();
+      if (result.needsReroute && canAttemptReroute && !useNavRecordingStore.getState().replaying) {
         // Re-anchor at the actual GPS position. The progress position is snapped
         // onto the obsolete route; using it here would ask the router for the
         // same route again and leave a genuinely off-route traveller stranded in
         // a reroute → waiting-for-GPS loop. Keep the old route projection only
         // for deciding which intermediate stops are already behind us.
-        const waypoints = remainingWaypoints(
+        const started = executeReroute({
+          trigger: "off-route",
+          route,
           matcher,
+          origin: fix.coords,
+          alongMeters: result.progress.alongMeters,
           destinationWaypoints,
-          fix.coords,
-          result.progress.alongMeters,
-        );
-        fetchDirections({
-          waypoints,
           mode,
-          lang: locale,
-          ...routeOptions,
-        })
-          .then((res) => {
-            // Bail out if navigation ended (stopped or arrived) while the
-            // reroute was in flight — otherwise we'd resurrect a finished trip.
-            const st = useNavigationStore.getState().status;
-            if (st === "idle" || st === "arrived") return;
-            const next = res.routes?.[res.activeRouteIndex ?? 0];
-            if (next) {
-              // Churn guard: record this reroute; if too many fired recently,
-              // pause further reroutes so the fresh route can settle.
-              const now = Date.now();
-              rerouteTimesRef.current = pruneRerouteTimes(
-                [...rerouteTimesRef.current, now],
-                now,
-                REROUTE_CHURN_WINDOW_MS,
-              );
-              if (isReroutingTooOften(rerouteTimesRef.current, REROUTE_CHURN_MAX)) {
-                rerouteCooldownUntilRef.current = now + REROUTE_CHURN_COOLDOWN_MS;
-                rerouteTimesRef.current = [];
-              }
-              tickRef.current = freshTick();
-              useNavigationStore.getState().applyReroute(next, res.provider);
-            } else {
-              // No alternative found: stay on the old route and tell the user.
-              useNavigationStore.setState({ status: "navigating" });
-              useNavigationStore.getState().signalRerouteFailed();
-            }
-          })
-          .catch((error) => {
-            const st = useNavigationStore.getState().status;
-            if (st === "idle" || st === "arrived") return;
-            // Offline / API error: keep the old route, surface a toast; the next
-            // qualifying off-route fix will retry.
-            useNavigationStore.setState({ status: "navigating" });
-            if (isConnectivityFailure(error, useNavigationStore.getState().connectivity)) {
-              useNavigationStore.getState().setRerouteUnavailable(true);
-            }
-            useNavigationStore.getState().signalRerouteFailed();
-          })
-          .finally(() => {
-            reroutingRef.current = false;
-          });
+          routeOptions,
+        });
+        if (started && retryRequested) lastHandledRetryNonceRef.current = rerouteRetryNonce;
       }
     },
-    [locale, speakCue, captureFix, matcherFor],
+    [speakCue, captureFix, matcherFor, executeReroute],
   );
 
   // Reset per-session tick state (spoken cues + deviation history) whenever the
@@ -330,6 +378,8 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
   const navStatus = useNavigationStore((s) => s.status);
   useEffect(() => {
     if (navStatus === "idle") {
+      rerouteAttemptRef.current++;
+      reroutingRef.current = false;
       rerouteTimesRef.current = [];
       rerouteCooldownUntilRef.current = 0;
       lastRealFixRef.current = null;
@@ -365,7 +415,7 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
       backoffMs,
       Date.now(),
     );
-    if (!fire || reroutingRef.current || Date.now() < rerouteCooldownUntilRef.current) return;
+    if (!fire) return;
     const store = useNavigationStore.getState();
     const { route, mode, destinationWaypoints, progress, routeOptions } = store;
     if (store.connectivity === "offline" || store.rerouteUnavailable) {
@@ -373,52 +423,17 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
       return;
     }
     if (!route || !progress) return;
-    reroutingRef.current = true;
-    haptics.warn();
-    store.beginReroute();
-    const from = progress.snapped;
-    const waypoints = remainingWaypoints(
-      matcherFor(route.geometry),
+    executeReroute({
+      trigger: "closure",
+      route,
+      matcher: matcherFor(route.geometry),
+      origin: progress.snapped,
+      alongMeters: progress.alongMeters,
       destinationWaypoints,
-      from,
-      progress.alongMeters,
-    );
-    fetchDirections({ waypoints, mode, lang: locale, ...routeOptions, avoidClosures: true })
-      .then((res) => {
-        const st = useNavigationStore.getState().status;
-        if (st === "idle" || st === "arrived") return;
-        const next = res.routes?.[res.activeRouteIndex ?? 0];
-        if (next) {
-          const now = Date.now();
-          rerouteTimesRef.current = pruneRerouteTimes(
-            [...rerouteTimesRef.current, now],
-            now,
-            REROUTE_CHURN_WINDOW_MS,
-          );
-          if (isReroutingTooOften(rerouteTimesRef.current, REROUTE_CHURN_MAX)) {
-            rerouteCooldownUntilRef.current = now + REROUTE_CHURN_COOLDOWN_MS;
-            rerouteTimesRef.current = [];
-          }
-          tickRef.current = freshTick();
-          useNavigationStore.getState().applyReroute(next, res.provider);
-        } else {
-          useNavigationStore.setState({ status: "navigating" });
-          useNavigationStore.getState().signalRerouteFailed();
-        }
-      })
-      .catch((error) => {
-        const st = useNavigationStore.getState().status;
-        if (st === "idle" || st === "arrived") return;
-        useNavigationStore.setState({ status: "navigating" });
-        if (isConnectivityFailure(error, useNavigationStore.getState().connectivity)) {
-          useNavigationStore.getState().setRerouteUnavailable(true);
-        }
-        useNavigationStore.getState().signalRerouteFailed();
-      })
-      .finally(() => {
-        reroutingRef.current = false;
-      });
-  }, [incidents, incidentStatus, avoidIncidents, navStatus, locale, matcherFor]);
+      mode,
+      routeOptions,
+    });
+  }, [incidents, incidentStatus, avoidIncidents, navStatus, matcherFor, executeReroute]);
 
   // Opt into the navigation simulator from the URL (`?navsim=1`) once on mount.
   // It swaps synthetic fixes for real geolocation so the full pipeline can be

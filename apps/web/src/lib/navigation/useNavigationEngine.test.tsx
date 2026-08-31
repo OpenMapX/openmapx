@@ -76,6 +76,27 @@ const route = {
   ],
 } as unknown as Route;
 
+function offRouteFixes(timestampOffset = 0): FixInput[] {
+  return [
+    { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: timestampOffset + 1000 },
+    { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: timestampOffset + 2000 },
+    { coords: [0.0014, 0.002], accuracy: 5, speed: 15, timestampMs: timestampOffset + 3000 },
+    { coords: [0.0016, 0.002], accuracy: 5, speed: 15, timestampMs: timestampOffset + 4000 },
+    { coords: [0.0018, 0.002], accuracy: 5, speed: 15, timestampMs: timestampOffset + 5000 },
+    { coords: [0.002, 0.002], accuracy: 5, speed: 15, timestampMs: timestampOffset + 6000 },
+  ];
+}
+
+async function triggerOffRoute(timestampOffset = 0): Promise<FixInput[]> {
+  const fixes = offRouteFixes(timestampOffset);
+  await act(async () => {
+    for (const fix of fixes) fixHandler?.(fix);
+    await Promise.resolve();
+    await Promise.resolve();
+  });
+  return fixes;
+}
+
 describe("useNavigationEngine", () => {
   beforeEach(() => {
     useNavigationStore.getState().stopNavigation();
@@ -107,25 +128,14 @@ describe("useNavigationEngine", () => {
     // Enough moving, off-route fixes (each ~222 m off the line) to accrue the
     // off-route score past the reroute threshold. They advance east, parallel to
     // the route, so this reads as a deviation rather than a wrong-way turn.
-    const offFixes: FixInput[] = [
-      { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: 1000 },
-      { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: 2000 },
-      { coords: [0.0014, 0.002], accuracy: 5, speed: 15, timestampMs: 3000 },
-      { coords: [0.0016, 0.002], accuracy: 5, speed: 15, timestampMs: 4000 },
-      { coords: [0.0018, 0.002], accuracy: 5, speed: 15, timestampMs: 5000 },
-      { coords: [0.002, 0.002], accuracy: 5, speed: 15, timestampMs: 6000 },
-    ];
-    await act(async () => {
-      for (const f of offFixes) fixHandler?.(f);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    const offFixes = await triggerOffRoute();
     expect(fetchDirections).toHaveBeenCalled();
     expect(fetchDirections).toHaveBeenCalledWith(
       expect.objectContaining({
         // The fifth fix reaches the score threshold. A reroute must start at
         // that raw GPS position, not its projection onto the obsolete route.
         waypoints: [offFixes[4].coords, [0.004, 0]],
+        avoidClosures: false,
       }),
     );
     expect(useNavigationStore.getState().route?.distance).toBe(999);
@@ -138,18 +148,7 @@ describe("useNavigationEngine", () => {
     ]);
     useNavigationStore.getState().setConnectivity("offline");
     renderHook(() => useNavigationEngine(disabledResource));
-    const offFixes: FixInput[] = [
-      { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: 1000 },
-      { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: 2000 },
-      { coords: [0.0014, 0.002], accuracy: 5, speed: 15, timestampMs: 3000 },
-      { coords: [0.0016, 0.002], accuracy: 5, speed: 15, timestampMs: 4000 },
-      { coords: [0.0018, 0.002], accuracy: 5, speed: 15, timestampMs: 5000 },
-      { coords: [0.002, 0.002], accuracy: 5, speed: 15, timestampMs: 6000 },
-    ];
-    await act(async () => {
-      for (const fix of offFixes) fixHandler?.(fix);
-      await Promise.resolve();
-    });
+    await triggerOffRoute();
     expect(fetchDirections).toHaveBeenCalledTimes(0);
     expect(useNavigationStore.getState().route?.distance).toBe(444);
     expect(useNavigationStore.getState().rerouteUnavailable).toBe(true);
@@ -167,22 +166,127 @@ describe("useNavigationEngine", () => {
     const route2 = { ...route, distance: 1111 } as Route;
     fetchDirections.mockResolvedValue({ routes: [route2], activeRouteIndex: 0 });
     renderHook(() => useNavigationEngine(disabledResource));
-    const offFixes: FixInput[] = [
-      { coords: [0.001, 0.002], accuracy: 5, speed: 15, timestampMs: 1000 },
-      { coords: [0.0012, 0.002], accuracy: 5, speed: 15, timestampMs: 2000 },
-      { coords: [0.0014, 0.002], accuracy: 5, speed: 15, timestampMs: 3000 },
-      { coords: [0.0016, 0.002], accuracy: 5, speed: 15, timestampMs: 4000 },
-      { coords: [0.0018, 0.002], accuracy: 5, speed: 15, timestampMs: 5000 },
-      { coords: [0.002, 0.002], accuracy: 5, speed: 15, timestampMs: 6000 },
-    ];
-    await act(async () => {
-      for (const fix of offFixes) fixHandler?.(fix);
-      await Promise.resolve();
-      await Promise.resolve();
-    });
+    await triggerOffRoute();
     expect(fetchDirections).toHaveBeenCalledTimes(1);
     expect(useNavigationStore.getState().route?.distance).toBe(1111);
     expect(useNavigationStore.getState().rerouteUnavailable).toBe(false);
+  });
+
+  it("returns to the old route state after a network failure", async () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    fetchDirections.mockRejectedValue(new TypeError("Failed to fetch"));
+    renderHook(() => useNavigationEngine(disabledResource));
+
+    await triggerOffRoute();
+
+    const state = useNavigationStore.getState();
+    expect(state.status).toBe("navigating");
+    expect(state.route).toBe(route);
+    expect(state.rerouteFailedNonce).toBe(1);
+    expect(state.rerouteUnavailable).toBe(true);
+  });
+
+  it("ignores a reroute that completes after navigation stops", async () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    let resolveResponse: (response: { routes: Route[]; activeRouteIndex: number }) => void =
+      () => {};
+    fetchDirections.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
+    renderHook(() => useNavigationEngine(disabledResource));
+
+    await triggerOffRoute();
+    act(() => useNavigationStore.getState().stopNavigation());
+    await act(async () => {
+      resolveResponse({ routes: [{ ...route, distance: 999 } as Route], activeRouteIndex: 0 });
+      await Promise.resolve();
+    });
+
+    expect(useNavigationStore.getState().status).toBe("idle");
+    expect(useNavigationStore.getState().route).toBeNull();
+  });
+
+  it("ignores a reroute that completes after the engine unmounts", async () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    let resolveResponse: (response: { routes: Route[]; activeRouteIndex: number }) => void =
+      () => {};
+    fetchDirections.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
+    const { unmount } = renderHook(() => useNavigationEngine(disabledResource));
+
+    await triggerOffRoute();
+    unmount();
+    await act(async () => {
+      resolveResponse({ routes: [{ ...route, distance: 999 } as Route], activeRouteIndex: 0 });
+      await Promise.resolve();
+    });
+
+    expect(useNavigationStore.getState().status).toBe("navigating");
+    expect(useNavigationStore.getState().route).toBe(route);
+  });
+
+  it("suppresses concurrent reroute attempts", async () => {
+    useNavigationStore.getState().startGroundNavigation(route, "driving", [
+      [0, 0],
+      [0.004, 0],
+    ]);
+    let resolveResponse: (response: { routes: Route[]; activeRouteIndex: number }) => void =
+      () => {};
+    fetchDirections.mockReturnValue(
+      new Promise((resolve) => {
+        resolveResponse = resolve;
+      }),
+    );
+    renderHook(() => useNavigationEngine(disabledResource));
+
+    await triggerOffRoute();
+    await triggerOffRoute(10_000);
+    expect(fetchDirections).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      resolveResponse({ routes: [{ ...route, distance: 999 } as Route], activeRouteIndex: 0 });
+      await Promise.resolve();
+    });
+  });
+
+  it("enters a cooldown after three successful reroutes in the churn window", async () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(100_000);
+      useNavigationStore.getState().startGroundNavigation(route, "driving", [
+        [0, 0],
+        [0.004, 0],
+      ]);
+      fetchDirections.mockImplementation(async () => ({
+        routes: [{ ...route, distance: 500 + fetchDirections.mock.calls.length } as Route],
+        activeRouteIndex: 0,
+      }));
+      renderHook(() => useNavigationEngine(disabledResource));
+
+      await triggerOffRoute();
+      await triggerOffRoute(10_000);
+      await triggerOffRoute(20_000);
+      expect(fetchDirections).toHaveBeenCalledTimes(3);
+
+      await triggerOffRoute(30_000);
+      expect(fetchDirections).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 
