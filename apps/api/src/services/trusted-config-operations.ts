@@ -4,10 +4,10 @@ import {
   trustedConfigurationPayloadSchema,
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
+import { envString } from "@openmapx/core/server-env";
 import { db } from "../db";
 import { integrationConfig } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
-import { envString } from "../utils/env";
 import { getServiceSelectionSummary } from "./admin-cli";
 import { createApiOpsClient, executeAndWait } from "./ops-client";
 import { resolveAllServiceConfigs } from "./service-config-resolver";

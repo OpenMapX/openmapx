@@ -1,7 +1,7 @@
 import { isGooglePhotosImageUrl, resolveGooglePhotosLink } from "@integrations/photos/orchestrator";
 import { fetchWithRedirects, USER_AGENT } from "@openmapx/core";
+import { envString } from "@openmapx/core/server-env";
 import type { FastifyPluginAsync } from "fastify";
-import { envString } from "../utils/env.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
 

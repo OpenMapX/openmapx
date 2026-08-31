@@ -1,5 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { envString } from "@openmapx/core/server-env";
 import { feedState } from "@openmapx/db-schema";
 import {
   FEED_PROXY_CONFIG_FILENAME,
@@ -64,7 +65,6 @@ import {
 import { asJobLogger, jobChildLogger } from "./logger.js";
 import { runOpsOperation } from "./ops-client.js";
 import type { StateStore } from "./state.js";
-import { envString } from "./utils/env.js";
 
 /**
  * Default cron expressions. The sync runs once daily at 03:00 UTC — late

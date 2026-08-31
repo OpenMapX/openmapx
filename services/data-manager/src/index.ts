@@ -1,6 +1,4 @@
-// Replace the bundled undici before any module captures global fetch
-// (see undici-fetch.ts).
-import "./undici-fetch.js";
+import "@openmapx/core/undici-fetch";
 import { accessSync, constants } from "node:fs";
 import { join } from "node:path";
 import { createFatalProcessHandler } from "@openmapx/core/server";

@@ -1,12 +1,11 @@
-// Must run first: swap the process's global fetch onto the fixed standalone
-// undici before any module captures or uses it (see undici-fetch.ts).
-import "./undici-fetch";
+import "@openmapx/core/undici-fetch";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
 import { createFatalProcessHandler, findRepoRoot } from "@openmapx/core/server";
+import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { eq } from "drizzle-orm";
 import { migrate } from "drizzle-orm/postgres-js/migrator";
@@ -81,7 +80,6 @@ import { applyTrustedConfiguration } from "./services/trusted-config-operations"
 import { applyRequiredMigrations } from "./startup-migrations";
 import { configuredTrustedWebOrigins, makeCsrfGuardHook } from "./utils/csrf";
 import { dockerComposeAction } from "./utils/docker-compose";
-import { envInt, envString } from "./utils/env";
 import {
   authLimit,
   expensivePublicApiLimit,

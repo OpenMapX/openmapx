@@ -5,9 +5,10 @@
  * caller's own session headers; nothing here reads or decrypts the account
  * table directly.
  */
+
+import { envString } from "@openmapx/core/server-env";
 import { auth } from "../../auth.js";
 import { redis } from "../../redis.js";
-import { envString } from "../../utils/env.js";
 import { getOsmConfig } from "../../utils/osm-config.js";
 import { recordOsmContributionOperation } from "../metrics/index.js";
 import { createOsmAccountService, type OsmTokenResolution } from "./account.js";

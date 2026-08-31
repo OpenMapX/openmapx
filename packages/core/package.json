@@ -26,6 +26,22 @@
       "types": "./src/repo-paths.ts",
       "default": "./src/repo-paths.ts"
     },
+    "./cache-namespaces": {
+      "types": "./src/cache-namespaces.ts",
+      "default": "./src/cache-namespaces.ts"
+    },
+    "./redis-secret": {
+      "types": "./src/redis-secret.ts",
+      "default": "./src/redis-secret.ts"
+    },
+    "./server-env": {
+      "types": "./src/server-env.ts",
+      "default": "./src/server-env.ts"
+    },
+    "./undici-fetch": {
+      "types": "./src/undici-fetch.ts",
+      "default": "./src/undici-fetch.ts"
+    },
     "./legal": {
       "types": "./src/legal.ts",
       "default": "./src/legal.ts"

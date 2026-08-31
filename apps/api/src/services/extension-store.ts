@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { USER_AGENT_ADMIN, validatePublicUrl } from "@openmapx/core";
 import { services as coreServices, safeFetchJson, safeFetchText } from "@openmapx/core/server";
+import { envString } from "@openmapx/core/server-env";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
 import { db } from "../db";
 import {
@@ -9,7 +10,6 @@ import {
   installedExtensionComponent,
 } from "../db/schema";
 import { redis } from "../redis";
-import { envString } from "../utils/env.js";
 import { safeErrorClass, summarizeExternalUrl } from "../utils/safe-log-fields.js";
 import { appLogger } from "./app-logger.js";
 

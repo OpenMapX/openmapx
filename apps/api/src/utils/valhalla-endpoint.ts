@@ -1,5 +1,5 @@
+import { envString } from "@openmapx/core/server-env";
 import { serviceUrl } from "../services/service-registry.js";
-import { envString } from "./env.js";
 
 /**
  * Final public Valhalla fallback. The former FOSSGIS demo

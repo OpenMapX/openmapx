@@ -1,5 +1,5 @@
+import { envString } from "@openmapx/core/server-env";
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { envString } from "./env.js";
 
 const DEFAULT_WEB_ORIGIN = "http://localhost:3000";
 const UNSAFE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);

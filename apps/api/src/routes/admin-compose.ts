@@ -1,4 +1,5 @@
 import { repoPaths, services } from "@openmapx/core/server";
+import { envString } from "@openmapx/core/server-env";
 import type { FastifyInstance } from "fastify";
 import { applyHardlinksFromPlan, renderAndPersistCompose } from "../services/admin-ops";
 import {
@@ -9,7 +10,6 @@ import {
 import { resolveAllServiceConfigs } from "../services/service-config-resolver";
 import { getServiceRegistry } from "../services/service-registry";
 import { dockerComposeAction, STACK_STOP_GUIDANCE } from "../utils/docker-compose";
-import { envString } from "../utils/env";
 import { requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
 

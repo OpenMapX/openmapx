@@ -1,9 +1,9 @@
 import { createHash, timingSafeEqual } from "node:crypto";
+import { envString } from "@openmapx/core/server-env";
 import { eq } from "drizzle-orm";
 import { db } from "../../db/index.js";
 import { oauthClient, serviceConfig } from "../../db/schema.js";
 import { inspectDawarichProvisioning } from "../../utils/docker-compose.js";
-import { envString } from "../../utils/env.js";
 import { resolveEffectiveServiceConfig } from "../service-config-resolver.js";
 import { getServiceRegistry, serviceUrl } from "../service-registry.js";
 import { getServiceSecretStrict } from "../service-secrets.js";

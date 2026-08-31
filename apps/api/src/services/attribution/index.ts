@@ -1,10 +1,10 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
+import { envString } from "@openmapx/core/server-env";
 import type { Logger } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { TTL } from "@openmapx/mobility-core/policy";
 import type Redis from "ioredis";
-import { envString } from "../../utils/env.js";
 import { loadAttributionIndex } from "./index-loader.js";
 import type { ManifestDataSource, MotisLicenseEntry, ResolvedAttribution } from "./types.js";
 

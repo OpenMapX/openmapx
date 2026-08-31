@@ -1,7 +1,7 @@
 import { closeSync, openSync, readSync, writeSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { envString } from "../../utils/env.js";
+import { envString } from "@openmapx/core/server-env";
 import { encodeTrafficSpeed } from "./traffic-speed.js";
 import type { WayEdge } from "./ways-to-edges.js";
 

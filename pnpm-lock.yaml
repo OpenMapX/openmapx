@@ -175,9 +175,6 @@ importers:
       tsx:
         specifier: 4.23.12
         version: 4.23.12
-      undici:
-        specifier: ^8.9.0
-        version: 8.10.0
       zod:
         specifier: ^4.4.3
         version: 4.4.3
@@ -327,6 +324,9 @@ importers:
       tsx:
         specifier: 4.23.12
         version: 4.23.12
+      undici:
+        specifier: ^8.9.0
+        version: 8.10.0
     devDependencies:
       '@types/node':
         specifier: ^26.3.0
@@ -2602,9 +2602,6 @@ importers:
       tsx:
         specifier: 4.23.12
         version: 4.23.12
-      undici:
-        specifier: ^8.9.0
-        version: 8.10.0
     devDependencies:
       '@testcontainers/postgresql':
         specifier: ^12.1.0

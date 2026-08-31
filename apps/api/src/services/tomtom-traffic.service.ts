@@ -1,5 +1,5 @@
 import { USER_AGENT } from "@openmapx/core";
-import { envString } from "../utils/env.js";
+import { envString } from "@openmapx/core/server-env";
 import type { TrafficProvider, TrafficTile } from "./traffic.provider";
 import { TrafficProviderHttpError } from "./traffic.provider";
 

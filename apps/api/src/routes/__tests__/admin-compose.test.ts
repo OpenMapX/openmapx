@@ -13,6 +13,7 @@ vi.mock("@openmapx/core/server", () => ({
     renderCompose: vi.fn(),
   },
 }));
+vi.mock("@openmapx/core/server-env", () => ({ envString: vi.fn() }));
 vi.mock("../../services/admin-ops", () => ({
   applyHardlinksFromPlan: (...args: unknown[]) => applyHardlinksFromPlan(...args),
   renderAndPersistCompose: (...args: unknown[]) => renderAndPersistCompose(...args),
@@ -26,7 +27,6 @@ vi.mock("../../utils/docker-compose", () => ({
   STACK_STOP_GUIDANCE:
     "Stack shutdown is unavailable from the web API because it would stop the operations agent. Run the documented host shutdown command instead.",
 }));
-vi.mock("../../utils/env", () => ({ envString: vi.fn() }));
 vi.mock("../../utils/require-admin", () => ({ requireAdmin: vi.fn().mockResolvedValue(adminA) }));
 vi.mock("../../utils/route-auth", () => ({ declareRouteAuth: vi.fn() }));
 

@@ -5,6 +5,7 @@ import {
   parseOfflinePackageRequest,
   validateOfflineMapPackageManifest,
 } from "@openmapx/core";
+import { envString } from "@openmapx/core/server-env";
 import type { FastifyPluginAsync, FastifyReply, FastifyRequest } from "fastify";
 import { redis } from "../redis.js";
 import {
@@ -12,7 +13,6 @@ import {
   OfflinePackagePrepareRateLimiter,
   readOfflinePackagePrincipalKeyFile,
 } from "../services/offline-package-principal.js";
-import { envString } from "../utils/env.js";
 import { getUserId, requireAuthHook } from "../utils/require-auth.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 

@@ -1,12 +1,8 @@
+import { aggregateCacheNamespaces, resolveCachePattern } from "@openmapx/core/cache-namespaces";
 import type { FastifyInstance } from "fastify";
 import { redis } from "../redis";
 import { writeAuditLog } from "../utils/audit-log";
-import {
-  APP_CACHE_PREFIXES,
-  aggregateNamespaces,
-  isAppCachePattern,
-  resolveCachePattern,
-} from "../utils/cache-namespaces";
+import { APP_CACHE_PREFIXES, isAppCachePattern } from "../utils/cache-policy";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
 
@@ -57,7 +53,7 @@ export async function adminCacheRoute(app: FastifyInstance): Promise<void> {
       keys.push(...(await scanKeys(redis, glob)));
     }
 
-    const namespaces = aggregateNamespaces(keys).map((n) => ({
+    const namespaces = aggregateCacheNamespaces(keys).map((n) => ({
       namespace: n.namespace,
       keyCount: n.count,
     }));

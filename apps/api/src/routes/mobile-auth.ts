@@ -1,3 +1,4 @@
+import { envString } from "@openmapx/core/server-env";
 import { fromNodeHeaders } from "better-auth/node";
 import type {
   FastifyContextConfig,
@@ -7,7 +8,6 @@ import type {
 } from "fastify";
 import { auth } from "../auth";
 import { MobileAuthHandoffService } from "../services/mobileAuthHandoff";
-import { envString } from "../utils/env";
 import { declareRouteAuth } from "../utils/route-auth";
 
 /**

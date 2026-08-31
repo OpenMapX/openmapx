@@ -1,8 +1,8 @@
 import type { StreetLevelCapabilities } from "@openmapx/core";
+import { envString } from "@openmapx/core/server-env";
 import type { StreetLevelProvider } from "@openmapx/integration-framework";
 import type { FastifyInstance } from "fastify";
 import { getAllIntegrations, getIntegrationProviders } from "../integration-host.js";
-import { envString } from "../utils/env.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
 
 /**

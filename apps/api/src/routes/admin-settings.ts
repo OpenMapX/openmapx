@@ -1,3 +1,4 @@
+import { envString } from "@openmapx/core/server-env";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
@@ -5,7 +6,6 @@ import { appLogger } from "../services/app-logger";
 import { invalidateDataUsePolicy, refreshDataUsePolicy } from "../services/data-use-policy";
 import { writeAuditLog } from "../utils/audit-log";
 import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } from "../utils/email";
-import { envString } from "../utils/env";
 import { emailTestLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";

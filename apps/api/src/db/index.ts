@@ -1,7 +1,7 @@
 import { assertProductionDatabaseUrlSecret } from "@openmapx/core/deployment-secret-policy";
+import { envString } from "@openmapx/core/server-env";
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
-import { envString } from "../utils/env";
 import * as schema from "./schema";
 
 const connectionString = envString(

@@ -19,10 +19,10 @@ afterAll(() => {
   Object.assign(globalThis, originalFetchGlobals);
 });
 
-describe("standalone undici fetch runtime", () => {
+describe("standalone Undici fetch runtime", () => {
   it("installs one coherent Fetch API implementation", async () => {
     vi.resetModules();
-    await import("../undici-fetch.js");
+    await import("./undici-fetch");
 
     expect(globalThis.fetch).toBe(standaloneFetch);
     expect(globalThis.FormData).toBe(StandaloneFormData);

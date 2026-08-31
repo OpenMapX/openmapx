@@ -1,36 +1,7 @@
+import { aggregateCacheNamespaces, resolveCachePattern } from "@openmapx/core/cache-namespaces";
 import type { Command } from "commander";
 import { dockerCompose } from "../lib/docker";
 import { log, table } from "../lib/output";
-
-/**
- * Turn a `cache clear` target into a Redis key glob.
- *
- * A bare word is treated as an integration namespace (`geocoding` →
- * `int:geocoding:*`), matching the `int:<id>:` prefix every integration's
- * `ctx.cache` writes under. Anything already containing a `*` is passed through
- * verbatim, so callers can target other prefixes too (e.g. `cache:geocode*` for
- * the API's own `withCache` keys, or `int:transit:*`).
- */
-export function resolveCachePattern(target: string): string {
-  return target.includes("*") ? target : `int:${target}:*`;
-}
-
-/**
- * Group Redis keys by namespace (everything up to the last `:` segment) with a
- * count each, sorted by count desc then name. Used by `cache list` to show what
- * is cached without dumping individual keys.
- */
-export function aggregateNamespaces(keys: string[]): Array<{ namespace: string; count: number }> {
-  const counts = new Map<string, number>();
-  for (const key of keys) {
-    const idx = key.lastIndexOf(":");
-    const namespace = idx === -1 ? key : key.slice(0, idx);
-    counts.set(namespace, (counts.get(namespace) ?? 0) + 1);
-  }
-  return [...counts.entries()]
-    .map(([namespace, count]) => ({ namespace, count }))
-    .sort((a, b) => b.count - a.count || a.namespace.localeCompare(b.namespace));
-}
 
 /** Run `redis-cli` inside the compose `redis` service. */
 async function redisCli(args: string[]) {
@@ -66,7 +37,7 @@ export function registerCacheCommands(program: Command): void {
         log.info("Cache is empty.");
         return;
       }
-      const rows = aggregateNamespaces(keys).map((r) => ({
+      const rows = aggregateCacheNamespaces(keys).map((r) => ({
         namespace: r.namespace,
         count: String(r.count),
       }));

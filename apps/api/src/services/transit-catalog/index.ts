@@ -1,7 +1,7 @@
 import { normalizeProducerUrl } from "@integrations/transit-mobility-database";
+import { envString } from "@openmapx/core/server-env";
 import type { GtfsCatalogProvider } from "@openmapx/integration-framework";
 import { getIntegrationsByDomain } from "../../integration-host.js";
-import { envString } from "../../utils/env.js";
 import type { TransitCatalogFeed } from "./types.js";
 
 const DATA_MANAGER_URL_DEFAULT = "http://localhost:4000";

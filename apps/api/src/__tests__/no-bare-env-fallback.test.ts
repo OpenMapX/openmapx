@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
  *
  * Compose renders optional container vars as `${VAR:-}`, which injects EMPTY
  * STRINGS for unset vars, and `"" ?? fallback` keeps the empty string. Env
- * VALUE reads must go through `envString`/`envInt` (src/utils/env.ts) so a
+ * VALUE reads must go through `envString`/`envInt` from the shared server-env module so a
  * blank var falls back. `?? null` / `?? undefined` passthroughs are exempt:
  * they normalize absence rather than pick a usable value.
  */
@@ -98,7 +98,7 @@ describe("no bare ?? fallback on a process.env read", () => {
     expect(
       offenders,
       `Bare \`??\` fallback on a process.env read — Compose \`\${VAR:-}\` injects ` +
-        `empty strings, which \`??\` keeps. Use envString/envInt from src/utils/env.ts ` +
+        `empty strings, which \`??\` keeps. Use envString/envInt from @openmapx/core/server-env ` +
         `(or add to ALLOWLIST with justification):\n${offenders.join("\n")}`,
     ).toEqual([]);
   });

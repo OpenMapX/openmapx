@@ -1,4 +1,4 @@
-import { envString } from "../utils/env";
+import { envString } from "@openmapx/core/server-env";
 import { tomtomTrafficService } from "./tomtom-traffic.service";
 import type { TrafficProvider } from "./traffic.provider";
 

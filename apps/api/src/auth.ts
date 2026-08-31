@@ -2,6 +2,7 @@ import { expo } from "@better-auth/expo";
 import { i18n } from "@better-auth/i18n";
 import { oauthProvider } from "@better-auth/oauth-provider";
 import { passkey } from "@better-auth/passkey";
+import { envString } from "@openmapx/core/server-env";
 import { type BetterAuthOptions, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import {
@@ -32,7 +33,6 @@ import {
   twoFactorOtpEmail,
   verifyEmailEmail,
 } from "./utils/emailTemplates";
-import { envString } from "./utils/env";
 import { getOsmConfig } from "./utils/osm-config";
 import { createProviderAvatarSync } from "./utils/provider-avatar";
 import { projectSessionPayload } from "./utils/session-projection";

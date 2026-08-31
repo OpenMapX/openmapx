@@ -1,7 +1,7 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { envString } from "@openmapx/core/server-env";
 import { runOpsOperation } from "../../ops-client.js";
-import { envString } from "../../utils/env.js";
 import { fetchCoveredWayIds } from "./covered-ways.js";
 import {
   type EnsureTrafficExtractResult,
