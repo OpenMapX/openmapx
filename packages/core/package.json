@@ -109,6 +109,10 @@
     "./utils/osmCategoryFilters": {
       "types": "./src/utils/osmCategoryFilters.ts",
       "default": "./src/utils/osmCategoryFilters.ts"
+    },
+    "./test/query": {
+      "types": "./src/test/queryWrapper.tsx",
+      "default": "./src/test/queryWrapper.tsx"
     }
   },
   "scripts": {
