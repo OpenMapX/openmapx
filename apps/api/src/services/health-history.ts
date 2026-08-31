@@ -1,4 +1,4 @@
-import { and, desc, eq, gt, lt, sql } from "drizzle-orm";
+import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "../db";
 import { healthHistory } from "../db/schema";
 
@@ -15,19 +15,6 @@ export async function recordHealthResult(
     responseTime: responseTime ?? null,
     error: error ?? null,
   });
-}
-
-/** Get raw health history entries for a service within a timeframe. */
-export async function getHistory(
-  serviceId: string,
-  hours = 24,
-): Promise<Array<typeof healthHistory.$inferSelect>> {
-  const since = new Date(Date.now() - hours * 60 * 60 * 1000);
-  return db
-    .select()
-    .from(healthHistory)
-    .where(and(eq(healthHistory.serviceId, serviceId), gt(healthHistory.checkedAt, since)))
-    .orderBy(desc(healthHistory.checkedAt));
 }
 
 /** Aggregate health history into hourly buckets with uptime percentage. */

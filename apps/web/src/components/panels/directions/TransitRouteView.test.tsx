@@ -53,10 +53,6 @@ vi.mock("@/lib/fareUtils", () => ({
   formatFare: () => "",
 }));
 
-vi.mock("@/lib/formatTime", () => ({
-  formatTime: (value: string) => value,
-}));
-
 vi.mock("@/lib/theme", () => ({
   BRAND: "#0f9d58",
   BRAND_HEX: "#0f9d58",

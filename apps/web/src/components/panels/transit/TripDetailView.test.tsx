@@ -119,10 +119,6 @@ vi.mock("@/lib/useAttributionFromHooks", () => ({
   ],
 }));
 
-vi.mock("@/lib/formatTime", () => ({
-  formatTime: (value: string) => value.slice(11, 16),
-}));
-
 vi.mock("@/lib/theme", () => ({
   BRAND: "#008080",
 }));

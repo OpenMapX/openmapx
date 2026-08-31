@@ -1,8 +1,8 @@
 import { fetchJson } from "@openmapx/core";
 import { z } from "zod";
 
-export const AUTH_PROVIDER_TIMEOUT_MS = 8_000;
-export const AUTH_PROVIDER_MAX_BYTES = 256 * 1024;
+const AUTH_PROVIDER_TIMEOUT_MS = 8_000;
+const AUTH_PROVIDER_MAX_BYTES = 256 * 1024;
 
 export class AuthProviderRequestError extends Error {
   readonly code = "auth-provider-request-failed";

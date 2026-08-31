@@ -105,7 +105,7 @@ async function fetchRegionStations(
 /**
  * Search Cambio stations within a bounding box.
  */
-export async function searchDeCambio(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
+async function searchDeCambio(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
   const regions = findRegionsInBbox(bbox);
   if (regions.length === 0) return [];
 

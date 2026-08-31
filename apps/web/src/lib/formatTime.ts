@@ -1,5 +1,3 @@
-export { formatTime, relativeTime } from "@openmapx/core";
-
 /**
  * Format an ISO timestamp as a coarse relative time for admin/activity views:
  * "just now", "5m ago", "3h ago", otherwise the locale date string.

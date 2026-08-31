@@ -20,10 +20,6 @@ export function registerCarSharingClient(client: RegionalCarSharingClient): void
   clients.push(client);
 }
 
-export function getRegisteredClients(): readonly RegionalCarSharingClient[] {
-  return clients;
-}
-
 /**
  * Search all registered regional clients whose regions overlap the bbox.
  * Returns stations from all matching clients.

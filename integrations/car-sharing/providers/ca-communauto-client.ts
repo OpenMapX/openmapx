@@ -160,7 +160,7 @@ async function fetchCityStations(
 }
 
 /** Search Communauto stations within a bounding box across all matching Canadian cities. */
-export async function searchCaCommunauto(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
+async function searchCaCommunauto(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
   const padding = 1; // ~1° latitude of slack around each city centroid
   const cities = CA_COMMUNAUTO_CITIES.filter((c) => {
     const pad = c.radiusKm / 111 + padding;

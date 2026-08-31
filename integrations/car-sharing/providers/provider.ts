@@ -33,6 +33,7 @@ import {
   stripMobilityKindPrefix,
 } from "@openmapx/mobility-core/mapper";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
+import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
 import { buildSharedMobilityMapContext } from "@openmapx/mobility-core/shared-mobility-context";
 import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
 import { mergeRegionalStations } from "./merge-stations.js";
@@ -62,7 +63,7 @@ const META: DataSourceMeta = {
   osmFilters: CATEGORY_FILTERS.car_sharing,
 };
 
-const CAR_FORM_FACTORS = new Set<import("./types.js").VehicleFormFactor>(["car"]);
+const CAR_FORM_FACTORS = new Set<VehicleFormFactor>(["car"]);
 
 // Manifest-driven attribution. Populated by `setManifestDataSources` during
 // `setup(ctx)` from `ctx.manifest.dataSources`.
