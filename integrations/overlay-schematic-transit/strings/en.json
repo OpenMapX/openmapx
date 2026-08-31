@@ -1,0 +1,11 @@
+{
+  "name": "Schematic Transit Map",
+  "description": "Overlay schematic transit-network maps — tram, metro and light rail, commuter rail, and long-distance rail — in metro-map (octilinear), geographic, or radial layout. Rendered weekly from OpenStreetMap by LOOM (University of Freiburg) and proxied through this server.",
+  "dataSources": {
+    "loom-tiles": {
+      "purpose": "Schematic transit-network map tiles for the map overlay.",
+      "dataSent": "Map tile coordinates (zoom/x/y) and the selected network group and layout. Requests are made by the OpenMapX server, never directly by your browser.",
+      "dataReceived": "Vector map tiles containing transit lines and stations derived from OpenStreetMap."
+    }
+  }
+}

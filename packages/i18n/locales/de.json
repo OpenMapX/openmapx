@@ -347,7 +347,24 @@
     "airports": "Flughäfen",
     "nautical": "Seekarten",
     "sunTime": "Tageslicht & Zeitzonen",
+    "schematicTransit": "Schematischer Liniennetzplan",
     "closeMorePanel": "Erweitertes Menü schließen"
+  },
+  "schematicTransit": {
+    "title": "Schematischer Liniennetzplan",
+    "toggleOverlay": "Schematischen Liniennetzplan ein-/ausblenden",
+    "network": {
+      "tram": "Straßenbahn",
+      "subwayLightrail": "U-Bahn & Stadtbahn",
+      "railCommuter": "S-Bahn & Regionalverkehr",
+      "rail": "Fernverkehr"
+    },
+    "layout": {
+      "geo": "Geografisch",
+      "octi": "Metroplan",
+      "orthorad": "Radial"
+    },
+    "coverageNote": "Aus OpenStreetMap abgeleitet; Abdeckung und Aktualität variieren je nach Region."
   },
   "cycling": {
     "cyclingInfrastructure": "Radinfrastruktur",

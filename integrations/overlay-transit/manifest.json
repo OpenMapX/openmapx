@@ -17,7 +17,7 @@
       "preview": "preview.svg"
     },
     "overlay": {
-      "excludes": []
+      "excludes": ["schematic-transit"]
     }
   },
   "backend": {

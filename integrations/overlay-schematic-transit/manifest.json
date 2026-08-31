@@ -1,0 +1,62 @@
+{
+  "id": "overlay-schematic-transit",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "documentation": "https://loom.cs.uni-freiburg.de/tiles",
+  "domains": ["map-overlay"],
+  "frontend": {
+    "mapLayer": true,
+    "legend": true,
+    "panel": false,
+    "layerSelector": {
+      "group": "map-details",
+      "labelKey": "schematicTransit",
+      "icon": "route",
+      "preview": "preview.svg"
+    },
+    "overlay": {
+      "excludes": ["transit"]
+    }
+  },
+  "backend": {
+    "routes": true
+  },
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "enabled": {
+        "type": "boolean",
+        "default": true
+      },
+      "tileBaseUrl": {
+        "type": "string",
+        "default": "https://loom.cs.uni-freiburg.de/tiles",
+        "title": "Tile base URL",
+        "description": "Base URL of the LOOM vector-tile service. Point this at a self-hosted LOOM instance to stop using the hosted University of Freiburg service."
+      }
+    }
+  },
+  "healthCheck": {
+    "type": "http",
+    "url": "https://loom.cs.uni-freiburg.de/tiles/rail/geo/0/0/0.mvt"
+  },
+  "quality": "built-in",
+  "category": "Data Overlays",
+  "dataSources": [
+    {
+      "sourceId": "loom-tiles",
+      "name": "LOOM Transit Maps (University of Freiburg)",
+      "url": "https://loom.cs.uni-freiburg.de/tiles",
+      "license": "ODbL-1.0",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>, rendered by <a href=\"https://loom.cs.uni-freiburg.de/tiles\">LOOM</a> (University of Freiburg)",
+      "commercialUse": "unknown",
+      "providerCountry": "DE",
+      "providerPrivacyUrl": "https://uni-freiburg.de/datenschutzerklaerung/",
+      "endUserExposure": "proxied",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

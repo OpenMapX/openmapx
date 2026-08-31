@@ -73,6 +73,7 @@ The built-in overlays group into a few themes.
 | **Traffic**            | Live traffic-flow coloring on roads                  | TomTom Traffic (needs an API key) |
 | **Traffic flow**       | Congestion coloring from your own road-conditions feeds | [OpenConditions](../developer/building-an-external-extension.md) speed data |
 | **Transit lines**      | Public-transport routes and lines                    | OpenStreetMap                 |
+| **Schematic transit map** | Metro-map style network plans with layout and network-group choice | [LOOM](./schematic-transit-map.md) (University of Freiburg), OpenStreetMap-derived |
 | **Live transit**       | Real-time bus, tram, and train positions             | Live-vehicle feeds (e.g. DB RIS, Entur) |
 | **Airports**           | Airport locations and metadata                       | OurAirports                   |
 | **Road conditions**    | Incidents, roadworks, and closures (community extension) | [OpenConditions](../developer/building-an-external-extension.md) |

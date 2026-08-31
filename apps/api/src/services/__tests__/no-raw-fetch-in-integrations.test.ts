@@ -38,6 +38,8 @@ const RAW_FETCH_ALLOWLIST: Record<string, string> = {
     "Kartverket station list is XML, not JSON (regex-parsed, no XML dependency)",
   "integrations/overlay-satellite/index.ts":
     "GetCapabilities XML + binary legend/tile proxies — none are JSON",
+  "integrations/overlay-schematic-transit/index.ts":
+    "tile proxy: streams the binary MVT tile body through createBoundedBinaryProxyStream",
   "integrations/overlay-weather-alerts/index.ts": "MeteoAlarm Atom+CAP feeds are XML, not JSON",
   "integrations/overlay-weather/index.ts":
     "RainViewer + OWM tile proxies: forward binary PNG tiles verbatim",

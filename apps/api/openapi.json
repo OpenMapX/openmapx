@@ -3593,6 +3593,65 @@
         "x-openmapx-source": "integrations/overlay-satellite/index.ts"
       }
     },
+    "/api/integrations/overlay-schematic-transit/tiles/{network}/{layout}/{z}/{x}/{y}": {
+      "get": {
+        "operationId": "getApiIntegrationsOverlaySchematicTransitTilesNetworkLayoutZXY",
+        "parameters": [
+          {
+            "name": "network",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "layout",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "z",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "x",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "y",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /tiles/:network/:layout/:z/:x/:y (overlay-schematic-transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "overlay-schematic-transit",
+        "x-openmapx-source": "integrations/overlay-schematic-transit/index.ts"
+      }
+    },
     "/api/integrations/overlay-sun-time/timezones": {
       "get": {
         "operationId": "getApiIntegrationsOverlaySunTimeTimezones",

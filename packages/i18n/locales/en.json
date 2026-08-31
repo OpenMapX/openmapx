@@ -347,7 +347,24 @@
     "airports": "Airports",
     "nautical": "Nautical",
     "sunTime": "Daylight & time zones",
+    "schematicTransit": "Schematic transit map",
     "closeMorePanel": "Close more panel placeholder"
+  },
+  "schematicTransit": {
+    "title": "Schematic transit map",
+    "toggleOverlay": "Toggle schematic transit map overlay",
+    "network": {
+      "tram": "Tram",
+      "subwayLightrail": "Metro & light rail",
+      "railCommuter": "Commuter rail",
+      "rail": "Long-distance rail"
+    },
+    "layout": {
+      "geo": "Geographic",
+      "octi": "Metro map",
+      "orthorad": "Radial"
+    },
+    "coverageNote": "Derived from OpenStreetMap; coverage and freshness vary by region."
   },
   "cycling": {
     "cyclingInfrastructure": "Cycling Infrastructure",
