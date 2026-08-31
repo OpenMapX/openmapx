@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, unlink, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
+import { fetchJson } from "@openmapx/core";
 import { createPassthroughCache } from "@openmapx/integration-framework/testing";
 import { buildSemanticCategoryCatalog } from "@openmapx/presets";
 import { createOllamaEmbeddingClient } from "../ollama-embeddings.js";
@@ -327,9 +328,10 @@ export function measureSemanticBypassLatency(
 }
 
 async function installedModels(endpoint: string): Promise<Map<string, string>> {
-  const response = await fetch(`${endpoint}/api/tags`);
-  if (!response.ok) throw new Error(`Ollama tags HTTP ${response.status}`);
-  const value = (await response.json()) as { models?: Array<{ name?: string; digest?: string }> };
+  const value = await fetchJson<{ models?: Array<{ name?: string; digest?: string }> }>(
+    `${endpoint}/api/tags`,
+    { label: "Ollama tags" },
+  );
   if (!Array.isArray(value.models)) throw new Error("Ollama tags response is malformed");
   return new Map(
     value.models.flatMap((model) =>

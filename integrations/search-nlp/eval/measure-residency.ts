@@ -3,6 +3,7 @@ import { createHash } from "node:crypto";
 import { mkdir, rename, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { promisify } from "node:util";
+import { fetchJson } from "@openmapx/core";
 import { isPrivateEndpoint } from "../provider-config.js";
 import { SEMANTIC_DIMENSIONS, SEMANTIC_MODEL } from "../semantic-taxonomy-types.js";
 
@@ -11,6 +12,7 @@ export const MAX_CONTAINER_LIMIT_BYTES = 8 * 1024 ** 3;
 export const MINIMUM_HEADROOM_BYTES = 1024 ** 3;
 const MINIMUM_ROUNDS = 5;
 const EVIDENCE_MAX_AGE_MS = 24 * 60 * 60 * 1_000;
+const OLLAMA_REQUEST_TIMEOUT_MS = 2 * 60_000;
 const EMBEDDING_PROMPT = "Instruct: classify a generic map request\nQuery: a quiet place to read";
 const PARSER_PROMPT = "Return a short JSON object for a generic map search for a library.";
 
@@ -186,10 +188,22 @@ export function parseDockerStatsMemory(input: string): number {
   return bytes;
 }
 
-async function jsonRequest(endpoint: string, path: string, init?: RequestInit): Promise<unknown> {
-  const response = await fetch(`${endpoint}${path}`, init);
-  if (!response.ok) throw new Error(`Ollama request failed with HTTP ${response.status}`);
-  return response.json() as Promise<unknown>;
+interface OllamaJsonRequestInit {
+  method: string;
+  headers: Record<string, string>;
+  body: string;
+}
+
+async function jsonRequest(
+  endpoint: string,
+  path: string,
+  init?: OllamaJsonRequestInit,
+): Promise<unknown> {
+  return fetchJson<unknown>(`${endpoint}${path}`, {
+    label: "Ollama",
+    timeoutMs: OLLAMA_REQUEST_TIMEOUT_MS,
+    ...(init ? { headers: init.headers, init: { method: init.method, body: init.body } } : {}),
+  });
 }
 
 function residentModels(
