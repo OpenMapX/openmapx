@@ -1,5 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import type { CacheClient } from "../src/cache.js";
 import type { MobilityHttpTransport } from "../src/json-transport.js";
+
+const cache: CacheClient = {
+  get: async () => null,
+  set: async () => undefined,
+  del: async () => undefined,
+  withCache: async (_key, _ttl, load) => load(new AbortController().signal),
+};
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -55,9 +63,9 @@ describe("loadCatalog", () => {
       privateFeedHostAllowlist: vi.fn(() => []),
     };
 
-    const { loadCatalog } = await import("../src/gbfs-catalog.js");
+    const { createGbfsCatalogClient } = await import("../src/gbfs-catalog.js");
 
-    const entries = await loadCatalog(transport);
+    const entries = await createGbfsCatalogClient({ cache, transport }).loadCatalog();
 
     expect(entries).toEqual(
       expect.arrayContaining([

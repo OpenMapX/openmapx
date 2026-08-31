@@ -5,7 +5,7 @@
  */
 
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
-import { cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
+import { type CacheClient, cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
@@ -58,8 +58,8 @@ const ATTRIBUTION = {
 };
 
 /** Fetch + cache both endpoints, join vehicle metadata to stations. */
-async function fetchData(): Promise<SharedMobilityStation[]> {
-  const cached = await cacheGet<SharedMobilityStation[]>(CACHE_KEY);
+async function fetchData(cache: CacheClient): Promise<SharedMobilityStation[]> {
+  const cached = await cacheGet<SharedMobilityStation[]>(cache, CACHE_KEY);
   if (cached) return cached;
 
   try {
@@ -138,7 +138,7 @@ async function fetchData(): Promise<SharedMobilityStation[]> {
       });
     }
 
-    await cacheSet(CACHE_KEY, stations, TTL.sharedMobility.stations);
+    await cacheSet(cache, CACHE_KEY, stations, TTL.sharedMobility.stations);
     return stations;
   } catch {
     return [];
@@ -151,8 +151,8 @@ export const deStadtteilautoClient: RegionalCarSharingClient = {
   // Münster center, ~20km radius covers all stations
   regions: [{ center: [7.626, 51.962] as LngLat, radiusKm: 20 }],
   attribution: ATTRIBUTION,
-  async search(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
-    const all = await fetchData();
+  async search(bbox: BoundingBox, cache: CacheClient): Promise<SharedMobilityStation[]> {
+    const all = await fetchData(cache);
     return all.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0]));
   },
 };

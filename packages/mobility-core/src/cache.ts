@@ -7,7 +7,7 @@ import { TTL as TTL_POLICY } from "./policy.js";
 // contracts, so mobility-core can no longer depend on integration-framework.
 // Any cache instance that satisfies this shape - including the one the host
 // passes to integrations via `IntegrationContext.cache` - can be supplied
-// to `initCache()`.
+// directly to the runtime that owns the operation.
 export interface CacheClient {
   get<T = unknown>(key: string): Promise<T | null>;
   set(key: string, value: unknown, ttlSeconds?: number): Promise<void>;
@@ -21,34 +21,28 @@ export interface CacheClient {
   ): Promise<T>;
 }
 
-let _cache: CacheClient | null = null;
-
-export function initCache(cache: CacheClient): void {
-  _cache = cache;
+export async function cacheGet<T>(cache: CacheClient, key: string): Promise<T | null> {
+  return cache.get<T>(key);
 }
 
-export async function cacheGet<T>(key: string): Promise<T | null> {
-  return _cache?.get<T>(key) ?? null;
-}
-
-export async function cacheSet(key: string, value: unknown, ttlSeconds: number): Promise<void> {
-  await _cache?.set(key, value, ttlSeconds);
+export async function cacheSet(
+  cache: CacheClient,
+  key: string,
+  value: unknown,
+  ttlSeconds: number,
+): Promise<void> {
+  await cache.set(key, value, ttlSeconds);
 }
 
 export async function withCache<T>(
+  cache: CacheClient,
   key: string,
   ttlSeconds: number,
   fn: (operationSignal: AbortSignal) => Promise<T>,
   callerSignal?: AbortSignal,
 ): Promise<T> {
   if (callerSignal?.aborted) throw callerSignal.reason;
-  if (_cache) {
-    const cached = await _cache.get<T>(key);
-    if (cached !== null) return cached;
-  }
-  const result = await fn(callerSignal ?? new AbortController().signal);
-  await _cache?.set(key, result, ttlSeconds);
-  return result;
+  return cache.withCache(key, ttlSeconds, fn, callerSignal);
 }
 
 export const TTL = {

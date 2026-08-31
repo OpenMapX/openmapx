@@ -1,9 +1,11 @@
 import type { BoundingBox, DataSourceMapContext, DataSourceMeta } from "@openmapx/core";
 import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/mobility-core/shared-mobility";
+import { createSharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { CacheClient } from "../context";
 import type { IntegrationDataSource } from "../manifest";
@@ -84,7 +86,21 @@ function manifestSource(sourceId: string, name: string, url: string): Integratio
 
 function definition(
   loadInventory = vi.fn(async () => ({ stations: [station()], vehicles: [vehicle()] })),
+  options: { cache?: CacheClient; dataSources?: IntegrationDataSource[] } = {},
 ) {
+  const cache = options.cache ?? cacheClient().cache;
+  const transport: MobilityHttpTransport = {
+    userAgent: "OpenMapX/test",
+    async fetchJson<T>() {
+      return {} as T;
+    },
+    async fetchText() {
+      return "";
+    },
+    hostMatchesAllowlist: () => false,
+    privateFeedHostAllowlist: () => [],
+  };
+  const runtime = createSharedMobilityRuntime({ cache, transport });
   return createSharedMobilityProvider({
     id: "car-sharing",
     meta: META,
@@ -93,6 +109,9 @@ function definition(
     detailCacheTtl: 300,
     mapContextCacheTtl: 600,
     detailStore: { ttlSeconds: 900, maxL1Items: 3_000 },
+    cache,
+    dataSources: options.dataSources ?? [],
+    runtime,
     loadInventory,
   });
 }
@@ -105,24 +124,25 @@ beforeEach(() => {
 
 describe("createSharedMobilityProvider", () => {
   it("publishes provider policy and credits only contributing manifest sources", async () => {
-    const shared = definition();
     const { cache, set } = cacheClient();
-    shared.setDetailCache(cache);
-    shared.setManifestDataSources([
-      manifestSource("gbfs", "GBFS", "https://example.com"),
-      manifestSource("unused", "Unused", "https://unused.example"),
-    ]);
+    const provider = definition(undefined, {
+      cache,
+      dataSources: [
+        manifestSource("gbfs", "GBFS", "https://example.com"),
+        manifestSource("unused", "Unused", "https://unused.example"),
+      ],
+    });
 
-    expect(shared.provider).toMatchObject({
+    expect(provider).toMatchObject({
       id: "car-sharing",
       meta: META,
       searchCacheTtl: 300,
       detailCacheTtl: 300,
       mapContextCacheTtl: 600,
     });
-    await expect(shared.provider.getFilters()).resolves.toEqual([]);
+    await expect(provider.getFilters()).resolves.toEqual([]);
 
-    const result = await shared.provider.search(BBOX);
+    const result = await provider.search(BBOX);
 
     expect(result.data.map((item) => item.id)).toEqual([
       "s:gbfs/provider/station-1",
@@ -142,34 +162,39 @@ describe("createSharedMobilityProvider", () => {
     const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
     const shared = definition();
 
-    const result = await shared.provider.search(BBOX);
+    const result = await shared.search(BBOX);
 
     expect(result.data).toHaveLength(2);
     expect(warn).toHaveBeenCalledWith("[car-sharing] Entur enrichment failed", expect.any(Error));
   });
 
   it("maps cached station and vehicle details and enriches each by kind", async () => {
-    const shared = definition();
-    shared.setManifestDataSources([manifestSource("gbfs", "GBFS", "https://example.com")]);
-    await shared.provider.search(BBOX);
+    const shared = definition(undefined, {
+      dataSources: [manifestSource("gbfs", "GBFS", "https://example.com")],
+    });
+    await shared.search(BBOX);
     vi.mocked(enrichEnturMobilityItems).mockClear();
 
-    const stationDetail = await shared.provider.getDetail("s:gbfs/provider/station-1");
-    const vehicleDetail = await shared.provider.getDetail("v:gbfs/provider/vehicle-1");
-    const missingDetail = await shared.provider.getDetail("missing");
+    const stationDetail = await shared.getDetail("s:gbfs/provider/station-1");
+    const vehicleDetail = await shared.getDetail("v:gbfs/provider/vehicle-1");
+    const missingDetail = await shared.getDetail("missing");
 
     expect(stationDetail.data?.id).toBe("s:gbfs/provider/station-1");
     expect(vehicleDetail.data?.id).toBe("v:gbfs/provider/vehicle-1");
     expect(missingDetail.data).toBeNull();
     expect(stationDetail.attributions.map((item) => item.sourceId)).toEqual(["gbfs"]);
-    expect(enrichEnturMobilityItems).toHaveBeenNthCalledWith(1, [expect.any(Object)], [], {
-      transport: expect.any(Object),
-      scope: "detail",
-    });
-    expect(enrichEnturMobilityItems).toHaveBeenNthCalledWith(2, [], [expect.any(Object)], {
-      transport: expect.any(Object),
-      scope: "detail",
-    });
+    expect(enrichEnturMobilityItems).toHaveBeenNthCalledWith(
+      1,
+      [expect.any(Object)],
+      [],
+      expect.objectContaining({ transport: expect.any(Object), scope: "detail" }),
+    );
+    expect(enrichEnturMobilityItems).toHaveBeenNthCalledWith(
+      2,
+      [],
+      [expect.any(Object)],
+      expect.objectContaining({ transport: expect.any(Object), scope: "detail" }),
+    );
   });
 
   it("delegates map context selection and marks it as static", async () => {
@@ -180,7 +205,7 @@ describe("createSharedMobilityProvider", () => {
     const shared = definition();
     const options = { providerIds: ["provider"] };
 
-    const result = await shared.provider.getMapContext?.(BBOX, {}, options);
+    const result = await shared.getMapContext?.(BBOX, {}, options);
 
     expect(buildSharedMobilityMapContext).toHaveBeenCalledWith(
       BBOX,
@@ -190,5 +215,46 @@ describe("createSharedMobilityProvider", () => {
     );
     expect(result?.data).toBe(context);
     expect(result?.freshness.hasRealtimeData).toBe(false);
+  });
+
+  it("keeps an earlier provider generation bound to its own inventory, cache, and sources", async () => {
+    const firstCache = cacheClient();
+    const secondCache = cacheClient();
+    const firstStation = station("first/station");
+    firstStation.sources = ["first"];
+    const secondStation = station("second/station");
+    secondStation.sources = ["second"];
+    const first = definition(
+      vi.fn(async () => ({ stations: [firstStation], vehicles: [] })),
+      {
+        cache: firstCache.cache,
+        dataSources: [manifestSource("first", "First", "https://first.example")],
+      },
+    );
+    const second = definition(
+      vi.fn(async () => ({ stations: [secondStation], vehicles: [] })),
+      {
+        cache: secondCache.cache,
+        dataSources: [manifestSource("second", "Second", "https://second.example")],
+      },
+    );
+
+    const secondResult = await second.search(BBOX);
+    const firstResult = await first.search(BBOX);
+
+    expect(firstResult.data.map((item) => item.id)).toEqual(["s:first/station"]);
+    expect(firstResult.attributions.map((item) => item.sourceId)).toEqual(["first"]);
+    expect(secondResult.data.map((item) => item.id)).toEqual(["s:second/station"]);
+    expect(secondResult.attributions.map((item) => item.sourceId)).toEqual(["second"]);
+    expect(firstCache.set).toHaveBeenCalledWith(
+      "shared-mobility-detail:v1:first",
+      expect.any(Object),
+      900,
+    );
+    expect(secondCache.set).toHaveBeenCalledWith(
+      "shared-mobility-detail:v1:second",
+      expect.any(Object),
+      900,
+    );
   });
 });

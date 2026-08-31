@@ -1,5 +1,5 @@
 import { dedupStations } from "./dedup.js";
-import { fetchMotisRentals } from "./motis-rentals.js";
+import type { MotisRentalsClient } from "./motis-rentals.js";
 import type { BoundingBox } from "./types/geometry.js";
 import type {
   MotisRentalSnapshot,
@@ -35,14 +35,13 @@ export interface SharedMobilitySourceDecision {
 
 export interface SharedMobilityOrchestratorConfig {
   category: "bike" | "scooter" | "car";
-  formFactors: ReadonlySet<VehicleFormFactor>;
   motisFormFactors: VehicleFormFactor[];
   adapters: SharedMobilityAdapter[];
   policy?: SharedMobilitySourcePolicy;
   /** Provider/region rollback IDs force fanout without a deployment. */
   denylist?: ReadonlySet<string>;
   onDecision?: (decision: SharedMobilitySourceDecision) => void;
-  fetchMotis?: typeof fetchMotisRentals;
+  fetchMotis: MotisRentalsClient["fetchMotisRentals"];
 }
 
 export interface SharedMobilityOrchestratorResult extends SharedMobilityInventory {
@@ -60,17 +59,6 @@ interface SharedMobilityDecisionRecord {
 
 const rollbackDenylist = new Set<SharedMobilityCategory>();
 const latestDecisions = new Map<SharedMobilityCategory, SharedMobilityDecisionRecord>();
-let decisionObserver:
-  | ((category: SharedMobilityCategory, decision: SharedMobilitySourceDecision) => void)
-  | null = null;
-
-export function setSharedMobilityDecisionObserver(
-  observer:
-    | ((category: SharedMobilityCategory, decision: SharedMobilitySourceDecision) => void)
-    | null,
-): void {
-  decisionObserver = observer;
-}
 
 export function setSharedMobilityRollback(
   category: SharedMobilityCategory,
@@ -234,12 +222,11 @@ export async function orchestrateSharedMobility(
     config.denylist?.has(config.category) || rollbackDenylist.has(config.category)
       ? "fanout"
       : requestedPolicy;
-  const fetchLocal = config.fetchMotis ?? fetchMotisRentals;
   let snapshot: MotisRentalSnapshot | null = null;
   let local: SharedMobilitySourceDecision["local"] = "error";
   try {
     snapshot = await boundFetch(
-      fetchLocal([bbox.west, bbox.south, bbox.east, bbox.north], config.motisFormFactors),
+      config.fetchMotis([bbox.west, bbox.south, bbox.east, bbox.north], config.motisFormFactors),
       MOTIS_FETCH_TIMEOUT_MS,
       null,
     );
@@ -289,7 +276,6 @@ export async function orchestrateSharedMobility(
     decision,
     recordedAt: new Date().toISOString(),
   });
-  decisionObserver?.(config.category, decision);
   config.onDecision?.(decision);
   return { ...resultInventory, snapshot, decision };
 }

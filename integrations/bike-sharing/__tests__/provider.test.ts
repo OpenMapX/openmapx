@@ -1,5 +1,7 @@
 import {
   createSharedMobilityProviderFixtures,
+  createSharedMobilityTestRuntime,
+  fetchMotisRentals,
   createSharedMobilityBbox as makeBbox,
   sharedMobilityProviderContract,
 } from "@openmapx/integration-framework/test/shared-mobility-provider";
@@ -18,8 +20,10 @@ vi.mock("../providers/donkey-client.js", () => ({
   searchDonkey: vi.fn(),
 }));
 
+const dbBikeMocks = vi.hoisted(() => ({ searchDbBikes: vi.fn() }));
+
 vi.mock("../providers/db-bike-client.js", () => ({
-  searchDbBikes: vi.fn(),
+  createDbBikeClient: () => dbBikeMocks.searchDbBikes,
 }));
 
 import {
@@ -31,12 +35,20 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { searchCityBikes } from "../providers/citybikes-client.js";
-import { searchDbBikes } from "../providers/db-bike-client.js";
 import { searchDonkey } from "../providers/donkey-client.js";
 import { searchNextbike } from "../providers/nextbike-client.js";
-import { bikeSharingProvider } from "../providers/provider.js";
+import { createBikeSharingProvider } from "../providers/provider.js";
+
+const { searchDbBikes } = dbBikeMocks;
+const bikeSharingProvider = createBikeSharingProvider({
+  runtime: createSharedMobilityTestRuntime(),
+  dataSources: [],
+  searchCityBikes,
+  searchDbBikes,
+  searchDonkey,
+  searchNextbike,
+});
 
 const fixtures = createSharedMobilityProviderFixtures("bike-sharing", "bicycle");
 const { makeResult, makeStation, makeVehicle } = fixtures;

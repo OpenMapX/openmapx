@@ -93,4 +93,23 @@ describe("mobility package boundaries", () => {
     expect(coreManifest.exports?.["./ris-client"]).toBeUndefined();
     expect(existsSync(join(CORE_ROOT, "src/ris-client.ts"))).toBe(false);
   });
+
+  it("exposes generation-scoped shared mobility without setup-time singleton setters", () => {
+    const mobilityManifest = readManifest(MOBILITY_ROOT);
+    const productionSource = collectSourceFiles(join(MOBILITY_ROOT, "src"))
+      .map((file) => readFileSync(file, "utf8"))
+      .join("\n");
+
+    expect(mobilityManifest.exports?.["./shared-mobility-runtime"]).toBeDefined();
+    for (const setter of [
+      "initCache",
+      "setMotisRentalSourceIndex",
+      "setSharedMobilityDecisionObserver",
+      "setSharedMobilityMotisUrl",
+      "setSharedMobilityNominatimUrl",
+      "setSharedMobilityTransitousUrl",
+    ]) {
+      expect(productionSource).not.toContain(setter);
+    }
+  });
 });

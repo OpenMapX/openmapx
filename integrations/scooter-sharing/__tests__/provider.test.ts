@@ -1,5 +1,7 @@
 import {
   createSharedMobilityProviderFixtures,
+  createSharedMobilityTestRuntime,
+  fetchMotisRentals,
   createSharedMobilityBbox as makeBbox,
   sharedMobilityProviderContract,
 } from "@openmapx/integration-framework/test/shared-mobility-provider";
@@ -10,8 +12,10 @@ vi.mock("../providers/felyx-client.js", () => ({
   searchFelyx: vi.fn(),
 }));
 
+const mobidromMocks = vi.hoisted(() => ({ searchDeNwMobidromScooter: vi.fn() }));
+
 vi.mock("../providers/de-nw-mobidrom-scooter-client.js", () => ({
-  searchDeNwMobidromScooter: vi.fn(),
+  createDeNwMobidromScooterClient: () => mobidromMocks.searchDeNwMobidromScooter,
 }));
 
 import {
@@ -23,10 +27,16 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
-import { searchDeNwMobidromScooter } from "../providers/de-nw-mobidrom-scooter-client.js";
 import { searchFelyx } from "../providers/felyx-client.js";
-import { scooterSharingProvider } from "../providers/provider.js";
+import { createScooterSharingProvider } from "../providers/provider.js";
+
+const { searchDeNwMobidromScooter } = mobidromMocks;
+const scooterSharingProvider = createScooterSharingProvider({
+  runtime: createSharedMobilityTestRuntime(),
+  dataSources: [],
+  searchDeNwMobidromScooter,
+  searchFelyx,
+});
 
 const fixtures = createSharedMobilityProviderFixtures("scooter-sharing", "scooter_standing");
 const { makeResult, makeStation, makeVehicle } = fixtures;
@@ -170,7 +180,7 @@ describe("scooterSharingProvider.search", () => {
     const bbox = makeBbox();
     await scooterSharingProvider.search(bbox);
 
-    expect(searchDeNwMobidromScooter).toHaveBeenCalledWith(bbox, expect.any(Object));
+    expect(searchDeNwMobidromScooter).toHaveBeenCalledWith(bbox);
   });
 });
 

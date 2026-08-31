@@ -1,24 +1,11 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
-
-vi.mock("../src/nominatim.js", () => ({
-  reverseGeocodeCity: vi.fn(),
-}));
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/gbfs-client.js", () => ({
   fetchGbfsSystem: vi.fn(),
 }));
 
-vi.mock("../src/gbfs-catalog.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../src/gbfs-catalog.js")>();
-  return {
-    ...actual,
-    loadCatalog: vi.fn(),
-    filterCatalogByBbox: vi.fn((entries: unknown[]) => entries),
-    sortByRelevance: vi.fn((entries: unknown[]) => entries),
-  };
-});
-
-import { loadCatalog } from "../src/gbfs-catalog.js";
+import type { CacheClient } from "../src/cache.js";
+import { createGbfsCatalogClient, type GbfsCatalogClient } from "../src/gbfs-catalog.js";
 import { fetchGbfsSystem } from "../src/gbfs-client.js";
 import {
   bboxOverlapsSwitzerland,
@@ -27,7 +14,6 @@ import {
   fetchSwissSharedMobilityDataForBbox,
 } from "../src/gbfs-provider-base.js";
 import type { MobilityHttpTransport } from "../src/json-transport.js";
-import { reverseGeocodeCity } from "../src/nominatim.js";
 
 const transport: MobilityHttpTransport = {
   userAgent: "OpenMapX/test",
@@ -41,6 +27,29 @@ const transport: MobilityHttpTransport = {
   privateFeedHostAllowlist: () => [],
 };
 
+const cache: CacheClient = {
+  get: async () => null,
+  set: async () => undefined,
+  del: async () => undefined,
+  withCache: async (_key, _ttl, load) => load(new AbortController().signal),
+};
+const reverseGeocodeCity = vi.fn();
+let catalog: GbfsCatalogClient;
+
+function dependencies() {
+  return {
+    cache,
+    catalog,
+    nominatim: { reverseGeocodeCity },
+    transport,
+  };
+}
+
+beforeEach(() => {
+  catalog = createGbfsCatalogClient({ cache, transport });
+  vi.spyOn(catalog, "loadCatalog");
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
@@ -49,7 +58,7 @@ afterEach(() => {
 describe("fetchGbfsData", () => {
   it("sends ET-Client-Name when probing Entur GBFS systems", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
-    vi.mocked(loadCatalog).mockResolvedValue([
+    vi.mocked(catalog.loadCatalog).mockResolvedValue([
       {
         countryCode: "NO",
         name: "Voi Oslo",
@@ -77,7 +86,7 @@ describe("fetchGbfsData", () => {
     const result = await fetchGbfsData(
       { south: 59.9, west: 10.7, north: 59.95, east: 10.8 },
       new Set(["scooter_standing"]),
-      transport,
+      dependencies(),
       "other",
     );
 
@@ -108,7 +117,7 @@ describe("fetchGbfsData", () => {
       autoDiscoveryUrl: "https://example.com/late-local/gbfs.json",
     });
 
-    vi.mocked(loadCatalog).mockResolvedValue(entries);
+    vi.mocked(catalog.loadCatalog).mockResolvedValue(entries);
     vi.mocked(reverseGeocodeCity).mockResolvedValue(null);
     vi.mocked(fetchGbfsSystem).mockImplementation(async (url) => {
       const isLocal = String(url).includes("late-local");
@@ -148,7 +157,7 @@ describe("fetchGbfsData", () => {
     const result = await fetchGbfsData(
       { south: 52.4, west: 13.3, north: 52.6, east: 13.5 },
       new Set(["bicycle"]),
-      transport,
+      dependencies(),
     );
 
     expect(result.stations).toHaveLength(1);
@@ -178,7 +187,7 @@ describe("fetchGbfsData", () => {
       autoDiscoveryUrl: `https://example.com/system-${index}/gbfs.json`,
     }));
 
-    vi.mocked(loadCatalog).mockResolvedValue(entries);
+    vi.mocked(catalog.loadCatalog).mockResolvedValue(entries);
     vi.mocked(reverseGeocodeCity).mockResolvedValue(null);
     vi.mocked(fetchGbfsSystem).mockResolvedValue({
       systemInfo: {
@@ -203,7 +212,7 @@ describe("fetchGbfsData", () => {
     const result = await fetchGbfsData(
       { south: 34.0, west: -118.5, north: 34.2, east: -118.1 },
       new Set(["bicycle"]),
-      transport,
+      dependencies(),
     );
 
     expect(result).toEqual({ stations: [], vehicles: [] });
@@ -215,7 +224,7 @@ describe("fetchSwissSharedMobilityData", () => {
   it("probes the official sharedmobility.ch discovery feed directly", async () => {
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => undefined);
     vi.mocked(fetchGbfsSystem).mockClear();
-    vi.mocked(loadCatalog).mockClear();
+    vi.mocked(catalog.loadCatalog).mockClear();
     vi.mocked(fetchGbfsSystem).mockResolvedValue({
       systemInfo: {
         systemId: "sharedmobility.ch",
@@ -233,14 +242,14 @@ describe("fetchSwissSharedMobilityData", () => {
     const result = await fetchSwissSharedMobilityData(
       { south: 46.9, west: 7.3, north: 47.0, east: 7.5 },
       new Set(["bicycle"]),
-      transport,
+      dependencies(),
     );
 
     expect(result).toEqual({ stations: [], vehicles: [] });
     expect(fetchGbfsSystem).toHaveBeenCalledWith("https://sharedmobility.ch/gbfs.json", undefined, {
       transport,
     });
-    expect(loadCatalog).not.toHaveBeenCalled();
+    expect(catalog.loadCatalog).not.toHaveBeenCalled();
     expect(logSpy).not.toHaveBeenCalled();
   });
 
@@ -252,7 +261,7 @@ describe("fetchSwissSharedMobilityData", () => {
     const result = await fetchSwissSharedMobilityData(
       { south: 46.9, west: 7.3, north: 47.0, east: 7.5 },
       new Set(["bicycle"]),
-      transport,
+      dependencies(),
     );
 
     expect(result).toEqual({ stations: [], vehicles: [] });
@@ -270,7 +279,7 @@ describe("fetchSwissSharedMobilityDataForBbox", () => {
     const result = await fetchSwissSharedMobilityDataForBbox(
       { south: 48.0, west: 11.0, north: 49.0, east: 12.0 },
       new Set(["bicycle"]),
-      transport,
+      dependencies(),
     );
 
     expect(result).toEqual({ stations: [], vehicles: [] });

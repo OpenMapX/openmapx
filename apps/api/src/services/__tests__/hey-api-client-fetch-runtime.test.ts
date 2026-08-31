@@ -339,18 +339,16 @@ describe("@hey-api/client-fetch runtime integrations", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const {
-      fetchMotisRentals,
-      setMotisRentalSourceIndex,
-      setSharedMobilityMotisUrl,
-      setSharedMobilityTransitousUrl,
-    } = await import("../../../../../packages/mobility-core/src/motis-rentals.js");
+    const { createMotisRentalsClient } = await import(
+      "../../../../../packages/mobility-core/src/motis-rentals.js"
+    );
+    const client = createMotisRentalsClient({
+      motisUrl: "http://local.example",
+      transitousUrl: "https://cloud.example",
+      rentalSourceIndex: [{ sourceId: "gbfs/nextbike", registrySystemId: "nextbike" }],
+    });
 
-    setSharedMobilityMotisUrl("http://local.example");
-    setSharedMobilityTransitousUrl("https://cloud.example");
-    setMotisRentalSourceIndex([{ sourceId: "gbfs/nextbike", registrySystemId: "nextbike" }]);
-
-    const rentals = await fetchMotisRentals([13.3, 52.4, 13.5, 52.6], ["bicycle"]);
+    const rentals = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6], ["bicycle"]);
 
     expect(rentals).toMatchObject({
       origin: "transitous",

@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("../src/cache.js", () => ({
   TTL: {
@@ -6,12 +6,13 @@ vi.mock("../src/cache.js", () => ({
       stations: 300,
     },
   },
-  withCache: vi.fn(async (_key: string, _ttl: number, fn: () => Promise<unknown>) => fn()),
+  withCache: vi.fn(
+    async (_cache: unknown, _key: string, _ttl: number, fn: () => Promise<unknown>) => fn(),
+  ),
 }));
 
 vi.mock("../src/gbfs-catalog.js", () => ({
   filterCatalogByBbox: vi.fn((entries: unknown[]) => entries),
-  loadCatalog: vi.fn(),
   normalizeFormFactor: vi.fn((value: string | undefined) => {
     switch (value) {
       case "bicycle":
@@ -27,26 +28,36 @@ vi.mock("../src/gbfs-catalog.js", () => ({
   }),
 }));
 
+import type { CacheClient } from "../src/cache.js";
 import {
   buildEnturGeofencingMapContext,
   enrichEnturMobilityItems,
   isEnturGbfsUrl,
 } from "../src/entur-mobility.js";
-import { filterCatalogByBbox, loadCatalog } from "../src/gbfs-catalog.js";
+import { filterCatalogByBbox } from "../src/gbfs-catalog.js";
 import type { MobilityHttpTransport } from "../src/json-transport.js";
 import type { SharedMobilityStation } from "../src/types/shared-mobility.js";
 
 const transport: MobilityHttpTransport = {
   userAgent: "OpenMapX/test",
-  async fetchJson<T>(): Promise<T> {
-    throw new Error("Unexpected JSON request");
-  },
+  fetchJson: vi.fn(),
   async fetchText(): Promise<string> {
     throw new Error("Unexpected text request");
   },
   hostMatchesAllowlist: () => false,
   privateFeedHostAllowlist: () => [],
 };
+const cache = {} as CacheClient;
+const loadCatalog = vi.fn();
+const catalog = { loadCatalog, probeSystem: vi.fn() };
+
+function dependencies() {
+  return { cache, catalog, transport };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+});
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -54,13 +65,7 @@ afterEach(() => {
 });
 
 function mockFetchJson(data: unknown) {
-  vi.stubGlobal(
-    "fetch",
-    vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => data,
-    }),
-  );
+  vi.mocked(transport.fetchJson).mockResolvedValue(data);
 }
 
 function makeStation(overrides?: Partial<SharedMobilityStation>): SharedMobilityStation {
@@ -152,7 +157,7 @@ describe("buildEnturGeofencingMapContext", () => {
 
     const bbox = { west: 10, south: 60, east: 11, north: 61 };
     const context = await buildEnturGeofencingMapContext(bbox, {
-      transport,
+      ...dependencies(),
       systemIds: ["voi-oslo"],
       vehicleTypeIds: ["scooter"],
     });
@@ -218,7 +223,7 @@ describe("buildEnturGeofencingMapContext", () => {
     const context = await buildEnturGeofencingMapContext(
       { west: 10, south: 60, east: 11, north: 61 },
       {
-        transport,
+        ...dependencies(),
         systemIds: ["voi-oslo"],
         vehicleTypeIds: ["car"],
       },
@@ -248,60 +253,54 @@ describe("buildEnturGeofencingMapContext", () => {
       },
     ]);
 
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (_url: string, init?: RequestInit) => {
-        const body = JSON.parse(String(init?.body));
-        expect(body.variables.systemIds).toEqual(["oslobysykkel"]);
-        return {
-          ok: true,
-          json: async () => ({
-            data: {
-              geofencingZones: [
-                {
-                  systemId: "oslobysykkel",
-                  geojson: {
-                    type: "FeatureCollection",
-                    features: [
-                      {
-                        type: "Feature",
-                        geometry: {
-                          type: "Polygon",
-                          coordinates: [
-                            [
-                              [10, 60],
-                              [11, 60],
-                              [11, 61],
-                              [10, 61],
-                              [10, 60],
-                            ],
-                          ],
+    vi.mocked(transport.fetchJson).mockImplementation(async (_url, options) => {
+      const body = JSON.parse(String(options?.body));
+      expect(body.variables.systemIds).toEqual(["oslobysykkel"]);
+      return {
+        data: {
+          geofencingZones: [
+            {
+              systemId: "oslobysykkel",
+              geojson: {
+                type: "FeatureCollection",
+                features: [
+                  {
+                    type: "Feature",
+                    geometry: {
+                      type: "Polygon",
+                      coordinates: [
+                        [
+                          [10, 60],
+                          [11, 60],
+                          [11, 61],
+                          [10, 61],
+                          [10, 60],
+                        ],
+                      ],
+                    },
+                    properties: {
+                      name: "No parking",
+                      rules: [
+                        {
+                          vehicleTypeIds: ["bike"],
+                          rideStartAllowed: true,
+                          rideEndAllowed: false,
+                          rideThroughAllowed: true,
+                          stationParking: false,
                         },
-                        properties: {
-                          name: "No parking",
-                          rules: [
-                            {
-                              vehicleTypeIds: ["bike"],
-                              rideStartAllowed: true,
-                              rideEndAllowed: false,
-                              rideThroughAllowed: true,
-                              stationParking: false,
-                            },
-                          ],
-                        },
-                      },
-                    ],
+                      ],
+                    },
                   },
-                },
-              ],
+                ],
+              },
             },
-          }),
-        };
-      }),
-    );
+          ],
+        },
+      } as never;
+    });
 
     const context = await buildEnturGeofencingMapContext(bbox, {
-      transport,
+      ...dependencies(),
       vehicleTypeIds: ["bike"],
     });
 
@@ -320,12 +319,11 @@ describe("buildEnturGeofencingMapContext", () => {
         autoDiscoveryUrl: "https://gbfs.example.de/esel_ac/gbfs.json",
       },
     ]);
-    const fetchSpy = vi.fn();
-    vi.stubGlobal("fetch", fetchSpy);
+    const fetchSpy = vi.mocked(transport.fetchJson);
 
     const context = await buildEnturGeofencingMapContext(
       { west: 6, south: 50, east: 7, north: 51 },
-      { transport, systemIds: ["esel_ac", "dott-aachen", "nextbike_an"] },
+      { ...dependencies(), systemIds: ["esel_ac", "dott-aachen", "nextbike_an"] },
     );
 
     expect(context).toBeNull();
@@ -345,13 +343,11 @@ describe("enrichEnturMobilityItems", () => {
         autoDiscoveryUrl: "https://api.entur.io/mobility/v2/gbfs/v3/manifest.json",
       },
     ]);
-    const fetchSpy = vi.fn().mockResolvedValue({
-      ok: true,
-      json: async () => ({ data: { stations: [], vehicles: [] } }),
-    });
-    vi.stubGlobal("fetch", fetchSpy);
+    const fetchSpy = vi
+      .mocked(transport.fetchJson)
+      .mockResolvedValue({ data: { stations: [], vehicles: [] } });
 
-    await enrichEnturMobilityItems([makeStation()], [], { transport, scope: "map" });
+    await enrichEnturMobilityItems([makeStation()], [], { ...dependencies(), scope: "map" });
 
     const requestBody = String(fetchSpy.mock.calls[0]?.[1]?.body);
     expect(requestBody).not.toContain("pricingPlans");
@@ -430,7 +426,7 @@ describe("enrichEnturMobilityItems", () => {
       }),
     ];
 
-    await enrichEnturMobilityItems(stations, [], { transport });
+    await enrichEnturMobilityItems(stations, [], dependencies());
 
     expect(stations[0].pricingSummary).toBe("1.50 EUR unlock");
     expect(stations[0].pricingDetails).toEqual([

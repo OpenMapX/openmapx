@@ -125,7 +125,6 @@ describe("orchestrateSharedMobility", () => {
     const fallback = vi.fn();
     const result = await orchestrateSharedMobility(bbox, {
       category: "bike",
-      formFactors: new Set(["bicycle"]),
       motisFormFactors: ["bicycle"],
       policy: "motis-first",
       fetchMotis,
@@ -140,7 +139,6 @@ describe("orchestrateSharedMobility", () => {
     const fallback = vi.fn();
     await orchestrateSharedMobility(bbox, {
       category: "bike",
-      formFactors: new Set(["bicycle"]),
       motisFormFactors: ["bicycle"],
       policy: "motis-first",
       fetchMotis: vi.fn().mockResolvedValue(snapshot({ stations: [], vehicles: [] })),
@@ -156,7 +154,6 @@ describe("orchestrateSharedMobility", () => {
     partial.completeness.vehicles = false;
     const result = await orchestrateSharedMobility(bbox, {
       category: "scooter",
-      formFactors: new Set(["scooter_standing"]),
       motisFormFactors: ["scooter_standing"],
       policy: "motis-first",
       fetchMotis: vi.fn().mockResolvedValue(partial),
@@ -174,7 +171,6 @@ describe("orchestrateSharedMobility", () => {
     const fallback = vi.fn().mockResolvedValue({ stations: [], vehicles: [] });
     const result = await orchestrateSharedMobility(bbox, {
       category: "car",
-      formFactors: new Set(["car"]),
       motisFormFactors: ["car"],
       policy: "motis-first",
       denylist: new Set(["car"]),
@@ -189,7 +185,6 @@ describe("orchestrateSharedMobility", () => {
     setSharedMobilityRollback("bike", true);
     await orchestrateSharedMobility(bbox, {
       category: "bike",
-      formFactors: new Set(["bicycle"]),
       motisFormFactors: ["bicycle"],
       policy: "motis-first",
       fetchMotis: vi.fn().mockResolvedValue(snapshot()),

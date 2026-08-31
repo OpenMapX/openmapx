@@ -2,12 +2,9 @@ import type { RentalsResponse } from "@motis-project/motis-client";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   createMotisRentalId,
+  createMotisRentalsClient,
   decodeMotisRentalId,
-  fetchMotisRentals,
   mapMotisRentalSnapshot,
-  setMotisRentalSourceIndex,
-  setSharedMobilityMotisUrl,
-  setSharedMobilityTransitousUrl,
 } from "../src/motis-rentals.js";
 import { encodePolyline } from "../src/polyline.js";
 
@@ -166,17 +163,16 @@ function fixture(): RentalsResponse {
 
 afterEach(() => {
   vi.unstubAllGlobals();
-  setMotisRentalSourceIndex([]);
-  setSharedMobilityMotisUrl(undefined);
-  setSharedMobilityTransitousUrl(undefined);
 });
 
 describe("complete MOTIS rental mapping", () => {
   it("maps collision-safe identities, providers, rules, holes, URIs, and filtered counts", () => {
-    setMotisRentalSourceIndex([
-      { sourceId: "mobilitydata:de:bike", registrySystemId: "provider/ä" },
-    ]);
-    const snapshot = mapMotisRentalSnapshot(fixture(), "motis-local", ["bicycle"]);
+    const snapshot = mapMotisRentalSnapshot(
+      fixture(),
+      "motis-local",
+      ["bicycle"],
+      [{ sourceId: "mobilitydata:de:bike", registrySystemId: "provider/ä" }],
+    );
     expect(snapshot.origin).toBe("motis-local");
     expect(snapshot.providers).toHaveLength(1);
     expect(snapshot.providerGroups[0]).toMatchObject({ nativeId: "group/all" });
@@ -298,8 +294,10 @@ describe("MOTIS rental request fallback", () => {
   }
 
   it("does no HEAD preflight and treats a healthy empty local snapshot as authoritative", async () => {
-    setSharedMobilityMotisUrl("https://local.test");
-    setSharedMobilityTransitousUrl("https://hosted.test");
+    const client = createMotisRentalsClient({
+      motisUrl: "https://local.test",
+      transitousUrl: "https://hosted.test",
+    });
     const calls: Array<{ url: string; method: string }> = [];
     vi.stubGlobal(
       "fetch",
@@ -314,7 +312,7 @@ describe("MOTIS rental request fallback", () => {
         });
       }),
     );
-    const snapshot = await fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
+    const snapshot = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
     expect(snapshot.origin).toBe("motis-local");
     expect(calls).toHaveLength(1);
     expect(calls[0]?.method).not.toBe("HEAD");
@@ -322,8 +320,10 @@ describe("MOTIS rental request fallback", () => {
   });
 
   it("falls back to hosted only for a local transport/5xx failure", async () => {
-    setSharedMobilityMotisUrl("https://local.test");
-    setSharedMobilityTransitousUrl("https://hosted.test");
+    const client = createMotisRentalsClient({
+      motisUrl: "https://local.test",
+      transitousUrl: "https://hosted.test",
+    });
     const calls: string[] = [];
     vi.stubGlobal(
       "fetch",
@@ -335,14 +335,16 @@ describe("MOTIS rental request fallback", () => {
           : jsonResponse(fixture());
       }),
     );
-    const snapshot = await fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
+    const snapshot = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
     expect(snapshot.origin).toBe("transitous");
     expect(calls.some((url) => url.includes("hosted.test"))).toBe(true);
   });
 
   it("does not hide a local 4xx contract failure behind hosted fallback", async () => {
-    setSharedMobilityMotisUrl("https://local.test");
-    setSharedMobilityTransitousUrl("https://hosted.test");
+    const client = createMotisRentalsClient({
+      motisUrl: "https://local.test",
+      transitousUrl: "https://hosted.test",
+    });
     const calls: string[] = [];
     vi.stubGlobal(
       "fetch",
@@ -351,7 +353,7 @@ describe("MOTIS rental request fallback", () => {
         return jsonResponse({ message: "bad request" }, 400);
       }),
     );
-    const snapshot = await fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
+    const snapshot = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
     expect(snapshot.origin).toBe("motis-local");
     expect(snapshot.completeness.warnings).toContain("HTTP 400");
     expect(calls).toHaveLength(1);

@@ -9,8 +9,8 @@ import {
   fetchJson as coreFetchJson,
   type LngLat,
 } from "@openmapx/core";
+import { type CacheClient, TTL, withCache } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
-import { TTL, withCache } from "./cache.js";
 
 const CITYBIKES_BASE = "https://api.citybik.es";
 const HEADERS = {
@@ -67,8 +67,9 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 /** Cached index of all CityBikes networks. */
-async function getNetworkIndex(): Promise<CityBikesNetwork[]> {
+async function getNetworkIndex(cache: CacheClient): Promise<CityBikesNetwork[]> {
   return withCache<CityBikesNetwork[]>(
+    cache,
     NETWORK_INDEX_CACHE_KEY,
     TTL.sharedMobility.networks,
     async () => {
@@ -85,9 +86,12 @@ async function getNetworkIndex(): Promise<CityBikesNetwork[]> {
  * Uses generous padding (~30km) because a network's center point is just
  * one coordinate while stations can be spread across a metro area.
  */
-export async function findNetworksInBbox(bbox: BoundingBox): Promise<CityBikesNetwork[]> {
+export async function findNetworksInBbox(
+  bbox: BoundingBox,
+  cache: CacheClient,
+): Promise<CityBikesNetwork[]> {
   const pad = 0.3; // ~30km
-  const networks = await getNetworkIndex();
+  const networks = await getNetworkIndex(cache);
   return networks.filter(
     (n) =>
       n.location.latitude >= bbox.south - pad &&
@@ -101,9 +105,11 @@ export async function findNetworksInBbox(bbox: BoundingBox): Promise<CityBikesNe
 export async function fetchNetworkStations(
   network: CityBikesNetwork,
   bbox: BoundingBox,
+  cache: CacheClient,
 ): Promise<SharedMobilityStation[]> {
   const cacheKey = `shared-mobility:citybikes:${network.id}`;
   const stations = await withCache<SharedMobilityStation[]>(
+    cache,
     cacheKey,
     TTL.sharedMobility.stations,
     async () => {
@@ -136,14 +142,19 @@ export async function fetchNetworkStations(
  * Search all CityBikes networks within a bounding box.
  * Returns stations from all matching networks.
  */
-export async function searchCityBikes(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
-  const networks = await findNetworksInBbox(bbox);
+export async function searchCityBikes(
+  bbox: BoundingBox,
+  cache: CacheClient,
+): Promise<SharedMobilityStation[]> {
+  const networks = await findNetworksInBbox(bbox, cache);
   if (networks.length === 0) return [];
 
   // Limit to max 5 networks per search to avoid excessive API calls
   const limited = networks.slice(0, 5);
 
-  const results = await Promise.allSettled(limited.map((n) => fetchNetworkStations(n, bbox)));
+  const results = await Promise.allSettled(
+    limited.map((network) => fetchNetworkStations(network, bbox, cache)),
+  );
 
   const stations: SharedMobilityStation[] = [];
   for (const r of results) {

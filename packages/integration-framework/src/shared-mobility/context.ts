@@ -3,19 +3,17 @@ import type {
   DataSourceMapContext,
   DataSourceMapContextSelection,
 } from "@openmapx/core";
-import { buildEnturGeofencingMapContext } from "@openmapx/mobility-core/entur-mobility";
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import {
   applicableMobilityRules,
   classifyMobilityRules,
   normalizeAndClipMobilityGeometry,
 } from "@openmapx/mobility-core/mobility-context-geometry";
-import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import type {
   MotisRentalSnapshot,
   SharedMobilityRestriction,
   VehicleFormFactor,
 } from "@openmapx/mobility-core/shared-mobility";
+import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 
 function selected(value: string, values: ReadonlySet<string>): boolean {
   return values.size === 0 || values.has(value);
@@ -133,13 +131,13 @@ function buildMotisFeatures(
 export async function buildSharedMobilityMapContext(
   bbox: BoundingBox,
   categoryFormFactors: ReadonlySet<VehicleFormFactor>,
-  transport: MobilityHttpTransport,
+  runtime: SharedMobilityRuntime,
   options: DataSourceMapContextSelection = {},
 ): Promise<DataSourceMapContext | null> {
   const formFactors = (options.formFactors ?? [...categoryFormFactors]).filter((factor) =>
     categoryFormFactors.has(factor as VehicleFormFactor),
   ) as VehicleFormFactor[];
-  const snapshot = await fetchMotisRentals(
+  const snapshot = await runtime.fetchMotisRentals(
     [bbox.west, bbox.south, bbox.east, bbox.north],
     formFactors,
   );
@@ -164,8 +162,7 @@ export async function buildSharedMobilityMapContext(
     !snapshot.completeness.zones ||
     (options.systemIds?.length ? uncoveredSystemIds.length > 0 : motisFeatures.length === 0);
   const entur = needsEntur
-    ? await buildEnturGeofencingMapContext(bbox, {
-        transport,
+    ? await runtime.buildEnturGeofencingMapContext(bbox, {
         systemIds: options.systemIds?.length ? uncoveredSystemIds : undefined,
         vehicleTypeIds: options.vehicleTypeIds,
       })

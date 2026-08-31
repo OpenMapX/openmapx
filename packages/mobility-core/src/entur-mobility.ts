@@ -1,7 +1,11 @@
 import { createHash } from "node:crypto";
-import { TTL, withCache } from "./cache.js";
+import { type CacheClient, TTL, withCache } from "./cache.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
-import { filterCatalogByBbox, loadCatalog, normalizeFormFactor } from "./gbfs-catalog.js";
+import {
+  filterCatalogByBbox,
+  type GbfsCatalogClient,
+  normalizeFormFactor,
+} from "./gbfs-catalog.js";
 import type { MobilityHttpTransport } from "./json-transport.js";
 import {
   applicableMobilityRules,
@@ -195,28 +199,37 @@ interface EnturEnrichmentData {
   vehicles?: EnturVehicle[] | null;
 }
 
+export interface EnturMobilityDependencies {
+  cache: CacheClient;
+  catalog: GbfsCatalogClient;
+  transport: MobilityHttpTransport;
+}
+
 function hashParts(parts: string[]): string {
   return createHash("sha256").update(parts.join("|")).digest("hex").slice(0, 16);
 }
 
 async function fetchEnturGraphQl<T>(
+  dependencies: EnturMobilityDependencies,
   query: string,
   variables: Record<string, unknown>,
   cacheKey: string,
 ): Promise<T> {
-  return withCache(cacheKey, ENTUR_QUERY_CACHE_TTL, async () => {
-    const response = await fetch(ENTUR_GRAPHQL_URL, {
+  return withCache(dependencies.cache, cacheKey, ENTUR_QUERY_CACHE_TTL, async () => {
+    const json = await dependencies.transport.fetchJson<{
+      data?: T;
+      errors?: Array<{ message?: string }>;
+    }>(ENTUR_GRAPHQL_URL, {
       method: "POST",
       headers: {
+        "User-Agent": dependencies.transport.userAgent,
         "content-type": "application/json",
         "ET-Client-Name": ENTUR_CLIENT_NAME,
       },
       body: JSON.stringify({ query, variables }),
+      timeoutMs: 10_000,
+      maxBytes: 8 * 1024 * 1024,
     });
-    if (!response.ok) {
-      throw new Error(`Entur mobility GraphQL error ${response.status}`);
-    }
-    const json = (await response.json()) as { data?: T; errors?: Array<{ message?: string }> };
     if (json.errors?.length) {
       throw new Error(
         json.errors
@@ -534,8 +547,8 @@ function mapRentalMethods(methods: Array<string | null> | null | undefined): str
   return labels.length > 0 ? labels.join(", ") : undefined;
 }
 
-async function loadEnturSystemIds(transport: MobilityHttpTransport): Promise<Set<string>> {
-  const catalog = await loadCatalog(transport);
+async function loadEnturSystemIds(dependencies: EnturMobilityDependencies): Promise<Set<string>> {
+  const catalog = await dependencies.catalog.loadCatalog();
   return new Set(
     catalog
       .filter((entry) => isEnturGbfsUrl(entry.autoDiscoveryUrl))
@@ -546,9 +559,9 @@ async function loadEnturSystemIds(transport: MobilityHttpTransport): Promise<Set
 export async function enrichEnturMobilityItems(
   stations: SharedMobilityStation[],
   vehicles: SharedMobilityVehicle[],
-  options: { transport: MobilityHttpTransport; scope?: "map" | "detail" },
+  options: EnturMobilityDependencies & { scope?: "map" | "detail" },
 ): Promise<void> {
-  const enturSystemIds = await loadEnturSystemIds(options.transport);
+  const enturSystemIds = await loadEnturSystemIds(options);
 
   const stationIds = [
     ...new Set(
@@ -669,6 +682,7 @@ export async function enrichEnturMobilityItems(
   `;
 
   const data = await fetchEnturGraphQl<EnturEnrichmentData>(
+    options,
     query,
     { stationIds, vehicleIds },
     `shared-mobility:entur:items:${options.scope ?? "detail"}:${hashParts([
@@ -783,7 +797,10 @@ export async function enrichEnturMobilityItems(
   }
 }
 
-async function fetchEnturGeofencing(systemIds: string[]): Promise<EnturGeofencingZones[]> {
+async function fetchEnturGeofencing(
+  dependencies: EnturMobilityDependencies,
+  systemIds: string[],
+): Promise<EnturGeofencingZones[]> {
   if (systemIds.length === 0) return [];
 
   const query = `
@@ -813,6 +830,7 @@ async function fetchEnturGeofencing(systemIds: string[]): Promise<EnturGeofencin
   `;
 
   const data = await fetchEnturGraphQl<{ geofencingZones?: EnturGeofencingZones[] | null }>(
+    dependencies,
     query,
     { systemIds },
     `shared-mobility:entur:geofencing:${hashParts(systemIds.slice().sort())}`,
@@ -824,9 +842,9 @@ async function fetchEnturGeofencing(systemIds: string[]): Promise<EnturGeofencin
 async function resolveEnturGeofencingSystemIds(
   bbox: BoundingBox,
   systemIds: string[] | undefined,
-  transport: MobilityHttpTransport,
+  dependencies: EnturMobilityDependencies,
 ): Promise<string[]> {
-  const catalog = await loadCatalog(transport);
+  const catalog = await dependencies.catalog.loadCatalog();
   const enturSystemIds = new Set(
     catalog
       .filter((entry) => isEnturGbfsUrl(entry.autoDiscoveryUrl))
@@ -855,19 +873,17 @@ async function resolveEnturGeofencingSystemIds(
 export async function buildEnturGeofencingMapContext(
   bbox: BoundingBox,
   options: {
+    cache: CacheClient;
+    catalog: GbfsCatalogClient;
     transport: MobilityHttpTransport;
     systemIds?: string[];
     vehicleTypeIds?: string[];
   },
 ): Promise<SharedMobilityMapContext | null> {
-  const systemIds = await resolveEnturGeofencingSystemIds(
-    bbox,
-    options.systemIds,
-    options.transport,
-  );
+  const systemIds = await resolveEnturGeofencingSystemIds(bbox, options.systemIds, options);
   if (systemIds.length === 0) return null;
 
-  const geofencing = await fetchEnturGeofencing(systemIds);
+  const geofencing = await fetchEnturGeofencing(options, systemIds);
   const vehicleTypeIds = new Set(options.vehicleTypeIds ?? []);
   const features: SharedMobilityMapContext["geojson"]["features"] = [];
 

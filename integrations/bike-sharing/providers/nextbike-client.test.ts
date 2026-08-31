@@ -1,3 +1,4 @@
+import { createPassthroughCache } from "@openmapx/integration-framework/testing";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { searchNextbike } from "./nextbike-client";
 
@@ -53,7 +54,10 @@ describe("Nextbike bulk feed", () => {
     );
 
     await expect(
-      searchNextbike({ west: 13.3, south: 52.4, east: 13.5, north: 52.6 }),
+      searchNextbike(
+        { west: 13.3, south: 52.4, east: 13.5, north: 52.6 },
+        createPassthroughCache(),
+      ),
     ).resolves.toEqual([expect.objectContaining({ id: "nextbike/1/2", name: "Alexanderplatz" })]);
   });
 });

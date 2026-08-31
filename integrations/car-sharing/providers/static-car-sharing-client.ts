@@ -4,7 +4,7 @@
  */
 
 import { type BoundingBox, bboxContains, type LngLat, USER_AGENT } from "@openmapx/core";
-import { cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
+import { type CacheClient, cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
@@ -40,8 +40,8 @@ export function createStaticCarSharingClient(
 ): RegionalCarSharingClient {
   const cacheKey = `cache:carsharing:static:${config.id}`;
 
-  async function fetchData(): Promise<SharedMobilityStation[]> {
-    const cached = await cacheGet<SharedMobilityStation[]>(cacheKey);
+  async function fetchData(cache: CacheClient): Promise<SharedMobilityStation[]> {
+    const cached = await cacheGet<SharedMobilityStation[]>(cache, cacheKey);
     if (cached) return cached;
 
     const controller = new AbortController();
@@ -55,7 +55,7 @@ export function createStaticCarSharingClient(
       const body = await res.text();
       const stations = config.parse(body);
 
-      await cacheSet(cacheKey, stations, TTL.sharedMobility.stations);
+      await cacheSet(cache, cacheKey, stations, TTL.sharedMobility.stations);
       return stations;
     } catch {
       clearTimeout(timer);
@@ -68,8 +68,8 @@ export function createStaticCarSharingClient(
     name: config.name,
     regions: config.regions,
     attribution: config.attribution,
-    async search(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
-      const all = await fetchData();
+    async search(bbox: BoundingBox, cache: CacheClient): Promise<SharedMobilityStation[]> {
+      const all = await fetchData(cache);
       return all.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0]));
     },
   };

@@ -1,12 +1,9 @@
 import type { BoundingBox } from "@openmapx/core";
+import { createPassthroughCache } from "@openmapx/integration-framework/testing";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { RegionalCarSharingClient } from "../regional-client-types.js";
-import {
-  registerCarSharingClient,
-  searchRegionalClients,
-  setCarSharingLogger,
-} from "../registry.js";
+import { createRegionalCarSharingRegistry } from "../registry.js";
 
 function makeStation(id: string): SharedMobilityStation {
   return {
@@ -29,11 +26,6 @@ function makeFakeLogger() {
   };
 }
 
-/**
- * Build a client whose region covers the given center coordinate, so it only
- * matches bboxes around that point. Using distinct lon/lat per describe block
- * avoids the module-level registry singleton bleeding across tests.
- */
 function makeClient(
   id: string,
   centerLng: number,
@@ -59,7 +51,6 @@ describe("searchRegionalClients — one source rejects", () => {
 
   it("returns healthy stations and warns once for the failing client id", async () => {
     const fakeLogger = makeFakeLogger();
-    setCarSharingLogger(fakeLogger);
 
     const station = makeStation("berlin-station");
     const goodClient = makeClient("berlin-good", 13.4, 52.5, async () => [station]);
@@ -67,9 +58,11 @@ describe("searchRegionalClients — one source rejects", () => {
       throw new Error("network error");
     });
 
-    registerCarSharingClient(goodClient);
-    registerCarSharingClient(badClient);
-
+    const searchRegionalClients = createRegionalCarSharingRegistry({
+      clients: [goodClient, badClient],
+      cache: createPassthroughCache(),
+      log: fakeLogger,
+    });
     const result = await searchRegionalClients(bbox);
 
     expect(result.some((s) => s.id === "berlin-station")).toBe(true);
@@ -88,7 +81,6 @@ describe("searchRegionalClients — all sources reject", () => {
 
   it("returns empty array and logs error when every client rejects", async () => {
     const fakeLogger = makeFakeLogger();
-    setCarSharingLogger(fakeLogger);
 
     const clientA = makeClient("paris-fail-a", 2.3, 48.8, async () => {
       throw new Error("fail A");
@@ -97,9 +89,11 @@ describe("searchRegionalClients — all sources reject", () => {
       throw new Error("fail B");
     });
 
-    registerCarSharingClient(clientA);
-    registerCarSharingClient(clientB);
-
+    const searchRegionalClients = createRegionalCarSharingRegistry({
+      clients: [clientA, clientB],
+      cache: createPassthroughCache(),
+      log: fakeLogger,
+    });
     const result = await searchRegionalClients(bbox);
 
     expect(result).toEqual([]);

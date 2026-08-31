@@ -53,23 +53,20 @@ function vehicle(provider: string, nativeId: string): SharedMobilityVehicle {
 describe("SharedMobilityDetailStore", () => {
   it("writes one provider snapshot and resolves station and vehicle on a fresh replica", async () => {
     const { cache, writes } = sharedCache();
-    const firstReplica = new SharedMobilityDetailStore(600, 1);
-    firstReplica.setCache(cache);
+    const firstReplica = new SharedMobilityDetailStore(cache, 600, 1);
     const items = [station("provider-a", "station-1"), vehicle("provider-a", "vehicle-1")];
     await firstReplica.store(items);
 
     expect(writes).toHaveLength(1);
 
-    const freshReplica = new SharedMobilityDetailStore(600, 1);
-    freshReplica.setCache(cache);
+    const freshReplica = new SharedMobilityDetailStore(cache, 600, 1);
     expect(await freshReplica.get(items[0]?.id ?? "")).toMatchObject({ nativeId: "station-1" });
     expect(await freshReplica.get(items[1]?.id ?? "")).toMatchObject({ nativeId: "vehicle-1" });
   });
 
   it("survives L1 eviction while keeping providers isolated", async () => {
     const { cache } = sharedCache();
-    const store = new SharedMobilityDetailStore(600, 1);
-    store.setCache(cache);
+    const store = new SharedMobilityDetailStore(cache, 600, 1);
     const first = station("provider-a", "same-id");
     const second = station("provider-b", "same-id");
     await store.store([first, second]);
@@ -91,12 +88,10 @@ describe("SharedMobilityDetailStore", () => {
       isDisabled: false,
       sources: ["gbfs/operator-a"],
     };
-    const writer = new SharedMobilityDetailStore(600, 1);
-    writer.setCache(cache);
+    const writer = new SharedMobilityDetailStore(cache, 600, 1);
     await writer.store([direct]);
 
-    const reader = new SharedMobilityDetailStore(600, 1);
-    reader.setCache(cache);
+    const reader = new SharedMobilityDetailStore(cache, 600, 1);
     expect(await reader.get(direct.id)).toEqual(direct);
   });
 });

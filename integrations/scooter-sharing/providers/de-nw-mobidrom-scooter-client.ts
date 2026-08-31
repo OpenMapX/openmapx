@@ -13,7 +13,7 @@
  * Dataset: https://www.mobilitaetsdaten.nrw/dataset/e-scooter-sharing-nrw
  */
 
-import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
+import { type BoundingBox, bboxContains, type LngLat } from "@openmapx/core";
 import { normalizeFormFactor, normalizeGbfsPropulsion } from "@openmapx/mobility-core/gbfs-catalog";
 import { fetchGbfsSystem } from "@openmapx/mobility-core/gbfs-client";
 import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
@@ -47,24 +47,21 @@ const CREDENTIAL_HOSTS = ["www.mobilitaetsdaten.nrw", "*.mobilitaetsdaten.nrw"];
 // NRW bounding box for fast pre-filter (full federal state)
 const COVERAGE_BBOX: BoundingBox = { south: 50.32, west: 5.87, north: 52.53, east: 9.46 };
 
-// Populated by setup(ctx) from the resolved integration config cascade.
-let configuredClientId: string | undefined;
-let configuredClientSecret: string | undefined;
-
-export function setDeNwMobidromScooterCredentials(creds: {
+interface ClientState {
   clientId?: string;
   clientSecret?: string;
-}): void {
-  configuredClientId = creds.clientId?.trim() || undefined;
-  configuredClientSecret = creds.clientSecret?.trim() || undefined;
+  tokenCache: TokenCache | null;
+  inflightToken: Promise<string | null> | null;
+  feedCache: FeedCache | null;
+  inflightFeed: Promise<FeedCache> | null;
 }
 
-function clientId(): string {
-  return configuredClientId ?? DEFAULT_CLIENT_ID;
+function clientId(state: ClientState): string {
+  return state.clientId ?? DEFAULT_CLIENT_ID;
 }
 
-function clientSecret(): string {
-  return configuredClientSecret ?? DEFAULT_CLIENT_SECRET;
+function clientSecret(state: ClientState): string {
+  return state.clientSecret ?? DEFAULT_CLIENT_SECRET;
 }
 
 interface TokenCache {
@@ -72,42 +69,47 @@ interface TokenCache {
   expiresAt: number; // epoch ms
 }
 
-let tokenCache: TokenCache | null = null;
-let inflightToken: Promise<string | null> | null = null;
-
 interface TokenResponse {
   access_token: string;
   expires_in: number; // seconds
   token_type?: string;
 }
 
-async function getAccessToken(): Promise<string | null> {
+async function getAccessToken(
+  state: ClientState,
+  transport: MobilityHttpTransport,
+): Promise<string | null> {
   const now = Date.now();
   // Refresh 60s early to avoid edge-case expiry mid-request
-  if (tokenCache && tokenCache.expiresAt > now + 60_000) {
-    return tokenCache.token;
+  if (state.tokenCache && state.tokenCache.expiresAt > now + 60_000) {
+    return state.tokenCache.token;
   }
-  if (inflightToken) return inflightToken;
+  if (state.inflightToken) return state.inflightToken;
 
-  inflightToken = (async () => {
+  state.inflightToken = (async () => {
     try {
       const body = new URLSearchParams({
         grant_type: "client_credentials",
-        client_id: clientId(),
-        client_secret: clientSecret(),
+        client_id: clientId(state),
+        client_secret: clientSecret(state),
       });
-      const json = await fetchJson<TokenResponse>(TOKEN_URL, {
+      const json = await transport.fetchJson<TokenResponse>(TOKEN_URL, {
+        method: "POST",
+        body: body.toString(),
         timeoutMs: FETCH_TIMEOUT_MS,
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        nullOnError: true,
-        init: { method: "POST", body: body.toString() },
+        maxBytes: 1024 * 1024,
+        allowedRedirectOrigin: "https://www.mobilitaetsdaten.nrw",
+        headers: {
+          "User-Agent": transport.userAgent,
+          "Content-Type": "application/x-www-form-urlencoded",
+        },
       });
       if (!json) {
         console.warn("[de-nw-mobidrom-scooter] token request failed");
         return null;
       }
       if (!json.access_token) return null;
-      tokenCache = {
+      state.tokenCache = {
         token: json.access_token,
         expiresAt: Date.now() + Math.max(60, json.expires_in - 30) * 1000,
       };
@@ -116,10 +118,10 @@ async function getAccessToken(): Promise<string | null> {
       console.warn("[de-nw-mobidrom-scooter] token request error:", err);
       return null;
     } finally {
-      inflightToken = null;
+      state.inflightToken = null;
     }
   })();
-  return inflightToken;
+  return state.inflightToken;
 }
 
 interface ManifestEntry {
@@ -137,17 +139,22 @@ interface FeedCache {
   fetchedAt: number;
 }
 
-let feedCache: FeedCache | null = null;
-let inflightFeed: Promise<FeedCache> | null = null;
-
 const TARGET_V3 = "3.0";
 
-async function fetchManifest(token: string): Promise<ManifestEntry[]> {
+async function fetchManifest(
+  token: string,
+  transport: MobilityHttpTransport,
+): Promise<ManifestEntry[]> {
   try {
-    const json = await fetchJson<Manifest>(MANIFEST_URL, {
+    const json = await transport.fetchJson<Manifest>(MANIFEST_URL, {
       timeoutMs: FETCH_TIMEOUT_MS,
-      headers: { Accept: "application/json", Authorization: `Bearer ${token}` },
-      nullOnError: true,
+      maxBytes: 8 * 1024 * 1024,
+      allowedRedirectOrigin: "https://www.mobilitaetsdaten.nrw",
+      headers: {
+        "User-Agent": transport.userAgent,
+        Accept: "application/json",
+        Authorization: `Bearer ${token}`,
+      },
     });
     if (!json) {
       console.warn("[de-nw-mobidrom-scooter] manifest fetch failed");
@@ -175,15 +182,20 @@ function prettifyOperator(systemId: string): string {
     .join(" ");
 }
 
-async function loadAllFeeds(transport: MobilityHttpTransport): Promise<FeedCache> {
-  if (feedCache && Date.now() - feedCache.fetchedAt < FEED_CACHE_MS) return feedCache;
-  if (inflightFeed) return inflightFeed;
+async function loadAllFeeds(
+  transport: MobilityHttpTransport,
+  state: ClientState,
+): Promise<FeedCache> {
+  if (state.feedCache && Date.now() - state.feedCache.fetchedAt < FEED_CACHE_MS) {
+    return state.feedCache;
+  }
+  if (state.inflightFeed) return state.inflightFeed;
 
-  inflightFeed = (async () => {
-    const token = await getAccessToken();
+  state.inflightFeed = (async () => {
+    const token = await getAccessToken(state, transport);
     if (!token) return { stations: [], vehicles: [], fetchedAt: Date.now() };
 
-    const entries = await fetchManifest(token);
+    const entries = await fetchManifest(token, transport);
     if (entries.length === 0) return { stations: [], vehicles: [], fetchedAt: Date.now() };
 
     const authHeaders = { Authorization: `Bearer ${token}` };
@@ -269,13 +281,13 @@ async function loadAllFeeds(transport: MobilityHttpTransport): Promise<FeedCache
       }
     }
 
-    feedCache = { stations, vehicles, fetchedAt: Date.now() };
-    return feedCache;
+    state.feedCache = { stations, vehicles, fetchedAt: Date.now() };
+    return state.feedCache;
   })().finally(() => {
-    inflightFeed = null;
+    state.inflightFeed = null;
   });
 
-  return inflightFeed;
+  return state.inflightFeed;
 }
 
 function bboxOverlaps(a: BoundingBox, b: BoundingBox): boolean {
@@ -285,15 +297,31 @@ function bboxOverlaps(a: BoundingBox, b: BoundingBox): boolean {
 /**
  * Fetch NRW e-scooter stations and vehicles within a bounding box.
  */
-export async function searchDeNwMobidromScooter(
+export function createDeNwMobidromScooterClient(options: {
+  clientId?: string;
+  clientSecret?: string;
+  transport: MobilityHttpTransport;
+}): (
   bbox: BoundingBox,
-  transport: MobilityHttpTransport,
-): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
-  if (!bboxOverlaps(bbox, COVERAGE_BBOX)) return { stations: [], vehicles: [] };
-
-  const feed = await loadAllFeeds(transport);
-  return {
-    stations: feed.stations.filter((s) => bboxContains(bbox, s.coordinates[1], s.coordinates[0])),
-    vehicles: feed.vehicles.filter((v) => bboxContains(bbox, v.coordinates[1], v.coordinates[0])),
+) => Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
+  const state: ClientState = {
+    clientId: options.clientId?.trim() || undefined,
+    clientSecret: options.clientSecret?.trim() || undefined,
+    tokenCache: null,
+    inflightToken: null,
+    feedCache: null,
+    inflightFeed: null,
+  };
+  return async (bbox) => {
+    if (!bboxOverlaps(bbox, COVERAGE_BBOX)) return { stations: [], vehicles: [] };
+    const feed = await loadAllFeeds(options.transport, state);
+    return {
+      stations: feed.stations.filter((station) =>
+        bboxContains(bbox, station.coordinates[1], station.coordinates[0]),
+      ),
+      vehicles: feed.vehicles.filter((vehicle) =>
+        bboxContains(bbox, vehicle.coordinates[1], vehicle.coordinates[0]),
+      ),
+    };
   };
 }

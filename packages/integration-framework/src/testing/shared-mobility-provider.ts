@@ -1,4 +1,5 @@
 import type { BoundingBox, DataSourceMapContextSelection, DataSourceResult } from "@openmapx/core";
+import type { CacheClient } from "@openmapx/mobility-core/cache";
 import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import { fetchSwissSharedMobilityDataForBbox } from "@openmapx/mobility-core/gbfs-provider-base";
 import type {
@@ -6,6 +7,7 @@ import type {
   SharedMobilityVehicle,
   VehicleFormFactor,
 } from "@openmapx/mobility-core/shared-mobility";
+import { createSharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
 import { buildSharedMobilityMapContext } from "../shared-mobility/context.js";
@@ -18,6 +20,7 @@ const mapperMocks = vi.hoisted(() => ({
   stripMobilityKindPrefix: (id: string) =>
     id.startsWith("s:") || id.startsWith("v:") ? id.slice(2) : id,
 }));
+const motisMocks = vi.hoisted(() => ({ fetchMotisRentals: vi.fn() }));
 
 export const { mapStationToResult, mapVehicleToResult } = mapperMocks;
 
@@ -35,7 +38,7 @@ vi.mock("../shared-mobility/context.js", () => ({
 }));
 
 vi.mock("@openmapx/mobility-core/motis-rentals", () => ({
-  fetchMotisRentals: vi.fn(),
+  createMotisRentalsClient: () => ({ fetchMotisRentals: motisMocks.fetchMotisRentals }),
 }));
 
 vi.mock("@openmapx/mobility-core/dedup", () => ({
@@ -51,6 +54,44 @@ export interface SharedMobilityProviderFixtures {
   makeStation(id: string, source: string): SharedMobilityStation;
   makeVehicle(id: string, source: string): SharedMobilityVehicle;
   makeResult(id: string): DataSourceResult;
+}
+
+export const { fetchMotisRentals } = motisMocks;
+
+export function createSharedMobilityTestRuntime() {
+  const values = new Map<string, unknown>();
+  const cache: CacheClient = {
+    async get<T>(key: string) {
+      return (values.get(key) as T | undefined) ?? null;
+    },
+    async set(key, value) {
+      values.set(key, value);
+    },
+    async del(key) {
+      values.delete(key);
+    },
+    async withCache<T>(key: string, _ttl: number, load: (signal: AbortSignal) => Promise<T>) {
+      const cached = values.get(key) as T | undefined;
+      if (cached !== undefined) return cached;
+      const value = await load(new AbortController().signal);
+      values.set(key, value);
+      return value;
+    },
+  };
+  return createSharedMobilityRuntime({
+    cache,
+    transport: {
+      userAgent: "OpenMapX/test",
+      async fetchJson<T>() {
+        return {} as T;
+      },
+      async fetchText() {
+        return "";
+      },
+      hostMatchesAllowlist: () => false,
+      privateFeedHostAllowlist: () => [],
+    },
+  });
 }
 
 export function createSharedMobilityBbox(): BoundingBox {
@@ -144,10 +185,11 @@ export function sharedMobilityProviderContract(
 
       const result = await options.provider.search(createSharedMobilityBbox());
 
-      expect(enrichEnturMobilityItems).toHaveBeenCalledWith([station], [vehicle], {
-        transport: expect.any(Object),
-        scope: "map",
-      });
+      expect(enrichEnturMobilityItems).toHaveBeenCalledWith(
+        [station],
+        [vehicle],
+        expect.objectContaining({ transport: expect.any(Object), scope: "map" }),
+      );
       expect(mapStationToResult).toHaveBeenCalledWith(station);
       expect(mapVehicleToResult).toHaveBeenCalledWith(vehicle);
       expect(result.data.map((item) => item.id)).toEqual([station.id, vehicle.id]);

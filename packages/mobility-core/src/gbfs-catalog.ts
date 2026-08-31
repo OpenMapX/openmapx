@@ -9,7 +9,7 @@ import {
   parseCsvRecords,
 } from "@openmapx/mobility-formats";
 import { MOBILITYDATA_GBFS_CATALOG_URL } from "@openmapx/transitous-core";
-import { TTL, withCache } from "./cache.js";
+import { type CacheClient, TTL, withCache } from "./cache.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
 import type { MobilityHttpTransport } from "./json-transport.js";
@@ -34,26 +34,51 @@ const SWISS_SHARED_MOBILITY_ENTRY: GbfsCatalogEntry = {
   url: "https://sharedmobility.ch",
 };
 
-let catalogEntries: GbfsCatalogEntry[] | null = null;
-let catalogLoadedAt = 0;
 const CATALOG_REFRESH_MS = 24 * 60 * 60 * 1000;
 
-// In-memory cache of system bbox approximations (from system_information or station spread)
-const systemBboxCache = new Map<
-  string,
-  { bbox: BoundingBox; vehicleTypes: Set<string>; expiresAt: number }
->();
+interface GbfsCatalogState {
+  entries: GbfsCatalogEntry[] | null;
+  loadedAt: number;
+  systemBboxes: Map<string, { bbox: BoundingBox; vehicleTypes: Set<string>; expiresAt: number }>;
+  inflightProbes: Map<string, Promise<GbfsSystemProbe | null>>;
+}
+
+export interface GbfsCatalogClient {
+  loadCatalog(): Promise<GbfsCatalogEntry[]>;
+  probeSystem(entry: GbfsCatalogEntry): Promise<GbfsSystemProbe | null>;
+}
+
+export function createGbfsCatalogClient(options: {
+  cache: CacheClient;
+  transport: MobilityHttpTransport;
+}): GbfsCatalogClient {
+  const state: GbfsCatalogState = {
+    entries: null,
+    loadedAt: 0,
+    systemBboxes: new Map(),
+    inflightProbes: new Map(),
+  };
+  return {
+    loadCatalog: () => loadCatalog(state, options.cache, options.transport),
+    probeSystem: (entry) => probeSystem(state, entry, options.transport),
+  };
+}
 
 /**
  * Loads the GBFS systems catalog from MobilityData.
  * Caches in memory and Redis.
  */
-export async function loadCatalog(transport: MobilityHttpTransport): Promise<GbfsCatalogEntry[]> {
-  if (catalogEntries && Date.now() - catalogLoadedAt < CATALOG_REFRESH_MS) {
-    return catalogEntries;
+async function loadCatalog(
+  state: GbfsCatalogState,
+  cache: CacheClient,
+  transport: MobilityHttpTransport,
+): Promise<GbfsCatalogEntry[]> {
+  if (state.entries && Date.now() - state.loadedAt < CATALOG_REFRESH_MS) {
+    return state.entries;
   }
 
   const mobilityDataEntries = await withCache<GbfsCatalogEntry[]>(
+    cache,
     CATALOG_CACHE_KEY,
     TTL.sharedMobility.catalog,
     async () => {
@@ -67,6 +92,7 @@ export async function loadCatalog(transport: MobilityHttpTransport): Promise<Gbf
   );
 
   const enturEntries = await withCache<GbfsCatalogEntry[]>(
+    cache,
     ENTUR_CATALOG_CACHE_KEY,
     TTL.sharedMobility.catalog,
     async () => {
@@ -92,8 +118,8 @@ export async function loadCatalog(transport: MobilityHttpTransport): Promise<Gbf
     SWISS_SHARED_MOBILITY_ENTRY,
   ]);
 
-  catalogEntries = entries;
-  catalogLoadedAt = Date.now();
+  state.entries = entries;
+  state.loadedAt = Date.now();
   return entries;
 }
 
@@ -266,32 +292,32 @@ export interface GbfsSystemProbe {
   systemData?: GbfsSystemData;
 }
 
-const inflightProbes = new Map<string, Promise<GbfsSystemProbe | null>>();
-
 /**
  * Probe a GBFS system to determine its geographic coverage and vehicle types.
  * Results are cached in memory. Concurrent probes for the same system are coalesced.
  */
-export async function probeSystem(
+async function probeSystem(
+  state: GbfsCatalogState,
   entry: GbfsCatalogEntry,
   transport: MobilityHttpTransport,
 ): Promise<GbfsSystemProbe | null> {
-  const cached = systemBboxCache.get(entry.systemId);
+  const cached = state.systemBboxes.get(entry.systemId);
   if (cached && cached.expiresAt > Date.now()) {
     return { bbox: cached.bbox, vehicleTypes: cached.vehicleTypes };
   }
 
-  const existing = inflightProbes.get(entry.systemId);
+  const existing = state.inflightProbes.get(entry.systemId);
   if (existing) return existing;
 
-  const promise = probeSystemInner(entry, transport).finally(() => {
-    inflightProbes.delete(entry.systemId);
+  const promise = probeSystemInner(state, entry, transport).finally(() => {
+    state.inflightProbes.delete(entry.systemId);
   });
-  inflightProbes.set(entry.systemId, promise);
+  state.inflightProbes.set(entry.systemId, promise);
   return promise;
 }
 
 async function probeSystemInner(
+  state: GbfsCatalogState,
   entry: GbfsCatalogEntry,
   transport: MobilityHttpTransport,
 ): Promise<GbfsSystemProbe | null> {
@@ -347,7 +373,7 @@ async function probeSystemInner(
     vehicleTypes.add("other");
   }
 
-  systemBboxCache.set(entry.systemId, {
+  state.systemBboxes.set(entry.systemId, {
     bbox,
     vehicleTypes,
     expiresAt: Date.now() + SYSTEM_CACHE_TTL * 1000,

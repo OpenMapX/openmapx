@@ -3,20 +3,19 @@
  * Handles catalog lookup, system probing, and station/vehicle extraction.
  */
 
-import { cacheGet, cacheSet, TTL } from "./cache.js";
+import { type CacheClient, cacheGet, cacheSet, TTL } from "./cache.js";
 import { isEnturGbfsUrl } from "./entur-gbfs.js";
 import {
   filterCatalogByBbox,
-  loadCatalog,
+  type GbfsCatalogClient,
   normalizeFormFactor,
   normalizeGbfsPropulsion,
-  probeSystem,
   sortByRelevance,
 } from "./gbfs-catalog.js";
 import { fetchGbfsSystem, type GbfsSystemData } from "./gbfs-client.js";
 import { bboxContains } from "./geo.js";
 import type { MobilityHttpTransport } from "./json-transport.js";
-import { reverseGeocodeCity } from "./nominatim.js";
+import type { NominatimClient } from "./nominatim.js";
 import { normalizeRentalReturnConstraint } from "./rental-constraints.js";
 import type { BoundingBox, LngLat } from "./types/geometry.js";
 import type {
@@ -71,6 +70,13 @@ export const SWISS_SHARED_MOBILITY_BBOX: BoundingBox = {
 interface CachedSystemData {
   stations: SharedMobilityStation[];
   vehicles: SharedMobilityVehicle[];
+}
+
+export interface GbfsProviderDependencies {
+  cache: CacheClient;
+  catalog: GbfsCatalogClient;
+  nominatim: NominatimClient;
+  transport: MobilityHttpTransport;
 }
 
 /** Detect GBFS station names that are internal IDs rather than human-readable. */
@@ -137,10 +143,11 @@ async function mapSettledWithConcurrency<T, R>(
 export async function fetchGbfsData(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
-  transport: MobilityHttpTransport,
+  dependencies: GbfsProviderDependencies,
   unknownFormFactor: VehicleFormFactor = "bicycle",
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
-  const catalog = await loadCatalog(transport);
+  const { cache, catalog: catalogClient, nominatim, transport } = dependencies;
+  const catalog = await catalogClient.loadCatalog();
   const candidates = filterCatalogByBbox(catalog, bbox);
 
   // Exclude operators that are defunct
@@ -155,7 +162,7 @@ export async function fetchGbfsData(
   // Reverse-geocode bbox center to determine city for prioritization
   const centerLat = (bbox.south + bbox.north) / 2;
   const centerLon = (bbox.west + bbox.east) / 2;
-  const city = await reverseGeocodeCity(centerLat, centerLon, transport);
+  const city = await nominatim.reverseGeocodeCity(centerLat, centerLon);
 
   // Sort for deterministic probing/fetching order, then cap the fan-out so
   // large countries cannot trigger hundreds of full GBFS fetches per search.
@@ -167,7 +174,7 @@ export async function fetchGbfsData(
     SYSTEM_PROBE_CONCURRENCY,
     async (entry) => {
       const probe = await settleWithin(
-        probeSystem(entry, transport),
+        catalogClient.probeSystem(entry),
         SYSTEM_PROBE_TIMEOUT_MS,
         null,
       );
@@ -201,6 +208,7 @@ export async function fetchGbfsData(
           targetFormFactors,
           unknownFormFactor,
           systemData,
+          cache,
         ),
         SYSTEM_FETCH_TIMEOUT_MS,
         { stations: [], vehicles: [] },
@@ -229,17 +237,19 @@ export async function fetchGbfsData(
 export async function fetchSwissSharedMobilityData(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
-  transport: MobilityHttpTransport,
+  dependencies: Pick<GbfsProviderDependencies, "cache" | "transport">,
   unknownFormFactor: VehicleFormFactor = "bicycle",
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
   const result = await fetchSystemData(
     SWISS_SHARED_MOBILITY_SYSTEM_ID,
     SWISS_SHARED_MOBILITY_DISCOVERY_URL,
     "sharedmobility.ch",
-    transport,
+    dependencies.transport,
     bbox,
     targetFormFactors,
     unknownFormFactor,
+    undefined,
+    dependencies.cache,
   );
   return result ?? { stations: [], vehicles: [] };
 }
@@ -247,13 +257,13 @@ export async function fetchSwissSharedMobilityData(
 export async function fetchSwissSharedMobilityDataForBbox(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
-  transport: MobilityHttpTransport,
+  dependencies: Pick<GbfsProviderDependencies, "cache" | "transport">,
   unknownFormFactor: VehicleFormFactor = "bicycle",
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] }> {
   if (!bboxOverlapsSwitzerland(bbox)) {
     return { stations: [], vehicles: [] };
   }
-  return fetchSwissSharedMobilityData(bbox, targetFormFactors, transport, unknownFormFactor);
+  return fetchSwissSharedMobilityData(bbox, targetFormFactors, dependencies, unknownFormFactor);
 }
 
 async function fetchSystemData(
@@ -264,11 +274,12 @@ async function fetchSystemData(
   bbox: BoundingBox,
   targetFormFactors: Set<VehicleFormFactor>,
   unknownFormFactor: VehicleFormFactor,
-  prefetchedSystemData?: GbfsSystemData,
+  prefetchedSystemData: GbfsSystemData | undefined,
+  cache: CacheClient,
 ): Promise<{ stations: SharedMobilityStation[]; vehicles: SharedMobilityVehicle[] } | null> {
   // Check Redis cache (persists across requests with different bboxes)
   const cacheKey = `${SYSTEM_CACHE_PREFIX}${systemId}:${[...targetFormFactors].sort().join(",")}:${unknownFormFactor}`;
-  const cached = await cacheGet<CachedSystemData>(cacheKey);
+  const cached = await cacheGet<CachedSystemData>(cache, cacheKey);
   if (cached) {
     return {
       stations: cached.stations.filter(
@@ -485,7 +496,7 @@ async function fetchSystemData(
   }
 
   // Cache all data (pre-bbox-filter, all form factors) in Redis for reuse across providers/bboxes
-  await cacheSet(cacheKey, { stations, vehicles }, SYSTEM_CACHE_TTL);
+  await cacheSet(cache, cacheKey, { stations, vehicles }, SYSTEM_CACHE_TTL);
 
   // Filter to bbox and target form factors
   return {

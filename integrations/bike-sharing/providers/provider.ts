@@ -5,18 +5,14 @@
 
 import type { BoundingBox, DataSourceMeta } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
+import type { IntegrationDataSource } from "@openmapx/integration-framework";
 import { createSharedMobilityProvider } from "@openmapx/integration-framework/shared-mobility-provider";
-import {
-  fetchGbfsData,
-  fetchSwissSharedMobilityDataForBbox,
-} from "@openmapx/mobility-core/gbfs-provider-base";
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
-import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
-import { searchCityBikes } from "./citybikes-client.js";
-import { searchDbBikes } from "./db-bike-client.js";
-import { searchDonkey } from "./donkey-client.js";
-import { searchNextbike } from "./nextbike-client.js";
+import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
+import type { searchCityBikes } from "./citybikes-client.js";
+import type { createDbBikeClient } from "./db-bike-client.js";
+import type { searchDonkey } from "./donkey-client.js";
+import type { searchNextbike } from "./nextbike-client.js";
 
 const BIKE_FORM_FACTORS = new Set<VehicleFormFactor>(["bicycle", "cargo_bicycle"]);
 
@@ -41,58 +37,72 @@ const META: DataSourceMeta = {
   osmFilters: CATEGORY_FILTERS.bicycle_rental,
 };
 
-async function loadBikeInventory(bbox: BoundingBox, transport: MobilityHttpTransport) {
-  return orchestrateSharedMobility(bbox, {
-    category: "bike",
-    formFactors: BIKE_FORM_FACTORS,
-    motisFormFactors: ["bicycle", "cargo_bicycle"],
-    adapters: [
-      {
-        id: "nextbike",
-        kind: "fallback",
-        fetch: async (bounds) => ({ stations: await searchNextbike(bounds), vehicles: [] }),
-      },
-      {
-        id: "citybikes",
-        kind: "fallback",
-        fetch: async (bounds) => ({ stations: await searchCityBikes(bounds), vehicles: [] }),
-      },
-      {
-        id: "donkey",
-        kind: "fallback",
-        fetch: async (bounds) => ({ stations: await searchDonkey(bounds), vehicles: [] }),
-      },
-      {
-        id: "direct-gbfs",
-        kind: "fallback",
-        fetch: (bounds) => fetchGbfsData(bounds, BIKE_FORM_FACTORS, transport),
-      },
-      {
-        id: "swiss-gbfs",
-        kind: "fallback",
-        fetch: (bounds) =>
-          fetchSwissSharedMobilityDataForBbox(bounds, BIKE_FORM_FACTORS, transport),
-      },
-      {
-        id: "db-bike",
-        kind: "proprietary",
-        fetch: searchDbBikes,
-      },
-    ],
-  });
+export interface BikeSharingProviderOptions {
+  runtime: SharedMobilityRuntime;
+  dataSources: IntegrationDataSource[];
+  searchCityBikes: typeof searchCityBikes;
+  searchDbBikes: ReturnType<typeof createDbBikeClient>;
+  searchDonkey: typeof searchDonkey;
+  searchNextbike: typeof searchNextbike;
 }
 
-export const {
-  provider: bikeSharingProvider,
-  setDetailCache,
-  setManifestDataSources,
-} = createSharedMobilityProvider({
-  id: "bike-sharing",
-  meta: META,
-  formFactors: BIKE_FORM_FACTORS,
-  searchCacheTtl: 120,
-  detailCacheTtl: 120,
-  mapContextCacheTtl: 300,
-  detailStore: { ttlSeconds: 600, maxL1Items: 5_000 },
-  loadInventory: loadBikeInventory,
-});
+export function createBikeSharingProvider(options: BikeSharingProviderOptions) {
+  const loadBikeInventory = (bbox: BoundingBox) =>
+    options.runtime.orchestrate(bbox, {
+      category: "bike",
+      motisFormFactors: ["bicycle", "cargo_bicycle"],
+      adapters: [
+        {
+          id: "nextbike",
+          kind: "fallback",
+          fetch: async (bounds) => ({
+            stations: await options.searchNextbike(bounds, options.runtime.cache),
+            vehicles: [],
+          }),
+        },
+        {
+          id: "citybikes",
+          kind: "fallback",
+          fetch: async (bounds) => ({
+            stations: await options.searchCityBikes(bounds, options.runtime.cache),
+            vehicles: [],
+          }),
+        },
+        {
+          id: "donkey",
+          kind: "fallback",
+          fetch: async (bounds) => ({ stations: await options.searchDonkey(bounds), vehicles: [] }),
+        },
+        {
+          id: "direct-gbfs",
+          kind: "fallback",
+          fetch: (bounds) => options.runtime.fetchGbfsData(bounds, BIKE_FORM_FACTORS),
+        },
+        {
+          id: "swiss-gbfs",
+          kind: "fallback",
+          fetch: (bounds) =>
+            options.runtime.fetchSwissSharedMobilityDataForBbox(bounds, BIKE_FORM_FACTORS),
+        },
+        {
+          id: "db-bike",
+          kind: "proprietary",
+          fetch: options.searchDbBikes,
+        },
+      ],
+    });
+
+  return createSharedMobilityProvider({
+    id: "bike-sharing",
+    meta: META,
+    formFactors: BIKE_FORM_FACTORS,
+    searchCacheTtl: 120,
+    detailCacheTtl: 120,
+    mapContextCacheTtl: 300,
+    detailStore: { ttlSeconds: 600, maxL1Items: 5_000 },
+    cache: options.runtime.cache,
+    dataSources: options.dataSources,
+    runtime: options.runtime,
+    loadInventory: loadBikeInventory,
+  });
+}

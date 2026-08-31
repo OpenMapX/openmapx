@@ -5,16 +5,12 @@
  */
 
 import type { BoundingBox, DataSourceMeta } from "@openmapx/core";
+import type { IntegrationDataSource } from "@openmapx/integration-framework";
 import { createSharedMobilityProvider } from "@openmapx/integration-framework/shared-mobility-provider";
-import {
-  fetchGbfsData,
-  fetchSwissSharedMobilityDataForBbox,
-} from "@openmapx/mobility-core/gbfs-provider-base";
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
-import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
-import { searchDeNwMobidromScooter } from "./de-nw-mobidrom-scooter-client.js";
-import { searchFelyx } from "./felyx-client.js";
+import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
+import type { createDeNwMobidromScooterClient } from "./de-nw-mobidrom-scooter-client.js";
+import type { searchFelyx } from "./felyx-client.js";
 
 const META: DataSourceMeta = {
   minZoom: 13,
@@ -47,48 +43,59 @@ const SCOOTER_FORM_FACTORS = new Set<VehicleFormFactor>([
   "moped",
 ]);
 
-async function loadScooterInventory(bbox: BoundingBox, transport: MobilityHttpTransport) {
-  return orchestrateSharedMobility(bbox, {
-    category: "scooter",
+export function createScooterSharingProvider(options: {
+  runtime: SharedMobilityRuntime;
+  dataSources: IntegrationDataSource[];
+  searchDeNwMobidromScooter: ReturnType<typeof createDeNwMobidromScooterClient>;
+  searchFelyx: typeof searchFelyx;
+}) {
+  const loadScooterInventory = (bbox: BoundingBox) =>
+    options.runtime.orchestrate(bbox, {
+      category: "scooter",
+      motisFormFactors: ["scooter_standing", "scooter_seated", "moped"],
+      adapters: [
+        {
+          id: "direct-gbfs",
+          kind: "fallback",
+          fetch: (bounds) => options.runtime.fetchGbfsData(bounds, SCOOTER_FORM_FACTORS, "other"),
+        },
+        {
+          id: "swiss-gbfs",
+          kind: "fallback",
+          fetch: (bounds) =>
+            options.runtime.fetchSwissSharedMobilityDataForBbox(
+              bounds,
+              SCOOTER_FORM_FACTORS,
+              "other",
+            ),
+        },
+        {
+          id: "felyx",
+          kind: "proprietary",
+          fetch: async (bounds) => ({
+            stations: [],
+            vehicles: await options.searchFelyx(bounds),
+          }),
+        },
+        {
+          id: "nrw-mobidrom",
+          kind: "proprietary",
+          fetch: options.searchDeNwMobidromScooter,
+        },
+      ],
+    });
+
+  return createSharedMobilityProvider({
+    id: "scooter-sharing",
+    meta: META,
     formFactors: SCOOTER_FORM_FACTORS,
-    motisFormFactors: ["scooter_standing", "scooter_seated", "moped"],
-    adapters: [
-      {
-        id: "direct-gbfs",
-        kind: "fallback",
-        fetch: (bounds) => fetchGbfsData(bounds, SCOOTER_FORM_FACTORS, transport, "other"),
-      },
-      {
-        id: "swiss-gbfs",
-        kind: "fallback",
-        fetch: (bounds) =>
-          fetchSwissSharedMobilityDataForBbox(bounds, SCOOTER_FORM_FACTORS, transport, "other"),
-      },
-      {
-        id: "felyx",
-        kind: "proprietary",
-        fetch: async (bounds) => ({ stations: [], vehicles: await searchFelyx(bounds) }),
-      },
-      {
-        id: "nrw-mobidrom",
-        kind: "proprietary",
-        fetch: (bounds) => searchDeNwMobidromScooter(bounds, transport),
-      },
-    ],
+    searchCacheTtl: 120,
+    detailCacheTtl: 120,
+    mapContextCacheTtl: 300,
+    detailStore: { ttlSeconds: 600, maxL1Items: 5_000 },
+    cache: options.runtime.cache,
+    dataSources: options.dataSources,
+    runtime: options.runtime,
+    loadInventory: loadScooterInventory,
   });
 }
-
-export const {
-  provider: scooterSharingProvider,
-  setDetailCache,
-  setManifestDataSources,
-} = createSharedMobilityProvider({
-  id: "scooter-sharing",
-  meta: META,
-  formFactors: SCOOTER_FORM_FACTORS,
-  searchCacheTtl: 120,
-  detailCacheTtl: 120,
-  mapContextCacheTtl: 300,
-  detailStore: { ttlSeconds: 600, maxL1Items: 5_000 },
-  loadInventory: loadScooterInventory,
-});

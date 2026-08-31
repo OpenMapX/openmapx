@@ -53,43 +53,25 @@ const DEFAULT_MOTIS_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
 const LOCAL_BREAKER_FAILURES = 2;
 const LOCAL_BREAKER_OPEN_MS = 15_000;
 
-let transitousUrl = DEFAULT_TRANSITOUS_URL;
-let motisLocalUrl = DEFAULT_MOTIS_URL;
-let localFailures = 0;
-let localBreakerOpenUntil = 0;
-let sourceByProvider = new Map<string, string>();
-
-const transitousInstance: MotisInstance = {
-  client: createClient({ baseUrl: transitousUrl }),
-  origin: "transitous",
-};
-
-const motisLocalInstance: MotisInstance = {
-  client: createClient({ baseUrl: motisLocalUrl }),
-  origin: "motis-local",
-};
-
-export function setSharedMobilityTransitousUrl(url: string | undefined): void {
+function configuredUrl(url: string | undefined, fallback: string): string {
   const trimmed = url?.trim();
-  transitousUrl = trimmed && trimmed.length > 0 ? trimmed : DEFAULT_TRANSITOUS_URL;
-  transitousInstance.client.setConfig({ baseUrl: transitousUrl });
+  return trimmed && trimmed.length > 0 ? trimmed : fallback;
 }
 
-export function setSharedMobilityMotisUrl(url: string | undefined): void {
-  const trimmed = url?.trim();
-  motisLocalUrl = trimmed && trimmed.length > 0 ? trimmed : DEFAULT_MOTIS_URL;
-  motisLocalInstance.client.setConfig({ baseUrl: motisLocalUrl });
-  localFailures = 0;
-  localBreakerOpenUntil = 0;
-}
-
-/** Install Plan 003's provider/feed mapping without coupling this package to data-manager files. */
-export function setMotisRentalSourceIndex(entries: MotisRentalSourceIndexEntry[]): void {
-  sourceByProvider = new Map<string, string>();
+function sourceIndex(entries: readonly MotisRentalSourceIndexEntry[]): ReadonlyMap<string, string> {
+  const byProvider = new Map<string, string>();
   for (const entry of entries) {
-    if (entry.providerId) sourceByProvider.set(entry.providerId, entry.sourceId);
-    if (entry.registrySystemId) sourceByProvider.set(entry.registrySystemId, entry.sourceId);
+    if (entry.providerId) byProvider.set(entry.providerId, entry.sourceId);
+    if (entry.registrySystemId) byProvider.set(entry.registrySystemId, entry.sourceId);
   }
+  return byProvider;
+}
+
+export interface MotisRentalsClient {
+  fetchMotisRentals(
+    bbox: [number, number, number, number],
+    formFactors?: VehicleFormFactor[],
+  ): Promise<MotisRentalSnapshot>;
 }
 
 function encodedSegment(value: string): string {
@@ -214,7 +196,10 @@ function mapRestriction(
   };
 }
 
-function sourceIdForProvider(providerId: string): string {
+function sourceIdForProvider(
+  providerId: string,
+  sourceByProvider: ReadonlyMap<string, string>,
+): string {
   return sourceByProvider.get(providerId) ?? providerId;
 }
 
@@ -253,8 +238,9 @@ function mapProviderGroup(
 function mapProvider(
   provider: RentalProvider,
   origin: RentalServingOrigin,
+  sourceByProvider: ReadonlyMap<string, string>,
 ): SharedMobilityProvider {
-  const sourceId = sourceIdForProvider(provider.id);
+  const sourceId = sourceIdForProvider(provider.id, sourceByProvider);
   return {
     id: createMotisRentalId(origin, provider.id, "provider", provider.id),
     nativeId: provider.id,
@@ -375,6 +361,7 @@ function mapStation(
   origin: RentalServingOrigin,
   filters: Set<VehicleFormFactor> | null,
   warnings: string[],
+  sourceByProvider: ReadonlyMap<string, string>,
 ): SharedMobilityStation | null {
   const matching = matchingNativeTypeIds(provider, filters);
   const lookup = typeLookups(provider, origin);
@@ -394,7 +381,7 @@ function mapStation(
   const availableVehicles = sumMatchingCounts(station.vehicleTypesAvailable, matching);
   const emptySlots = sumMatchingCounts(station.vehicleDocksAvailable, matching);
   const hasDockCounts = dockNativeTypeIds.length > 0;
-  const sourceId = sourceIdForProvider(station.providerId);
+  const sourceId = sourceIdForProvider(station.providerId, sourceByProvider);
   const primaryScheme = `${origin}/${encodedSegment(station.providerId)}/station`;
   return {
     id: createMotisRentalId(origin, station.providerId, "station", station.id),
@@ -453,8 +440,9 @@ function mapVehicle(
   provider: RentalProvider | undefined,
   providerGroup: RentalProviderGroup | undefined,
   origin: RentalServingOrigin,
+  sourceByProvider: ReadonlyMap<string, string>,
 ): SharedMobilityVehicle {
-  const sourceId = sourceIdForProvider(vehicle.providerId);
+  const sourceId = sourceIdForProvider(vehicle.providerId, sourceByProvider);
   const primaryScheme = `${origin}/${encodedSegment(vehicle.providerId)}/vehicle`;
   return {
     id: createMotisRentalId(origin, vehicle.providerId, "vehicle", vehicle.id),
@@ -514,6 +502,7 @@ function mapZone(
   provider: RentalProvider,
   origin: RentalServingOrigin,
   warnings: string[],
+  sourceByProvider: ReadonlyMap<string, string>,
 ): SharedMobilityZone | null {
   const rules = zone.rules.map((rule) => mapRestriction(rule, provider, origin));
   const area = decodeMultiPolygon(zone.area, `zone ${zone.name ?? "unnamed"}`, warnings);
@@ -535,7 +524,7 @@ function mapZone(
     bbox: zone.bbox,
     area,
     rules,
-    sourceId: sourceIdForProvider(zone.providerId),
+    sourceId: sourceIdForProvider(zone.providerId, sourceByProvider),
     servingOrigin: origin,
   };
 }
@@ -544,7 +533,9 @@ export function mapMotisRentalSnapshot(
   response: RentalsResponse,
   origin: RentalServingOrigin,
   formFactors?: VehicleFormFactor[],
+  rentalSourceIndex: readonly MotisRentalSourceIndexEntry[] = [],
 ): MotisRentalSnapshot {
+  const sourceByProvider = sourceIndex(rentalSourceIndex);
   const warnings: string[] = [];
   const filters = formFactors && formFactors.length > 0 ? new Set(formFactors) : null;
   const rawProviders = response.providers ?? [];
@@ -557,7 +548,7 @@ export function mapMotisRentalSnapshot(
       (provider) =>
         !filters || provider.formFactors.some((factor) => filters.has(mapFormFactor(factor))),
     )
-    .map((provider) => mapProvider(provider, origin));
+    .map((provider) => mapProvider(provider, origin, sourceByProvider));
   const includedProviderNativeIds = new Set(providers.map((provider) => provider.nativeId));
   const providerGroups = (response.providerGroups ?? [])
     .map((group) => ({
@@ -578,6 +569,7 @@ export function mapMotisRentalSnapshot(
         origin,
         filters,
         warnings,
+        sourceByProvider,
       ),
     )
     .filter((station): station is SharedMobilityStation => station !== null);
@@ -590,6 +582,7 @@ export function mapMotisRentalSnapshot(
         providerById.get(vehicle.providerId),
         providerGroupById.get(vehicle.providerGroupId),
         origin,
+        sourceByProvider,
       ),
     );
   const zones = (response.zones ?? [])
@@ -602,7 +595,7 @@ export function mapMotisRentalSnapshot(
         return [];
       }
       if (!includedProviderNativeIds.has(provider.id)) return [];
-      const mapped = mapZone(zone, provider, origin, warnings);
+      const mapped = mapZone(zone, provider, origin, warnings, sourceByProvider);
       return mapped ? [mapped] : [];
     })
     .sort((a, b) => a.z - b.z || a.id.localeCompare(b.id));
@@ -678,28 +671,50 @@ async function queryRentals(
   }
 }
 
-export async function fetchMotisRentals(
-  bbox: [number, number, number, number],
-  formFactors?: VehicleFormFactor[],
-): Promise<MotisRentalSnapshot> {
-  const now = Date.now();
-  if (now >= localBreakerOpenUntil) {
-    const local = await queryRentals(motisLocalInstance, bbox);
-    if (local.data) {
-      localFailures = 0;
-      localBreakerOpenUntil = 0;
-      return mapMotisRentalSnapshot(local.data, "motis-local", formFactors);
-    }
-    if (!local.fallbackEligible) {
-      return emptySnapshot("motis-local", local.failure ?? "local MOTIS rejected rentals request");
-    }
-    localFailures++;
-    if (localFailures >= LOCAL_BREAKER_FAILURES) {
-      localBreakerOpenUntil = now + LOCAL_BREAKER_OPEN_MS;
-    }
-  }
+export function createMotisRentalsClient(options: {
+  motisUrl?: string;
+  transitousUrl?: string;
+  rentalSourceIndex?: readonly MotisRentalSourceIndexEntry[];
+}): MotisRentalsClient {
+  const localInstance: MotisInstance = {
+    client: createClient({ baseUrl: configuredUrl(options.motisUrl, DEFAULT_MOTIS_URL) }),
+    origin: "motis-local",
+  };
+  const hostedInstance: MotisInstance = {
+    client: createClient({ baseUrl: configuredUrl(options.transitousUrl, DEFAULT_TRANSITOUS_URL) }),
+    origin: "transitous",
+  };
+  const sources = options.rentalSourceIndex ?? [];
+  let localFailures = 0;
+  let localBreakerOpenUntil = 0;
 
-  const hosted = await queryRentals(transitousInstance, bbox);
-  if (hosted.data) return mapMotisRentalSnapshot(hosted.data, "transitous", formFactors);
-  return emptySnapshot("transitous", hosted.failure ?? "hosted Transitous rentals unavailable");
+  return {
+    async fetchMotisRentals(bbox, formFactors) {
+      const now = Date.now();
+      if (now >= localBreakerOpenUntil) {
+        const local = await queryRentals(localInstance, bbox);
+        if (local.data) {
+          localFailures = 0;
+          localBreakerOpenUntil = 0;
+          return mapMotisRentalSnapshot(local.data, "motis-local", formFactors, sources);
+        }
+        if (!local.fallbackEligible) {
+          return emptySnapshot(
+            "motis-local",
+            local.failure ?? "local MOTIS rejected rentals request",
+          );
+        }
+        localFailures++;
+        if (localFailures >= LOCAL_BREAKER_FAILURES) {
+          localBreakerOpenUntil = now + LOCAL_BREAKER_OPEN_MS;
+        }
+      }
+
+      const hosted = await queryRentals(hostedInstance, bbox);
+      if (hosted.data) {
+        return mapMotisRentalSnapshot(hosted.data, "transitous", formFactors, sources);
+      }
+      return emptySnapshot("transitous", hosted.failure ?? "hosted Transitous rentals unavailable");
+    },
+  };
 }

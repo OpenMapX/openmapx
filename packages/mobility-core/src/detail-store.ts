@@ -53,19 +53,14 @@ function cacheKey(scope: string): string {
  * Search performs one shared write per provider/source instead of one write per item.
  */
 export class SharedMobilityDetailStore {
-  private cache: CacheClient | null = null;
   private readonly l1 = new Map<string, SharedMobilityDetailItem>();
 
   constructor(
+    private readonly cache: CacheClient,
     private readonly ttlSeconds: number,
     private readonly maxL1Items: number,
     private readonly maxSnapshotItems = 10_000,
   ) {}
-
-  setCache(cache: CacheClient): void {
-    if (this.cache !== cache) this.clearL1();
-    this.cache = cache;
-  }
 
   clearL1(): void {
     this.l1.clear();
@@ -82,7 +77,6 @@ export class SharedMobilityDetailStore {
   }
 
   private async mergeAndStore(key: string, incoming: SharedMobilityDetailItem[]): Promise<void> {
-    if (!this.cache) return;
     try {
       const previous = await this.cache.get<DetailSnapshot>(key);
       const byId = new Map<string, SharedMobilityDetailItem>();
@@ -119,7 +113,7 @@ export class SharedMobilityDetailStore {
 
   private async readSnapshot(key: string): Promise<SharedMobilityDetailItem[]> {
     try {
-      const snapshot = await this.cache?.get<DetailSnapshot>(key);
+      const snapshot = await this.cache.get<DetailSnapshot>(key);
       return snapshot?.schemaVersion === 1 ? snapshot.items : [];
     } catch {
       return [];

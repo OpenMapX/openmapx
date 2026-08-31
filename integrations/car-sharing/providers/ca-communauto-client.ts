@@ -20,7 +20,7 @@
  */
 
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
-import { cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
+import { type CacheClient, cacheGet, cacheSet, TTL } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import type { RegionalCarSharingClient } from "./regional-client-types.js";
 
@@ -134,9 +134,10 @@ function bookingWindow(): { start: string; end: string } {
 async function fetchCityStations(
   city: (typeof CA_COMMUNAUTO_CITIES)[number],
   bbox: BoundingBox,
+  cache: CacheClient,
 ): Promise<SharedMobilityStation[]> {
   const cacheKey = `cache:carsharing:ca-communauto:${city.cityId}`;
-  let stations = await cacheGet<SharedMobilityStation[]>(cacheKey);
+  let stations = await cacheGet<SharedMobilityStation[]>(cache, cacheKey);
 
   if (!stations) {
     const { start, end } = bookingWindow();
@@ -150,7 +151,7 @@ async function fetchCityStations(
         timeoutMs: FETCH_TIMEOUT_MS,
       });
       stations = parseCommunautoStations(city.cityId, body);
-      await cacheSet(cacheKey, stations, TTL.sharedMobility.stations);
+      await cacheSet(cache, cacheKey, stations, TTL.sharedMobility.stations);
     } catch {
       return [];
     }
@@ -160,7 +161,10 @@ async function fetchCityStations(
 }
 
 /** Search Communauto stations within a bounding box across all matching Canadian cities. */
-async function searchCaCommunauto(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
+async function searchCaCommunauto(
+  bbox: BoundingBox,
+  cache: CacheClient,
+): Promise<SharedMobilityStation[]> {
   const padding = 1; // ~1° latitude of slack around each city centroid
   const cities = CA_COMMUNAUTO_CITIES.filter((c) => {
     const pad = c.radiusKm / 111 + padding;
@@ -173,7 +177,9 @@ async function searchCaCommunauto(bbox: BoundingBox): Promise<SharedMobilityStat
   });
   if (cities.length === 0) return [];
 
-  const results = await Promise.allSettled(cities.map((c) => fetchCityStations(c, bbox)));
+  const results = await Promise.allSettled(
+    cities.map((city) => fetchCityStations(city, bbox, cache)),
+  );
 
   const stations: SharedMobilityStation[] = [];
   for (const r of results) {

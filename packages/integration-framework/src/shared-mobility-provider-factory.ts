@@ -5,15 +5,13 @@ import type {
   DataSourceMeta,
   DataSourceResult,
 } from "@openmapx/core";
-import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { SharedMobilityDetailStore } from "@openmapx/mobility-core/detail-store";
-import { enrichEnturMobilityItems } from "@openmapx/mobility-core/entur-mobility";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
 import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
 import type { SharedMobilityInventory } from "@openmapx/mobility-core/shared-mobility-orchestrator";
+import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 import type { CacheClient } from "./context";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider";
 import { createManifestAttribution, type IntegrationDataSource } from "./manifest";
@@ -38,23 +36,19 @@ export interface SharedMobilityProviderConfig {
     maxL1Items: number;
     maxSnapshotItems?: number;
   };
-  loadInventory(
-    bbox: BoundingBox,
-    transport: MobilityHttpTransport,
-  ): Promise<SharedMobilityInventory>;
-}
-
-export interface SharedMobilityProviderDefinition {
-  provider: MobilityDataSourceProvider;
-  setDetailCache(cache: CacheClient): void;
-  setManifestDataSources(dataSources: IntegrationDataSource[]): void;
+  cache: CacheClient;
+  dataSources: IntegrationDataSource[];
+  runtime: SharedMobilityRuntime;
+  loadInventory(bbox: BoundingBox): Promise<SharedMobilityInventory>;
 }
 
 export function createSharedMobilityProvider(
   config: SharedMobilityProviderConfig,
-): SharedMobilityProviderDefinition {
+): MobilityDataSourceProvider {
   const attribution = createManifestAttribution();
+  attribution.set(config.dataSources);
   const detailStore = new SharedMobilityDetailStore(
+    config.cache,
     config.detailStore.ttlSeconds,
     config.detailStore.maxL1Items,
     config.detailStore.maxSnapshotItems,
@@ -77,13 +71,14 @@ export function createSharedMobilityProvider(
       return [];
     },
     async search(bbox: BoundingBox): Promise<MobilityResult<DataSourceResult[]>> {
-      const inventory = await config.loadInventory(bbox, mobilityHttpTransport);
+      const inventory = await config.loadInventory(bbox);
 
       try {
-        await enrichEnturMobilityItems(inventory.stations, inventory.vehicles, {
-          transport: mobilityHttpTransport,
-          scope: "map",
-        });
+        await config.runtime.enrichEnturMobilityItems(
+          inventory.stations,
+          inventory.vehicles,
+          "map",
+        );
       } catch (error) {
         console.warn(`[${config.id}] Entur enrichment failed`, error);
       }
@@ -103,10 +98,9 @@ export function createSharedMobilityProvider(
       if (!cached) return wrapRealtime(null, []);
 
       const isStation = "availableVehicles" in cached;
-      await enrichEnturMobilityItems(isStation ? [cached] : [], isStation ? [] : [cached], {
-        transport: mobilityHttpTransport,
-        scope: "detail",
-      }).catch(() => undefined);
+      await config.runtime
+        .enrichEnturMobilityItems(isStation ? [cached] : [], isStation ? [] : [cached], "detail")
+        .catch(() => undefined);
       const attributions = attribution.forResults([cached], (item) => item.sources);
       return wrapRealtime(
         isStation ? mapStationToDetail(cached) : mapVehicleToDetail(cached),
@@ -119,24 +113,11 @@ export function createSharedMobilityProvider(
       options?: DataSourceMapContextSelection,
     ) {
       return wrapStatic(
-        await buildSharedMobilityMapContext(
-          bbox,
-          config.formFactors,
-          mobilityHttpTransport,
-          options,
-        ),
+        await buildSharedMobilityMapContext(bbox, config.formFactors, config.runtime, options),
         attribution.all(),
       );
     },
   };
 
-  return {
-    provider,
-    setDetailCache(cache) {
-      detailStore.setCache(cache);
-    },
-    setManifestDataSources(dataSources) {
-      attribution.set(dataSources);
-    },
-  };
+  return provider;
 }

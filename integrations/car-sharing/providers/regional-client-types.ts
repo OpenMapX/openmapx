@@ -1,4 +1,5 @@
 import type { BoundingBox, LngLat } from "@openmapx/core";
+import type { CacheClient } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 
 /**
@@ -20,7 +21,7 @@ export interface RegionalCarSharingClient {
     licenseUrl?: string;
   };
   /** Search for stations within the bounding box. */
-  search(bbox: BoundingBox): Promise<SharedMobilityStation[]>;
+  search(bbox: BoundingBox, cache: CacheClient): Promise<SharedMobilityStation[]>;
 }
 
 /** Check if a bbox overlaps with any of the client's regions. */

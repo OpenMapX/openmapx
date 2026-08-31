@@ -5,12 +5,8 @@
  * https://apis.deutschebahn.com/db-api-marketplace/apis/shared-mobility-gbfs/v2/de
  */
 
-import {
-  type BoundingBox,
-  bboxContains,
-  fetchJson as coreFetchJson,
-  type LngLat,
-} from "@openmapx/core";
+import { type BoundingBox, bboxContains, type LngLat } from "@openmapx/core";
+import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
@@ -38,36 +34,28 @@ interface CachedData {
   vehicles: SharedMobilityVehicle[];
   expiresAt: number;
 }
-const cache = new Map<string, CachedData>();
 const CACHE_TTL_MS = 120_000; // 2 min
-
-// Populated by setup(ctx) from the resolved integration config cascade.
-let cachedClientId: string | undefined;
-let cachedApiKey: string | undefined;
-
-export function setDbBikeCredentials(creds: { clientId?: string; apiKey?: string }): void {
-  cachedClientId = creds.clientId && creds.clientId.length > 0 ? creds.clientId : undefined;
-  cachedApiKey = creds.apiKey && creds.apiKey.length > 0 ? creds.apiKey : undefined;
-}
-
-function getCredentials(): { clientId: string; apiKey: string } | null {
-  if (!cachedClientId || !cachedApiKey) return null;
-  return { clientId: cachedClientId, apiKey: cachedApiKey };
-}
 
 async function fetchJson<T>(
   url: string,
   creds: { clientId: string; apiKey: string },
+  transport: MobilityHttpTransport,
 ): Promise<T | null> {
-  return coreFetchJson<T>(url, {
-    timeoutMs: FETCH_TIMEOUT_MS,
-    nullOnError: true,
-    headers: {
-      Accept: "application/json",
-      "DB-Client-ID": creds.clientId,
-      "DB-Api-Key": creds.apiKey,
-    },
-  });
+  try {
+    return await transport.fetchJson<T>(url, {
+      timeoutMs: FETCH_TIMEOUT_MS,
+      maxBytes: 8 * 1024 * 1024,
+      allowedRedirectOrigin: "https://apis.deutschebahn.com",
+      headers: {
+        "User-Agent": transport.userAgent,
+        Accept: "application/json",
+        "DB-Client-ID": creds.clientId,
+        "DB-Api-Key": creds.apiKey,
+      },
+    });
+  } catch {
+    return null;
+  }
 }
 
 type RawStationStatus = GbfsV23StationStatus["data"]["stations"][number];
@@ -77,6 +65,8 @@ async function fetchProvider(
   providerId: string,
   bbox: BoundingBox,
   creds: { clientId: string; apiKey: string },
+  transport: MobilityHttpTransport,
+  cache: Map<string, CachedData>,
 ): Promise<{
   stations: SharedMobilityStation[];
   vehicles: SharedMobilityVehicle[];
@@ -98,11 +88,11 @@ async function fetchProvider(
 
   // Fetch all feeds in parallel
   const [sysInfoRes, stInfoRes, stStatusRes, freeBikeRes, vTypesRes] = await Promise.all([
-    fetchJson<GbfsV23SystemInformation>(`${base}/system_information`, creds),
-    fetchJson<GbfsV23StationInformation>(`${base}/station_information`, creds),
-    fetchJson<GbfsV23StationStatus>(`${base}/station_status`, creds),
-    fetchJson<GbfsV23FreeBikeStatus>(`${base}/free_bike_status`, creds),
-    fetchJson<GbfsV23VehicleTypes>(`${base}/vehicle_types`, creds),
+    fetchJson<GbfsV23SystemInformation>(`${base}/system_information`, creds, transport),
+    fetchJson<GbfsV23StationInformation>(`${base}/station_information`, creds, transport),
+    fetchJson<GbfsV23StationStatus>(`${base}/station_status`, creds, transport),
+    fetchJson<GbfsV23FreeBikeStatus>(`${base}/free_bike_status`, creds, transport),
+    fetchJson<GbfsV23VehicleTypes>(`${base}/vehicle_types`, creds, transport),
   ]);
 
   const operator = sysInfoRes?.data?.operator ?? sysInfoRes?.data?.name ?? providerId;
@@ -187,30 +177,32 @@ async function fetchProvider(
  * Search all DB bike-sharing providers and return stations + vehicles in the bbox.
  * Returns empty arrays if DB credentials are not configured.
  */
-export async function searchDbBikes(bbox: BoundingBox): Promise<{
+export function createDbBikeClient(options: {
+  clientId?: string;
+  apiKey?: string;
+  transport: MobilityHttpTransport;
+}): (bbox: BoundingBox) => Promise<{
   stations: SharedMobilityStation[];
   vehicles: SharedMobilityVehicle[];
 }> {
-  const creds = getCredentials();
-  if (!creds) return { stations: [], vehicles: [] };
+  const clientId = options.clientId?.trim();
+  const apiKey = options.apiKey?.trim();
+  const credentials = clientId && apiKey ? { clientId, apiKey } : null;
+  const cache = new Map<string, CachedData>();
 
-  const results = await Promise.allSettled(
-    PROVIDER_IDS.map((id) => fetchProvider(id, bbox, creds)),
-  );
-
-  const stations: SharedMobilityStation[] = [];
-  const vehicles: SharedMobilityVehicle[] = [];
-
-  for (const r of results) {
-    if (r.status === "fulfilled") {
-      stations.push(...r.value.stations);
-      vehicles.push(...r.value.vehicles);
+  return async (bbox) => {
+    if (!credentials) return { stations: [], vehicles: [] };
+    const results = await Promise.allSettled(
+      PROVIDER_IDS.map((id) => fetchProvider(id, bbox, credentials, options.transport, cache)),
+    );
+    const stations: SharedMobilityStation[] = [];
+    const vehicles: SharedMobilityVehicle[] = [];
+    for (const result of results) {
+      if (result.status === "fulfilled") {
+        stations.push(...result.value.stations);
+        vehicles.push(...result.value.vehicles);
+      }
     }
-  }
-
-  console.log(
-    `[db-bike] ${stations.length} stations, ${vehicles.length} free-floating from ${PROVIDER_IDS.length} providers`,
-  );
-
-  return { stations, vehicles };
+    return { stations, vehicles };
+  };
 }

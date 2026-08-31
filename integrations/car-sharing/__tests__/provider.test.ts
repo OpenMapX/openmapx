@@ -1,14 +1,12 @@
 import {
   createSharedMobilityProviderFixtures,
+  createSharedMobilityTestRuntime,
+  fetchMotisRentals,
   createSharedMobilityBbox as makeBbox,
   sharedMobilityProviderContract,
 } from "@openmapx/integration-framework/test/shared-mobility-provider";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
 import { describe, expect, it, vi } from "vitest";
-
-vi.mock("../providers/registry.js", () => ({
-  searchRegionalClients: vi.fn(),
-}));
 
 vi.mock("../providers/merge-stations.js", () => ({
   mergeRegionalStations: vi.fn((items: unknown[]) => items),
@@ -23,10 +21,15 @@ import {
   fetchGbfsData,
   fetchSwissSharedMobilityDataForBbox,
 } from "@openmapx/mobility-core/gbfs-provider-base";
-import { fetchMotisRentals } from "@openmapx/mobility-core/motis-rentals";
 import { mergeRegionalStations } from "../providers/merge-stations.js";
-import { carSharingProvider } from "../providers/provider.js";
-import { searchRegionalClients } from "../providers/registry.js";
+import { createCarSharingProvider } from "../providers/provider.js";
+
+const searchRegionalClients = vi.fn();
+const carSharingProvider = createCarSharingProvider({
+  runtime: createSharedMobilityTestRuntime(),
+  dataSources: [],
+  searchRegionalClients,
+});
 
 const fixtures = createSharedMobilityProviderFixtures("car-sharing", "car");
 const { makeResult, makeStation, makeVehicle } = fixtures;

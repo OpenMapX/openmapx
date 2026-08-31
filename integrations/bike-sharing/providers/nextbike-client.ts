@@ -5,8 +5,8 @@
  */
 
 import { type BoundingBox, bboxContains, fetchJson, type LngLat } from "@openmapx/core";
+import { type CacheClient, TTL, withCache } from "@openmapx/mobility-core/cache";
 import type { SharedMobilityStation } from "@openmapx/mobility-core/shared-mobility";
-import { TTL, withCache } from "./cache.js";
 
 const NEXTBIKE_URL = "https://maps.nextbike.net/maps/nextbike-live.json";
 const FETCH_TIMEOUT_MS = 10_000;
@@ -52,8 +52,12 @@ interface NextbikeBike {
 /**
  * Fetch the global Nextbike dataset and extract stations within the bbox.
  */
-export async function searchNextbike(bbox: BoundingBox): Promise<SharedMobilityStation[]> {
+export async function searchNextbike(
+  bbox: BoundingBox,
+  cache: CacheClient,
+): Promise<SharedMobilityStation[]> {
   const allData = await withCache<NextbikeCountry[]>(
+    cache,
     CACHE_KEY,
     TTL.sharedMobility.stations,
     async () => {

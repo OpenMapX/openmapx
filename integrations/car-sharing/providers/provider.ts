@@ -5,16 +5,14 @@
 
 import type { BoundingBox, DataSourceMeta } from "@openmapx/core";
 import { CATEGORY_FILTERS } from "@openmapx/core";
+import type { IntegrationDataSource } from "@openmapx/integration-framework";
 import { createSharedMobilityProvider } from "@openmapx/integration-framework/shared-mobility-provider";
-import {
-  fetchGbfsData,
-  fetchSwissSharedMobilityDataForBbox,
-} from "@openmapx/mobility-core/gbfs-provider-base";
-import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
-import type { VehicleFormFactor } from "@openmapx/mobility-core/shared-mobility";
-import { orchestrateSharedMobility } from "@openmapx/mobility-core/shared-mobility-orchestrator";
+import type {
+  SharedMobilityStation,
+  VehicleFormFactor,
+} from "@openmapx/mobility-core/shared-mobility";
+import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 import { mergeRegionalStations } from "./merge-stations.js";
-import { searchRegionalClients } from "./registry.js";
 
 const META: DataSourceMeta = {
   minZoom: 12,
@@ -39,45 +37,49 @@ const META: DataSourceMeta = {
 
 const CAR_FORM_FACTORS = new Set<VehicleFormFactor>(["car"]);
 
-async function loadCarInventory(bbox: BoundingBox, transport: MobilityHttpTransport) {
-  return orchestrateSharedMobility(bbox, {
-    category: "car",
+export function createCarSharingProvider(options: {
+  runtime: SharedMobilityRuntime;
+  dataSources: IntegrationDataSource[];
+  searchRegionalClients(bbox: BoundingBox): Promise<SharedMobilityStation[]>;
+}) {
+  const loadCarInventory = (bbox: BoundingBox) =>
+    options.runtime.orchestrate(bbox, {
+      category: "car",
+      motisFormFactors: ["car"],
+      adapters: [
+        {
+          id: "direct-gbfs",
+          kind: "fallback",
+          fetch: (bounds) => options.runtime.fetchGbfsData(bounds, CAR_FORM_FACTORS),
+        },
+        {
+          id: "swiss-gbfs",
+          kind: "fallback",
+          fetch: (bounds) =>
+            options.runtime.fetchSwissSharedMobilityDataForBbox(bounds, CAR_FORM_FACTORS),
+        },
+        {
+          id: "regional",
+          kind: "proprietary",
+          fetch: async (bounds) => ({
+            stations: mergeRegionalStations(await options.searchRegionalClients(bounds)),
+            vehicles: [],
+          }),
+        },
+      ],
+    });
+
+  return createSharedMobilityProvider({
+    id: "car-sharing",
+    meta: META,
     formFactors: CAR_FORM_FACTORS,
-    motisFormFactors: ["car"],
-    adapters: [
-      {
-        id: "direct-gbfs",
-        kind: "fallback",
-        fetch: (bounds) => fetchGbfsData(bounds, CAR_FORM_FACTORS, transport),
-      },
-      {
-        id: "swiss-gbfs",
-        kind: "fallback",
-        fetch: (bounds) => fetchSwissSharedMobilityDataForBbox(bounds, CAR_FORM_FACTORS, transport),
-      },
-      {
-        id: "regional",
-        kind: "proprietary",
-        fetch: async (bounds) => ({
-          stations: mergeRegionalStations(await searchRegionalClients(bounds)),
-          vehicles: [],
-        }),
-      },
-    ],
+    searchCacheTtl: 300,
+    detailCacheTtl: 300,
+    mapContextCacheTtl: 300,
+    detailStore: { ttlSeconds: 900, maxL1Items: 3_000 },
+    cache: options.runtime.cache,
+    dataSources: options.dataSources,
+    runtime: options.runtime,
+    loadInventory: loadCarInventory,
   });
 }
-
-export const {
-  provider: carSharingProvider,
-  setDetailCache,
-  setManifestDataSources,
-} = createSharedMobilityProvider({
-  id: "car-sharing",
-  meta: META,
-  formFactors: CAR_FORM_FACTORS,
-  searchCacheTtl: 300,
-  detailCacheTtl: 300,
-  mapContextCacheTtl: 300,
-  detailStore: { ttlSeconds: 900, maxL1Items: 3_000 },
-  loadInventory: loadCarInventory,
-});
