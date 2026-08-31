@@ -1,15 +1,7 @@
 import { createHash } from "node:crypto";
-import {
-  closeSync,
-  existsSync,
-  fsyncSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
+import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { scanGtfsArchives } from "./internal.js";
 import type { JobContext } from "./types.js";
 
@@ -60,24 +52,6 @@ function manifestPath(ctx: JobContext): string {
   return join(ctx.outDir, TRANSIT_SOURCE_MANIFEST_FILENAME);
 }
 
-function atomicWrite(path: string, value: unknown): void {
-  const temporary = `${path}.tmp-${process.pid}-${Date.now()}`;
-  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
-  const file = openSync(temporary, "r");
-  try {
-    fsyncSync(file);
-  } finally {
-    closeSync(file);
-  }
-  renameSync(temporary, path);
-  const directory = openSync(dirname(path), "r");
-  try {
-    fsyncSync(directory);
-  } finally {
-    closeSync(directory);
-  }
-}
-
 export function writeTransitSourceManifest(ctx: JobContext): string {
   const bySourceId = new Map<string, DraftSource>();
   for (const source of (ctx.state.selectedFeedFiles ?? []).flatMap(
@@ -113,7 +87,7 @@ export function writeTransitSourceManifest(ctx: JobContext): string {
     },
   };
   const path = manifestPath(ctx);
-  atomicWrite(path, manifest);
+  atomicWriteJsonSync(path, manifest, { durability: "full" });
   return path;
 }
 
@@ -158,7 +132,7 @@ export function finalizeTransitSourceManifest(ctx: JobContext): string {
       modifiedAt: stats.mtime.toISOString(),
     };
   }
-  atomicWrite(path, manifest);
+  atomicWriteJsonSync(path, manifest, { durability: "full" });
   return path;
 }
 

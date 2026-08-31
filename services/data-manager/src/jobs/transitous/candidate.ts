@@ -1,17 +1,11 @@
 import { createHash } from "node:crypto";
-import {
-  existsSync,
-  readdirSync,
-  readFileSync,
-  renameSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { basename, join } from "node:path";
 import {
   type MotisConfigExpectations,
   parseMotisConfigExpectations,
 } from "@openmapx/transitous-core";
+import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { GTFS_ARCHIVE_RE } from "./internal.js";
 import type { MotisOperationsPolicy } from "./operations-profile.js";
 import { TRANSIT_SOURCE_MANIFEST_FILENAME } from "./source-manifest.js";
@@ -159,9 +153,7 @@ export function createCandidateManifest(
     },
   };
   const output = join(stagingDir, CANDIDATE_MANIFEST_FILENAME);
-  const temporary = `${output}.tmp-${process.pid}`;
-  writeFileSync(temporary, `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
-  renameSync(temporary, output);
+  atomicWriteJsonSync(output, manifest, { durability: "full" });
   return manifest;
 }
 

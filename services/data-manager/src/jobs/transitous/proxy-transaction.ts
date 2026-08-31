@@ -1,13 +1,5 @@
-import {
-  existsSync,
-  mkdirSync,
-  readFileSync,
-  renameSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname, join } from "node:path";
+import { existsSync, readFileSync, rmSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { applyHardlinkPlan, type HardlinkEntry } from "@openmapx/hardlinks";
 import {
   type FeedProxyVars,
@@ -15,6 +7,7 @@ import {
   renderFeedProxyNginxConfig,
 } from "@openmapx/motis-feed-proxy-config";
 import { runOpsOperation } from "../../ops-client.js";
+import { atomicWriteFileSync } from "../../utils/atomic-write.js";
 import {
   CANDIDATE_MANIFEST_FILENAME,
   CANDIDATE_PROXY_DIRNAME,
@@ -32,15 +25,15 @@ function readOptional(path: string): { existed: boolean; text: string } {
     : { existed: false, text: "" };
 }
 
-function writeAtomic(path: string, text: string): void {
-  mkdirSync(dirname(path), { recursive: true });
-  const temporary = `${path}.tmp-${process.pid}`;
-  writeFileSync(temporary, text, "utf-8");
-  renameSync(temporary, path);
+function writeProxyFile(path: string, text: string): void {
+  atomicWriteFileSync(path, text, {
+    durability: "full",
+    createParentDirectory: true,
+  });
 }
 
 function restore(path: string, previous: { existed: boolean; text: string }): void {
-  if (previous.existed) writeAtomic(path, previous.text);
+  if (previous.existed) writeProxyFile(path, previous.text);
   else rmSync(path, { force: true });
 }
 
@@ -83,7 +76,7 @@ const FEED_PROXY_DATA_TYPE = "motis-feed-proxy-config";
  * the dir the feed-proxy container actually mounts (`motis-feed-proxy-config/`).
  *
  * The container mounts a *hardlinked copy* of the producer dir, not the producer
- * dir itself. `writeAtomic` (write-tmp + rename) gives each new config a fresh
+ * dir itself. Atomic replacement gives each new config a fresh
  * inode, orphaning the previously-linked copy — so without re-linking here nginx
  * keeps serving the stale config no matter how often we `nginx -s reload`. This
  * repairs the link (linkFileAt rm+relinks on inode mismatch) before every
@@ -142,8 +135,8 @@ export async function commitProxyTransaction(ctx: JobContext): Promise<void> {
   const state = ctx.state.proxyTransaction;
   if (state?.phase !== "staged") return;
   try {
-    writeAtomic(state.activeConfigPath, state.candidateConfig);
-    writeAtomic(state.activeVarsPath, state.candidateVars);
+    writeProxyFile(state.activeConfigPath, state.candidateConfig);
+    writeProxyFile(state.activeVarsPath, state.candidateVars);
     await validateAndReload(ctx);
     state.phase = "committed";
   } catch (error) {
@@ -204,8 +197,8 @@ export const run: StageFn = async (ctx) => {
     };
     ctx.state.proxyTransaction = state;
     try {
-      writeAtomic(activeConfigPath, unionConfig);
-      writeAtomic(activeVarsPath, unionVars);
+      writeProxyFile(activeConfigPath, unionConfig);
+      writeProxyFile(activeVarsPath, unionVars);
       await validateAndReload(ctx);
     } catch (error) {
       await restoreAndReload(ctx, state);

@@ -1,4 +1,4 @@
-import { readFileSync, renameSync, writeFileSync } from "node:fs";
+import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type {
   HealthResponse,
@@ -9,6 +9,7 @@ import type {
 } from "@motis-project/motis-client";
 import { MOTIS_VERSION } from "@openmapx/transitous-core";
 import { readTransitousLock } from "../../transitous-lock.js";
+import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 import { CAPABILITY_SNAPSHOT_FILENAME, type MotisCandidateManifest } from "./candidate.js";
 import {
   elevationPlanUrl,
@@ -531,9 +532,7 @@ export function writeCapabilitySnapshot(
     probes: report.outcomes,
   };
   const output = join(stagingDir, CAPABILITY_SNAPSHOT_FILENAME);
-  const temporary = `${output}.tmp-${process.pid}`;
-  writeFileSync(temporary, `${JSON.stringify(snapshot, null, 2)}\n`, "utf-8");
-  renameSync(temporary, output);
+  atomicWriteJsonSync(output, snapshot, { durability: "full" });
   return snapshot;
 }
 

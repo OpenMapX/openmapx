@@ -8,9 +8,9 @@ import {
   renameSync,
   rmSync,
   symlinkSync,
-  writeFileSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
+import { atomicWriteJsonSync } from "../../utils/atomic-write.js";
 
 export type MotisSlot = "A" | "B";
 
@@ -34,12 +34,6 @@ export interface MotisSlotLayout {
 }
 
 const other = (slot: MotisSlot): MotisSlot => (slot === "A" ? "B" : "A");
-
-function atomicJson(path: string, value: unknown): void {
-  const temporary = `${path}.tmp-${process.pid}`;
-  writeFileSync(temporary, `${JSON.stringify(value, null, 2)}\n`, "utf-8");
-  renameSync(temporary, path);
-}
 
 function readRecord(path: string): MotisSlotRecord | null {
   if (!existsSync(path)) return null;
@@ -90,7 +84,7 @@ export function ensureMotisSlotLayout(dataDir: string): MotisSlotLayout {
   migrateDirectory(stagingAlias, slots[other(record.activeSlot)]);
   replaceAlias(liveAlias, slots[record.activeSlot]);
   replaceAlias(stagingAlias, slots[other(record.activeSlot)]);
-  if (!existing) atomicJson(statePath, record);
+  if (!existing) atomicWriteJsonSync(statePath, record, { durability: "full" });
   return { root, slots: { ...slots }, liveAlias, stagingAlias, statePath, record };
 }
 
@@ -118,7 +112,7 @@ export function commitMotisSlotActivation(
     imageDigest: next.imageDigest,
     activatedAt: next.activatedAt,
   };
-  atomicJson(layout.statePath, record);
+  atomicWriteJsonSync(layout.statePath, record, { durability: "full" });
   layout.record = record;
   return record;
 }

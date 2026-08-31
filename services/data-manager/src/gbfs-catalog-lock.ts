@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { atomicWriteJsonSync } from "./utils/atomic-write.js";
 
 export const GBFS_CATALOG_LOCK_RELATIVE_PATH = "infra/docker/gbfs-catalog.lock.json";
 
@@ -54,11 +55,9 @@ export function readGbfsCatalogLock(repoRoot: string): GbfsCatalogLock {
 export function writeGbfsCatalogLock(repoRoot: string, lock: GbfsCatalogLock): void {
   decodeGbfsCatalogLock(lock);
   const path = join(repoRoot, GBFS_CATALOG_LOCK_RELATIVE_PATH);
-  const temporary = `${path}.tmp-${process.pid}`;
-  writeFileSync(
-    temporary,
-    `${JSON.stringify({ $schema: "./gbfs-catalog.lock.schema.json", ...lock }, null, 2)}\n`,
-    "utf-8",
+  atomicWriteJsonSync(
+    path,
+    { $schema: "./gbfs-catalog.lock.schema.json", ...lock },
+    { durability: "full" },
   );
-  renameSync(temporary, path);
 }

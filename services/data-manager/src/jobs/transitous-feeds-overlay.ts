@@ -1,15 +1,6 @@
-import {
-  closeSync,
-  existsSync,
-  fsyncSync,
-  openSync,
-  readFileSync,
-  renameSync,
-  unlinkSync,
-  writeFileSync,
-} from "node:fs";
-import { dirname } from "node:path";
+import { existsSync, readFileSync } from "node:fs";
 import { isSafeFeedSourceName } from "@openmapx/transitous-core";
+import { atomicWriteJsonSync } from "../utils/atomic-write.js";
 
 export interface FeedOverlayPatch {
   sourceId: string;
@@ -291,30 +282,7 @@ export function readFeedOverlay(path: string): FeedOverlay | null {
 /** Persist a validated v3 overlay with a durable same-directory atomic rename. */
 export function writeFeedOverlayAtomic(path: string, overlay: FeedOverlay): void {
   const validated = parseFeedOverlay(overlay, path);
-  const temporary = `${path}.tmp-${process.pid}-${Date.now()}`;
-  try {
-    writeFileSync(temporary, `${JSON.stringify(validated, null, 2)}\n`, { mode: 0o600 });
-    const file = openSync(temporary, "r");
-    try {
-      fsyncSync(file);
-    } finally {
-      closeSync(file);
-    }
-    renameSync(temporary, path);
-    const directory = openSync(dirname(path), "r");
-    try {
-      fsyncSync(directory);
-    } finally {
-      closeSync(directory);
-    }
-  } catch (error) {
-    try {
-      unlinkSync(temporary);
-    } catch {
-      // The rename may already have succeeded or the temporary file was never created.
-    }
-    throw error;
-  }
+  atomicWriteJsonSync(path, validated, { durability: "full", mode: 0o600 });
 }
 
 function catalogIdentity(feed: FeedFile, source: FeedSource): string {
