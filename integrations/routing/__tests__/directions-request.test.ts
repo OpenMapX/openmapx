@@ -163,4 +163,19 @@ describe("directions cache identity", () => {
       ],
     });
   });
+
+  it.each(POLICIES)("distinguishes %s closure policy and geometry states", (_label, policy) => {
+    const closureOff = parseDirectionsRequest({ waypoints: THREE_WAYPOINTS }, policy);
+    const closureOn = parseDirectionsRequest(
+      { waypoints: THREE_WAYPOINTS, avoidClosures: "true" },
+      policy,
+    );
+    const identities = [
+      createDirectionsCacheIdentity(closureOff, null),
+      createDirectionsCacheIdentity(closureOn, null),
+      createDirectionsCacheIdentity(closureOn, "excl:abc"),
+    ];
+
+    expect(new Set(identities.map((identity) => JSON.stringify(identity))).size).toBe(3);
+  });
 });
