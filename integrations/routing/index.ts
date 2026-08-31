@@ -18,10 +18,19 @@ import {
   resolveTravelInstant,
   round,
 } from "./closure-exclusions.js";
+import {
+  createDirectionsCacheIdentity,
+  DIRECTIONS_REQUEST_POLICY,
+  DirectionsRequestValidationError,
+  MAX_ROUTE_WAYPOINTS,
+  OPTIMIZE_DIRECTIONS_REQUEST_POLICY,
+  type ParsedDirectionsRequest,
+  parseDirectionsRequest,
+} from "./directions-request.js";
 import { runEvPlan } from "./ev-plan.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
 import type { DirectionsResult } from "./types.js";
-import { parseDateTime, parseTravelMode } from "./validation.js";
+import { parseTravelMode } from "./validation.js";
 
 /** A raw (un-projected) approach alert from OSM, returned by /navigation/alerts. */
 interface RawRoadAlert {
@@ -38,17 +47,6 @@ interface RawRoadAlert {
  * alerts wouldn't fit on screen anyway.
  */
 const MAX_ALERT_BBOX_DEG2 = 0.6;
-const MAX_ROUTE_WAYPOINTS = 50;
-
-/**
- * Motorised modes request live speed observations so providers that support
- * them can reflect congestion; foot/bike ignore it. This is the
- * route-handler-layer default the `useLiveTraffic` contract expects callers
- * to supply.
- */
-function isMotorisedMode(mode: TravelMode): boolean {
-  return mode === "driving" || mode === "motorcycle";
-}
 
 function routeMetricValues(result: DirectionsResult): {
   routeCount: number;
@@ -106,6 +104,34 @@ function isUnsupportedExclusionsError(error: unknown): boolean {
   return error instanceof RoutingProviderError && error.code === "unsupported-exclusions";
 }
 
+async function planDirectionsRequest(ctx: IntegrationContext, request: ParsedDirectionsRequest) {
+  const { waypoints, avoidClosures, routingOptions: baseRoutingOptions } = request;
+  const closureRefTime = resolveTravelInstant(
+    waypoints,
+    baseRoutingOptions.departAt,
+    baseRoutingOptions.arriveBy,
+  );
+  const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
+    ctx,
+    waypoints,
+    avoidClosures,
+    closureRefTime,
+  );
+
+  return {
+    closureRefTime,
+    hasExclusions,
+    keyParams: createDirectionsCacheIdentity(request, exclusionsHash),
+    routingOptions: {
+      ...baseRoutingOptions,
+      ...(hasExclusions && {
+        excludeLocations: exclusions.points,
+        excludePolygons: exclusions.polygons,
+      }),
+    },
+  };
+}
+
 /** Parse an OSM `maxspeed` tag to km/h, or undefined when not a plain number. */
 function parseMaxspeedKmh(value: string | undefined): number | undefined {
   if (!value) return undefined;
@@ -149,36 +175,6 @@ function mapAlertElements(
     });
   }
   return out;
-}
-
-/** Parse semicolon-separated "lng,lat" pairs into coordinate tuples. */
-function parseWaypoints(raw: string): [number, number][] {
-  const candidates = raw.split(";").map((pair) => pair.split(","));
-  const points = parseWgs84PointList(candidates, { min: 2, max: MAX_ROUTE_WAYPOINTS });
-  if (!points) {
-    throw new Error(`Waypoints must contain 2-${MAX_ROUTE_WAYPOINTS} valid WGS84 lng,lat pairs`);
-  }
-  return points;
-}
-
-function parseEndpointWaypoints(
-  originLng: unknown,
-  originLat: unknown,
-  destLng: unknown,
-  destLat: unknown,
-): [number, number][] | null {
-  return parseWgs84PointList(
-    [
-      [originLng, originLat],
-      [destLng, destLat],
-    ],
-    { min: 2, max: 2 },
-  );
-}
-
-/** Round all waypoints for cache-key stability. */
-function roundWaypoints(wps: [number, number][]): [number, number][] {
-  return wps.map((wp) => [round(wp[0], 4), round(wp[1], 4)]);
 }
 
 /**
@@ -331,116 +327,24 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/directions", async (req, reply) => {
     const requestStartedAt = performance.now();
-    const {
-      waypoints: waypointsParam,
-      originLng,
-      originLat,
-      destLng,
-      destLat,
-      mode = "driving",
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      avoidClosures,
-      units,
-      lang,
-      departAt: departAtRaw,
-      arriveBy: arriveByRaw,
-    } = scalarQueries(req.query);
-
-    let waypoints: [number, number][];
-
-    if (waypointsParam) {
-      try {
-        waypoints = parseWaypoints(waypointsParam);
-      } catch (e) {
-        reply.status(400).send({ error: (e as Error).message });
-        return;
-      }
-    } else if (
-      originLng !== undefined &&
-      originLat !== undefined &&
-      destLng !== undefined &&
-      destLat !== undefined
-    ) {
-      const parsed = parseEndpointWaypoints(originLng, originLat, destLng, destLat);
-      if (!parsed) {
-        reply.status(400).send({ error: "Origin and destination must be valid WGS84 coordinates" });
-        return;
-      }
-      waypoints = parsed;
-    } else {
-      reply.status(400).send({
-        error:
-          "Provide either 'waypoints' (semicolon-separated lng,lat pairs) or originLng/originLat/destLng/destLat",
-      });
-      return;
-    }
-
-    if (waypoints.length < 2) {
-      reply.status(400).send({ error: "At least 2 waypoints are required" });
-      return;
-    }
-
-    let travelMode: TravelMode;
-    let departAt: string | undefined;
-    let arriveBy: string | undefined;
+    let request: ParsedDirectionsRequest;
     try {
-      travelMode = parseTravelMode(mode);
-      departAt = parseDateTime(departAtRaw, "departAt");
-      arriveBy = parseDateTime(arriveByRaw, "arriveBy");
-    } catch (e) {
-      reply.status(400).send({ error: (e as Error).message });
-      return;
-    }
-    if (travelMode === "transit") {
-      reply.status(400).send({ error: "Use /api/transit/plan for transit routing" });
-      return;
-    }
-    if (departAt && arriveBy) {
-      reply.status(400).send({ error: "departAt and arriveBy are mutually exclusive" });
+      request = parseDirectionsRequest(req.query, DIRECTIONS_REQUEST_POLICY);
+    } catch (error) {
+      if (!(error instanceof DirectionsRequestValidationError)) throw error;
+      reply.status(400).send({ error: error.message });
       return;
     }
 
-    const opts = {
-      avoidHighways: avoidHighways === "true",
-      avoidTolls: avoidTolls === "true",
-      avoidFerries: avoidFerries === "true",
-      units: (units ?? "metric") as "metric" | "imperial",
-    };
-
-    const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
-
-    // Only avoid closures actually in effect at the chosen travel time: the
-    // selected departure (or arrival) instant — resolved via the route origin's
-    // timezone — falling back to "now" for an immediate trip. Without this a
-    // planned-but-not-yet-active closure would wrongly detour a trip planned for
-    // before it starts. departAt/arriveBy are already part of the route cache
-    // key, so time-varied exclusions stay correctly cached.
-    const closureRefTime = resolveTravelInstant(waypoints, departAt, arriveBy);
-
-    const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
-      ctx,
+    const {
       waypoints,
-      wantClosureAvoidance,
-      closureRefTime,
-    );
-
-    const keyParams = {
-      arriveBy: arriveBy ?? null,
+      travelMode,
       avoidClosures: wantClosureAvoidance,
-      avoidFerries: opts.avoidFerries,
-      avoidHighways: opts.avoidHighways,
-      avoidTolls: opts.avoidTolls,
-      departAt: departAt ?? null,
-      exclusionsHash,
-      lang: lang ?? "en",
-      mode: travelMode,
-      units: opts.units,
-      waypoints: roundWaypoints(waypoints),
-    };
-
-    const requireTimeAware = Boolean(departAt || arriveBy);
+      requireTimeAware,
+      routingOptions: baseRoutingOptions,
+    } = request;
+    const { closureRefTime, hasExclusions, keyParams, routingOptions } =
+      await planDirectionsRequest(ctx, request);
 
     // When exclusions are present, only use providers that explicitly honour
     // the generic exclusion contract. Falling back to an engine that ignores
@@ -456,7 +360,7 @@ export function setup(ctx: IntegrationContext): void {
         mode: travelMode,
         operation: "directions",
         outcome: "error",
-        liveTraffic: isMotorisedMode(travelMode),
+        liveTraffic: baseRoutingOptions.useLiveTraffic,
         closureAvoidance: wantClosureAvoidance,
         startedAt: requestStartedAt,
       });
@@ -467,17 +371,6 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const routingOpts = {
-      ...opts,
-      lang,
-      departAt,
-      arriveBy,
-      useLiveTraffic: isMotorisedMode(travelMode),
-      ...(hasExclusions && {
-        excludeLocations: exclusions.points,
-        excludePolygons: exclusions.polygons,
-      }),
-    };
     const ttl = cacheTtlSeconds(closureRefTime);
 
     try {
@@ -489,7 +382,7 @@ export function setup(ctx: IntegrationContext): void {
           for (const resolved of resolvedChain) {
             const providerStartedAt = performance.now();
             try {
-              const r = await resolved.provider.getRoute(waypoints, travelMode, routingOpts);
+              const r = await resolved.provider.getRoute(waypoints, travelMode, routingOptions);
               ctx.metricsRecorder?.recordProviderCall(
                 {
                   providerId: resolved.integrationId,
@@ -524,7 +417,7 @@ export function setup(ctx: IntegrationContext): void {
         mode: travelMode,
         operation: "directions",
         outcome: "ok",
-        liveTraffic: isMotorisedMode(travelMode),
+        liveTraffic: baseRoutingOptions.useLiveTraffic,
         closureAvoidance: wantClosureAvoidance,
         startedAt: requestStartedAt,
         result,
@@ -536,7 +429,7 @@ export function setup(ctx: IntegrationContext): void {
         mode: travelMode,
         operation: "directions",
         outcome: "error",
-        liveTraffic: isMotorisedMode(travelMode),
+        liveTraffic: baseRoutingOptions.useLiveTraffic,
         closureAvoidance: wantClosureAvoidance,
         startedAt: requestStartedAt,
       });
@@ -551,117 +444,24 @@ export function setup(ctx: IntegrationContext): void {
 
   ctx.registerRoute("GET", "/directions/optimize", async (req, reply) => {
     const requestStartedAt = performance.now();
-    const {
-      waypoints: waypointsParam,
-      originLng,
-      originLat,
-      destLng,
-      destLat,
-      mode = "driving",
-      avoidHighways,
-      avoidTolls,
-      avoidFerries,
-      avoidClosures,
-      units,
-      lang,
-      departAt: departAtRaw,
-      arriveBy: arriveByRaw,
-    } = scalarQueries(req.query);
-
-    let waypoints: [number, number][];
-
-    if (waypointsParam) {
-      try {
-        waypoints = parseWaypoints(waypointsParam);
-      } catch (e) {
-        reply.status(400).send({ error: (e as Error).message });
-        return;
-      }
-    } else if (
-      originLng !== undefined &&
-      originLat !== undefined &&
-      destLng !== undefined &&
-      destLat !== undefined
-    ) {
-      const parsed = parseEndpointWaypoints(originLng, originLat, destLng, destLat);
-      if (!parsed) {
-        reply.status(400).send({ error: "Origin and destination must be valid WGS84 coordinates" });
-        return;
-      }
-      waypoints = parsed;
-    } else {
-      reply.status(400).send({
-        error:
-          "Provide either 'waypoints' (semicolon-separated lng,lat pairs) or originLng/originLat/destLng/destLat",
-      });
-      return;
-    }
-
-    if (waypoints.length < 3) {
-      reply.status(400).send({ error: "At least 3 waypoints are required for optimization" });
-      return;
-    }
-
-    let travelMode: TravelMode;
-    let departAt: string | undefined;
-    let arriveBy: string | undefined;
+    let request: ParsedDirectionsRequest;
     try {
-      travelMode = parseTravelMode(mode);
-      departAt = parseDateTime(departAtRaw, "departAt");
-      arriveBy = parseDateTime(arriveByRaw, "arriveBy");
-    } catch (e) {
-      reply.status(400).send({ error: (e as Error).message });
-      return;
-    }
-    if (travelMode === "transit") {
-      reply.status(400).send({ error: "transit routing cannot be optimised here" });
-      return;
-    }
-    if (departAt && arriveBy) {
-      reply.status(400).send({ error: "departAt and arriveBy are mutually exclusive" });
+      request = parseDirectionsRequest(req.query, OPTIMIZE_DIRECTIONS_REQUEST_POLICY);
+    } catch (error) {
+      if (!(error instanceof DirectionsRequestValidationError)) throw error;
+      reply.status(400).send({ error: error.message });
       return;
     }
 
-    const opts = {
-      avoidHighways: avoidHighways === "true",
-      avoidTolls: avoidTolls === "true",
-      avoidFerries: avoidFerries === "true",
-      units: (units ?? "metric") as "metric" | "imperial",
-    };
-
-    const wantClosureAvoidance = avoidClosures === "true" || avoidClosures === "1";
-
-    // Only avoid closures actually in effect at the chosen travel time: the
-    // selected departure (or arrival) instant — resolved via the route origin's
-    // timezone — falling back to "now" for an immediate trip. Without this a
-    // planned-but-not-yet-active closure would wrongly detour a trip planned for
-    // before it starts. departAt/arriveBy are already part of the route cache
-    // key, so time-varied exclusions stay correctly cached.
-    const closureRefTime = resolveTravelInstant(waypoints, departAt, arriveBy);
-
-    const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
-      ctx,
+    const {
       waypoints,
-      wantClosureAvoidance,
-      closureRefTime,
-    );
-
-    const keyParams = {
-      arriveBy: arriveBy ?? null,
+      travelMode,
       avoidClosures: wantClosureAvoidance,
-      avoidFerries: opts.avoidFerries,
-      avoidHighways: opts.avoidHighways,
-      avoidTolls: opts.avoidTolls,
-      departAt: departAt ?? null,
-      exclusionsHash,
-      lang: lang ?? "en",
-      mode: travelMode,
-      optimize: true,
-      units: opts.units,
-      waypoints: roundWaypoints(waypoints),
-    };
-
-    const requireTimeAware = Boolean(departAt || arriveBy);
+      requireTimeAware,
+      routingOptions: baseRoutingOptions,
+    } = request;
+    const { closureRefTime, hasExclusions, keyParams, routingOptions } =
+      await planDirectionsRequest(ctx, request);
 
     const resolved = getOptimizeProvider(travelMode, { requireTimeAware });
 
@@ -676,7 +476,7 @@ export function setup(ctx: IntegrationContext): void {
         mode: travelMode,
         operation: "optimize",
         outcome: "error",
-        liveTraffic: isMotorisedMode(travelMode),
+        liveTraffic: baseRoutingOptions.useLiveTraffic,
         closureAvoidance: wantClosureAvoidance,
         startedAt: requestStartedAt,
       });
@@ -687,17 +487,6 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const routingOpts = {
-      ...opts,
-      lang,
-      departAt,
-      arriveBy,
-      useLiveTraffic: isMotorisedMode(travelMode),
-      ...(hasExclusions && {
-        excludeLocations: exclusions.points,
-        excludePolygons: exclusions.polygons,
-      }),
-    };
     const ttl = cacheTtlSeconds(closureRefTime);
 
     try {
@@ -708,7 +497,7 @@ export function setup(ctx: IntegrationContext): void {
           const providerStartedAt = performance.now();
           let r: DirectionsResult;
           try {
-            r = await optimizeFn(waypoints, travelMode, routingOpts);
+            r = await optimizeFn(waypoints, travelMode, routingOptions);
             ctx.metricsRecorder?.recordProviderCall(
               {
                 providerId: effectiveResolved.integrationId,
@@ -741,7 +530,7 @@ export function setup(ctx: IntegrationContext): void {
         mode: travelMode,
         operation: "optimize",
         outcome: "ok",
-        liveTraffic: isMotorisedMode(travelMode),
+        liveTraffic: baseRoutingOptions.useLiveTraffic,
         closureAvoidance: wantClosureAvoidance,
         startedAt: requestStartedAt,
         result,
@@ -753,7 +542,7 @@ export function setup(ctx: IntegrationContext): void {
         mode: travelMode,
         operation: "optimize",
         outcome: "error",
-        liveTraffic: isMotorisedMode(travelMode),
+        liveTraffic: baseRoutingOptions.useLiveTraffic,
         closureAvoidance: wantClosureAvoidance,
         startedAt: requestStartedAt,
       });
