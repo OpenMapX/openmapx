@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { mapIt52FlorencePayload, mergeIt52FlorenceLive } from "../it-52-florence-mapper.js";
 import { parseIt52FlorenceBundled } from "../it-52-florence-parser.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -76,29 +77,19 @@ async function runMigrated(): Promise<ParkingFacility[]> {
   });
 }
 
-describe("florence-it parser+mapper equivalence to pre-migration in-memory parser", () => {
-  it("produces the same set of facility ids in the same order", async () => {
-    const ref = runReference();
-    const got = await runMigrated();
-    expect(got.map((f) => f.id)).toEqual(ref.map((f) => f.id));
-  });
-
-  it("produces field-by-field-identical facilities", async () => {
-    const ref = runReference();
-    const got = await runMigrated();
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.freeSpaces, `row ${i}: freeSpaces`).toBe(r.freeSpaces);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.access, `row ${i}: access`).toBe(r.access);
-    }
-  });
+parkingEquivalenceContract({
+  name: "Florence",
+  reference: runReference,
+  migrated: runMigrated,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "freeSpaces",
+    "hasRealtimeData",
+    "fee",
+    "access",
+  ],
 });

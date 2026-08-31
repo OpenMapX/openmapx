@@ -9,6 +9,10 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeDeParkapiV3BundledParser } from "../de-parkapi-v3-bundled-parser.js";
 import { mapDeParkapiV3Payload, mergeDeParkapiV3Live } from "../de-parkapi-v3-mapper.js";
+import {
+  parkingEquivalenceContract,
+  stubSuccessfulFetchResponse,
+} from "./support/parking-equivalence-contract.js";
 
 const FIXTURE_PATH = join(__dirname, "fixtures", "parkapi-v3-sample.json");
 const FIXTURE_BUFFER = readFileSync(FIXTURE_PATH);
@@ -17,6 +21,7 @@ const FIXTURE_PARSED = JSON.parse(FIXTURE_BUFFER.toString("utf-8")) as {
 };
 
 const SOURCES_API = "https://api.mobidata-bw.de/park-api/api/public/v3/sources";
+const FIXED_NOW = Date.parse("2026-05-06T12:00:00.000Z");
 
 const SOURCES_RESPONSE: { items: ParkApiV3Source[] } = {
   items: [
@@ -197,63 +202,52 @@ async function runMigrated(): Promise<ParkingFacility[]> {
   });
 }
 
+async function runMigratedWithSources(): Promise<ParkingFacility[]> {
+  vi.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
+  stubSuccessfulFetchResponse(SOURCES_API, JSON.stringify(SOURCES_RESPONSE));
+  return runMigrated();
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
+parkingEquivalenceContract({
+  name: "ParkAPI v3",
+  reference: () => runReference(FIXED_NOW),
+  migrated: runMigratedWithSources,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "sourceUid",
+    "sourceName",
+    "sourceUrl",
+    "sourceAttribution",
+    "parkingType",
+    "capacity",
+    "freeSpaces",
+    "hasRealtimeData",
+    "dataUpdatedAt",
+    "staticDataUpdatedAt",
+    "realtimeDataUpdatedAt",
+    "isStale",
+    "qualityWarnings",
+    "disabledSpaces",
+    "chargingSpaces",
+    "maxHeight",
+    "fee",
+    "feeDescription",
+    "operator",
+    "address",
+    "openingHours",
+    "url",
+  ],
+});
+
 describe("parkapi-v3 parser+mapper equivalence to pre-migration impl", () => {
-  it("produces field-by-field-identical car facilities", async () => {
-    const FIXED_NOW = Date.parse("2026-05-06T12:00:00.000Z");
-    vi.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
-
-    const fetchMock = vi.fn(async (input: string | URL) => {
-      const url = String(input);
-      if (url === SOURCES_API) {
-        return new Response(JSON.stringify(SOURCES_RESPONSE), { status: 200 });
-      }
-      throw new Error(`Unexpected request: ${url}`);
-    });
-    vi.stubGlobal("fetch", fetchMock);
-
-    const ref = runReference(FIXED_NOW);
-    const got = await runMigrated();
-
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.sourceUid, `row ${i}: sourceUid`).toBe(r.sourceUid);
-      expect(g.sourceName, `row ${i}: sourceName`).toBe(r.sourceName);
-      expect(g.sourceUrl, `row ${i}: sourceUrl`).toBe(r.sourceUrl);
-      expect(g.sourceAttribution, `row ${i}: sourceAttribution`).toEqual(r.sourceAttribution);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-      expect(g.freeSpaces, `row ${i}: freeSpaces`).toBe(r.freeSpaces);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.dataUpdatedAt, `row ${i}: dataUpdatedAt`).toBe(r.dataUpdatedAt);
-      expect(g.staticDataUpdatedAt, `row ${i}: staticDataUpdatedAt`).toBe(r.staticDataUpdatedAt);
-      expect(g.realtimeDataUpdatedAt, `row ${i}: realtimeDataUpdatedAt`).toBe(
-        r.realtimeDataUpdatedAt,
-      );
-      expect(g.isStale, `row ${i}: isStale`).toBe(r.isStale);
-      expect(g.qualityWarnings, `row ${i}: qualityWarnings`).toEqual(r.qualityWarnings);
-      expect(g.disabledSpaces, `row ${i}: disabledSpaces`).toBe(r.disabledSpaces);
-      expect(g.chargingSpaces, `row ${i}: chargingSpaces`).toBe(r.chargingSpaces);
-      expect(g.maxHeight, `row ${i}: maxHeight`).toBe(r.maxHeight);
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.feeDescription, `row ${i}: feeDescription`).toBe(r.feeDescription);
-      expect(g.operator, `row ${i}: operator`).toBe(r.operator);
-      expect(g.address, `row ${i}: address`).toBe(r.address);
-      expect(g.openingHours, `row ${i}: openingHours`).toBe(r.openingHours);
-      expect(g.url, `row ${i}: url`).toBe(r.url);
-    }
-  });
-
   it("skips bike/missing-coord sites just like the pre-migration impl", async () => {
     vi.stubGlobal(
       "fetch",

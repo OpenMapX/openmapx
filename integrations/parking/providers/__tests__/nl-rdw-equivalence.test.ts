@@ -6,9 +6,10 @@ import type {
   RdwGeoRecord,
   RdwSpecsRecord,
 } from "@openmapx/mobility-core/parking";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { mapNlRdwPayload } from "../nl-rdw-mapper.js";
 import { parseNlRdwStatic } from "../nl-rdw-parser.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 /**
  * Pre-migration reference: query 3 GEO datasets + specs, join by
@@ -139,32 +140,22 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("rdw-nl parser+mapper equivalence to pre-migration in-memory parser", () => {
-  it("produces the same facility ids in the same order", async () => {
-    const ref = runReference();
-    const got = await runMigrated();
-    expect(got.map((f) => f.id)).toEqual(ref.map((f) => f.id));
-  });
-
-  it("produces field-by-field-identical facilities", async () => {
-    const ref = runReference();
-    const got = await runMigrated();
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.disabledSpaces, `row ${i}: disabledSpaces`).toBe(r.disabledSpaces);
-      expect(g.chargingSpaces, `row ${i}: chargingSpaces`).toBe(r.chargingSpaces);
-      expect(g.maxHeight, `row ${i}: maxHeight`).toBe(r.maxHeight);
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.parkAndRide, `row ${i}: parkAndRide`).toBe(r.parkAndRide);
-    }
-  });
+parkingEquivalenceContract({
+  name: "Dutch RDW",
+  reference: runReference,
+  migrated: runMigrated,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "capacity",
+    "hasRealtimeData",
+    "disabledSpaces",
+    "chargingSpaces",
+    "maxHeight",
+    "fee",
+    "parkAndRide",
+  ],
 });

@@ -10,6 +10,10 @@ import { parseDatexParkingStatus, parseDatexParkingTable } from "@openmapx/mobil
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { parseLuCitaBundled } from "../lu-cita-bundled-parser.js";
 import { mapLuCitaPayload, mergeLuCitaLive } from "../lu-cita-mapper.js";
+import {
+  parkingEquivalenceContract,
+  stubSuccessfulFetchResponse,
+} from "./support/parking-equivalence-contract.js";
 
 /**
  * Pre-migration reference, lifted from the prior `cita-lu.ts` →
@@ -25,6 +29,7 @@ import { mapLuCitaPayload, mergeLuCitaLive } from "../lu-cita-mapper.js";
 const TABLE_FIXTURE = readFileSync(join(__dirname, "fixtures", "cita-lu-table.xml"));
 const STATUS_FIXTURE = readFileSync(join(__dirname, "fixtures", "cita-lu-status.xml"));
 const STATUS_URL = "https://www.cita.lu/info_trafic/datex/parking_dynamic.xml";
+const FIXED_NOW = Date.parse("2026-05-23T11:10:00.000Z");
 
 const REF_ATTRIBUTION: ParkingSourceAttribution = {
   name: "CITA Luxembourg",
@@ -121,56 +126,44 @@ async function runMigrated(): Promise<ParkingFacility[]> {
   });
 }
 
+async function runMigratedWithStatus(): Promise<ParkingFacility[]> {
+  vi.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
+  stubSuccessfulFetchResponse(STATUS_URL, STATUS_FIXTURE.toString("utf-8"));
+  return runMigrated();
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
+parkingEquivalenceContract({
+  name: "CITA Luxembourg",
+  reference: () => runReference(FIXED_NOW),
+  migrated: runMigratedWithStatus,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "sourceUid",
+    "sourceName",
+    "sourceUrl",
+    "sourceAttribution",
+    "parkingType",
+    "capacity",
+    "freeSpaces",
+    "hasRealtimeData",
+    "dataUpdatedAt",
+    "realtimeDataUpdatedAt",
+    "isStale",
+    "qualityWarnings",
+    "fee",
+    "state",
+  ],
+});
+
 describe("cita-lu parser+mapper equivalence to pre-migration DATEX provider", () => {
-  it("produces field-by-field-identical facilities", async () => {
-    const FIXED_NOW = Date.parse("2026-05-23T11:10:00.000Z");
-    vi.spyOn(Date, "now").mockReturnValue(FIXED_NOW);
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL) => {
-        const url = String(input);
-        if (url === STATUS_URL) {
-          return new Response(STATUS_FIXTURE.toString("utf-8"), { status: 200 });
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      }),
-    );
-
-    const ref = runReference(FIXED_NOW);
-    const got = await runMigrated();
-
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.sourceUid, `row ${i}: sourceUid`).toBe(r.sourceUid);
-      expect(g.sourceName, `row ${i}: sourceName`).toBe(r.sourceName);
-      expect(g.sourceUrl, `row ${i}: sourceUrl`).toBe(r.sourceUrl);
-      expect(g.sourceAttribution, `row ${i}: sourceAttribution`).toEqual(r.sourceAttribution);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-      expect(g.freeSpaces, `row ${i}: freeSpaces`).toBe(r.freeSpaces);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.dataUpdatedAt, `row ${i}: dataUpdatedAt`).toBe(r.dataUpdatedAt);
-      expect(g.realtimeDataUpdatedAt, `row ${i}: realtimeDataUpdatedAt`).toBe(
-        r.realtimeDataUpdatedAt,
-      );
-      expect(g.isStale, `row ${i}: isStale`).toBe(r.isStale);
-      expect(g.qualityWarnings, `row ${i}: qualityWarnings`).toEqual(r.qualityWarnings);
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.state, `row ${i}: state`).toBe(r.state);
-    }
-  });
-
   it("URL-encodes record ids with slashes into the stable poiId", async () => {
     vi.stubGlobal(
       "fetch",

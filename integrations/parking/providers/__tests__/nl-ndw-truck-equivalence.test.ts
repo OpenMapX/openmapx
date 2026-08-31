@@ -6,6 +6,10 @@ import { parseDatexParkingStatus, parseDatexParkingTable } from "@openmapx/mobil
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { parseNlNdwTruckBundled } from "../nl-ndw-truck-bundled-parser.js";
 import { mapNlNdwTruckPayload, mergeNlNdwTruckLive } from "../nl-ndw-truck-mapper.js";
+import {
+  parkingEquivalenceContract,
+  stubSuccessfulFetchResponse,
+} from "./support/parking-equivalence-contract.js";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -82,46 +86,37 @@ async function runMigrated(): Promise<ParkingFacility[]> {
   });
 }
 
+async function runMigratedWithStatus(): Promise<ParkingFacility[]> {
+  stubSuccessfulFetchResponse(STATUS_URL, STATUS_FIXTURE.toString("utf-8"));
+  return runMigrated();
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
+parkingEquivalenceContract({
+  name: "NDW truck parking",
+  reference: refBuild,
+  migrated: runMigratedWithStatus,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "capacity",
+    "freeSpaces",
+    "hasRealtimeData",
+    "fee",
+    "state",
+    "chargingSpaces",
+    "chargingDetails",
+  ],
+});
+
 describe("ndw-truck-nl parser+mapper equivalence to pre-migration in-memory impl", () => {
-  it("produces field-by-field-identical facilities", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: string | URL) => {
-        const url = String(input);
-        if (url === STATUS_URL) {
-          return new Response(STATUS_FIXTURE.toString("utf-8"), { status: 200 });
-        }
-        throw new Error(`Unexpected request: ${url}`);
-      }),
-    );
-
-    const ref = refBuild();
-    const got = await runMigrated();
-
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-      expect(g.freeSpaces, `row ${i}: freeSpaces`).toBe(r.freeSpaces);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.state, `row ${i}: state`).toBe(r.state);
-      expect(g.chargingSpaces, `row ${i}: chargingSpaces`).toBe(r.chargingSpaces);
-      expect(g.chargingDetails, `row ${i}: chargingDetails`).toBe(r.chargingDetails);
-    }
-  });
-
   it("degrades gracefully when the status feed errors out", async () => {
     vi.stubGlobal(
       "fetch",

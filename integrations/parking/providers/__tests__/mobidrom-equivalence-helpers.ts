@@ -1,5 +1,5 @@
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
-import { expect } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { makeMobidromBundledParser } from "../mobidrom-bundled-parser.js";
 import {
   fixMojibakeString,
@@ -7,6 +7,7 @@ import {
   type MobidromSiteBean,
 } from "../mobidrom-common.js";
 import { makeMobidromMapper, mergeMobidromLive } from "../mobidrom-mapper.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 /**
  * Reference implementation of the pre-migration `mapMobidromSite` + URL fetcher
@@ -153,34 +154,43 @@ export async function migratedRunAll(
   });
 }
 
-export function assertFacilitiesEqual(
-  got: readonly ParkingFacility[],
-  ref: readonly ParkingFacility[],
+export function mobidromParkingEquivalenceContract(
+  name: string,
+  buffer: Buffer,
+  options: MobidromMapOptions,
 ): void {
-  // Throws via expect — caller wraps in describe/it so we just compare every
-  // field for every row to surface mismatches with a helpful index.
-  expect(got).toHaveLength(ref.length);
-  for (let i = 0; i < ref.length; i++) {
-    const r = ref[i];
-    const g = got[i];
-    expect(g.id, `row ${i}: id`).toBe(r.id);
-    expect(g.name, `row ${i}: name`).toBe(r.name);
-    expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-    expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-    expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-    expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-    expect(g.freeSpaces, `row ${i}: freeSpaces`).toBe(r.freeSpaces);
-    expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-    expect(g.disabledSpaces, `row ${i}: disabledSpaces`).toBe(r.disabledSpaces);
-    expect(g.chargingSpaces, `row ${i}: chargingSpaces`).toBe(r.chargingSpaces);
-    expect(g.maxHeight, `row ${i}: maxHeight`).toBe(r.maxHeight);
-    expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-    expect(g.feeDescription, `row ${i}: feeDescription`).toBe(r.feeDescription);
-    expect(g.operator, `row ${i}: operator`).toBe(r.operator);
-    expect(g.address, `row ${i}: address`).toBe(r.address);
-    expect(g.openingHours, `row ${i}: openingHours`).toBe(r.openingHours);
-    expect(g.state, `row ${i}: state`).toBe(r.state);
-    expect(g.parkAndRide, `row ${i}: parkAndRide`).toBe(r.parkAndRide);
-    expect(g.url, `row ${i}: url`).toBe(r.url);
-  }
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-05-23T10:10:00Z"));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  parkingEquivalenceContract({
+    name,
+    reference: () => refRunAll(buffer, options),
+    migrated: () => migratedRunAll(buffer, options),
+    fields: [
+      "id",
+      "name",
+      "coordinates",
+      "sources",
+      "parkingType",
+      "capacity",
+      "freeSpaces",
+      "hasRealtimeData",
+      "disabledSpaces",
+      "chargingSpaces",
+      "maxHeight",
+      "fee",
+      "feeDescription",
+      "operator",
+      "address",
+      "openingHours",
+      "state",
+      "parkAndRide",
+      "url",
+    ],
+  });
 }

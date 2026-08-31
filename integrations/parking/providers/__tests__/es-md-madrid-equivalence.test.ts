@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
-import { describe, expect, it } from "vitest";
 import { mapEsMdMadridPayload } from "../es-md-madrid-mapper.js";
 import { parseEsMdMadridStatic } from "../es-md-madrid-parser.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 /**
  * Pre-migration reference, lifted verbatim from the prior madrid-es.ts.
@@ -136,33 +136,23 @@ function runMigrated(): ParkingFacility[] {
   return parseEsMdMadridStatic(FIXTURE).map((row) => mapEsMdMadridPayload(row.poiId, row.payload));
 }
 
-describe("madrid-es parser+mapper equivalence to pre-migration in-memory parser", () => {
-  it("produces the same set of facility ids in the same order", () => {
-    const reference = runReference();
-    const migrated = runMigrated();
-    expect(migrated.map((f) => f.id)).toEqual(reference.map((f) => f.id));
-  });
-
-  it("produces field-by-field-identical facilities", () => {
-    const reference = runReference();
-    const migrated = runMigrated();
-    expect(migrated).toHaveLength(reference.length);
-    for (let i = 0; i < reference.length; i++) {
-      const ref = reference[i];
-      const got = migrated[i];
-      expect(got.id, `row ${i}: id`).toBe(ref.id);
-      expect(got.name, `row ${i}: name`).toBe(ref.name);
-      expect(got.coordinates, `row ${i}: coordinates`).toEqual(ref.coordinates);
-      expect(got.sources, `row ${i}: sources`).toEqual(ref.sources);
-      expect(got.parkingType, `row ${i}: parkingType`).toBe(ref.parkingType);
-      expect(got.capacity, `row ${i}: capacity`).toBe(ref.capacity);
-      expect(got.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(ref.hasRealtimeData);
-      expect(got.disabledSpaces, `row ${i}: disabledSpaces`).toBe(ref.disabledSpaces);
-      expect(got.fee, `row ${i}: fee`).toBe(ref.fee);
-      expect(got.address, `row ${i}: address`).toBe(ref.address);
-      expect(got.openingHours, `row ${i}: openingHours`).toBe(ref.openingHours);
-      expect(got.url, `row ${i}: url`).toBe(ref.url);
-      expect(got.parkAndRide, `row ${i}: parkAndRide`).toBe(ref.parkAndRide);
-    }
-  });
+parkingEquivalenceContract({
+  name: "Madrid",
+  reference: runReference,
+  migrated: runMigrated,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "capacity",
+    "hasRealtimeData",
+    "disabledSpaces",
+    "fee",
+    "address",
+    "openingHours",
+    "url",
+    "parkAndRide",
+  ],
 });

@@ -7,9 +7,9 @@ import type {
   ParkingFacility,
   ParkingType,
 } from "@openmapx/mobility-core/parking";
-import { describe, expect, it } from "vitest";
 import { mapFrBnlsPayload } from "../fr-bnls-mapper.js";
 import { parseFrBnlsStatic } from "../fr-bnls-parser.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 /**
  * Pre-migration reference, lifted verbatim from the prior bnls-fr.ts.
@@ -104,37 +104,27 @@ function runMigrated(): ParkingFacility[] {
   return parseFrBnlsStatic(FIXTURE).map((row) => mapFrBnlsPayload(row.poiId, row.payload));
 }
 
-describe("bnls-fr parser+mapper equivalence to pre-migration in-memory parser", () => {
-  it("produces the same set of facility ids in the same order", () => {
-    const ref = runReference();
-    const got = runMigrated();
-    expect(got.map((f) => f.id)).toEqual(ref.map((f) => f.id));
-  });
-
-  it("produces field-by-field-identical facilities", () => {
-    const ref = runReference();
-    const got = runMigrated();
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.disabledSpaces, `row ${i}: disabledSpaces`).toBe(r.disabledSpaces);
-      expect(g.chargingSpaces, `row ${i}: chargingSpaces`).toBe(r.chargingSpaces);
-      expect(g.maxHeight, `row ${i}: maxHeight`).toBe(r.maxHeight);
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.feeDescription, `row ${i}: feeDescription`).toBe(r.feeDescription);
-      expect(g.tariffRows, `row ${i}: tariffRows`).toEqual(r.tariffRows);
-      expect(g.access, `row ${i}: access`).toBe(r.access);
-      expect(g.address, `row ${i}: address`).toBe(r.address);
-      expect(g.parkAndRide, `row ${i}: parkAndRide`).toBe(r.parkAndRide);
-      expect(g.url, `row ${i}: url`).toBe(r.url);
-    }
-  });
+parkingEquivalenceContract({
+  name: "French national parking database",
+  reference: runReference,
+  migrated: runMigrated,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "capacity",
+    "hasRealtimeData",
+    "disabledSpaces",
+    "chargingSpaces",
+    "maxHeight",
+    "fee",
+    "feeDescription",
+    "tariffRows",
+    "access",
+    "address",
+    "parkAndRide",
+    "url",
+  ],
 });

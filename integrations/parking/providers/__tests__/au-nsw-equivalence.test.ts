@@ -2,9 +2,10 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { integrationEnvVarName } from "@openmapx/integration-framework";
 import type { ParkingFacility } from "@openmapx/mobility-core/parking";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { parseAuNswBundled } from "../au-nsw-bundled-parser.js";
 import { mapAuNswPayload, mergeAuNswLive } from "../au-nsw-mapper.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 const NSW_API_KEY_ENV = integrationEnvVarName("parking", "au-nsw-api-key");
 
@@ -123,36 +124,24 @@ afterEach(() => {
   process.env[NSW_API_KEY_ENV] = undefined;
 });
 
-describe("nsw-au parser+mapper equivalence to pre-migration in-memory parser", () => {
-  it("produces the same facility ids in the same order", async () => {
-    const ref = runReference();
-    const got = await runMigrated();
-    expect(got.map((f) => f.id)).toEqual(ref.map((f) => f.id));
-  });
-
-  it("produces field-by-field-identical facilities", async () => {
-    const ref = runReference();
-    const got = await runMigrated();
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates[0], `row ${i}: lng`).toBeCloseTo(r.coordinates[0], 6);
-      expect(g.coordinates[1], `row ${i}: lat`).toBeCloseTo(r.coordinates[1], 6);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-      expect(g.freeSpaces, `row ${i}: freeSpaces`).toBe(r.freeSpaces);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.dataUpdatedAt, `row ${i}: dataUpdatedAt`).toBe(r.dataUpdatedAt);
-      expect(g.realtimeDataUpdatedAt, `row ${i}: realtimeDataUpdatedAt`).toBe(
-        r.realtimeDataUpdatedAt,
-      );
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.parkAndRide, `row ${i}: parkAndRide`).toBe(r.parkAndRide);
-      expect(g.address, `row ${i}: address`).toBe(r.address);
-    }
-  });
+parkingEquivalenceContract({
+  name: "New South Wales",
+  reference: runReference,
+  migrated: runMigrated,
+  coordinatePrecision: 6,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "capacity",
+    "freeSpaces",
+    "hasRealtimeData",
+    "dataUpdatedAt",
+    "realtimeDataUpdatedAt",
+    "fee",
+    "parkAndRide",
+    "address",
+  ],
 });

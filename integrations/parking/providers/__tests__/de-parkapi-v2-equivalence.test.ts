@@ -9,6 +9,7 @@ import type {
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeDeParkapiV2BundledParser } from "../de-parkapi-v2-bundled-parser.js";
 import { mapDeParkapiV2Payload, mergeDeParkapiV2Live } from "../de-parkapi-v2-mapper.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 const CITIES_FIXTURE = readFileSync(join(__dirname, "fixtures", "parkapi-v2-cities.json"));
 const DRESDEN_LOTS = readFileSync(join(__dirname, "fixtures", "parkapi-v2-dresden.json"));
@@ -113,35 +114,35 @@ async function runMigrated(): Promise<ParkingFacility[]> {
   });
 }
 
+async function runMigratedWithFixture(): Promise<ParkingFacility[]> {
+  vi.stubGlobal("fetch", makeFetchMock());
+  return runMigrated();
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
 
+parkingEquivalenceContract({
+  name: "ParkAPI v2",
+  reference: runReference,
+  migrated: runMigratedWithFixture,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "capacity",
+    "freeSpaces",
+    "hasRealtimeData",
+    "state",
+    "address",
+  ],
+});
+
 describe("parkapi-v2 parser+mapper equivalence to pre-migration impl", () => {
-  it("produces field-by-field-identical facilities across federated cities", async () => {
-    vi.stubGlobal("fetch", makeFetchMock());
-
-    const ref = runReference();
-    const got = await runMigrated();
-
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-      expect(g.freeSpaces, `row ${i}: freeSpaces`).toBe(r.freeSpaces);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.state, `row ${i}: state`).toBe(r.state);
-      expect(g.address, `row ${i}: address`).toBe(r.address);
-    }
-  });
-
   it("respects active_support and skips lots without coords", async () => {
     vi.stubGlobal("fetch", makeFetchMock());
     const got = await runMigrated();

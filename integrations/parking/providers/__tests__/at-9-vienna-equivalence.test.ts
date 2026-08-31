@@ -1,9 +1,9 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
-import { describe, expect, it } from "vitest";
 import { mapAt9ViennaPayload } from "../at-9-vienna-mapper.js";
 import { parseAt9ViennaStatic } from "../at-9-vienna-parser.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 /**
  * Pre-migration reference, lifted verbatim from the prior vienna-at.ts.
@@ -80,33 +80,23 @@ function runMigrated(): ParkingFacility[] {
   return parseAt9ViennaStatic(FIXTURE).map((row) => mapAt9ViennaPayload(row.poiId, row.payload));
 }
 
-describe("vienna-at parser+mapper equivalence to pre-migration in-memory parser", () => {
-  it("produces the same set of facility ids in the same order", () => {
-    const ref = runReference();
-    const got = runMigrated();
-    expect(got.map((f) => f.id)).toEqual(ref.map((f) => f.id));
-  });
-
-  it("produces field-by-field-identical facilities", () => {
-    const ref = runReference();
-    const got = runMigrated();
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.disabledSpaces, `row ${i}: disabledSpaces`).toBe(r.disabledSpaces);
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.access, `row ${i}: access`).toBe(r.access);
-      expect(g.operator, `row ${i}: operator`).toBe(r.operator);
-      expect(g.address, `row ${i}: address`).toBe(r.address);
-      expect(g.parkAndRide, `row ${i}: parkAndRide`).toBe(r.parkAndRide);
-      expect(g.url, `row ${i}: url`).toBe(r.url);
-    }
-  });
+parkingEquivalenceContract({
+  name: "Vienna",
+  reference: runReference,
+  migrated: runMigrated,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "hasRealtimeData",
+    "disabledSpaces",
+    "fee",
+    "access",
+    "operator",
+    "address",
+    "parkAndRide",
+    "url",
+  ],
 });

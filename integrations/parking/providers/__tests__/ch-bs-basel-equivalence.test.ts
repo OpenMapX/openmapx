@@ -1,9 +1,10 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { ParkingFacility, ParkingType } from "@openmapx/mobility-core/parking";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, vi } from "vitest";
 import { mapChBsBaselPayload, mergeChBsBaselLive } from "../ch-bs-basel-mapper.js";
 import { parseChBsBaselBundled } from "../ch-bs-basel-parser.js";
+import { parkingEquivalenceContract } from "./support/parking-equivalence-contract.js";
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -92,31 +93,21 @@ async function runMigrated(): Promise<ParkingFacility[]> {
   });
 }
 
-describe("basel-ch parser+mapper equivalence to pre-migration in-memory parser", () => {
-  it("produces the same set of facility ids in the same order", async () => {
-    const ref = runReference();
-    const got = await runMigrated();
-    expect(got.map((f) => f.id)).toEqual(ref.map((f) => f.id));
-  });
-
-  it("produces field-by-field-identical facilities", async () => {
-    const ref = runReference();
-    const got = await runMigrated();
-    expect(got).toHaveLength(ref.length);
-    for (let i = 0; i < ref.length; i++) {
-      const r = ref[i];
-      const g = got[i];
-      expect(g.id, `row ${i}: id`).toBe(r.id);
-      expect(g.name, `row ${i}: name`).toBe(r.name);
-      expect(g.coordinates, `row ${i}: coordinates`).toEqual(r.coordinates);
-      expect(g.sources, `row ${i}: sources`).toEqual(r.sources);
-      expect(g.parkingType, `row ${i}: parkingType`).toBe(r.parkingType);
-      expect(g.capacity, `row ${i}: capacity`).toBe(r.capacity);
-      expect(g.freeSpaces, `row ${i}: freeSpaces`).toBe(r.freeSpaces);
-      expect(g.hasRealtimeData, `row ${i}: hasRealtimeData`).toBe(r.hasRealtimeData);
-      expect(g.fee, `row ${i}: fee`).toBe(r.fee);
-      expect(g.address, `row ${i}: address`).toBe(r.address);
-      expect(g.url, `row ${i}: url`).toBe(r.url);
-    }
-  });
+parkingEquivalenceContract({
+  name: "Basel",
+  reference: runReference,
+  migrated: runMigrated,
+  fields: [
+    "id",
+    "name",
+    "coordinates",
+    "sources",
+    "parkingType",
+    "capacity",
+    "freeSpaces",
+    "hasRealtimeData",
+    "fee",
+    "address",
+    "url",
+  ],
 });
