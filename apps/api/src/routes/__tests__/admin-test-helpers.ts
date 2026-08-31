@@ -1,50 +1,31 @@
-/**
- * Shared harness for admin route tests.
- *
- * Usage pattern for each test file:
- *
- *   import { mockAdminSession } from "./admin-test-helpers.js";
- *
- *   // Mock the auth guard — all three exports must be provided because
- *   // require-admin.ts re-exports them from the same module.
- *   const fakeSession = mockAdminSession();
- *   vi.mock("../../utils/require-admin.js", () => ({
- *     requireAdmin: vi.fn().mockResolvedValue(fakeSession),
- *     getAdminSession: vi.fn().mockReturnValue(fakeSession),
- *     tryAdminSession: vi.fn().mockResolvedValue(fakeSession),
- *   }));
- *
- *   // Mock the database (match the import specifier from the route exactly)
- *   vi.mock("../../db/index.js", () => ({ db: { select: vi.fn(), insert: vi.fn(), ... } }));
- *
- *   // Mock docker utilities
- *   vi.mock("../../utils/docker-compose.js", () => ({
- *     dockerComposePs: vi.fn().mockResolvedValue([]),
- *     dockerComposeLogs: vi.fn(),
- *   }));
- *
- *   // Mock the audit log so writes become no-ops
- *   vi.mock("../../utils/audit-log.js", () => ({
- *     writeAuditLog: vi.fn().mockResolvedValue(undefined),
- *   }));
- *
- * Boot the route under test in `beforeAll` using the standard Fastify harness:
- *
- *   let app: FastifyInstance;
- *   beforeAll(async () => {
- *     const { adminServicesRoute } = await import("../admin-services.js");
- *     app = Fastify({ logger: false });
- *     await app.register(adminServicesRoute);
- *     await app.ready();
- *   });
- *   afterAll(() => app.close());
- *   afterEach(() => vi.clearAllMocks());
- *
- * Auth-rejection tests must create a second isolated app that registers the
- * route while requireAdmin is mocked to throw. Since vi.mock hoisting means the
- * module-level mock is already in place, use mockRejectedValueOnce inside the
- * test rather than a new vi.mock call.
- */
+import Fastify, { type FastifyInstance, type FastifyPluginAsync } from "fastify";
+import { vi } from "vitest";
+import { mockAdminSession } from "../../test/auth.js";
 
-// Canonical session/auth fixtures live in the shared toolkit at src/test/.
-export { mockAdminSession } from "../../test/auth.js";
+export { mockAdminSession };
+
+export function installAdminRouteMocks() {
+  const session = mockAdminSession();
+  const requireAdmin = vi.fn().mockResolvedValue(session);
+  const getAdminSession = vi.fn().mockReturnValue(session);
+  const tryAdminSession = vi.fn().mockResolvedValue(session);
+  const writeAuditLog = vi.fn().mockResolvedValue(undefined);
+
+  vi.doMock("../../utils/require-admin.js", () => ({
+    requireAdmin: (...args: unknown[]) => requireAdmin(...args),
+    getAdminSession: (...args: unknown[]) => getAdminSession(...args),
+    tryAdminSession: (...args: unknown[]) => tryAdminSession(...args),
+  }));
+  vi.doMock("../../utils/audit-log.js", () => ({
+    writeAuditLog: (...args: unknown[]) => writeAuditLog(...args),
+  }));
+
+  return { session, requireAdmin, getAdminSession, tryAdminSession, writeAuditLog };
+}
+
+export async function createAdminTestApp(route: FastifyPluginAsync): Promise<FastifyInstance> {
+  const app = Fastify({ logger: false });
+  await app.register(route);
+  await app.ready();
+  return app;
+}

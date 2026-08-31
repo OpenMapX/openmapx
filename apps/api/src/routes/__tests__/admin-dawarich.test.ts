@@ -1,22 +1,16 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { mockAdminSession } from "./admin-test-helpers.js";
+import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 
-const fakeSession = mockAdminSession();
-const mockRequireAdmin = vi.fn().mockResolvedValue(fakeSession);
-const mockGetAdminSession = vi.fn().mockReturnValue(fakeSession);
-vi.mock("../../utils/require-admin.js", () => ({
-  requireAdmin: (...args: unknown[]) => mockRequireAdmin(...args),
-  getAdminSession: (...args: unknown[]) => mockGetAdminSession(...args),
-}));
+const {
+  session: fakeSession,
+  requireAdmin: mockRequireAdmin,
+  getAdminSession: mockGetAdminSession,
+  writeAuditLog: mockWriteAuditLog,
+} = installAdminRouteMocks();
 
 vi.mock("../../utils/rate-limit.js", () => ({
   serviceActionLimit: { preHandler: () => vi.fn().mockResolvedValue(undefined) },
-}));
-
-const mockWriteAuditLog = vi.fn().mockResolvedValue(undefined);
-vi.mock("../../utils/audit-log.js", () => ({
-  writeAuditLog: (...args: unknown[]) => mockWriteAuditLog(...args),
 }));
 
 const bundle = new Map([
@@ -127,9 +121,7 @@ let app: FastifyInstance;
 beforeAll(async () => {
   process.env.DOMAIN = "example.test";
   const { adminDawarichRoute } = await import("../admin-dawarich.js");
-  app = Fastify({ logger: false });
-  await app.register(adminDawarichRoute);
-  await app.ready();
+  app = await createAdminTestApp(adminDawarichRoute);
 });
 
 afterAll(async () => {

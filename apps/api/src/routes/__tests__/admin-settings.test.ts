@@ -1,24 +1,12 @@
-import Fastify, { type FastifyInstance } from "fastify";
+import type { FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { mockAdminSession } from "./admin-test-helpers.js";
+import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 
-// Auth guard mock — all three exports required
-const fakeSession = mockAdminSession();
-const mockRequireAdmin = vi.fn().mockResolvedValue(fakeSession);
-const mockGetAdminSession = vi.fn().mockReturnValue(fakeSession);
-const mockTryAdminSession = vi.fn().mockResolvedValue(fakeSession);
-
-vi.mock("../../utils/require-admin.js", () => ({
-  requireAdmin: (...args: unknown[]) => mockRequireAdmin(...args),
-  getAdminSession: (...args: unknown[]) => mockGetAdminSession(...args),
-  tryAdminSession: (...args: unknown[]) => mockTryAdminSession(...args),
-}));
-
-// Audit log
-const mockWriteAuditLog = vi.fn().mockResolvedValue(undefined);
-vi.mock("../../utils/audit-log.js", () => ({
-  writeAuditLog: (...args: unknown[]) => mockWriteAuditLog(...args),
-}));
+const {
+  session: fakeSession,
+  requireAdmin: mockRequireAdmin,
+  writeAuditLog: mockWriteAuditLog,
+} = installAdminRouteMocks();
 
 // Data-use policy — the PATCH handler calls invalidateDataUsePolicy() then
 // awaits refreshDataUsePolicy(); both must be mocked or the route 500s.
@@ -103,9 +91,7 @@ let app: FastifyInstance;
 
 beforeAll(async () => {
   const { adminSettingsRoute } = await import("../admin-settings.js");
-  app = Fastify({ logger: false });
-  await app.register(adminSettingsRoute);
-  await app.ready();
+  app = await createAdminTestApp(adminSettingsRoute);
 });
 
 afterAll(() => app.close());

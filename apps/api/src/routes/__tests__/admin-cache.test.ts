@@ -1,25 +1,14 @@
 import { Readable } from "node:stream";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
-import { mockAdminSession } from "./admin-test-helpers.js";
+import { createAdminTestApp, installAdminRouteMocks } from "./admin-test-helpers.js";
 
-// Auth guard mock — all three exports required.
-const fakeSession = mockAdminSession();
-const mockRequireAdmin = vi.fn().mockResolvedValue(fakeSession);
-const mockGetAdminSession = vi.fn().mockReturnValue(fakeSession);
-const mockTryAdminSession = vi.fn().mockResolvedValue(fakeSession);
-
-vi.mock("../../utils/require-admin.js", () => ({
-  requireAdmin: (...args: unknown[]) => mockRequireAdmin(...args),
-  getAdminSession: (...args: unknown[]) => mockGetAdminSession(...args),
-  tryAdminSession: (...args: unknown[]) => mockTryAdminSession(...args),
-}));
-
-// Audit log.
-const mockWriteAuditLog = vi.fn().mockResolvedValue(undefined);
-vi.mock("../../utils/audit-log.js", () => ({
-  writeAuditLog: (...args: unknown[]) => mockWriteAuditLog(...args),
-}));
+const {
+  requireAdmin: mockRequireAdmin,
+  getAdminSession: mockGetAdminSession,
+  tryAdminSession: mockTryAdminSession,
+  writeAuditLog: mockWriteAuditLog,
+} = installAdminRouteMocks();
 
 // Fake Redis. `scanStream` returns a stream emitting one array of the keys
 // whose name matches the requested glob prefix. `flushdb` is a spy so the
@@ -64,9 +53,7 @@ let app: FastifyInstance;
 
 beforeAll(async () => {
   const { adminCacheRoute } = await import("../admin-cache.js");
-  app = Fastify({ logger: false });
-  await app.register(adminCacheRoute);
-  await app.ready();
+  app = await createAdminTestApp(adminCacheRoute);
 });
 
 afterAll(() => app.close());
