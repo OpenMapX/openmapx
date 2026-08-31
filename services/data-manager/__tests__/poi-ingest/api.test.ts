@@ -1,69 +1,18 @@
+import "./support/poi-ingest-environment.js";
+
 import type { RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import Fastify from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PoiIngestKind, PoiIngestResult } from "../../src/jobs/poi-ingest/types.js";
-
-// --- mock the pipeline -----------------------------------------------------
-const runStaticIngestMock = vi.fn(
-  (_ctx: unknown): Promise<PoiIngestResult> => Promise.resolve({} as PoiIngestResult),
-);
-const runLiveIngestMock = vi.fn(
-  (_ctx: unknown): Promise<PoiIngestResult> => Promise.resolve({} as PoiIngestResult),
-);
-const runBundledIngestMock = vi.fn(
-  (_ctx: unknown): Promise<PoiIngestResult> => Promise.resolve({} as PoiIngestResult),
-);
-const buildPoiJobContextMock = vi.fn(
-  (opts: Record<string, unknown>): Record<string, unknown> => ({
-    ...opts,
-    state: {},
-  }),
-);
-
-vi.mock("../../src/jobs/poi-ingest/pipeline.js", () => ({
-  runStaticIngest: (...args: unknown[]) => runStaticIngestMock(...(args as [unknown])),
-  runLiveIngest: (...args: unknown[]) => runLiveIngestMock(...(args as [unknown])),
-  runBundledIngest: (...args: unknown[]) => runBundledIngestMock(...(args as [unknown])),
-  buildPoiJobContext: (opts: Record<string, unknown>) => buildPoiJobContextMock(opts),
-}));
-
-// --- mock persistence ------------------------------------------------------
-const createPoiJobRowMock = vi.fn(
-  (_opts: Record<string, unknown>): Promise<string> => Promise.resolve("job-1"),
-);
-const finalizePoiJobRowMock = vi.fn(
-  (_jobId: string, _status: string): Promise<void> => Promise.resolve(),
-);
-const upsertPoiFeedStateMock = vi.fn(
-  (_opts: Record<string, unknown>): Promise<void> => Promise.resolve(),
-);
-type LastFeedState =
-  | {
-      lastStaticHash: string | null;
-      lastStaticRowCount: number | null;
-      lastStaticIngestAt: Date | null;
-      consecutiveFailures: number;
-      status: string;
-    }
-  | undefined;
-const getLastPoiFeedStateMock = vi.fn(
-  (_sourceId: string): Promise<LastFeedState> => Promise.resolve(undefined),
-);
-const onStageCompleteStub = vi.fn();
-const makePoiPersistingOnStageCompleteMock = vi.fn(
-  (_jobId: string, _logger: unknown) => onStageCompleteStub,
-);
-
-vi.mock("../../src/jobs/poi-ingest/persistence.js", () => ({
-  createPoiJobRow: (...args: unknown[]) =>
-    createPoiJobRowMock(...(args as [Record<string, unknown>])),
-  finalizePoiJobRow: (...args: unknown[]) => finalizePoiJobRowMock(...(args as [string, string])),
-  upsertPoiFeedState: (...args: unknown[]) =>
-    upsertPoiFeedStateMock(...(args as [Record<string, unknown>])),
-  getLastPoiFeedState: (...args: unknown[]) => getLastPoiFeedStateMock(...(args as [string])),
-  makePoiPersistingOnStageComplete: (...args: unknown[]) =>
-    makePoiPersistingOnStageCompleteMock(...(args as [string, unknown])),
-}));
+import {
+  bundledPoiSource as bundledSource,
+  fakePoiRedis as fakeRedis,
+  fakePoiSql as fakeSql,
+  getPoiIngestTestMocks,
+  makePoiIngestResult as makeResult,
+  resetPoiIngestTestMocks,
+  staticLivePoiSource as staticLiveSource,
+  staticPoiSource as staticSource,
+} from "./support/poi-ingest-environment.js";
 
 // --- mock db ---------------------------------------------------------------
 // The API issues three distinct shapes of read:
@@ -118,76 +67,15 @@ import { registerPoiIngestApi } from "../../src/jobs/poi-ingest/api.js";
 import { noopMetricsSink, type PoiIngestMetricsSink } from "../../src/jobs/poi-ingest/metrics.js";
 import { createPoiSingleFlight } from "../../src/jobs/poi-ingest/single-flight.js";
 
-function staticSource(id = "src-1"): RegisteredPoiSource {
-  return {
-    id,
-    stationIdPrefix: `${id}:`,
-    domain: "ev-charging",
-    name: id,
-    static: {
-      cron: "0 * * * *",
-      fetch: { type: "http", url: "https://example.com/data.csv" },
-      parse: function* () {},
-    },
-  } as RegisteredPoiSource;
-}
-
-function staticLiveSource(id = "src-live"): RegisteredPoiSource {
-  return {
-    id,
-    stationIdPrefix: `${id}:`,
-    domain: "ev-charging",
-    name: id,
-    static: {
-      cron: "0 * * * *",
-      fetch: { type: "http", url: "https://example.com/data.csv" },
-      parse: function* () {},
-    },
-    live: {
-      cron: "*/5 * * * *",
-      fetch: { type: "http", url: "https://example.com/live.json" },
-      parse: () => new Map(),
-    },
-  } as RegisteredPoiSource;
-}
-
-function bundledSource(id = "bundled-1"): RegisteredPoiSource {
-  return {
-    id,
-    stationIdPrefix: `${id}:`,
-    domain: "parking",
-    name: id,
-    bundled: {
-      cron: "*/10 * * * *",
-      fetch: { type: "http", url: "https://example.com/feed.json" },
-      parse: () => ({ static: [], live: new Map() }),
-    },
-  } as RegisteredPoiSource;
-}
-
-function fakeSql(): import("postgres").Sql {
-  return {} as unknown as import("postgres").Sql;
-}
-function fakeRedis(): import("ioredis").Redis {
-  return {} as unknown as import("ioredis").Redis;
-}
-
-function makeResult(
-  sourceId: string,
-  kind: PoiIngestKind,
-  overrides: Partial<PoiIngestResult> = {},
-): PoiIngestResult {
-  return {
-    sourceId,
-    kind,
-    startedAt: "2025-01-01T00:00:00.000Z",
-    finishedAt: "2025-01-01T00:00:01.000Z",
-    durationMs: 1000,
-    status: "ok",
-    stages: [],
-    ...overrides,
-  };
-}
+const {
+  createPoiJobRowMock,
+  finalizePoiJobRowMock,
+  getLastPoiFeedStateMock,
+  runBundledIngestMock,
+  runLiveIngestMock,
+  runStaticIngestMock,
+  upsertPoiFeedStateMock,
+} = getPoiIngestTestMocks();
 
 interface BuildAppOpts {
   sources?: readonly RegisteredPoiSource[];
@@ -210,21 +98,7 @@ async function buildApp(opts: BuildAppOpts = {}) {
 }
 
 beforeEach(() => {
-  runStaticIngestMock.mockReset();
-  runLiveIngestMock.mockReset();
-  runBundledIngestMock.mockReset();
-  buildPoiJobContextMock.mockClear();
-  createPoiJobRowMock.mockReset();
-  finalizePoiJobRowMock.mockReset();
-  upsertPoiFeedStateMock.mockReset();
-  getLastPoiFeedStateMock.mockReset();
-  onStageCompleteStub.mockReset();
-  makePoiPersistingOnStageCompleteMock.mockClear();
-
-  createPoiJobRowMock.mockResolvedValue("job-1");
-  finalizePoiJobRowMock.mockResolvedValue(undefined);
-  upsertPoiFeedStateMock.mockResolvedValue(undefined);
-  getLastPoiFeedStateMock.mockResolvedValue(undefined);
+  resetPoiIngestTestMocks();
 
   dbReadQueue.length = 0;
 });
