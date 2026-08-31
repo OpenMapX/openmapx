@@ -87,7 +87,7 @@ const VALHALLA_PREDICTED_CSV_DIR = "/custom_files/predicted-csv";
  * Available bytes from `df -Pk`. The agent parses this itself so the caller
  * never supplies a path or reads raw process output.
  */
-export function parsePosixDfAvailableBytes(output: string): number {
+function parsePosixDfAvailableBytes(output: string): number {
   const lines = output
     .trim()
     .split(/\r?\n/)

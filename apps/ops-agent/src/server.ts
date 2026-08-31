@@ -1025,6 +1025,3 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
   });
   return app;
 }
-
-export type { OpsRuntime } from "./runtime";
-export { createUnavailableRuntime } from "./runtime";

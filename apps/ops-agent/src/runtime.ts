@@ -36,7 +36,7 @@ export interface OpsTrustedClaim {
   }>;
 }
 
-export type OpsRuntimeHandler<K extends OpsOperationKind> = (
+type OpsRuntimeHandler<K extends OpsOperationKind> = (
   operation: Extract<OpsOperation, { kind: K }>,
   context: OpsExecutionContext,
 ) => Promise<OpsResultFor<K>>;

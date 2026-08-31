@@ -14,7 +14,7 @@ import {
   parseBoundedOpsResult,
 } from "@openmapx/core/ops";
 
-export const OPS_JOB_JOURNAL_MAX_ENTRIES = 256;
+const OPS_JOB_JOURNAL_MAX_ENTRIES = 256;
 export const OPS_JOB_JOURNAL_MAX_BYTES = 24 * 1024 * 1024;
 export const OPS_JOB_JOURNAL_MAX_ORPHANS = 8;
 const OPERATION_ID = /^job1_[A-Za-z0-9_-]{16,64}$/;

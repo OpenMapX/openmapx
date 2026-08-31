@@ -62,7 +62,7 @@ const DATA_TYPE_ALIASES: Readonly<Record<string, readonly string[]>> = {
 type BackupKind = "backup.create" | "backup.restore" | "backup.delete";
 type BackupInventoryEntry = OpsResultFor<"backup.list">["backups"][number];
 
-export interface FixedCliOptions {
+interface FixedCliOptions {
   signal: AbortSignal;
   emitLog(stream: "stdout" | "stderr", message: string): void;
 }
@@ -76,7 +76,7 @@ export interface AdministrativeRuntimeOptions {
   loadBuildAuthority?: () => Promise<readonly BuildAuthorityService[]>;
 }
 
-export interface BuildAuthorityService {
+interface BuildAuthorityService {
   serviceId: string;
   enabled: boolean;
   isBuiltIn: boolean;
@@ -110,7 +110,7 @@ export interface AdministrativeReleaseRuntimeOptions {
   releaseStoreLockHooks?: ReleaseStoreLockHooks;
 }
 
-export type ReleaseTransactionPhase =
+type ReleaseTransactionPhase =
   | "prepared"
   | "overlay_written"
   | "services_applied"
@@ -330,7 +330,7 @@ function corruptEntry(
   };
 }
 
-export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
+function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
   const root = backupRoot(rootDir);
   if (!strictDirectory(root)) return { backups: [], warningCount: 0 };
   const entries = listDescriptorAnchoredDirectory(rootDir, ["infra", "docker", "backups"], {
@@ -681,7 +681,7 @@ function acquireBackupStoreLock(rootDir: string): Promise<ReleaseStoreLock> {
  * is absent or unreadable. Used to prove that the bytes an effect acts on are
  * the bytes that were authorized.
  */
-export function inspectBackupManifestDigest(rootDir: string, backupId: string): string | null {
+function inspectBackupManifestDigest(rootDir: string, backupId: string): string | null {
   try {
     assertBackupId(backupId);
     const raw = readDescriptorAnchoredUtf8(
