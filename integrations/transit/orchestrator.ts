@@ -10,8 +10,7 @@ import {
   type TripPlanRequest,
   type TripRefreshRequest,
 } from "@openmapx/integration-framework";
-import type { Attribution } from "@openmapx/mobility-core/attribution";
-import type { Freshness } from "@openmapx/mobility-core/freshness";
+import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type {
   Departure,
@@ -36,6 +35,7 @@ import type {
 } from "@openmapx/mobility-core/transit-reachability";
 import { deduplicateStops, isTripNumber } from "./dedup.js";
 import { enrichDeparturesWithRealtime } from "./realtime.js";
+import { emptyResult, mergeAttributions, mergeFreshness } from "./result-merge.js";
 
 function bboxesOverlap(a: BBox, b: BBox): boolean {
   return a[2] > b[0] && b[2] > a[0] && a[3] > b[1] && b[3] > a[1];
@@ -53,18 +53,6 @@ export function bboxToCenter(bbox: BBox): { lat: number; lng: number; radiusMete
   const lngMeters = (lngDiff * Math.PI * EARTH_RADIUS * Math.cos((lat * Math.PI) / 180)) / 180;
   const halfDiag = Math.sqrt(latMeters * latMeters + lngMeters * lngMeters) / 2;
   return { lat, lng, radiusMeters: halfDiag * 1.1 };
-}
-
-function freshnessNow(opts?: { hasRealtimeData?: boolean }): Freshness {
-  return {
-    fetchedAt: new Date().toISOString(),
-    hasRealtimeData: opts?.hasRealtimeData ?? false,
-    isStale: false,
-  };
-}
-
-function emptyResult<T>(data: T, opts?: { hasRealtimeData?: boolean }): MobilityResult<T> {
-  return { data, attributions: [], freshness: freshnessNow(opts) };
 }
 
 /** Returns provider coverage bbox or null when the provider declares global `all:true` coverage. */
@@ -125,43 +113,6 @@ function supportsPlanningRequest(provider: TransitProvider, required: string[]):
 }
 
 /**
- * Merge multiple Attribution[] arrays, deduped by `sourceId`.
- *
- * When the host has provided an AttributionIndex on the IntegrationContext, we
- * delegate the merge to `ctx.attributionIndex.dedupAndOrder`, which:
- *
- *   - resolves each sourceId against MOTIS license.json + integration manifest
- *     dataSources (so the curated row replaces the caller-supplied stub);
- *   - groups integration-manifest entries before motis-license entries;
- *   - sorts alphabetically within each group for stable output.
- *
- * Without an index, this falls back to the original dedup-only behaviour so
- * orchestrators wired up before F1+F2 keep working unchanged.
- */
-function mergeAttributions(
-  index: { dedupAndOrder(attrs: Attribution[]): Attribution[] } | undefined,
-  ...lists: Attribution[][]
-): Attribution[] {
-  if (index) {
-    const all: Attribution[] = [];
-    for (const list of lists) {
-      for (const a of list) all.push(a);
-    }
-    return index.dedupAndOrder(all);
-  }
-  const seen = new Set<string>();
-  const out: Attribution[] = [];
-  for (const list of lists) {
-    for (const a of list) {
-      if (seen.has(a.sourceId)) continue;
-      seen.add(a.sourceId);
-      out.push(a);
-    }
-  }
-  return out;
-}
-
-/**
  * Keep only the fan-out results that actually returned data, for building
  * attribution lists. Providers are queried broadly (by prefix/coverage), so the
  * raw result set includes providers that matched the area but returned nothing —
@@ -170,22 +121,6 @@ function mergeAttributions(
  */
 function resultsWithData<T>(results: MobilityResult<T[]>[]): MobilityResult<T[]>[] {
   return results.filter((r) => r.data.length > 0);
-}
-
-/** Pick the earliest fetchedAt and the strongest realtime/stale signal. */
-function mergeFreshness(...lists: Freshness[]): Freshness {
-  if (lists.length === 0) return freshnessNow();
-  let fetchedAt = lists[0].fetchedAt;
-  let hasRealtimeData = false;
-  let isStale = false;
-  let dataAsOf: string | undefined;
-  for (const f of lists) {
-    if (f.fetchedAt < fetchedAt) fetchedAt = f.fetchedAt;
-    if (f.hasRealtimeData) hasRealtimeData = true;
-    if (f.isStale) isStale = true;
-    if (f.dataAsOf && (!dataAsOf || f.dataAsOf < dataAsOf)) dataAsOf = f.dataAsOf;
-  }
-  return { fetchedAt, hasRealtimeData, isStale, ...(dataAsOf ? { dataAsOf } : {}) };
 }
 
 /**

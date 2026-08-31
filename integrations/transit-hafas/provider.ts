@@ -6,13 +6,13 @@ import {
   normalizeRemarks,
   productToMode,
 } from "@openmapx/core";
+import { journeysToTripPlan } from "@openmapx/mobility-core/fptf-journey";
 import type {
   Departure,
   GeoJSONLineString,
   ServiceAlert,
   TransitStop,
   TransportMode,
-  TripItinerary,
   TripLeg,
   TripPlan,
   VehicleJourney,
@@ -309,54 +309,9 @@ export async function planJourney(
     // biome-ignore lint/suspicious/noExplicitAny: external API response
     const data = await fetchJson<{ journeys?: any[] }>(url.toString(), { nullOnError: true });
     if (!data?.journeys?.length) return null;
-
-    const itineraries: TripItinerary[] = data.journeys.map(
-      // biome-ignore lint/suspicious/noExplicitAny: external API response
-      (j: any): TripItinerary => {
-        // biome-ignore lint/suspicious/noExplicitAny: external API response
-        const rawLegs: any[] = j.legs ?? [];
-        // biome-ignore lint/suspicious/noExplicitAny: external API response
-        const legs: TripLeg[] = rawLegs.map((l: any) => legToTripLeg(l, inst));
-        const startTime = legs[0]?.startTime ?? "";
-        const endTime = legs[legs.length - 1]?.endTime ?? "";
-        const durationMs =
-          startTime && endTime ? new Date(endTime).getTime() - new Date(startTime).getTime() : 0;
-        const transfers = Math.max(0, legs.filter((l) => l.route !== undefined).length - 1);
-        // FPTF walking legs include a `distance` field in meters — use it directly
-        const walkDistance = rawLegs
-          // biome-ignore lint/suspicious/noExplicitAny: external API response
-          .filter((l: any) => l.walking === true)
-          // biome-ignore lint/suspicious/noExplicitAny: external API response
-          .reduce((sum: number, l: any) => sum + (l.distance ?? 0), 0);
-        return {
-          duration: Math.round(durationMs / 1000),
-          startTime,
-          endTime,
-          transfers,
-          walkDistance: Math.round(walkDistance),
-          legs,
-        };
-      },
+    return journeysToTripPlan(data.journeys, { fromLat, fromLng, toLat, toLng }, (leg) =>
+      legToTripLeg(leg, inst),
     );
-
-    // Derive from/to from the first journey's first/last leg
-    const firstLeg = itineraries[0]?.legs[0];
-    const lastItinerary = itineraries[0];
-    const lastLeg = lastItinerary?.legs[lastItinerary.legs.length - 1];
-
-    return {
-      from: {
-        name: firstLeg?.from.name ?? "",
-        lat: firstLeg?.from.lat ?? fromLat,
-        lng: firstLeg?.from.lng ?? fromLng,
-      },
-      to: {
-        name: lastLeg?.to.name ?? "",
-        lat: lastLeg?.to.lat ?? toLat,
-        lng: lastLeg?.to.lng ?? toLng,
-      },
-      itineraries,
-    };
   } catch {
     return null;
   }

@@ -19,6 +19,7 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import { bucketTimestamps, isTripNumber, normalizeHeadsign, normalizeShortName } from "./dedup.js";
 import type { TransitOrchestrator } from "./orchestrator.js";
+import { emptyResult, mergeAttributions, mergeFreshness } from "./result-merge.js";
 
 /** Extended Departure with optional feedTag (set by some providers like MOTIS). */
 interface DepartureWithFeed extends Departure {
@@ -41,47 +42,6 @@ const TTL = {
   placeFacilities: TTL_POLICY.STATIC_ARCHIVE,
 };
 
-function freshnessNow(opts?: { hasRealtimeData?: boolean }): Freshness {
-  return {
-    fetchedAt: new Date().toISOString(),
-    hasRealtimeData: opts?.hasRealtimeData ?? false,
-    isStale: false,
-  };
-}
-
-function emptyResult<T>(data: T, opts?: { hasRealtimeData?: boolean }): MobilityResult<T> {
-  return { data, attributions: [], freshness: freshnessNow(opts) };
-}
-
-/**
- * Merge multiple Attribution[] arrays. When the host provides an
- * AttributionIndex on the IntegrationContext, delegate dedup + ordering to it
- * (so MOTIS license.json and manifest dataSources stay the single source of
- * truth). Otherwise fall back to simple dedup-by-sourceId.
- */
-function mergeAttributions(
-  index: { dedupAndOrder(attrs: Attribution[]): Attribution[] } | undefined,
-  ...lists: Attribution[][]
-): Attribution[] {
-  if (index) {
-    const all: Attribution[] = [];
-    for (const list of lists) {
-      for (const a of list) all.push(a);
-    }
-    return index.dedupAndOrder(all);
-  }
-  const seen = new Set<string>();
-  const out: Attribution[] = [];
-  for (const list of lists) {
-    for (const a of list) {
-      if (seen.has(a.sourceId)) continue;
-      seen.add(a.sourceId);
-      out.push(a);
-    }
-  }
-  return out;
-}
-
 /**
  * Resolve a route's raw provider ids (e.g. "ms", "db", "dyn:at/oebb") to
  * human-readable names from each provider's static attribution, mirroring the
@@ -99,21 +59,6 @@ function resolveProviderNames(providers: TransitProvider[], ids: string[]): stri
     if (!names.includes(name)) names.push(name);
   }
   return names;
-}
-
-function mergeFreshness(...lists: Freshness[]): Freshness {
-  if (lists.length === 0) return freshnessNow();
-  let fetchedAt = lists[0].fetchedAt;
-  let hasRealtimeData = false;
-  let isStale = false;
-  let dataAsOf: string | undefined;
-  for (const f of lists) {
-    if (f.fetchedAt < fetchedAt) fetchedAt = f.fetchedAt;
-    if (f.hasRealtimeData) hasRealtimeData = true;
-    if (f.isStale) isStale = true;
-    if (f.dataAsOf && (!dataAsOf || f.dataAsOf < dataAsOf)) dataAsOf = f.dataAsOf;
-  }
-  return { fetchedAt, hasRealtimeData, isStale, ...(dataAsOf ? { dataAsOf } : {}) };
 }
 
 export interface PlaceTransit {

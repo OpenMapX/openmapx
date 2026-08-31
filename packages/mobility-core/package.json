@@ -33,6 +33,10 @@
       "types": "./src/types/freshness.ts",
       "default": "./src/types/freshness.ts"
     },
+    "./fptf-journey": {
+      "types": "./src/fptf-journey.ts",
+      "default": "./src/fptf-journey.ts"
+    },
     "./fuel": {
       "types": "./src/types/fuel.ts",
       "default": "./src/types/fuel.ts"
