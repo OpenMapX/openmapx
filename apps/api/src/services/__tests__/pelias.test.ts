@@ -1,25 +1,7 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { emptyResponse, streamedJsonResponse } from "../../test/streamed-response.js";
+import { describe, expect, it, vi } from "vitest";
+import { geocodingAdapterContract } from "./support/geocoding-adapter-contract.js";
 
-let mockFetch: ReturnType<typeof vi.fn>;
-
-beforeEach(() => {
-  mockFetch = vi.fn();
-  vi.stubGlobal("fetch", mockFetch);
-});
-
-afterEach(() => {
-  vi.restoreAllMocks();
-  vi.unstubAllGlobals();
-});
-
-function mockOk(data: unknown) {
-  return streamedJsonResponse(data);
-}
-
-function mockNotOk(status = 500) {
-  return emptyResponse(status);
-}
+const { mockFetch, mockOk, mockNotOk } = geocodingAdapterContract("Pelias");
 
 function makePeliasResponse(features: unknown[]) {
   return { features };
