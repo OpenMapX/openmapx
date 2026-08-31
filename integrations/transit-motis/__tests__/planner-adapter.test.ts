@@ -1,4 +1,4 @@
-import { createClient } from "@hey-api/client-fetch";
+import { createMotisInstance } from "@openmapx/mobility-core/motis-client";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { planMock } = vi.hoisted(() => ({ planMock: vi.fn() }));
@@ -9,11 +9,11 @@ vi.mock("@motis-project/motis-client", async (importOriginal) => ({
 
 import { planTrip } from "../adapter.js";
 
-const instance = {
-  client: createClient({ baseUrl: "http://motis.test" }),
+const instance = createMotisInstance({
+  baseUrl: "http://motis.test",
   prefix: "ms:",
   provider: "ms",
-};
+});
 
 function response() {
   return {

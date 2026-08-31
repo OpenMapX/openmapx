@@ -1,5 +1,6 @@
 import type { Mode, OneToManyIntermodalResponse, Place } from "@motis-project/motis-client";
 import { oneToAll, oneToManyIntermodalPost } from "@motis-project/motis-client";
+import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 import {
   TRANSIT_WALK_PROFILE,
   type TransitReachabilityCapabilities,
@@ -8,7 +9,6 @@ import {
   type TransitReachabilitySeed,
   type TransitReachabilitySurfaceRequest,
 } from "@openmapx/mobility-core/transit-reachability";
-import type { MotisInstance } from "./instances.js";
 import { uniqueModes } from "./mode-map.js";
 
 export type MotisReachabilityErrorCode =

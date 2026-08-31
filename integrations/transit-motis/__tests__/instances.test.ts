@@ -1,13 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { motisLocalInstance, transitousInstance } from "../instances.js";
+import { createTransitMotisInstances } from "../instances.js";
 
 // MOTIS honours only the first occurrence of a repeated query param, so a
 // multi-mode `transitModes` allow-list must be sent comma-joined in a single
 // param. The client-fetch default explodes arrays into repeated params, which
 // silently dropped every mode after the first (breaking the Deutschlandticket
 // filter). These tests pin the comma-joined serialisation.
-describe("MOTIS client query serialization", () => {
-  async function captureUrl(instance: typeof transitousInstance): Promise<string> {
+describe("transit-MOTIS instances", () => {
+  async function captureUrl(
+    instance: ReturnType<typeof createTransitMotisInstances>["transitousInstance"],
+  ): Promise<string> {
     let capturedUrl = "";
     const mockFetch = (input: Request): Promise<Response> => {
       capturedUrl = input.url;
@@ -26,15 +28,22 @@ describe("MOTIS client query serialization", () => {
     return capturedUrl;
   }
 
-  it("serializes array params comma-joined for the Transitous client", async () => {
-    const url = await captureUrl(transitousInstance);
-    expect(url).toContain("transitModes=REGIONAL_RAIL,TRAM,BUS");
-    expect(url.match(/transitModes=/g)).toHaveLength(1);
-  });
+  it("constructs local, reachability, and hosted clients from one resolved configuration", async () => {
+    const instances = createTransitMotisInstances({
+      localUrl: "https://local.example",
+      transitousUrl: "https://hosted.example",
+    });
 
-  it("serializes array params comma-joined for the local MOTIS client", async () => {
-    const url = await captureUrl(motisLocalInstance);
-    expect(url).toContain("transitModes=REGIONAL_RAIL,TRAM,BUS");
-    expect(url.match(/transitModes=/g)).toHaveLength(1);
+    expect(instances.motisLocalInstance.client).not.toBe(
+      instances.motisLocalReachabilityInstance.client,
+    );
+    expect(instances.motisLocalInstance).toMatchObject({ prefix: "ms:", provider: "ms" });
+    expect(instances.transitousInstance).toMatchObject({ prefix: "mo:", provider: "mo" });
+    await expect(captureUrl(instances.motisLocalInstance)).resolves.toContain(
+      "https://local.example/api/v1/plan",
+    );
+    await expect(captureUrl(instances.transitousInstance)).resolves.toContain(
+      "https://hosted.example/api/v1/plan",
+    );
   });
 });

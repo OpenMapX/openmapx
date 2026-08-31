@@ -55,11 +55,7 @@ import {
   getStops,
   getStopTimetable,
 } from "@integrations/transit-motis/adapter";
-import {
-  motisLocalInstance,
-  motisLocalReachabilityInstance,
-  setMotisLocalUrl,
-} from "@integrations/transit-motis/instances";
+import { createTransitMotisInstances } from "@integrations/transit-motis/instances";
 import {
   checkMotisReachabilityDestinations,
   getMotisReachabilitySeeds,
@@ -145,6 +141,9 @@ const STAGING_PORT = 8082;
 // for real, ending in a direct HTTP probe of the promoted timetable.
 const PRIMARY_SERVICE = "motis";
 const PRIMARY_PORT = 8081;
+const { motisLocalInstance, motisLocalReachabilityInstance } = createTransitMotisInstances({
+  localUrl: `http://127.0.0.1:${PRIMARY_PORT}`,
+});
 const FEED_PROXY_SERVICE = "motis-feed-proxy";
 const GBFS_FIXTURE_SERVICE = "gbfs-fixture";
 const GBFS_FIXTURE_PORT = 18_083;
@@ -915,7 +914,6 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       // Exercise the product adapter against the live pinned server, not a
       // mocked response: stop/departure lookup, platform normalization,
       // civil-day timetable, map/routes, and experimental route-details.
-      setMotisLocalUrl(`http://127.0.0.1:${PRIMARY_PORT}`);
       const berlinStops = await getStops(motisLocalInstance, [13.3, 52.49, 13.46, 52.54]);
       expect(berlinStops.length).toBeGreaterThanOrEqual(4);
       const hbfPlatform = berlinStops.find(

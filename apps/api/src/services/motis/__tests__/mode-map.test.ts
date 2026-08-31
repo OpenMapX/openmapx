@@ -1,4 +1,5 @@
-import { motisMode, uniqueModes } from "@integrations/transit-motis/mode-map";
+import { uniqueModes } from "@integrations/transit-motis/mode-map";
+import { motisMode } from "@openmapx/mobility-core/motis-radar";
 import { describe, expect, it } from "vitest";
 
 describe("motisMode", () => {

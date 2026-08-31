@@ -31,7 +31,6 @@ import {
   refreshTrip,
   searchByName,
 } from "@integrations/transit-motis/adapter";
-import type { MotisInstance } from "@integrations/transit-motis/instances";
 import { decodeMotisLineReference } from "@integrations/transit-motis/route-pattern-id";
 import {
   geocode,
@@ -41,6 +40,7 @@ import {
   refreshItinerary,
   stoptimes,
 } from "@motis-project/motis-client";
+import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 
 const testInstance: MotisInstance = {
   client: {} as never,

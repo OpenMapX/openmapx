@@ -22,13 +22,14 @@ import {
   stops as motisStops,
   transfers as motisTransfers,
   trip as motisTrip,
-  trips as motisTrips,
   plan,
   routeDetails,
   stoptimes,
 } from "@motis-project/motis-client";
 import { type BBox, decodePolyline, timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
 import { mapMotisAlert } from "@openmapx/mobility-core/motis-alerts";
+import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
+import { motisMode } from "@openmapx/mobility-core/motis-radar";
 import type {
   Departure,
   FareProduct,
@@ -47,10 +48,8 @@ import type {
   TripPlan,
   VehicleJourney,
   VehicleJourneyStop,
-  VehiclePosition,
 } from "@openmapx/mobility-core/transit";
-import type { MotisInstance } from "./instances.js";
-import { motisLegMode, motisMode, uniqueModes } from "./mode-map.js";
+import { motisLegMode, uniqueModes } from "./mode-map.js";
 import {
   decodeMotisLineReference,
   encodeMotisLineReference,
@@ -58,7 +57,6 @@ import {
   validateMotisLineReferenceEpoch,
   validateMotisRoutePatternEpoch,
 } from "./route-pattern-id.js";
-import { tripSegmentsToVehicles } from "./vehicle-radar.js";
 
 /** Strip the instance prefix from a prefixed stop/trip ID. */
 export function rawId(instance: MotisInstance, stopId: string): string {
@@ -1173,48 +1171,6 @@ export function motisPlaceToJourneyStop(instance: MotisInstance, place: Place): 
         )
       : undefined,
   };
-}
-
-/** Polyline precision requested from (and decoded for) the `trips` endpoint. */
-const RADAR_PRECISION = 6;
-
-/**
- * Live vehicle positions in a bounding box via the MOTIS `map/trips` endpoint:
- * fetch the trips operating now, then interpolate each along its current segment
- * by elapsed time. Powers the transit live-vehicle overlay.
- */
-export async function getVehicleRadar(
-  instance: MotisInstance,
-  bbox: BBox,
-  zoom = 13,
-): Promise<VehiclePosition[]> {
-  const [west, south, east, north] = bbox;
-  const now = Date.now();
-  try {
-    const { data } = await motisTrips({
-      client: instance.client,
-      query: {
-        min: `${south},${west}`,
-        max: `${north},${east}`,
-        startTime: new Date(now - 60_000).toISOString(),
-        endTime: new Date(now + 60_000).toISOString(),
-        zoom,
-        precision: RADAR_PRECISION,
-      },
-    });
-    if (!Array.isArray(data)) return [];
-    return tripSegmentsToVehicles(
-      {
-        prefix: instance.prefix,
-        provider: instance.provider,
-        precision: RADAR_PRECISION,
-        nowMs: now,
-      },
-      data,
-    );
-  } catch {
-    return [];
-  }
 }
 
 /**

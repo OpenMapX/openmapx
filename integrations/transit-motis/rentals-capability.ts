@@ -1,7 +1,7 @@
 import type { RentalProviderGroup } from "@motis-project/motis-client";
 import { rentals as motisRentals } from "@motis-project/motis-client";
 import type { TransitRentalFormFactor } from "@openmapx/integration-framework";
-import type { MotisInstance } from "./instances.js";
+import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 
 /**
  * Form factors OpenMapX can offer as a transit access mode. MOTIS may report

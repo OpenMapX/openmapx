@@ -5,7 +5,6 @@
   "license": "MIT",
   "documentation": "https://developers.deutschebahn.com/",
   "domains": ["live-transit"],
-  "dependencies": ["overlay-live-transit"],
   "backend": {
     "routes": false
   },

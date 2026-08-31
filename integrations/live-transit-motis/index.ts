@@ -1,6 +1,3 @@
-import { type Client, createClient } from "@hey-api/client-fetch";
-import { getVehicleRadar } from "@integrations/transit-motis/adapter.js";
-import { motisLocalInstance } from "@integrations/transit-motis/instances.js";
 import {
   type Itinerary,
   type Leg,
@@ -16,14 +13,15 @@ import {
   type RealtimeProvider,
   type TripUpdate,
 } from "@openmapx/integration-framework";
+import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { mapMotisAlert, mapMotisAlertSeverity } from "@openmapx/mobility-core/motis-alerts";
+import { createMotisInstance, type MotisInstance } from "@openmapx/mobility-core/motis-client";
+import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 
 const attribution = createManifestAttribution();
-
-import type { Attribution } from "@openmapx/mobility-core/attribution";
 
 /**
  * Final fallback when neither the `motis` service registry entry nor
@@ -34,7 +32,6 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
  */
 const FALLBACK_MOTIS_URL = "http://localhost:8081";
 const TRANSITOUS_URL = "https://api.transitous.org";
-const TIMEOUT_MS = 8_000;
 const PROVIDER_ID = "live-transit-motis";
 const SOURCE_ID = "motis-rt";
 const ALERT_PREFIX = "mr:";
@@ -54,39 +51,38 @@ function resolveMotisUrl(ctx: IntegrationContext): string {
   );
 }
 
-// MOTIS declares array query params as `explode: false` (comma-joined in one
-// param) and honours only the FIRST occurrence of a repeated param, so the
-// client-fetch default (`explode: true`) would drop all but the first value of
-// any multi-value list. Serialise arrays comma-joined to match the spec.
-const QUERY_SERIALIZER = { array: { explode: false, style: "form" } } as const;
-
-function makeClient(baseUrl: string): Client {
-  const c = createClient({
-    baseUrl,
-    headers: { "User-Agent": USER_AGENT_TRANSIT },
-    querySerializer: QUERY_SERIALIZER,
-  });
-  c.interceptors.request.use(
-    (request) => new Request(request, { signal: AbortSignal.timeout(TIMEOUT_MS) }),
-  );
-  return c;
+interface LiveTransitMotisInstances {
+  local: MotisInstance;
+  transitous: MotisInstance;
 }
 
-// Two instances so realtime is queried against the SAME MOTIS that produced the
-// id: `mo:` ids come from the cloud Transitous instance, everything else (`ms:`)
-// from the deployment's self-hosted MOTIS. Routing by prefix (not reachability)
-// is required — a `mo:` trip simply does not exist in the local instance, and
-// vice versa — and mirrors transit-motis's getVehicleJourney prefix handling.
-const localClient = makeClient(FALLBACK_MOTIS_URL);
-const transitousClient = makeClient(TRANSITOUS_URL);
+function createLiveTransitMotisInstances(ctx: IntegrationContext): LiveTransitMotisInstances {
+  return {
+    local: createMotisInstance({
+      baseUrl: resolveMotisUrl(ctx),
+      prefix: "ms:",
+      provider: "ms",
+      userAgent: USER_AGENT_TRANSIT,
+    }),
+    transitous: createMotisInstance({
+      baseUrl: (ctx.config.transitousUrl as string | undefined)?.trim() || TRANSITOUS_URL,
+      prefix: "mo:",
+      provider: "mo",
+      userAgent: USER_AGENT_TRANSIT,
+    }),
+  };
+}
 
-function routeForId(id: string): { client: Client; attribution: Attribution[] } {
+function routeForId(
+  id: string,
+  instances: LiveTransitMotisInstances,
+): { client: MotisInstance["client"]; attribution: Attribution[] } {
   if (id.startsWith("mo:")) {
     const attr = attribution.bySource("transitous");
-    return { client: transitousClient, attribution: attr ? [attr] : [] };
+    return { client: instances.transitous.client, attribution: attr ? [attr] : [] };
   }
   const attr = attribution.bySource("motis-rt");
-  return { client: localClient, attribution: attr ? [attr] : [] };
+  return { client: instances.local.client, attribution: attr ? [attr] : [] };
 }
 
 /** MOTIS id prefixes the local + cloud + RT providers all share. */
@@ -171,12 +167,12 @@ function deltaFromItinerary(
  * positions — the overlay renders them distinctly and prefers a real GPS fix for
  * the same trip. On the self-hosted instance (`ms:`), where most feeds publish no
  * GPS at all, this is the only way to show moving vehicles.
- *
- * Reuses transit-motis's proven `getVehicleRadar` + configured `motisLocalInstance`
- * client rather than a second MOTIS client of our own.
  */
-async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
-  const vehicles = await getVehicleRadar(motisLocalInstance, bbox);
+async function getInterpolatedVehicles(
+  instance: MotisInstance,
+  bbox: BBox,
+): Promise<LiveTransitVehicle[]> {
+  const vehicles = await getMotisVehicleRadar(instance, bbox);
   return vehicles.map((vehicle) => ({
     ...vehicle,
     sourceId: SOURCE_ID,
@@ -187,17 +183,8 @@ async function getInterpolatedVehicles(bbox: BBox): Promise<LiveTransitVehicle[]
 }
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.onActivate(() => {
-    attribution.set(ctx.manifest.dataSources ?? []);
-    localClient.setConfig({
-      baseUrl: resolveMotisUrl(ctx),
-      headers: { "User-Agent": USER_AGENT_TRANSIT },
-    });
-    transitousClient.setConfig({
-      baseUrl: (ctx.config.transitousUrl as string | undefined) || TRANSITOUS_URL,
-      headers: { "User-Agent": USER_AGENT_TRANSIT },
-    });
-  });
+  const instances = createLiveTransitMotisInstances(ctx);
+  ctx.onActivate(() => attribution.set(ctx.manifest.dataSources ?? []));
 
   const provider: RealtimeProvider = {
     id: PROVIDER_ID,
@@ -211,11 +198,11 @@ export function setup(ctx: IntegrationContext): void {
     },
     async getVehiclePositions(bbox: BBox) {
       const attr = attribution.bySource(SOURCE_ID);
-      const data = await getInterpolatedVehicles(bbox);
+      const data = await getInterpolatedVehicles(instances.local, bbox);
       return withAttribution(data, attr ? [attr] : [], freshnessNow({ hasRealtimeData: true }));
     },
     async getAlertsForStop(stopId) {
-      const { client, attribution: attr } = routeForId(stopId);
+      const { client, attribution: attr } = routeForId(stopId, instances);
       try {
         const { data } = await stoptimes({
           client,
@@ -242,7 +229,7 @@ export function setup(ctx: IntegrationContext): void {
       if (!MOTIS_ID_PREFIX_RE.test(tripId)) {
         return withAttribution(null, attribution.all(), freshnessNow({ hasRealtimeData: true }));
       }
-      const { client, attribution: attr } = routeForId(tripId);
+      const { client, attribution: attr } = routeForId(tripId, instances);
       try {
         const { data } = await motisTrip({
           client,
@@ -265,9 +252,8 @@ export const __testing = {
   findPlaceForStop,
   mapMotisAlert,
   mapMotisAlertSeverity,
+  createLiveTransitMotisInstances,
   resolveMotisUrl,
   routeForId,
   stripPrefix,
-  localClient,
-  transitousClient,
 };

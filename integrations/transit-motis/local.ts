@@ -9,6 +9,8 @@ import type {
 } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
+import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripLeg, TripPlan } from "@openmapx/mobility-core/transit";
 import type {
@@ -17,13 +19,7 @@ import type {
 } from "@openmapx/mobility-core/transit-reachability";
 import * as motis from "./adapter.js";
 import { attributionLocal, attributionTransitous } from "./attributions.js";
-import {
-  type MotisInstance,
-  motisLocalInstance,
-  motisLocalReachabilityInstance,
-  setMotisLocalUrl,
-  transitousInstance,
-} from "./instances.js";
+import type { TransitMotisInstances } from "./instances.js";
 import {
   checkMotisReachabilityDestinations,
   getMotisReachabilitySeeds,
@@ -33,9 +29,6 @@ import {
 } from "./reachability.js";
 import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
 import { decodeMotisLineReference, decodeMotisRoutePatternId } from "./route-pattern-id.js";
-
-let cachedLocalReachable = false;
-let cachedLocalReachableAt = 0;
 
 const LOCAL_REACHABILITY_TTL_MS = 15_000;
 
@@ -233,28 +226,6 @@ function wrapLocalWithFeedAttribution<T>(
   return withAttribution(data, attributions, freshnessNow({ hasRealtimeData: isRealtime }));
 }
 
-/** Check if the local MOTIS instance is reachable. */
-async function isMotisReachable(): Promise<boolean> {
-  try {
-    const { response } = await stops({
-      client: motisLocalInstance.client,
-      query: { min: "0,0", max: "0.01,0.01" },
-    });
-    return response.ok || (response.status >= 400 && response.status < 500);
-  } catch {
-    return false;
-  }
-}
-
-async function isMotisReachableCached(): Promise<boolean> {
-  if (Date.now() - cachedLocalReachableAt < LOCAL_REACHABILITY_TTL_MS) {
-    return cachedLocalReachable;
-  }
-  cachedLocalReachable = await isMotisReachable();
-  cachedLocalReachableAt = Date.now();
-  return cachedLocalReachable;
-}
-
 function withPrefix(id: string, prefix: "ms:" | "mo:"): string {
   return `${prefix}${id.replace(/^(ms:|mo:)/, "")}`;
 }
@@ -326,7 +297,29 @@ async function planWithInstance(
   );
 }
 
-export function setupLocal(ctx: IntegrationContext): void {
+export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInstances): void {
+  const { motisLocalInstance, motisLocalReachabilityInstance, transitousInstance } = instances;
+  let cachedLocalReachable = false;
+  let cachedLocalReachableAt = 0;
+  const isMotisReachable = async (): Promise<boolean> => {
+    try {
+      const { response } = await stops({
+        client: motisLocalInstance.client,
+        query: { min: "0,0", max: "0.01,0.01" },
+      });
+      return response.ok || (response.status >= 400 && response.status < 500);
+    } catch {
+      return false;
+    }
+  };
+  const isMotisReachableCached = async (): Promise<boolean> => {
+    if (Date.now() - cachedLocalReachableAt < LOCAL_REACHABILITY_TTL_MS) {
+      return cachedLocalReachable;
+    }
+    cachedLocalReachable = await isMotisReachable();
+    cachedLocalReachableAt = Date.now();
+    return cachedLocalReachable;
+  };
   const hostedFallbackEnabled =
     ctx.config.hostedRuntimeFallback !== false &&
     process.env.MOTIS_OPERATIONS_PROFILE !== "regional-sovereign";
@@ -334,16 +327,6 @@ export function setupLocal(ctx: IntegrationContext): void {
     if (!hostedFallbackEnabled)
       throw new Error("hosted MOTIS fallback disabled by operations profile");
   };
-  // Resolution order: service registry → manifest config → MOTIS_URL env →
-  // localhost fallback. The env var matches the one services/data-manager
-  // and live-transit-motis honour, so a single deployment-wide
-  // `MOTIS_URL=…` reaches every consumer of the local instance.
-  const resolved = ctx.getRequiredService("motis");
-  const motisUrl = resolveLocalMotisUrl(resolved?.url, ctx.config.endpoint, process.env.MOTIS_URL);
-  setMotisLocalUrl(motisUrl);
-  ctx.log.info(`[transit-motis] configured local MOTIS endpoint: ${motisUrl}`);
-  cachedLocalReachable = false;
-  cachedLocalReachableAt = 0;
   // Warm the live rental-capability probe so the access options reflect reality
   // by the time the directions panel opens.
   primeRentalFormFactors(motisLocalInstance);
@@ -680,10 +663,10 @@ export function setupLocal(ctx: IntegrationContext): void {
     },
     async getVehicleRadar(bbox) {
       if (await isMotisReachableCached()) {
-        return wrapLocalRT(await motis.getVehicleRadar(motisLocalInstance, bbox));
+        return wrapLocalRT(await getMotisVehicleRadar(motisLocalInstance, bbox));
       }
       requireHostedFallback();
-      return wrapTransitousRT(await motis.getVehicleRadar(transitousInstance, bbox));
+      return wrapTransitousRT(await getMotisVehicleRadar(transitousInstance, bbox));
     },
     async getStopTransfers(stopId) {
       const localId = withPrefix(stopId, "ms:");

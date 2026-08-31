@@ -121,19 +121,15 @@ describe("@hey-api/client-fetch runtime integrations", () => {
     });
     vi.stubGlobal("fetch", fetchMock);
 
-    const [
-      { configureTransitous, motisLocalInstance, setMotisLocalUrl, transitousInstance },
-      motis,
-    ] = await Promise.all([
+    const [{ createTransitMotisInstances }, motis] = await Promise.all([
       import("@integrations/transit-motis/instances.js"),
       import("@motis-project/motis-client"),
     ]);
-
-    configureTransitous({
-      url: "https://cloud.example",
-      userAgent: "OpenMapX-Test/1.0",
+    const { motisLocalInstance, transitousInstance } = createTransitMotisInstances({
+      localUrl: "http://local.example",
+      transitousUrl: "https://cloud.example",
+      transitousUserAgent: "OpenMapX-Test/1.0",
     });
-    setMotisLocalUrl("http://local.example");
 
     const cloud = await motis.stops({
       client: transitousInstance.client,

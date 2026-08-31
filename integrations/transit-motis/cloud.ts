@@ -1,10 +1,10 @@
 import { applyDeutschlandticketFilter } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import * as motis from "./adapter.js";
 import { attributionTransitous } from "./attributions.js";
-import { configureTransitous, transitousInstance } from "./instances.js";
 import { getRentalFormFactors, primeRentalFormFactors } from "./rentals-capability.js";
 
 function wrapTransitous<T>(data: T) {
@@ -18,17 +18,13 @@ function withPrefix(id: string, prefix: "mo:"): string {
   return `${prefix}${id.replace(/^(ms:|mo:)/, "")}`;
 }
 
-export function setupCloud(ctx: IntegrationContext): void {
+export function setupCloud(ctx: IntegrationContext, transitousInstance: MotisInstance): void {
   if (
     ctx.config.hostedRuntimeFallback === false ||
     process.env.MOTIS_OPERATIONS_PROFILE === "regional-sovereign"
   ) {
     return;
   }
-  configureTransitous({
-    url: ctx.config.transitousUrl as string | undefined,
-    userAgent: ctx.config.transitousUserAgent as string | undefined,
-  });
   primeRentalFormFactors(transitousInstance);
 
   // Always-on soft resilience layer for local-MOTIS restarts and dev/cold-start.

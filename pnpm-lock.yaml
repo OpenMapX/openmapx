@@ -1031,9 +1031,6 @@ importers:
 
   integrations/live-transit-motis:
     dependencies:
-      '@hey-api/client-fetch':
-        specifier: workspace:*
-        version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
         specifier: ^2.11.0
         version: 2.11.2
@@ -1794,9 +1791,6 @@ importers:
 
   integrations/transit-motis:
     dependencies:
-      '@hey-api/client-fetch':
-        specifier: workspace:*
-        version: link:../../packages/hey-api-client-fetch
       '@motis-project/motis-client':
         specifier: ^2.11.0
         version: 2.11.2

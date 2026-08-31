@@ -81,6 +81,14 @@
       "types": "./src/motis-rentals.ts",
       "default": "./src/motis-rentals.ts"
     },
+    "./motis-client": {
+      "types": "./src/server/motis-client.ts",
+      "default": "./src/server/motis-client.ts"
+    },
+    "./motis-radar": {
+      "types": "./src/motis-radar.ts",
+      "default": "./src/motis-radar.ts"
+    },
     "./mobility-context-geometry": {
       "types": "./src/mobility-context-geometry.ts",
       "default": "./src/mobility-context-geometry.ts"

@@ -5,7 +5,6 @@
   "license": "MIT",
   "documentation": "https://motis-project.de/",
   "domains": ["live-transit"],
-  "dependencies": ["overlay-live-transit"],
   "requires": [{ "service": "motis", "optional": true }],
   "backend": {
     "routes": false

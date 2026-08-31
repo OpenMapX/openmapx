@@ -1,5 +1,6 @@
+import { motisMode } from "@openmapx/mobility-core/motis-radar";
 import { describe, expect, it } from "vitest";
-import { motisLegMode, motisMode, uniqueModes } from "../mode-map.js";
+import { motisLegMode, uniqueModes } from "../mode-map.js";
 
 describe("motisMode — intermodal access legs render distinctly from walking", () => {
   it("maps bike access modes to cycling", () => {

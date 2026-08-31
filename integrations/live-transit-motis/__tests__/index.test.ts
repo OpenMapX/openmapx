@@ -5,7 +5,7 @@ vi.mock("@motis-project/motis-client", () => ({
   stoptimes: vi.fn(),
   trip: vi.fn(),
 }));
-vi.mock("@integrations/transit-motis/adapter.js", () => ({ getVehicleRadar: vi.fn() }));
+vi.mock("@openmapx/mobility-core/motis-radar", () => ({ getMotisVehicleRadar: vi.fn() }));
 
 interface CtxHandle {
   ctx: IntegrationContext;
@@ -91,8 +91,8 @@ describe("live-transit-motis provider", () => {
   });
 
   it("maps radar positions to the canonical live-transit vehicle contract", async () => {
-    const { getVehicleRadar } = await import("@integrations/transit-motis/adapter.js");
-    vi.mocked(getVehicleRadar).mockResolvedValueOnce([
+    const { getMotisVehicleRadar } = await import("@openmapx/mobility-core/motis-radar");
+    vi.mocked(getMotisVehicleRadar).mockResolvedValueOnce([
       {
         id: "ms:vehicle-1",
         provider: "transit-motis-local",
@@ -348,18 +348,42 @@ describe("live-transit-motis provider", () => {
   });
 
   describe("prefix routing", () => {
+    it("keeps clients scoped to their integration setup generation", async () => {
+      const motisClient = await import("@motis-project/motis-client");
+      vi.mocked(motisClient.stoptimes).mockResolvedValue({
+        data: { place: { alerts: [] } },
+      } as never);
+      const mod = await loadModule();
+      const first = createCtx({ endpoint: "https://first-local.example" });
+      const second = createCtx({ endpoint: "https://second-local.example" });
+      mod.setup(first.ctx);
+      mod.setup(second.ctx);
+
+      await first.getProvider().getAlertsForStop?.("ms:first");
+      await second.getProvider().getAlertsForStop?.("ms:second");
+
+      const firstClient = vi.mocked(motisClient.stoptimes).mock.calls.at(-2)?.[0]?.client;
+      const secondClient = vi.mocked(motisClient.stoptimes).mock.calls.at(-1)?.[0]?.client;
+      expect(firstClient).toBeDefined();
+      expect(secondClient).toBeDefined();
+      expect(firstClient).not.toBe(secondClient);
+      expect(firstClient?.getConfig().baseUrl).toBe("https://first-local.example");
+      expect(secondClient?.getConfig().baseUrl).toBe("https://second-local.example");
+    });
+
     it("routeForId picks the client + attribution by id prefix", async () => {
       const mod = await loadModule();
       const { ctx } = createCtx();
       mod.setup(ctx);
-      const { routeForId, transitousClient, localClient } = mod.__testing;
+      const { createLiveTransitMotisInstances, routeForId } = mod.__testing;
+      const instances = createLiveTransitMotisInstances(ctx);
 
-      expect(routeForId("mo:NL:123").client).toBe(transitousClient);
-      expect(routeForId("ms:DE:456").client).toBe(localClient);
-      expect(routeForId("8000105").client).toBe(localClient);
+      expect(routeForId("mo:NL:123", instances).client).toBe(instances.transitous.client);
+      expect(routeForId("ms:DE:456", instances).client).toBe(instances.local.client);
+      expect(routeForId("8000105", instances).client).toBe(instances.local.client);
 
-      expect(routeForId("mo:x").attribution[0]?.sourceId).toBe("transitous");
-      expect(routeForId("ms:x").attribution[0]?.sourceId).toBe("motis-rt");
+      expect(routeForId("mo:x", instances).attribution[0]?.sourceId).toBe("transitous");
+      expect(routeForId("ms:x", instances).attribution[0]?.sourceId).toBe("motis-rt");
     });
 
     it("queries Transitous for mo: stops and the local instance for ms: stops", async () => {
@@ -374,14 +398,14 @@ describe("live-transit-motis provider", () => {
       const provider = getProvider();
 
       await provider.getAlertsForStop?.("mo:NL:123");
-      expect(motisClient.stoptimes).toHaveBeenLastCalledWith(
-        expect.objectContaining({ client: mod.__testing.transitousClient }),
-      );
+      const transitousClient = vi.mocked(motisClient.stoptimes).mock.calls.at(-1)?.[0]?.client;
 
       await provider.getAlertsForStop?.("ms:DE:456");
-      expect(motisClient.stoptimes).toHaveBeenLastCalledWith(
-        expect.objectContaining({ client: mod.__testing.localClient }),
-      );
+      const localClient = vi.mocked(motisClient.stoptimes).mock.calls.at(-1)?.[0]?.client;
+
+      expect(transitousClient).toBeDefined();
+      expect(localClient).toBeDefined();
+      expect(transitousClient).not.toBe(localClient);
     });
   });
 });

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 
 const MOBILITY_ROOT = fileURLToPath(new URL("../", import.meta.url));
 const CORE_ROOT = fileURLToPath(new URL("../../core/", import.meta.url));
+const INTEGRATIONS_ROOT = fileURLToPath(new URL("../../../integrations/", import.meta.url));
 
 interface PackageManifest {
   dependencies?: Record<string, string>;
@@ -94,6 +95,16 @@ describe("mobility package boundaries", () => {
     expect(existsSync(join(CORE_ROOT, "src/ris-client.ts"))).toBe(false);
   });
 
+  it("keeps reusable MOTIS clients in the server-side mobility layer", () => {
+    const mobilityManifest = readManifest(MOBILITY_ROOT);
+    const coreManifest = readManifest(CORE_ROOT);
+
+    expect(mobilityManifest.exports?.["./motis-client"]).toBeDefined();
+    expect(mobilityManifest.exports?.["./motis-radar"]).toBeDefined();
+    expect(coreManifest.exports?.["./motis-client"]).toBeUndefined();
+    expect(coreManifest.exports?.["./motis-radar"]).toBeUndefined();
+  });
+
   it("exposes generation-scoped shared mobility without setup-time singleton setters", () => {
     const mobilityManifest = readManifest(MOBILITY_ROOT);
     const productionSource = collectSourceFiles(join(MOBILITY_ROOT, "src"))
@@ -111,5 +122,32 @@ describe("mobility package boundaries", () => {
     ]) {
       expect(productionSource).not.toContain(setter);
     }
+  });
+
+  it("requires production cross-integration imports to be declared dependencies", () => {
+    const violations: string[] = [];
+    for (const entry of readdirSync(INTEGRATIONS_ROOT, { withFileTypes: true })) {
+      if (!entry.isDirectory()) continue;
+      const integrationRoot = join(INTEGRATIONS_ROOT, entry.name);
+      const manifestPath = join(integrationRoot, "manifest.json");
+      if (!existsSync(manifestPath)) continue;
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+        dependencies?: string[];
+      };
+      const dependencies = new Set(manifest.dependencies ?? []);
+      for (const file of collectSourceFiles(integrationRoot)) {
+        const relativeFile = relative(integrationRoot, file);
+        if (relativeFile.includes("__tests__") || relativeFile.includes(".test.")) continue;
+        const source = readFileSync(file, "utf8");
+        for (const match of source.matchAll(/@integrations\/([^/"']+)(?:\/[^"']*)?/g)) {
+          const target = match[1];
+          if (target !== entry.name && !dependencies.has(target)) {
+            violations.push(`${entry.name}/${relativeFile} -> ${target}`);
+          }
+        }
+      }
+    }
+
+    expect(violations).toEqual([]);
   });
 });

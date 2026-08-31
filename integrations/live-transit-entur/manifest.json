@@ -5,7 +5,6 @@
   "license": "MIT",
   "documentation": "https://developer.entur.org/pages-real-time-vehicle/",
   "domains": ["live-transit"],
-  "dependencies": ["overlay-live-transit"],
   "backend": {
     "routes": false
   },

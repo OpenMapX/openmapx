@@ -5,7 +5,7 @@
   "license": "MIT",
   "documentation": "https://opentransportdata.swiss/en/cookbook/event-cookbook/siri-sx/",
   "domains": ["live-transit"],
-  "dependencies": ["overlay-live-transit", "transit-opentransportdata-ch"],
+  "dependencies": ["transit-opentransportdata-ch"],
   "backend": {
     "routes": false
   },

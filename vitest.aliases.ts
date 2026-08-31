@@ -68,6 +68,10 @@ export function createRepoVitestAliases(repoRoot: string) {
       find: /^@openmapx\/mobility-core\/ris-client(?:\.js)?$/,
       replacement: resolve(repoRoot, "packages/mobility-core/src/server/ris-client.ts"),
     },
+    {
+      find: /^@openmapx\/mobility-core\/motis-client(?:\.js)?$/,
+      replacement: resolve(repoRoot, "packages/mobility-core/src/server/motis-client.ts"),
+    },
     // Everything else under the package resolves to `src/<sub>.ts`.
     {
       find: /^@openmapx\/mobility-core\/(.+?)(?:\.js)?$/,
