@@ -1,13 +1,12 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import type { GithubIssueSink } from "../../src/jobs/github-issue-sink.js";
 import {
   type AlertLogger,
-  buildGithubIssueSink,
   detectStaleFeeds,
   emitFeedAlerts,
   emitPipelineFailureAlert,
   type FeedAlert,
   type FeedStateReader,
-  type GithubIssueSink,
   githubIssueTitle,
 } from "../../src/jobs/transitous/staleness-alerts.js";
 
@@ -253,46 +252,6 @@ describe("emitFeedAlerts", () => {
     expect(githubIssueTitle({ ...SAMPLE_ALERT, kind: "consecutive-failures" })).toBe(
       "Failing transit feed: de/vbb",
     );
-  });
-});
-
-describe("buildGithubIssueSink", () => {
-  beforeEach(() => {
-    vi.restoreAllMocks();
-  });
-
-  it("returns null when token or repo is missing", () => {
-    expect(buildGithubIssueSink(undefined, "openmapx/openmapx")).toBeNull();
-    expect(buildGithubIssueSink("t", undefined)).toBeNull();
-    expect(buildGithubIssueSink("", "openmapx/openmapx")).toBeNull();
-  });
-
-  it("returns a sink that hits the GitHub REST API when both are set", async () => {
-    const fetchMock = vi
-      .spyOn(globalThis, "fetch")
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { "Content-Type": "application/json" },
-        }),
-      )
-      .mockResolvedValueOnce(
-        new Response(JSON.stringify({ html_url: "https://github.com/foo/bar/issues/2" }), {
-          status: 201,
-          headers: { "Content-Type": "application/json" },
-        }),
-      );
-    const sink = buildGithubIssueSink("tok", "foo/bar");
-    expect(sink).not.toBeNull();
-    if (!sink) return;
-    const existing = await sink.findOpenIssueByTitle?.("Stale transit feed: de/vbb");
-    expect(existing).toBeNull();
-    const url = await sink.createIssue("Stale transit feed: de/vbb", "body");
-    expect(url).toBe("https://github.com/foo/bar/issues/2");
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    const firstCall = fetchMock.mock.calls[0];
-    if (!firstCall) throw new Error("missing first fetch call");
-    expect(firstCall[0]).toContain("/repos/foo/bar/issues?state=open");
   });
 });
 

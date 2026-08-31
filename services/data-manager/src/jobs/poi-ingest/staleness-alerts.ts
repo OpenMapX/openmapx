@@ -1,5 +1,6 @@
 import { poiFeedState } from "@openmapx/db-schema";
 import { db as defaultDb } from "../../db/index.js";
+import type { GithubIssueSink } from "../github-issue-sink.js";
 
 /**
  * Per-POI-source staleness + consecutive-failure alerting.
@@ -43,11 +44,6 @@ export interface PoiAlertLogger {
   error: (msg: string, extra?: Record<string, unknown>) => void;
 }
 
-export interface PoiGithubIssueSink {
-  createIssue: (title: string, body: string) => Promise<string>;
-  findOpenIssueByTitle?: (title: string) => Promise<string | null>;
-}
-
 /**
  * Structural alias matching the slice of Drizzle the detector uses. Keeps
  * the test surface a hand-rolled stub rather than a full Drizzle mock.
@@ -82,7 +78,7 @@ export interface DetectStalePoiSourcesOptions {
 export interface EmitPoiAlertsOptions {
   alerts: PoiAlert[];
   log: PoiAlertLogger;
-  githubIssue?: PoiGithubIssueSink;
+  githubIssue?: GithubIssueSink;
 }
 
 const DEFAULT_STALE_AFTER_HOURS = 48;
@@ -229,49 +225,4 @@ function poiGithubIssueBody(alert: PoiAlert): string {
     lines.push(`- lastErrorMessage: \`${alert.detail.lastErrorMessage}\``);
   }
   return lines.join("\n");
-}
-
-/**
- * Build a `PoiGithubIssueSink` from raw token + repo. Returns `null` when
- * either is missing so callers can wire env-var lookup without conditionals.
- */
-export function buildPoiGithubIssueSink(
-  token: string | undefined,
-  repo: string | undefined,
-): PoiGithubIssueSink | null {
-  if (!token || !repo) return null;
-  const apiBase = `https://api.github.com/repos/${repo}`;
-  return {
-    async findOpenIssueByTitle(title: string): Promise<string | null> {
-      const url = `${apiBase}/issues?state=open&per_page=100`;
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-        },
-      });
-      if (!res.ok) {
-        throw new Error(`GitHub list issues failed: ${res.status} ${res.statusText}`);
-      }
-      const issues = (await res.json()) as Array<{ title: string; html_url: string }>;
-      const match = issues.find((issue) => issue.title === title);
-      return match ? match.html_url : null;
-    },
-    async createIssue(title: string, body: string): Promise<string> {
-      const res = await fetch(`${apiBase}/issues`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ title, body }),
-      });
-      if (!res.ok) {
-        throw new Error(`GitHub create issue failed: ${res.status} ${res.statusText}`);
-      }
-      const issue = (await res.json()) as { html_url: string };
-      return issue.html_url;
-    },
-  };
 }

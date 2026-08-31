@@ -1,6 +1,7 @@
 import { feedState } from "@openmapx/db-schema";
 import { db as defaultDb } from "../../db/index.js";
 import { scrubSecrets, scrubSecretsOptional } from "../../utils/scrub-secrets.js";
+import type { GithubIssueSink } from "../github-issue-sink.js";
 
 /**
  * Per-feed staleness + consecutive-failure alerting.
@@ -37,13 +38,6 @@ export interface AlertLogger {
   error: (msg: string, extra?: Record<string, unknown>) => void;
   /** Optional. Receives unscrubbed diagnostics; off unless LOG_LEVEL=debug. */
   debug?: (msg: string, extra?: Record<string, unknown>) => void;
-}
-
-export interface GithubIssueSink {
-  /** Create (or reuse) a GitHub Issue. Returns the issue URL. */
-  createIssue: (title: string, body: string) => Promise<string>;
-  /** Search currently-open issues to dedupe. Returns the URL if a match exists. */
-  findOpenIssueByTitle?: (title: string) => Promise<string | null>;
 }
 
 /**
@@ -314,50 +308,4 @@ function githubIssueBody(alert: FeedAlert): string {
     lines.push(`- validationMessage: \`${alert.detail.validationMessage}\``);
   }
   return lines.join("\n");
-}
-
-/**
- * Helper that builds a `GithubIssueSink` from raw token + repo strings. Returns
- * `null` when either argument is missing so callers can wire the env-var
- * lookup without conditionals.
- */
-export function buildGithubIssueSink(
-  token: string | undefined,
-  repo: string | undefined,
-): GithubIssueSink | null {
-  if (!token || !repo) return null;
-  const apiBase = `https://api.github.com/repos/${repo}`;
-  return {
-    async findOpenIssueByTitle(title: string): Promise<string | null> {
-      const url = `${apiBase}/issues?state=open&per_page=100`;
-      const res = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-        },
-      });
-      if (!res.ok) {
-        throw new Error(`GitHub list issues failed: ${res.status} ${res.statusText}`);
-      }
-      const issues = (await res.json()) as Array<{ title: string; html_url: string }>;
-      const match = issues.find((issue) => issue.title === title);
-      return match ? match.html_url : null;
-    },
-    async createIssue(title: string, body: string): Promise<string> {
-      const res = await fetch(`${apiBase}/issues`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          Accept: "application/vnd.github+json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ title, body }),
-      });
-      if (!res.ok) {
-        throw new Error(`GitHub create issue failed: ${res.status} ${res.statusText}`);
-      }
-      const issue = (await res.json()) as { html_url: string };
-      return issue.html_url;
-    },
-  };
 }

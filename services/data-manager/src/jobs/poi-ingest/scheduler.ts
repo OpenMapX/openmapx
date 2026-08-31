@@ -6,17 +6,13 @@ import {
 import { Cron } from "croner";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
+import { createGithubIssueSink, type GithubIssueSink } from "../github-issue-sink.js";
 import { createLogMetricsSink, type PoiIngestMetricsSink } from "./metrics.js";
 import { combineMetricsSinks, createOtelMetricsSink } from "./otel-metrics.js";
 import { createPoiJobRow, getLastPoiFeedState } from "./persistence.js";
 import { runOneAndPersist } from "./runner.js";
 import { createPoiSingleFlight, type PoiSingleFlight } from "./single-flight.js";
-import {
-  buildPoiGithubIssueSink,
-  detectStalePoiSources,
-  emitPoiAlerts,
-  type PoiGithubIssueSink,
-} from "./staleness-alerts.js";
+import { detectStalePoiSources, emitPoiAlerts } from "./staleness-alerts.js";
 import type { PoiIngestKind, PoiJobLogger } from "./types.js";
 
 /**
@@ -64,7 +60,7 @@ export interface PoiSchedulerOptions {
    */
   runStalenessCheck?: () => Promise<void>;
   /** Test seam: pre-built GitHub sink. Overrides the env-var lookup. */
-  githubIssueSink?: PoiGithubIssueSink | null;
+  githubIssueSink?: GithubIssueSink | null;
 }
 
 export interface PoiSchedulerHandles {
@@ -279,13 +275,13 @@ export function setupPoiIngestCron(opts: PoiSchedulerOptions): PoiSchedulerHandl
   // `POI_INGEST_ALERT_GH_TOKEN` + `POI_INGEST_ALERT_GH_REPO`; without those,
   // the structured-log path still fires. The cron itself can be disabled with
   // the standard sentinel set, identical to per-source crons.
-  const githubIssueSink: PoiGithubIssueSink | null =
+  const githubIssueSink: GithubIssueSink | null =
     opts.githubIssueSink !== undefined
       ? opts.githubIssueSink
-      : buildPoiGithubIssueSink(
-          process.env.POI_INGEST_ALERT_GH_TOKEN?.trim() || undefined,
-          process.env.POI_INGEST_ALERT_GH_REPO?.trim() || undefined,
-        );
+      : createGithubIssueSink({
+          token: process.env.POI_INGEST_ALERT_GH_TOKEN,
+          repository: process.env.POI_INGEST_ALERT_GH_REPO,
+        });
 
   const defaultStalenessCheck = async (): Promise<void> => {
     const alerts = await detectStalePoiSources();

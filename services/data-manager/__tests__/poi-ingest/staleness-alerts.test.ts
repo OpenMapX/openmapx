@@ -1,12 +1,11 @@
 import { describe, expect, it, vi } from "vitest";
+import type { GithubIssueSink } from "../../src/jobs/github-issue-sink.js";
 import {
-  buildPoiGithubIssueSink,
   detectStalePoiSources,
   emitPoiAlerts,
   type PoiAlert,
   type PoiAlertLogger,
   type PoiFeedStateReader,
-  type PoiGithubIssueSink,
   poiGithubIssueTitle,
 } from "../../src/jobs/poi-ingest/staleness-alerts.js";
 
@@ -192,7 +191,7 @@ describe("emitPoiAlerts", () => {
 
   it("skips creation when an open GitHub issue already exists", async () => {
     const log = buildLogger();
-    const githubIssue: PoiGithubIssueSink = {
+    const githubIssue: GithubIssueSink = {
       findOpenIssueByTitle: vi.fn().mockResolvedValue("https://github.com/x/y/issues/1"),
       createIssue: vi.fn().mockRejectedValue(new Error("should not be called")),
     };
@@ -204,7 +203,7 @@ describe("emitPoiAlerts", () => {
 
   it("creates a new issue when no open match exists", async () => {
     const log = buildLogger();
-    const githubIssue: PoiGithubIssueSink = {
+    const githubIssue: GithubIssueSink = {
       findOpenIssueByTitle: vi.fn().mockResolvedValue(null),
       createIssue: vi.fn().mockResolvedValue("https://github.com/x/y/issues/2"),
     };
@@ -222,27 +221,11 @@ describe("emitPoiAlerts", () => {
 
   it("logs but does not throw when the GitHub sink fails", async () => {
     const log = buildLogger();
-    const githubIssue: PoiGithubIssueSink = {
+    const githubIssue: GithubIssueSink = {
       createIssue: vi.fn().mockRejectedValue(new Error("rate limited")),
     };
     await expect(emitPoiAlerts({ alerts: [alert], log, githubIssue })).resolves.toBeUndefined();
     expect(log.errorCalls.some(([m]) => m.includes("GitHub issue failed"))).toBe(true);
-  });
-});
-
-describe("buildPoiGithubIssueSink", () => {
-  it("returns null when either credential is missing", () => {
-    expect(buildPoiGithubIssueSink(undefined, "x/y")).toBeNull();
-    expect(buildPoiGithubIssueSink("tok", undefined)).toBeNull();
-    expect(buildPoiGithubIssueSink("", "x/y")).toBeNull();
-    expect(buildPoiGithubIssueSink("tok", "")).toBeNull();
-  });
-
-  it("returns a sink when both credentials are provided", () => {
-    const sink = buildPoiGithubIssueSink("tok", "x/y");
-    expect(sink).not.toBeNull();
-    expect(typeof sink?.createIssue).toBe("function");
-    expect(typeof sink?.findOpenIssueByTitle).toBe("function");
   });
 });
 

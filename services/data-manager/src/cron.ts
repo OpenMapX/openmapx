@@ -11,6 +11,7 @@ import { Cron } from "croner";
 import { and, eq } from "drizzle-orm";
 import type { FastifyBaseLogger } from "fastify";
 import { db } from "./db/index.js";
+import { createGithubIssueSink, type GithubIssueSink } from "./jobs/github-issue-sink.js";
 import { discoverLatestOvertureRelease } from "./jobs/overture/pull.js";
 import { rebuildOvertureLinks } from "./jobs/overture/rebuild-links.js";
 import {
@@ -56,11 +57,9 @@ import type { MotisOperationsPolicy } from "./jobs/transitous/operations-profile
 import { finalizeJobRow, makePersistingOnStageComplete } from "./jobs/transitous/persistence.js";
 import type { SingleFlightController } from "./jobs/transitous/single-flight.js";
 import {
-  buildGithubIssueSink,
   detectStaleFeeds,
   emitFeedAlerts,
   emitPipelineFailureAlert,
-  type GithubIssueSink,
 } from "./jobs/transitous/staleness-alerts.js";
 import { asJobLogger, jobChildLogger } from "./logger.js";
 import { runOpsOperation } from "./ops-client.js";
@@ -460,10 +459,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const githubIssue: GithubIssueSink | null =
     options.githubIssueSink !== undefined
       ? options.githubIssueSink
-      : buildGithubIssueSink(
-          process.env.TRANSITOUS_ALERT_GH_TOKEN?.trim() || undefined,
-          process.env.TRANSITOUS_ALERT_GH_REPO?.trim() || undefined,
-        );
+      : createGithubIssueSink({
+          token: process.env.TRANSITOUS_ALERT_GH_TOKEN,
+          repository: process.env.TRANSITOUS_ALERT_GH_REPO,
+        });
 
   let lastFeedProxyReloadAt: number | null = null;
   const feedProxyConfPath = join(
