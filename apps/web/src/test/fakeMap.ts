@@ -48,14 +48,17 @@ export interface FakeMapState {
   bearing: number;
   /** Backing value for `getCenter()`; `jumpTo`/`easeTo` write it when they carry a centre. */
   center: { lng: number; lat: number };
-  /** Last padding passed to `setPadding()`, or null if never called. */
-  padding: Record<string, number> | null;
+  /** Backing value for `getPadding()`; null until a transition carries padding. */
+  padding: { top: number; bottom: number; left: number; right: number } | null;
   cameraTransitions: Array<{
-    method: "easeTo" | "jumpTo";
+    method: "easeTo" | "jumpTo" | "flyTo" | "fitBounds" | "setPadding";
     options: Record<string, unknown>;
     /** Second argument, e.g. `{ programmatic: true }`; undefined when omitted. */
     eventData?: Record<string, unknown>;
   }>;
+  cameraForBoundsCalls: Array<{ bounds: unknown; options: Record<string, unknown> | undefined }>;
+  /** Backing value for `isMoving()` — set it to stage a camera animation in flight. */
+  moving: boolean;
   movedLayers: Array<{ layerId: string; beforeId?: string }>;
   light: Record<string, unknown> | null;
   missingStyleImageResolver: MissingStyleImageResolver | null;
@@ -100,6 +103,10 @@ export interface CreateFakeMapOptions {
   center?: { lng: number; lat: number };
   /** `getContainer().clientHeight`, which camera padding maths read (default 800). */
   containerHeight?: number;
+  /** `getContainer().clientWidth` (default 1200). */
+  containerWidth?: number;
+  /** Screen projection used by `project()`; defaults to the fixed `projectedPoint`. */
+  project?: (lngLat: [number, number]) => { x: number; y: number };
   /** Initial WGS84 viewport bounds, including wrapped west > east antimeridian views. */
   bounds?: { west: number; south: number; east: number; north: number };
 }
@@ -125,6 +132,8 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     center: options.center ?? { lng: 0, lat: 0 },
     padding: null,
     cameraTransitions: [],
+    cameraForBoundsCalls: [],
+    moving: false,
     movedLayers: [],
     light: null,
     missingStyleImageResolver: null,
@@ -145,13 +154,16 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
   };
 
   const baseLayers = options.baseLayers ?? [];
-  const container = { clientHeight: options.containerHeight ?? 800 };
+  const container = {
+    clientHeight: options.containerHeight ?? 800,
+    clientWidth: options.containerWidth ?? 1200,
+  };
   for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
 
-  // Camera transitions move the state a caller can read back. Centre and pitch
-  // follow the transition; zoom and bearing stay test-driven inputs, since tests
-  // set `state.zoom` by hand to stage a gesture and then assert on what the code
-  // under test did with it.
+  // Camera transitions move the state a caller can read back. Centre, pitch and
+  // padding follow the transition; zoom and bearing stay test-driven inputs,
+  // since tests set `state.zoom` by hand to stage a gesture and then assert on
+  // what the code under test did with it.
   const applyCamera = (options: Record<string, unknown>) => {
     if (typeof options.pitch === "number") state.pitch = options.pitch;
     const center = options.center;
@@ -160,6 +172,16 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     } else if (center && typeof center === "object") {
       const { lng, lat } = center as { lng?: number; lat?: number };
       if (typeof lng === "number" && typeof lat === "number") state.center = { lng, lat };
+    }
+    const padding = options.padding;
+    if (padding && typeof padding === "object") {
+      const p = padding as Record<string, number>;
+      state.padding = {
+        top: p.top ?? 0,
+        bottom: p.bottom ?? 0,
+        left: p.left ?? 0,
+        right: p.right ?? 0,
+      };
     }
   };
 
@@ -306,7 +328,12 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     queryRenderedFeatures: (_point: unknown, queryOptions?: { layers?: string[] }) =>
       queryOptions?.layers?.flatMap((layerId) => state.renderedFeatures.get(layerId) ?? []) ?? [],
     querySourceFeatures: () => [],
-    project: () => state.projectedPoint,
+    project: (lngLat: unknown) => {
+      if (options.project && Array.isArray(lngLat)) {
+        return options.project([Number(lngLat[0]), Number(lngLat[1])]);
+      }
+      return state.projectedPoint;
+    },
     unproject: () => ({ lng: 0, lat: 0 }),
     getZoom: () => state.zoom,
     getPitch: () => state.pitch,
@@ -319,9 +346,17 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     },
     getCenter: () => state.center,
     getBearing: () => state.bearing,
-    setPadding: (padding: Record<string, number>) => {
-      state.padding = padding;
+    getPadding: () => state.padding ?? { top: 0, bottom: 0, left: 0, right: 0 },
+    setPadding: (padding: Record<string, number>, eventData?: Record<string, unknown>) => {
+      state.padding = {
+        top: padding.top ?? 0,
+        bottom: padding.bottom ?? 0,
+        left: padding.left ?? 0,
+        right: padding.right ?? 0,
+      };
+      state.cameraTransitions.push({ method: "setPadding", options: padding, eventData });
     },
+    isMoving: () => state.moving,
     getContainer: () => container,
     getBounds: () => {
       const bounds = options.bounds ?? { west: -180, south: -90, east: 180, north: 90 };
@@ -336,7 +371,21 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     getCanvasContainer: () => canvas,
     addControl: () => {},
     removeControl: () => {},
-    flyTo: () => {},
+    // MapLibre answers with a `LngLat`-shaped centre, not a tuple; code that
+    // reads `.lng` has to work here exactly as it does in a browser.
+    cameraForBounds: (bounds: unknown, cameraOptions?: Record<string, unknown>) => {
+      state.cameraForBoundsCalls.push({ bounds, options: cameraOptions });
+      const [[west, south], [east, north]] = bounds as [[number, number], [number, number]];
+      return {
+        center: { lng: (west + east) / 2, lat: (south + north) / 2 },
+        zoom: state.zoom,
+        bearing: 0,
+      };
+    },
+    flyTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
+      state.cameraTransitions.push({ method: "flyTo", options, eventData });
+      applyCamera(options);
+    },
     easeTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
       state.cameraTransitions.push({ method: "easeTo", options, eventData });
       applyCamera(options);
@@ -345,7 +394,17 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       state.cameraTransitions.push({ method: "jumpTo", options, eventData });
       applyCamera(options);
     },
-    fitBounds: () => {},
+    fitBounds: (
+      bounds: unknown,
+      options?: Record<string, unknown>,
+      eventData?: Record<string, unknown>,
+    ) => {
+      state.cameraTransitions.push({
+        method: "fitBounds",
+        options: { bounds, ...options },
+        eventData,
+      });
+    },
     on,
     off,
     once: on,

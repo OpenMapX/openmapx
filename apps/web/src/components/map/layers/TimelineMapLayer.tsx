@@ -16,6 +16,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
 
 export const PERSONAL_TIMELINE_TRACKS_SOURCE_ID = "personal-timeline-tracks-source";
 export const PERSONAL_TIMELINE_VISITS_SOURCE_ID = "personal-timeline-visits-source";
@@ -102,7 +103,7 @@ function ActiveTimelineGeometry({ ownerId, date }: { ownerId: string; date: stri
     if (lastFittedKey.current === fitKey) return;
     lastFittedKey.current = fitKey;
     const [west, south, east, north] = day.bounds;
-    const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+    const reducedMotion = prefersReducedMotion();
     const bounds: [[number, number], [number, number]] = [
       [west, south],
       [east, north],

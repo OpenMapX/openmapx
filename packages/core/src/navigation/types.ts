@@ -2,7 +2,7 @@ import type { LngLat } from "../types/geometry";
 import type { RouteStep, TravelMode } from "../types/routing";
 
 export type NavStatus = "idle" | "navigating" | "rerouting" | "arrived";
-export type CameraMode = "follow" | "free";
+export type CameraMode = "follow" | "free" | "overview";
 export type CueTier = "far" | "near" | "now";
 
 export interface SnapResult {

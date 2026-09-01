@@ -230,3 +230,56 @@ describe("fake map interaction controls", () => {
     ).toEqual([poi]);
   });
 });
+
+describe("camera recording", () => {
+  it("records flyTo, fitBounds, setPadding and reports padding back", () => {
+    const fake = createFakeMap({ containerWidth: 1000, containerHeight: 500 });
+    expect(fake.map.getContainer().clientWidth).toBe(1000);
+    expect(fake.map.getPadding()).toEqual({ top: 0, bottom: 0, left: 0, right: 0 });
+    fake.map.setPadding({ top: 1, bottom: 2, left: 3, right: 4 }, { programmatic: true });
+    expect(fake.map.getPadding()).toEqual({ top: 1, bottom: 2, left: 3, right: 4 });
+    fake.map.flyTo({ center: [8, 50], zoom: 12 }, { programmatic: true });
+    fake.map.fitBounds(
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      { padding: 10 },
+    );
+    expect(fake.state.cameraTransitions.map((t) => t.method)).toEqual([
+      "setPadding",
+      "flyTo",
+      "fitBounds",
+    ]);
+    expect(fake.state.center).toEqual({ lng: 8, lat: 50 });
+  });
+
+  it("answers cameraForBounds with the bounds midpoint and records the call", () => {
+    const fake = createFakeMap({ zoom: 9 });
+    const camera = fake.map.cameraForBounds(
+      [
+        [0, 0],
+        [2, 4],
+      ],
+      { padding: 5 },
+    );
+    expect(camera).toEqual({ center: { lng: 1, lat: 2 }, zoom: 9, bearing: 0 });
+    expect(fake.state.cameraForBoundsCalls).toEqual([
+      {
+        bounds: [
+          [0, 0],
+          [2, 4],
+        ],
+        options: { padding: 5 },
+      },
+    ]);
+  });
+
+  it("projects through the supplied projection and exposes isMoving", () => {
+    const fake = createFakeMap({ project: ([lng, lat]) => ({ x: lng * 10, y: -lat * 10 }) });
+    expect(fake.map.project([1, 2])).toEqual({ x: 10, y: -20 });
+    expect(fake.map.isMoving()).toBe(false);
+    fake.state.moving = true;
+    expect(fake.map.isMoving()).toBe(true);
+  });
+});
