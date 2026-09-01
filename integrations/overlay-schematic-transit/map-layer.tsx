@@ -2,9 +2,9 @@
 
 import { useOverlayExclusion } from "@openmapx/core";
 import { useMemo } from "react";
-import { useMapLayerGroup } from "@/components/map/layers/useMapLayerGroup";
-import { useEnv } from "@/lib/EnvProvider";
-import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { buildSchematicGroup } from "./map-layer-group";
 import { useSchematicTransitStore } from "./store";
 

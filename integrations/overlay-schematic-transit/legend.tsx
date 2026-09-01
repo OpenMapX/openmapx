@@ -5,7 +5,7 @@ import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { SCHEMATIC_LAYOUTS, SCHEMATIC_NETWORKS, useSchematicTransitStore } from "./store";
 
 export function SchematicTransitLegend() {

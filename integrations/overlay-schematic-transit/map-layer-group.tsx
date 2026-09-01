@@ -1,5 +1,5 @@
 import type { ExpressionSpecification } from "maplibre-gl";
-import type { MapLayerGroup } from "@/components/map/layers/mapLayerGroup";
+import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import type { SchematicLayout, SchematicNetwork } from "./store";
 
 export const SCHEMATIC_SOURCE_ID = "omx-schematic-transit-src";
