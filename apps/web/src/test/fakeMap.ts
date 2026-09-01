@@ -109,6 +109,14 @@ export interface CreateFakeMapOptions {
   project?: (lngLat: [number, number]) => { x: number; y: number };
   /** Initial WGS84 viewport bounds, including wrapped west > east antimeridian views. */
   bounds?: { west: number; south: number; east: number; north: number };
+  /**
+   * Reproduce MapLibre's synchronous move-event ordering for the camera
+   * methods: every one of them stops the running animation first — firing that
+   * animation's `moveend` with the event data it was started with — and instant
+   * moves then fire `movestart`/`moveend` back to back. Off by default, since
+   * most consumers only read `cameraTransitions` and would see new events.
+   */
+  emitCameraEvents?: boolean;
 }
 
 export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
@@ -159,6 +167,22 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     clientWidth: options.containerWidth ?? 1200,
   };
   for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
+
+  const emitCameraEvents = options.emitCameraEvents ?? false;
+  let animating: { eventData?: Record<string, unknown> } | null = null;
+
+  const stopAnimation = () => {
+    if (!emitCameraEvents || !animating) return;
+    const { eventData } = animating;
+    animating = null;
+    api.emit("moveend", eventData ?? {});
+  };
+  const startMove = (eventData: Record<string, unknown> | undefined, animated: boolean) => {
+    if (!emitCameraEvents) return;
+    api.emit("movestart", eventData ?? {});
+    if (animated) animating = { eventData };
+    else api.emit("moveend", eventData ?? {});
+  };
 
   // Camera transitions move the state a caller can read back. Centre, pitch and
   // padding follow the transition; zoom and bearing stay test-driven inputs,
@@ -348,6 +372,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     getBearing: () => state.bearing,
     getPadding: () => state.padding ?? { top: 0, bottom: 0, left: 0, right: 0 },
     setPadding: (padding: Record<string, number>, eventData?: Record<string, unknown>) => {
+      stopAnimation();
       state.padding = {
         top: padding.top ?? 0,
         bottom: padding.bottom ?? 0,
@@ -355,6 +380,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
         right: padding.right ?? 0,
       };
       state.cameraTransitions.push({ method: "setPadding", options: padding, eventData });
+      startMove(eventData, false);
     },
     isMoving: () => state.moving,
     getContainer: () => container,
@@ -383,16 +409,22 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
       };
     },
     flyTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
+      stopAnimation();
       state.cameraTransitions.push({ method: "flyTo", options, eventData });
       applyCamera(options);
+      startMove(eventData, true);
     },
     easeTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
+      stopAnimation();
       state.cameraTransitions.push({ method: "easeTo", options, eventData });
       applyCamera(options);
+      startMove(eventData, true);
     },
     jumpTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
+      stopAnimation();
       state.cameraTransitions.push({ method: "jumpTo", options, eventData });
       applyCamera(options);
+      startMove(eventData, false);
     },
     fitBounds: (
       bounds: unknown,

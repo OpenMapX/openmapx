@@ -37,6 +37,7 @@ import { MapContextMenu } from "@/components/map/MapContextMenu";
 import { MapControls } from "@/components/map/MapControls";
 import { MapFooter } from "@/components/map/MapFooter";
 import { MapLayerHost } from "@/components/map/MapLayerHost";
+import { MapPaddingSync } from "@/components/map/MapPaddingSync";
 import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
@@ -121,6 +122,7 @@ export default function HomePage() {
               MapControls — both live in this subtree. */}
           <NavIncidentsProvider>
             <MapCanvas />
+            <MapPaddingSync />
             <GlobeProjection />
             <BaseAttributions />
             <RasterBaseLayer

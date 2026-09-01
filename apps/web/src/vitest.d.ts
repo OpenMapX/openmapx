@@ -49,6 +49,7 @@ interface VitestExpectation {
   toBeNull(): void;
   toContain(expected: unknown): void;
   toHaveLength(expected: number): void;
+  toHaveProperty(property: string | readonly string[], value?: unknown): void;
   toEqual(expected: unknown): void;
   toMatchObject(expected: unknown): void;
   toHaveBeenCalled(): void;
