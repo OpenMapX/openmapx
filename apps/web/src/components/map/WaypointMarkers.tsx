@@ -4,8 +4,8 @@ import type { LngLat } from "@openmapx/core";
 import { useDirectionsStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { useMap } from "@/lib/MapContext";
-import { BRAND } from "@/lib/theme";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 const PIN_SVG_NS = "http://www.w3.org/2000/svg";
 

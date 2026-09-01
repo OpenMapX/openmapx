@@ -2,7 +2,7 @@
 
 import { useOverlayExclusion } from "@openmapx/core";
 import { useEffect, useMemo } from "react";
-import { useIntegrationSourceAttributions } from "@/lib/useIntegrationAttribution";
+import { useIntegrationSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
 import { EffisBurnedAreaLayer } from "./layers/effis-burned-area-layer";
 import { HotspotLayer } from "./layers/hotspot-layer";
 import { NifcPerimeterLayer } from "./layers/nifc-perimeter-layer";

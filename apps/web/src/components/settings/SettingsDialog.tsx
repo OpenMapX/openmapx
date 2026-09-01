@@ -24,8 +24,11 @@ import {
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { localeNames, locales } from "@/i18n/config";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 import { setLocaleAndReload } from "@/lib/setLocale";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 import { NavigationSettingsDialog } from "./NavigationSettingsDialog";
 import { Section, SettingRow } from "./settingsPrimitives";
 

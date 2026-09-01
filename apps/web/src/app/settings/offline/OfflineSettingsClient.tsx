@@ -41,8 +41,8 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
-import type { ClientEnv } from "@/lib/env";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
+import type { ClientEnv } from "@/integration-api/runtime/env";
 import { haptics } from "@/lib/haptics";
 import { loadOpenMapXStyle } from "@/lib/map";
 import {

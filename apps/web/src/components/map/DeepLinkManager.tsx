@@ -59,6 +59,7 @@ import {
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { useMap } from "@/integration-api/map/MapContext";
 import {
   DEEPLINK_UPDATE_EVENT,
   formatBboxParam,
@@ -72,7 +73,6 @@ import {
   setCsvParam,
   splitCsv,
 } from "@/lib/deepLink";
-import { useMap } from "@/lib/MapContext";
 
 type SubscribableStore = {
   subscribe: (listener: () => void) => () => void;

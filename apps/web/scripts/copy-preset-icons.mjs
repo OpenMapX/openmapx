@@ -44,7 +44,13 @@ for (const { name, iconsDir } of SOURCES) {
 
 const weatherCodesPath = resolve(webRoot, "../../packages/core/src/utils/weatherCodes.ts");
 const meteoconsPath = require.resolve("@iconify-json/meteocons/icons.json");
-const weatherIconOutputPath = join(webRoot, "src", "components", "weather", "meteocons.json");
+const weatherIconOutputPath = join(
+  webRoot,
+  "src",
+  "integration-api",
+  "components",
+  "meteocons.json",
+);
 
 const weatherCodes = readFileSync(weatherCodesPath, "utf8");
 const weatherIconNames = [

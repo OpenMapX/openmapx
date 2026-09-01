@@ -89,7 +89,7 @@ vi.mock("next-intl", () => ({
   },
 }));
 
-vi.mock("@/lib/theme", () => ({
+vi.mock("@/integration-api/runtime/theme", () => ({
   BRAND: "#0f9d58",
 }));
 
@@ -300,7 +300,7 @@ vi.mock("@openmapx/core", () => ({
   }),
 }));
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ flyTo: vi.fn() }),
 }));
 

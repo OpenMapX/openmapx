@@ -11,8 +11,8 @@ import type { TripItinerary, TripLeg, VehicleJourneyStop } from "@openmapx/mobil
 import { useTranslations } from "next-intl";
 import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { TransitBoardingDepartures } from "./TransitBoardingDepartures";
 
 /** Best available time for a stop: realtime departure/arrival, else scheduled. */

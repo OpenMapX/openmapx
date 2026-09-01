@@ -4,7 +4,7 @@ import type { ProviderHealthResponse } from "@/lib/admin/transitHooks";
 
 const resetMutate = vi.fn();
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://test.local" }),
 }));
 

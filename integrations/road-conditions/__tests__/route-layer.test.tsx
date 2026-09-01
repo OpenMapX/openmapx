@@ -1,6 +1,6 @@
 import { fetchRoadConditions } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 
@@ -36,18 +36,18 @@ const MAP_REF = {
     return fake.map;
   },
 };
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: MAP_REF, mapReady: true, styleVersion: 0 }),
 }));
 // A value distinct from any plausible hardcoded zoom threshold (e.g. 10), so a
 // passing `maxzoom` assertion actually proves the layer reads this hook rather
 // than a literal that happens to coincide with it.
-vi.mock("@/lib/overlayZoomGate", () => ({ useOverlayMinZoom: () => 7 }));
-vi.mock("@/components/map/overlay/useOverlayStoreState", () => ({
+vi.mock("@/integration-api/overlay/overlayZoomGate", () => ({ useOverlayMinZoom: () => 7 }));
+vi.mock("@/integration-api/overlay/useOverlayStoreState", () => ({
   useOverlayLayerVisible: () => true,
 }));
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
     dateTime: (value: string | number | Date) => String(value),
     date: (value: string | number | Date) => String(value),
@@ -76,7 +76,7 @@ const DRAWN_STATE = {
   evStops: [],
   navigating: false,
 };
-vi.mock("@/lib/useDrawnDirectionsRoutes", () => ({
+vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
   useDrawnDirectionsRoutes: () => DRAWN_STATE,
 }));
 vi.mock("@openmapx/core", async (importOriginal) => {

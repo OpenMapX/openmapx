@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import { formatDuration, formatMeasurementDistance } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 interface Props {
   durationRemaining: number;

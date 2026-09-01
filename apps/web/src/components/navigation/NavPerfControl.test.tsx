@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeMap, type FakeMap } from "@/test";
 
-vi.mock("@/lib/MapContext", () => {
+vi.mock("@/integration-api/map/MapContext", () => {
   const value = {
     mapRef: { current: null as unknown },
     mapReady: true,
@@ -19,7 +19,7 @@ vi.mock("@/lib/MapContext", () => {
 });
 
 import { useNavigationStore } from "@openmapx/core";
-import * as mapContext from "@/lib/MapContext";
+import * as mapContext from "@/integration-api/map/MapContext";
 import { NavPerfControl } from "./NavPerfControl";
 
 const mapContextTest = (mapContext as unknown as { __test: { mapRef: { current: unknown } } })

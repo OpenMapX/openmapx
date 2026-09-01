@@ -14,7 +14,7 @@ import type {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { SectionLabel } from "../shared/SectionLabel";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
 

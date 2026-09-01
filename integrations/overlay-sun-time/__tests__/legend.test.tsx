@@ -6,7 +6,7 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 let fake: FakeMap;
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,
@@ -14,7 +14,9 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({ useEnv: () => ({ apiUrl: "http://api.test" }) }));
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "http://api.test" }),
+}));
 
 // jsdom never decodes images, so a real `Image.onload` would never fire and the
 // map layer's icon-load path would hang forever under test. Stub the global so

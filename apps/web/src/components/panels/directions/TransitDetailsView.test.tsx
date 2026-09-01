@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TransitDetailsView } from "./TransitDetailsView";
 
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
     time: (v: string | number | Date) => String(v),
     date: (v: string | number | Date) => String(v),
@@ -101,11 +101,11 @@ vi.mock("@/lib/fareUtils", () => ({
   formatFare: () => "",
 }));
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ flyTo: vi.fn() }),
 }));
 
-vi.mock("@/lib/theme", () => ({
+vi.mock("@/integration-api/runtime/theme", () => ({
   BRAND: "#0f9d58",
 }));
 

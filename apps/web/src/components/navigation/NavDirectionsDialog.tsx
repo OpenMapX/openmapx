@@ -4,7 +4,10 @@ import Dialog from "@mui/material/Dialog";
 import DialogContent from "@mui/material/DialogContent";
 import type { Route } from "@openmapx/core";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 
 /**
  * The full turn-by-turn step list during navigation, in a dialog. Reuses the

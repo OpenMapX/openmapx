@@ -4,11 +4,11 @@ import type { StreetLevelCapabilities } from "@openmapx/core";
 import { useOverlayExclusion, useStreetLevelStore } from "@openmapx/core";
 import type { FilterSpecification, MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import { useEffect } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import { subscribeStyleLoaded } from "@/components/map/layers/styleLoadedSync";
-import { useEnv } from "@/lib/EnvProvider";
-import { useMap } from "@/lib/MapContext";
-import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useStreetLevelProviders } from "./useStreetLevelProviders";
 
 type MvtCoverage = Extract<StreetLevelCapabilities["coverage"], { kind: "mvt" }>;

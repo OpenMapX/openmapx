@@ -1,6 +1,6 @@
 import type { MapGeoJSONFeature, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import {
   type MapOverlayInteractionEvent,
   registerMapOverlayInteraction,

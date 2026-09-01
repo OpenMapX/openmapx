@@ -3,7 +3,7 @@
 import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/EnvProvider", () => {
+vi.mock("@/integration-api/runtime/EnvProvider", () => {
   const env = { styleProvider: "openmapx" };
   return { useEnv: () => env };
 });

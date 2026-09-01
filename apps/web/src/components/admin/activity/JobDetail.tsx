@@ -9,7 +9,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { DataManagerJobStages } from "../shared/DataManagerJobStages";
 import { JobStatusChip } from "../shared/JobStatusChip";
 

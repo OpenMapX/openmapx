@@ -19,7 +19,10 @@ import { toMangroveExportJwk } from "@openmapx/mangrove-client";
 import { useMangroveKeypairExport } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 
 interface Props {
   open: boolean;

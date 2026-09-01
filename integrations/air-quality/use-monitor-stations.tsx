@@ -8,8 +8,8 @@ import type {
 } from "@openmapx/air-quality";
 import { apiClient, isApiClientError, useDebouncedCallback } from "@openmapx/core";
 import { useCallback, useEffect, useRef } from "react";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
-import { useMap } from "@/lib/MapContext";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 
 import { useAirQualityStore } from "./store";
 

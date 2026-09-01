@@ -12,7 +12,7 @@ import {
 } from "@openmapx/openconditions-contrib-client";
 import { useMutation } from "@tanstack/react-query";
 import { useCallback, useRef, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { generateNonce } from "./claim";
 import type { SubClaimAction } from "./relay";
 

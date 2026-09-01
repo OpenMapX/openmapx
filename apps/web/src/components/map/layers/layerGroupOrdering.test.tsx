@@ -10,7 +10,7 @@ const fake = createFakeMap({
   ],
 });
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,
@@ -19,9 +19,11 @@ vi.mock("@/lib/MapContext", () => ({
     flyTo: vi.fn(),
   }),
 }));
-vi.mock("@/lib/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
+vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
 vi.mock("@/lib/attributionForProviders", () => ({ attributionsForProviders: () => [] }));
-vi.mock("@/lib/useIntegrationAttribution", () => ({ useIntegrationDomainAttribution: vi.fn() }));
+vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
+  useIntegrationDomainAttribution: vi.fn(),
+}));
 vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
 vi.mock("@/lib/navigation/useNavTrafficSignals", () => ({
   useNavTrafficSignals: () => [[8, 50] as [number, number]],
@@ -67,7 +69,7 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
     r0: [{ startMeters: 200, endMeters: 900, los: "queuing", confidence: "measured" }],
   }),
 }));
-vi.mock("@/lib/useDrawnDirectionsRoutes", () => ({
+vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
   useDrawnDirectionsRoutes: () => ({
     routes: [],
     activeRouteIndex: 0,

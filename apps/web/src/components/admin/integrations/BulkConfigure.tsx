@@ -27,7 +27,7 @@ import Typography from "@mui/material/Typography";
 import type { CredentialSetup } from "@openmapx/integration-framework";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";

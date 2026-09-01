@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { layerRegistrations } from "@/components/map/layers/layerStack";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { useSunTimeStore } from "../store";
 
@@ -14,7 +14,7 @@ let fake: FakeMap;
 // "skips re-publishing" test below exists to catch.
 const mapRefBox: { current: FakeMap["map"] | null } = { current: null };
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: mapRefBox,
     mapReady: true,
@@ -22,7 +22,9 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({ useEnv: () => ({ apiUrl: "http://api.test" }) }));
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "http://api.test" }),
+}));
 
 // jsdom never decodes images, so a real `Image.onload` would never fire and
 // the icon-load path in map-layer.tsx would hang forever under test. Stub the

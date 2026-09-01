@@ -13,8 +13,8 @@ import {
   weatherCodeToInfo,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
-import { WeatherIcon } from "@/components/weather/WeatherIcon";
+import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { useWeatherStore } from "./store";
 
 const SUB_LAYERS: { key: WeatherSubLayer; needsOwm: boolean }[] = [

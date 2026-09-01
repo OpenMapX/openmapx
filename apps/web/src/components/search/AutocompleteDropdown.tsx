@@ -19,7 +19,7 @@ import type { AutocompleteResult } from "@openmapx/core";
 import { isTransitRawCategory, normalizeSearchTerm } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandLogo } from "./BrandLogo";
 import { PresetIcon } from "./PresetIcon";
 

@@ -11,7 +11,7 @@ vi.mock("@openmapx/core", () => ({
   formatMeasurementDistance: (m: number, sys: string) =>
     sys === "imperial" ? `${m} ft` : `${m} m`,
 }));
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
     time: (v: string | number | Date) => String(v),
     date: (v: string | number | Date) => String(v),

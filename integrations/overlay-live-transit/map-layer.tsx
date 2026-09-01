@@ -12,18 +12,18 @@ import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 import type { GeoJSONFeatureDiff, GeoJSONSourceDiff, MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
-import { useEnv } from "@/lib/EnvProvider";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
-import { useMap } from "@/lib/MapContext";
-import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
 import {
   loadTransitVehicleMarkers,
   modeColor,
   transitVehicleIconExpression,
-} from "@/lib/transitMarkers";
-import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
+} from "@/integration-api/map/transitMarkers";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
+import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { isFreshVehicleObservation } from "./freshness";
 import { useLiveTransitStore } from "./store";
 import type { LiveTransitSnapshot } from "./types.js";

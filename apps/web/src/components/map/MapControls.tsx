@@ -15,7 +15,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { Suspense } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
-import { useMap } from "@/lib/MapContext";
+import { useMap } from "@/integration-api/map/MapContext";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";

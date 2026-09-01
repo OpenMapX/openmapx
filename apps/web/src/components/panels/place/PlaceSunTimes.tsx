@@ -6,7 +6,7 @@ import Typography from "@mui/material/Typography";
 import { useSunTimes } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 interface Props {
   lat: number;

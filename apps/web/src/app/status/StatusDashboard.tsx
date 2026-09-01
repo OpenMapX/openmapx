@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
 interface ServiceStatus {
   id: string;

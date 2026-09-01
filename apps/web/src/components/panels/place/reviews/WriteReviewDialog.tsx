@@ -27,7 +27,10 @@ import {
 import { useSubmitReview, useUploadReviewImage, useUserKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 
 type Experience = GeoExperienceContext;
 

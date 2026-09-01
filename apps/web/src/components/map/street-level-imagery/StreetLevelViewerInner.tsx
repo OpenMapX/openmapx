@@ -12,14 +12,14 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { LocationMinimap } from "@/components/map/LocationMinimap";
 import { SearchBar } from "@/components/search/SearchBar";
-import { useEnv } from "@/lib/EnvProvider";
-import { useMap } from "@/lib/MapContext";
+import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
+import { useStreetLevelProviders } from "@/integration-api/components/useStreetLevelProviders";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { StreetLevelFlatImage } from "./StreetLevelFlatImage";
 import { StreetLevelInfoCard } from "./StreetLevelInfoCard";
 import { fetchStreetLevelNode, pickPanoramaUrl, type StreetLevelNode } from "./useStreetLevelNode";
-import { useStreetLevelProviders } from "./useStreetLevelProviders";
 
 interface TourPlugin {
   setCurrentNode: (id: string) => void;

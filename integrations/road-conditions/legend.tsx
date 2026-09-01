@@ -7,7 +7,7 @@ import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { SEVERITY_COLORS, TYPE_GLYPHS } from "./markers";
 import { type Horizon, type MinSeverity, useRoadConditionsStore } from "./store";
 import {

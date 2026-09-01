@@ -5,7 +5,7 @@ import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import type { ChangeEvent } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 export function WaypointInput({
   value,

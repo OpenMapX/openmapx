@@ -3,7 +3,7 @@ import { apiClient } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { StrictMode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import {
   act,
   createFakeMap,
@@ -33,8 +33,8 @@ const mapContext = vi.hoisted(() => ({
   styleVersion: 0,
 }));
 
-vi.mock("@/lib/MapContext", () => ({ useMap: () => mapContext }));
-vi.mock("@/lib/useIntegrationAttribution", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({ useMap: () => mapContext }));
+vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
   useSourceAttributions: attributionState.sources,
 }));
 vi.mock("../use-monitor-stations", async (importOriginal) => {

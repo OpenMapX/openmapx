@@ -6,11 +6,11 @@ const fake = createFakeMap({ styleLoaded: true });
 /** Mutable so a test can null it the way `MapCanvas` does on teardown. */
 const mapRef: { current: unknown } = { current: fake.map };
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
 
-import { findMissingLayers } from "./desiredStack";
+import { findMissingLayers } from "@/components/map/layers/desiredStack";
 import { unregisterLayerSlot } from "./layerStack";
 import type { MapLayerGroup } from "./mapLayerGroup";
 import { useMapLayerGroup } from "./useMapLayerGroup";

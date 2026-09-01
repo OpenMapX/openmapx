@@ -29,7 +29,7 @@ const boundary = {
   ],
 };
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,

@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 const CARD_WIDTH = 168;
 const CARD_IMAGE_HEIGHT = 112;

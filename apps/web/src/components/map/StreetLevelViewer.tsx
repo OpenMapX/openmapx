@@ -11,7 +11,7 @@ import { safeHref, useDirectionsStore, useStreetLevelStore } from "@openmapx/cor
 import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
-import { useStreetLevelProviders } from "./street-level-imagery/useStreetLevelProviders";
+import { useStreetLevelProviders } from "@/integration-api/components/useStreetLevelProviders";
 
 const StreetLevelViewerInner = dynamic(
   () => import("./street-level-imagery/StreetLevelViewerInner"),

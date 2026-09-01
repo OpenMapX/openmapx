@@ -6,8 +6,8 @@ import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import NextLink from "next/link";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { useMapAttributionHtml } from "@/integration-api/overlay/mapAttributionStore";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
-import { useMapAttributionHtml } from "@/lib/mapAttributionStore";
 import { CREDITS_SEPARATOR, CREDITS_SX } from "./MapCredits";
 
 // Pixels to lift the footer while navigating, so it clears the navigation

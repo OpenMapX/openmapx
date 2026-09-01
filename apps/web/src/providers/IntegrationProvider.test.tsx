@@ -6,7 +6,7 @@ import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { CHANNEL_GLOBAL } from "@/lib/mobile/mobileShellEnvironment";
 import { IntegrationProvider } from "./IntegrationProvider";
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.example.test" }),
 }));
 

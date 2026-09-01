@@ -4,7 +4,7 @@ import FlagIcon from "@mui/icons-material/Flag";
 import StarIcon from "@mui/icons-material/Star";
 import Typography from "@mui/material/Typography";
 import type { ReactNode } from "react";
-import { BRAND } from "./theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 const ICON_MAP: Record<string, React.ElementType> = {
   heart: FavoriteIcon,

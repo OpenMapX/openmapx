@@ -5,7 +5,7 @@ import Typography from "@mui/material/Typography";
 import type { RideQuote } from "@openmapx/core";
 import { formatDuration } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 function formatFare(amount: number, currency: string, locale: string): string {
   try {

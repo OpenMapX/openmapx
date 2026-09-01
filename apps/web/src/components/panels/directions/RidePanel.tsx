@@ -21,7 +21,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { RideQuoteList } from "@/components/panels/directions/RideQuoteList";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Stop refreshing quotes once the user has stopped interacting with the panel. */
 const IDLE_MS = 5 * 60 * 1000;

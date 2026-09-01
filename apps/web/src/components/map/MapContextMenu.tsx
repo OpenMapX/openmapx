@@ -43,9 +43,9 @@ import {
   useRef,
   useState,
 } from "react";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { useMap } from "@/integration-api/map/MapContext";
 import { buildLocationShareUrl, shareUrl } from "@/lib/deepLink";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
-import { useMap } from "@/lib/MapContext";
 import { findStylePoiAtPoint, getStylePoiLayerIds, type StylePoiTarget } from "./mapStylePoiTarget";
 
 interface MapContextTarget {

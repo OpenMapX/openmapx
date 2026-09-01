@@ -2,14 +2,14 @@ import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { layerRegistrations } from "@/components/map/layers/layerStack";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import manifest from "../manifest.json";
 import { useEnvironmentStore } from "../store";
 
 let fake: FakeMap;
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,
@@ -17,7 +17,7 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
 

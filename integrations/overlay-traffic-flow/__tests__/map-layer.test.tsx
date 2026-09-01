@@ -1,13 +1,13 @@
 import type { MapLayerMouseEvent } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { registerMapOverlayInteraction } from "@/components/map/overlay/mapInteractionArbiter";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { registerMapOverlayInteraction } from "@/integration-api/map/mapInteractionArbiter";
 import { createFakeMap, type FakeMap, render } from "@/test";
 import { useTrafficFlowStore } from "../store";
 
 let fake: FakeMap;
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,
@@ -15,7 +15,7 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ martinBaseUrl: "https://api.test/martin" }),
 }));
 

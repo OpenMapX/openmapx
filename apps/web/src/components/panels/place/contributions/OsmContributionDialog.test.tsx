@@ -11,7 +11,7 @@ import { createQueryWrapper } from "@/test/query";
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 const fullScreen = vi.fn(() => false);
-vi.mock("@/lib/useFullScreenOnMobile", () => ({
+vi.mock("@/integration-api/runtime/useFullScreenOnMobile", () => ({
   useFullScreenOnMobile: () => fullScreen(),
   mobileFullScreenDialogPaperSx: {},
 }));

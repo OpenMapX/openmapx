@@ -7,8 +7,8 @@ import { useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
-import { WeatherIcon } from "@/components/weather/WeatherIcon";
 import { windDirectionLabel } from "@/components/weather/weatherUtils";
+import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 
 interface Props {
   lat: number;

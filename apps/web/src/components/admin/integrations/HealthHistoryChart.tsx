@@ -17,7 +17,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
 interface HealthBucket {
   hour: string;

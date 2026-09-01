@@ -8,7 +8,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { BAND_COLOR, BAND_OPACITY } from "./map-layer";
 import { useSunTimeStore } from "./store";
 

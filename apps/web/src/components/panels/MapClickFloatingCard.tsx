@@ -19,8 +19,8 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { useMap } from "@/lib/MapContext";
-import { BRAND } from "@/lib/theme";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 export function MapClickFloatingCard() {
   const tc = useTranslations("common");

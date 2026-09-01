@@ -1,7 +1,7 @@
 import type { OfflineMapPackageManifest } from "@openmapx/core";
 import { escapeHtml, sanitizeUrl } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
-import type { ClientEnv } from "./env";
+import type { ClientEnv } from "@/integration-api/runtime/env";
 import { resolveOfflinePackageStyle } from "./offlineAreas/packageStyle";
 
 /**

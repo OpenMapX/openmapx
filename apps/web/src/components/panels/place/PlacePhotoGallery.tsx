@@ -24,9 +24,9 @@ import {
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
-import { LocationMinimap } from "@/components/map/LocationMinimap";
-import { useMap } from "@/lib/MapContext";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { PhotoAttribution } from "./PhotoAttribution";
 
 interface Props {

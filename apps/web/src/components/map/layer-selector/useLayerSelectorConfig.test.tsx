@@ -6,8 +6,8 @@ import { render, renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { isValidElement } from "react";
 import { describe, expect, it } from "vitest";
-import { EnvProvider } from "@/lib/EnvProvider";
-import type { ClientEnv } from "@/lib/env";
+import { EnvProvider } from "@/integration-api/runtime/EnvProvider";
+import type { ClientEnv } from "@/integration-api/runtime/env";
 import { IntegrationLayerPreview } from "./IntegrationLayerPreview";
 import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 

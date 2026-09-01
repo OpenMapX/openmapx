@@ -5,7 +5,7 @@ import Tabs from "@mui/material/Tabs";
 import { useSavedPlacesStore, useSession, useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { SavedLabeledTab } from "./SavedLabeledTab";
 import { SavedListDetail } from "./SavedListDetail";
 import { SavedListsTab } from "./SavedListsTab";

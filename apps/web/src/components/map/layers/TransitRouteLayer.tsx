@@ -2,9 +2,9 @@
 
 import { routeColor, usePlaceStore, useRouteStops, useTransitRoute } from "@openmapx/core";
 import { useEffect } from "react";
-import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE_HEX } from "@/lib/theme";
-import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 const SOURCE_ID = "transit-route-detail-source";
 const LINE_LAYER_ID = "transit-route-detail-line";

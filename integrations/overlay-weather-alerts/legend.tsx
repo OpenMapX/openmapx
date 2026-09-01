@@ -5,7 +5,7 @@ import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import { relativeTime, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { SEVERITY_COLORS } from "./map-layer";
 import { ALL_SEVERITIES, useWeatherAlertStore } from "./store";
 

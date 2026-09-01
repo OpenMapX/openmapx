@@ -19,10 +19,10 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { BRAND, TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
 import { formatCo2Emission } from "@/lib/formatCo2";
 import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
-import { BRAND, TRAFFIC_TEXT_COLOR } from "@/lib/theme";
 import { requestHeadingPermission } from "@/lib/useHeading";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);

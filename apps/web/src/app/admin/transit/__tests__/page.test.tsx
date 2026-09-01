@@ -16,7 +16,7 @@ const syncMutate = vi.fn();
 const restartMutate = vi.fn();
 const resetMutate = vi.fn();
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://test.local" }),
 }));
 

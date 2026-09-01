@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  anchorMapLayers,
+  registerLayerSlot,
+  unregisterLayerSlot,
+} from "@/integration-api/map/layerStack";
 import { createFakeMap } from "@/test";
-import { anchorMapLayers, registerLayerSlot, unregisterLayerSlot } from "./layerStack";
 
 /**
  * The reported failure: satellite imagery and wildfires both anchored below the

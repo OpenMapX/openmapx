@@ -7,7 +7,7 @@ import { SAMPLE_TRANSIT_ITINERARY } from "./TransitRouteView.fixtures";
 // useDateTimeFormat -> formatClockTime, but pinned off locale/settings-store
 // nondeterminism so the assertion below ("18:00") doesn't depend on the
 // user's time-format preference or the test runner's default locale.
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
     time: (value: string | number | Date, opts?: { timeZone?: string }) =>
       new Intl.DateTimeFormat("en-GB", {
@@ -68,7 +68,7 @@ vi.mock("@/lib/fareUtils", () => ({
   formatFare: () => "",
 }));
 
-vi.mock("@/lib/theme", () => ({
+vi.mock("@/integration-api/runtime/theme", () => ({
   BRAND: "#0f9d58",
   BRAND_HEX: "#0f9d58",
 }));

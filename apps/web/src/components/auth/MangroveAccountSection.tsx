@@ -43,7 +43,7 @@ import {
 } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { MangroveExportDialog } from "./MangroveExportDialog";
 import { MangroveSetupWizard } from "./MangroveSetupWizard";
 import { MangroveUnlockDialog } from "./MangroveUnlockDialog";

@@ -2,7 +2,7 @@
 
 import type { StreetLevelCapabilities } from "@openmapx/core";
 import { useQuery } from "@tanstack/react-query";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
 /** Stable identity so consumers' effect dependencies don't fire every render. */
 const NO_PROVIDERS: StreetLevelCapabilities[] = [];

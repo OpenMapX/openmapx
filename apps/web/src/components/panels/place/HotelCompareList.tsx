@@ -15,7 +15,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandMark } from "../shared/BrandMark";
 
 function Row({

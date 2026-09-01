@@ -5,15 +5,12 @@ import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TransitRoute } from "@openmapx/mobility-core/transit";
 import { useEffect, useState } from "react";
-import { addLayerInSlot } from "@/components/map/layers/layerStack";
-import {
-  findVectorLineReference,
-  setLayerVisibility,
-} from "@/components/map/layers/layerStyleUtils";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
-import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE_HEX } from "@/lib/theme";
-import { useMapAttributions } from "@/lib/useMapAttributions";
+import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { findVectorLineReference, setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { useTransitStore } from "./store";
 
 const TRANSIT_LAYER_ID = "openmapx-transit-layer";

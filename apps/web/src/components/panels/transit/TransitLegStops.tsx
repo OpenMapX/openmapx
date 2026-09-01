@@ -11,7 +11,7 @@ import { useVehicleJourney } from "@openmapx/core";
 import { sliceJourneyToLeg } from "@openmapx/core/navigation";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 interface TransitLegStopsProps {
   tripId?: string;

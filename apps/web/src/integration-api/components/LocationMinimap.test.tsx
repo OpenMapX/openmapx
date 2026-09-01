@@ -24,7 +24,7 @@ vi.mock("@mui/material/styles", async (importOriginal) => ({
   useColorScheme: () => testState.scheme,
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => testState.env,
 }));
 
@@ -34,7 +34,7 @@ vi.mock("@/lib/map", () => ({
   loadOpenMapXStyle: testState.loadOpenMapXStyle,
 }));
 
-vi.mock("./MapCredits", () => ({ MapCredits: () => null }));
+vi.mock("@/components/map/MapCredits", () => ({ MapCredits: () => null }));
 
 vi.mock("maplibre-gl", () => {
   let workerUrl = "";

@@ -2,9 +2,9 @@
 
 import { PANEL, useSavedListPlaces, useSavedPlacesStore, useSidebarStore } from "@openmapx/core";
 import { useEffect } from "react";
-import { useMap } from "@/lib/MapContext";
-import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
-import { removeLayerAndSource, upsertGeoJsonSource } from "./layerStyleUtils";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { removeLayerAndSource, upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
 
 const SOURCE_ID = "saved-places-source";
 const LAYER_ID = "saved-places-layer";

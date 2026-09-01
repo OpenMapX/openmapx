@@ -79,13 +79,13 @@ import { WaypointList } from "@/components/panels/directions/WaypointList";
 import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sheet/sheetState";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
+import { BRAND } from "@/integration-api/runtime/theme";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
-import { BRAND } from "@/lib/theme";
-import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 export function DirectionsPanelContent() {
   const t = useTranslations("directions");

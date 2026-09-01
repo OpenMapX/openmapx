@@ -15,7 +15,7 @@ vi.mock("next-intl", async (importOriginal) => ({
   useLocale: () => "en",
 }));
 
-vi.mock("@/lib/EnvProvider", () => {
+vi.mock("@/integration-api/runtime/EnvProvider", () => {
   const env = {
     apiUrl: "",
     mapStyleUrl: "",
@@ -25,7 +25,7 @@ vi.mock("@/lib/EnvProvider", () => {
   return { useEnv: () => env };
 });
 
-vi.mock("@/lib/MapContext", () => {
+vi.mock("@/integration-api/map/MapContext", () => {
   const mapRef = { current: null as unknown };
   const value = {
     mapRef,
@@ -139,7 +139,7 @@ vi.mock("maplibre-gl", () => {
 
 import { useMapStore, useNavigationStore } from "@openmapx/core";
 import * as maplibre from "maplibre-gl";
-import * as mapContext from "@/lib/MapContext";
+import * as mapContext from "@/integration-api/map/MapContext";
 import * as mapStyle from "@/lib/map";
 import { MapCanvas } from "./MapCanvas";
 

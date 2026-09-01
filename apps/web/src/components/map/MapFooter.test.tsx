@@ -3,8 +3,8 @@
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useMapAttributionStore } from "@/lib/mapAttributionStore";
-import { attributionToHtml } from "@/lib/useMapAttributions";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
+import { attributionToHtml } from "@/integration-api/overlay/useMapAttributions";
 import { MapFooter } from "./MapFooter";
 
 vi.mock("next-intl", () => ({

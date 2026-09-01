@@ -44,7 +44,7 @@ describe("subscribeStyleLoaded", () => {
       "apps/web/src/components/map/CategoryResultMarkers.tsx",
       "apps/web/src/components/map/layers/RasterBaseLayer.tsx",
       "apps/web/src/components/map/layers/ImportedGeometryLayer.tsx",
-      "apps/web/src/components/map/street-level-imagery/StreetLevelCoverageLayer.tsx",
+      "apps/web/src/integration-api/components/StreetLevelCoverageLayer.tsx",
     ];
 
     for (const file of files) {

@@ -27,7 +27,7 @@ import { useNavigationEngine } from "@/lib/navigation/useNavigationEngine";
 import { NavIncidentsProvider } from "./NavIncidentsProvider";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
 

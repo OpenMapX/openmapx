@@ -12,7 +12,7 @@ import { useAirQualityStore } from "./store";
 let fake: FakeMap;
 let styleVersion = 0;
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion }),
 }));
 

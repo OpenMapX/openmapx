@@ -4,8 +4,8 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { CYCLING_COLORS } from "@/components/map/layers/cyclingConfig";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { CYCLING_COLORS } from "@/integration-api/map/cyclingConfig";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { useCyclingStore } from "./store";
 
 const LINE_ITEMS = [

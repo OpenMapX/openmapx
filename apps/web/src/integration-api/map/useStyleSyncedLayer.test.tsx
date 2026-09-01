@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { MapContextValue } from "@/lib/MapContext";
+import type { MapContextValue } from "@/integration-api/map/MapContext";
 import { createFakeMap, render } from "@/test";
 import { useStyleSyncedLayer } from "./useStyleSyncedLayer";
 

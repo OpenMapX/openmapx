@@ -4,7 +4,7 @@ import { act, render } from "@testing-library/react";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/MapContext", () => {
+vi.mock("@/integration-api/map/MapContext", () => {
   const context = {
     mapRef: { current: null as unknown },
     mapReady: true,
@@ -14,8 +14,8 @@ vi.mock("@/lib/MapContext", () => {
 });
 
 import { PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
-import * as mapContext from "@/lib/MapContext";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import * as mapContext from "@/integration-api/map/MapContext";
 import { MapStylePoiClickHandler } from "./MapStylePoiClickHandler";
 
 const mapContextTest = (mapContext as unknown as { __test: { mapRef: { current: unknown } } })

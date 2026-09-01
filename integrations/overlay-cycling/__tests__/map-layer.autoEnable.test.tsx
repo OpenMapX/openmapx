@@ -4,7 +4,7 @@ import { getOverlayEntry, registerOverlayEntry, useDirectionsStore } from "@open
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, render } from "@/test";
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: null }, mapReady: false, styleVersion: 0 }),
 }));
 

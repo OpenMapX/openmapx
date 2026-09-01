@@ -5,11 +5,11 @@ import { useLayerStore } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { LayerSpecification } from "maplibre-gl";
 import { useEffect } from "react";
-import { useMap } from "@/lib/MapContext";
-import { useMapAttributions } from "@/lib/useMapAttributions";
-import { addLayerInSlot } from "./layerStack";
-import { setLayerVisibility } from "./layerStyleUtils";
-import { subscribeStyleLoaded } from "./styleLoadedSync";
+import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 
 type RasterPaint = Extract<LayerSpecification, { type: "raster" }>["paint"];
 

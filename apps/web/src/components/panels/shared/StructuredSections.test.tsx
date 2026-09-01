@@ -10,7 +10,7 @@ vi.mock("@/components/ui/HlsVideo", () => ({
   ),
 }));
 
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
     time: (v: string | number | Date) => String(v),
     date: (v: string | number | Date) => String(v),
@@ -31,7 +31,7 @@ vi.mock("next-intl", () => ({
     )[key] ?? key,
 }));
 
-vi.mock("@/lib/theme", () => ({
+vi.mock("@/integration-api/runtime/theme", () => ({
   BRAND: "#008080",
 }));
 

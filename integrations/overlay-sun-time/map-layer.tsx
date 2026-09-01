@@ -2,12 +2,12 @@
 
 import { subsolarPoint, twilightBands, tzOffsetLabel, tzOffsetMinutes } from "@openmapx/core";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import type { GeoJsonSourceDataEntry } from "@/components/map/layers/layerStyleUtils";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
-import { useEnv } from "@/lib/EnvProvider";
-import { useMap } from "@/lib/MapContext";
-import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import type { GeoJsonSourceDataEntry } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useSunTimeStore } from "./store";
 
 const SOURCE_ID = "sun-time-terminator";

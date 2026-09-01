@@ -3,11 +3,11 @@
 import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect } from "react";
-import { addLayerInSlot } from "@/components/map/layers/layerStack";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
-import { useMap } from "@/lib/MapContext";
+import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { BRAND_HEX } from "@/integration-api/runtime/theme";
 import { createMarkerSvg } from "@/lib/markerSvg";
-import { BRAND_HEX } from "@/lib/theme";
 
 const SOURCE = "route-search-source";
 const LAYER = "route-search-layer";

@@ -1,11 +1,11 @@
 "use client";
 
-import { addLayerInSlot } from "@/components/map/layers/layerStack";
-import { useStyleSyncedLayer } from "@/components/map/layers/useStyleSyncedLayer";
-import { useEnv } from "@/lib/EnvProvider";
-import { useMap } from "@/lib/MapContext";
-import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
-import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useStyleSyncedLayer } from "@/integration-api/map/useStyleSyncedLayer";
+import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
+import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useTrafficStore } from "./store";
 
 const TRAFFIC_SOURCE_ID = "openmapx-traffic-source";

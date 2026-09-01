@@ -2,9 +2,9 @@
 
 import { routeColor, usePlaceStore, useRouteLive, useTransitRoute } from "@openmapx/core";
 import { useEffect } from "react";
-import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE_HEX } from "@/lib/theme";
-import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 const SOURCE_ID = "vehicle-live-source";
 const LAYER_ID = "vehicle-live-layer";

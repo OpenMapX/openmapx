@@ -9,7 +9,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Typography from "@mui/material/Typography";
 import { type LabeledPlace, useLabeledPlaces, useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 interface Props {
   onSelectPlace: (place: LabeledPlace) => void;

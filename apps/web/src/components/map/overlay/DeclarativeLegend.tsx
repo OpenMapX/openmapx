@@ -9,12 +9,12 @@ import type {
 } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import {
   useOverlayLayerVisible,
   useOverlayPanelOpen,
   useOverlaySetLayerVisible,
-} from "./useOverlayStoreState";
+} from "@/integration-api/overlay/useOverlayStoreState";
 
 /**
  * Renders an overlay legend entirely from its manifest `frontend.overlay.legend`

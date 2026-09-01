@@ -21,12 +21,12 @@ import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit
 import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
-import { useMap } from "@/lib/MapContext";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
-import { addLayerInSlot, unregisterLayerSlot } from "./layers/layerStack";
-import { upsertGeoJsonSource } from "./layers/layerStyleUtils";
-import { subscribeStyleLoaded } from "./layers/styleLoadedSync";
 
 const SOURCE_ID = "category-results-source";
 const LAYER_ID = "category-results-layer";

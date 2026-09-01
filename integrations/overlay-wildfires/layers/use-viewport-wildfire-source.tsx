@@ -2,7 +2,7 @@
 
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useMap } from "@/lib/MapContext";
+import { useMap } from "@/integration-api/map/MapContext";
 import { useWildfireStore } from "../store";
 import type { WildfireFeatureCollection } from "../types";
 import {

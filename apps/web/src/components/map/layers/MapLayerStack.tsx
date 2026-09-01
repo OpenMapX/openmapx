@@ -2,10 +2,10 @@
 
 import { useLayerStore } from "@openmapx/core";
 import { useEffect } from "react";
-import { useMap } from "@/lib/MapContext";
+import { anchorMapLayers } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
 import { reportMissingLayers } from "@/lib/map/mapLayerDiagnostics";
 import { findMissingLayers } from "./desiredStack";
-import { anchorMapLayers } from "./layerStack";
 
 /**
  * Re-asserts the canonical layer order for the whole map. Every layer declares

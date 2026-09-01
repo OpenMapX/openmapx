@@ -5,7 +5,7 @@ import Typography from "@mui/material/Typography";
 import { timeZoneAt, tzDiffMinutes, tzOffsetLabel, viewerTimeZone } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 interface Props {
   lat: number;

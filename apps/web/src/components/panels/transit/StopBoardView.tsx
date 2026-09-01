@@ -12,7 +12,7 @@ import type { Departure, MergedDeparture } from "@openmapx/mobility-core/transit
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
+import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { AlertsBanner } from "./AlertsBanner";
 import { DepartureRow } from "./DepartureRow";
 

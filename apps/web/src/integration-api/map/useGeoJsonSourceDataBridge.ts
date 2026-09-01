@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef } from "react";
-import type { MapContextValue } from "@/lib/MapContext";
+import type { MapContextValue } from "@/integration-api/map/MapContext";
 import {
   createGeoJsonSourceDataBridge,
   type GeoJsonSourceDataApplyResult,

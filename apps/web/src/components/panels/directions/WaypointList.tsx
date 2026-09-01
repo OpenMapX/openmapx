@@ -23,7 +23,7 @@ import Typography from "@mui/material/Typography";
 import type { Waypoint } from "@openmapx/core";
 import type { useTranslations } from "next-intl";
 import { WaypointRow } from "@/components/panels/directions/WaypointRow";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 const MAX_WAYPOINTS = 10;
 

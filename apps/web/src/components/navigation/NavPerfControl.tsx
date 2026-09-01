@@ -6,7 +6,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useNavigationStore } from "@openmapx/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useMapOptional } from "@/lib/MapContext";
+import { useMapOptional } from "@/integration-api/map/MapContext";
 import {
   createNavigationPerfMonitor,
   NAV_PERF_SCENARIOS,

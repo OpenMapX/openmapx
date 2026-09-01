@@ -2,7 +2,7 @@
 
 import type * as maplibregl from "maplibre-gl";
 import { type DependencyList, useEffect } from "react";
-import type { MapContextValue } from "@/lib/MapContext";
+import type { MapContextValue } from "@/integration-api/map/MapContext";
 import { setLayerVisibility } from "./layerStyleUtils";
 import { subscribeStyleLoaded } from "./styleLoadedSync";
 

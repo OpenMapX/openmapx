@@ -32,7 +32,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandLogo } from "./BrandLogo";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";

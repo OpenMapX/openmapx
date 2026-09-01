@@ -2,7 +2,7 @@
 
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useId, useRef } from "react";
-import { useMap } from "@/lib/MapContext";
+import { useMap } from "@/integration-api/map/MapContext";
 import { clearGroupError, reportGroupError } from "@/lib/map/mapLayerDiagnostics";
 
 export interface DynamicLineState {

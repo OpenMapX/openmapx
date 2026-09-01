@@ -5,10 +5,10 @@ import type { MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
-import { useEnv } from "@/lib/EnvProvider";
-import { useMap } from "@/lib/MapContext";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useHikingStore } from "./store";
 
 const SOURCE_ID = "openmapx-shelters-source";

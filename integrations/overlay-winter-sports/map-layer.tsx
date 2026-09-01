@@ -4,11 +4,11 @@ import { escapeHtml, useDebouncedCallback, useOverlayExclusion } from "@openmapx
 import type { MapLayerMouseEvent, MapMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
-import { useEnv } from "@/lib/EnvProvider";
-import { useMap } from "@/lib/MapContext";
-import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useWinterSportsStore } from "./store";
 
 const RASTER_SOURCE_ID = "openmapx-opensnowmap-source";

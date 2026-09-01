@@ -8,7 +8,7 @@ import Typography from "@mui/material/Typography";
 import { useSession } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useMemo, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
 /**
  * The page the installed app opens in the system browser.

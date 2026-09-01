@@ -22,7 +22,9 @@ const systemStatus = {
   ],
 };
 
-vi.mock("@/lib/EnvProvider", () => ({ useEnv: () => ({ apiUrl: "http://api.test" }) }));
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "http://api.test" }),
+}));
 vi.mock("../shared/AdminToast", () => ({ useAdminToast: () => vi.fn() }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),

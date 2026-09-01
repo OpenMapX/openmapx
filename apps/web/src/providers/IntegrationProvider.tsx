@@ -5,7 +5,7 @@ import { IntegrationRegistry, type IntegrationsResponse } from "@openmapx/integr
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { FrameworkStringsProvider } from "@/lib/frameworkStringsContext";
 import { IntegrationDisclosuresProvider } from "@/lib/integrationDisclosuresContext";
 import {

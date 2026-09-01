@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { TRAFFIC_TEXT_COLOR } from "./theme";
+import { TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
 
 describe("TRAFFIC_TEXT_COLOR", () => {
   it("exposes a CSS variable per displayable band", () => {

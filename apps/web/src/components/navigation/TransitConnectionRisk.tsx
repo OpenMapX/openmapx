@@ -9,7 +9,7 @@ import type { TransitTransfer } from "@openmapx/core/navigation";
 import { connectionRisk } from "@openmapx/core/navigation";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { liveArrivalDelayMs } from "./TransitNavBottomBar";
 
 /** Earliest alternative departure that leaves after `notBeforeMs`, or null. */

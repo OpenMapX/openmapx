@@ -5,7 +5,7 @@ import Typography from "@mui/material/Typography";
 import type { Pollutant } from "@openmapx/air-quality";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 
 import { useAirQualityStore } from "./store";
 

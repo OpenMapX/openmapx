@@ -10,7 +10,7 @@ import Typography from "@mui/material/Typography";
 import { useMapStore, useOverlayVisibilitySetter } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import {
   EFFIS_BURNED_AREA_STYLE,
   NIFC_PERIMETER_STYLE,

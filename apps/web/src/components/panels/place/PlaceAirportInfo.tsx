@@ -19,7 +19,7 @@ import type {
 import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { SectionLabel } from "../shared/SectionLabel";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
 

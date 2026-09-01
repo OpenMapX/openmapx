@@ -10,7 +10,7 @@ import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
 import type { Waypoint } from "@openmapx/core";
 import { WaypointInput } from "@/components/panels/directions/WaypointInput";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 interface WaypointRowProps {
   waypoint: Waypoint;

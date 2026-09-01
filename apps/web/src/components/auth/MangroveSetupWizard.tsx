@@ -27,7 +27,10 @@ import { fingerprintPem, isWebAuthnAvailable, publicKeyToPem } from "@openmapx/m
 import { useSetupKeypair } from "@openmapx/mangrove-react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 
 type Mode = "unencrypted" | "passphrase" | "passphrase+webauthn";
 type Step = "chooseMode" | "importJwk" | "configure" | "confirmUnencrypted";

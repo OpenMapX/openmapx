@@ -7,7 +7,7 @@ import Typography from "@mui/material/Typography";
 import { formatDuration } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 /**
  * Transit arrival summary: names the destination and recaps the trip (total

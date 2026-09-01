@@ -12,10 +12,10 @@ import {
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import { calendarDateInTimeZone } from "@/components/panels/timeline/TimelineDayHeader";
-import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE_HEX } from "@/lib/theme";
-import type { MapLayerGroup, SlottedLayer } from "./mapLayerGroup";
-import { useMapLayerGroup } from "./useMapLayerGroup";
+import { useMap } from "@/integration-api/map/MapContext";
+import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 export const PERSONAL_TIMELINE_TRACKS_SOURCE_ID = "personal-timeline-tracks-source";
 export const PERSONAL_TIMELINE_VISITS_SOURCE_ID = "personal-timeline-visits-source";

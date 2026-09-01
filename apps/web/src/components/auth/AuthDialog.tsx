@@ -21,8 +21,11 @@ import Typography from "@mui/material/Typography";
 import { authClient, oauthProviders } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 import { useSystemAuth } from "@/lib/mobile/useSystemAuth";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 
 type AuthMode = "sign-in" | "sign-up" | "2fa" | "forgot-password" | "reset-password";
 

@@ -7,7 +7,7 @@ import Typography from "@mui/material/Typography";
 import { useHotelSearchStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useEffect } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 const inputSx = {
   border: "1px solid",

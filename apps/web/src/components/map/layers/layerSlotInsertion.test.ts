@@ -1,6 +1,10 @@
 import { afterEach, describe, expect, it } from "vitest";
+import {
+  addLayerInSlot,
+  anchorMapLayers,
+  unregisterLayerSlot,
+} from "@/integration-api/map/layerStack";
 import { createFakeMap } from "@/test";
-import { addLayerInSlot, anchorMapLayers, unregisterLayerSlot } from "./layerStack";
 
 const IDS = ["under-line", "over-line", "top-marker"];
 

@@ -1,5 +1,5 @@
 import type { SxProps, Theme } from "@mui/material/styles";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 /**
  * Shared "floating pill chip" styling used by the map-overlay chip rows

@@ -7,8 +7,8 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
-import { useEnv } from "@/lib/EnvProvider";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { GIBS_LAYERS, today, useSatelliteStore, yesterday } from "./store";
 
 export function SatelliteLegend() {

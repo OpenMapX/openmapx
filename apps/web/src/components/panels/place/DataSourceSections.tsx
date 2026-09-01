@@ -30,7 +30,7 @@ import type { Translatable } from "@openmapx/integration-framework/strings";
 import { useTranslations } from "next-intl";
 import { Fragment, type ReactNode } from "react";
 import { AttributionText } from "@/components/ui/AttributionText";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandMark } from "../shared/BrandMark";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
 import { DataSourceNearbyTransit } from "./DataSourceNearbyTransit";

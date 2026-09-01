@@ -1,7 +1,7 @@
 "use client";
 
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { type ConfigFieldSource, SchemaConfigForm } from "../shared/SchemaConfigForm";
 

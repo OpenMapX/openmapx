@@ -31,7 +31,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 

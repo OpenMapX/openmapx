@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, fireEvent, render, screen, userEvent, waitFor, within } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("@/lib/MapContext", () => {
+vi.mock("@/integration-api/map/MapContext", () => {
   const mapContext = {
     mapRef: { current: null as unknown },
     mapReady: true,
@@ -44,9 +44,9 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import * as mapContextModule from "@/integration-api/map/MapContext";
 import * as deepLinkModule from "@/lib/deepLink";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
-import * as mapContextModule from "@/lib/MapContext";
 import { MapContextMenu } from "./MapContextMenu";
 
 const coreTest = (

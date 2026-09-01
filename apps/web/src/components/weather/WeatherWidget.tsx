@@ -16,9 +16,9 @@ import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMap } from "@/lib/MapContext";
-import { useMapAttributions } from "@/lib/useMapAttributions";
-import { WeatherIcon } from "./WeatherIcon";
+import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { windDirectionLabel } from "./weatherUtils";
 
 export function WeatherWidget() {

@@ -9,7 +9,7 @@
 
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type { Map as MaplibreMap } from "maplibre-gl";
-import { createMarkerSvg } from "./markerSvg";
+import { createMarkerSvg } from "@/lib/markerSvg";
 
 // Material Design icon paths (24x24 viewbox)
 const ICON_PATHS: Record<string, string> = {

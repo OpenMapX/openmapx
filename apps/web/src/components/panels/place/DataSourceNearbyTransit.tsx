@@ -26,8 +26,8 @@ import {
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
-import { useMap } from "@/lib/MapContext";
-import { BRAND } from "@/lib/theme";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 const DEFAULT_RADIUS_M = 500;
 const MAX_STOPS = 6;

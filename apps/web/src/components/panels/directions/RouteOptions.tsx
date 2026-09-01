@@ -22,7 +22,7 @@ import {
   useTransitPlanningCapabilities,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 function ColumnHeading({ label }: { label: string }) {
   return (

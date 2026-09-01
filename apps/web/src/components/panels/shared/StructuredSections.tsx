@@ -20,8 +20,8 @@ import { type PricingPlanEntry, proxyImageUrl, safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useState } from "react";
 import { HlsVideo } from "@/components/ui/HlsVideo";
-import { BRAND } from "@/lib/theme";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { BRAND } from "@/integration-api/runtime/theme";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 export interface StructuredSection {
   id?: string;

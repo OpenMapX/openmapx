@@ -11,7 +11,7 @@ import type { Route } from "@openmapx/core";
 import { useElevation } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { ElevationChart } from "./ElevationChart";
 import { useElevationHover } from "./ElevationHoverContext";
 import { ElevationStats } from "./ElevationStats";

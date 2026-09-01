@@ -1,9 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useId, useRef } from "react";
-import { useMap } from "@/lib/MapContext";
+import { clearDesired, recordDesired } from "@/components/map/layers/desiredStack";
+import { useMap } from "@/integration-api/map/MapContext";
 import { clearGroupError, reportGroupError } from "@/lib/map/mapLayerDiagnostics";
-import { clearDesired, recordDesired } from "./desiredStack";
 import { type AppliedGroup, applyGroup, emptyApplied, type MapLayerGroup } from "./mapLayerGroup";
 
 /**

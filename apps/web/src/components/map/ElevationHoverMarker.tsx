@@ -3,7 +3,7 @@
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useElevationHover } from "@/components/elevation/ElevationHoverContext";
-import { useMap } from "@/lib/MapContext";
+import { useMap } from "@/integration-api/map/MapContext";
 
 export function ElevationHoverMarker() {
   const { mapRef } = useMap();

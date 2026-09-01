@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it, vi } from "vitest";
 import { TripDetailView } from "./TripDetailView";
 
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
     time: (v: string | number | Date) => String(v),
     date: (v: string | number | Date) => String(v),
@@ -108,7 +108,7 @@ vi.mock("@/components/ui/AttributionStrip", () => ({
   ),
 }));
 
-vi.mock("@/lib/useAttributionFromHooks", () => ({
+vi.mock("@/integration-api/overlay/useAttributionFromHooks", () => ({
   useAttributionFromHooks: () => [
     {
       sourceId: "otdch",
@@ -119,7 +119,7 @@ vi.mock("@/lib/useAttributionFromHooks", () => ({
   ],
 }));
 
-vi.mock("@/lib/theme", () => ({
+vi.mock("@/integration-api/runtime/theme", () => ({
   BRAND: "#008080",
 }));
 

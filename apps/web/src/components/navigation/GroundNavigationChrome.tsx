@@ -13,8 +13,8 @@ import { geoJsonBBox, useNavigationStore, useSettingsStore } from "@openmapx/cor
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
+import { useMapOptional } from "@/integration-api/map/MapContext";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
-import { useMapOptional } from "@/lib/MapContext";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";

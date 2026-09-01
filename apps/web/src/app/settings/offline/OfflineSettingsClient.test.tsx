@@ -44,7 +44,7 @@ vi.mock("@openmapx/core", () => ({
   useSession: () => mocks.session,
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({
     apiUrl: "https://api.example",
     styleProvider: "openmapx",

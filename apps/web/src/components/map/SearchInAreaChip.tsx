@@ -10,9 +10,9 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { PANEL_WIDTH } from "@/lib/layout";
-import { useMap } from "@/lib/MapContext";
-import { BRAND } from "@/lib/theme";
 
 // Floating card: sidebar(400) + gap(24) + card(376) = 800px from left edge
 const FLOATING_CARD_RIGHT_EDGE = 800;

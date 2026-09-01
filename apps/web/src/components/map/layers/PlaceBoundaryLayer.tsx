@@ -3,9 +3,9 @@
 import type { AreaGeometry, BBox } from "@openmapx/core";
 import { usePlaceDetails, usePlaceStore } from "@openmapx/core";
 import { useEffect, useMemo, useRef } from "react";
-import { useMap } from "@/lib/MapContext";
-import type { MapLayerGroup, SlottedLayer } from "./mapLayerGroup";
-import { useMapLayerGroup } from "./useMapLayerGroup";
+import { useMap } from "@/integration-api/map/MapContext";
+import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 
 const SOURCE_ID = "place-boundary-source";
 const LAYER_FILL = "place-boundary-fill";

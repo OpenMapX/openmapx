@@ -15,7 +15,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     tzOffsetLabel: (...args: unknown[]) => tzOffsetLabel(...args),
   };
 });
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({ time: (...args: unknown[]) => time(...args) }),
 }));
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));

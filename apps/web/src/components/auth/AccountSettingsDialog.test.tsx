@@ -2,11 +2,11 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent, waitFor } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("@/lib/useFullScreenOnMobile", () => ({
+vi.mock("@/integration-api/runtime/useFullScreenOnMobile", () => ({
   mobileFullScreenDialogPaperSx: {},
   useFullScreenOnMobile: () => false,
 }));
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({ date: (value: Date) => value.toISOString() }),
 }));
 vi.mock("./MangroveAccountSection", () => ({ MangroveAccountSection: () => null }));

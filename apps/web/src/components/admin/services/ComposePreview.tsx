@@ -10,7 +10,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRef } from "react";
 import { useComposePreview } from "@/hooks/useComposePreview";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useAdminToast } from "../shared/AdminToast";
 
 export function ComposePreview() {

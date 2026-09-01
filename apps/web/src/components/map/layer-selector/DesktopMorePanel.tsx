@@ -10,7 +10,7 @@ import Typography from "@mui/material/Typography";
 import type { MapLayer } from "@openmapx/core";
 import { OVERLAY_REGISTRY, toggleOverlay, useCapabilities, useLayerStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useOverlayZoomGate } from "@/lib/overlayZoomGate";
+import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
 import { DesktopMoreTile } from "./DesktopMoreTile";
 import { globePreview } from "./layerPreviewSvgs";
 import { DESKTOP_MORE_MAP_TYPES } from "./layerSelectorConfig";

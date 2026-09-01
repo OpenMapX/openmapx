@@ -11,7 +11,7 @@ import {
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TripPlan } from "@openmapx/mobility-core/transit";
 import { useCallback, useRef } from "react";
-import { useMapOptional } from "@/lib/MapContext";
+import { useMapOptional } from "@/integration-api/map/MapContext";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
 

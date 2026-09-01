@@ -30,7 +30,10 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useReducer } from "react";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 import { OsmContributionChooser } from "./OsmContributionChooser";
 import { OsmContributionForm } from "./OsmContributionForm";
 import { OSM_CONTRIBUTE_CALLBACK_PARAM, OsmContributionGate } from "./OsmContributionGate";

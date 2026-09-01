@@ -7,7 +7,7 @@ import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ServiceSummary, useServicesList } from "@/hooks/useServices";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { CapabilityBindingPicker } from "./CapabilityBindingPicker";
 
 interface RequireEntry {

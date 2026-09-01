@@ -3,10 +3,10 @@
 import { greatCircleArc, useDirectionsStore, useFlightStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
-import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE_HEX } from "@/lib/theme";
-import type { MapLayerGroup, SlottedLayer } from "./mapLayerGroup";
-import { useMapLayerGroup } from "./useMapLayerGroup";
+import { useMap } from "@/integration-api/map/MapContext";
+import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 const SOURCE_ID = "flight-arc-source";
 const LAYER_LINE = "flight-arc-line";

@@ -15,8 +15,8 @@ import { FileOpenHandler } from "@/components/pwa/FileOpenHandler";
 import { PersistentStorageRequest } from "@/components/pwa/PersistentStorageRequest";
 import { SwUpdateNotice } from "@/components/pwa/SwUpdateNotice";
 import { InstallPromptCapture } from "@/components/pwa/useInstallPrompt";
-import { EnvProvider } from "@/lib/EnvProvider";
-import { buildClientEnv } from "@/lib/env";
+import { EnvProvider } from "@/integration-api/runtime/EnvProvider";
+import { buildClientEnv } from "@/integration-api/runtime/env";
 import { Providers } from "./providers";
 
 export const metadata: Metadata = {

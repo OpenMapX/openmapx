@@ -1,7 +1,7 @@
 "use client";
 
 import PlaceIcon from "@mui/icons-material/Place";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 interface PresetIconProps {
   iconKey: string | undefined;

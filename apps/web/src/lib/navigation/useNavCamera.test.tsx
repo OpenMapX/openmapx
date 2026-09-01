@@ -12,7 +12,7 @@ import {
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/MapContext", () => {
+vi.mock("@/integration-api/map/MapContext", () => {
   const value = {
     mapRef: { current: null as unknown },
     mapReady: false,
@@ -75,7 +75,7 @@ vi.mock("maplibre-gl", () => {
 });
 
 import * as maplibre from "maplibre-gl";
-import * as mapContext from "@/lib/MapContext";
+import * as mapContext from "@/integration-api/map/MapContext";
 import { createFakeMap, type FakeMap } from "@/test";
 import { useNavCamera } from "./useNavCamera";
 

@@ -4,7 +4,7 @@ import { render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { OfflinePackageRecord } from "@/lib/offlineAreas";
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ styleProvider: "openmapx", tilesUrl: "" }),
 }));
 

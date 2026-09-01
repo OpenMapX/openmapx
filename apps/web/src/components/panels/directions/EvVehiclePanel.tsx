@@ -29,8 +29,8 @@ import {
   useState,
 } from "react";
 import { List, type ListImperativeAPI, type RowComponentProps, useListRef } from "react-window";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
-import { BRAND } from "@/lib/theme";
 
 const HOME_CURRENCIES = ["EUR", "USD", "GBP", "CHF"];
 

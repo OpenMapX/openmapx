@@ -4,8 +4,8 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { timeZoneAt, useCurrentWeather, weatherCodeToInfo } from "@openmapx/core";
 import { useEffect, useMemo, useState } from "react";
-import { WeatherIcon } from "@/components/weather/WeatherIcon";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 interface Props {
   lat: number;

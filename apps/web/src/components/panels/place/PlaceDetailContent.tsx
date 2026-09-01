@@ -22,7 +22,7 @@ import type { MergedRoute, TransportMode } from "@openmapx/mobility-core/transit
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { BrandLogo } from "@/components/search/BrandLogo";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { useDetailChrome } from "../DetailShell";
 import { useFloatingMobileSheetHandle } from "../sheet/mobileSheetShared";
 import { useMobileSheet, useSheetSentinel } from "../sheet/sheetState";

@@ -22,9 +22,9 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { haptics } from "@/lib/haptics";
 import { resolveListIcon } from "@/lib/listIcon";
-import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 
 interface Props {
   open: boolean;

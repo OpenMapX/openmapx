@@ -7,11 +7,11 @@ let fake: FakeMap;
 // real style swap would change what `useMap()` returns.
 let mockStyleVersion = 0;
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: mockStyleVersion }),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
 
@@ -21,7 +21,7 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 // calls useDrawnDirectionsRoutes, which reaches into TanStack Query hooks this
 // suite has no QueryClientProvider for — mock it out with an empty route so it
 // stays inert here; its own behavior is covered by route-layer.test.tsx.
-vi.mock("@/lib/useDrawnDirectionsRoutes", () => ({
+vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
   useDrawnDirectionsRoutes: () => ({
     routes: [],
     activeRouteIndex: 0,

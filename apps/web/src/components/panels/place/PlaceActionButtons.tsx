@@ -23,8 +23,8 @@ import type { ReactNode } from "react";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { SavePlaceDialog } from "@/components/panels/saved/SavePlaceDialog";
+import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { shareCurrentUrl } from "@/lib/deepLink";
-import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 
 interface ActionButtonProps {
   icon: ReactNode;

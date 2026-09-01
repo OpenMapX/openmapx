@@ -29,12 +29,15 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { usePinMarker } from "@/hooks/usePinMarker";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
-import { useMap } from "@/lib/MapContext";
 import { createMarkerSvg } from "@/lib/markerSvg";
-import { useMapAttributions } from "@/lib/useMapAttributions";
 import { pickDataSourceContextAction } from "./dataSourceContextInteraction";
 import {
   contextColorExpression,
@@ -43,9 +46,6 @@ import {
   contextSortKeyExpression,
 } from "./dataSourceContextStyle";
 import { pickHoveredDataSourceItemId } from "./dataSourceHover";
-import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
-import { upsertGeoJsonSource } from "./layerStyleUtils";
-import { subscribeStyleLoaded } from "./styleLoadedSync";
 
 function sourceId(dsId: string) {
   return `ds-${dsId}`;

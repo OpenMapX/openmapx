@@ -17,7 +17,7 @@ vi.mock("../useWatchPosition", () => ({
     fixHandler = onFix;
   },
 }));
-vi.mock("@/lib/MapContext", () => ({ useMapOptional: () => null }));
+vi.mock("@/integration-api/map/MapContext", () => ({ useMapOptional: () => null }));
 
 import { useTransitNavigationEngine } from "./useTransitNavigationEngine";
 

@@ -3,10 +3,10 @@
 import type { ImportedGeometry } from "@openmapx/core";
 import { geoJsonBBox, useImportedGeometryStore } from "@openmapx/core";
 import { useEffect, useRef } from "react";
-import { useMap } from "@/lib/MapContext";
-import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
-import { removeLayerAndSource, upsertGeoJsonSource } from "./layerStyleUtils";
-import { subscribeStyleLoaded } from "./styleLoadedSync";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { removeLayerAndSource, upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 
 const SOURCE = "imported-geometry-source";
 const FILL = "imported-geometry-fill";

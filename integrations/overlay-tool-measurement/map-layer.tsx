@@ -7,10 +7,10 @@ import { lineString, polygon as turfPolygon } from "@turf/helpers";
 import { length } from "@turf/length";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
-import { useMap } from "@/lib/MapContext";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMeasurementStore } from "./store";
 
 const SOURCE_ID = "measurement-source";

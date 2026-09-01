@@ -3,7 +3,7 @@
 import type { DaySchedule, OpeningHoursStatus } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
-import { useDateTimeFormat } from "./useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 export interface OpeningHoursText {
   /** Translated "Open" / "Closed" for the coloured state word. */

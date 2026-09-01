@@ -60,8 +60,8 @@ import {
   SiVimeo,
   SiVk,
 } from "react-icons/si";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
-import { BRAND } from "@/lib/theme";
 
 /** Language code → country code for emoji flag rendering. */
 const LANG_TO_COUNTRY: Record<string, string> = {

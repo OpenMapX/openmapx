@@ -43,10 +43,10 @@ import {
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { exportSavedList } from "@/lib/exportSavedList";
 import { resolveListIcon } from "@/lib/listIcon";
-import { useMap } from "@/lib/MapContext";
-import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 import { PlaceThumbnail } from "./PlaceThumbnail";
 import { ShareListDialog } from "./ShareListDialog";
 

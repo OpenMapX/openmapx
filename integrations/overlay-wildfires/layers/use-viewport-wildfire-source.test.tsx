@@ -8,7 +8,7 @@ import type { ViewportWildfireSourceId } from "./viewport-wildfire-validation";
 
 const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"] | null } }));
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: mapContext.mapRef, mapReady: true, styleVersion: 0 }),
 }));
 

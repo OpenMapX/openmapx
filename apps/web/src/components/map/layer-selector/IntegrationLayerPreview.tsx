@@ -1,7 +1,7 @@
 "use client";
 
 import { type ReactNode, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
 /** Generic fallback preview for integrations without a usable custom preview. */
 export const genericPreview: ReactNode = (

@@ -64,7 +64,7 @@ vi.mock("@/components/ui/AttributionStrip", () => ({
   ),
 }));
 
-vi.mock("@/lib/useAttributionFromHooks", () => ({
+vi.mock("@/integration-api/overlay/useAttributionFromHooks", () => ({
   useAttributionFromHooks: () => sharedAttributions,
 }));
 

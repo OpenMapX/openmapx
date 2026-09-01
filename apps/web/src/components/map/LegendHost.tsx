@@ -10,10 +10,10 @@ import { integrationIdToOverlayId, useNavigationStore, useSidebarStore } from "@
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { type ComponentType, lazy, Suspense, useMemo, useState } from "react";
+import { useAnyOverlayPanelOpen } from "@/integration-api/overlay/useOverlayStoreState";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
-import { useAnyOverlayPanelOpen } from "./overlay/useOverlayStoreState";
 import { dedupeSharedMapLayers } from "./sharedIntegrationLayer";
 
 const FLUSH_BOTTOM = "var(--omx-safe-bottom)";

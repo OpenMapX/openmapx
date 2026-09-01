@@ -30,7 +30,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import type { ServiceQuality, ServiceSummary } from "@/hooks/useServices";
 import { useServicesList } from "@/hooks/useServices";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { StatusBadge } from "../integrations/StatusBadge";
 import { AdminTablePagination } from "../shared/AdminTablePagination";
 import { AdminTableSurface } from "../shared/AdminTableSurface";

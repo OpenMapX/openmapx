@@ -15,7 +15,7 @@ import { useTranslations } from "next-intl";
 import type { ReactElement } from "react";
 import { useEffect, useState } from "react";
 import { SectionAttribution } from "@/components/ui/SectionAttribution";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDataSourceAttribution } from "./useDataSourceAttribution";
 
 interface HarborFacility {

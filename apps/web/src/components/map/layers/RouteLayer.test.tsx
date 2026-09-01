@@ -34,7 +34,7 @@ const drawn = {
   navigating: false,
 };
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,
@@ -42,8 +42,10 @@ vi.mock("@/lib/MapContext", () => ({
     fitBounds: vi.fn(),
   }),
 }));
-vi.mock("@/lib/useDrawnDirectionsRoutes", () => ({ useDrawnDirectionsRoutes: () => drawn }));
-vi.mock("@/lib/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
+vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
+  useDrawnDirectionsRoutes: () => drawn,
+}));
+vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
 vi.mock("@/lib/attributionForProviders", () => ({ attributionsForProviders: () => [] }));
 vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
 vi.mock("@openmapx/core", async (importOriginal) => ({

@@ -15,11 +15,13 @@ vi.mock("./street-level-imagery/StreetLevelViewerInner", () => ({
 }));
 
 const providersMock = vi.fn();
-vi.mock("./street-level-imagery/useStreetLevelProviders", () => ({
+vi.mock("@/integration-api/components/useStreetLevelProviders", () => ({
   useStreetLevelProviders: () => providersMock(),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({ useEnv: () => ({ apiUrl: "http://api.test" }) }));
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
+  useEnv: () => ({ apiUrl: "http://api.test" }),
+}));
 
 import { StreetLevelViewer } from "./StreetLevelViewer";
 

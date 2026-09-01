@@ -1,4 +1,4 @@
-import { PRIMARY_BLUE_HEX } from "./theme";
+import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 
 /**
  * Route line geometry, in one place, because three layers draw the same route

@@ -60,10 +60,10 @@ import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { TransitLegStops } from "@/components/panels/transit/TransitLegStops";
 import { TripDetailView } from "@/components/panels/transit/TripDetailView";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
-import { useMap } from "@/lib/MapContext";
-import { BRAND } from "@/lib/theme";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 
 /**
  * Per-mode rendering for non-transit street legs (walk + intermodal bike/car

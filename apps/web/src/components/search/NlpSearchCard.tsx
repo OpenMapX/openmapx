@@ -6,7 +6,7 @@ import Typography from "@mui/material/Typography";
 import type { SearchIntent } from "@openmapx/integration-framework";
 import { useTranslations } from "next-intl";
 import { AiBadge } from "@/components/ui/AiBadge";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 interface NlpSearchCardProps {
   intent: SearchIntent;

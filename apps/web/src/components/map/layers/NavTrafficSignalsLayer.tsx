@@ -1,10 +1,10 @@
 "use client";
 
 import { useMemo } from "react";
+import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useNavTrafficSignals } from "@/lib/navigation/useNavTrafficSignals";
 import { loadTrafficLightImage, TRAFFIC_LIGHT_IMAGE_ID } from "@/lib/trafficLightMarker";
-import type { MapLayerGroup, SlottedLayer } from "./mapLayerGroup";
-import { useMapLayerGroup } from "./useMapLayerGroup";
 
 const SOURCE = "nav-traffic-signals-source";
 export const NAV_TRAFFIC_SIGNALS_LAYER_ID = "nav-traffic-signals";

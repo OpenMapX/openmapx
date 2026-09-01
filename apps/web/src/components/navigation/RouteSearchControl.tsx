@@ -30,10 +30,10 @@ import {
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { BrandLogo } from "@/components/search/BrandLogo";
-import { useMapOptional } from "@/lib/MapContext";
+import { useMapOptional } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { useRouteSearchStore } from "@/lib/navigation/routeSearchStore";
 import { routeSearchQueryFor, useRouteSearch } from "@/lib/navigation/useRouteSearch";
-import { BRAND } from "@/lib/theme";
 import { RouteSearchResultsLayer } from "./RouteSearchResultsLayer";
 
 // MUI LocalGasStation glyph — fuel isn't a poi-search chip category, so we carry

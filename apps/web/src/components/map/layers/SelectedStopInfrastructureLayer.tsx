@@ -8,8 +8,8 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import type { Map as MaplibreMap } from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
-import { useMap } from "@/lib/MapContext";
-import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
 
 const STOP_AREA_SOURCE_ID = "selected-stop-area-source";
 const STOP_AREA_FILL_LAYER_ID = "selected-stop-area-fill";

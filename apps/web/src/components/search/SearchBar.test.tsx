@@ -34,7 +34,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 
 const fakeMap = createFakeMap();
 const flyToMock = vi.fn();
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fakeMap.map },
     mapReady: true,

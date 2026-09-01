@@ -8,7 +8,7 @@ import type { ReactNode } from "react";
 import {
   useOverlayLayerVisible,
   useOverlaySetLayerVisible,
-} from "@/components/map/overlay/useOverlayStoreState";
+} from "@/integration-api/overlay/useOverlayStoreState";
 
 /** An action row: leading icon, label, tap runs `onClick`. */
 export function ActionRow({

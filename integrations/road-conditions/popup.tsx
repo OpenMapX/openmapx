@@ -1,6 +1,6 @@
 import { formatDuration, type RoadConditionEvent, type RoadConditionType } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
-import { buildStackedPopupCardItems, type PopupCardSpec } from "@/components/map/overlay/popupCard";
+import { buildStackedPopupCardItems, type PopupCardSpec } from "@/integration-api/map/popupCard";
 import { isFutureRoadCondition } from "./visual-style";
 
 export const ROAD_CONDITION_SEVERITY_RANK: Record<string, number> = {

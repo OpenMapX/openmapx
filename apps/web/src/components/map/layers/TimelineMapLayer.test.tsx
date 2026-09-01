@@ -88,7 +88,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   };
 });
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,

@@ -3,7 +3,7 @@
 import { useLayerStore } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { RasterBaseLayer } from "./RasterBaseLayer";
 
 const OSM_ATTRIBUTION: Attribution = {

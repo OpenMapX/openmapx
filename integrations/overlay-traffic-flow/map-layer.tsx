@@ -4,18 +4,18 @@ import { useOverlayExclusion } from "@openmapx/core";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
-import { addLayerInSlot } from "@/components/map/layers/layerStack";
-import { useStyleSyncedLayer } from "@/components/map/layers/useStyleSyncedLayer";
+import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
 import {
   registerMapOverlayInteraction,
   removeMapOverlayPopup,
   replaceMapOverlayPopup,
-} from "@/components/map/overlay/mapInteractionArbiter";
-import { buildPopupCard, type PopupCardSpec } from "@/components/map/overlay/popupCard";
-import { useEnv } from "@/lib/EnvProvider";
-import { useMap } from "@/lib/MapContext";
-import { flowColorExpression } from "@/lib/trafficFlowExpression";
-import { useIntegrationDomainAttribution } from "@/lib/useIntegrationAttribution";
+} from "@/integration-api/map/mapInteractionArbiter";
+import { buildPopupCard, type PopupCardSpec } from "@/integration-api/map/popupCard";
+import { flowColorExpression } from "@/integration-api/map/trafficFlowExpression";
+import { useStyleSyncedLayer } from "@/integration-api/map/useStyleSyncedLayer";
+import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useTrafficFlowStore } from "./store";
 import { TRAFFIC_FLOW_OPACITY_EXPRESSION } from "./visual-style";
 

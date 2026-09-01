@@ -1,12 +1,12 @@
 import { render } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { registerLayerSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { createFakeMap } from "@/test";
-import { registerLayerSlot, unregisterLayerSlot } from "./layerStack";
 import { MapLayerStack } from "./MapLayerStack";
 
 const fake = createFakeMap({ styleLoaded: true });
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: 0 }),
 }));
 

@@ -23,8 +23,8 @@ import { useCreateList, useDeleteList, useSavedLists, useSavedPlacesStore } from
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
+import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
-import { BRAND, BRAND_LIGHT } from "@/lib/theme";
 
 export function SavedListsTab() {
   const t = useTranslations("saved");

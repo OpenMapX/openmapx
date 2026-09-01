@@ -16,9 +16,12 @@ import {
   type VoiceGuidanceTiming,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { speakOnce, useAvailableVoices } from "@/lib/navigation/useNavigationVoice";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
 import { Section, SettingRow, SwitchControl } from "./settingsPrimitives";
 
 const VOICE_TIMING_OPTIONS: { value: VoiceGuidanceTiming; labelKey: string }[] = [

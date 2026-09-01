@@ -56,7 +56,7 @@ import { CategoryChips } from "@/components/search/CategoryChips";
 import { CategoryFilterBar } from "@/components/search/CategoryFilterBar";
 import { SearchBar } from "@/components/search/SearchBar";
 import { WeatherWidget } from "@/components/weather/WeatherWidget";
-import { MapProvider } from "@/lib/MapContext";
+import { MapProvider } from "@/integration-api/map/MapContext";
 
 // Raster base layers register each Attribution as its own atomic side-channel
 // source via `useMapAttributions`, so identical credits (notably "© OSM"

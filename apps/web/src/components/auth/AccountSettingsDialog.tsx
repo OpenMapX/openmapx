@@ -34,8 +34,11 @@ import { authClient, getInitials, oauthProviders, proxyImageUrl } from "@openmap
 import { useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 import type { AccountSettingsSection } from "@/stores/accountSettingsStore";
 import { MangroveAccountSection } from "./MangroveAccountSection";
 import { SharedLinksSection } from "./SharedLinksSection";

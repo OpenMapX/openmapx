@@ -28,7 +28,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type MouseEvent, type ReactNode, useId, useState } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { BrandMark } from "../shared/BrandMark";
 
 /**

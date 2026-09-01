@@ -3,7 +3,7 @@
 import { act, cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/MapContext", () => {
+vi.mock("@/integration-api/map/MapContext", () => {
   const value = {
     mapReady: false,
     mapRef: { current: null as { container: HTMLElement } | null },
@@ -33,7 +33,7 @@ vi.mock("maplibre-gl", () => {
 });
 
 import { useMapStore } from "@openmapx/core";
-import * as mapContext from "@/lib/MapContext";
+import * as mapContext from "@/integration-api/map/MapContext";
 import { UserLocationMarker } from "./UserLocationMarker";
 
 const mapContextTest = (

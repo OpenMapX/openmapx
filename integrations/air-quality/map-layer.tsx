@@ -5,11 +5,11 @@ import type { MapLayerMouseEvent } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef } from "react";
-import type { MapLayerGroup } from "@/components/map/layers/mapLayerGroup";
-import { useMapLayerGroup } from "@/components/map/layers/useMapLayerGroup";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
-import { useMap } from "@/lib/MapContext";
-import { useSourceAttributions } from "@/lib/useIntegrationAttribution";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { useMap } from "@/integration-api/map/MapContext";
+import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
+import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
+import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
 
 import { useAirQualityStore } from "./store";
 import { MONITOR_MIN_ZOOM, MONITOR_SOURCE_ID, useMonitorStations } from "./use-monitor-stations";

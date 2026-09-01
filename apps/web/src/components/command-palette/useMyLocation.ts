@@ -2,7 +2,7 @@
 
 import { useMapStore } from "@openmapx/core";
 import { useCallback } from "react";
-import { useMapOptional } from "@/lib/MapContext";
+import { useMapOptional } from "@/integration-api/map/MapContext";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 
 /**

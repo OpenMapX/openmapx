@@ -25,8 +25,8 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { useMap } from "@/lib/MapContext";
-import { BRAND } from "@/lib/theme";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 interface PlaceholderLabel {
   key: "home" | "work";

@@ -9,7 +9,7 @@ const MAP_REF = {
   },
 };
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: MAP_REF,
     mapReady: true,
@@ -17,7 +17,9 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/useMapAttributions", () => ({ useMapAttributions: () => undefined }));
+vi.mock("@/integration-api/overlay/useMapAttributions", () => ({
+  useMapAttributions: () => undefined,
+}));
 
 import { TransitLayer } from "../map-layer";
 

@@ -9,7 +9,7 @@ import {
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
-import { useMapOptional } from "@/lib/MapContext";
+import { useMapOptional } from "@/integration-api/map/MapContext";
 import {
   type CameraPose,
   cameraPoseChanged,

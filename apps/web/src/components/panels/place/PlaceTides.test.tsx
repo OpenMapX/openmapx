@@ -2,7 +2,7 @@ import type { TidesResponse } from "@openmapx/core";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-vi.mock("@/lib/useDateTimeFormat", () => ({
+vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({
     time: (value: Date) => value.toISOString().slice(11, 16),
   }),

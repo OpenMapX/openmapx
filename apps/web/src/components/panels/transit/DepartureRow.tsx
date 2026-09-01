@@ -7,7 +7,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Departure, TripRemark } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { OccupancyIndicator } from "./OccupancyIndicator";
 import { REMARK_PRIORITY, RemarkChip } from "./RemarkChip";
 import { RouteBadge } from "./RouteBadge";

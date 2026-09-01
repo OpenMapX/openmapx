@@ -76,7 +76,7 @@ function mentionsWire(src: string, wires: string[] = ATTRIBUTION_WIRES): boolean
  * this guard would push every provider to register duplicate attributions.
  *
  * Only `export … from "@/…"` counts, never a plain `import`. Following imports
- * too made the guard vacuous: importing the hook module `@/lib/useIntegrationAttribution`
+ * too made the guard vacuous: importing the hook module `@/integration-api/overlay/useIntegrationAttribution`
  * pulled in every symbol that file names, so any integration that imported one
  * attribution hook appeared to wire all of them.
  */

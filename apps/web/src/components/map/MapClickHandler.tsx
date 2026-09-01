@@ -13,8 +13,8 @@ import {
 import type * as maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
-import { useMap } from "@/lib/MapContext";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { useMap } from "@/integration-api/map/MapContext";
 
 export function MapClickHandler() {
   const { mapRef, mapReady, styleVersion } = useMap();

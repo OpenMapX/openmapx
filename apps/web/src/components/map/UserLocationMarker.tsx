@@ -3,7 +3,7 @@
 import { useMapStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { useMap } from "@/lib/MapContext";
+import { useMap } from "@/integration-api/map/MapContext";
 
 export function UserLocationMarker() {
   const { mapReady, mapRef } = useMap();

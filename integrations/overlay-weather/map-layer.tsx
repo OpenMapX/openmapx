@@ -7,10 +7,10 @@ import {
   type WeatherSubLayer,
 } from "@openmapx/core";
 import { useCallback, useEffect, useMemo, useRef } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import { useEnv } from "@/lib/EnvProvider";
-import { useMap } from "@/lib/MapContext";
-import { useIntegrationAttribution } from "@/lib/useIntegrationAttribution";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useWeatherStore } from "./store";
 
 const RADAR_SOURCE_PREFIX = "weather-radar-";

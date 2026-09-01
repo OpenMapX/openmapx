@@ -15,8 +15,8 @@ import type { MergedRoute, TransitRoute, TransitStop } from "@openmapx/mobility-
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { PRIMARY_BLUE } from "@/lib/theme";
-import { useAttributionFromHooks } from "@/lib/useAttributionFromHooks";
+import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
+import { PRIMARY_BLUE } from "@/integration-api/runtime/theme";
 import { PanelDetailHeader } from "../shared/PanelDetailHeader";
 import { AlertsBanner } from "./AlertsBanner";
 import { RouteBadge } from "./RouteBadge";

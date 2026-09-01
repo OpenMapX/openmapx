@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("@/lib/useFullScreenOnMobile", () => ({
+vi.mock("@/integration-api/runtime/useFullScreenOnMobile", () => ({
   mobileFullScreenDialogPaperSx: {},
   useFullScreenOnMobile: () => false,
 }));

@@ -18,7 +18,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useId, useState } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { HotelCompareList } from "./HotelCompareList";
 import { HotelPriceBadge } from "./HotelPriceBadge";
 import { HotelRateOptions } from "./HotelRateOptions";

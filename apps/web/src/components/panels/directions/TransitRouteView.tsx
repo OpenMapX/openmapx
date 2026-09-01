@@ -28,12 +28,12 @@ import { useState } from "react";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
+import { BRAND, BRAND_HEX } from "@/integration-api/runtime/theme";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { extractFareSummary, formatFare } from "@/lib/fareUtils";
 import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { ensureNotificationPermission } from "@/lib/navigation/navNotify";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
-import { BRAND, BRAND_HEX } from "@/lib/theme";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
 import { formatCo2Emission } from "../../../lib/formatCo2";
 
 const OCCUPANCY_RANK: Record<OccupancyLevel, number> = {

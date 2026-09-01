@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { useTranslations } from "next-intl";
 import type { ChangeEvent } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 export type TimeMode = "now" | "depart" | "arrive";
 

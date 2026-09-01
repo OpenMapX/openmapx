@@ -1,7 +1,7 @@
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { layerRegistrations } from "@/components/map/layers/layerStack";
-import { INTERACTIVE_LAYER_IDS } from "@/lib/interactiveLayers";
+import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { layerRegistrations } from "@/integration-api/map/layerStack";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import type { WildfirePopupController } from "../popup-controller";
 import { useWildfireStore } from "../store";
@@ -16,11 +16,11 @@ const popupState = vi.hoisted(() => ({
   }>,
 }));
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: mapContext.mapRef, mapReady: true, styleVersion: 0 }),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
 

@@ -4,10 +4,10 @@ import Box from "@mui/material/Box";
 import { type SxProps, type Theme, useColorScheme } from "@mui/material/styles";
 import type { StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { MapCredits } from "@/components/map/MapCredits";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { baseMapCreditsHtml, loadMaptilerStyle, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
-import { MapCredits } from "./MapCredits";
 
 interface LocationMinimapProps {
   lng: number;

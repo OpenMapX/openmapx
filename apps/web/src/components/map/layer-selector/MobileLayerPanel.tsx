@@ -14,7 +14,7 @@ import {
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 
-import { useOverlayZoomGate } from "@/lib/overlayZoomGate";
+import { useOverlayZoomGate } from "@/integration-api/overlay/overlayZoomGate";
 import { LayerPreviewTile } from "./LayerPreviewTile";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
 import type { GeneratedLayerEntry } from "./useLayerSelectorConfig";

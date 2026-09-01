@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("@/lib/MapContext", () => ({ useMapOptional: () => null }));
+vi.mock("@/integration-api/map/MapContext", () => ({ useMapOptional: () => null }));
 
 const toggleOverlayMock = vi.fn();
 vi.mock("@openmapx/core", async (importOriginal) => {

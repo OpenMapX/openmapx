@@ -22,7 +22,7 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
-import { useMap } from "@/lib/MapContext";
+import { useMap } from "@/integration-api/map/MapContext";
 
 /** Capture month and year in the active locale, or null when unknown. */
 export function formatCaptureDate(capturedAt: string | undefined, locale: string): string | null {

@@ -3,9 +3,9 @@
 import { useOverlayExclusion } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
-import { addLayerInSlot } from "@/components/map/layers/layerStack";
-import { setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
-import { useMap } from "@/lib/MapContext";
+import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
 import {
   EXTRUSION_BASE,
   EXTRUSION_COLOR,

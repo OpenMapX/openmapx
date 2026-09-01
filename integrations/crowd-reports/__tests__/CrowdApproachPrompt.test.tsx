@@ -12,7 +12,7 @@ import { render, screen } from "@/test";
 import { CrowdApproachPrompt } from "../CrowdApproachPrompt";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
 

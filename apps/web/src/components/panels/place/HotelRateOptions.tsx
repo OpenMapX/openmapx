@@ -5,7 +5,7 @@ import Typography from "@mui/material/Typography";
 import { useHotelSearchStore } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { type ChangeEvent, useMemo } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Curated currency choices (extensible; the effective currency is prepended if missing). */
 const CURRENCIES = [

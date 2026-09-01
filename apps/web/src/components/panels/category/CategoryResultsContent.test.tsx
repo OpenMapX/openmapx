@@ -1,7 +1,7 @@
 import { useCategorySearchStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
-import { MapProvider } from "@/lib/MapContext";
+import { MapProvider } from "@/integration-api/map/MapContext";
 import { act, fireEvent, render, screen } from "@/test";
 import { createQueryWrapper } from "@/test/query";
 import { CategoryResultsContent } from "./CategoryResultsContent";

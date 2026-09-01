@@ -5,7 +5,7 @@ import { useBuildingsStore } from "../store";
 
 let fake: FakeMap;
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,

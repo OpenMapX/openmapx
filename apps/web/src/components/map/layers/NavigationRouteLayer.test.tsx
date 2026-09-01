@@ -36,10 +36,10 @@ const navState = {
 // (e.g. `rerender()` in the 100-update tests below) must not look like the map
 // itself changed.
 const mapRef: { current: unknown } = { current: fake.map };
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
-vi.mock("@/lib/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
+vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
 vi.mock("@/lib/attributionForProviders", () => ({ attributionsForProviders: () => [] }));
 vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
 vi.mock("@openmapx/core", async (importOriginal) => ({

@@ -12,7 +12,7 @@ import Typography from "@mui/material/Typography";
 import type { CategoryFacet } from "@openmapx/core";
 import { useCategoryFacetStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 function prettifyCuisine(value: string): string {
   return value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());

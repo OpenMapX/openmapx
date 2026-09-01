@@ -9,10 +9,10 @@ import {
   CYCLING_MIN_ZOOM,
   CYCLING_POI_SOURCE_LAYER,
   CYCLING_SOURCE_LAYER,
-} from "@/components/map/layers/cyclingConfig";
-import { addLayerInSlot } from "@/components/map/layers/layerStack";
-import { setLayerVisibility } from "@/components/map/layers/layerStyleUtils";
-import { useMap } from "@/lib/MapContext";
+} from "@/integration-api/map/cyclingConfig";
+import { addLayerInSlot } from "@/integration-api/map/layerStack";
+import { setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
 import { useCyclingStore } from "./store";
 
 function findTransportationSource(map: maplibregl.Map): string | null {

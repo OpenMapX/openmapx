@@ -266,6 +266,12 @@ legend can be declared as `frontend.overlay.legend` in the manifest rather than
 written, and the layer registers the credits that appear in the map credits
 strip while it is drawn.
 
+Compiled built-ins import web capabilities through focused
+`@/integration-api/map/...`, `overlay/...`, `runtime/...`, or `components/...`
+paths. This is the trusted web host's app-local API, not an extension SDK.
+Installed community integrations cannot execute presentation JavaScript and
+cannot consume these modules; they remain declarative-only.
+
 The full `frontend.overlay` schema and the community-code restriction are documented in
 [Integration system → Map overlays](./integration-system.md#map-overlays).
 

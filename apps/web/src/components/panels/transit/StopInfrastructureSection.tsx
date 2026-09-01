@@ -34,8 +34,8 @@ import type {
 } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { useMap } from "@/lib/MapContext";
-import { BRAND } from "@/lib/theme";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { type StructuredSection, StructuredSections } from "../shared/StructuredSections";
 
 interface StopInfrastructureSectionProps {

@@ -46,8 +46,8 @@ import {
 } from "@/components/panels/datasource/GroupedMultiSelectSection";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { translateDataSourceLabel, translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
-import { BRAND } from "@/lib/theme";
 import { BrandMark } from "../shared/BrandMark";
 
 /** Matches 3-decimal Euro prices like "2.119" within a summary string. */

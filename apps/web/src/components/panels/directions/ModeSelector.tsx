@@ -13,7 +13,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { TravelMode } from "@openmapx/core";
 import type { ReactNode } from "react";
-import { BRAND } from "@/lib/theme";
+import { BRAND } from "@/integration-api/runtime/theme";
 
 const MODES: { mode: TravelMode; icon: ReactNode; labelKey: string; disabled?: boolean }[] = [
   { mode: "driving", icon: <DirectionsCarIcon sx={{ fontSize: 22 }} />, labelKey: "driving" },

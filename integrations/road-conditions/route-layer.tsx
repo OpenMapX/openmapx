@@ -10,19 +10,19 @@ import type { MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { addLayerInSlot, unregisterLayerSlot } from "@/components/map/layers/layerStack";
-import type { GeoJsonSourceData } from "@/components/map/layers/layerStyleUtils";
-import { useGeoJsonSourceDataBridge } from "@/components/map/layers/useGeoJsonSourceDataBridge";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import type { GeoJsonSourceData } from "@/integration-api/map/layerStyleUtils";
+import { useMap } from "@/integration-api/map/MapContext";
 import {
   registerMapOverlayInteraction,
   removeMapOverlayPopup,
   replaceMapOverlayPopup,
-} from "@/components/map/overlay/mapInteractionArbiter";
-import { useOverlayLayerVisible } from "@/components/map/overlay/useOverlayStoreState";
-import { useMap } from "@/lib/MapContext";
-import { useOverlayMinZoom } from "@/lib/overlayZoomGate";
-import { useDateTimeFormat } from "@/lib/useDateTimeFormat";
-import { useDrawnDirectionsRoutes } from "@/lib/useDrawnDirectionsRoutes";
+} from "@/integration-api/map/mapInteractionArbiter";
+import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
+import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
+import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import {
   buildRoadConditionDisplayGroups,
   buildRoadConditionDisplayLines,

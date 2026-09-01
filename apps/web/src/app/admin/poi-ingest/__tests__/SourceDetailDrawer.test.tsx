@@ -4,7 +4,7 @@ import type { PoiSourceDetail } from "@/lib/admin/poiIngestHooks";
 
 const triggerMutate = vi.fn();
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://test.local" }),
 }));
 

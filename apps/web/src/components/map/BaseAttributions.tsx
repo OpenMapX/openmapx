@@ -3,10 +3,10 @@
 import { useLayerStore } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useMemo } from "react";
-import { useEnv } from "@/lib/EnvProvider";
+import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { baseMapVectorCredits } from "@/lib/map";
 import { useOfflinePackageActive } from "@/lib/offlineAreas";
-import { useMapAttributions } from "@/lib/useMapAttributions";
 
 /**
  * Always-on credits for whichever base style is active. Registered via

@@ -10,9 +10,9 @@ import { useRef, useState } from "react";
 import {
   pictureLayerIds,
   providerIdByLayer,
-} from "@/components/map/street-level-imagery/StreetLevelCoverageLayer";
-import { useStreetLevelProviders } from "@/components/map/street-level-imagery/useStreetLevelProviders";
-import { useMap } from "@/lib/MapContext";
+} from "@/integration-api/components/StreetLevelCoverageLayer";
+import { useStreetLevelProviders } from "@/integration-api/components/useStreetLevelProviders";
+import { useMap } from "@/integration-api/map/MapContext";
 
 const SEARCH_BUF = 20; // feature query buffer (px) — logic only
 const CIRCLE_R = 10; // visual indicator radius — smaller than the boy

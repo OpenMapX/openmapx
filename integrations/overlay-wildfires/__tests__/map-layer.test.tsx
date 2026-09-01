@@ -9,15 +9,15 @@ const popupState = vi.hoisted(() => ({
   instances: [] as Array<{ removeCalls: number }>,
 }));
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: mapContext.mapRef, mapReady: true, styleVersion: 0 }),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
 
-vi.mock("@/lib/useIntegrationAttribution", () => ({
+vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
   useIntegrationSourceAttributions: attributionState.filtered,
 }));
 

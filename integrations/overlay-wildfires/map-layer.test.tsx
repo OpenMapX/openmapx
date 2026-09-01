@@ -13,7 +13,7 @@ const mapContext = vi.hoisted(() => ({ mapRef: { current: null as FakeMap["map"]
 
 let fake: FakeMap;
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: mapContext.mapRef,
     mapReady: true,
@@ -21,11 +21,11 @@ vi.mock("@/lib/MapContext", () => ({
   }),
 }));
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.test" }),
 }));
 
-vi.mock("@/lib/useIntegrationAttribution", () => ({
+vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
   useIntegrationAttribution: vi.fn(),
   useIntegrationSourceAttributions: attributionState.filtered,
 }));

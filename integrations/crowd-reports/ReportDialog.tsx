@@ -34,8 +34,11 @@ import { createSvgIcon } from "@mui/material/utils";
 import { useMapStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
-import { LocationMinimap } from "@/components/map/LocationMinimap";
-import { mobileFullScreenDialogPaperSx, useFullScreenOnMobile } from "@/lib/useFullScreenOnMobile";
+import { LocationMinimap } from "@/integration-api/components/LocationMinimap";
+import {
+  mobileFullScreenDialogPaperSx,
+  useFullScreenOnMobile,
+} from "@/integration-api/runtime/useFullScreenOnMobile";
 import {
   buildReportClaim,
   defaultSeverityForCategory,

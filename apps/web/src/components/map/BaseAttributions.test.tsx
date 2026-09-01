@@ -3,7 +3,7 @@
 import { useLayerStore } from "@openmapx/core";
 import { render } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { useMapAttributionStore } from "@/lib/mapAttributionStore";
+import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { BaseAttributions } from "./BaseAttributions";
 
 /**
@@ -15,7 +15,7 @@ const state = {
   env: { styleProvider: "openmapx" as "openmapx" | "maptiler" },
 };
 
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => state.env,
 }));
 

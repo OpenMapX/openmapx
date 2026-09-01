@@ -78,6 +78,8 @@ import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { NlpConsentDialog } from "@/components/ui/NlpConsentDialog";
 import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/ui/nlpConsent";
+import { useMap } from "@/integration-api/map/MapContext";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { attributionsForProviders, mergeAttributions } from "@/lib/attributionForProviders";
 import {
   useAiSearchDisclosure,
@@ -88,9 +90,7 @@ import {
   launchExploreTextSearch,
   launchTextSearch,
 } from "@/lib/launchExplore";
-import { useMap } from "@/lib/MapContext";
 import { isConfidentPlaceMatch } from "@/lib/placeMatch";
-import { BRAND } from "@/lib/theme";
 import { useHydrated } from "@/lib/useHydrated";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
 import { MobileSearchEmptyState } from "./MobileSearchEmptyState";

@@ -12,9 +12,9 @@ import type { EvChargeStop, EvDirectionsResult } from "@openmapx/core";
 import { formatDuration, useDataSources } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
-import { BRAND } from "@/lib/theme";
 
 export function EvPlanCard({
   result,

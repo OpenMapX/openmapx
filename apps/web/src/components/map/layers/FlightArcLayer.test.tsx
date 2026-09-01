@@ -5,7 +5,7 @@ import { act, createFakeMap, expectStyleSwapIsLossless, type FakeMap, render } f
 let fake: FakeMap;
 const fitBounds = vi.fn();
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef: { current: fake.map },
     mapReady: true,

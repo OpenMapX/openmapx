@@ -8,7 +8,7 @@ const sessionState: { data: unknown; isPending: boolean } = { data: null, isPend
 vi.mock("@openmapx/core", () => ({
   useSession: () => sessionState,
 }));
-vi.mock("@/lib/EnvProvider", () => ({
+vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "https://api.example.test" }),
 }));
 // The page is a server component; its async translator has no jsdom equivalent,

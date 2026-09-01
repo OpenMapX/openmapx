@@ -8,8 +8,8 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
-import { modeColor } from "@/lib/transitMarkers";
+import { modeColor } from "@/integration-api/map/transitMarkers";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { useLiveTransitStore } from "./store";
 
 const MODE_LABEL_KEYS: Partial<Record<TransportMode, string>> = {

@@ -11,9 +11,9 @@ import {
 import type { GeoJSONLineString, TransportMode } from "@openmapx/mobility-core/transit";
 import type { ExpressionSpecification } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
-import { useMap } from "@/lib/MapContext";
-import { PRIMARY_BLUE_HEX } from "@/lib/theme";
-import { addLayerInSlot, unregisterLayerSlot } from "./layerStack";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
+import { useMap } from "@/integration-api/map/MapContext";
+import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { shouldRefineLegGeometry } from "./legGeometryRefine";
 
 // Non-transit "street" legs (walk plus intermodal bike/car access) render as

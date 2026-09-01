@@ -5,7 +5,7 @@ import { useColorScheme } from "@mui/material/styles";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { MapCredits } from "@/components/map/MapCredits";
-import { useEnv } from "@/lib/EnvProvider";
+import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { baseMapCreditsHtml, loadOpenMapXStyle } from "@/lib/map";
 import { loadMapLibreRuntime } from "@/lib/maplibreRuntime";
 import {

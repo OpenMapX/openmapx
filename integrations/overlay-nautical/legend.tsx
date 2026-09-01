@@ -14,7 +14,7 @@ import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type { ReactNode } from "react";
-import { OverlayLegend } from "@/components/map/OverlayLegend";
+import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
 import { type TideStationFilter, useNauticalStore } from "./store";
 
 const STATION_TYPE_SWATCHES: Array<{ key: string; color: string }> = [

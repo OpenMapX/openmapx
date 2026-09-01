@@ -497,11 +497,12 @@ this one switches on) and `minZoom`.
 
 For trusted built-ins the layer itself is a shipped component: `map-layer.tsx`, with the
 `frontend.mapLayer` flag set (and `frontend.legend` plus a `legend.tsx` when the
-declarative legend above isn't expressive enough). Built-in overlays import the
-app's map context and layer utilities directly:
+declarative legend above isn't expressive enough). Built-in overlays use the
+web host's focused integration API instead of importing arbitrary application
+modules:
 
 ```tsx
-import { useMap } from "@/lib/MapContext";
+import { useMap } from "@/integration-api/map/MapContext";
 
 export default function MapLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -509,6 +510,14 @@ export default function MapLayer() {
   return null;
 }
 ```
+
+The modules under `apps/web/src/integration-api/` are an app-local API for
+trusted integrations compiled into the OpenMapX web build. They group map,
+overlay, runtime, and reusable component capabilities behind focused import
+paths. They are not a package, a remotely consumable extension SDK, or a
+same-origin script interface. Production frontend sources under `integrations/`
+may import only these web-host paths; a boundary test rejects private web
+imports, path escapes, broad barrels, and dynamic host entry points.
 
 ### Crediting an overlay's sources
 
@@ -532,6 +541,8 @@ Community integration artifacts are declarative-only. The installer rejects
 does not serve a bundle route; and the web provider never appends community
 scripts. This is deliberate: a same-origin script has the signed-in user's full
 authority, and CSP cannot sandbox code the application intentionally executes.
+The app-local integration API does not alter this boundary and is unavailable
+to installed extensions. Community presentation JavaScript remains prohibited.
 Executable community presentation will remain disabled until it can run on a
 separate origin (or equivalently isolated worker) behind a narrow, versioned
 message/capability API. Static SVG previews and host-rendered manifest fields

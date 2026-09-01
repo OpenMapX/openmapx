@@ -7,7 +7,7 @@ const fake = createFakeMap({
   baseLayers: [{ id: "place-labels", type: "symbol" }],
 });
 
-vi.mock("@/lib/MapContext", () => ({
+vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: 0 }),
 }));
 vi.mock("@/lib/navigation/useNavTrafficSignals", () => ({
