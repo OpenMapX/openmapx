@@ -10,7 +10,7 @@ import type {
 import { createSharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobility-runtime";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MobilityDataSourceProvider } from "../contracts/mobility-data-source-provider.js";
-import { buildSharedMobilityMapContext } from "../shared-mobility/context.js";
+import { buildSharedMobilityMapContext } from "../shared-mobility/context";
 
 const mapperMocks = vi.hoisted(() => ({
   mapStationToResult: vi.fn(),

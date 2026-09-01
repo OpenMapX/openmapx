@@ -23,9 +23,9 @@ import type {
   SharedMobilityStation,
   SharedMobilityVehicle,
 } from "@openmapx/mobility-core/shared-mobility";
-import { STATION_ID_PREFIX, VEHICLE_ID_PREFIX } from "./ids.js";
+import { STATION_ID_PREFIX, VEHICLE_ID_PREFIX } from "./ids";
 
-export { stripMobilityKindPrefix } from "./ids.js";
+export { stripMobilityKindPrefix } from "./ids";
 
 function t(key: string, values?: Record<string, string | number>): I18nToken {
   return values ? { $t: key, values } : { $t: key };

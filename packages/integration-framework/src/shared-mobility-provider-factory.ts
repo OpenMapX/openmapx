@@ -15,14 +15,14 @@ import type { SharedMobilityRuntime } from "@openmapx/mobility-core/shared-mobil
 import type { CacheClient } from "./context";
 import type { MobilityDataSourceProvider } from "./contracts/mobility-data-source-provider";
 import { createManifestAttribution, type IntegrationDataSource } from "./manifest";
-import { buildSharedMobilityMapContext } from "./shared-mobility/context.js";
+import { buildSharedMobilityMapContext } from "./shared-mobility/context";
 import {
   mapStationToDetail,
   mapStationToResult,
   mapVehicleToDetail,
   mapVehicleToResult,
   stripMobilityKindPrefix,
-} from "./shared-mobility/mapper.js";
+} from "./shared-mobility/mapper";
 
 export interface SharedMobilityProviderConfig {
   id: string;

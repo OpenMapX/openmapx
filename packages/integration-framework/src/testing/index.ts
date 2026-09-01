@@ -5,7 +5,7 @@ import type {
   MobilityHttpTransport,
 } from "@openmapx/mobility-core/json-transport";
 import type { PoiSource } from "@openmapx/poi-source-registry";
-import { runImmediateActivation } from "../activation-transaction.js";
+import { runImmediateActivation } from "../activation-transaction";
 import type {
   BinaryHttpResponse,
   CacheClient,
