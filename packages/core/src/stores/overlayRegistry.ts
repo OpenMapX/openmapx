@@ -1,7 +1,8 @@
 import type { LoadedIntegrationMeta } from "../types/integrationMeta";
 import {
-  createOverlayStore,
+  createPlaceholderOverlayStore,
   getRegisteredOverlayStore,
+  notifyOverlayChangeListeners,
   type OverlayStoreBase,
   runInOverlayTransaction,
 } from "./createOverlayStore";
@@ -34,10 +35,25 @@ const overlayEntries: OverlayEntry[] = [];
 /** Read-only view of the registry. */
 export const OVERLAY_REGISTRY: readonly OverlayEntry[] = overlayEntries;
 
+let overlayRegistryInitialized = false;
+
+/**
+ * Whether the registry has been populated at least once. Until then a
+ * synchronous read sees an empty list and cannot tell "this deployment has no
+ * overlays" from "integration metadata is still loading" — anything acting on
+ * overlay ids at startup (deep links, contextual automation) must wait for
+ * this to flip instead of treating emptiness as an answer.
+ */
+export function isOverlayRegistryInitialized(): boolean {
+  return overlayRegistryInitialized;
+}
+
 /** Register a new overlay entry at runtime (used by integration framework). */
 export function registerOverlayEntry(entry: OverlayEntry): void {
   if (overlayEntries.some((e) => e.id === entry.id)) return;
   overlayEntries.push(entry);
+  overlayRegistryInitialized = true;
+  notifyOverlayChangeListeners();
 }
 
 /**
@@ -76,12 +92,12 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
     const overlayId = integrationIdToOverlayId(integration.id);
     let storeHook = getRegisteredOverlayStore(overlayId) as StoreHook | undefined;
 
-    // Auto-create a basic overlay store for integrations that don't have a
-    // pre-registered store. This lets new simple overlays work with just a
-    // manifest — no store file needed (plan section 8.3).
+    // Stand in for integrations whose store hasn't been registered yet: simple
+    // overlays with just a manifest never register one, and lazily loaded
+    // modules register theirs later — at which point the real store adopts
+    // whatever state the stand-in accumulated.
     if (!storeHook) {
-      const autoStore = createOverlayStore({ overlayId, extra: {} });
-      storeHook = autoStore as unknown as StoreHook;
+      storeHook = createPlaceholderOverlayStore(overlayId) as unknown as StoreHook;
     }
 
     const overlay = integration.frontend.overlay as {
@@ -117,6 +133,9 @@ export function initOverlayRegistry(integrations: LoadedIntegrationMeta[]): void
       excludes: overlay.excludes ?? [],
     });
   }
+
+  overlayRegistryInitialized = true;
+  notifyOverlayChangeListeners();
 }
 
 export function getOverlayEntry(id: OverlayId): OverlayEntry | undefined {

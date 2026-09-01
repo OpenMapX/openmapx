@@ -6,6 +6,7 @@ import {
   isLiveNavigationStatus,
   useDirectionsStore,
   useNavigationStore,
+  useOverlayRegistryReady,
 } from "@openmapx/core";
 import { useEffect, useMemo, useRef } from "react";
 
@@ -77,7 +78,13 @@ export function ContextualOverlays() {
   }
   const ownership = ownershipRef.current;
 
+  // A deep link can put the app into a context before IntegrationProvider has
+  // populated the overlay registry; re-run once it has, or the overlays that
+  // context wants would be skipped as "not deployed" for the whole session.
+  const overlaysReady = useOverlayRegistryReady();
+
   useEffect(() => {
+    if (!overlaysReady) return;
     CONTEXTUAL_OVERLAYS.forEach(({ overlayId, contexts }, index) => {
       // Skip overlays whose integration isn't registered on this deployment.
       if (!getOverlayEntry(overlayId)) return;
@@ -89,7 +96,7 @@ export function ContextualOverlays() {
         ownership.release(overlayId, ownerKey);
       }
     });
-  }, [active, ownership]);
+  }, [active, overlaysReady, ownership]);
 
   // A teardown mid-context must not leave an auto-enabled overlay on. This is
   // its own effect — with no dependency that ever changes across the

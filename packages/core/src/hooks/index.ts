@@ -128,6 +128,7 @@ export {
   usePublishOsmContribution,
 } from "./useOsmContributions";
 export { useOverlayExclusion } from "./useOverlayExclusion";
+export { useOverlayRegistryReady } from "./useOverlayRegistryReady";
 export { useOverlayVisibilitySetter } from "./useOverlayVisibilitySetter";
 export {
   PERSONAL_TIMELINE_QUERY_KEY,

@@ -42,7 +42,13 @@ const overlayStoreMap = new Map<string, UseBoundStore<StoreApi<OverlayStoreBase>
 
 const overlayChangeListeners = new Set<() => void>();
 
-function notifyOverlayChangeListeners(): void {
+/**
+ * Wake every subscribeOverlayStoreChanges listener. Fired for store state
+ * changes and registrations here, and by overlayRegistry.ts whenever the
+ * registry itself is (re)populated, so readiness hooks re-read on the same
+ * signal that store hooks already use.
+ */
+export function notifyOverlayChangeListeners(): void {
   for (const listener of overlayChangeListeners) listener();
 }
 
@@ -87,6 +93,27 @@ export function subscribeOverlayStoreChanges(listener: () => void): () => void {
   return () => {
     overlayChangeListeners.delete(listener);
   };
+}
+
+/**
+ * Overlay ids whose current store is a stand-in created by the registry
+ * because the overlay's own module (and its createOverlayStore call) had not
+ * loaded yet. The real store inherits the stand-in's open state when it
+ * arrives, so a deep link or user toggle applied in the meantime survives.
+ */
+const placeholderOverlayIds = new Set<string>();
+
+/**
+ * Create the stand-in store the registry uses for an overlay whose module is
+ * still loading. Only the registry should call this; integration modules call
+ * createOverlayStore, which recognises and adopts the stand-in's state.
+ */
+export function createPlaceholderOverlayStore(
+  overlayId: string,
+): UseBoundStore<StoreApi<OverlayStoreBase>> {
+  const store = createOverlayStore({ overlayId, extra: {} });
+  placeholderOverlayIds.add(overlayId);
+  return store as unknown as UseBoundStore<StoreApi<OverlayStoreBase>>;
 }
 
 /** Get a store by its overlay ID. Used by overlayRegistry.ts. */
@@ -157,10 +184,21 @@ export function createOverlayStore<
   store.subscribe(notifyOverlayChangeListeners);
 
   if (config.overlayId) {
+    const previous = overlayStoreMap.get(config.overlayId);
+    const adoptsPlaceholder =
+      previous !== undefined && placeholderOverlayIds.delete(config.overlayId);
     overlayStoreMap.set(
       config.overlayId,
       store as unknown as UseBoundStore<StoreApi<OverlayStoreBase>>,
     );
+    if (adoptsPlaceholder) {
+      // The stand-in may already have been opened (deep link, contextual
+      // automation, a fast user); carry that over instead of resetting the
+      // overlay to closed the moment its module finishes loading. Re-creating
+      // a real store for the same id deliberately still resets it.
+      const { panelOpen, layerVisible, userRevision } = previous.getState();
+      store.setState({ panelOpen, layerVisible, userRevision } as Partial<FullState>);
+    }
     // Registering (or replacing) a store changes what lookups resolve to, so
     // the effective state may change without any store state transition.
     notifyOverlayChangeListeners();

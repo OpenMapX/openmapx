@@ -6,6 +6,7 @@ import {
   isOverlayActive,
   type OverlayStoreBase,
   registerOverlayEntry,
+  runOverlayTransaction,
 } from "@openmapx/core";
 import { render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -70,5 +71,20 @@ describe("DeepLinkManager overlay application", () => {
     expect(isOverlayActive("weather")).toBe(false);
     expect(window.location.search).toContain("ov=air-quality");
     expect(window.location.search).not.toContain("overlay-air-quality");
+  });
+
+  it("leaves an automation-opened overlay alone when the link does not name it", () => {
+    // Contextual automation (e.g. transit directions) opened this overlay; its
+    // userRevision is untouched because nobody chose it by hand.
+    runOverlayTransaction("air-quality", { panelOpen: true }, { kind: "automation", owner: "t" });
+    expect(isOverlayActive("air-quality")).toBe(true);
+
+    // A link that only carries a camera says nothing about overlays.
+    window.history.replaceState(null, "", "/?map=52.5,13.4,11,0,0");
+    render(<DeepLinkManager />);
+
+    expect(isOverlayActive("air-quality")).toBe(true);
+    expect(getRegisteredOverlayStore("air-quality")?.getState().userRevision).toBe(0);
+    expect(window.location.search).toContain("ov=air-quality");
   });
 });

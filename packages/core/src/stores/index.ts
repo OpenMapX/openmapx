@@ -57,6 +57,7 @@ export {
   initOverlayRegistry,
   integrationIdToOverlayId,
   isOverlayActive,
+  isOverlayRegistryInitialized,
   OVERLAY_REGISTRY,
   overlayTransactionClosure,
   registerOverlayEntry,

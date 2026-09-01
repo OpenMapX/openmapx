@@ -50,6 +50,7 @@ import {
   useDirectionsStore,
   useLayerStore,
   useMapStore,
+  useOverlayRegistryReady,
   usePlaceStore,
   useSavedPlacesStore,
   useSearchStore,
@@ -58,7 +59,7 @@ import {
 } from "@openmapx/core";
 import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
   DEEPLINK_UPDATE_EVENT,
@@ -230,6 +231,12 @@ function openOverlay(id: string): void {
 function closeOverlay(id: string): void {
   const state = getOverlayState(id);
   if (!state?.panelOpen) return;
+  // An open overlay whose userRevision never moved was opened by automation
+  // (contextual overlays for the current directions/navigation context), not
+  // by the user or an earlier link. A link that doesn't name it is silent
+  // about it, not against it: closing it here would register as a user
+  // disable and suppress the automation for the rest of that context.
+  if (state.userRevision === 0) return;
   runOverlayTransaction(id, { panelOpen: false }, { kind: "user" });
 }
 
@@ -473,7 +480,21 @@ function applyTravelTime(parsed: ParsedDeepLink["travelTime"]): void {
   }
 }
 
-function applyDeepLink(parsed: ParsedDeepLink, map: maplibregl.Map | null): void {
+function applyOverlayDeepLink(parsed: ParsedDeepLink): void {
+  applyOverlayState(parsed);
+  applyOverlaySettings(parsed);
+}
+
+/**
+ * `overlays: false` applies everything except the overlay part, for a link
+ * that arrives before the overlay registry exists; the caller owns replaying
+ * applyOverlayDeepLink once it does.
+ */
+function applyDeepLink(
+  parsed: ParsedDeepLink,
+  map: maplibregl.Map | null,
+  options: { overlays: boolean },
+): void {
   if (!parsed.hasDeepLinkParams) return;
 
   clearPanelState();
@@ -482,8 +503,7 @@ function applyDeepLink(parsed: ParsedDeepLink, map: maplibregl.Map | null): void
   layer.setActiveLayer(oneOf(parsed.base, MAP_LAYERS) ?? "default");
   layer.setGlobeView(Boolean(parsed.globe));
 
-  applyOverlayState(parsed);
-  applyOverlaySettings(parsed);
+  if (options.overlays) applyOverlayDeepLink(parsed);
 
   if (parsed.map && map) {
     map.jumpTo({
@@ -705,22 +725,34 @@ function encodeCurrentUrl(map: maplibregl.Map | null): string {
 
 export function DeepLinkManager() {
   const { mapRef, mapReady } = useMap();
+  // The map is ready long before IntegrationProvider has populated the overlay
+  // registry from /api/integrations, so a link's overlay part is applied in a
+  // second phase once the registry exists.
+  const overlaysReady = useOverlayRegistryReady();
+  const overlaysReadyRef = useRef(overlaysReady);
+  overlaysReadyRef.current = overlaysReady;
   const applyingRef = useRef(false);
   const timeoutRef = useRef<number | null>(null);
+  /** A parsed link whose overlay part is still waiting for the registry. */
+  const pendingOverlaysRef = useRef<ParsedDeepLink | null>(null);
+
+  const writeUrl = useCallback(() => {
+    if (typeof window === "undefined" || applyingRef.current) return;
+    // Until the pending overlay part has been applied, the URL is the only
+    // place that intent exists. Re-encoding from the current, overlay-less
+    // state would silently delete `ov` and every overlay setting.
+    if (pendingOverlaysRef.current) return;
+    const nextUrl = encodeCurrentUrl(mapRef.current);
+    const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+    if (nextUrl !== currentUrl) {
+      window.history.replaceState(window.history.state, "", nextUrl);
+    }
+  }, [mapRef]);
 
   useEffect(() => {
     if (!mapReady) return;
 
     const map = mapRef.current;
-
-    const writeUrl = () => {
-      if (typeof window === "undefined" || applyingRef.current) return;
-      const nextUrl = encodeCurrentUrl(mapRef.current);
-      const currentUrl = `${window.location.pathname}${window.location.search}${window.location.hash}`;
-      if (nextUrl !== currentUrl) {
-        window.history.replaceState(window.history.state, "", nextUrl);
-      }
-    };
 
     const scheduleWrite = () => {
       if (applyingRef.current) return;
@@ -731,9 +763,11 @@ export function DeepLinkManager() {
     const applyFromLocation = () => {
       const parsed = parseDeepLinkSearch(window.location.search);
       if (!parsed.hasDeepLinkParams) return;
+      const overlaysNow = overlaysReadyRef.current;
+      pendingOverlaysRef.current = overlaysNow ? null : parsed;
       applyingRef.current = true;
       try {
-        applyDeepLink(parsed, mapRef.current);
+        applyDeepLink(parsed, mapRef.current, { overlays: overlaysNow });
       } finally {
         applyingRef.current = false;
       }
@@ -754,7 +788,25 @@ export function DeepLinkManager() {
       window.removeEventListener("popstate", applyFromLocation);
       window.removeEventListener(DEEPLINK_UPDATE_EVENT, writeUrl);
     };
-  }, [mapReady, mapRef]);
+  }, [mapReady, mapRef, writeUrl]);
+
+  // Second phase: replay the overlay part of a link that arrived before the
+  // registry existed. Runs once per pending link — a later metadata refresh
+  // re-populates the registry but must not re-apply a link the user has since
+  // moved on from.
+  useEffect(() => {
+    if (!overlaysReady) return;
+    const pending = pendingOverlaysRef.current;
+    if (!pending) return;
+    pendingOverlaysRef.current = null;
+    applyingRef.current = true;
+    try {
+      applyOverlayDeepLink(pending);
+    } finally {
+      applyingRef.current = false;
+    }
+    writeUrl();
+  }, [overlaysReady, writeUrl]);
 
   return null;
 }
