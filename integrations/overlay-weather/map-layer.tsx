@@ -11,7 +11,7 @@ import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layer
 import { useMap } from "@/integration-api/map/MapContext";
 import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
-import { useWeatherStore } from "./store";
+import { effectiveWeatherSubLayer, useWeatherStore } from "./store";
 
 const RADAR_SOURCE_PREFIX = "weather-radar-";
 const RADAR_LAYER_PREFIX = "weather-radar-layer-";
@@ -33,7 +33,9 @@ export function WeatherLayer() {
   const env = useEnv();
   const layerVisible = useWeatherStore((s) => s.layerVisible);
   useIntegrationAttribution("overlay-weather", layerVisible);
-  const activeSubLayer = useWeatherStore((s) => s.activeSubLayer);
+  // What to render, not what was asked for: an OWM layer requested while OWM
+  // is unavailable (deep link, key removed) renders radar instead of 503 tiles.
+  const activeSubLayer = useWeatherStore(effectiveWeatherSubLayer);
   const radarHost = useWeatherStore((s) => s.radarHost);
   const radarPastFrames = useWeatherStore((s) => s.radarPastFrames);
   const radarNowcastFrames = useWeatherStore((s) => s.radarNowcastFrames);

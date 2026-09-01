@@ -7,6 +7,31 @@ import type {
 } from "@openmapx/core";
 import { createOverlayStore } from "@openmapx/core";
 
+/** Every sub-layer the overlay can render; all but radar need an OpenWeatherMap key. */
+export const WEATHER_SUB_LAYERS: { key: WeatherSubLayer; needsOwm: boolean }[] = [
+  { key: "radar", needsOwm: false },
+  { key: "temperature", needsOwm: true },
+  { key: "clouds", needsOwm: true },
+  { key: "wind", needsOwm: true },
+  { key: "pressure", needsOwm: true },
+  { key: "precipitation", needsOwm: true },
+];
+
+/**
+ * The sub-layer to actually render. `activeSubLayer` records what was asked
+ * for (a deep link, or a choice made before an OWM key was removed) and is
+ * kept so it takes effect as soon as OWM is available; until then an OWM
+ * layer would only produce 503 tiles, so radar, which needs no key, stands in.
+ */
+export function effectiveWeatherSubLayer(state: {
+  activeSubLayer: WeatherSubLayer;
+  owmAvailable: boolean;
+}): WeatherSubLayer {
+  const needsOwm =
+    WEATHER_SUB_LAYERS.find((layer) => layer.key === state.activeSubLayer)?.needsOwm ?? true;
+  return needsOwm && !state.owmAvailable ? "radar" : state.activeSubLayer;
+}
+
 export const useWeatherStore = createOverlayStore({
   overlayId: "weather",
   extra: {

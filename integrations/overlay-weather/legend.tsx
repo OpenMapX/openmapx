@@ -7,24 +7,11 @@ import Slider from "@mui/material/Slider";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import {
-  useOverlayVisibilitySetter,
-  type WeatherSubLayer,
-  weatherCodeToInfo,
-} from "@openmapx/core";
+import { useOverlayVisibilitySetter, weatherCodeToInfo } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { WeatherIcon } from "@/integration-api/components/WeatherIcon";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
-import { useWeatherStore } from "./store";
-
-const SUB_LAYERS: { key: WeatherSubLayer; needsOwm: boolean }[] = [
-  { key: "radar", needsOwm: false },
-  { key: "temperature", needsOwm: true },
-  { key: "clouds", needsOwm: true },
-  { key: "wind", needsOwm: true },
-  { key: "pressure", needsOwm: true },
-  { key: "precipitation", needsOwm: true },
-];
+import { effectiveWeatherSubLayer, useWeatherStore, WEATHER_SUB_LAYERS } from "./store";
 
 function formatFrameTime(unix: number, pastCount: number, index: number): string {
   if (index === pastCount - 1) return "Now";
@@ -46,7 +33,7 @@ export function WeatherLegend() {
   const loading = useWeatherStore((s) => s.loading);
   const radarLoading = useWeatherStore((s) => s.radarLoading);
 
-  const activeSubLayer = useWeatherStore((s) => s.activeSubLayer);
+  const activeSubLayer = useWeatherStore(effectiveWeatherSubLayer);
   const setActiveSubLayer = useWeatherStore((s) => s.setActiveSubLayer);
   const owmAvailable = useWeatherStore((s) => s.owmAvailable);
 
@@ -61,7 +48,7 @@ export function WeatherLegend() {
   const radarUnavailable = useWeatherStore((s) => s.radarUnavailable);
 
   const allFrames = [...radarPastFrames, ...radarNowcastFrames];
-  const availableSubLayers = SUB_LAYERS.filter(({ needsOwm }) => !needsOwm || owmAvailable);
+  const availableSubLayers = WEATHER_SUB_LAYERS.filter(({ needsOwm }) => !needsOwm || owmAvailable);
   const showRadarControls = activeSubLayer === "radar" && allFrames.length > 0 && !radarUnavailable;
 
   return (
