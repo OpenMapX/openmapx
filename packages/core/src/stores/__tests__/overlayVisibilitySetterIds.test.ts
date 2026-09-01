@@ -51,7 +51,7 @@ describe("useOverlayVisibilitySetter overlay ids — integration legends", () =>
 describe("useOverlayVisibilitySetter overlay ids — apps/web call sites", () => {
   const STREET_LEVEL_IMAGERY_FILES = [
     "apps/web/src/components/map/Pegman.tsx",
-    "apps/web/src/components/map/street-level-imagery/StreetLevelLegend.tsx",
+    "apps/web/src/integration-api/components/StreetLevelLegend.tsx",
   ];
 
   it("Pegman and StreetLevelLegend both pass the shared street-level-imagery id", () => {
