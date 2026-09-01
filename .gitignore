@@ -93,6 +93,8 @@ infra/docker/service-selection.json
 # Decrypted per-service secret files (rendered from the vault; never commit)
 infra/docker/.generated-secrets/
 infra/docker/.maintenance/
+# Service runtime-recovery journal written by apps/api on every boot
+infra/docker/.runtime-recovery/
 infra/docker/services/transitous/api-keys.json
 services/motis/tools/transitous/api-keys.json
 services/.community/
