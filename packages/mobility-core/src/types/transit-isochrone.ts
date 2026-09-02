@@ -1,9 +1,13 @@
 import type { BBox } from "./geometry.js";
+// Extensionless because this is the one runtime import in this directory and the
+// web app resolves with `moduleResolution: "bundler"`, which does not map a `.js`
+// specifier onto its `.ts` source. Type-only imports are erased before resolution,
+// so they keep the package's `.js` convention.
 import {
   parseTransitReachabilitySurfaceRequest,
   type TransitReachabilityQuery,
   type TransitReachabilitySource,
-} from "./transit-reachability.js";
+} from "./transit-reachability";
 
 export const MAX_TRANSIT_ISOCHRONE_AREA_KM2 = 900;
 export const DEFAULT_TRANSIT_ISOCHRONE_MAX_SAMPLES = 2048;
