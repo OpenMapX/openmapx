@@ -24,7 +24,6 @@ WORKDIR /tmp/gtfsclean-build
 RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
     GOPROXY=direct go get github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 && \
     GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
-    GOPROXY=direct go get golang.org/x/crypto@v0.55.0 && \
     GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
 FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS base

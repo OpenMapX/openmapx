@@ -50,3 +50,14 @@ vulnerabilities:
     paths: ["usr/local/lib/docker/cli-plugins/docker-compose"]
     expired_at: 2026-09-20
     statement: Awaiting an official Compose binary with golang.org/x/mod 0.40.0 or newer.
+  # The ssh advisory reaches only callers that dial over SSH. The data-manager
+  # drives Compose against the bind-mounted socket and never sets a DOCKER_HOST,
+  # so the vulnerable transport is not on any path this image takes.
+  - id: CVE-2026-56854
+    paths: ["usr/local/lib/docker/cli-plugins/docker-compose"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Compose binary with golang.org/x/crypto 0.55.0 or newer.
+  - id: CVE-2026-84304
+    paths: ["usr/local/lib/docker/cli-plugins/docker-compose"]
+    expired_at: 2026-09-20
+    statement: Awaiting an official Compose binary with google.golang.org/grpc 1.83.1 or newer.
