@@ -18,6 +18,7 @@ import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
+import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
 import { ArrivalCard } from "./ArrivalCard";
 import { FasterRouteBanner } from "./FasterRouteBanner";
 import { NavAlertSlot } from "./NavAlertSlot";
@@ -59,6 +60,9 @@ export function GroundNavigationChrome({ coverage }: Props) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
+  const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
+  useNavChromeObstructions("ground", { isMobile, arrived: status === "arrived", bannerEl });
+
   const [rerouteToastOpen, setRerouteToastOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [directionsOpen, setDirectionsOpen] = useState(false);
@@ -79,7 +83,7 @@ export function GroundNavigationChrome({ coverage }: Props) {
   // Release the follow camera and frame the whole route. Used by the overflow
   // "overview" action; the recenter control flips the camera back to "follow".
   const handleOverview = () => {
-    setCameraMode("free");
+    setCameraMode("overview");
     const geometry = route?.geometry;
     if (!mapCtx || !geometry || geometry.length < 2) return;
     const box = geoJsonBBox({ type: "LineString", coordinates: geometry } as GeoJSON.LineString);
@@ -143,6 +147,7 @@ export function GroundNavigationChrome({ coverage }: Props) {
         <>
           <RouteSearchControl />
           <Box
+            ref={setBannerEl}
             sx={{
               pointerEvents: "auto",
               display: "flex",

@@ -153,7 +153,7 @@ export function RouteSearchControl() {
   useEffect(() => {
     if (!searching) return;
     fittedRef.current = false;
-    setCameraMode("free");
+    setCameraMode("overview");
     mapCtx?.resetBearing(); // ease bearing + pitch to 0 (north-up, top-down)
     return () => setCameraMode("follow");
   }, [searching]);

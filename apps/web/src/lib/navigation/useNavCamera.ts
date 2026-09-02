@@ -11,10 +11,18 @@ import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import {
+  getCameraPaddingTarget,
+  type ResolvedPadding,
+  subscribeCameraPaddingTarget,
+} from "@/lib/cameraPadding";
+import { prefersReducedMotion } from "@/lib/reducedMotion";
+import {
+  CAMERA_PADDING_EPSILON,
   type CameraPose,
   cameraPoseChanged,
   type PuckPose,
   puckPoseChanged,
+  SETTLED_FRAMES_BEFORE_SLEEP,
   shouldKeepAnimating,
 } from "./navCameraScheduler";
 
@@ -41,6 +49,9 @@ const BEARING_TAU = 0.35;
 // suspended (it must not run jumpTo, which calls stop() and would cancel the
 // gesture) until this long after the last user camera event.
 const ZOOM_TAU = 1.6;
+// Chrome that moves under the map retargets the padding; the camera follows it
+// briskly enough to look attached to the chrome rather than to lag behind it.
+const PADDING_TAU = 0.2;
 const USER_CAM_SUSPEND_MS = 350;
 
 type CameraActivityEvent = maplibregl.MapMovementEvent | maplibregl.MapWheelEvent;
@@ -71,15 +82,40 @@ const CHEVRON_SVG = `<svg width="${PUCK_PX}" height="${PUCK_PX}" viewBox="0 0 48
   <path d="M24 11 L34 36 L24 30 L14 36 Z" fill="#1a73e8" stroke="#ffffff" stroke-width="1.5" stroke-linejoin="round"/>
 </svg>`;
 
-// Keep the puck on the line between the screen's bottom two quarters (i.e. 3/4
-// of the way down) so the road ahead fills the view. Realised via camera
-// padding: a top inset shifts the centred point downward.
-const PUCK_SCREEN_RATIO = 0.75;
-
-/** Camera padding that places the followed point at PUCK_SCREEN_RATIO down. */
-function followPadding(map: maplibregl.Map): maplibregl.PaddingOptions {
-  const h = map.getContainer().clientHeight;
-  return { top: Math.max(0, (2 * PUCK_SCREEN_RATIO - 1) * h), bottom: 0, left: 0, right: 0 };
+/**
+ * Ease every edge toward the target, snapping to it once the tail of the ease
+ * has become too fine for the loop to publish.
+ *
+ * The frames the loop still has before it sleeps cover
+ * `1 - (1 - alpha) ** SETTLED_FRAMES_BEFORE_SLEEP` of whatever distance is
+ * left. Once that fraction of it falls under the publication threshold, every
+ * one of those frames sends nothing, the loop sleeps part-way through the ease,
+ * and the framing stays permanently short of the chrome that asked for it. So
+ * the snap is tied to the sleep rule rather than to a frame count of its own:
+ * it spends the remainder in one step the loop will publish. On the dt = 0
+ * frame after a wake nothing has moved yet, so only an ease that has genuinely
+ * arrived may snap.
+ */
+function easePadding(
+  from: maplibregl.PaddingOptions,
+  to: ResolvedPadding,
+  alpha: number,
+): ResolvedPadding {
+  const step = (a: number, b: number) => a + (b - a) * alpha;
+  const eased = {
+    top: step(from.top ?? 0, to.top),
+    bottom: step(from.bottom ?? 0, to.bottom),
+    left: step(from.left ?? 0, to.left),
+    right: step(from.right ?? 0, to.right),
+  };
+  const beforeSleep = 1 - (1 - alpha) ** SETTLED_FRAMES_BEFORE_SLEEP;
+  const snapWithin = alpha > 0 ? CAMERA_PADDING_EPSILON / beforeSleep : CAMERA_PADDING_EPSILON;
+  const settled =
+    Math.abs(eased.top - to.top) < snapWithin &&
+    Math.abs(eased.bottom - to.bottom) < snapWithin &&
+    Math.abs(eased.left - to.left) < snapWithin &&
+    Math.abs(eased.right - to.right) < snapWithin;
+  return settled ? { ...to } : eased;
 }
 
 /** Ease an angle (deg) toward a target along the shortest arc. */
@@ -161,6 +197,14 @@ export function useNavCamera(): void {
   // loop follows at their zoom instead of auto-zooming); and the time until
   // which a recent user camera gesture suspends the follow loop.
   const displayedZoomRef = useRef<number | null>(null);
+  // Eased camera padding, so a chrome change slides the framing instead of
+  // stepping it. null = "take whatever the map currently shows".
+  const displayedPaddingRef = useRef<ResolvedPadding | null>(null);
+  // Where that ease is heading. Resolving it measures the map container, and a
+  // frame has already written the puck's transform by then — reading layout
+  // there would force a reflow every frame. So it is cached until one of its
+  // inputs announces a change; null = "recompute on the next frame".
+  const paddingTargetRef = useRef<ResolvedPadding | null>(null);
   const userZoomedRef = useRef(false);
   const userCamActivityUntilRef = useRef(0);
   // True while a finger/mouse button is down on the map. The follow loop yields
@@ -237,6 +281,7 @@ export function useNavCamera(): void {
     lastPuckRef.current = null;
     lastCamRef.current = null;
     displayedZoomRef.current = null;
+    displayedPaddingRef.current = null;
     requestFrame();
   }, [route, requestFrame]);
 
@@ -271,17 +316,21 @@ export function useNavCamera(): void {
     const enterZoom = userZoomedRef.current
       ? map.getZoom()
       : Math.max(map.getZoom(), NAV_ENTER_ZOOM);
+    const enterPadding = getCameraPaddingTarget(map);
     map.easeTo(
       {
         zoom: enterZoom,
         pitch: PITCH[mode] ?? 0,
-        padding: followPadding(map),
-        duration: ENTER_EASE_MS,
+        padding: enterPadding,
+        duration: prefersReducedMotion() ? 0 : ENTER_EASE_MS,
       },
       { programmatic: true },
     );
-    // Seed the eased follow-zoom so the per-frame loop continues from here.
+    // Seed the eased follow-zoom and padding so the per-frame loop continues
+    // from here.
     displayedZoomRef.current = enterZoom;
+    displayedPaddingRef.current = enterPadding;
+    paddingTargetRef.current = enterPadding;
     settleUntilRef.current = performance.now() + SETTLE_MS;
     // Forget the published poses: a recenter or a mode change is a
     // discontinuity, and the first frame after the ease must draw it.
@@ -289,6 +338,23 @@ export function useNavCamera(): void {
     lastCamRef.current = null;
     requestFrame();
   }, [mapRef, active, cameraMode, mode, requestFrame]);
+
+  // Chrome moving under the map (a sheet detent, a rewrapped banner) changes
+  // the padding target; the next frame resolves it once and eases toward it.
+  // This subscription covers every input of that target, which is what lets the
+  // loop treat the cached one as good until told otherwise — so failing to bind
+  // it does not merely drop a wake, it freezes the framing for the whole trip.
+  // `styleVersion` is what announces a map: `mapRef` is a stable object, and a
+  // rebuilt map neither clears `mapReady` nor re-runs anything else here.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: styleVersion is the trigger for re-binding, not a value the body reads.
+  useEffect(() => {
+    const map = mapRef?.current;
+    if (!map || !active) return;
+    return subscribeCameraPaddingTarget(map, () => {
+      paddingTargetRef.current = null;
+      requestFrame();
+    });
+  }, [mapRef, active, requestFrame, styleVersion]);
 
   // Inputs the loop reads imperatively rather than through a dependency: they
   // change what the next frame would draw, so each needs an explicit wake.
@@ -332,6 +398,8 @@ export function useNavCamera(): void {
         if (attaching) {
           lastPuckRef.current = null;
           lastCamRef.current = null;
+          // A different container, so its measurements are not this map's.
+          paddingTargetRef.current = null;
         }
 
         const dt = lastFrameRef.current === null ? 0 : (now - lastFrameRef.current) / 1000;
@@ -388,6 +456,21 @@ export function useNavCamera(): void {
             displayedZoomRef.current = base + (targetZoomForSpeed(speed) - base) * zAlpha;
             zoom = displayedZoomRef.current;
           }
+          // The follow loop owns padding for as long as it owns the camera, so
+          // the sync component stays out and the two can't ease against each
+          // other.
+          let targetPadding = paddingTargetRef.current;
+          if (!targetPadding) {
+            targetPadding = getCameraPaddingTarget(map);
+            paddingTargetRef.current = targetPadding;
+          }
+          const pAlpha = 1 - Math.exp(-Math.max(dt, 0) / PADDING_TAU);
+          const padding = easePadding(
+            displayedPaddingRef.current ?? map.getPadding(),
+            targetPadding,
+            pAlpha,
+          );
+          displayedPaddingRef.current = padding;
           // North-up keeps the map oriented north (the puck still rotates to the
           // travel bearing); the default course-up rotates the map to it.
           const cameraBearing = useSettingsStore.getState().mapNorthUp ? 0 : brg;
@@ -396,11 +479,13 @@ export function useNavCamera(): void {
             lat: point[1],
             bearing: cameraBearing,
             zoom,
+            padding,
           };
           if (cameraPoseChanged(lastCamRef.current, camPose, commandZoom)) {
-            const camOpts: maplibregl.CameraOptions = {
+            const camOpts: maplibregl.JumpToOptions = {
               center: point as LngLat,
               bearing: cameraBearing,
+              padding,
             };
             if (commandZoom) camOpts.zoom = zoom;
             map.jumpTo(camOpts, { programmatic: true });
@@ -446,20 +531,22 @@ export function useNavCamera(): void {
     };
   }, [active, mapRef, requestFrame]);
 
-  // Hide the puck and release the follow padding when not actively navigating;
-  // also clear user-control state so the next trip starts in auto-follow.
+  // Hide the puck when not actively navigating, and clear user-control state so
+  // the next trip starts in auto-follow. The padding is left where it is: the
+  // sync component reconciles it against whatever chrome is now on screen.
   useEffect(() => {
     if (!active) {
       markerRef.current?.remove();
       markerMapRef.current = null;
       lastPuckRef.current = null;
       lastCamRef.current = null;
-      mapRef?.current?.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      displayedPaddingRef.current = null;
+      paddingTargetRef.current = null;
       userZoomedRef.current = false;
       userCamActivityUntilRef.current = 0;
       userInteractingRef.current = false;
     }
-  }, [active, mapRef]);
+  }, [active]);
 
   // Honour user camera gestures during navigation. A pan/rotate/pitch releases
   // follow (the recenter control resumes it); a zoom keeps following but hands

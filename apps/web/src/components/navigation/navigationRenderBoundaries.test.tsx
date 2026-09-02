@@ -533,7 +533,12 @@ describe("navigation render boundaries — arrival and resume roots", () => {
       useNavigationStore.getState().completeArrival();
     });
 
-    expect(renderCount("ArrivalCard")).toBe(1);
+    // Two passes, not one: the guidance banner carries the callback ref that
+    // holds the measured map obstruction, so unmounting it commits a second
+    // pass over the arrival branch. Arrival happens once per trip; what this
+    // guards is that no *fix* reaches the arrival root, which the two zeroes
+    // below still pin.
+    expect(renderCount("ArrivalCard")).toBe(2);
     expect(renderCount("ManeuverBanner")).toBe(0);
     expect(renderCount("NavBottomBar")).toBe(0);
   });

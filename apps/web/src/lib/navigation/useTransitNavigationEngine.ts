@@ -108,7 +108,7 @@ export function useTransitNavigationEngine(): void {
 
       // Follow the snapped position unless the user has released the camera
       // (e.g. via "Overview"); the MapControls recenter compass sets it back.
-      if (map && store.cameraMode !== "free") {
+      if (map && store.cameraMode === "follow") {
         map.easeTo(
           { center: tp.snapped, zoom: Math.max(map.getZoom(), 15), duration: 350 },
           { programmatic: true },

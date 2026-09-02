@@ -1,8 +1,10 @@
 import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, render } from "@testing-library/react";
+import { act, cleanup, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
+import { getMapObstructionInsets } from "@/lib/mapObstructions";
 import { CHANNEL_GLOBAL } from "@/lib/mobile/mobileShellEnvironment";
 
 const calls = { engine: 0, liveRefresh: [] as boolean[], wakeLock: [] as boolean[] };
@@ -113,5 +115,34 @@ describe("TransitNavigationView runtime ownership", () => {
 
     // The WebView remains the product UI; only the ownership moved.
     expect(view.container.textContent).not.toBe("");
+  });
+});
+
+describe("TransitNavigationView map coverage", () => {
+  afterEach(() => {
+    cleanup();
+    useNavigationStore.getState().stopNavigation();
+  });
+
+  // This view stays mounted for the whole session and renders nothing until a
+  // trip runs, so registering its column on `status === "arrived"` alone would
+  // reserve a column of map on every idle screen.
+  it("reserves the chrome column only once a transit trip is on screen", () => {
+    mount({});
+    expect(getMapObstructionInsets().left).toBe(0);
+    cleanup();
+
+    useNavigationStore.setState({ status: "navigating", kind: "transit", itinerary });
+    mount({});
+    expect(getMapObstructionInsets().left).toBe(NAV_LANDSCAPE_PANEL_WIDTH + 32);
+  });
+
+  it("releases the column on arrival, where only the floating card remains", () => {
+    useNavigationStore.setState({ status: "navigating", kind: "transit", itinerary });
+    mount({});
+    expect(getMapObstructionInsets().left).toBe(NAV_LANDSCAPE_PANEL_WIDTH + 32);
+
+    act(() => useNavigationStore.setState({ status: "arrived" }));
+    expect(getMapObstructionInsets().left).toBe(0);
   });
 });

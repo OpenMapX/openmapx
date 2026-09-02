@@ -1,3 +1,5 @@
+import type { PaddingOptions } from "maplibre-gl";
+
 /**
  * Visibility predicates for the navigation camera loop, kept pure and free of
  * MapLibre so the wake/sleep rule can be exercised without a map, a marker or a
@@ -28,6 +30,12 @@ export const CAMERA_LNGLAT_EPSILON = 1e-6;
 export const CAMERA_BEARING_EPSILON = 0.05;
 export const CAMERA_ZOOM_EPSILON = 0.004;
 /**
+ * Padding threshold. Padding shifts the whole projection, so it is measured in
+ * the same screen pixels the chrome that produced it is: half a pixel is the
+ * finest move that can land on a different device pixel.
+ */
+export const CAMERA_PADDING_EPSILON = 0.5;
+/**
  * Consecutive frames that must publish nothing before the loop sleeps. Two,
  * because the first frame after a wake runs with dt = 0 — the filters cannot
  * move on it, so a single settled frame is not evidence that the pose has
@@ -43,6 +51,7 @@ export interface PuckPose {
 
 export interface CameraPose extends PuckPose {
   zoom: number;
+  padding?: Required<PaddingOptions>;
 }
 
 /** Shortest angular distance between two bearings, degrees, always positive. */
@@ -73,6 +82,21 @@ export function puckPoseChanged(last: PuckPose | null, next: PuckPose): boolean 
   return poseChanged(last, next, PUCK_LNGLAT_EPSILON, PUCK_BEARING_EPSILON);
 }
 
+/** A pose that carries no padding leaves the map's padding alone, so it never counts as changed. */
+function paddingChanged(
+  last: Required<PaddingOptions> | undefined,
+  next: Required<PaddingOptions> | undefined,
+): boolean {
+  if (!next) return false;
+  if (!last) return true;
+  return (
+    Math.abs(next.top - last.top) > CAMERA_PADDING_EPSILON ||
+    Math.abs(next.bottom - last.bottom) > CAMERA_PADDING_EPSILON ||
+    Math.abs(next.left - last.left) > CAMERA_PADDING_EPSILON ||
+    Math.abs(next.right - last.right) > CAMERA_PADDING_EPSILON
+  );
+}
+
 /**
  * Whether a camera pose warrants another `jumpTo`. Zoom only participates while
  * the loop still commands zoom — once the user has taken zoom control the loop
@@ -84,6 +108,7 @@ export function cameraPoseChanged(
   commandsZoom: boolean,
 ): boolean {
   if (poseChanged(last, next, CAMERA_LNGLAT_EPSILON, CAMERA_BEARING_EPSILON)) return true;
+  if (paddingChanged(last?.padding, next.padding)) return true;
   return commandsZoom && !!last && Math.abs(next.zoom - last.zoom) > CAMERA_ZOOM_EPSILON;
 }
 

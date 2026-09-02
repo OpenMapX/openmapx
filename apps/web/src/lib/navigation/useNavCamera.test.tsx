@@ -76,6 +76,8 @@ vi.mock("maplibre-gl", () => {
 
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
+import type { ResolvedPadding } from "@/lib/cameraPadding";
+import { publishMapObstruction } from "@/lib/mapObstructions";
 import { createFakeMap, type FakeMap } from "@/test";
 import { useNavCamera } from "./useNavCamera";
 
@@ -336,6 +338,12 @@ async function mountNavCamera(options: { startNavigation?: boolean } = {}): Prom
     unmount: () => view.unmount(),
     rerender: () => view.rerender(),
   };
+}
+
+/** The padding carried by the most recent camera transform, if any. */
+function lastJumpPadding(fake: FakeMap): ResolvedPadding | undefined {
+  const jumps = fake.state.cameraTransitions.filter((t) => t.method === "jumpTo");
+  return jumps.at(-1)?.options.padding as ResolvedPadding | undefined;
 }
 
 function applyFix(alongMeters: number, speedMps = SPEED_MPS): void {
@@ -742,5 +750,144 @@ describe("useNavCamera camera ownership", () => {
 
     expect(fake.state.cameraTransitions.length).toBeGreaterThan(transitions);
     expect(fake.state.cameraTransitions.at(-1)?.method).toBe("jumpTo");
+  });
+
+  describe("camera padding", () => {
+    afterEach(() => {
+      publishMapObstruction("test-nav-column", "left", null);
+      publishMapObstruction("test-nav-sheet", "bottom", null);
+    });
+
+    it("enters follow with the obstruction insets plus the puck offset from the visible height", async () => {
+      publishMapObstruction("test-nav-column", "left", 432);
+      const { fake } = await mountNavCamera();
+      const enter = fake.state.cameraTransitions.find((t) => t.method === "easeTo");
+      expect(enter?.options.padding).toEqual({ top: 400, bottom: 0, left: 432, right: 0 });
+    });
+
+    it("eases the padding toward a new target inside the frame loop", async () => {
+      const harness = await mountNavCamera();
+      applyFix(START_ALONG);
+      harness.frames.flush(30);
+      act(() => publishMapObstruction("test-nav-sheet", "bottom", 200));
+      harness.frames.flush(90);
+      const jumps = harness.fake.state.cameraTransitions.filter((t) => t.method === "jumpTo");
+      expect(jumps.at(-1)?.options.padding).toEqual({ top: 300, bottom: 200, left: 0, right: 0 });
+      expect(harness.fake.state.padding).toEqual({ top: 300, bottom: 200, left: 0, right: 0 });
+    });
+
+    it("publishes intermediate padding on the way to a new target", async () => {
+      const harness = await mountNavCamera();
+      applyFix(START_ALONG);
+      harness.frames.flush(30);
+      act(() => publishMapObstruction("test-nav-sheet", "bottom", 200));
+      // Five frames in, a 0.2 s time constant is well short of the target: the
+      // camera has to show the journey, not the destination.
+      harness.frames.flush(5);
+      const padding = lastJumpPadding(harness.fake);
+      expect(padding?.bottom).toBeGreaterThan(0);
+      expect(padding?.bottom).toBeLessThan(200);
+      expect(padding?.top).toBeGreaterThan(300);
+      expect(padding?.top).toBeLessThan(400);
+    });
+
+    it("arrives exactly on a new target from a standing pose, however small the move", async () => {
+      const harness = await mountNavCamera();
+      // Hand zoom to the user first: the auto-zoom keeps creeping toward the
+      // standstill zoom long after the pose is still, and a frame it publishes
+      // would be indistinguishable from one the padding asked for.
+      act(() => harness.fake.emit("zoomstart", {}));
+      applyFix(START_ALONG, 0);
+      harness.frames.flush(1200);
+      expect(harness.frames.pending()).toBe(0);
+      let transitions = harness.fake.state.cameraTransitions.length;
+
+      // Chrome that moves by less than a pixel cannot move the target at all —
+      // it is resolved in whole pixels — so nothing reaches the camera.
+      act(() => publishMapObstruction("test-nav-column", "left", 0.4));
+      harness.frames.flush(60);
+      expect(harness.fake.state.cameraTransitions).toHaveLength(transitions);
+
+      // One pixel is worth publishing but not worth easing: every frame of an
+      // ease toward it would fall under the publication threshold, so it is
+      // spent in a single step that lands on the target rather than dying
+      // part-way there.
+      act(() => publishMapObstruction("test-nav-column", "left", 1));
+      harness.frames.flush(60);
+      expect(harness.fake.state.cameraTransitions).toHaveLength(transitions + 1);
+      expect(lastJumpPadding(harness.fake)).toEqual({ top: 400, bottom: 0, left: 1, right: 0 });
+      transitions = harness.fake.state.cameraTransitions.length;
+
+      // A move worth easing takes many frames and still arrives exactly.
+      act(() => publishMapObstruction("test-nav-column", "left", 432));
+      harness.frames.flush(90);
+      expect(harness.fake.state.cameraTransitions.length).toBeGreaterThan(transitions + 1);
+      expect(lastJumpPadding(harness.fake)).toEqual({ top: 400, bottom: 0, left: 432, right: 0 });
+    });
+
+    it("keeps following the padding of a map that arrived after the loop mounted", async () => {
+      const frames = createFrameHarness(CLOCK_START);
+      vi.stubGlobal("requestAnimationFrame", frames.request);
+      vi.stubGlobal("cancelAnimationFrame", frames.cancel);
+      vi.spyOn(performance, "now").mockImplementation(() => frames.now());
+      startRoute();
+      const view = renderHook(() => useNavCamera());
+
+      // A map that initialises late, or is rebuilt mid-trip, announces itself
+      // through styleVersion alone: mapRef is one stable object, and mapReady
+      // never goes back to false. Whatever binds to the map has to hear that,
+      // or the padding target it cached is the last one this trip ever sees.
+      const fake = createFakeMap({ zoom: 10 });
+      mapContextTest.mapRef.current = fake.map;
+      mapContextTest.mapReady = true;
+      mapContextTest.styleVersion = 1;
+      await act(async () => {
+        view.rerender();
+        await Promise.resolve();
+      });
+
+      applyFix(START_ALONG);
+      frames.flush(60, FRAME_MS);
+      act(() => publishMapObstruction("test-nav-sheet", "bottom", 200));
+      frames.flush(120, FRAME_MS);
+
+      expect(lastJumpPadding(fake)).toEqual({ top: 300, bottom: 200, left: 0, right: 0 });
+      view.unmount();
+    });
+
+    it("resolves the padding target once per change instead of measuring every frame", async () => {
+      const harness = await mountNavCamera();
+      applyFix(START_ALONG);
+      // Past the first frame: attaching the marker invalidates the seed the
+      // enter-follow ease left, so every trip measures once from inside the
+      // loop and the spy below would count that too.
+      harness.frames.flush(60);
+
+      // Resolving the target is the loop's only container measurement, and the
+      // frame has already moved the puck by the time it would run — measuring
+      // per frame would force a layout in the hottest loop in the app.
+      const map = harness.fake.map as unknown as { getContainer: () => unknown };
+      const measure = map.getContainer.bind(map);
+      let measurements = 0;
+      map.getContainer = () => {
+        measurements += 1;
+        return measure();
+      };
+
+      harness.frames.flush(60);
+      expect(measurements).toBe(0);
+
+      act(() => publishMapObstruction("test-nav-sheet", "bottom", 200));
+      harness.frames.flush(60);
+      expect(measurements).toBe(1);
+    });
+
+    it("leaves the padding for the sync component when navigation ends", async () => {
+      const harness = await mountNavCamera();
+      act(() => useNavigationStore.getState().stopNavigation());
+      expect(harness.fake.state.cameraTransitions.some((t) => t.method === "setPadding")).toBe(
+        false,
+      );
+    });
   });
 });

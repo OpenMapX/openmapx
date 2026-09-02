@@ -17,6 +17,7 @@ import { useMapOptional } from "@/integration-api/map/MapContext";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
+import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
 import { useTransitLiveRefresh } from "@/lib/navigation/useTransitLiveRefresh";
 import { useTransitNavigationEngine } from "@/lib/navigation/useTransitNavigationEngine";
 import { useWakeLock } from "@/lib/useWakeLock";
@@ -65,6 +66,11 @@ export function TransitNavigationView() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
 
+  // This view is mounted for the whole session and renders nothing until a
+  // transit trip runs, so an idle mount must not reserve the column either.
+  const [bannerEl, setBannerEl] = useState<HTMLDivElement | null>(null);
+  useNavChromeObstructions("transit", { isMobile, arrived: !active || !itinerary, bannerEl });
+
   // Collapse the route-planning sidebar while navigating; restore on exit.
   useEffect(() => {
     if (!active) return;
@@ -88,9 +94,9 @@ export function TransitNavigationView() {
     currentLeg.steps.length > 0;
 
   // Release the follow camera and frame the whole itinerary. The MapControls
-  // recenter compass (shown while cameraMode === "free") resumes following.
+  // recenter compass (shown whenever the camera is not following) resumes it.
   const handleOverview = () => {
-    setCameraMode("free");
+    setCameraMode("overview");
     const coords = legs.flatMap((l) => l.geometry?.coordinates ?? []);
     if (!mapCtx || coords.length < 2) return;
     const box = geoJsonBBox({ type: "LineString", coordinates: coords } as GeoJSON.LineString);
@@ -140,6 +146,7 @@ export function TransitNavigationView() {
       ) : (
         <>
           <Box
+            ref={setBannerEl}
             sx={{
               pointerEvents: "auto",
               display: "flex",

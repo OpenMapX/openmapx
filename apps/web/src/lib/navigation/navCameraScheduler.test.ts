@@ -79,6 +79,31 @@ describe("cameraPoseChanged", () => {
   });
 });
 
+describe("cameraPoseChanged with padding", () => {
+  const base = { lng: 0, lat: 0, bearing: 0, zoom: 16 };
+  const p = (top: number, bottom = 0, left = 0, right = 0) => ({ top, bottom, left, right });
+  it("publishes when padding moves by more than half a pixel and not otherwise", () => {
+    expect(
+      cameraPoseChanged({ ...base, padding: p(100) }, { ...base, padding: p(100.4) }, false),
+    ).toBe(false);
+    expect(
+      cameraPoseChanged({ ...base, padding: p(100) }, { ...base, padding: p(101) }, false),
+    ).toBe(true);
+    expect(cameraPoseChanged({ ...base }, { ...base, padding: p(1) }, false)).toBe(true);
+  });
+
+  it("watches all four edges", () => {
+    const last = { ...base, padding: p(100, 80, 60, 40) };
+    expect(cameraPoseChanged(last, { ...base, padding: p(101, 80, 60, 40) }, false)).toBe(true);
+    expect(cameraPoseChanged(last, { ...base, padding: p(100, 81, 60, 40) }, false)).toBe(true);
+    expect(cameraPoseChanged(last, { ...base, padding: p(100, 80, 61, 40) }, false)).toBe(true);
+    expect(cameraPoseChanged(last, { ...base, padding: p(100, 80, 60, 41) }, false)).toBe(true);
+    expect(cameraPoseChanged(last, { ...base, padding: p(100.4, 80.4, 60.4, 40.4) }, false)).toBe(
+      false,
+    );
+  });
+});
+
 describe("shouldKeepAnimating", () => {
   const frame = (over: Partial<Parameters<typeof shouldKeepAnimating>[0]> = {}) =>
     shouldKeepAnimating({

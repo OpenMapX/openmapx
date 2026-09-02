@@ -154,10 +154,11 @@ export function MapControls() {
         {/* Street-level imagery pegman is irrelevant during turn-by-turn navigation. */}
         {!navigating && <Pegman />}
 
-        {/* Compass — while navigating it appears only when the user has panned
-          off-track and recenters/resumes tracking; otherwise it resets bearing
-          and is only visible when the map is rotated. */}
-        {(navigating ? navCameraMode === "free" : Math.abs(bearing) > 0.5 || pitch > 0.5) && (
+        {/* Compass — while navigating it appears whenever the camera has left
+          follow (a pan off-track, or the route overview) and recenters/resumes
+          tracking; otherwise it resets bearing and is only visible when the map
+          is rotated. */}
+        {(navigating ? navCameraMode !== "follow" : Math.abs(bearing) > 0.5 || pitch > 0.5) && (
           <Tooltip title={navigating ? tNav("recenter") : t("resetBearing")} placement="left">
             <Paper elevation={2} sx={{ borderRadius: "50%", overflow: "hidden" }}>
               <IconButton
