@@ -76,6 +76,16 @@
           }
         }
       }
+    },
+    {
+      "includes": ["integrations/overlay-tool-travel-time/transit-field-layer.ts"],
+      "linter": {
+        "rules": {
+          "correctness": {
+            "useHookAtTopLevel": "off"
+          }
+        }
+      }
     }
   ],
   "javascript": {
