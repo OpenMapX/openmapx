@@ -5,7 +5,6 @@ import { IntegrationRegistryContext } from "@openmapx/integration-framework/reac
 import { renderHook } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import type { StreetGridAlignment } from "@/lib/streetGrid";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -14,10 +13,7 @@ vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 const mapCtx = vi.hoisted(() => ({ current: null as { resetBearing: () => void } | null }));
 vi.mock("@/integration-api/map/MapContext", () => ({ useMapOptional: () => mapCtx.current }));
 
-const alignState = vi.hoisted(() => ({
-  available: true,
-  align: vi.fn((): StreetGridAlignment["status"] => "ok"),
-}));
+const alignState = vi.hoisted(() => ({ available: true, align: vi.fn() }));
 vi.mock("@/lib/useAlignToStreets", () => ({ useAlignToStreets: () => alignState }));
 
 const toggleOverlayMock = vi.fn();

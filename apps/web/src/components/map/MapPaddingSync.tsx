@@ -13,6 +13,7 @@ import {
 import {
   getCameraPaddingTarget,
   paddingEquals,
+  type ResolvedPadding,
   subscribeCameraPaddingTarget,
 } from "@/lib/cameraPadding";
 import { type MapEdge, publishMapObstruction } from "@/lib/mapObstructions";
@@ -75,10 +76,15 @@ function useSafeAreaObstructions(probe: HTMLDivElement | null) {
  * the camera.
  */
 export function MapPaddingSync() {
-  const { mapRef, mapReady } = useMap();
+  const { mapRef, mapReady, styleVersion } = useMap();
   const [probe, setProbe] = useState<HTMLDivElement | null>(null);
   useSafeAreaObstructions(probe);
 
+  // `styleVersion` is what announces a map: `mapRef` is a stable object, and a
+  // rebuilt map neither clears `mapReady` nor re-runs anything else here, so
+  // without it the listeners below stay bound to the removed one and every
+  // later panel change silently frames nothing.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: styleVersion is the trigger for re-binding, not a value the body reads.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
@@ -89,20 +95,38 @@ export function MapPaddingSync() {
     let pointerDown = false;
     let foreignMoving = false;
     let evaluated = false;
+    /**
+     * The next application jumps rather than eases (a window resize). Consumed
+     * by whichever evaluation accounts for that resize, including one that
+     * finds the target already on the map — left set there, it would make the
+     * next ordinary panel change jump too.
+     */
     let instantNext = false;
+    /** Where this sync's own padding ease is headed, while it runs. */
+    let easingTo: ResolvedPadding | null = null;
 
     const apply = () => {
       scheduled = false;
+      // Resolving a target measures the container, and during ground follow the
+      // answer is thrown away: `useNavCamera` owns the padding outright there,
+      // and publishes a camera every frame, each one re-entering here.
+      if (followCameraOwnsPadding()) return;
       // The first evaluation after the map is ready jumps; nothing is on screen
       // yet that an ease could be seen against.
       const firstEvaluation = !evaluated;
       evaluated = true;
       const target = getCameraPaddingTarget(map);
-      if (paddingEquals(target, map.getPadding())) return;
-      if (followCameraOwnsPadding()) return;
+      // Mid-ease the map does not carry the target yet, so the comparison is
+      // against where the ease is headed: it runs to its end untouched, and
+      // only a target that moved under it starts a new one.
+      if (paddingEquals(target, easingTo ?? map.getPadding())) {
+        instantNext = false;
+        return;
+      }
       if (userMoving || pointerDown) return;
       const request = activeCameraRequest(map);
       if (request) {
+        instantNext = false;
         if (!paddingEquals(request.padding, target)) retargetCameraRequest(map, request, target);
         return;
       }
@@ -115,8 +139,14 @@ export function MapPaddingSync() {
       instantNext = false;
       const eventData = { programmatic: true, paddingSync: true };
       try {
-        if (instant) map.setPadding(target, eventData);
-        else map.easeTo({ padding: target, duration: PADDING_EASE_MS }, eventData);
+        if (instant) {
+          map.setPadding(target, eventData);
+          return;
+        }
+        map.easeTo({ padding: target, duration: PADDING_EASE_MS }, eventData);
+        // Recorded once the call returns: starting the ease stops whatever was
+        // running and fires a synchronous `moveend`, whose handler clears this.
+        easingTo = target;
       } catch {
         // A map removed mid-frame; the next target change tries again.
       }
@@ -141,6 +171,7 @@ export function MapPaddingSync() {
     const onMoveEnd = () => {
       userMoving = false;
       foreignMoving = false;
+      easingTo = null;
       clearCameraRequest(map);
       schedule();
     };
@@ -180,7 +211,7 @@ export function MapPaddingSync() {
       map.off("resize", onResize);
       if (scheduled) cancelAnimationFrame(frame);
     };
-  }, [mapRef, mapReady]);
+  }, [mapRef, mapReady, styleVersion]);
 
   return (
     <div

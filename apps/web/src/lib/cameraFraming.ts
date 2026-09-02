@@ -12,6 +12,12 @@ const RETARGET_FRESH_MS = 100;
 const RETARGET_MIN_MS = 300;
 /** How long past its own duration a request stays worth retargeting. */
 const REQUEST_STALE_SLACK_MS = 100;
+/**
+ * An instant request has no duration to age against, so it carries its own
+ * window: long enough for chrome opening alongside the framing to register and
+ * be framed against, short enough that a panel opened later re-frames nothing.
+ */
+const INSTANT_REQUEST_WINDOW_MS = 300;
 
 const REQUEST_EVENT_DATA = { programmatic: true, cameraRequest: true };
 
@@ -140,12 +146,17 @@ function framingState(map: maplibregl.Map): FramingState {
   return created;
 }
 
-/** The framing request still animating on `map`, or null. */
+function retargetWindow(request: CameraRequest): number {
+  if (request.duration === 0) return INSTANT_REQUEST_WINDOW_MS;
+  return request.duration + REQUEST_STALE_SLACK_MS;
+}
+
+/** The framing request still worth retargeting on `map`, or null. */
 export function activeCameraRequest(map: maplibregl.Map): CameraRequest | null {
   const state = framingStates.get(map);
   const request = state?.request;
   if (!state || !request) return null;
-  if (performance.now() - request.startedAt > request.duration + REQUEST_STALE_SLACK_MS) {
+  if (performance.now() - request.startedAt > retargetWindow(request)) {
     state.request = null;
     return null;
   }
@@ -177,11 +188,14 @@ export function issueCameraRequest(
   const state = framingState(map);
   const options = compact({ ...camera, padding: request.padding });
   if (request.duration === 0) {
-    state.request = null;
     // Stamped first: `jumpTo` fires `moveend` synchronously, and the padding
     // sync reads this while handling it.
     state.lastInstantAt = performance.now();
     map.jumpTo(options, REQUEST_EVENT_DATA);
+    // Kept on record like a timed request, and for the same reason: chrome
+    // registering just after the jump has to re-frame these bounds against the
+    // new visible strip, not merely shift where the centre is drawn.
+    state.request = request;
     return;
   }
   const animation = { ...options, duration: request.duration };
@@ -198,6 +212,14 @@ export function retargetCameraRequest(
   request: CameraRequest,
   padding: ResolvedPadding,
 ): void {
+  // An instant framing re-frames instantly, however late: the caller asked for
+  // no animation. Its original `startedAt` rides along, so the retargetable
+  // window closes on the framing itself instead of being pushed out by each
+  // retarget.
+  if (request.duration === 0) {
+    issueCameraRequest(map, { ...request, padding });
+    return;
+  }
   const now = performance.now();
   const elapsed = now - request.startedAt;
   if (elapsed < RETARGET_FRESH_MS) {

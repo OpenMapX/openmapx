@@ -270,7 +270,7 @@ export default function StreetLevelViewerInner() {
         <div ref={containerRef} style={{ width: "100%", height: "100%" }} />
       )}
 
-      <SearchBar />
+      <SearchBar surface="street-level" />
 
       {failed && (
         <Typography

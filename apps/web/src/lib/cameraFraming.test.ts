@@ -221,6 +221,31 @@ describe("instant framing", () => {
       eventData: { programmatic: true, cameraRequest: true },
     });
     expect(lastInstantRequestAt(fake.map)).toBe(2000);
+  });
+
+  it("keeps an instant request retargetable for a bounded window", () => {
+    const fake = createFakeMap({ containerWidth: 1200, containerHeight: 800 });
+    vi.spyOn(performance, "now").mockReturnValue(2000);
+    frameBoundsInstant(fake.map, [
+      [0, 0],
+      [2, 2],
+    ]);
+    const request = activeCameraRequest(fake.map);
+    if (!request) throw new Error("no instant request on record");
+
+    vi.spyOn(performance, "now").mockReturnValue(2200);
+    retargetCameraRequest(fake.map, request, { top: 0, bottom: 0, left: 400, right: 0 });
+    // Still instant, and re-fitted rather than merely re-centred: the caller
+    // asked for no animation, and a late retarget must not invent one.
+    expect(fake.state.cameraTransitions.at(-1)).toMatchObject({
+      method: "jumpTo",
+      options: { center: [1, 1], padding: { left: 400 } },
+    });
+    expect(fake.state.cameraForBoundsCalls).toHaveLength(2);
+
+    // The window runs from the original framing, so a chain of retargets cannot
+    // keep a long-finished one alive.
+    vi.spyOn(performance, "now").mockReturnValue(2301);
     expect(activeCameraRequest(fake.map)).toBeNull();
   });
 

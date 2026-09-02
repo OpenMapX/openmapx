@@ -52,7 +52,6 @@ interface VitestExpectation {
   toHaveProperty(property: string | readonly string[], value?: unknown): void;
   toEqual(expected: unknown): void;
   toMatchObject(expected: unknown): void;
-  toHaveProperty(key: string, value?: unknown): void;
   toHaveBeenCalled(): void;
   toHaveBeenCalledTimes(times: number): void;
   toHaveBeenCalledWith(...args: unknown[]): void;

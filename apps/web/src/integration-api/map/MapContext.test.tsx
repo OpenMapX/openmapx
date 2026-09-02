@@ -108,7 +108,22 @@ describe("MapContext camera wrappers", () => {
     expect(last(fake)?.method).toBe("jumpTo");
     expect(last(fake)?.options).not.toHaveProperty("duration");
     expect(lastInstantRequestAt(fake.map)).toBe(1000);
-    expect(activeCameraRequest(fake.map)).toBeNull();
+    // Recorded like any other, so chrome opening alongside it can still be
+    // framed against — instantly.
+    expect(activeCameraRequest(fake.map)).toMatchObject({ kind: "flyTo", duration: 0 });
+  });
+
+  it("fits instantly under reduced motion, so callers never ask for that themselves", () => {
+    reduced.current = true;
+    const { fake, ctx } = setup();
+    act(() =>
+      ctx().fitBounds([
+        [0, 0],
+        [2, 2],
+      ]),
+    );
+    expect(last(fake)?.method).toBe("jumpTo");
+    expect(last(fake)?.options).not.toHaveProperty("duration");
   });
 
   it("queues flyTo until the map is ready and drains it as an instant jump with padding", () => {

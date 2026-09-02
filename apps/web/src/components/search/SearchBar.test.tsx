@@ -622,4 +622,20 @@ describe("SearchBar map obstruction", () => {
     fireEvent.focus(screen.getByLabelText("search.ariaLabel"));
     expect(getMapObstructionInsets().top).toBe(0);
   });
+
+  it("leaves the map bar's registration alone from another surface", () => {
+    useMediaQueryMock.mockReturnValue(true);
+    renderBar();
+    expect(getMapObstructionInsets().top).toBe(BAR_BOTTOM);
+
+    // The street-level viewer covers the map outright, so its bar registers
+    // nothing — and, sharing the registry with the page's bar, must not take
+    // that one's entry with it when it goes.
+    const viewerBar = render(<SearchBar surface="street-level" />, {
+      wrapper: createQueryWrapper(),
+    });
+    expect(getMapObstructionInsets().top).toBe(BAR_BOTTOM);
+    viewerBar.unmount();
+    expect(getMapObstructionInsets().top).toBe(BAR_BOTTOM);
+  });
 });

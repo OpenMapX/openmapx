@@ -1,8 +1,10 @@
 "use client";
 
 import { useMapStore, useNavigationStore } from "@openmapx/core";
+import { useTranslations } from "next-intl";
 import { useCallback, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
+import { alignRefusalKey, announceAlign } from "./alignAnnouncement";
 import { prefersReducedMotion } from "./reducedMotion";
 import {
   ALIGN_MIN_ZOOM,
@@ -19,20 +21,29 @@ const ALIGN_EASE_MS = 300;
  */
 const ALIGN_MEMO_MS = 1000;
 
-/** Rotates the map so the local street grid runs up and down the screen. */
-export function useAlignToStreets(): {
-  available: boolean;
-  align: () => StreetGridAlignment["status"];
-} {
+/**
+ * Rotates the map so the local street grid runs up and down the screen, and
+ * publishes what to say when it cannot — so every caller surfaces the same
+ * words without choosing them.
+ */
+export function useAlignToStreets(): { available: boolean; align: () => void } {
+  const t = useTranslations("map");
   const ctx = useMapOptional();
   const zoom = useMapStore((s) => s.zoom);
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const memo = useRef<{ key: string; at: number; result: StreetGridAlignment } | null>(null);
   const styleVersion = ctx?.styleVersion ?? 0;
 
-  const align = useCallback((): StreetGridAlignment["status"] => {
+  const align = useCallback((): void => {
+    const announce = (status: StreetGridAlignment["status"]) => {
+      const refusal = alignRefusalKey(status);
+      if (refusal) announceAlign(t(refusal));
+    };
     const map = ctx?.mapRef.current;
-    if (!map) return "no-grid";
+    if (!map) {
+      announce("no-grid");
+      return;
+    }
     const key = alignmentCacheKey(map, styleVersion);
     const now = Date.now();
     const cached =
@@ -47,8 +58,8 @@ export function useAlignToStreets(): {
         { programmatic: true },
       );
     }
-    return result.status;
-  }, [ctx, styleVersion]);
+    announce(result.status);
+  }, [ctx, styleVersion, t]);
 
   return { available: Boolean(ctx) && !navigating && zoom >= ALIGN_MIN_ZOOM, align };
 }

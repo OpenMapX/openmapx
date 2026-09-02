@@ -82,6 +82,12 @@ export interface FakeMap {
   setRenderedFeatures(layerId: string, features: MapGeoJSONFeature[]): void;
   /** Attribution strings of all registered sources (what the control shows). */
   registeredAttributions(): string[];
+  /**
+   * Ends the animated transition in flight: lands its camera and, under
+   * `emitCameraEvents`, fires the `moveend` that closes it. Only an animation
+   * held back by `deferAnimatedCamera` has anything to land.
+   */
+  settleCameraAnimation(): void;
 }
 
 export interface CreateFakeMapOptions {
@@ -117,6 +123,14 @@ export interface CreateFakeMapOptions {
    * most consumers only read `cameraTransitions` and would see new events.
    */
   emitCameraEvents?: boolean;
+  /**
+   * Hold an animated transition's camera back until the animation ends, the
+   * way `easeTo`/`flyTo` reach their target over a duration rather than the
+   * instant the call returns. `settleCameraAnimation()` lands it; another
+   * camera call stops it where it stood. Off by default, since most consumers
+   * read the camera back straight after asking for it.
+   */
+  deferAnimatedCamera?: boolean;
 }
 
 export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
@@ -169,19 +183,31 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
   for (const layer of baseLayers) state.layers.set(layer.id, { ...layer });
 
   const emitCameraEvents = options.emitCameraEvents ?? false;
-  let animating: { eventData?: Record<string, unknown> } | null = null;
+  const deferAnimatedCamera = options.deferAnimatedCamera ?? false;
+  let animating: {
+    eventData?: Record<string, unknown>;
+    options: Record<string, unknown>;
+  } | null = null;
 
   const stopAnimation = () => {
-    if (!emitCameraEvents || !animating) return;
+    if (!animating) return;
     const { eventData } = animating;
     animating = null;
-    api.emit("moveend", eventData ?? {});
+    // The camera stays where the stopped animation left it, which under
+    // `deferAnimatedCamera` is where it started.
+    if (emitCameraEvents) api.emit("moveend", eventData ?? {});
   };
-  const startMove = (eventData: Record<string, unknown> | undefined, animated: boolean) => {
+  const startMove = (
+    eventData: Record<string, unknown> | undefined,
+    animated: boolean,
+    cameraOptions: Record<string, unknown>,
+  ) => {
+    if (animated && (emitCameraEvents || deferAnimatedCamera)) {
+      animating = { eventData, options: cameraOptions };
+    }
     if (!emitCameraEvents) return;
     api.emit("movestart", eventData ?? {});
-    if (animated) animating = { eventData };
-    else api.emit("moveend", eventData ?? {});
+    if (!animated) api.emit("moveend", eventData ?? {});
   };
 
   // Camera transitions move the state a caller can read back. Centre, pitch and
@@ -380,7 +406,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
         right: padding.right ?? 0,
       };
       state.cameraTransitions.push({ method: "setPadding", options: padding, eventData });
-      startMove(eventData, false);
+      startMove(eventData, false, padding);
     },
     isMoving: () => state.moving,
     getContainer: () => container,
@@ -411,20 +437,20 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     flyTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
       stopAnimation();
       state.cameraTransitions.push({ method: "flyTo", options, eventData });
-      applyCamera(options);
-      startMove(eventData, true);
+      if (!deferAnimatedCamera) applyCamera(options);
+      startMove(eventData, true, options);
     },
     easeTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
       stopAnimation();
       state.cameraTransitions.push({ method: "easeTo", options, eventData });
-      applyCamera(options);
-      startMove(eventData, true);
+      if (!deferAnimatedCamera) applyCamera(options);
+      startMove(eventData, true, options);
     },
     jumpTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {
       stopAnimation();
       state.cameraTransitions.push({ method: "jumpTo", options, eventData });
       applyCamera(options);
-      startMove(eventData, false);
+      startMove(eventData, false, options);
     },
     fitBounds: (
       bounds: unknown,
@@ -453,6 +479,13 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     },
     registeredAttributions() {
       return [...state.sources.values()].map((s) => (s.attribution as string | undefined) ?? "");
+    },
+    settleCameraAnimation() {
+      const pending = animating;
+      if (!pending) return;
+      animating = null;
+      applyCamera(pending.options);
+      if (emitCameraEvents) api.emit("moveend", pending.eventData ?? {});
     },
   };
   return api;

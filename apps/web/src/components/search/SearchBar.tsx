@@ -102,7 +102,24 @@ import { VoiceSearchButton } from "./VoiceSearchButton";
  *  re-parse it on every SearchBar render. */
 const PALETTE_SHORTCUT = parseShortcut("Mod+K");
 
-export function SearchBar() {
+/** Which surface a bar sits on; more than one can be mounted at a time. */
+export type SearchBarSurface = "map" | "street-level";
+
+/**
+ * The map-obstruction registry is keyed by id alone, so each surface needs its
+ * own — otherwise the second bar to mount overwrites the first's entry and
+ * either one's unmount deletes it.
+ */
+const OBSTRUCTION_ID: Record<SearchBarSurface, string> = {
+  map: "search-bar",
+  "street-level": "street-level-search-bar",
+};
+
+export interface SearchBarProps {
+  surface?: SearchBarSurface;
+}
+
+export function SearchBar({ surface = "map" }: SearchBarProps) {
   const t = useTranslations("search");
   const tSaved = useTranslations("saved");
   const tCmd = useTranslations("commandPalette");
@@ -515,8 +532,13 @@ export function SearchBar() {
 
   // Desktop keeps the bar inside the rail's column, which is already registered
   // as an obstruction; a full-screen search covers the map entirely, and
-  // framing against that would leave nothing to aim at.
-  useMeasuredMapObstruction("search-bar", "top", isMobile && !fullScreen ? barEl : null);
+  // framing against that would leave nothing to aim at. The street-level viewer
+  // covers it just as completely, so the bar riding on it registers nothing.
+  useMeasuredMapObstruction(
+    OBSTRUCTION_ID[surface],
+    "top",
+    surface === "map" && isMobile && !fullScreen ? barEl : null,
+  );
 
   if (directionsOpen) return null;
 

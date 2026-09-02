@@ -3,6 +3,8 @@ import { act, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createFakeMap, type FakeMap } from "@/test";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+
 const reduced = { current: false };
 vi.mock("@/lib/reducedMotion", () => ({ prefersReducedMotion: () => reduced.current }));
 
@@ -15,6 +17,7 @@ vi.mock("./streetGrid", async () => ({
   computeStreetGridAlignment: (...args: unknown[]) => compute(...args),
 }));
 
+import { clearAlignAnnouncement, useAlignAnnouncement } from "./alignAnnouncement";
 import { useAlignToStreets } from "./useAlignToStreets";
 
 describe("useAlignToStreets", () => {
@@ -27,6 +30,7 @@ describe("useAlignToStreets", () => {
   });
   afterEach(() => {
     vi.useRealTimers();
+    clearAlignAnnouncement();
     useMapStore.setState({ zoom: 2 });
     useNavigationStore.setState({ status: "idle" });
   });
@@ -46,11 +50,9 @@ describe("useAlignToStreets", () => {
   it("eases to the computed bearing programmatically and memoises per camera key", () => {
     compute.mockReturnValue({ status: "ok", bearing: 30 });
     const { result } = renderHook(() => useAlignToStreets());
-    let status: string | undefined;
     act(() => {
-      status = result.current.align();
+      result.current.align();
     });
-    expect(status).toBe("ok");
     expect(fake.state.cameraTransitions.at(-1)).toMatchObject({
       method: "easeTo",
       options: { bearing: 30, duration: 300 },
@@ -85,10 +87,13 @@ describe("useAlignToStreets", () => {
     expect(compute).toHaveBeenCalledTimes(2);
   });
 
-  it("jumps under reduced motion and reports non-ok statuses without moving", () => {
+  it("jumps under reduced motion and reports non-ok outcomes without moving", () => {
     reduced.current = true;
     compute.mockReturnValue({ status: "ok", bearing: 30 });
-    const { result } = renderHook(() => useAlignToStreets());
+    const { result } = renderHook(() => ({
+      align: useAlignToStreets().align,
+      announcement: useAlignAnnouncement(),
+    }));
     act(() => {
       result.current.align();
     });
@@ -99,11 +104,38 @@ describe("useAlignToStreets", () => {
     reduced.current = false;
     compute.mockReturnValue({ status: "no-grid" });
     fake.state.bearing = 5;
-    let status: string | undefined;
     act(() => {
-      status = result.current.align();
+      result.current.align();
     });
-    expect(status).toBe("no-grid");
+    expect(result.current.announcement?.text).toBe("map.alignNoGrid");
     expect(fake.state.cameraTransitions).toHaveLength(1);
+  });
+
+  it.each([
+    ["no-grid", "map.alignNoGrid"],
+    ["zoomed-out", "map.alignZoomIn"],
+    ["aligned", "map.alignAlready"],
+  ] as const)("announces %s for whoever asked to align", (status, message) => {
+    compute.mockReturnValue({ status });
+    const { result } = renderHook(() => ({
+      align: useAlignToStreets().align,
+      announcement: useAlignAnnouncement(),
+    }));
+    act(() => {
+      result.current.align();
+    });
+    expect(result.current.announcement?.text).toBe(message);
+  });
+
+  it("stays silent when the map rotates", () => {
+    compute.mockReturnValue({ status: "ok", bearing: 30 });
+    const { result } = renderHook(() => ({
+      align: useAlignToStreets().align,
+      announcement: useAlignAnnouncement(),
+    }));
+    act(() => {
+      result.current.align();
+    });
+    expect(result.current.announcement).toBeNull();
   });
 });

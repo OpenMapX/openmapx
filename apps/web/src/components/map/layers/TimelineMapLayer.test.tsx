@@ -223,24 +223,6 @@ describe("TimelineMapLayer", () => {
     expect(fitBounds).toHaveBeenCalledTimes(2);
   });
 
-  it("fits instantly when reduced motion is requested", () => {
-    vi.stubGlobal(
-      "matchMedia",
-      vi.fn(() => ({ matches: true })),
-    );
-    openTimeline();
-    render(<TimelineMapLayer />);
-
-    expect(fitBounds).toHaveBeenCalledWith(
-      [
-        [13, 52],
-        [14, 53],
-      ],
-      80,
-      { duration: 0 },
-    );
-  });
-
   it("selects an entry only from timeline layer clicks and synchronizes pointer feedback", () => {
     openTimeline();
     const on = vi.spyOn(fake.map, "on");

@@ -301,6 +301,8 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
           label: t("cmdAlignToStreets"),
           iconKey: "align-streets",
           run: () => {
+            // An outcome worth explaining is announced by the hook and shown by
+            // the map chrome, so asking from here reads the same as the button.
             align();
           },
         });

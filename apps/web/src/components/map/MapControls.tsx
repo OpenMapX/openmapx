@@ -15,9 +15,10 @@ import Tooltip from "@mui/material/Tooltip";
 import { useMapStore, useNavigationStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
-import { Suspense, useState } from "react";
+import { Suspense } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
 import { useMap } from "@/integration-api/map/MapContext";
+import { clearAlignAnnouncement, useAlignAnnouncement } from "@/lib/alignAnnouncement";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { useAlignToStreets } from "@/lib/useAlignToStreets";
@@ -58,19 +59,9 @@ export function MapControls() {
   const pitch = useMapStore((s) => s.pitch);
   const handleMyLocation = useMyLocation();
   const { available: alignAvailable, align } = useAlignToStreets();
-  const [alignMessage, setAlignMessage] = useState<{ text: string; seq: number } | null>(null);
-  // The counter makes a repeat of the same words a new value: asking twice has
-  // to re-announce and restart the toast, and identical state would do neither.
-  const showAlignMessage = (text: string) =>
-    setAlignMessage((previous) => ({ text, seq: (previous?.seq ?? 0) + 1 }));
-  // A refusal is the interesting outcome: a rotation is self-evident on screen,
-  // but nothing moving needs a reason.
-  const handleAlign = () => {
-    const status = align();
-    if (status === "no-grid") showAlignMessage(t("alignNoGrid"));
-    else if (status === "zoomed-out") showAlignMessage(t("alignZoomIn"));
-    else if (status === "aligned") showAlignMessage(t("alignAlready"));
-  };
+  // The hook picks the words; this is simply the surface that shows them, for
+  // every way of asking — the button below, or the command palette.
+  const alignMessage = useAlignAnnouncement();
   const registry = useIntegrationRegistry();
   const crowdReportsEnabled = Boolean(registry.get("crowd-reports"));
   const vh = useWindowHeight();
@@ -191,7 +182,7 @@ export function MapControls() {
             <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
               <IconButton
                 size="small"
-                onClick={handleAlign}
+                onClick={align}
                 sx={{ width: 36, height: 36 }}
                 aria-label={t("alignToStreetsAriaLabel")}
               >
@@ -234,7 +225,7 @@ export function MapControls() {
         key={alignMessage?.seq}
         open={alignMessage !== null}
         autoHideDuration={2500}
-        onClose={() => setAlignMessage(null)}
+        onClose={clearAlignAnnouncement}
         message={alignMessage?.text}
         slotProps={{ content: { role: "presentation" } }}
         anchorOrigin={{ vertical: "bottom", horizontal: "center" }}
