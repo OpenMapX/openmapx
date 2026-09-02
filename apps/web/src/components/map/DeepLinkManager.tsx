@@ -61,6 +61,7 @@ import type { TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { frameBoundsInstant, jumpToView } from "@/lib/cameraFraming";
 import {
   DEEPLINK_UPDATE_EVENT,
   formatBboxParam,
@@ -202,13 +203,10 @@ function syncMapStoreFromMap(map: maplibregl.Map): void {
 }
 
 function fitBbox(map: maplibregl.Map, bbox: BoundingBox): void {
-  map.fitBounds(
-    [
-      [bbox.west, bbox.south],
-      [bbox.east, bbox.north],
-    ],
-    { padding: 80, duration: 0 },
-  );
+  frameBoundsInstant(map, [
+    [bbox.west, bbox.south],
+    [bbox.east, bbox.north],
+  ]);
   syncMapStoreFromMap(map);
 }
 
@@ -506,7 +504,7 @@ function applyDeepLink(
   if (options.overlays) applyOverlayDeepLink(parsed);
 
   if (parsed.map && map) {
-    map.jumpTo({
+    jumpToView(map, {
       center: parsed.map.center,
       zoom: parsed.map.zoom,
       bearing: parsed.map.bearing,

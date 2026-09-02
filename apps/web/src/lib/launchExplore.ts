@@ -8,6 +8,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
+import { frameBoundsInstant } from "./cameraFraming";
 
 const FRAME_RADIUS_METRES = 1000;
 
@@ -25,14 +26,10 @@ export function launchExploreFromPlace(
   const bbox = bboxAroundPoint(anchor.coordinates, FRAME_RADIUS_METRES);
 
   if (map) {
-    map.fitBounds(
-      [
-        [bbox.west, bbox.south],
-        [bbox.east, bbox.north],
-      ],
-      { padding: 80, duration: 0 },
-      { programmatic: true },
-    );
+    frameBoundsInstant(map, [
+      [bbox.west, bbox.south],
+      [bbox.east, bbox.north],
+    ]);
   }
 
   useDataSourceStore.getState().setActiveSource(null);
@@ -60,14 +57,10 @@ export function launchExploreTextSearch(
   const bbox = bboxAroundPoint(anchor.coordinates, FRAME_RADIUS_METRES);
 
   if (map) {
-    map.fitBounds(
-      [
-        [bbox.west, bbox.south],
-        [bbox.east, bbox.north],
-      ],
-      { padding: 80, duration: 0 },
-      { programmatic: true },
-    );
+    frameBoundsInstant(map, [
+      [bbox.west, bbox.south],
+      [bbox.east, bbox.north],
+    ]);
   }
 
   useDataSourceStore.getState().setActiveSource(null);

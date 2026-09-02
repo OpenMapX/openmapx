@@ -198,7 +198,7 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
 
 export function DataSourceLayer() {
   const t = useTranslations("dataSources");
-  const { mapRef, mapReady, styleVersion } = useMap();
+  const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const filters = useDataSourceStore((s) => s.filters);
   const selectItem = useDataSourceStore((s) => s.selectItem);
@@ -661,17 +661,18 @@ export function DataSourceLayer() {
       if (positions.length === 0) return;
       const lngs = positions.map((position) => position[0]);
       const lats = positions.map((position) => position[1]);
-      map.fitBounds(
+      fitBounds(
         [
           [Math.min(...lngs), Math.min(...lats)],
           [Math.max(...lngs), Math.max(...lats)],
         ],
-        { padding: 48, maxZoom: 17 },
+        48,
+        { maxZoom: 17 },
       );
     };
     window.addEventListener("openmapx:focus-data-source-context", onFocusContext);
     return () => window.removeEventListener("openmapx:focus-data-source-context", onFocusContext);
-  }, [mapContext, mapRef]);
+  }, [mapContext, mapRef, fitBounds]);
 
   // Click + cursor handlers — bind to both markers and labels layers
   useEffect(() => {

@@ -160,7 +160,7 @@ function parkingFeatures(
 }
 
 export function SelectedStopInfrastructureLayer() {
-  const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
+  const { mapRef, mapReady, styleVersion, fitBounds, flyTo } = useMap();
   const selectedPlace = usePlaceStore((state) => state.selectedPlace);
   const transitMapFocus = usePlaceStore((state) => state.transitMapFocus);
   const { data: infrastructure } = usePlaceStopInfrastructure(selectedPlace);
@@ -408,11 +408,7 @@ export function SelectedStopInfrastructureLayer() {
     if (transitMapFocus.kind === "platform") {
       const platform = infrastructure.platforms.find((item) => item.id === transitMapFocus.id);
       if (platform) {
-        map.flyTo({
-          center: [platform.lng, platform.lat],
-          zoom: Math.max(map.getZoom(), 17),
-          duration: 900,
-        });
+        flyTo([platform.lng, platform.lat], Math.max(map.getZoom(), 17), { duration: 900 });
         return;
       }
     }
@@ -431,11 +427,7 @@ export function SelectedStopInfrastructureLayer() {
     if (transitMapFocus.kind === "parking") {
       const parking = infrastructure.parking.find((item) => item.id === transitMapFocus.id);
       if (parking) {
-        map.flyTo({
-          center: [parking.lng, parking.lat],
-          zoom: Math.max(map.getZoom(), 17),
-          duration: 900,
-        });
+        flyTo([parking.lng, parking.lat], Math.max(map.getZoom(), 17), { duration: 900 });
         return;
       }
     }
@@ -446,12 +438,21 @@ export function SelectedStopInfrastructureLayer() {
       return;
     }
 
-    map.flyTo({
-      center: [infrastructure.canonicalStop.lng, infrastructure.canonicalStop.lat],
-      zoom: Math.max(map.getZoom(), 16),
-      duration: 900,
-    });
-  }, [mapRef, mapReady, fitBounds, isStopMode, infrastructure, selectedPlace?.id, transitMapFocus]);
+    flyTo(
+      [infrastructure.canonicalStop.lng, infrastructure.canonicalStop.lat],
+      Math.max(map.getZoom(), 16),
+      { duration: 900 },
+    );
+  }, [
+    mapRef,
+    mapReady,
+    fitBounds,
+    flyTo,
+    isStopMode,
+    infrastructure,
+    selectedPlace?.id,
+    transitMapFocus,
+  ]);
 
   return null;
 }

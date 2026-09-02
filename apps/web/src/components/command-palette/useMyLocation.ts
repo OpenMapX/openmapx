@@ -17,18 +17,18 @@ import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
  */
 export function useMyLocation(): () => void {
   const setUserLocation = useMapStore((s) => s.setUserLocation);
-  const map = useMapOptional();
+  const mapCtx = useMapOptional();
   const requestFix = useForegroundLocation();
   return useCallback(() => {
     // True no-op outside <MapProvider>: no location prompt and no
     // user-location store update either, since neither is meaningful
     // without a map to fly to.
-    if (!map) return;
+    if (!mapCtx) return;
     void requestFix().then((result) => {
       if (result.status !== "ok") return;
       const lngLat: [number, number] = [result.fix.lng, result.fix.lat];
       setUserLocation(lngLat);
-      map.flyTo(lngLat, 14);
+      mapCtx.flyTo(lngLat, 14);
     });
-  }, [setUserLocation, map, requestFix]);
+  }, [setUserLocation, mapCtx, requestFix]);
 }
