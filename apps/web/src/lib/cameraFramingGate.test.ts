@@ -22,8 +22,6 @@ const ALLOWED = new Set([
   "apps/web/src/lib/navigation/useNavCamera.ts",
   // Reveals the next transit leg through the navigation camera's own pipeline.
   "apps/web/src/lib/navigation/useTransitNavigationEngine.ts",
-  // Snaps bearing to the street grid; a pose change, with no content to frame.
-  "apps/web/src/lib/useAlignToStreets.ts",
   // Eases between the flat and globe projections, keeping the current framing.
   "apps/web/src/components/map/layers/GlobeProjection.tsx",
   // Standalone map in the offline settings page, with no app chrome over it.
@@ -80,10 +78,19 @@ describe("camera framing goes through the padded wrappers", () => {
     expect(rawCameraOffenders([{ file: "x.ts", source: "map.flyTo({ center })" }])).toEqual([
       "x.ts:1",
     ]);
+    expect(rawCameraOffenders([{ file: "x.ts", source: "map.jumpTo({ center })" }])).toEqual([
+      "x.ts:1",
+    ]);
     expect(rawCameraOffenders([{ file: "x.ts", source: "mapRef.current?.fitBounds(b)" }])).toEqual([
       "x.ts:1",
     ]);
     expect(rawCameraOffenders([{ file: "x.ts", source: "mapCtx.fitBounds(b, 80)" }])).toEqual([]);
+    expect(rawCameraOffenders([{ file: "x.ts", source: "sitemap.flyTo(url)" }])).toEqual([]);
     expect(rawCameraOffenders([{ file: "x.ts", source: "flyTo(coords, 15)" }])).toEqual([]);
+  });
+
+  it("exempts only files that still exist", () => {
+    const missing = [...ALLOWED].filter((file) => !fs.existsSync(path.join(REPO_ROOT, file)));
+    expect(missing).toEqual([]);
   });
 });

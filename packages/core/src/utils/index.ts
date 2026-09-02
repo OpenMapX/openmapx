@@ -118,6 +118,13 @@ export {
   resolveStopAsPlace,
 } from "./geocodeStopAsPlace";
 export { estimateFlightMinutes, greatCircleArc } from "./greatCircle";
+export {
+  bearingDelta,
+  dominantGridBearing,
+  type GridOrientation,
+  nearestGridBearing,
+  type WeightedBearing,
+} from "./gridOrientation";
 export { buildHotelOpenUrl } from "./hotelLink";
 export { bareDomain } from "./httpUrl";
 export { formatAddress, legalConfig } from "./legalConfig";
