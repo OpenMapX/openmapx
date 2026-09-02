@@ -24,6 +24,7 @@ WORKDIR /tmp/gtfsclean-build
 RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
     GOPROXY=direct go get github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 && \
     GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
+    GOPROXY=direct go get golang.org/x/crypto@v0.55.0 && \
     GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
 FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS base
@@ -113,10 +114,14 @@ FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
+# libexpat1 is named explicitly because the packages that pull it in are
+# satisfied by the base image's older build, which predates the fix for
+# CVE-2026-56408.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       osmium-tool curl unzip bzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
+      libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Static Docker CLI so the data-manager can invoke `docker exec` (feed-proxy
