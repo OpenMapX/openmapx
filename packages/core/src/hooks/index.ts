@@ -22,6 +22,7 @@ export {
   useStopsNearby,
   useStopTimetable,
   useStopTransfers,
+  useTransitIsochrone,
   useTransitPlan,
   useTransitPlanningCapabilities,
   useTransitReachability,

@@ -1,5 +1,6 @@
 import type { BBox } from "@openmapx/core";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
+import type { TravelTimeField } from "@openmapx/mobility-core/isoline";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type {
   Departure,
@@ -14,6 +15,7 @@ import type {
   VehicleJourney,
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
+import type { TransitIsochroneRequest } from "@openmapx/mobility-core/transit-isochrone";
 import type {
   TransitReachabilityCapabilities,
   TransitReachabilityCheckRequest,
@@ -243,6 +245,17 @@ export interface TransitProvider {
     request: TransitReachabilitySurfaceRequest,
     signal?: AbortSignal,
   ): Promise<MobilityResult<TransitReachabilitySurface>>;
+  /**
+   * Sample travel times across the request's lattice.
+   *
+   * Returns the raw field rather than finished polygons: the field is what gets
+   * cached, and it is independent of the thresholds, so changing a threshold
+   * re-contours a cached field instead of re-sampling.
+   */
+  getTransitTravelTimeField?(
+    request: TransitIsochroneRequest,
+    signal?: AbortSignal,
+  ): Promise<MobilityResult<TravelTimeField>>;
   checkReachabilityDestinations?(
     request: TransitReachabilityCheckRequest,
     signal?: AbortSignal,

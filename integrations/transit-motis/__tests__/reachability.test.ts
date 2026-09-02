@@ -207,3 +207,74 @@ describe("MOTIS reachability", () => {
     }
   });
 });
+
+describe("exportable isochrone capability", () => {
+  const observed = {
+    hasStreetRouting: true,
+    maxOneToManySize: 128,
+    maxOneToAllTravelTimeMinutes: 90,
+    maxPrePostTransitSeconds: 900,
+    maxDirectSeconds: 900,
+    oneToManyIntermodalVerified: true,
+  };
+
+  it("stays closed when the operator has not opted in", () => {
+    const capabilities = resolveMotisReachabilityCapabilities({
+      source: "self-hosted-motis",
+      runtimeHealthy: true,
+      operatorEnabled: true,
+      exportableIsochronesEnabled: false,
+      observed,
+    });
+    expect(capabilities.exportableIsochrones).toBe(false);
+    expect(capabilities.exportableIsochroneReason).toBe("polygons-disabled");
+  });
+
+  it("opens when the operator opts in and every exact-check gate passes", () => {
+    const capabilities = resolveMotisReachabilityCapabilities({
+      source: "self-hosted-motis",
+      runtimeHealthy: true,
+      operatorEnabled: true,
+      exportableIsochronesEnabled: true,
+      observed,
+    });
+    expect(capabilities.exportableIsochrones).toBe(true);
+    expect(capabilities.exportableIsochroneReason).toBe("available");
+  });
+
+  it("stays closed on a hosted source even when opted in", () => {
+    const capabilities = resolveMotisReachabilityCapabilities({
+      source: "transitous",
+      runtimeHealthy: true,
+      operatorEnabled: true,
+      exportableIsochronesEnabled: true,
+      observed,
+    });
+    expect(capabilities.exportableIsochrones).toBe(false);
+    expect(capabilities.exportableIsochroneReason).toBe("hosted-source");
+  });
+
+  it("stays closed when the one-to-many canary never verified", () => {
+    const capabilities = resolveMotisReachabilityCapabilities({
+      source: "self-hosted-motis",
+      runtimeHealthy: true,
+      operatorEnabled: true,
+      exportableIsochronesEnabled: true,
+      observed: { ...observed, oneToManyIntermodalVerified: false },
+    });
+    expect(capabilities.exportableIsochrones).toBe(false);
+    expect(capabilities.exportableIsochroneReason).toBe("endpoint-unverified");
+  });
+
+  it("stays closed when exact checks are off, since polygons need the same runtime", () => {
+    const capabilities = resolveMotisReachabilityCapabilities({
+      source: "self-hosted-motis",
+      runtimeHealthy: true,
+      operatorEnabled: false,
+      exportableIsochronesEnabled: true,
+      observed,
+    });
+    expect(capabilities.exportableIsochrones).toBe(false);
+    expect(capabilities.exportableIsochroneReason).toBe("operator-disabled");
+  });
+});

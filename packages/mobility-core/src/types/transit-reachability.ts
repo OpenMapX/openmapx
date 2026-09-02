@@ -23,10 +23,19 @@ export type TransitExactPointCheckReason =
   | "endpoint-unverified"
   | "runtime-unhealthy";
 
+export type TransitExportableIsochroneReason = TransitExactPointCheckReason | "polygons-disabled";
+
 export interface TransitReachabilityCapabilities {
   estimatedSurface: boolean;
   exactPointChecks: boolean;
   exactPointCheckReason: TransitExactPointCheckReason;
+  /**
+   * Sampled, exportable polygons. Requires every exact-check gate plus its own
+   * opt-in, because one request issues many sequential one-to-many batches
+   * rather than the one or two an exact check needs.
+   */
+  exportableIsochrones: boolean;
+  exportableIsochroneReason: TransitExportableIsochroneReason;
   maxDestinationsPerBatch: number | null;
   maxTravelTimeMinutes: number;
   datasetEpoch: string | null;

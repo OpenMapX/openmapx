@@ -7,6 +7,7 @@ import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import Divider from "@mui/material/Divider";
@@ -21,15 +22,19 @@ import Typography from "@mui/material/Typography";
 import {
   type LngLat,
   TRANSIT_WALK_PROFILE,
+  type TransitIsochroneRequest,
   type TransitReachabilitySurfaceRequest,
   useIsochrone,
+  useTransitIsochrone,
   useTransitReachability,
 } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
+import { exportTransitIsochrone, transitIsochroneFilename } from "./export-geojson";
 import {
   resolveTravelTimeBackend,
   TRAVEL_TIME_PRESETS,
+  type TransitSurfaceKind,
   type TravelTimeMode,
   useTravelTimeStore,
 } from "./store";
@@ -53,6 +58,10 @@ export function TravelTimeToolbar() {
   const showTransitStops = useTravelTimeStore((s) => s.showTransitStops);
   const transitFieldUnsupported = useTravelTimeStore((s) => s.transitFieldUnsupported);
   const transitFilterState = useTravelTimeStore((s) => s.transitFilterState);
+  const transitSurfaceKind = useTravelTimeStore((s) => s.transitSurfaceKind);
+  const transitPolygonBbox = useTravelTimeStore((s) => s.transitPolygonBbox);
+  const setTransitSurfaceKind = useTravelTimeStore((s) => s.setTransitSurfaceKind);
+  const requestTransitPolygons = useTravelTimeStore((s) => s.requestTransitPolygons);
   const setMode = useTravelTimeStore((s) => s.setMode);
   const toggleMinutes = useTravelTimeStore((s) => s.toggleMinutes);
   const setOrigin = useTravelTimeStore((s) => s.setOrigin);
@@ -82,7 +91,28 @@ export function TravelTimeToolbar() {
     transitRequest,
     isActive && isTransit,
   );
+  const showPolygons = isTransit && transitSurfaceKind === "polygons";
+  // Mirrors the map layer's request so react-query serves both from one fetch.
+  const isochroneRequest = useMemo<TransitIsochroneRequest | null>(() => {
+    if (!origin || !queryTime || !showPolygons || !transitPolygonBbox) return null;
+    if (selectedMinutes.length === 0) return null;
+    return {
+      origin: { lng: origin[0], lat: origin[1] },
+      queryTime,
+      direction: "depart-at",
+      thresholdsMinutes: [...selectedMinutes].sort((a, b) => a - b),
+      walkProfileId: TRANSIT_WALK_PROFILE.id,
+      bbox: transitPolygonBbox,
+    };
+  }, [origin, queryTime, selectedMinutes, showPolygons, transitPolygonBbox]);
+  const {
+    data: transitIsochrone,
+    isFetching: isochroneSampling,
+    error: isochroneError,
+  } = useTransitIsochrone(isochroneRequest, isActive && showPolygons);
+
   const isFetching = isTransit ? reachFetching : isochroneFetching;
+  const polygonsSupported = transitSurface?.capabilities.exportableIsochrones === true;
 
   if (!isActive) return null;
 
@@ -200,10 +230,82 @@ export function TravelTimeToolbar() {
               minutes: TRANSIT_WALK_PROFILE.egressSeconds / 60,
             })}
           </Typography>
-          {transitFieldUnsupported && (
+          {transitFieldUnsupported && !showPolygons && (
             <Typography role="status" sx={{ fontSize: 11, color: "warning.main" }}>
               {t("fieldFallback")}
             </Typography>
+          )}
+
+          {polygonsSupported && (
+            <>
+              <ToggleButtonGroup
+                value={transitSurfaceKind}
+                exclusive
+                size="small"
+                onChange={(_, v: TransitSurfaceKind | null) => {
+                  if (v) setTransitSurfaceKind(v);
+                }}
+                sx={{ alignSelf: "flex-start", "& .MuiToggleButton-root": { px: 1, py: 0.25 } }}
+              >
+                <ToggleButton value="estimated" sx={{ fontSize: 11, textTransform: "none" }}>
+                  {t("surfaceKindEstimated")}
+                </ToggleButton>
+                <ToggleButton value="polygons" sx={{ fontSize: 11, textTransform: "none" }}>
+                  {t("surfaceKindPolygons")}
+                </ToggleButton>
+              </ToggleButtonGroup>
+
+              {showPolygons && (
+                <>
+                  <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+                    {t("polygonAccuracy")}
+                  </Typography>
+                  <Box sx={{ display: "flex", gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                    <Button
+                      size="small"
+                      variant="outlined"
+                      disabled={isochroneSampling || !origin}
+                      onClick={requestTransitPolygons}
+                      sx={{ fontSize: 11, textTransform: "none" }}
+                    >
+                      {isochroneSampling ? t("generatingPolygons") : t("generatePolygons")}
+                    </Button>
+                    {transitIsochrone && !isochroneSampling && (
+                      <Button
+                        size="small"
+                        variant="text"
+                        onClick={() =>
+                          exportTransitIsochrone(
+                            transitIsochrone.featureCollection,
+                            transitIsochroneFilename(transitIsochrone.queryTime),
+                          )
+                        }
+                        sx={{ fontSize: 11, textTransform: "none" }}
+                      >
+                        {t("downloadGeoJson")}
+                      </Button>
+                    )}
+                  </Box>
+                  <Typography aria-live="polite" sx={{ fontSize: 11, color: "text.secondary" }}>
+                    {isochroneSampling
+                      ? t("polygonStatusSampling")
+                      : isochroneError
+                        ? t("polygonFailed")
+                        : transitIsochrone
+                          ? t("polygonStatusReady", {
+                              samples: transitIsochrone.sampling.sampleCount,
+                              metres: Math.round(transitIsochrone.sampling.resolutionMetres),
+                            })
+                          : t("polygonStatusIdle")}
+                  </Typography>
+                  {transitIsochrone?.sampling.clippedToBbox && (
+                    <Typography sx={{ fontSize: 11, color: "warning.main" }}>
+                      {t("polygonClipped")}
+                    </Typography>
+                  )}
+                </>
+              )}
+            </>
           )}
           <FormControlLabel
             control={

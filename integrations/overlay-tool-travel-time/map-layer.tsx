@@ -3,8 +3,10 @@
 import {
   type LngLat,
   TRANSIT_WALK_PROFILE,
+  type TransitIsochroneRequest,
   type TransitReachabilitySurfaceRequest,
   useIsochrone,
+  useTransitIsochrone,
   useTransitReachability,
 } from "@openmapx/core";
 import type { MapMouseEvent } from "maplibre-gl";
@@ -62,6 +64,8 @@ export function TravelTimeLayer() {
   const queryTime = useTravelTimeStore((s) => s.queryTime);
   const showTransitStops = useTravelTimeStore((s) => s.showTransitStops);
   const transitFieldUnsupported = useTravelTimeStore((s) => s.transitFieldUnsupported);
+  const transitSurfaceKind = useTravelTimeStore((s) => s.transitSurfaceKind);
+  const transitPolygonBbox = useTravelTimeStore((s) => s.transitPolygonBbox);
   const { publish: publishGeoJson } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -97,6 +101,44 @@ export function TravelTimeLayer() {
   const { data: transitSurface, attributions: transitAttributions } = useTransitReachability(
     transitRequest,
     isActive && isTransit,
+  );
+
+  const showPolygons = isTransit && transitSurfaceKind === "polygons";
+
+  // Track the visible extent while polygons are selected so pressing Generate
+  // can freeze an area. Only the live viewport moves here; the frozen bbox that
+  // actually drives sampling changes solely on an explicit request.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady || !isActive || !showPolygons) return;
+    const setViewport = useTravelTimeStore.getState().setTransitPolygonViewport;
+    const publishBounds = () => {
+      const bounds = map.getBounds();
+      setViewport([bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()]);
+    };
+    publishBounds();
+    map.on("moveend", publishBounds);
+    return () => {
+      map.off("moveend", publishBounds);
+    };
+  }, [isActive, mapReady, mapRef, showPolygons]);
+  const isochroneRequest = useMemo<TransitIsochroneRequest | null>(() => {
+    if (!origin || !queryTime || !showPolygons || !transitPolygonBbox) return null;
+    if (selectedMinutes.length === 0) return null;
+    return {
+      origin: { lng: origin[0], lat: origin[1] },
+      queryTime,
+      direction: "depart-at",
+      // Unlike the estimated field, every threshold is contoured server-side
+      // from one sampled field, so all of them travel in the request.
+      thresholdsMinutes: [...selectedMinutes].sort((a, b) => a - b),
+      walkProfileId: TRANSIT_WALK_PROFILE.id,
+      bbox: transitPolygonBbox,
+    };
+  }, [origin, queryTime, selectedMinutes, showPolygons, transitPolygonBbox]);
+  const { data: transitIsochrone } = useTransitIsochrone(
+    isochroneRequest,
+    isActive && showPolygons,
   );
   useMapAttributions(
     "travel-time:street-isochrone",
@@ -274,16 +316,35 @@ export function TravelTimeLayer() {
   // one-to-all seeds. The origin seed adds direct walking reach.
   useEffect(() => {
     void styleVersion;
-    const seeds = origin
-      ? [{ lng: origin[0], lat: origin[1], arrivalSeconds: 0 }, ...(transitSurface?.seeds ?? [])]
-      : [];
-    transitFieldLayerRef.current?.setData(seeds, selectedMinutes);
-  }, [origin, selectedMinutes, styleVersion, transitSurface]);
+    // Blank the estimated field while polygons are shown so the two never stack
+    // and imply an agreement they do not have.
+    const seeds =
+      origin && !showPolygons
+        ? [{ lng: origin[0], lat: origin[1], arrivalSeconds: 0 }, ...(transitSurface?.seeds ?? [])]
+        : [];
+    transitFieldLayerRef.current?.setData(seeds, showPolygons ? [] : selectedMinutes);
+  }, [origin, selectedMinutes, showPolygons, styleVersion, transitSurface]);
 
   // Update isochrone polygons
   useEffect(() => {
     void styleVersion;
     if (!mapReady || !isActive) return;
+
+    // Sampled transit polygons reuse the street-isochrone fill/outline layers:
+    // the server already sets `color` and `opacity` per feature, so no paint or
+    // slot change is needed and the two surface kinds cannot diverge visually.
+    if (showPolygons) {
+      publishGeoJson([
+        {
+          sourceId: SOURCE_ID,
+          data: transitIsochrone?.featureCollection ?? {
+            type: "FeatureCollection",
+            features: [],
+          },
+        },
+      ]);
+      return;
+    }
 
     if (isTransit || !isochroneData || isochroneData.contours.length === 0) {
       publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features: [] } }]);
@@ -307,7 +368,16 @@ export function TravelTimeLayer() {
       }));
 
     publishGeoJson([{ sourceId: SOURCE_ID, data: { type: "FeatureCollection", features } }]);
-  }, [isActive, isTransit, isochroneData, mapReady, publishGeoJson, styleVersion]);
+  }, [
+    isActive,
+    isTransit,
+    isochroneData,
+    mapReady,
+    publishGeoJson,
+    showPolygons,
+    styleVersion,
+    transitIsochrone,
+  ]);
 
   // Update transit reachability dots (one-to-all). Each reachable stop is
   // coloured by the transit mode and faded by which selected time band it falls

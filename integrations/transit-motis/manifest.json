@@ -49,6 +49,12 @@
         "default": false,
         "title": "Exact Explore reachability",
         "description": "Opt in to experimental exact POI checks on the verified self-hosted MOTIS instance. Destination coordinates are never sent to Transitous."
+      },
+      "exportableIsochronesEnabled": {
+        "type": "boolean",
+        "default": false,
+        "title": "Exportable transit isochrone polygons",
+        "description": "Opt in to sampled, downloadable transit isochrone polygons. One request issues many sequential one-to-many batches against the verified self-hosted MOTIS instance, so enable it only after measuring the cost on your hardware. Requires exact Explore reachability. Lattice coordinates are never sent to Transitous."
       }
     }
   },

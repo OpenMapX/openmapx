@@ -42,6 +42,7 @@ export function resolveMotisReachabilityCapabilities(options: {
   source: "self-hosted-motis" | "transitous";
   runtimeHealthy: boolean;
   operatorEnabled: boolean;
+  exportableIsochronesEnabled?: boolean;
   datasetEpoch?: string;
   observed?: ObservedMotisReachabilityCapabilities;
 }): TransitReachabilityCapabilities {
@@ -62,10 +63,21 @@ export function resolveMotisReachabilityCapabilities(options: {
   ) {
     exactPointCheckReason = "endpoint-unverified";
   }
+  // Polygons sit strictly behind exact checks: every gate those pass, plus a
+  // separate operator opt-in for the much larger request cost.
+  const exportableIsochroneReason: TransitReachabilityCapabilities["exportableIsochroneReason"] =
+    exactPointCheckReason !== "available"
+      ? exactPointCheckReason
+      : options.exportableIsochronesEnabled === true
+        ? "available"
+        : "polygons-disabled";
+
   return {
     estimatedSurface: runtimeHealthy,
     exactPointChecks: exactPointCheckReason === "available",
     exactPointCheckReason,
+    exportableIsochrones: exportableIsochroneReason === "available",
+    exportableIsochroneReason,
     maxDestinationsPerBatch:
       source === "self-hosted-motis" && (observed?.maxOneToManySize ?? 0) > 0
         ? Math.min(Math.floor(observed?.maxOneToManySize ?? 0), 128)
@@ -168,7 +180,7 @@ export async function getMotisReachabilitySeeds(
   }
 }
 
-function bestDuration(response: OneToManyIntermodalResponse, index: number): number | null {
+export function bestDuration(response: OneToManyIntermodalResponse, index: number): number | null {
   const candidates: number[] = [];
   const street = response.street_durations?.[index]?.duration;
   if (typeof street === "number" && Number.isFinite(street)) candidates.push(street);
@@ -178,6 +190,65 @@ function bestDuration(response: OneToManyIntermodalResponse, index: number): num
     }
   }
   return candidates.length > 0 ? Math.min(...candidates) : null;
+}
+
+export interface OneToManyBatchQuery {
+  origin: { lng: number; lat: number };
+  queryTime: string;
+  thresholdsMinutes: number[];
+  transitModes?: string[];
+}
+
+/**
+ * One `one-to-many-intermodal` call. Returns best durations in seconds aligned
+ * to `destinations`, with `null` where no itinerary exists.
+ *
+ * Shared by the exact point check and the lattice sampler so the two cannot
+ * drift into different routing assumptions — a point must not be inside a
+ * sampled polygon yet excluded by the exact filter because the two paths sent
+ * MOTIS different options.
+ */
+export async function runOneToManyBatch(
+  instance: MotisInstance,
+  query: OneToManyBatchQuery,
+  destinations: ReadonlyArray<{ lat: number; lng: number }>,
+  signal: AbortSignal,
+): Promise<Array<number | null>> {
+  const maxTravelTime = Math.max(...query.thresholdsMinutes);
+  const response = await oneToManyIntermodalPost({
+    client: instance.client,
+    signal,
+    body: {
+      one: `${query.origin.lat},${query.origin.lng}`,
+      many: destinations.map(({ lat, lng }) => `${lat},${lng}`),
+      time: query.queryTime,
+      arriveBy: false,
+      maxTravelTime,
+      pedestrianProfile: TRANSIT_WALK_PROFILE.pedestrianProfile,
+      pedestrianSpeed: TRANSIT_WALK_PROFILE.speedMetresPerSecond,
+      transitModes: query.transitModes as Mode[] | undefined,
+      preTransitModes: ["WALK"],
+      postTransitModes: ["WALK"],
+      directMode: "WALK",
+      maxPreTransitTime: TRANSIT_WALK_PROFILE.accessSeconds,
+      maxPostTransitTime: TRANSIT_WALK_PROFILE.egressSeconds,
+      maxDirectTime: TRANSIT_WALK_PROFILE.directSeconds,
+    },
+  });
+  const data = response.data;
+  if (
+    !data ||
+    !Array.isArray(data.street_durations) ||
+    !Array.isArray(data.transit_durations) ||
+    data.street_durations.length !== destinations.length ||
+    data.transit_durations.length !== destinations.length
+  ) {
+    throw new MotisReachabilityError(
+      "invalid-response",
+      "MOTIS one-to-many response does not align with destinations",
+    );
+  }
+  return destinations.map((_, index) => bestDuration(data, index));
 }
 
 export async function checkMotisReachabilityDestinations(
@@ -197,41 +268,9 @@ export async function checkMotisReachabilityDestinations(
     for (let offset = 0; offset < request.destinations.length; offset += batchSize) {
       requestSignal.throwIfAborted();
       const destinations = request.destinations.slice(offset, offset + batchSize);
-      const response = await oneToManyIntermodalPost({
-        client: instance.client,
-        signal: requestSignal,
-        body: {
-          one: `${request.origin.lat},${request.origin.lng}`,
-          many: destinations.map(({ lat, lng }) => `${lat},${lng}`),
-          time: request.queryTime,
-          arriveBy: false,
-          maxTravelTime,
-          pedestrianProfile: TRANSIT_WALK_PROFILE.pedestrianProfile,
-          pedestrianSpeed: TRANSIT_WALK_PROFILE.speedMetresPerSecond,
-          transitModes: request.transitModes as Mode[] | undefined,
-          preTransitModes: ["WALK"],
-          postTransitModes: ["WALK"],
-          directMode: "WALK",
-          maxPreTransitTime: TRANSIT_WALK_PROFILE.accessSeconds,
-          maxPostTransitTime: TRANSIT_WALK_PROFILE.egressSeconds,
-          maxDirectTime: TRANSIT_WALK_PROFILE.directSeconds,
-        },
-      });
-      const data = response.data;
-      if (
-        !data ||
-        !Array.isArray(data.street_durations) ||
-        !Array.isArray(data.transit_durations) ||
-        data.street_durations.length !== destinations.length ||
-        data.transit_durations.length !== destinations.length
-      ) {
-        throw new MotisReachabilityError(
-          "invalid-response",
-          "MOTIS one-to-many response does not align with destinations",
-        );
-      }
+      const durations = await runOneToManyBatch(instance, request, destinations, requestSignal);
       for (let index = 0; index < destinations.length; index += 1) {
-        const durationSeconds = bestDuration(data, index);
+        const durationSeconds = durations[index];
         results.push({
           id: destinations[index].id,
           durationSeconds,

@@ -346,7 +346,7 @@ export type TransitDecisionReason =
   | "realtime_complete";
 
 export interface TransitReachabilityMetrics {
-  operation: "capabilities" | "surface" | "exact";
+  operation: "capabilities" | "surface" | "exact" | "isochrone";
   source: "self-hosted-motis" | "transitous" | "none";
   capabilityState:
     | "available"
@@ -354,10 +354,20 @@ export interface TransitReachabilityMetrics {
     | "hosted-source"
     | "street-routing-disabled"
     | "endpoint-unverified"
-    | "runtime-unhealthy";
+    | "runtime-unhealthy"
+    // Exportable polygons are gated separately from exact checks.
+    | "polygons-disabled";
   outcome: "ok" | "unavailable" | "error" | "timeout" | "cancelled";
   cacheOutcome: "hit" | "miss" | "none";
-  errorKind: "none" | "unavailable" | "timeout" | "invalid-response" | "unsupported" | "upstream";
+  errorKind:
+    | "none"
+    | "unavailable"
+    | "timeout"
+    | "invalid-response"
+    | "unsupported"
+    | "upstream"
+    // Rejected by the isochrone single-flight limit rather than by MOTIS.
+    | "busy";
   latencyMs: number;
   rawSeedCount?: number;
   seedCount?: number;

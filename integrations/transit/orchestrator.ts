@@ -11,6 +11,7 @@ import {
   type TripRefreshRequest,
 } from "@openmapx/integration-framework";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
+import type { TravelTimeField } from "@openmapx/mobility-core/isoline";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type {
   Departure,
@@ -26,6 +27,7 @@ import type {
   VehicleJourney,
   VehiclePosition,
 } from "@openmapx/mobility-core/transit";
+import type { TransitIsochroneRequest } from "@openmapx/mobility-core/transit-isochrone";
 import type {
   TransitReachabilityCapabilities,
   TransitReachabilityCheckRequest,
@@ -1029,6 +1031,17 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     return provider.checkReachabilityDestinations(request, signal);
   }
 
+  async function getTransitTravelTimeField(
+    request: TransitIsochroneRequest,
+    signal?: AbortSignal,
+  ): Promise<MobilityResult<TravelTimeField>> {
+    const provider = await reachabilityProvider();
+    if (!provider?.getTransitTravelTimeField) {
+      throw new Error("exportable transit isochrones are unavailable");
+    }
+    return provider.getTransitTravelTimeField(request, signal);
+  }
+
   return {
     collectProviders,
     resolveByPrefix,
@@ -1061,6 +1074,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     getReachabilityCapabilities,
     getReachabilitySurface,
     checkReachabilityDestinations,
+    getTransitTravelTimeField,
   };
 }
 

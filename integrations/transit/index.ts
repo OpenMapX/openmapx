@@ -25,11 +25,23 @@ import type {
   TripItinerary,
 } from "@openmapx/mobility-core/transit";
 import {
+  parseTransitIsochroneRequest,
+  TRANSIT_ISOCHRONE_METHOD,
+  type TransitIsochroneRequest,
+  type TransitIsochroneResult,
+} from "@openmapx/mobility-core/transit-isochrone";
+import {
   parseTransitReachabilityCheckRequest,
   parseTransitReachabilitySurfaceRequest,
   type TransitReachabilityCheckRequest,
   type TransitReachabilitySurfaceRequest,
 } from "@openmapx/mobility-core/transit-reachability";
+import {
+  buildIsochroneFeatureCollection,
+  samplingFromField,
+  transitIsochroneFieldCacheKey,
+  withSingleFlight,
+} from "./isochrone.js";
 import {
   createTransitOrchestrator,
   UnsupportedTransitPlanningCapabilitiesError,
@@ -1046,6 +1058,118 @@ export function setup(ctx: IntegrationContext): void {
         reply
           .status(failure.errorKind === "timeout" ? 504 : 502)
           .send({ error: "Exact transit check failed" });
+      }
+    },
+    { rateLimitTier: "expensive" },
+  );
+
+  ctx.registerRoute(
+    "POST",
+    "/reachability/isochrone",
+    async (req, reply) => {
+      const startedAt = Date.now();
+      let request: TransitIsochroneRequest;
+      try {
+        request = parseTransitIsochroneRequest(req.body);
+      } catch (error) {
+        reply.status(400).send({ error: (error as Error).message });
+        return;
+      }
+      try {
+        const capabilities = await orchestrator.getReachabilityCapabilities();
+        if (!capabilities?.exportableIsochrones) {
+          ctx.metricsRecorder?.recordTransitReachability?.({
+            operation: "isochrone",
+            source:
+              capabilities?.exportableIsochroneReason === "hosted-source" ? "transitous" : "none",
+            capabilityState: capabilities?.exportableIsochroneReason ?? "runtime-unhealthy",
+            outcome: "unavailable",
+            cacheOutcome: "none",
+            errorKind: "unavailable",
+            latencyMs: Date.now() - startedAt,
+          });
+          reply.status(409).send({
+            error: "Exportable transit isochrones are unavailable",
+            reason: capabilities?.exportableIsochroneReason ?? "runtime-unhealthy",
+          });
+          return;
+        }
+
+        // Only the sampled field is cached, under a key that excludes
+        // thresholds. Contouring then runs on every request, so changing a
+        // threshold re-contours a cached field in milliseconds instead of
+        // re-sampling for a minute.
+        const { fieldResult, cacheMiss } = await withSingleFlight("transit-isochrone", async () => {
+          const cacheKey = transitIsochroneFieldCacheKey(request, capabilities.datasetEpoch);
+          let miss = false;
+          const cached = await ctx.cache.withCache(cacheKey, 900, () => {
+            miss = true;
+            return orchestrator.getTransitTravelTimeField(request, req.signal);
+          });
+          return { fieldResult: cached, cacheMiss: miss };
+        });
+
+        const field = fieldResult.data;
+        const sampling = samplingFromField(field);
+        const data: TransitIsochroneResult = {
+          queryTime: request.queryTime,
+          source: "self-hosted-motis",
+          method: TRANSIT_ISOCHRONE_METHOD,
+          accuracy: "sampled",
+          datasetEpoch: capabilities.datasetEpoch,
+          sampling,
+          featureCollection: buildIsochroneFeatureCollection(field, request, {
+            source: "self-hosted-motis",
+            datasetEpoch: capabilities.datasetEpoch,
+            attribution: fieldResult.attributions ?? [],
+          }),
+        };
+
+        ctx.metricsRecorder?.recordTransitReachability?.({
+          operation: "isochrone",
+          source: data.source,
+          capabilityState: capabilities.exportableIsochroneReason,
+          outcome: "ok",
+          cacheOutcome: cacheMiss ? "miss" : "hit",
+          errorKind: "none",
+          latencyMs: Date.now() - startedAt,
+          seedCount: sampling.sampleCount,
+          batchCount: sampling.batchCount,
+          gridMetres: sampling.gridMetres,
+        });
+        reply.header("Cache-Control", "no-store");
+        reply.send(toEnvelope({ ...fieldResult, data }));
+      } catch (error) {
+        if ((error as Error).message?.includes("already in progress")) {
+          ctx.metricsRecorder?.recordTransitReachability?.({
+            operation: "isochrone",
+            source: "none",
+            capabilityState: "available",
+            outcome: "unavailable",
+            cacheOutcome: "none",
+            errorKind: "busy",
+            latencyMs: Date.now() - startedAt,
+          });
+          reply.header("Retry-After", "30");
+          reply.status(429).send({ error: "A transit isochrone computation is already running" });
+          return;
+        }
+        const failure = reachabilityFailure(error, req.signal);
+        ctx.metricsRecorder?.recordTransitReachability?.({
+          operation: "isochrone",
+          source: "none",
+          capabilityState: "runtime-unhealthy",
+          ...failure,
+          cacheOutcome: "none",
+          latencyMs: Date.now() - startedAt,
+        });
+        if (failure.errorKind === "unsupported" || failure.errorKind === "unavailable") {
+          reply.status(409).send({ error: "Exportable transit isochrones are unavailable" });
+          return;
+        }
+        reply
+          .status(failure.errorKind === "timeout" ? 504 : 502)
+          .send({ error: "Transit isochrone generation failed" });
       }
     },
     { rateLimitTier: "expensive" },

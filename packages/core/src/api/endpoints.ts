@@ -74,6 +74,7 @@ export const API_ENDPOINTS = {
   transitReachabilityCapabilities: "/api/integrations/transit/reachability/capabilities",
   transitReachabilitySurface: "/api/integrations/transit/reachability/surface",
   transitReachabilityCheck: "/api/integrations/transit/reachability/check",
+  transitReachabilityIsochrone: "/api/integrations/transit/reachability/isochrone",
   transitLegGeometry: "/api/integrations/transit/leg-geometry",
   transitAlerts: "/api/integrations/transit/alerts",
   transitVehicles: "/api/integrations/transit/vehicles",

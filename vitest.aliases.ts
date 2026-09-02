@@ -14,6 +14,7 @@ const MOBILITY_CORE_TYPE_SUBPATHS = [
   "ev-charging",
   "transit",
   "transit-reachability",
+  "transit-isochrone",
 ];
 
 export function createRepoVitestAliases(repoRoot: string) {
@@ -71,6 +72,12 @@ export function createRepoVitestAliases(repoRoot: string) {
     {
       find: /^@openmapx\/mobility-core\/motis-client(?:\.js)?$/,
       replacement: resolve(repoRoot, "packages/mobility-core/src/server/motis-client.ts"),
+    },
+    // A directory module rather than a single file, so the catch-all below
+    // (which appends `.ts`) would miss it.
+    {
+      find: /^@openmapx\/mobility-core\/isoline(?:\.js)?$/,
+      replacement: resolve(repoRoot, "packages/mobility-core/src/isoline/index.ts"),
     },
     // Everything else under the package resolves to `src/<sub>.ts`.
     {

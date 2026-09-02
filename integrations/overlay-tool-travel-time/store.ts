@@ -20,6 +20,16 @@ export function resolveTravelTimeBackend(mode: TravelTimeMode): TravelTimeBacken
 
 export type TransitReachFilterState = "off" | "pending" | "applied" | "unavailable" | "failed";
 
+/**
+ * `estimated` is the shipped straight-line WebGL field; `polygons` is the
+ * sampled, exportable artifact. They are different accuracy claims and the UI
+ * must never blur them.
+ */
+export type TransitSurfaceKind = "estimated" | "polygons";
+
+/** A frozen request for a polygon run: `[west, south, east, north]`. */
+export type TransitPolygonBbox = [number, number, number, number];
+
 export const TRAVEL_TIME_PRESETS: Record<TravelTimeMode, number[]> = {
   walking: [5, 10, 15, 20, 30, 60],
   cycling: [5, 10, 15, 20, 30, 45, 60, 90],
@@ -42,6 +52,14 @@ export interface TravelTimeState {
   showTransitStops: boolean;
   transitFieldUnsupported: "webgl2" | "float-render-target" | "shader" | null;
   transitFilterState: TransitReachFilterState;
+  transitSurfaceKind: TransitSurfaceKind;
+  /** Live map bounds, tracked only so a polygon run can be framed on request. */
+  transitPolygonViewport: TransitPolygonBbox | null;
+  /**
+   * The area a polygon run was actually started for. Frozen at request time so
+   * panning afterwards cannot silently re-sample under the user.
+   */
+  transitPolygonBbox: TransitPolygonBbox | null;
 
   activate: () => void;
   activateAnchored: (origin: LngLat) => void;
@@ -55,6 +73,9 @@ export interface TravelTimeState {
   setShowTransitStops: (show: boolean) => void;
   setTransitFieldUnsupported: (reason: "webgl2" | "float-render-target" | "shader" | null) => void;
   setTransitFilterState: (state: TransitReachFilterState) => void;
+  setTransitSurfaceKind: (kind: TransitSurfaceKind) => void;
+  setTransitPolygonViewport: (bbox: TransitPolygonBbox | null) => void;
+  requestTransitPolygons: () => void;
 }
 
 export function normalizedDepartureMinute(time: string | Date | number = Date.now()): string {
@@ -75,6 +96,9 @@ export const useTravelTimeStore = create<TravelTimeState>((set) => ({
   showTransitStops: false,
   transitFieldUnsupported: null,
   transitFilterState: "off",
+  transitSurfaceKind: "estimated",
+  transitPolygonViewport: null,
+  transitPolygonBbox: null,
 
   activate: () =>
     set({
@@ -86,6 +110,8 @@ export const useTravelTimeStore = create<TravelTimeState>((set) => ({
       queryTime: normalizedDepartureMinute(),
       transitFieldUnsupported: null,
       transitFilterState: "off",
+      transitSurfaceKind: "estimated",
+      transitPolygonBbox: null,
     }),
 
   activateAnchored: (origin) =>
@@ -98,6 +124,8 @@ export const useTravelTimeStore = create<TravelTimeState>((set) => ({
       queryTime: normalizedDepartureMinute(),
       transitFieldUnsupported: null,
       transitFilterState: "off",
+      transitSurfaceKind: "estimated",
+      transitPolygonBbox: null,
     }),
 
   deactivate: () =>
@@ -110,6 +138,9 @@ export const useTravelTimeStore = create<TravelTimeState>((set) => ({
       queryTime: null,
       transitFieldUnsupported: null,
       transitFilterState: "off",
+      transitSurfaceKind: "estimated",
+      transitPolygonViewport: null,
+      transitPolygonBbox: null,
     }),
 
   setOrigin: (origin) =>
@@ -128,6 +159,15 @@ export const useTravelTimeStore = create<TravelTimeState>((set) => ({
   setShowTransitStops: (showTransitStops) => set({ showTransitStops }),
   setTransitFieldUnsupported: (transitFieldUnsupported) => set({ transitFieldUnsupported }),
   setTransitFilterState: (transitFilterState) => set({ transitFilterState }),
+  setTransitSurfaceKind: (transitSurfaceKind) =>
+    // Switching away from polygons drops the frozen area so returning to them
+    // does not silently re-show a result computed for a different viewport.
+    set((s) => ({
+      transitSurfaceKind,
+      transitPolygonBbox: transitSurfaceKind === "polygons" ? s.transitPolygonBbox : null,
+    })),
+  setTransitPolygonViewport: (transitPolygonViewport) => set({ transitPolygonViewport }),
+  requestTransitPolygons: () => set((s) => ({ transitPolygonBbox: s.transitPolygonViewport })),
 
   setMode: (mode) =>
     set((s) => {
@@ -138,6 +178,11 @@ export const useTravelTimeStore = create<TravelTimeState>((set) => ({
         selectedMinutes: stillValid.length > 0 ? stillValid : [presets[2] ?? presets[0]],
         transitFilterState:
           mode === "transit" && s.anchored && s.onlyWithinReach ? "pending" : "off",
+        // Polygons are transit-only; leaving the mode drops both the choice and
+        // the frozen area so they cannot reappear against a stale viewport.
+        ...(mode === "transit"
+          ? {}
+          : { transitSurfaceKind: "estimated" as const, transitPolygonBbox: null }),
         ...(mode === "transit" && s.mode !== "transit"
           ? { queryTime: normalizedDepartureMinute() }
           : {}),

@@ -56,6 +56,7 @@ import {
   getStopTimetable,
 } from "@integrations/transit-motis/adapter";
 import { createTransitMotisInstances } from "@integrations/transit-motis/instances";
+import { sampleMotisTravelTimeField } from "@integrations/transit-motis/isochrone";
 import {
   checkMotisReachabilityDestinations,
   getMotisReachabilitySeeds,
@@ -954,6 +955,29 @@ describeLive("transitous pipeline end-to-end against real motis containers", () 
       expect(exactReachability.results).toEqual([
         expect.objectContaining({ id: "berlin-hbf", reachable: true }),
       ]);
+      // Lattice sampling against the real endpoint. This asserts the request
+      // contract — batching, alignment, ordering — not latency: the fixture's
+      // street graph is a 400-byte PBF, so timings here would say nothing about
+      // a real regional deployment.
+      const sampledField = await sampleMotisTravelTimeField(
+        motisLocalReachabilityInstance,
+        { ...reachabilityQuery, bbox: [13.36, 52.52, 13.38, 52.53] },
+        {
+          maxBatchSize: capabilitySnapshot.reachability?.maxOneToManySize ?? 1,
+          maxSamples: 48,
+          deadlineMs: 120_000,
+        },
+      );
+      expect(sampledField.values).toHaveLength(sampledField.lattice.nx * sampledField.lattice.ny);
+      expect(sampledField.batchCount).toBeGreaterThan(0);
+      expect(sampledField.values.every((value) => value === null || Number.isFinite(value))).toBe(
+        true,
+      );
+      // The origin sits inside this bbox, so at least one point must be
+      // reachable — an all-null field would mean the lattice never reached the
+      // street graph at all.
+      expect(sampledField.unreachableCount).toBeLessThan(sampledField.values.length);
+
       const platforms = await getStopPlatforms(motisLocalInstance, hbfPlatform?.id ?? "");
       expect(platforms).toEqual(
         expect.arrayContaining([

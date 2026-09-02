@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { toWebMercator } from "@openmapx/mobility-core/mercator";
 import type {
   TransitReachabilityCheckRequest,
   TransitReachabilitySeed,
@@ -8,15 +9,6 @@ import type {
 
 export const INITIAL_TRANSIT_SEED_GRID_METRES = 100;
 export const MAX_TRANSIT_REACHABILITY_SEEDS = 4_096;
-
-const EARTH_RADIUS_METRES = 6_378_137;
-
-function webMercator(seed: Pick<TransitReachabilitySeed, "lng" | "lat">): [number, number] {
-  const x = (seed.lng * Math.PI * EARTH_RADIUS_METRES) / 180;
-  const clampedLat = Math.max(-85.051_129, Math.min(85.051_129, seed.lat));
-  const y = EARTH_RADIUS_METRES * Math.log(Math.tan(Math.PI / 4 + (clampedLat * Math.PI) / 360));
-  return [x, y];
-}
 
 function preferSeed(
   a: TransitReachabilitySeed,
@@ -30,7 +22,7 @@ function preferSeed(
 function thinAtGrid(seeds: readonly TransitReachabilitySeed[], gridMetres: number) {
   const cells = new Map<string, TransitReachabilitySeed>();
   for (const seed of seeds) {
-    const [x, y] = webMercator(seed);
+    const [x, y] = toWebMercator(seed.lng, seed.lat);
     const key = `${Math.floor(x / gridMetres)}:${Math.floor(y / gridMetres)}`;
     const current = cells.get(key);
     cells.set(key, current ? preferSeed(current, seed) : seed);

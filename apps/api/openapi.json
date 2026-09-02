@@ -4919,6 +4919,23 @@
         "x-openmapx-source": "integrations/transit/index.ts"
       }
     },
+    "/api/integrations/transit/reachability/isochrone": {
+      "post": {
+        "operationId": "postApiIntegrationsTransitReachabilityIsochrone",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /reachability/isochrone (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
     "/api/integrations/transit/reachability/surface": {
       "post": {
         "operationId": "postApiIntegrationsTransitReachabilitySurface",

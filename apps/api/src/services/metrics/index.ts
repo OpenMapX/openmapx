@@ -355,7 +355,7 @@ export function recordTransitDecision(labels: TransitDecisionLabels, value = 1):
 }
 
 export interface TransitReachabilityMetricInput {
-  operation: "capabilities" | "surface" | "exact";
+  operation: "capabilities" | "surface" | "exact" | "isochrone";
   source: "self-hosted-motis" | "transitous" | "none";
   capabilityState: string;
   outcome: string;

@@ -29,6 +29,7 @@ export { useStopSearch } from "./useStopSearch";
 export { useStopsNearby } from "./useStopsNearby";
 export { useStopTimetable } from "./useStopTimetable";
 export { useStopTransfers } from "./useStopTransfers";
+export { transitIsochroneKey, useTransitIsochrone } from "./useTransitIsochrone";
 export { useTransitPlan } from "./useTransitPlan";
 export {
   type TransitPlanningCapabilityProvider,

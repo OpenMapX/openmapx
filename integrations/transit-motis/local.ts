@@ -13,6 +13,7 @@ import type { MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripLeg, TripPlan } from "@openmapx/mobility-core/transit";
+import { DEFAULT_TRANSIT_ISOCHRONE_MAX_SAMPLES } from "@openmapx/mobility-core/transit-isochrone";
 import type {
   TransitReachabilityCapabilities,
   TransitReachabilitySurface,
@@ -20,6 +21,7 @@ import type {
 import * as motis from "./adapter.js";
 import { attributionLocal, attributionTransitous } from "./attributions.js";
 import type { TransitMotisInstances } from "./instances.js";
+import { MAX_ONE_TO_MANY_BATCH, sampleMotisTravelTimeField } from "./isochrone.js";
 import {
   checkMotisReachabilityDestinations,
   getMotisReachabilitySeeds,
@@ -336,6 +338,7 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
   // tags against it; without an index they fall back to ATTRIBUTION_LOCAL.
   const attributionIndex = ctx.attributionIndex;
   const exactReachabilityEnabled = ctx.config.exactReachabilityEnabled === true;
+  const exportableIsochronesEnabled = ctx.config.exportableIsochronesEnabled === true;
   const requireActiveEpoch = (): string => {
     const epoch = activeMotisCapabilities()?.epoch;
     if (!epoch) {
@@ -581,6 +584,7 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
           source: "self-hosted-motis",
           runtimeHealthy: true,
           operatorEnabled: exactReachabilityEnabled,
+          exportableIsochronesEnabled,
           datasetEpoch: active?.epoch,
           observed: active?.reachability,
         });
@@ -600,6 +604,7 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
             source: "self-hosted-motis",
             runtimeHealthy: true,
             operatorEnabled: exactReachabilityEnabled,
+            exportableIsochronesEnabled,
             datasetEpoch: active?.epoch,
             observed: active?.reachability,
           });
@@ -643,6 +648,7 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
         source: "self-hosted-motis",
         runtimeHealthy: true,
         operatorEnabled: exactReachabilityEnabled,
+        exportableIsochronesEnabled,
         datasetEpoch: active?.epoch,
         observed: active?.reachability,
       });
@@ -657,6 +663,38 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
           motisLocalReachabilityInstance,
           request,
           capabilities.maxDestinationsPerBatch,
+          signal,
+        ),
+      );
+    },
+    async getTransitTravelTimeField(request, signal) {
+      if (!(await isMotisReachableCached())) {
+        throw new MotisReachabilityError("unavailable", "self-hosted MOTIS is unavailable");
+      }
+      const active = activeMotisCapabilities();
+      const capabilities = resolveMotisReachabilityCapabilities({
+        source: "self-hosted-motis",
+        runtimeHealthy: true,
+        operatorEnabled: exactReachabilityEnabled,
+        exportableIsochronesEnabled,
+        datasetEpoch: active?.epoch,
+        observed: active?.reachability,
+      });
+      if (!capabilities.exportableIsochrones) {
+        throw new MotisReachabilityError(
+          "unsupported",
+          `exportable transit isochrones are disabled: ${capabilities.exportableIsochroneReason}`,
+        );
+      }
+      return wrapLocal(
+        await sampleMotisTravelTimeField(
+          motisLocalReachabilityInstance,
+          request,
+          {
+            maxBatchSize: capabilities.maxDestinationsPerBatch ?? MAX_ONE_TO_MANY_BATCH,
+            maxSamples: DEFAULT_TRANSIT_ISOCHRONE_MAX_SAMPLES,
+            deadlineMs: 60_000,
+          },
           signal,
         ),
       );

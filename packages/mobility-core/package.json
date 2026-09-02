@@ -29,21 +29,13 @@
       "types": "./src/types/ev-charging.ts",
       "default": "./src/types/ev-charging.ts"
     },
-    "./freshness": {
-      "types": "./src/types/freshness.ts",
-      "default": "./src/types/freshness.ts"
-    },
-    "./geo": {
-      "types": "./src/geo.ts",
-      "default": "./src/geo.ts"
-    },
-    "./geometry": {
-      "types": "./src/types/geometry.ts",
-      "default": "./src/types/geometry.ts"
-    },
     "./fptf-journey": {
       "types": "./src/fptf-journey.ts",
       "default": "./src/fptf-journey.ts"
+    },
+    "./freshness": {
+      "types": "./src/types/freshness.ts",
+      "default": "./src/types/freshness.ts"
     },
     "./fuel": {
       "types": "./src/types/fuel.ts",
@@ -61,25 +53,41 @@
       "types": "./src/gbfs-provider-base.ts",
       "default": "./src/gbfs-provider-base.ts"
     },
-    "./license": {
-      "types": "./src/license.ts",
-      "default": "./src/license.ts"
+    "./geo": {
+      "types": "./src/geo.ts",
+      "default": "./src/geo.ts"
+    },
+    "./geometry": {
+      "types": "./src/types/geometry.ts",
+      "default": "./src/types/geometry.ts"
     },
     "./identified": {
       "types": "./src/types/identified.ts",
       "default": "./src/types/identified.ts"
     },
+    "./isoline": {
+      "types": "./src/isoline/index.ts",
+      "default": "./src/isoline/index.ts"
+    },
     "./json-transport": {
       "types": "./src/json-transport.ts",
       "default": "./src/json-transport.ts"
     },
+    "./license": {
+      "types": "./src/license.ts",
+      "default": "./src/license.ts"
+    },
+    "./mercator": {
+      "types": "./src/mercator.ts",
+      "default": "./src/mercator.ts"
+    },
+    "./mobility-context-geometry": {
+      "types": "./src/mobility-context-geometry.ts",
+      "default": "./src/mobility-context-geometry.ts"
+    },
     "./motis-alerts": {
       "types": "./src/motis-alerts.ts",
       "default": "./src/motis-alerts.ts"
-    },
-    "./motis-rentals": {
-      "types": "./src/motis-rentals.ts",
-      "default": "./src/motis-rentals.ts"
     },
     "./motis-client": {
       "types": "./src/server/motis-client.ts",
@@ -89,17 +97,9 @@
       "types": "./src/motis-radar.ts",
       "default": "./src/motis-radar.ts"
     },
-    "./mobility-context-geometry": {
-      "types": "./src/mobility-context-geometry.ts",
-      "default": "./src/mobility-context-geometry.ts"
-    },
-    "./shared-mobility-orchestrator": {
-      "types": "./src/shared-mobility-orchestrator.ts",
-      "default": "./src/shared-mobility-orchestrator.ts"
-    },
-    "./shared-mobility-runtime": {
-      "types": "./src/shared-mobility-runtime.ts",
-      "default": "./src/shared-mobility-runtime.ts"
+    "./motis-rentals": {
+      "types": "./src/motis-rentals.ts",
+      "default": "./src/motis-rentals.ts"
     },
     "./nominatim": {
       "types": "./src/nominatim.ts",
@@ -125,21 +125,33 @@
       "types": "./src/server/ris-client.ts",
       "default": "./src/server/ris-client.ts"
     },
+    "./shared-mobility": {
+      "types": "./src/types/shared-mobility.ts",
+      "default": "./src/types/shared-mobility.ts"
+    },
+    "./shared-mobility-orchestrator": {
+      "types": "./src/shared-mobility-orchestrator.ts",
+      "default": "./src/shared-mobility-orchestrator.ts"
+    },
+    "./shared-mobility-runtime": {
+      "types": "./src/shared-mobility-runtime.ts",
+      "default": "./src/shared-mobility-runtime.ts"
+    },
     "./transit": {
       "types": "./src/types/transit.ts",
       "default": "./src/types/transit.ts"
-    },
-    "./transit-reachability": {
-      "types": "./src/types/transit-reachability.ts",
-      "default": "./src/types/transit-reachability.ts"
     },
     "./transit-delay": {
       "types": "./src/transit-delay.ts",
       "default": "./src/transit-delay.ts"
     },
-    "./shared-mobility": {
-      "types": "./src/types/shared-mobility.ts",
-      "default": "./src/types/shared-mobility.ts"
+    "./transit-isochrone": {
+      "types": "./src/types/transit-isochrone.ts",
+      "default": "./src/types/transit-isochrone.ts"
+    },
+    "./transit-reachability": {
+      "types": "./src/types/transit-reachability.ts",
+      "default": "./src/types/transit-reachability.ts"
     }
   },
   "dependencies": {

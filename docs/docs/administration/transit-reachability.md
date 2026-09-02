@@ -109,7 +109,81 @@ transit planning remain available. Metrics expose bounded source, capability,
 cache, outcome/error, latency, seed/grid, destination, and batch information;
 they never include origins, destination coordinates, or result IDs.
 
-True exportable polygons remain a separate future feature. The preferred path
-is adaptive grid destinations through local MOTIS one-to-many followed by
-contouring, with its own performance, resolution, topology, and cache study—not
-per-stop Valhalla fan-out.
+## Exportable polygons
+
+There is a third artifact, and the three make different accuracy claims. Keeping
+them distinct is what stops an export from being read as more authoritative than
+it is:
+
+| Artifact | Egress model | Claim | Cost |
+| --- | --- | --- | --- |
+| **Estimated** field | straight line from each reached stop | barrier-blind visual estimate | one MOTIS request |
+| **Sampled** polygons | street-routed at each lattice point, interpolated between | accurate at the sample points; boundary uncertain within about one cell | 8–32 MOTIS requests |
+| **Exact** point check | street-routed at that coordinate | authoritative for that coordinate | one or two MOTIS requests |
+
+Sampled polygons are downloadable RFC 7946 GeoJSON. The file carries an
+`openmapx` member holding the origin, departure minute, walk profile, source,
+dataset epoch, sampling metadata, attribution, and an explicit accuracy note, so
+it stays self-describing after it leaves OpenMapX. It is **not** an exact
+isochrone, and area or population figures derived from it inherit both the
+sampling error and any bbox clipping.
+
+### Enabling
+
+Set the `transit-motis` option `exportableIsochronesEnabled: true`. It is off by
+default and sits strictly behind exact reachability: every gate listed above
+must already pass, plus this switch. A closed gate reports
+`exportableIsochroneReason` and disables nothing else.
+
+### Sampling budget
+
+A request supplies a bbox, which the server clamps to 900 km² of **ground** area
+(about 30 × 30 km) and reports `clippedToBbox` when it does. The lattice spacing
+is `max(100 m, sqrt(area / 2048))`, rounded up onto a fixed ladder so a nudged
+viewport reuses the same lattice and the same cached field. A 30 × 30 km request
+resolves to roughly 660 m; a 10 × 10 km request to roughly 220 m.
+
+Lattice points are sampled through `one-to-many-intermodal` in sequential
+batches of `min(advertised maxOneToManySize, 128)`, with a per-batch 30-second
+timeout and a 60-second budget across the run. Sampling is all-or-nothing: a
+field missing a failed batch would contour that region as unreachable, which is
+silently wrong rather than visibly broken.
+
+Because MOTIS performs **one** timetable search per request and reuses it for
+the whole batch, cost is roughly `batches × timetableSearch + samples ×
+streetOffset`. Raising MOTIS `limits.onetomany_max_many_` above its default of
+128 therefore cuts the dominant term; OpenMapX reads the advertised value, so
+that tuning takes effect with no code change. If a run does not fit the
+60-second budget on your hardware, lower the sample budget: resolution degrades,
+correctness does not.
+
+### Load and caching
+
+Only one isochrone computation runs per API instance at a time; concurrent
+callers receive `429` with `Retry-After`. Without that limit a handful of users
+could issue hundreds of sequential MOTIS batches and starve ordinary journey
+planning. The route is also in the expensive rate-limit tier.
+
+The **sampled field** is cached for 900 seconds under a key that deliberately
+excludes the thresholds. Contouring a cached field costs milliseconds, so
+changing a threshold re-contours instantly instead of re-sampling for a minute.
+
+A bbox spanning the antimeridian is rejected rather than split.
+
+### Accuracy benchmark
+
+```bash
+pnpm exec tsx scripts/benchmark-transit-isochrone-accuracy.ts \
+  --base-url http://127.0.0.1:3001 \
+  --lat 52.525 --lng 13.369 --minutes 30
+```
+
+The script generates polygons, draws deterministic sample points across the
+sampled bbox, and compares polygon inclusion against exact one-to-many checks.
+Disagreements within two cells of the boundary are expected and reported, not
+gated — the polygon interpolates between lattice points there. Disagreements
+further than two cells from the boundary have no sampling explanation and exit
+non-zero.
+
+Roll back by turning `exportableIsochronesEnabled` off; the estimated field and
+journey planning are untouched by it.

@@ -5,11 +5,20 @@
 // `./server`.
 
 export {
+  DEFAULT_TRANSIT_ISOCHRONE_MAX_SAMPLES,
+  MAX_TRANSIT_ISOCHRONE_AREA_KM2,
+  TRANSIT_ISOCHRONE_METHOD,
+  type TransitIsochroneRequest,
+  type TransitIsochroneResult,
+  type TransitIsochroneSampling,
+} from "@openmapx/mobility-core/transit-isochrone";
+export {
   MAX_TRANSIT_REACHABILITY_DESTINATIONS,
   MAX_TRANSIT_REACHABILITY_MINUTES,
   MAX_TRANSIT_REACHABILITY_THRESHOLDS,
   TRANSIT_WALK_PROFILE,
   type TransitExactPointCheckReason,
+  type TransitExportableIsochroneReason,
   type TransitReachabilityCapabilities,
   type TransitReachabilityCheckRequest,
   type TransitReachabilityCheckResult,
