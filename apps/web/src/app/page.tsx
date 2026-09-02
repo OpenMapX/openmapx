@@ -9,6 +9,7 @@ import { DataSourceDetailBridge } from "@/components/map/DataSourceDetailBridge"
 import { DeepLinkManager } from "@/components/map/DeepLinkManager";
 import { ElevationHoverMarker } from "@/components/map/ElevationHoverMarker";
 import { ExploreAnchorMarker } from "@/components/map/ExploreAnchorMarker";
+import { GarageSyncBridge } from "@/components/map/GarageSyncBridge";
 import { ImportedGeometryBanner } from "@/components/map/ImportedGeometryBanner";
 import { LegendHost } from "@/components/map/LegendHost";
 import { LayerSelector } from "@/components/map/layer-selector/LayerSelector";
@@ -39,6 +40,7 @@ import { MapFooter } from "@/components/map/MapFooter";
 import { MapLayerHost } from "@/components/map/MapLayerHost";
 import { MapPaddingSync } from "@/components/map/MapPaddingSync";
 import { MapStylePoiClickHandler } from "@/components/map/MapStylePoiClickHandler";
+import { ParkedVehicleMarkers } from "@/components/map/ParkedVehicleMarkers";
 import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { StreetLevelViewer } from "@/components/map/StreetLevelViewer";
@@ -166,11 +168,13 @@ export default function HomePage() {
             {/* Built-in overlay/tool layers loaded dynamically by MapLayerHost. */}
             <MapLayerHost />
             <DataSourceDetailBridge />
+            <GarageSyncBridge />
             <MapClickHandler />
             <MapStylePoiClickHandler />
             <MapContextMenu />
             <UserLocationMarker />
             <SelectedPlaceMarker />
+            <ParkedVehicleMarkers />
             <ExploreAnchorMarker />
             <SelectedStopInfrastructureLayer />
             <WaypointMarkers />

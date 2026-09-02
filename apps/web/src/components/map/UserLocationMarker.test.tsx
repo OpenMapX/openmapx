@@ -1,8 +1,16 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("@/components/panels/MyLocationCard", () => ({
+  MyLocationCard: ({ onClose }: { onClose: () => void }) => (
+    <button type="button" onClick={onClose}>
+      my-location-card
+    </button>
+  ),
+}));
 vi.mock("@/integration-api/map/MapContext", () => {
   const value = {
     mapReady: false,
@@ -69,5 +77,26 @@ describe("UserLocationMarker", () => {
     view.rerender(<UserLocationMarker />);
 
     await waitFor(() => expect(mapContainer.children).toHaveLength(1));
+  });
+
+  it("opens the location card when the marker is clicked", async () => {
+    const mapContainer = document.createElement("div");
+    mapContextTest.mapRef.current = { container: mapContainer };
+    mapContextTest.mapReady = true;
+    useMapStore.setState({ userLocation: [13.4, 52.5] });
+
+    render(<UserLocationMarker />);
+    await waitFor(() => expect(mapContainer.children).toHaveLength(1));
+
+    expect(screen.queryByText("my-location-card")).toBeNull();
+    act(() => {
+      (mapContainer.firstElementChild as HTMLElement).click();
+    });
+    expect(screen.getByText("my-location-card")).toBeInTheDocument();
+
+    act(() => {
+      screen.getByText("my-location-card").click();
+    });
+    expect(screen.queryByText("my-location-card")).toBeNull();
   });
 });

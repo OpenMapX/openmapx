@@ -6,6 +6,7 @@ import DownloadForOfflineIcon from "@mui/icons-material/DownloadForOffline";
 import HistoryIcon from "@mui/icons-material/History";
 import ImageIcon from "@mui/icons-material/Image";
 import LinkIcon from "@mui/icons-material/Link";
+import LocalParkingIcon from "@mui/icons-material/LocalParking";
 import PrintIcon from "@mui/icons-material/Print";
 import SettingsIcon from "@mui/icons-material/Settings";
 import StorageIcon from "@mui/icons-material/Storage";
@@ -21,7 +22,14 @@ import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
 import Snackbar from "@mui/material/Snackbar";
 import Typography from "@mui/material/Typography";
-import { PANEL, useMenuStore, useSession, useSidebarStore } from "@openmapx/core";
+import {
+  PANEL,
+  useMenuStore,
+  useParkedLocations,
+  useParkingStore,
+  useSession,
+  useSidebarStore,
+} from "@openmapx/core";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { type ChangeEvent, useRef, useState } from "react";
@@ -40,6 +48,7 @@ export function HamburgerMenu() {
   const isOpen = useMenuStore((s) => s.isOpen);
   const close = useMenuStore((s) => s.close);
   const { data: session, isPending: sessionPending } = useSession();
+  const { data: parked } = useParkedLocations();
   const isSignedIn = !sessionPending && !!session?.user?.id;
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [snackbarOpen, setSnackbarOpen] = useState(false);
@@ -73,6 +82,14 @@ export function HamburgerMenu() {
   const handleTimeline = () => {
     close();
     useSidebarStore.getState().openSidebar(PANEL.TIMELINE);
+  };
+
+  const handleParking = () => {
+    close();
+    const first = parked?.[0];
+    if (!first) return;
+    useParkingStore.getState().select(first.id);
+    useSidebarStore.getState().openSidebar(PANEL.PARKING);
   };
 
   const handleShareMap = async () => {
@@ -127,6 +144,17 @@ export function HamburgerMenu() {
                 <TimelineIcon />
               </ListItemIcon>
               <ListItemText primary={t("timeline")} />
+            </ListItemButton>
+          )}
+
+          {/* Conditional rather than disabled: an always-present "Parking" that
+              does nothing teaches the user the entry is broken. */}
+          {parked && parked.length > 0 && (
+            <ListItemButton sx={{ height: 48 }} onClick={handleParking}>
+              <ListItemIcon sx={{ minWidth: 40 }}>
+                <LocalParkingIcon />
+              </ListItemIcon>
+              <ListItemText primary={t("parking")} />
             </ListItemButton>
           )}
 

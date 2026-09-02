@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 27. August 2026
+        Zuletzt aktualisiert: 1. September 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -310,6 +310,17 @@ export default function PrivacyContentDe({
               angemeldet sind, werden Ortsname, Koordinaten und zugeh&ouml;rige Metadaten in unserer
               Datenbank gespeichert, damit sie ger&auml;te&uuml;bergreifend synchronisiert werden
               k&ouml;nnen
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Fahrzeuge und Parkposition</strong> &mdash; wenn Sie ein Fahrzeug anlegen oder
+              Ihre Parkposition speichern, w&auml;hrend Sie angemeldet sind, werden das
+              Fahrzeugprofil sowie die von Ihnen eingegebenen Koordinaten, Adresse, Notiz und
+              Parkzeit in unserer Datenbank gespeichert, damit sie ger&auml;te&uuml;bergreifend
+              synchronisiert werden. Nichts wird automatisch erfasst; jeder Eintrag stammt von
+              Ihnen. Pro Fahrzeug wird nur die aktuelle Parkposition aufbewahrt &mdash; es gibt
+              keinen Parkverlauf
             </Typography>
           </li>
           <li>
@@ -1148,6 +1159,13 @@ export default function PrivacyContentDe({
             <Typography>
               <strong>Gespeicherte Orte</strong> &mdash; werden aufbewahrt, bis Sie sie entfernen
               oder Ihr Konto l&ouml;schen.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Fahrzeuge und Parkposition</strong> &mdash; werden aufbewahrt, bis Sie die
+              Parkposition l&ouml;schen, das Fahrzeug entfernen oder Ihr Konto l&ouml;schen. Beim
+              L&ouml;schen eines Fahrzeugs wird auch dessen Parkposition entfernt.
             </Typography>
           </li>
           <li>

@@ -28,6 +28,12 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     }),
   };
 });
+const parking = vi.hoisted(() => ({ saveAt: vi.fn(async () => "saved" as const) }));
+// The menu row's job is to hand the target coordinate to the shared save
+// action; persistence is that hook's own test.
+vi.mock("@/components/panels/parking/useSaveParking", () => ({
+  useSaveParking: () => ({ saveAt: parking.saveAt, saveHere: vi.fn(), isSaving: false }),
+}));
 vi.mock("@/lib/deepLink", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/deepLink")>();
   const shareUrl = vi.fn();
@@ -799,7 +805,7 @@ describe("MapContextMenu dismissal and semantics", () => {
     expect(removeKeyListener.mock.calls.some(([event]) => event === "keydown")).toBe(true);
   });
 
-  it("exposes five named top-level menu items with 44px minimum targets", () => {
+  it("exposes six named top-level menu items with 44px minimum targets", () => {
     render(<MapContextMenu />);
     openAtMapPoint();
 
@@ -812,8 +818,19 @@ describe("MapContextMenu dismissal and semantics", () => {
       "mapContextMenu.toHere",
       "mapContextMenu.copyLocation",
       "mapContextMenu.openPlaceDetails",
+      "parking.saveHere",
       "mapContextMenu.shareLocation",
     ]);
     for (const item of items) expect(getComputedStyle(item).minHeight).toBe("44px");
+  });
+
+  it("hands the right-clicked coordinate to the shared save action", async () => {
+    render(<MapContextMenu />);
+    openAtMapPoint();
+
+    await userEvent.click(screen.getByRole("menuitem", { name: "parking.saveHere" }));
+
+    await waitFor(() => expect(parking.saveAt).toHaveBeenCalledTimes(1));
+    expect(parking.saveAt.mock.calls[0][0]).toEqual([-77.02573, 38.88859]);
   });
 });

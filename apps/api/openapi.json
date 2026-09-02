@@ -79,6 +79,10 @@
       "description": "Routes under /api/osm."
     },
     {
+      "name": "parking",
+      "description": "Routes under /api/parking."
+    },
+    {
       "name": "places",
       "description": "Routes under /api/places."
     },
@@ -117,6 +121,10 @@
     {
       "name": "transit",
       "description": "Routes under /api/transit."
+    },
+    {
+      "name": "vehicles",
+      "description": "Routes under /api/vehicles."
     },
     {
       "name": "winter-sports",
@@ -6034,6 +6042,78 @@
         "x-openmapx-auth": "session"
       }
     },
+    "/api/parking": {
+      "get": {
+        "operationId": "getApiParking",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "parking"
+        ],
+        "x-openmapx-auth": "session"
+      },
+      "put": {
+        "operationId": "putApiParking",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "parking"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/parking/{id}": {
+      "delete": {
+        "operationId": "deleteApiParkingId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "parking"
+        ],
+        "x-openmapx-auth": "session"
+      },
+      "patch": {
+        "operationId": "patchApiParkingId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "parking"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
     "/api/places/{id}": {
       "get": {
         "operationId": "getApiPlacesId",
@@ -7063,6 +7143,78 @@
         },
         "tags": [
           "transit"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/vehicles": {
+      "get": {
+        "operationId": "getApiVehicles",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "vehicles"
+        ],
+        "x-openmapx-auth": "session"
+      },
+      "post": {
+        "operationId": "postApiVehicles",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "vehicles"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/vehicles/{id}": {
+      "delete": {
+        "operationId": "deleteApiVehiclesId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "vehicles"
+        ],
+        "x-openmapx-auth": "session"
+      },
+      "patch": {
+        "operationId": "patchApiVehiclesId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "vehicles"
         ],
         "x-openmapx-auth": "session"
       }

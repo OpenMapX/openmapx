@@ -13,6 +13,7 @@ import { authRoute } from "./auth";
 import { capabilitiesRoute } from "./capabilities";
 import { dataManagerRoute } from "./data-manager";
 import { elevationRoute } from "./elevation";
+import { garageRoute } from "./garage";
 import { imageProxyRoute } from "./image-proxy";
 import { internalMetricsRoute } from "./internal-metrics";
 import { internalPoiSourcesRoute } from "./internal-poi-sources";
@@ -81,6 +82,7 @@ export async function registerCoreRoutes(
   await server.register(winterSportsRoute, { prefix: "/api" });
   await server.register(reviewsKeypairRoute, { prefix: "/api" });
   await server.register(savedRoute, { prefix: "/api" });
+  await server.register(garageRoute, { prefix: "/api" });
   await server.register(sharesRoute, { prefix: "/api" });
   await server.register(osmContributionsRoute(), { prefix: "/api" });
   await server.register(timelineRoute, { prefix: "/api" });

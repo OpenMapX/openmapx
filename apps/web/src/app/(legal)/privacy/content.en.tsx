@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: August 27, 2026
+        Last updated: September 1, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -295,6 +295,15 @@ export default function PrivacyContent({
               <strong>Saved places</strong> — if you save places while signed in, the place name,
               coordinates, and associated metadata are stored in our database so they can be
               synchronized across devices
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Vehicles and parked location</strong> — if you add a vehicle or save where you
+              parked while signed in, the vehicle profile and the coordinates, address, note and
+              expiry you entered are stored in our database so they synchronize across your devices.
+              Nothing is recorded automatically; every entry is one you made. Only the current
+              parked position per vehicle is kept — there is no parking history
             </Typography>
           </li>
           <li>
@@ -1047,6 +1056,13 @@ export default function PrivacyContent({
           <li>
             <Typography>
               <strong>Saved places</strong> — retained until you remove them or delete your account.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Vehicles and parked location</strong> — retained until you clear the parked
+              location, delete the vehicle, or delete your account. Deleting a vehicle also deletes
+              where it was parked.
             </Typography>
           </li>
           <li>

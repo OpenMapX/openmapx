@@ -1,6 +1,5 @@
 import { create } from "zustand";
 import { getStorage } from "../platform/storage";
-import type { ConnectorStandard, EvVehicleSpec } from "../types/ev";
 import type { UnitSystem } from "../types/geometry";
 import type { DateFormat, TimeFormat } from "../utils/dateTimeFormat";
 import { useDirectionsStore } from "./directionsStore";
@@ -25,7 +24,6 @@ const EV_EXCLUSIVE_NETWORKS_STORAGE_KEY = "openmapx:evExclusiveNetworks";
 const EV_PREFER_CHEAPER_STORAGE_KEY = "openmapx:evPreferCheaper";
 const EV_HOME_PRICE_PER_KWH_STORAGE_KEY = "openmapx:evHomePricePerKwh";
 const EV_HOME_CURRENCY_STORAGE_KEY = "openmapx:evHomeCurrency";
-const EV_CUSTOM_VEHICLE_STORAGE_KEY = "openmapx:evCustomVehicle";
 
 const TIME_FORMATS: readonly TimeFormat[] = ["auto", "12h", "24h"];
 const DATE_FORMATS: readonly DateFormat[] = ["auto", "dmy", "mdy", "ymd"];
@@ -156,44 +154,6 @@ function readEvHomeCurrency(): string {
   return getStorage().getString(EV_HOME_CURRENCY_STORAGE_KEY) || "EUR";
 }
 
-function readEvCustomVehicle(): EvVehicleSpec | null {
-  // Same presence idiom as readEvHomePricePerKwh: an absent or empty entry is
-  // "never set", not an all-zero spec.
-  const raw = getStorage().getString(EV_CUSTOM_VEHICLE_STORAGE_KEY);
-  if (raw == null || raw === "") return null;
-  try {
-    const parsed = JSON.parse(raw) as Partial<EvVehicleSpec>;
-    const positive = (v: unknown): v is number =>
-      typeof v === "number" && Number.isFinite(v) && v > 0;
-    if (
-      !positive(parsed.batteryKwh) ||
-      !positive(parsed.baseWhPerKm) ||
-      !positive(parsed.maxDcKw)
-    ) {
-      return null;
-    }
-    const maxAcKw =
-      typeof parsed.maxAcKw === "number" && Number.isFinite(parsed.maxAcKw) && parsed.maxAcKw >= 0
-        ? parsed.maxAcKw
-        : 0;
-    const connectors = Array.isArray(parsed.connectors)
-      ? parsed.connectors.filter((c): c is ConnectorStandard => typeof c === "string")
-      : [];
-    if (connectors.length === 0) return null;
-    return {
-      batteryKwh: parsed.batteryKwh,
-      baseWhPerKm: parsed.baseWhPerKm,
-      massTonnes: positive(parsed.massTonnes) ? parsed.massTonnes : 2,
-      maxDcKw: parsed.maxDcKw,
-      maxAcKw,
-      vehicleTaperSocPct: positive(parsed.vehicleTaperSocPct) ? parsed.vehicleTaperSocPct : 80,
-      connectors,
-    };
-  } catch {
-    return null;
-  }
-}
-
 interface SettingsState {
   units: UnitSystem;
   setUnits: (u: UnitSystem) => void;
@@ -254,9 +214,6 @@ interface SettingsState {
   /** Currency of `evHomePricePerKwh`, e.g. "EUR". */
   evHomeCurrency: string;
   setEvHomeCurrency: (v: string) => void;
-  /** Hand-entered spec for a car outside the bundled dataset; null = none saved. */
-  evCustomVehicle: EvVehicleSpec | null;
-  setEvCustomVehicle: (v: EvVehicleSpec | null) => void;
   /**
    * Re-read the persisted preferences from storage. The store is created at
    * module-eval time, which can run before the platform storage adapter is
@@ -374,14 +331,6 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(EV_HOME_CURRENCY_STORAGE_KEY, evHomeCurrency);
     set({ evHomeCurrency });
   },
-  evCustomVehicle: readEvCustomVehicle(),
-  setEvCustomVehicle: (evCustomVehicle) => {
-    getStorage().setString(
-      EV_CUSTOM_VEHICLE_STORAGE_KEY,
-      evCustomVehicle ? JSON.stringify(evCustomVehicle) : "",
-    );
-    set({ evCustomVehicle });
-  },
   hydrate: () =>
     set({
       units: readUnits(),
@@ -404,6 +353,5 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       evPreferCheaper: readEvPreferCheaper(),
       evHomePricePerKwh: readEvHomePricePerKwh(),
       evHomeCurrency: readEvHomeCurrency(),
-      evCustomVehicle: readEvCustomVehicle(),
     }),
 }));

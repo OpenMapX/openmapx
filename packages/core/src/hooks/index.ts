@@ -89,6 +89,19 @@ export { useExploreResults } from "./useExploreResults";
 export { useFilteredCategoryResults } from "./useFilteredCategoryResults";
 export { useFilterSearch } from "./useFilterSearch";
 export { useFlightProviders } from "./useFlightProviders";
+export {
+  GARAGE_QUERY_KEY,
+  useClearParkedLocation,
+  useCreateVehicle,
+  useDefaultVehicle,
+  useDeleteVehicle,
+  useGarageIdentity,
+  useParkedLocations,
+  useSaveParkedLocation,
+  useUpdateParkedLocation,
+  useUpdateVehicle,
+  useVehicles,
+} from "./useGarage";
 export { useGeocoding } from "./useGeocoding";
 export {
   useHikingArea,

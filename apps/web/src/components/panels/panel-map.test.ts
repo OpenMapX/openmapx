@@ -5,7 +5,7 @@ import { DIRECTIONS_DETENTS, PLACE_DETENTS } from "./sheet/detents";
 describe("panel-map", () => {
   it("SIDEBAR_PANELS has exactly the expected panel ids, each with a truthy component", () => {
     expect(Object.keys(SIDEBAR_PANELS).sort()).toEqual(
-      ["category", "datasource", "directions", "place", "saved", "timeline"].sort(),
+      ["category", "datasource", "directions", "parking", "place", "saved", "timeline"].sort(),
     );
     for (const entry of Object.values(SIDEBAR_PANELS)) {
       expect(entry.component).toBeDefined();

@@ -16,6 +16,8 @@ import {
   useLayerStore,
   useMapStore,
   useMenuStore,
+  useParkedLocations,
+  useParkingStore,
   usePlaceStore,
   useSearchStore,
   useSession,
@@ -64,6 +66,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
   const integrations = useIntegrationRegistry();
   const { data: session } = useSession();
   const isSignedIn = !!session?.user?.id;
+  const { data: parkedLocations } = useParkedLocations();
 
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
@@ -151,6 +154,21 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
         iconKey: "saved",
         shortcut: PARSED.saved,
         run: () => useSidebarStore.getState().openSidebar(PANEL.SAVED),
+      });
+    }
+    // Only reachable once something is parked; otherwise the command would open
+    // a panel that immediately closes itself.
+    if (parkedLocations && parkedLocations.length > 0) {
+      const first = parkedLocations[0];
+      out.push({
+        id: "panels.parking",
+        group: "panels",
+        label: t("cmdOpenParking"),
+        iconKey: "parking",
+        run: () => {
+          useParkingStore.getState().select(first.id);
+          useSidebarStore.getState().openSidebar(PANEL.PARKING);
+        },
       });
     }
     out.push(
@@ -316,6 +334,7 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     globeView,
     integrations,
     isSignedIn,
+    parkedLocations,
     mode,
     setMode,
     myLocation,

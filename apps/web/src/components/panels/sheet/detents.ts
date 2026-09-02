@@ -54,6 +54,14 @@ export const LIST_DETENTS: DetentConfig = {
   initial: "mid",
 };
 
+/** Shorter than a list: the parking surface is one record plus a few actions. */
+export const PARKING_DETENTS: DetentConfig = {
+  peek: "180px",
+  mid: "44dvh",
+  maxHeight: MAX_HEIGHT,
+  initial: "mid",
+};
+
 /**
  * Snap indices as the library reports them: 0 is its dismissed position, then
  * one index per snap counting from the bottom up — the element list is

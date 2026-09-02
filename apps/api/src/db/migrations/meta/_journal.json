@@ -127,6 +127,13 @@
       "when": 1788216860783,
       "tag": "0017_share_links",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1788288536405,
+      "tag": "0018_personal_vehicles_and_parking",
+      "breakpoints": true
     }
   ]
 }

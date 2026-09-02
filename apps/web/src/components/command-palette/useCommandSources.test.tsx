@@ -19,6 +19,9 @@ vi.mock("@openmapx/core", async (importOriginal) => {
       return (actual.toggleOverlay as (...a: [string, unknown]) => unknown)(...args);
     },
     useSession: () => ({ data: null }),
+    // The Parking command is gated on a stored record; this suite covers the
+    // overlay commands, so the garage stays empty.
+    useParkedLocations: () => ({ data: [] }),
   };
 });
 

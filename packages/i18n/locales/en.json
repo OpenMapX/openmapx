@@ -760,12 +760,6 @@
     "evMode": "EV",
     "ev": {
       "vehicle": "Vehicle",
-      "customVehicle": "Custom vehicle…",
-      "customBattery": "Usable battery (kWh)",
-      "customConsumption": "Consumption (Wh/km)",
-      "customMaxDc": "Max DC power (kW)",
-      "customMaxAc": "Max AC power (kW)",
-      "customConnectors": "Connectors",
       "batteryStart": "Current battery",
       "socTarget": "Charge to",
       "socArrivalMin": "Arrival reserve",
@@ -1343,7 +1337,8 @@
     "cmdLayerTerrain": "Map: Terrain",
     "cmdLayerCycling": "Map: Cycling",
     "cmdSearchCategory": "Search nearby: {category}",
-    "cmdToggleOverlay": "Toggle overlay: {name}"
+    "cmdToggleOverlay": "Toggle overlay: {name}",
+    "cmdOpenParking": "Open parking location"
   },
   "dataSources": {
     "clearAllFilters": "Clear all filters",
@@ -2206,7 +2201,9 @@
       "nh3": "Ammonia (NH3)",
       "no": "Nitric oxide (NO)"
     },
-    "unit": { "ugm3": "Concentration (µg/m³)" },
+    "unit": {
+      "ugm3": "Concentration (µg/m³)"
+    },
     "status": {
       "loading": "Loading monitor snapshot…",
       "quota": "Monitor coverage is unavailable because the request quota was exhausted.",
@@ -2235,7 +2232,11 @@
       "gapFilled": "Gap-filled",
       "unknown": "Unknown"
     },
-    "freshness": { "fresh": "Fresh", "stale": "Stale", "unknown": "Unknown" },
+    "freshness": {
+      "fresh": "Fresh",
+      "stale": "Stale",
+      "unknown": "Unknown"
+    },
     "quality": {
       "regulatoryCertified": "Regulatory certified",
       "qualityAssured": "Quality assured",
@@ -2440,7 +2441,8 @@
     "settings": "Settings",
     "privacy": "Privacy",
     "terms": "Terms",
-    "imprint": "Imprint"
+    "imprint": "Imprint",
+    "parking": "Parking"
   },
   "timeline": {
     "onboardingTitle": "Your timeline",
@@ -2800,5 +2802,60 @@
     "openInBrowserBody": "This version of the app cannot carry the sign-in back automatically. You can sign in on the website, but you will need to sign in again in the app after updating.",
     "systemAuthCancelled": "Sign-in was cancelled.",
     "systemAuthFailed": "Sign-in could not be completed. Please try again."
+  },
+  "parking": {
+    "title": "Parking location",
+    "savedWhen": "Saved {when}",
+    "forVehicle": "For {name}",
+    "markerLabel": "You parked here",
+    "saveHere": "Save parking here",
+    "saveParking": "Save parking",
+    "savedToast": "Parking saved",
+    "locationUnavailable": "Your location is unavailable",
+    "yourLocation": "Your location",
+    "directions": "Directions",
+    "directionsFromHere": "Directions from here",
+    "share": "Share",
+    "clear": "Clear",
+    "note": "Parking notes",
+    "notePlaceholder": "Level 3, bay 14",
+    "expires": "Parking expires",
+    "expired": "Expired",
+    "timeLeft": "{duration} left",
+    "changeLocation": "Change location",
+    "pickOnMap": "Tap the map to move the pin"
+  },
+  "vehicles": {
+    "title": "Vehicles",
+    "sectionTitle": "Vehicles",
+    "add": "Add vehicle",
+    "edit": "Edit",
+    "delete": "Delete",
+    "deleteWarning": "Deleting this vehicle also clears where it is parked.",
+    "save": "Save",
+    "cancel": "Cancel",
+    "name": "Name",
+    "kind": "Type",
+    "kindCar": "Car",
+    "kindMotorcycle": "Motorcycle",
+    "kindBicycle": "Bicycle",
+    "powertrain": "Powertrain",
+    "powertrainElectric": "Electric",
+    "powertrainPluginHybrid": "Plug-in hybrid",
+    "powertrainHybrid": "Hybrid",
+    "powertrainPetrol": "Petrol",
+    "powertrainDiesel": "Diesel",
+    "powertrainOther": "Other",
+    "makeDefault": "Make default",
+    "fuelConsumption": "Consumption (L/100 km)",
+    "preset": "Start from a model",
+    "battery": "Battery (kWh)",
+    "consumption": "Consumption (Wh/km)",
+    "maxDc": "Max DC (kW)",
+    "maxAc": "Max AC (kW)",
+    "limitReached": "You can save up to {count} vehicles",
+    "myVehicles": "My vehicles",
+    "empty": "No vehicles yet",
+    "connectors": "Connectors"
   }
 }

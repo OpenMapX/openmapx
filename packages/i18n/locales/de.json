@@ -760,12 +760,6 @@
     "evMode": "E-Auto",
     "ev": {
       "vehicle": "Fahrzeug",
-      "customVehicle": "Eigenes Fahrzeug…",
-      "customBattery": "Nutzbare Batterie (kWh)",
-      "customConsumption": "Verbrauch (Wh/km)",
-      "customMaxDc": "Max. DC-Leistung (kW)",
-      "customMaxAc": "Max. AC-Leistung (kW)",
-      "customConnectors": "Anschlüsse",
       "batteryStart": "Aktueller Akkustand",
       "socTarget": "Laden bis",
       "socArrivalMin": "Ankunftsreserve",
@@ -1343,7 +1337,8 @@
     "cmdLayerTerrain": "Karte: Gelände",
     "cmdLayerCycling": "Karte: Fahrrad",
     "cmdSearchCategory": "In der Nähe suchen: {category}",
-    "cmdToggleOverlay": "Overlay umschalten: {name}"
+    "cmdToggleOverlay": "Overlay umschalten: {name}",
+    "cmdOpenParking": "Parkposition öffnen"
   },
   "dataSources": {
     "clearAllFilters": "Alle Filter zurücksetzen",
@@ -2206,7 +2201,9 @@
       "nh3": "Ammoniak (NH3)",
       "no": "Stickstoffmonoxid (NO)"
     },
-    "unit": { "ugm3": "Konzentration (µg/m³)" },
+    "unit": {
+      "ugm3": "Konzentration (µg/m³)"
+    },
     "status": {
       "loading": "Messstations-Snapshot wird geladen…",
       "quota": "Die Stationsabdeckung ist wegen eines ausgeschöpften Anfragelimits nicht verfügbar.",
@@ -2235,7 +2232,11 @@
       "gapFilled": "Lücken ergänzt",
       "unknown": "Unbekannt"
     },
-    "freshness": { "fresh": "Aktuell", "stale": "Veraltet", "unknown": "Unbekannt" },
+    "freshness": {
+      "fresh": "Aktuell",
+      "stale": "Veraltet",
+      "unknown": "Unbekannt"
+    },
     "quality": {
       "regulatoryCertified": "Behördlich zertifiziert",
       "qualityAssured": "Qualitätsgesichert",
@@ -2440,7 +2441,8 @@
     "settings": "Einstellungen",
     "privacy": "Datenschutz",
     "terms": "Nutzungsbedingungen",
-    "imprint": "Impressum"
+    "imprint": "Impressum",
+    "parking": "Parken"
   },
   "timeline": {
     "onboardingTitle": "Ihre Zeitleiste",
@@ -2800,5 +2802,60 @@
     "openInBrowserBody": "Diese App-Version kann die Anmeldung nicht automatisch übernehmen. Du kannst dich auf der Website anmelden, musst dich nach dem Update aber erneut in der App anmelden.",
     "systemAuthCancelled": "Die Anmeldung wurde abgebrochen.",
     "systemAuthFailed": "Die Anmeldung konnte nicht abgeschlossen werden. Bitte versuche es erneut."
+  },
+  "parking": {
+    "title": "Parkposition",
+    "savedWhen": "Gespeichert {when}",
+    "forVehicle": "Für {name}",
+    "markerLabel": "Hier geparkt",
+    "saveHere": "Parkposition hier speichern",
+    "saveParking": "Parkposition speichern",
+    "savedToast": "Parkposition gespeichert",
+    "locationUnavailable": "Dein Standort ist nicht verfügbar",
+    "yourLocation": "Dein Standort",
+    "directions": "Route",
+    "directionsFromHere": "Route von hier",
+    "share": "Teilen",
+    "clear": "Löschen",
+    "note": "Parknotizen",
+    "notePlaceholder": "Ebene 3, Platz 14",
+    "expires": "Parkzeit endet",
+    "expired": "Abgelaufen",
+    "timeLeft": "Noch {duration}",
+    "changeLocation": "Position ändern",
+    "pickOnMap": "Tippe auf die Karte, um den Pin zu verschieben"
+  },
+  "vehicles": {
+    "title": "Fahrzeuge",
+    "sectionTitle": "Fahrzeuge",
+    "add": "Fahrzeug hinzufügen",
+    "edit": "Bearbeiten",
+    "delete": "Löschen",
+    "deleteWarning": "Beim Löschen dieses Fahrzeugs wird auch seine Parkposition entfernt.",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "name": "Name",
+    "kind": "Typ",
+    "kindCar": "Auto",
+    "kindMotorcycle": "Motorrad",
+    "kindBicycle": "Fahrrad",
+    "powertrain": "Antrieb",
+    "powertrainElectric": "Elektrisch",
+    "powertrainPluginHybrid": "Plug-in-Hybrid",
+    "powertrainHybrid": "Hybrid",
+    "powertrainPetrol": "Benzin",
+    "powertrainDiesel": "Diesel",
+    "powertrainOther": "Sonstiges",
+    "makeDefault": "Als Standard festlegen",
+    "fuelConsumption": "Verbrauch (l/100 km)",
+    "preset": "Von einem Modell übernehmen",
+    "battery": "Batterie (kWh)",
+    "consumption": "Verbrauch (Wh/km)",
+    "maxDc": "Max. DC (kW)",
+    "maxAc": "Max. AC (kW)",
+    "limitReached": "Du kannst bis zu {count} Fahrzeuge speichern",
+    "myVehicles": "Meine Fahrzeuge",
+    "empty": "Noch keine Fahrzeuge",
+    "connectors": "Anschlüsse"
   }
 }

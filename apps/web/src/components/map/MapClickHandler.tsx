@@ -7,6 +7,7 @@ import {
   PANEL,
   useDirectionsStore,
   useMapClickStore,
+  useParkingStore,
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
@@ -29,6 +30,12 @@ export function MapClickHandler() {
     if (!map || !mapReady) return;
 
     const onClick = (e: MapMouseEvent) => {
+      // Repositioning a parked pin consumes the tap: falling through would also
+      // deselect the place and drop a grey pin under the one being moved.
+      if (useParkingStore.getState().picking) {
+        useParkingStore.getState().setPickedCoords([e.lngLat.lng, e.lngLat.lat]);
+        return;
+      }
       // Crowd-report location picking: consume the tap to place the report point
       // and re-open the dialog, instead of the normal place/waypoint behavior.
       if (useCrowdReportStore.getState().picking) {

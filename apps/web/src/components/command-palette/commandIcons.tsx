@@ -8,6 +8,7 @@ import HelpOutlineIcon from "@mui/icons-material/HelpOutlined";
 import LayersIcon from "@mui/icons-material/Layers";
 import LightModeIcon from "@mui/icons-material/LightMode";
 import LinkIcon from "@mui/icons-material/Link";
+import LocalParkingIcon from "@mui/icons-material/LocalParking";
 import MapIcon from "@mui/icons-material/Map";
 import MenuIcon from "@mui/icons-material/Menu";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
@@ -30,6 +31,7 @@ const ICONS: Record<string, ReactNode> = {
   overlay: <LayersIcon fontSize="small" />,
   panel: <NearMeIcon fontSize="small" />,
   saved: <BookmarkBorderIcon fontSize="small" />,
+  parking: <LocalParkingIcon fontSize="small" />,
   directions: <DirectionsIcon fontSize="small" />,
   nearby: <NearMeIcon fontSize="small" />,
   menu: <MenuIcon fontSize="small" />,

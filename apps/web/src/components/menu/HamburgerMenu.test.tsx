@@ -22,9 +22,12 @@ vi.mock("@/lib/importGeoFile", () => ({
 }));
 
 const session = { current: { data: null as unknown, isPending: false } };
+const parked = vi.hoisted(() => ({ current: { data: [] as unknown[] } }));
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
-  return { ...actual, useSession: () => session.current };
+  // The Parking entry is gated on a stored record; this suite is about the
+  // menu, not the garage, so it stays empty unless a case says otherwise.
+  return { ...actual, useSession: () => session.current, useParkedLocations: () => parked.current };
 });
 
 import { HamburgerMenu } from "./HamburgerMenu";

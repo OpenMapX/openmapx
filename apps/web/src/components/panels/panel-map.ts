@@ -1,7 +1,12 @@
 import type { SxProps, Theme } from "@mui/material/styles";
 import type { ComponentType } from "react";
 import { lazy } from "react";
-import { type DetentConfig, DIRECTIONS_DETENTS, PLACE_DETENTS } from "./sheet/detents";
+import {
+  type DetentConfig,
+  DIRECTIONS_DETENTS,
+  PARKING_DETENTS,
+  PLACE_DETENTS,
+} from "./sheet/detents";
 
 const PlacePanelContent = lazy(() =>
   import("./place/PlacePanelContent").then((m) => ({ default: m.PlacePanelContent })),
@@ -24,6 +29,9 @@ const DirectionsPanelContent = lazy(() =>
 const SavedPlacesContent = lazy(() =>
   import("./saved/SavedPlacesContent").then((m) => ({ default: m.SavedPlacesContent })),
 );
+const ParkingPanelContent = lazy(() =>
+  import("./parking/ParkingPanelContent").then((m) => ({ default: m.ParkingPanelContent })),
+);
 const TimelinePanelContent = lazy(() =>
   import("./timeline/TimelinePanelContent").then((m) => ({ default: m.TimelinePanelContent })),
 );
@@ -44,6 +52,7 @@ export const SIDEBAR_PANELS: Record<string, PanelEntry> = {
   datasource: { component: DataSourceFilterContent },
   directions: { component: DirectionsPanelContent, detents: DIRECTIONS_DETENTS },
   saved: { component: SavedPlacesContent, contentSx: { pt: { xs: 0, sm: "72px" } } },
+  parking: { component: ParkingPanelContent, detents: PARKING_DETENTS },
   timeline: { component: TimelinePanelContent, contentSx: { pt: { xs: 0, sm: "72px" } } },
 };
 

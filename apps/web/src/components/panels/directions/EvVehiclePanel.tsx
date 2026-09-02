@@ -2,6 +2,7 @@
 
 import Autocomplete, { autocompleteClasses, createFilterOptions } from "@mui/material/Autocomplete";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import Checkbox from "@mui/material/Checkbox";
 import FormControl from "@mui/material/FormControl";
 import FormControlLabel from "@mui/material/FormControlLabel";
@@ -15,29 +16,21 @@ import Switch from "@mui/material/Switch";
 import { styled } from "@mui/material/styles";
 import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
-import type { ConnectorStandard, EvVehicleSpec } from "@openmapx/core";
-import { useDirectionsStore, useSettingsStore } from "@openmapx/core";
+import { useDirectionsStore, useSettingsStore, useVehicles } from "@openmapx/core";
 import { COMMON_EV_NETWORKS, listVehicles } from "@openmapx/ev-charge-planner";
 import { useTranslations } from "next-intl";
-import {
-  forwardRef,
-  type HTMLAttributes,
-  type SyntheticEvent,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { forwardRef, type HTMLAttributes, type SyntheticEvent, useMemo, useState } from "react";
 import { List, type ListImperativeAPI, type RowComponentProps, useListRef } from "react-window";
+import { VehiclesDialog } from "@/components/settings/VehiclesDialog";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { CUSTOM_VEHICLE_ID } from "@/lib/buildEvDirectionsRequest";
+import { garageVehicleId } from "@/lib/buildEvDirectionsRequest";
 
 const HOME_CURRENCIES = ["EUR", "USD", "GBP", "CHF"];
 
 interface VehicleOption {
   id: string;
   label: string;
-  /** Group heading the option sits under; the custom vehicle gets its own. */
+  /** Group heading the option sits under; garage vehicles share their own. */
   make: string;
 }
 
@@ -159,53 +152,6 @@ const VehiclePopper = styled(Popper)({
   },
 });
 
-const CONNECTOR_OPTIONS: ConnectorStandard[] = [
-  "ccs2",
-  "ccs1",
-  "chademo",
-  "type2",
-  "type1",
-  "tesla_ccs",
-  "nacs",
-  "gbt_ac",
-  "gbt_dc",
-  "type3",
-];
-
-/** Sensible European default so a half-filled custom form still yields a usable spec. */
-const DEFAULT_CUSTOM_CONNECTORS: ConnectorStandard[] = ["ccs2", "type2"];
-
-/** Quiet period before a custom-vehicle edit reaches the store and triggers a re-plan. */
-const COMMIT_DEBOUNCE_MS = 500;
-
-interface CustomVehicleDraft {
-  battery: string;
-  consumption: string;
-  maxDc: string;
-  maxAc: string;
-  connectors: ConnectorStandard[];
-}
-
-/** Null until battery, consumption and DC power are all positive — a partial form must not be sent. */
-function draftToSpec(draft: CustomVehicleDraft): EvVehicleSpec | null {
-  const batteryKwh = Number(draft.battery);
-  const baseWhPerKm = Number(draft.consumption);
-  const maxDcKw = Number(draft.maxDc);
-  const maxAcKw = Number(draft.maxAc);
-  const positive = (v: number) => Number.isFinite(v) && v > 0;
-  if (!positive(batteryKwh) || !positive(baseWhPerKm) || !positive(maxDcKw)) return null;
-  if (draft.connectors.length === 0) return null;
-  return {
-    batteryKwh,
-    baseWhPerKm,
-    massTonnes: 2,
-    maxDcKw,
-    maxAcKw: Number.isFinite(maxAcKw) && maxAcKw > 0 ? maxAcKw : 0,
-    vehicleTaperSocPct: 80,
-    connectors: draft.connectors,
-  };
-}
-
 /**
  * EV trip inputs: vehicle + state-of-charge, network preferences,
  * cheaper-charging bias and home electricity price. Persisted
@@ -216,6 +162,7 @@ function draftToSpec(draft: CustomVehicleDraft): EvVehicleSpec | null {
  */
 export function EvVehiclePanel() {
   const t = useTranslations("directions.ev");
+  const tVehicles = useTranslations("vehicles");
 
   const evSocStartPct = useDirectionsStore((s) => s.evSocStartPct);
   const setEvSocStartPct = useDirectionsStore((s) => s.setEvSocStartPct);
@@ -238,17 +185,23 @@ export function EvVehiclePanel() {
   const setEvHomePricePerKwh = useSettingsStore((s) => s.setEvHomePricePerKwh);
   const evHomeCurrency = useSettingsStore((s) => s.evHomeCurrency);
   const setEvHomeCurrency = useSettingsStore((s) => s.setEvHomeCurrency);
-  const evCustomVehicle = useSettingsStore((s) => s.evCustomVehicle);
-  const setEvCustomVehicle = useSettingsStore((s) => s.setEvCustomVehicle);
+  const { data: garageVehicles } = useVehicles();
+  const [garageOpen, setGarageOpen] = useState(false);
 
-  // The sentinel has no manufacturer, so it becomes its own one-entry group and
-  // stays first: `groupBy` only chunks consecutive options, it does not reorder.
+  // Garage entries have no manufacturer, so they form their own leading group:
+  // `groupBy` only chunks consecutive options, it never reorders them.
   const options = useMemo<VehicleOption[]>(
     () => [
-      { id: CUSTOM_VEHICLE_ID, label: t("customVehicle"), make: t("customVehicle") },
+      ...(garageVehicles ?? [])
+        .filter((vehicle) => vehicle.ev !== null)
+        .map((vehicle) => ({
+          id: garageVehicleId(vehicle.id),
+          label: vehicle.name,
+          make: tVehicles("myVehicles"),
+        })),
       ...VEHICLE_OPTIONS,
     ],
-    [t],
+    [garageVehicles, tVehicles],
   );
 
   // Virtualization means the highlighted option may not be mounted, so MUI's own
@@ -258,32 +211,6 @@ export function EvVehiclePanel() {
   const scrollToHighlighted = (_event: SyntheticEvent, option: VehicleOption | null) => {
     const index = option ? rowIndexById.get(option.id) : undefined;
     if (index !== undefined) virtualListRef.current?.scrollToRow({ index, align: "auto" });
-  };
-
-  const isCustomVehicle = evVehicleId === CUSTOM_VEHICLE_ID;
-  const [customDraft, setCustomDraft] = useState<CustomVehicleDraft>(() => ({
-    battery: evCustomVehicle ? String(evCustomVehicle.batteryKwh) : "",
-    consumption: evCustomVehicle ? String(evCustomVehicle.baseWhPerKm) : "",
-    maxDc: evCustomVehicle ? String(evCustomVehicle.maxDcKw) : "",
-    maxAc: evCustomVehicle ? String(evCustomVehicle.maxAcKw) : "",
-    connectors: evCustomVehicle?.connectors ?? DEFAULT_CUSTOM_CONNECTORS,
-  }));
-
-  const commitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  useEffect(() => () => clearTimeout(commitTimer.current ?? undefined), []);
-
-  // The store write drives both EV-plan request memos, and a plan is a real
-  // server-side route + corridor-charger + matrix computation. Writing on every
-  // keystroke would plan for "7" and then "77" while the user types battery
-  // size, so the spec only reaches the store once typing pauses.
-  const updateCustomDraft = (patch: Partial<CustomVehicleDraft>) => {
-    const next = { ...customDraft, ...patch };
-    setCustomDraft(next);
-    clearTimeout(commitTimer.current ?? undefined);
-    commitTimer.current = setTimeout(
-      () => setEvCustomVehicle(draftToSpec(next)),
-      COMMIT_DEBOUNCE_MS,
-    );
   };
 
   return (
@@ -320,67 +247,6 @@ export function EvVehiclePanel() {
           <TextField {...params} label={t("vehicle")} variant="outlined" size="small" />
         )}
       />
-
-      {isCustomVehicle && (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            <TextField
-              size="small"
-              type="number"
-              label={t("customBattery")}
-              value={customDraft.battery}
-              onChange={(e) => updateCustomDraft({ battery: e.target.value })}
-              slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
-              fullWidth
-            />
-            <TextField
-              size="small"
-              type="number"
-              label={t("customConsumption")}
-              value={customDraft.consumption}
-              onChange={(e) => updateCustomDraft({ consumption: e.target.value })}
-              slotProps={{ htmlInput: { min: 0, step: 1 } }}
-              fullWidth
-            />
-          </Box>
-          <Box sx={{ display: "flex", gap: 1.5 }}>
-            <TextField
-              size="small"
-              type="number"
-              label={t("customMaxDc")}
-              value={customDraft.maxDc}
-              onChange={(e) => updateCustomDraft({ maxDc: e.target.value })}
-              slotProps={{ htmlInput: { min: 0, step: 1 } }}
-              fullWidth
-            />
-            <TextField
-              size="small"
-              type="number"
-              label={t("customMaxAc")}
-              value={customDraft.maxAc}
-              onChange={(e) => updateCustomDraft({ maxAc: e.target.value })}
-              slotProps={{ htmlInput: { min: 0, step: 0.1 } }}
-              fullWidth
-            />
-          </Box>
-          <Autocomplete
-            multiple
-            size="small"
-            options={CONNECTOR_OPTIONS}
-            getOptionLabel={(c) => t(`connector.${c}`)}
-            value={customDraft.connectors}
-            onChange={(_event, value) => updateCustomDraft({ connectors: value })}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label={t("customConnectors")}
-                variant="outlined"
-                size="small"
-              />
-            )}
-          />
-        </Box>
-      )}
 
       <Box sx={{ display: "flex", gap: 1.5 }}>
         <TextField
@@ -420,6 +286,11 @@ export function EvVehiclePanel() {
           fullWidth
         />
       </Box>
+
+      <Button size="small" onClick={() => setGarageOpen(true)}>
+        {tVehicles("add")}
+      </Button>
+      <VehiclesDialog open={garageOpen} onClose={() => setGarageOpen(false)} />
 
       <Autocomplete
         multiple

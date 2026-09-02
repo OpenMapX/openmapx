@@ -5,10 +5,15 @@ import {
   useEvDirections,
   useNavigationStore,
   useSettingsStore,
+  useVehicles,
 } from "@openmapx/core";
 import { useLocale } from "next-intl";
 import { useMemo } from "react";
-import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
+import {
+  buildEvDirectionsRequest,
+  GARAGE_VEHICLE_PREFIX,
+  isGarageVehicleId,
+} from "@/lib/buildEvDirectionsRequest";
 
 // Stable fallbacks for the "nothing to draw yet" case. A fresh `[]` literal in
 // the return statement would change identity every render, and RouteLayer's
@@ -60,7 +65,7 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   const evVehicleId = useSettingsStore((s) => s.evVehicleId);
-  const evCustomVehicle = useSettingsStore((s) => s.evCustomVehicle);
+  const { data: garageVehicles } = useVehicles();
   const evSocTargetPct = useSettingsStore((s) => s.evSocTargetPct);
   const evPreferredNetworks = useSettingsStore((s) => s.evPreferredNetworks);
   const evAvoidedNetworks = useSettingsStore((s) => s.evAvoidedNetworks);
@@ -114,7 +119,11 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
         waypoints: routeWaypoints,
         allWaypointsFilled: allFilled,
         vehicleId: evVehicleId,
-        customVehicle: evCustomVehicle,
+        garageVehicle:
+          evVehicleId && isGarageVehicleId(evVehicleId)
+            ? (garageVehicles?.find((v) => v.id === evVehicleId.slice(GARAGE_VEHICLE_PREFIX.length))
+                ?.ev ?? null)
+            : null,
         socStartPct: evSocStartPct,
         socArrivalMinPct: evSocArrivalMinPct,
         socTargetPct: evSocTargetPct,
@@ -137,7 +146,7 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
       routeWaypoints,
       allFilled,
       evVehicleId,
-      evCustomVehicle,
+      garageVehicles,
       evSocStartPct,
       evSocArrivalMinPct,
       evSocTargetPct,

@@ -52,6 +52,7 @@ import {
   useSidebarStore,
   useTransitPlan,
   useTransitPlanningCapabilities,
+  useVehicles,
   viewerTimeZone,
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
@@ -83,7 +84,11 @@ import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributio
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
-import { buildEvDirectionsRequest } from "@/lib/buildEvDirectionsRequest";
+import {
+  buildEvDirectionsRequest,
+  GARAGE_VEHICLE_PREFIX,
+  isGarageVehicleId,
+} from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 
@@ -177,7 +182,7 @@ export function DirectionsPanelContent() {
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
   const evVehicleId = useSettingsStore((s) => s.evVehicleId);
-  const evCustomVehicle = useSettingsStore((s) => s.evCustomVehicle);
+  const { data: garageVehicles } = useVehicles();
   const evSocTargetPct = useSettingsStore((s) => s.evSocTargetPct);
   const evPreferredNetworks = useSettingsStore((s) => s.evPreferredNetworks);
   const evAvoidedNetworks = useSettingsStore((s) => s.evAvoidedNetworks);
@@ -316,7 +321,11 @@ export function DirectionsPanelContent() {
         waypoints: routeWaypoints,
         allWaypointsFilled,
         vehicleId: evVehicleId,
-        customVehicle: evCustomVehicle,
+        garageVehicle:
+          evVehicleId && isGarageVehicleId(evVehicleId)
+            ? (garageVehicles?.find((v) => v.id === evVehicleId.slice(GARAGE_VEHICLE_PREFIX.length))
+                ?.ev ?? null)
+            : null,
         socStartPct: evSocStartPct,
         socArrivalMinPct: evSocArrivalMinPct,
         socTargetPct: evSocTargetPct,
@@ -340,7 +349,7 @@ export function DirectionsPanelContent() {
       routeWaypoints,
       allWaypointsFilled,
       evVehicleId,
-      evCustomVehicle,
+      garageVehicles,
       evSocStartPct,
       evSocArrivalMinPct,
       evSocTargetPct,

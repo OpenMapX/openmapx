@@ -89,3 +89,10 @@ export {
   type PersonalTimelineConnectionRow,
   personalTimelineConnection,
 } from "./timeline-connection-schema";
+// Personal vehicle garage and parked-location state
+export {
+  type ParkedLocationRow,
+  type PersonalVehicleRow,
+  parkedLocation,
+  personalVehicle,
+} from "./vehicle-schema";

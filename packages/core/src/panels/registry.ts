@@ -1,6 +1,7 @@
 import { useCategorySearchStore } from "../stores/categorySearchStore";
 import { useDataSourceStore } from "../stores/dataSourceStore";
 import { useDirectionsStore } from "../stores/directionsStore";
+import { useParkingStore } from "../stores/parkingStore";
 import { usePersonalTimelineStore } from "../stores/personalTimelineStore";
 import { usePlaceStore } from "../stores/placeStore";
 import { useSavedPlacesStore } from "../stores/savedPlacesStore";
@@ -32,6 +33,11 @@ export const PANEL_REGISTRY: Record<string, PanelDefinition> = {
     id: PANEL.SAVED,
     layer: "sidebar",
     onDeactivate: () => useSavedPlacesStore.getState().clearSelectedList(),
+  },
+  [PANEL.PARKING]: {
+    id: PANEL.PARKING,
+    layer: "sidebar",
+    onDeactivate: () => useParkingStore.getState().reset(),
   },
   [PANEL.TIMELINE]: {
     id: PANEL.TIMELINE,

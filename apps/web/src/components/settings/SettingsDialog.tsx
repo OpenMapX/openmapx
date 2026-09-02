@@ -31,6 +31,7 @@ import {
 import { setLocaleAndReload } from "@/lib/setLocale";
 import { NavigationSettingsDialog } from "./NavigationSettingsDialog";
 import { Section, SettingRow } from "./settingsPrimitives";
+import { VehiclesDialog } from "./VehiclesDialog";
 
 // Fixed sample instant (Dec 31, 2025, 13:05 local) used to preview each
 // date/time format option in the dropdowns.
@@ -53,6 +54,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const t = useTranslations("menu");
   const ts = useTranslations("settings");
   const tn = useTranslations("navigationSettings");
+  const tv = useTranslations("vehicles");
   const tc = useTranslations("common");
   const locale = useLocale();
   const { mode, setMode } = useColorScheme();
@@ -66,6 +68,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setAiSearchEnabled = useSettingsStore((s) => s.setAiSearchEnabled);
   const fullScreen = useFullScreenOnMobile();
   const [navSettingsOpen, setNavSettingsOpen] = useState(false);
+  const [vehiclesOpen, setVehiclesOpen] = useState(false);
 
   return (
     <Dialog
@@ -172,6 +175,13 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </ListItemButton>
         </Section>
 
+        <Section title={tv("sectionTitle")}>
+          <ListItemButton onClick={() => setVehiclesOpen(true)} sx={{ borderRadius: 1, px: 1 }}>
+            <ListItemText primary={tv("title")} />
+            <ChevronRightIcon sx={{ color: "text.secondary" }} />
+          </ListItemButton>
+        </Section>
+
         <Section title={ts("search")}>
           <SettingRow label={ts("aiSearch")}>
             <Switch
@@ -185,6 +195,7 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
         </Section>
       </DialogContent>
       <NavigationSettingsDialog open={navSettingsOpen} onClose={() => setNavSettingsOpen(false)} />
+      <VehiclesDialog open={vehiclesOpen} onClose={() => setVehiclesOpen(false)} />
     </Dialog>
   );
 }

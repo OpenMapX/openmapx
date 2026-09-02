@@ -2,6 +2,7 @@
 
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import CopyAllIcon from "@mui/icons-material/CopyAll";
+import LocalParkingIcon from "@mui/icons-material/LocalParking";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import PlaceIcon from "@mui/icons-material/Place";
@@ -43,6 +44,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useSaveParking } from "@/components/panels/parking/useSaveParking";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
 import { buildLocationShareUrl, shareUrl } from "@/lib/deepLink";
@@ -54,8 +56,8 @@ interface MapContextTarget {
   poi: StylePoiTarget | null;
 }
 
-type ActionId = "from" | "to" | "copy" | "details" | "share";
-const ACTION_ORDER: ActionId[] = ["from", "to", "copy", "details", "share"];
+type ActionId = "from" | "to" | "copy" | "details" | "parking" | "share";
+const ACTION_ORDER: ActionId[] = ["from", "to", "copy", "details", "parking", "share"];
 
 function formatContextCoordinates([lng, lat]: [number, number]): string {
   return `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
@@ -70,8 +72,10 @@ function cameFromTouch(event: MouseEvent & { pointerType?: string }): boolean {
 
 export function MapContextMenu(): React.ReactNode {
   const t = useTranslations("mapContextMenu");
+  const tParking = useTranslations("parking");
   const locale = useLocale();
   const { mapRef, mapReady, styleVersion } = useMap();
+  const { saveAt } = useSaveParking();
   const [target, setTarget] = useState<MapContextTarget | null>(null);
   const [activeAction, setActiveAction] = useState<ActionId>("from");
   const [copyOpen, setCopyOpen] = useState(false);
@@ -88,6 +92,7 @@ export function MapContextMenu(): React.ReactNode {
     to: null,
     copy: null,
     details: null,
+    parking: null,
     share: null,
   });
   const copyRowRef = useRef<HTMLElement | null>(null);
@@ -309,6 +314,13 @@ export function MapContextMenu(): React.ReactNode {
       sidebar.openDetail(PANEL.PLACE_CARD);
     }
     closeMenu();
+  };
+
+  const saveParkingHere = async () => {
+    if (!target) return;
+    const outcome = await saveAt(target.coordinates, { address: reverseGeo?.address ?? null });
+    closeMenu();
+    setFeedback(outcome === "saved" ? tParking("savedToast") : tParking("locationUnavailable"));
   };
 
   const copyRows = useMemo(() => {
@@ -536,6 +548,16 @@ export function MapContextMenu(): React.ReactNode {
                       <PlaceIcon fontSize="small" />
                     </ListItemIcon>
                     <ListItemText>{t("openPlaceDetails")}</ListItemText>
+                  </MenuItem>
+                  <MenuItem
+                    {...commonActionProps("parking")}
+                    onClick={() => void saveParkingHere()}
+                    sx={{ minHeight: "44px !important" }}
+                  >
+                    <ListItemIcon>
+                      <LocalParkingIcon fontSize="small" />
+                    </ListItemIcon>
+                    <ListItemText>{tParking("saveHere")}</ListItemText>
                   </MenuItem>
                   <MenuItem
                     {...commonActionProps("share")}

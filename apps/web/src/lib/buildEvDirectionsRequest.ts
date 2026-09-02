@@ -1,7 +1,15 @@
 import type { EvDirectionsRequest, EvVehicleSpec, LngLat } from "@openmapx/core";
 
-/** Sentinel `vehicleId` meaning "use the user's hand-entered spec instead of a dataset preset". */
-export const CUSTOM_VEHICLE_ID = "custom";
+/** Prefix marking a `vehicleId` that names a garage vehicle rather than a dataset preset. */
+export const GARAGE_VEHICLE_PREFIX = "garage:";
+
+export function garageVehicleId(id: string): string {
+  return `${GARAGE_VEHICLE_PREFIX}${id}`;
+}
+
+export function isGarageVehicleId(vehicleId: string): boolean {
+  return vehicleId.startsWith(GARAGE_VEHICLE_PREFIX);
+}
 
 /**
  * Single source of truth for building the `POST /directions/ev` request body.
@@ -16,8 +24,12 @@ export interface EvDirectionsRequestInput {
   waypoints: LngLat[];
   allWaypointsFilled: boolean;
   vehicleId: string | null;
-  /** Hand-entered spec, sent instead of `vehicleId` when the custom vehicle is selected. */
-  customVehicle: EvVehicleSpec | null;
+  /**
+   * Spec of the selected garage vehicle, resolved by the caller. Both callers
+   * must resolve it identically: they run independent `useEvDirections` queries
+   * and only share a cache entry when their request bodies match byte for byte.
+   */
+  garageVehicle: EvVehicleSpec | null;
   socStartPct: number;
   socArrivalMinPct: number;
   socTargetPct: number;
@@ -43,12 +55,14 @@ export function buildEvDirectionsRequest(
   input: EvDirectionsRequestInput,
 ): EvDirectionsRequest | null {
   if (!input.isEvMode || !input.allWaypointsFilled || !input.vehicleId) return null;
-  const isCustom = input.vehicleId === CUSTOM_VEHICLE_ID;
-  if (isCustom && !input.customVehicle) return null;
+  const isGarage = isGarageVehicleId(input.vehicleId);
+  // A garage selection that resolves to nothing — the vehicle was deleted, or
+  // its spec is incomplete — must not silently plan with another car.
+  if (isGarage && !input.garageVehicle) return null;
   return {
     waypoints: input.waypoints,
-    ...(isCustom && input.customVehicle
-      ? { vehicle: input.customVehicle }
+    ...(isGarage && input.garageVehicle
+      ? { vehicle: input.garageVehicle }
       : { vehicleId: input.vehicleId }),
     socStartPct: input.socStartPct,
     socArrivalMinPct: input.socArrivalMinPct,

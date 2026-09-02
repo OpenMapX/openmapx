@@ -52,6 +52,7 @@ interface VitestExpectation {
   toHaveProperty(property: string | readonly string[], value?: unknown): void;
   toEqual(expected: unknown): void;
   toMatchObject(expected: unknown): void;
+  toHaveProperty(key: string, value?: unknown): void;
   toHaveBeenCalled(): void;
   toHaveBeenCalledTimes(times: number): void;
   toHaveBeenCalledWith(...args: unknown[]): void;
@@ -98,6 +99,8 @@ declare module "vitest" {
   export const afterEach: (callback: VitestTestCallback) => void;
   export const vi: {
     fn(implementation?: VitestMockImplementation): VitestMockFunction;
+    /** Runs the factory before the module graph, so `vi.mock` can close over it. */
+    hoisted<T>(factory: () => T): T;
     mock(id: string, factory: VitestMockFactory): void;
     mocked<T>(item: T): T;
     spyOn<T, K extends keyof T>(object: T, method: K): VitestMockFunction;

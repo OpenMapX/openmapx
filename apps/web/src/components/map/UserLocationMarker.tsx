@@ -2,13 +2,18 @@
 
 import { useMapStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useTranslations } from "next-intl";
+import { useEffect, useRef, useState } from "react";
+import { MyLocationCard } from "@/components/panels/MyLocationCard";
 import { useMap } from "@/integration-api/map/MapContext";
 
 export function UserLocationMarker() {
+  const t = useTranslations("parking");
   const { mapReady, mapRef } = useMap();
   const userLocation = useMapStore((s) => s.userLocation);
   const markerRef = useRef<maplibregl.Marker | null>(null);
+  const [cardOpen, setCardOpen] = useState(false);
+  const locationLabel = t("yourLocation");
 
   // Cleanup on unmount
   useEffect(() => {
@@ -32,8 +37,12 @@ export function UserLocationMarker() {
           return;
         }
 
-        const wrapper = document.createElement("div");
-        wrapper.style.cssText = "position:relative;width:16px;height:16px;";
+        const wrapper = document.createElement("button");
+        wrapper.type = "button";
+        wrapper.setAttribute("aria-label", locationLabel);
+        wrapper.style.cssText =
+          "position:relative;width:16px;height:16px;padding:0;border:0;background:none;cursor:pointer;";
+        wrapper.addEventListener("click", () => setCardOpen(true));
 
         // Outer pulsing ring
         const pulse = document.createElement("div");
@@ -81,7 +90,9 @@ export function UserLocationMarker() {
     return () => {
       destroyed = true;
     };
-  }, [userLocation, mapReady, mapRef]);
+  }, [userLocation, mapReady, mapRef, locationLabel]);
 
-  return null;
+  return userLocation && cardOpen ? (
+    <MyLocationCard coords={userLocation} onClose={() => setCardOpen(false)} />
+  ) : null;
 }
