@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen, userEvent } from "@/test";
 
+import { TravelTimeToolbar } from "../legend";
 import { useTravelTimeStore } from "../store";
 
 const reachability = vi.hoisted(() => vi.fn());
@@ -13,8 +14,6 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
   useTransitIsochrone: () => isochrone(),
 }));
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
-
-const { TravelTimeToolbar } = await import("../legend");
 
 function capabilities(exportableIsochrones: boolean) {
   return {
