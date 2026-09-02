@@ -16,18 +16,22 @@ import {
   useState,
 } from "react";
 import { haptics } from "@/lib/haptics";
+import { publishMapObstruction } from "@/lib/mapObstructions";
 import { publishMobilePanelHeight, useMobilePanelFollowCap } from "@/lib/mobilePanelHeight";
 import { useVisualViewport } from "@/lib/useVisualViewport";
 import { SHEET_PART_STYLES, sheetChromeVars } from "./chrome";
 import { type Detent, type DetentConfig, detentIndex, snapSlots } from "./detents";
 import { DetailChromeContext, FloatingHandleContext } from "./mobileSheetShared";
-import { peekContentHeight, visibleSheetHeight } from "./sheetMetrics";
+import { peekContentHeight, sheetObstructionHeight, visibleSheetHeight } from "./sheetMetrics";
 import {
   detentFromSnapEvent,
   type MobileSheetApi,
   MobileSheetContext,
   type SnapDetail,
 } from "./sheetState";
+
+/** How long the sheet has to hold still before its height counts as settled. */
+const SHEET_SETTLE_MS = 120;
 
 /**
  * Resizing the sheet from the keyboard. The handle lives in the shadow root
@@ -232,6 +236,15 @@ export function MobileBottomSheet({
     snapTo(detent);
   }, [detent, snapTo]);
 
+  // Read fresh inside the settle timer instead of being captured by the effect
+  // below. `midPx` is recomputed on every window resize — the on-screen
+  // keyboard, a rotation, the mobile URL bar collapsing — and re-running the
+  // effect there would delete the obstruction at once and only restore it a
+  // settle delay later, easing the camera out to the no-sheet framing and back
+  // for a sheet that never moved.
+  const midPxRef = useRef(midPx);
+  const visiblePxRef = useRef(0);
+
   // The visible height has to be derived from the host's scroll offset, not
   // measured directly, so it needs republishing on scroll. It also needs
   // republishing on resize: the host's own box is not fixed for every sheet —
@@ -244,12 +257,25 @@ export function MobileBottomSheet({
     // one rather than whichever of the two happens to be taller.
     if (obscured) {
       publishMobilePanelHeight(id, null);
+      publishMapObstruction(id, "bottom", null);
       return;
     }
     let frame = 0;
+    let settle = 0;
     const publish = () => {
       frame = 0;
-      publishMobilePanelHeight(id, visibleSheetHeight(host));
+      const visible = visibleSheetHeight(host);
+      visiblePxRef.current = visible;
+      publishMobilePanelHeight(id, visible);
+      // The camera only re-frames once the sheet comes to rest, never mid-drag.
+      window.clearTimeout(settle);
+      settle = window.setTimeout(() => {
+        publishMapObstruction(
+          id,
+          "bottom",
+          sheetObstructionHeight(visible, midPxRef.current, window.innerHeight),
+        );
+      }, SHEET_SETTLE_MS);
     };
     const onChange = () => {
       if (!frame) frame = requestAnimationFrame(publish);
@@ -262,9 +288,25 @@ export function MobileBottomSheet({
       host.removeEventListener("scroll", onChange);
       ro.disconnect();
       if (frame) cancelAnimationFrame(frame);
+      window.clearTimeout(settle);
       publishMobilePanelHeight(id, null);
+      publishMapObstruction(id, "bottom", null);
     };
   }, [host, id, obscured]);
+
+  // A new cap, or a sheet coming out from under the one that covered it, still
+  // has to reach the camera — but neither is a drag, so both land at once
+  // rather than behind the settle delay. Runs after the effect above, so the
+  // height it reuses is the one that effect just measured.
+  useEffect(() => {
+    midPxRef.current = midPx;
+    if (!host || obscured) return;
+    publishMapObstruction(
+      id,
+      "bottom",
+      sheetObstructionHeight(visiblePxRef.current, midPx, window.innerHeight),
+    );
+  }, [host, id, obscured, midPx]);
 
   // Resolve the mid snap to pixels for the follow cap. Snap markers are 1px
   // targets offset by `top: calc(var(--snap) - 1px)` inside the fixed host, so

@@ -1,3 +1,5 @@
+import { DEFAULT_FOLLOW_CAP_FRACTION } from "@/lib/mobilePanelHeight";
+
 export interface ScrollGeometry {
   scrollTop: number;
   scrollHeight: number;
@@ -39,4 +41,20 @@ export function peekContentHeight(
 ): number {
   const hidden = hiddenAtPeekHeights.reduce((sum, h) => sum + Math.max(0, h), 0);
   return Math.max(0, Math.round(subtreeHeight - hidden + headerHeight));
+}
+
+/**
+ * How much of the map a sheet takes away for camera framing. Capped at the mid
+ * detent (or the default follow fraction for sheets without one) so a sheet
+ * dragged to full keeps framing continuous with where it will come back down.
+ */
+export function sheetObstructionHeight(
+  visiblePx: number,
+  midPx: number | null,
+  viewportHeight: number,
+): number | null {
+  if (!(visiblePx > 0)) return null;
+  const cap =
+    midPx ?? (viewportHeight > 0 ? viewportHeight * DEFAULT_FOLLOW_CAP_FRACTION : visiblePx);
+  return Math.min(visiblePx, cap);
 }

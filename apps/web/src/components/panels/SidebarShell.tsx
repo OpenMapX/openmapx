@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { lazy, type ReactNode, Suspense, useState } from "react";
 import { SidebarCollapseToggle } from "@/components/ui/SidebarCollapseToggle";
 import { PANEL_WIDTH } from "@/lib/layout";
+import { useMapObstruction } from "@/lib/mapObstructions";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
 import { type DetentConfig, LIST_DETENTS } from "./sheet/detents";
 
@@ -64,6 +65,7 @@ function DesktopSidebar({ children, contentSx }: SidebarShellProps) {
   const toggleCollapsed = useSidebarStore((s) => s.toggleCollapsed);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   useMobilePanelHeightTracker("sidebar", el);
+  useMapObstruction("sidebar", "left", collapsed ? null : PANEL_WIDTH);
 
   return (
     <>

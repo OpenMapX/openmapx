@@ -7,6 +7,7 @@ import { useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { lazy, type ReactNode, Suspense, useContext, useEffect, useState } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
+import { useMapObstruction } from "@/lib/mapObstructions";
 import { useMobilePanelHeightTracker } from "@/lib/mobilePanelHeight";
 import { PLACE_DETENTS } from "./sheet/detents";
 import { DetailChromeContext } from "./sheet/mobileSheetShared";
@@ -16,6 +17,7 @@ const MobileBottomSheet = lazy(() =>
 );
 
 const CARD_GAP = 24;
+const DETAIL_CARD_WIDTH = 376;
 
 // Re-exported so existing imports of `DetailChromeContext` from this module
 // (tests included) keep working now that MobileBottomSheet owns the provider.
@@ -60,6 +62,13 @@ function DesktopDetail({ children }: { children: ReactNode }) {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   useMobilePanelHeightTracker("detail", el);
+  // The card floats beside the rail, so what it takes from the map is the
+  // distance to its own right edge — which moves with the rail's collapse.
+  useMapObstruction(
+    "detail",
+    "left",
+    (collapsed ? CARD_GAP : PANEL_WIDTH + CARD_GAP) + DETAIL_CARD_WIDTH,
+  );
 
   return (
     <Paper
@@ -69,7 +78,7 @@ function DesktopDetail({ children }: { children: ReactNode }) {
         position: "absolute",
         top: 66,
         left: collapsed ? CARD_GAP : PANEL_WIDTH + CARD_GAP,
-        width: 376,
+        width: DETAIL_CARD_WIDTH,
         maxHeight: "calc(100dvh - 78px)",
         overflowY: "auto",
         borderRadius: 2,

@@ -90,6 +90,7 @@ import {
   launchExploreTextSearch,
   launchTextSearch,
 } from "@/lib/launchExplore";
+import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { isConfidentPlaceMatch } from "@/lib/placeMatch";
 import { useHydrated } from "@/lib/useHydrated";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
@@ -130,6 +131,7 @@ export function SearchBar() {
   const inputRef = useRef<HTMLInputElement>(null);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  const [barEl, setBarEl] = useState<HTMLDivElement | null>(null);
   const shortcutPlatform = useHydrated() ? getPlatform() : "other";
   const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
@@ -506,6 +508,16 @@ export function SearchBar() {
     ];
   }, [nearbyMode, q, t]);
 
+  // Mobile: when the search is focused, the bar takes over the full viewport
+  // Pure CSS transition — same component,same focus/dropdown state,
+  // just a different layout.
+  const fullScreen = isMobile && isFocused;
+
+  // Desktop keeps the bar inside the rail's column, which is already registered
+  // as an obstruction; a full-screen search covers the map entirely, and
+  // framing against that would leave nothing to aim at.
+  useMeasuredMapObstruction("search-bar", "top", isMobile && !fullScreen ? barEl : null);
+
   if (directionsOpen) return null;
 
   const handleActivateNlp = () => {
@@ -855,11 +867,6 @@ export function SearchBar() {
     !showDropdown &&
     !syntheticResult;
 
-  // Mobile: when the search is focused, the bar takes over the full viewport
-  // Pure CSS transition — same component,same focus/dropdown state,
-  // just a different layout.
-  const fullScreen = isMobile && isFocused;
-
   const handleBack = () => {
     setIsFocused(false);
     inputRef.current?.blur();
@@ -898,6 +905,7 @@ export function SearchBar() {
         />
       )}
       <Box
+        ref={setBarEl}
         sx={{
           position: "absolute",
           top: "calc(12px + var(--omx-safe-top))",

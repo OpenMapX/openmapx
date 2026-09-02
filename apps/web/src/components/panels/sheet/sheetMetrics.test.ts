@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { peekContentHeight, visibleSheetHeight } from "./sheetMetrics";
+import { peekContentHeight, sheetObstructionHeight, visibleSheetHeight } from "./sheetMetrics";
 
 // The host scrolls a track whose extra scrollable length equals the sheet's
 // max height: at scrollTop 0 nothing shows, at max scroll the sheet fills the
@@ -59,5 +59,22 @@ describe("peekContentHeight", () => {
 
   it("never returns a negative height", () => {
     expect(peekContentHeight(40, [80], 0)).toBe(0);
+  });
+});
+
+describe("sheetObstructionHeight", () => {
+  it("is null while nothing is visible", () => {
+    expect(sheetObstructionHeight(0, 400, 800)).toBeNull();
+  });
+  it("follows the visible height up to the mid detent", () => {
+    expect(sheetObstructionHeight(180, 416, 800)).toBe(180);
+    expect(sheetObstructionHeight(752, 416, 800)).toBe(416);
+  });
+  it("falls back to the default follow fraction of the viewport for two-snap sheets", () => {
+    expect(sheetObstructionHeight(700, null, 800)).toBe(520);
+    expect(sheetObstructionHeight(100, null, 800)).toBe(100);
+  });
+  it("uses the visible height itself before the viewport is known", () => {
+    expect(sheetObstructionHeight(300, null, 0)).toBe(300);
   });
 });

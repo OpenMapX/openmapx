@@ -13,7 +13,9 @@ import Paper from "@mui/material/Paper";
 import Popover from "@mui/material/Popover";
 import Radio from "@mui/material/Radio";
 import type { SxProps, Theme } from "@mui/material/styles";
+import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import type { OpeningHoursFilter } from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
@@ -33,6 +35,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { BRAND } from "@/integration-api/runtime/theme";
+import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { BrandLogo } from "./BrandLogo";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
@@ -252,10 +255,19 @@ export function CategoryFilterBar() {
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [panelAnchorEl, setPanelAnchorEl] = useState<HTMLElement | null>(null);
+  const [barEl, setBarEl] = useState<HTMLDivElement | null>(null);
   // Pending state — committed only on Apply
   const [pendingMode, setPendingMode] = useState<OpeningHoursFilter>(openingHoursFilter);
   const [pendingDay, setPendingDay] = useState<number | null>(openAtDay);
   const [pendingHour, setPendingHour] = useState<number | null>(openAtHour);
+
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
+  // Every branch below returns a different root (or none at all), so this sits
+  // above them all and follows whichever one is mounted through `barEl`. Mobile
+  // only: on desktop the row floats in the margin beside the rail, whose own
+  // inset already frames the camera clear of that side.
+  useMeasuredMapObstruction("category-filter-bar", "top", isMobile ? barEl : null);
 
   // Fuel stations (data source): simple "Open now" toggle chip. No brand
   // chips here — selecting a data source calls clearCategory() first, so
@@ -263,7 +275,10 @@ export function CategoryFilterBar() {
   if (activeSource === "fuel") {
     const isFiltered = openingHoursFilter === "open_now";
     return (
-      <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
+      <Box
+        ref={setBarEl}
+        sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}
+      >
         <Chip
           icon={
             <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
@@ -314,7 +329,10 @@ export function CategoryFilterBar() {
     const hasChips = requireChips.length > 0 || excludeChips.length > 0;
     if (!hasChips && !unmappedNotice) return null;
     return (
-      <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
+      <Box
+        ref={setBarEl}
+        sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}
+      >
         {requireChips}
         {excludeChips}
         {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
@@ -327,7 +345,10 @@ export function CategoryFilterBar() {
   if (!effectiveCategory || !HOURS_FILTER_CATEGORY_IDS.has(effectiveCategory)) {
     if (!unmappedNotice && !showBrandChips) return null;
     return (
-      <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
+      <Box
+        ref={setBarEl}
+        sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}
+      >
         {brandChips}
         {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
       </Box>
@@ -357,7 +378,10 @@ export function CategoryFilterBar() {
   const radioSx = { color: BRAND, "&.Mui-checked": { color: BRAND }, p: 0.5 };
 
   return (
-    <Box sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}>
+    <Box
+      ref={setBarEl}
+      sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}
+    >
       <Chip
         icon={
           <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>

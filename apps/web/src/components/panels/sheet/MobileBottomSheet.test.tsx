@@ -1,5 +1,11 @@
-import { render } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, render } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  getMapObstructionInsets,
+  publishMapObstruction,
+  subscribeMapObstructions,
+} from "@/lib/mapObstructions";
+import { publishMobilePanelHeight } from "@/lib/mobilePanelHeight";
 import { PLACE_DETENTS } from "./detents";
 import { isHostKeyDown, keyboardDetent, MobileBottomSheet } from "./MobileBottomSheet";
 
@@ -115,5 +121,153 @@ describe("snap marker keying", () => {
     expect(afterMarkers[0]).toBe(beforeMarkers[0]);
     expect(afterMarkers[1]).toBe(beforeMarkers[1]);
     expect(afterMarkers[1].getAttribute("style")).not.toBe(beforePeekStyle);
+  });
+});
+
+describe("bottom obstruction publishing", () => {
+  const SHEET_ID = "obstruction-sheet";
+  // TWO_SNAP declares no mid detent, so the cap the sheet publishes against is
+  // the viewport fraction rather than a snap marker's offsetTop — which jsdom,
+  // having no layout, would report as 0 and turn into a 1px cap.
+  const sheet = (obscured?: boolean) => (
+    <MobileBottomSheet id={SHEET_ID} zIndex={1} detents={TWO_SNAP} obscured={obscured}>
+      <div>content</div>
+    </MobileBottomSheet>
+  );
+
+  // PLACE_DETENTS does declare a mid detent, so this one resolves a real cap
+  // off its snap markers — which is what makes a cap change reachable below.
+  const midDetentSheet = () => (
+    <MobileBottomSheet id={SHEET_ID} zIndex={1} detents={PLACE_DETENTS}>
+      <div>content</div>
+    </MobileBottomSheet>
+  );
+
+  const hostOf = (container: HTMLElement) => container.querySelector("bottom-sheet") as HTMLElement;
+
+  /**
+   * Moves the mid detent. The sheet reads the cap as the mid marker's
+   * `offsetTop + 1`, which jsdom always reports as 0, and re-reads it on a
+   * window resize — the on-screen keyboard, a rotation, the URL bar collapsing.
+   * Every marker is given the same offset so the test does not have to restate
+   * the component's own index arithmetic.
+   */
+  function resizeMidDetentTo(host: HTMLElement, midPx: number) {
+    for (const marker of host.querySelectorAll<HTMLElement>('[slot="snap"]')) {
+      Object.defineProperty(marker, "offsetTop", { value: midPx - 1, configurable: true });
+    }
+    act(() => {
+      window.dispatchEvent(new Event("resize"));
+    });
+  }
+
+  // The host is a fixed-height scroll container, so how much of the sheet shows
+  // is how far the host has been scrolled. jsdom neither lays the host out nor
+  // honours a `scrollTop` write, so the geometry is pinned by hand.
+  function scrollHostTo(host: HTMLElement, visiblePx: number) {
+    for (const [property, value] of [
+      ["clientHeight", 800],
+      ["scrollHeight", 1600],
+      ["scrollTop", visiblePx],
+    ] as const) {
+      Object.defineProperty(host, property, { value, configurable: true });
+    }
+  }
+
+  // Vitest's fake timers drive `requestAnimationFrame` too, so a scroll reaches
+  // the publish one frame later and the settle delay runs from there.
+  const FRAME_MS = 20;
+  const SETTLE_MS = 120;
+
+  /** Moves the sheet and lets it come to rest, as a finger lifting would. */
+  function settleSheetAt(host: HTMLElement, visiblePx: number) {
+    scrollHostTo(host, visiblePx);
+    host.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(FRAME_MS + SETTLE_MS);
+  }
+
+  // Both singletons the publishing effect writes, so nothing an earlier test
+  // left behind can seed a later one.
+  afterEach(() => {
+    vi.useRealTimers();
+    publishMapObstruction(SHEET_ID, "bottom", null);
+    publishMobilePanelHeight(SHEET_ID, null);
+  });
+
+  it("publishes the sheet's extent only once it has stopped moving", () => {
+    vi.useFakeTimers();
+    const { container } = render(sheet());
+    const host = hostOf(container);
+    scrollHostTo(host, 240);
+
+    host.dispatchEvent(new Event("scroll"));
+    vi.advanceTimersByTime(FRAME_MS);
+    // The height is known by now, but a sheet still under the finger has no
+    // settled height worth re-framing the camera against.
+    expect(getMapObstructionInsets().bottom).toBe(0);
+
+    vi.advanceTimersByTime(SETTLE_MS);
+    expect(getMapObstructionInsets().bottom).toBe(240);
+  });
+
+  it("re-frames as soon as a covered sheet is uncovered", () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(sheet(true));
+    scrollHostTo(hostOf(container), 240);
+
+    rerender(sheet());
+
+    // Uncovering is not a drag: the sheet is already at rest, so the framing
+    // has to be right on the commit that reveals it, not a settle delay later.
+    expect(getMapObstructionInsets().bottom).toBe(240);
+  });
+
+  it("takes a covered sheet straight back out of the framing", () => {
+    vi.useFakeTimers();
+    const { container, rerender } = render(sheet());
+    settleSheetAt(hostOf(container), 240);
+    expect(getMapObstructionInsets().bottom).toBe(240);
+
+    rerender(sheet(true));
+    expect(getMapObstructionInsets().bottom).toBe(0);
+  });
+
+  it("applies a new cap without ever letting the framing lapse", async () => {
+    vi.useFakeTimers();
+    const { container } = render(midDetentSheet());
+    const host = hostOf(container);
+    // Until the element upgrades, every marker sits at the same flow position
+    // and the sheet deliberately refuses to read a mid detent off them.
+    await act(async () => {
+      await customElements.whenDefined("bottom-sheet");
+    });
+
+    resizeMidDetentTo(host, 400);
+    settleSheetAt(host, 240);
+    expect(getMapObstructionInsets().bottom).toBe(240);
+
+    // Every value the camera would be given, in order. The resize below moves
+    // the mid detent under the sheet's current height, so the new cap binds —
+    // and it has to bind on that same commit, with no timers advanced and
+    // without the entry passing through zero on the way. A zero in here is the
+    // camera framing for an absent sheet and then framing straight back.
+    const published: number[] = [];
+    const unsubscribe = subscribeMapObstructions(() =>
+      published.push(getMapObstructionInsets().bottom),
+    );
+    resizeMidDetentTo(host, 200);
+    unsubscribe();
+
+    expect(published).toEqual([200]);
+  });
+
+  it("releases the obstruction when the sheet unmounts", () => {
+    vi.useFakeTimers();
+    const { container, unmount } = render(sheet());
+    settleSheetAt(hostOf(container), 240);
+    expect(getMapObstructionInsets().bottom).toBe(240);
+
+    unmount();
+    expect(getMapObstructionInsets().bottom).toBe(0);
   });
 });

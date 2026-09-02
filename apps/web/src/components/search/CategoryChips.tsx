@@ -2,6 +2,8 @@
 
 import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
+import { useTheme } from "@mui/material/styles";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import type { CategoryId } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
@@ -16,6 +18,7 @@ import {
 } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 
 function SvgIcon({ path, size = 16 }: { path: string; size?: number }) {
@@ -89,8 +92,18 @@ export function CategoryChips() {
     [clearCategory, setQuery, setActiveSource, setActiveCategory],
   );
 
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [chipsEl, setChipsEl] = useState<HTMLDivElement | null>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
+
+  // Stable identity: an inline arrow would detach and re-attach the row on
+  // every render, costing an extra pass through the measured registration.
+  const setRowRef = useCallback((el: HTMLDivElement | null) => {
+    scrollRef.current = el;
+    setChipsEl(el);
+  }, []);
 
   const updateScrollState = useCallback(() => {
     const el = scrollRef.current;
@@ -108,6 +121,14 @@ export function CategoryChips() {
 
   const hidden = directionsOpen || activeCategory || activeSource || textSearchActive;
   const zoomedOut = zoom < 9;
+
+  // The chip row only lies across the map on mobile; on desktop it floats in
+  // the margin beside the rail, whose own inset already frames the camera clear
+  // of that side. Zoomed out the row is faded rather than unmounted, so it is
+  // still measurable while covering nothing. Registered above the early return
+  // so the hook runs on every render — the value, not the call site, decides
+  // whether anything registers.
+  useMeasuredMapObstruction("category-chips", "top", isMobile && !zoomedOut ? chipsEl : null);
 
   if (hidden) return null;
 
@@ -127,7 +148,7 @@ export function CategoryChips() {
 
   return (
     <Box
-      ref={scrollRef}
+      ref={setRowRef}
       sx={{
         ...floatingToolbarSx,
         overflowX: "auto",

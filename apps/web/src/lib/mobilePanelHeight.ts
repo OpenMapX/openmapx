@@ -16,7 +16,7 @@ let cachedCap: number | null = null;
  * swipe sheet). Above this the panel covers the map controls anyway, so
  * following it further would push them off the top of the visible map.
  */
-const DEFAULT_FOLLOW_CAP_FRACTION = 0.65;
+export const DEFAULT_FOLLOW_CAP_FRACTION = 0.65;
 
 function recomputeMax() {
   let max = 0;
