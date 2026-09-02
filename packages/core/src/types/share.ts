@@ -1,3 +1,5 @@
+import type { WaypointSchedule } from "./routing";
+
 /** Owner-facing projection of a share link — never contains the token or its hash. */
 export interface OwnerShare {
   id: string;
@@ -23,6 +25,10 @@ export interface RouteSharePayload {
   avoidHighways?: boolean;
   avoidTolls?: boolean;
   avoidFerries?: boolean;
+  /** Bumped when the schedule encoding changes; readers reject an unknown value. */
+  scheduleVersion?: 1;
+  /** Per-waypoint time constraints, aligned to `waypoints`. */
+  schedules?: (WaypointSchedule | null)[];
 }
 
 export interface PublicSharePlace {

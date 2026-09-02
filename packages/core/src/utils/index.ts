@@ -259,6 +259,7 @@ export type { TideExtremaOptions, TideExtreme, TideSample } from "./tideExtrema"
 export { despikeSeries, findTideExtrema } from "./tideExtrema";
 export {
   formatInTimeZone,
+  isoWithOffsetInZone,
   localDateInZone,
   timeZoneAt,
   tzDiffMinutes,

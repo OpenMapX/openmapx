@@ -16,11 +16,35 @@ export type TravelMode =
   | "flying"
   | "ride";
 
+/**
+ * Temporal constraints at one waypoint. Every wall clock is `YYYY-MM-DDTHH:mm`
+ * local to `timeZone`; when `timeZone` is omitted it is resolved from the
+ * waypoint's coordinate.
+ */
+export interface WaypointSchedule {
+  /** Earliest permitted departure from this waypoint. */
+  departAfter?: string;
+  /** Latest permitted arrival at this waypoint. */
+  arriveBy?: string;
+  /**
+   * Appointment time: be here at this moment. Dwell then runs from the
+   * appointment rather than from arrival, so arriving early still departs at
+   * `fixedAt + dwellSeconds`. Cannot be combined with the two fields above.
+   */
+  fixedAt?: string;
+  /** Time spent at this waypoint before departing, in seconds. */
+  dwellSeconds?: number;
+  /** IANA zone the wall clocks above are expressed in, e.g. "Europe/Berlin". */
+  timeZone?: string;
+}
+
 export interface Waypoint {
   id: string;
   coords: LngLat | null;
   label: string;
   type: "origin" | "waypoint" | "destination";
+  /** Temporal constraints for this stop. Absent means "no constraint". */
+  schedule?: WaypointSchedule;
 }
 
 export interface ManeuverLane {
@@ -196,6 +220,13 @@ export interface RoutingOptions {
    * lives at the route-handler layer, not here.
    */
   useLiveTraffic?: boolean;
+  /**
+   * Seconds to spend at each waypoint before departing, aligned index-for-index
+   * with the waypoint list. Engines that model per-location service time advance
+   * their own clock by it, so later legs are costed for the later hour. Ignored
+   * at the origin and destination.
+   */
+  dwellSeconds?: (number | undefined)[];
 }
 
 /** A single point in a recorded GPS trace, optionally tagged with capture time. */
@@ -372,4 +403,151 @@ export interface EvDirectionsResult extends DirectionsResult {
     };
   };
   warnings: EvPlanWarning[];
+}
+
+/** How faithfully a provider can honour one temporal semantic. */
+export type TemporalSupport =
+  /** The engine itself enforces the semantic. */
+  | "native"
+  /** OpenMapX enforces it exactly, by orchestrating several engine calls. */
+  | "emulated"
+  /** Enforced arithmetically, on travel times that ignore the departure instant. */
+  | "approximate"
+  /** Cannot be honoured; a request needing it is rejected. */
+  | "unsupported";
+
+/**
+ * Response-level summary of the semantics one request actually used. `"exact"`
+ * covers `native` and `emulated`; `"approximate"` means the wall clocks rest on
+ * travel times that do not vary with the departure instant.
+ */
+export type ScheduleFidelity = "exact" | "approximate";
+
+/** Per-semantic temporal support declared by a routing or transit provider. */
+export interface TemporalCapabilities {
+  /** Trip-level departure pin. */
+  tripDepartAt: TemporalSupport;
+  /** Trip-level arrival pin. */
+  tripArriveBy: TemporalSupport;
+  /** Dwell at an intermediate waypoint. */
+  dwell: TemporalSupport;
+  /** Earliest-departure window at a waypoint. */
+  waypointDepartAfter: TemporalSupport;
+  /** Latest-arrival window at a waypoint. */
+  waypointArriveBy: TemporalSupport;
+  /** Travel time varies with the departure instant. */
+  timeDependentTravel: TemporalSupport;
+}
+
+/**
+ * Why a set of constraints cannot be satisfied. Every variant names the
+ * waypoint, and the time-bearing ones carry rendered wall clocks so a caller
+ * can show the interval without re-deriving zones.
+ */
+export type ScheduleViolation =
+  | { kind: "conflicting-fields"; waypointIndex: number; fields: string[] }
+  | { kind: "invalid-time"; waypointIndex: number; field: string; value: string }
+  | { kind: "invalid-dwell"; waypointIndex: number; dwellSeconds: number }
+  | {
+      kind: "inverted-order";
+      fromIndex: number;
+      toIndex: number;
+      earliestDeparture: string;
+      latestArrival: string;
+    }
+  | { kind: "anchor-conflict"; waypointIndex: number; anchor: string; latestArrival: string }
+  | {
+      kind: "late-arrival";
+      waypointIndex: number;
+      requiredBy: string;
+      earliestArrival: string;
+      shortfallSeconds: number;
+    }
+  | {
+      kind: "early-departure";
+      waypointIndex: number;
+      allowedFrom: string;
+      latestDeparture: string;
+      shortfallSeconds: number;
+    }
+  | { kind: "unreachable"; fromIndex: number; toIndex: number };
+
+/** One stop on a resolved trip schedule. */
+export interface ScheduledStop {
+  waypointIndex: number;
+  timeZone: string;
+  /** ISO-8601 with this stop's own offset; absent at the origin. */
+  arrival?: string;
+  /** ISO-8601 with this stop's own offset; absent at the destination. */
+  departure?: string;
+  dwellSeconds: number;
+  /** Idle seconds beyond dwell, caused by a binding window. */
+  waitSeconds: number;
+  utcOffsetMinutes: number;
+}
+
+/** One travelled leg on a resolved trip schedule. */
+export interface ScheduledLeg {
+  fromIndex: number;
+  toIndex: number;
+  departure: string;
+  arrival: string;
+  travelSeconds: number;
+}
+
+/** The canonical timeline for a trip: when you are where, and why you wait. */
+export interface TripSchedule {
+  stops: ScheduledStop[];
+  legs: ScheduledLeg[];
+  departure: string;
+  arrival: string;
+  totalTravelSeconds: number;
+  totalDwellSeconds: number;
+  totalWaitSeconds: number;
+  /** The trip's ends fall on different local calendar days. */
+  multiDay: boolean;
+  violations: ScheduleViolation[];
+}
+
+/** Why a scheduled plan is less than the caller asked for, without being wrong. */
+export type SchedulePlanWarning =
+  /** Travel times come from an engine that ignores the departure instant. */
+  | { kind: "approximate-travel-times"; providerId: string }
+  /** One leg fell through from one provider to another mid-chain. */
+  | { kind: "provider-fallback"; from: string; to: string }
+  /** Dwell was requested at the origin or destination, where it has no meaning. */
+  | { kind: "dwell-ignored-at-endpoint"; waypointIndex: number };
+
+/** Request body for `POST /directions/schedule`. */
+export interface ScheduleDirectionsRequest {
+  /** Origin…destination, in order. 2 to 25 entries. */
+  waypoints: LngLat[];
+  /** Per-waypoint constraints, aligned index-for-index. `null` means unconstrained. */
+  schedules?: (WaypointSchedule | null)[];
+  mode?: TravelMode;
+  /** Trip anchor, resolved in the origin's zone. Mutually exclusive with `arriveBy`. */
+  departAt?: string;
+  /** Trip anchor, resolved in the destination's zone. Mutually exclusive with `departAt`. */
+  arriveBy?: string;
+  avoidHighways?: boolean;
+  avoidTolls?: boolean;
+  avoidFerries?: boolean;
+  avoidClosures?: boolean;
+  units?: "metric" | "imperial";
+  lang?: string;
+  /** Reordering stops is refused while any waypoint carries a time window. */
+  optimize?: boolean;
+}
+
+/**
+ * Response for `POST /directions/schedule`. `routes` always holds exactly one
+ * route — a scheduled trip is a chain, and alternates only exist for a single
+ * unconstrained pair of points.
+ */
+export interface ScheduledDirectionsResult extends DirectionsResult {
+  schedule: TripSchedule;
+  fidelity: ScheduleFidelity;
+  /** Declared support of the provider that served the trip. */
+  temporal: TemporalCapabilities;
+  warnings: SchedulePlanWarning[];
 }

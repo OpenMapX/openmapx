@@ -53,6 +53,15 @@ export function setupCloud(ctx: IntegrationContext, transitousInstance: MotisIns
       routes: { lookup: false, forStop: false, stops: false, geometry: false },
       planning: true,
       planningFeatures: {
+        chaining: true,
+        temporal: {
+          tripDepartAt: "native",
+          tripArriveBy: "native",
+          dwell: "emulated",
+          waypointDepartAfter: "emulated",
+          waypointArriveBy: "emulated",
+          timeDependentTravel: "native",
+        },
         maxTransfers: true,
         transferBuffer: true,
         wheelchairRequired: true,

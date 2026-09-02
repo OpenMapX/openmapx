@@ -4,16 +4,19 @@ import {
   useDirectionsStore,
   useEvDirections,
   useNavigationStore,
+  useScheduledDirections,
   useSettingsStore,
   useVehicles,
 } from "@openmapx/core";
 import { useLocale } from "next-intl";
 import { useMemo } from "react";
+import { toDateTimeLocalString } from "@/components/panels/directions/TimeModePicker";
 import {
   buildEvDirectionsRequest,
   GARAGE_VEHICLE_PREFIX,
   isGarageVehicleId,
 } from "@/lib/buildEvDirectionsRequest";
+import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 
 // Stable fallbacks for the "nothing to draw yet" case. A fresh `[]` literal in
 // the return statement would change identity every render, and RouteLayer's
@@ -61,6 +64,8 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
     avoidHighways,
     avoidTolls,
     avoidFerries,
+    timeMode,
+    tripTime,
   } = useDirectionsStore();
   const units = useSettingsStore((s) => s.units);
   const avoidIncidents = useSettingsStore((s) => s.avoidIncidents);
@@ -89,13 +94,52 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
   );
   const allFilled = routeWaypoints.length === waypoints.length && waypoints.length >= 2;
 
+  // Built through the same helper the panel uses, so both hit one cache entry.
+  const scheduleRequest = useMemo(
+    () =>
+      navigating || isEvMode || mode === "transit" || mode === "flying"
+        ? null
+        : buildScheduleRequest({
+            waypoints,
+            mode,
+            timeMode,
+            tripTime,
+            avoidHighways,
+            avoidTolls,
+            avoidFerries,
+            avoidClosures: avoidIncidents,
+            units,
+            lang: locale,
+          }),
+    [
+      navigating,
+      isEvMode,
+      mode,
+      waypoints,
+      timeMode,
+      tripTime,
+      avoidHighways,
+      avoidTolls,
+      avoidFerries,
+      avoidIncidents,
+      units,
+      locale,
+    ],
+  );
+  const { data: scheduledData } = useScheduledDirections(scheduleRequest);
+
+  const tripDepartAt =
+    timeMode === "depart" && tripTime ? toDateTimeLocalString(tripTime) : undefined;
+  const tripArriveBy =
+    timeMode === "arrive" && tripTime ? toDateTimeLocalString(tripTime) : undefined;
+
   const { data } = useDirections({
     // Transit uses the transit-plan endpoint and flights deep-link out — neither
     // routes through the ground engines, so skip the directions query for both.
     // EV mode routes through `useEvDirections` below instead. Skip it while
     // navigating too: the nav layer draws the live route.
     waypoints:
-      navigating || isEvMode || mode === "transit" || mode === "flying"
+      navigating || isEvMode || mode === "transit" || mode === "flying" || scheduleRequest
         ? []
         : allFilled
           ? routeWaypoints
@@ -107,6 +151,10 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
     avoidClosures: avoidIncidents,
     units,
     lang: locale,
+    // Before the trip time moved into the store this hook never saw it, so the
+    // map and the panel keyed different cache entries and drew different routes.
+    departAt: tripDepartAt,
+    arriveBy: tripArriveBy,
   });
 
   // Independent EV-plan query — built with the exact same request the plan
@@ -168,12 +216,15 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
   const { data: evData } = useEvDirections(navigating ? null : evRequest);
 
   // The result actually drawn on the map: the EV plan (route + inserted
-  // charge-stop legs) in EV mode, the plain route otherwise.
-  const activeResult = isEvMode ? evData : data;
+  // charge-stop legs) in EV mode, the scheduled chain when any stop carries a
+  // time constraint, the plain route otherwise.
+  const activeResult = isEvMode ? evData : (scheduledData ?? data);
 
   return {
     routes: navigating ? EMPTY_ROUTES : (activeResult?.routes ?? EMPTY_ROUTES),
-    activeRouteIndex,
+    // A scheduled trip is a single chained route, so the stored alternate index
+    // would point past the end of it.
+    activeRouteIndex: scheduledData && !isEvMode ? 0 : activeRouteIndex,
     provider: activeResult?.provider,
     mode,
     isEvMode,

@@ -29,6 +29,12 @@ import {
 } from "./directions-request.js";
 import { runEvPlan } from "./ev-plan.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
+import { NoScheduleProviderError, runSchedulePlan } from "./schedule-plan.js";
+import {
+  createScheduleCacheIdentity,
+  parseScheduleRequest,
+  ScheduleRequestValidationError,
+} from "./schedule-request.js";
 import type { DirectionsResult } from "./types.js";
 import { parseTravelMode } from "./validation.js";
 
@@ -705,6 +711,101 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(result);
     } catch {
       reply.send({ alerts: [] }); // optional layer: never fail navigation over it
+    }
+  });
+
+  /**
+   * POST /directions/schedule — a ground route planned around per-waypoint time
+   * windows and dwell. Body shape is `ScheduleDirectionsRequest` from
+   * `@openmapx/core`. Returns one route plus the canonical trip schedule; a
+   * scheduled trip is a chain, so there are no alternates.
+   */
+  ctx.registerRoute("POST", "/directions/schedule", async (req, reply) => {
+    let request: ReturnType<typeof parseScheduleRequest>;
+    try {
+      request = parseScheduleRequest(req.body);
+    } catch (error) {
+      if (!(error instanceof ScheduleRequestValidationError)) throw error;
+      reply
+        .status(error.reason ? 422 : 400)
+        .send({ error: error.message, ...(error.reason ? { reason: error.reason } : {}) });
+      return;
+    }
+
+    const closureRefTime = resolveTravelInstant(
+      request.waypoints,
+      request.anchor.kind === "departAt" ? request.anchor.wallClock : undefined,
+      request.anchor.kind === "arriveBy" ? request.anchor.wallClock : undefined,
+    );
+    const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
+      ctx,
+      request.waypoints,
+      request.avoidClosures,
+      closureRefTime,
+    );
+    if (hasExclusions) {
+      request.routingOptions.excludeLocations = exclusions.points;
+      request.routingOptions.excludePolygons = exclusions.polygons;
+    }
+
+    let chain = getRoutingProviders(request.travelMode);
+    if (hasExclusions) {
+      chain = chain.filter((entry) => entry.provider.supportsExclusions === true);
+    }
+    if (chain.length === 0) {
+      reply
+        .status(503)
+        .send({ error: `No routing provider available for mode: ${request.travelMode}` });
+      return;
+    }
+
+    const ttl = cacheTtlSeconds(closureRefTime);
+    try {
+      const result = await ctx.cache.withCache(
+        hashKey("cache:directions:schedule", createScheduleCacheIdentity(request, exclusionsHash)),
+        ttl,
+        () =>
+          runSchedulePlan(request, chain, {
+            onProviderCall: (providerId, outcome, durationMs) => {
+              ctx.metricsRecorder?.recordProviderCall(
+                { providerId, method: "getRoute", outcome },
+                durationMs,
+              );
+            },
+          }),
+      );
+
+      // A contradictory trip is a client error, but the planner still produced
+      // the best-effort schedule that explains why — send both.
+      const contradictory = result.schedule.violations.some(
+        (violation) =>
+          violation.kind === "inverted-order" ||
+          violation.kind === "anchor-conflict" ||
+          violation.kind === "conflicting-fields" ||
+          violation.kind === "invalid-time" ||
+          violation.kind === "invalid-dwell",
+      );
+      if (contradictory) {
+        reply.status(422).send({
+          error: "The requested schedule cannot be satisfied",
+          violations: result.schedule.violations,
+          schedule: result.schedule,
+        });
+        return;
+      }
+
+      reply.header(
+        "Cache-Control",
+        `private, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+      );
+      reply.send(result);
+    } catch (error) {
+      if (error instanceof NoScheduleProviderError) {
+        reply.status(503).send({ error: error.message, missing: error.missing });
+        return;
+      }
+      ctx.log.error("Scheduled routing failed", error as Error);
+      reply.status(502).send({ error: "Routing unavailable" });
     }
   });
 

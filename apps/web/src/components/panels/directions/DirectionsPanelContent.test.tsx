@@ -6,6 +6,7 @@ vi.mock("next-intl", async () =>
 );
 
 const useDirectionsMock = vi.fn();
+const useScheduledDirectionsMock = vi.fn();
 const useTransitPlanMock = vi.fn();
 const useAutocompleteMock = vi.fn();
 vi.mock("@openmapx/core", async (importOriginal) => {
@@ -13,6 +14,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   return {
     ...actual,
     useDirections: (...a: unknown[]) => useDirectionsMock(...a),
+    useScheduledDirections: (...a: unknown[]) => useScheduledDirectionsMock(...a),
     useTransitPlan: (...a: unknown[]) => useTransitPlanMock(...a),
     useAutocomplete: (...a: unknown[]) => useAutocompleteMock(...a),
     useCapabilities: () => ({ services: {} }),
@@ -54,6 +56,9 @@ interface TransitCallArgs {
 
 beforeEach(() => {
   useDirectionsMock
+    .mockReset()
+    .mockReturnValue({ data: undefined, isLoading: false, isError: false });
+  useScheduledDirectionsMock
     .mockReset()
     .mockReturnValue({ data: undefined, isLoading: false, isError: false });
   useTransitPlanMock
@@ -439,5 +444,95 @@ describe("DirectionsPanelContent", () => {
       fireEvent.click(screen.getAllByText("directions.bestRoute")[1]);
       expect(snapTo).toHaveBeenCalledWith("peek");
     });
+  });
+});
+
+interface ScheduleCallArgs {
+  waypoints: [number, number][];
+  schedules: (Record<string, unknown> | null)[];
+  departAt?: string;
+  arriveBy?: string;
+}
+
+describe("scheduled trips", () => {
+  it("keeps using the plain directions query when nothing is constrained", () => {
+    seedOriginDestination();
+    renderPanel();
+
+    expect(lastArg<DirectionsCallArgs>(useDirectionsMock).waypoints).toEqual([
+      [13.3, 52.5],
+      [11.5, 48.1],
+    ]);
+    expect(useScheduledDirectionsMock).toHaveBeenCalledWith(null);
+  });
+
+  it("switches to the scheduled query as soon as a waypoint carries a schedule", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().addWaypoint(0);
+      useDirectionsStore.getState().setWaypoint(1, [12.37, 51.34], "Leipzig");
+      useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 });
+    });
+    renderPanel();
+
+    const arg = lastArg<ScheduleCallArgs>(useScheduledDirectionsMock);
+    expect(arg.waypoints).toEqual([
+      [13.3, 52.5],
+      [12.37, 51.34],
+      [11.5, 48.1],
+    ]);
+    expect(arg.schedules).toEqual([null, { dwellSeconds: 1800 }, null]);
+    // Exactly one query is live, so the two never split the cache.
+    expect(lastArg<DirectionsCallArgs>(useDirectionsMock).waypoints).toEqual([]);
+  });
+
+  it("reads the trip time from the store rather than local state", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().setTimeMode("depart");
+      useDirectionsStore.getState().setTripTime(new Date(2026, 8, 1, 9, 30));
+    });
+    renderPanel();
+
+    expect(lastArg<DirectionsCallArgs>(useDirectionsMock).departAt).toBe("2026-09-01T09:30");
+  });
+
+  it("carries the trip time into the scheduled request as departAt", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().setTimeMode("depart");
+      useDirectionsStore.getState().setTripTime(new Date(2026, 8, 1, 9, 30));
+      useDirectionsStore.getState().setWaypointSchedule(1, { arriveBy: "2026-09-01T14:00" });
+    });
+    renderPanel();
+
+    expect(lastArg<ScheduleCallArgs>(useScheduledDirectionsMock).departAt).toBe("2026-09-01T09:30");
+  });
+
+  it("disables Optimize and explains why while a window constraint is set", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().addWaypoint(0);
+      useDirectionsStore.getState().setWaypoint(1, [12.37, 51.34], "Leipzig");
+      useDirectionsStore.getState().setWaypointSchedule(1, { fixedAt: "2026-09-01T14:00" });
+    });
+    renderPanel();
+
+    const optimize = screen.getByRole("button", { name: /directions.optimizeStopOrder/ });
+    expect(optimize.hasAttribute("disabled")).toBe(true);
+    expect(optimize.getAttribute("title")).toBe("directions.scheduleOptimizeBlocked");
+  });
+
+  it("leaves Optimize enabled for a dwell-only trip", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().addWaypoint(0);
+      useDirectionsStore.getState().setWaypoint(1, [12.37, 51.34], "Leipzig");
+      useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 });
+    });
+    renderPanel();
+
+    const optimize = screen.getByRole("button", { name: /directions.optimizeStopOrder/ });
+    expect(optimize.hasAttribute("disabled")).toBe(false);
   });
 });

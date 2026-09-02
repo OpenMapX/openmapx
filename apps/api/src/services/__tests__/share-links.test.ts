@@ -195,3 +195,64 @@ describe("toOwnerShare", () => {
     expect(JSON.stringify(owner)).not.toMatch(/HASH|user-1|snapshot/);
   });
 });
+
+describe("validateRouteShare with per-waypoint schedules", () => {
+  it("accepts an aligned schedules array and records the version", () => {
+    const parsed = validateRouteShare({
+      ...ROUTE,
+      schedules: [
+        null,
+        { arriveBy: "2026-09-01T14:00", dwellSeconds: 1800, timeZone: "Europe/Berlin" },
+      ],
+    });
+    expect(parsed?.scheduleVersion).toBe(1);
+    expect(parsed?.schedules).toEqual([
+      null,
+      { arriveBy: "2026-09-01T14:00", dwellSeconds: 1800, timeZone: "Europe/Berlin" },
+    ]);
+  });
+
+  it("omits the schedules entirely when every entry is unconstrained", () => {
+    const parsed = validateRouteShare({ ...ROUTE, schedules: [null, null] });
+    expect(parsed?.schedules).toBeUndefined();
+    expect(parsed?.scheduleVersion).toBeUndefined();
+  });
+
+  it("rejects a schedules array that does not align with the waypoints", () => {
+    expect(validateRouteShare({ ...ROUTE, schedules: [null] })).toBeNull();
+  });
+
+  it("rejects a malformed wall clock", () => {
+    expect(
+      validateRouteShare({ ...ROUTE, schedules: [null, { arriveBy: "tomorrow" }] }),
+    ).toBeNull();
+  });
+
+  it("rejects an unrecognized time zone", () => {
+    expect(
+      validateRouteShare({ ...ROUTE, schedules: [null, { timeZone: "Not/AZone" }] }),
+    ).toBeNull();
+  });
+
+  it("rejects an out-of-range or fractional dwell", () => {
+    expect(
+      validateRouteShare({ ...ROUTE, schedules: [null, { dwellSeconds: 100_000 }] }),
+    ).toBeNull();
+    expect(validateRouteShare({ ...ROUTE, schedules: [null, { dwellSeconds: 90.5 }] })).toBeNull();
+    expect(validateRouteShare({ ...ROUTE, schedules: [null, { dwellSeconds: -1 }] })).toBeNull();
+  });
+
+  it("rejects an unknown schedule field", () => {
+    expect(validateRouteShare({ ...ROUTE, schedules: [null, { leaveWhenever: true }] })).toBeNull();
+  });
+
+  it("rejects an unknown schedule version", () => {
+    expect(
+      validateRouteShare({ ...ROUTE, scheduleVersion: 2, schedules: [null, null] }),
+    ).toBeNull();
+  });
+
+  it("leaves an ordinary payload untouched", () => {
+    expect(validateRouteShare(ROUTE)).toEqual(ROUTE);
+  });
+});

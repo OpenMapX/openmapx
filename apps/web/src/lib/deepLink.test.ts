@@ -1,3 +1,4 @@
+import type { Waypoint } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildDirectionsDeepLinkUrl,
@@ -5,11 +6,13 @@ import {
   DEEPLINK_UPDATE_EVENT,
   formatCameraParam,
   formatLabeledPoint,
+  formatScheduleParam,
   paramsWithoutDeepLink,
   parseCameraParam,
   parseDeepLinkSearch,
   parseLabeledPoint,
   parseLngLatListParam,
+  parseScheduleParam,
   shareCurrentUrl,
   shareUrl,
 } from "./deepLink";
@@ -217,5 +220,65 @@ describe("buildDirectionsDeepLinkUrl", () => {
     const parsed = new URL(url);
     expect(parsed.searchParams.has("mode")).toBe(false);
     expect(parsed.searchParams.has("avoid")).toBe(false);
+  });
+});
+
+describe("schedule deep-link param", () => {
+  const waypoints: Waypoint[] = [
+    {
+      id: "a",
+      coords: [0, 0],
+      label: "A",
+      type: "origin",
+      schedule: { departAfter: "2026-09-02T09:30", timeZone: "Europe/Berlin" },
+    },
+    { id: "b", coords: [1, 1], label: "B", type: "waypoint" },
+    {
+      id: "c",
+      coords: [2, 2],
+      label: "C",
+      type: "destination",
+      schedule: { fixedAt: "2026-09-02T14:00", dwellSeconds: 1800 },
+    },
+  ];
+
+  it("emits nothing for an unconstrained trip", () => {
+    const plain = waypoints.map(({ schedule: _schedule, ...rest }) => rest);
+    expect(formatScheduleParam(plain)).toBeNull();
+  });
+
+  it("round-trips constrained waypoints only", () => {
+    const encoded = formatScheduleParam(waypoints);
+    expect(encoded).toBe("1|0,d=2026-09-02T09:30,z=Europe/Berlin;2,f=2026-09-02T14:00,w=30");
+    expect(parseScheduleParam(encoded)).toEqual({
+      0: { departAfter: "2026-09-02T09:30", timeZone: "Europe/Berlin" },
+      2: { fixedAt: "2026-09-02T14:00", dwellSeconds: 1800 },
+    });
+  });
+
+  it("drops an unknown version wholesale", () => {
+    expect(parseScheduleParam("2|0,d=2026-09-02T09:30")).toEqual({});
+  });
+
+  it("ignores an unknown key but keeps the record", () => {
+    expect(parseScheduleParam("1|0,d=2026-09-02T09:30,q=nonsense")).toEqual({
+      0: { departAfter: "2026-09-02T09:30" },
+    });
+  });
+
+  it("drops a malformed wall clock, a bad index and a bad dwell", () => {
+    expect(parseScheduleParam("1|0,d=tomorrow;x,f=2026-09-02T14:00;1,w=abc")).toEqual({});
+  });
+
+  it("returns nothing for an absent or shapeless value", () => {
+    expect(parseScheduleParam(null)).toEqual({});
+    expect(parseScheduleParam("nonsense")).toEqual({});
+  });
+
+  it("parses the sched param into the directions deep link", () => {
+    const parsed = parseDeepLinkSearch(
+      "?panel=directions&wp=0,0&wp=1,1&sched=1%7C0%2Ca%3D2026-09-02T14%3A00",
+    );
+    expect(parsed.directions?.schedules).toEqual({ 0: { arriveBy: "2026-09-02T14:00" } });
   });
 });

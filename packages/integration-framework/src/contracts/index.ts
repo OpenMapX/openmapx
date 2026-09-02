@@ -155,6 +155,9 @@ export type {
   StreetLevelProvider,
 } from "./street-level-imagery-provider.js";
 export type {
+  ChainedTripPlan,
+  ChainedTripSegment,
+  ChainPlanWarning,
   ProviderAttribution,
   TimetableEntry,
   TransitCapabilities,

@@ -47,9 +47,11 @@ import {
   useMenuStore,
   useOptimizeRoute,
   useRouteInGermany,
+  useScheduledDirections,
   useSession,
   useSettingsStore,
   useSidebarStore,
+  useTransitChainPlan,
   useTransitPlan,
   useTransitPlanningCapabilities,
   useVehicles,
@@ -74,9 +76,12 @@ import {
   TimeModePicker,
   toDateTimeLocalString,
 } from "@/components/panels/directions/TimeModePicker";
+import { TransitChainView } from "@/components/panels/directions/TransitChainView";
 import { TransitDetailsView } from "@/components/panels/directions/TransitDetailsView";
 import { TransitItineraryCard } from "@/components/panels/directions/TransitRouteView";
+import { TripScheduleCard } from "@/components/panels/directions/TripScheduleCard";
 import { WaypointList } from "@/components/panels/directions/WaypointList";
+import { WaypointScheduleDialog } from "@/components/panels/directions/WaypointScheduleDialog";
 import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sheet/sheetState";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
@@ -90,6 +95,7 @@ import {
   isGarageVehicleId,
 } from "@/lib/buildEvDirectionsRequest";
 import { shareCurrentUrl } from "@/lib/deepLink";
+import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 
 export function DirectionsPanelContent() {
@@ -126,6 +132,12 @@ export function DirectionsPanelContent() {
     requireBikeTransport,
     bikeHillPreference,
     deutschlandticketOnly,
+    timeMode,
+    tripTime,
+    setTimeMode,
+    setTripTime,
+    setWaypointSchedule,
+    applyWaypointOrder,
     setWaypoint,
     addWaypoint,
     removeWaypoint,
@@ -205,8 +217,7 @@ export function DirectionsPanelContent() {
   const [timePickerOpen, setTimePickerOpen] = useState(false);
   // Driving depart/arrive is kept independent of the transit time state so the
   // two flows never interfere.
-  const [drivingTimeMode, setDrivingTimeMode] = useState<TimeMode>("now");
-  const [drivingTime, setDrivingTime] = useState<Date | null>(null);
+  const [scheduleEditIndex, setScheduleEditIndex] = useState<number | null>(null);
   const [numItineraries, setNumItineraries] = useState(3);
   const [transitPageToken, setTransitPageToken] = useState<string | undefined>();
   const [transitPageDirection, setTransitPageDirection] = useState<"previous" | "next">("next");
@@ -287,19 +298,60 @@ export function DirectionsPanelContent() {
   // Road-mode depart/arrive → wall-clock strings for the time-aware engine
   // (Valhalla; OSRM ignores them). Debounced so dragging the picker doesn't
   // refetch per change. Driving + motorcycle only (transit has its own query).
-  const debouncedDrivingTime = useDebounce(drivingTime, 500);
+  const debouncedDrivingTime = useDebounce(tripTime, 500);
   const drivingDepartAtStr =
-    isDrivingTimeMode && drivingTimeMode === "depart" && debouncedDrivingTime instanceof Date
+    isDrivingTimeMode && timeMode === "depart" && debouncedDrivingTime instanceof Date
       ? toDateTimeLocalString(debouncedDrivingTime)
       : undefined;
   const drivingArriveByStr =
-    isDrivingTimeMode && drivingTimeMode === "arrive" && debouncedDrivingTime instanceof Date
+    isDrivingTimeMode && timeMode === "arrive" && debouncedDrivingTime instanceof Date
       ? toDateTimeLocalString(debouncedDrivingTime)
       : undefined;
 
+  // One of the two ground queries runs at a time: the scheduled endpoint takes
+  // over the moment any waypoint carries a constraint, so the two can never
+  // split the cache or draw different routes.
+  const scheduleRequest = useMemo(
+    () =>
+      isTransitMode || isFlightMode || isEvMode
+        ? null
+        : buildScheduleRequest({
+            waypoints,
+            mode: routeMode,
+            timeMode,
+            tripTime: debouncedDrivingTime,
+            avoidHighways,
+            avoidTolls,
+            avoidFerries,
+            avoidClosures: avoidIncidents,
+            units,
+            lang: locale,
+          }),
+    [
+      isTransitMode,
+      isFlightMode,
+      isEvMode,
+      waypoints,
+      routeMode,
+      timeMode,
+      debouncedDrivingTime,
+      avoidHighways,
+      avoidTolls,
+      avoidFerries,
+      avoidIncidents,
+      units,
+      locale,
+    ],
+  );
+  const { data: scheduledData } = useScheduledDirections(scheduleRequest);
+
   const { data, isLoading, isError } = useDirections({
     waypoints:
-      isTransitMode || isFlightMode || isEvMode ? [] : allWaypointsFilled ? routeWaypoints : [],
+      isTransitMode || isFlightMode || isEvMode || scheduleRequest
+        ? []
+        : allWaypointsFilled
+          ? routeWaypoints
+          : [],
     mode: routeMode,
     avoidHighways,
     avoidTolls,
@@ -442,9 +494,59 @@ export function DirectionsPanelContent() {
     ],
   );
 
+  // A transit journey with intermediate stops — or with any stop time — is a
+  // chain of connections, one per segment; the point-to-point planner cannot
+  // express it, so exactly one of the two queries runs.
+  const transitIsChained =
+    isTransitMode &&
+    allWaypointsFilled &&
+    (waypoints.length > 2 || waypoints.some((wp) => wp.schedule !== undefined));
+
+  const transitChainRequest = useMemo(
+    () =>
+      transitIsChained
+        ? {
+            waypoints: routeWaypoints.map(([lng, lat]) => ({ lat, lng })),
+            schedules: waypoints.map((wp) => wp.schedule ?? null),
+            ...(transitDepartAtStr ? { departureTime: transitDepartAtStr } : {}),
+            ...(transitArriveByStr ? { arrivalTime: transitArriveByStr } : {}),
+            modes: effectiveMotisModes,
+            wheelchairRequired,
+            ...(maxTransfers !== null ? { maxTransfers } : {}),
+            transferBuffer,
+            requireBikeTransport,
+            bikeHillPreference,
+            preTransitModes: accessModes.preTransitModes,
+            postTransitModes: accessModes.postTransitModes,
+            directModes: accessModes.directModes,
+            deutschlandticketOnly: deutschlandticketActive,
+            ...(activePlanningMetadata?.datasetEpoch
+              ? { capabilityEpoch: activePlanningMetadata.datasetEpoch }
+              : {}),
+          }
+        : null,
+    [
+      transitIsChained,
+      routeWaypoints,
+      waypoints,
+      transitDepartAtStr,
+      transitArriveByStr,
+      effectiveMotisModes,
+      wheelchairRequired,
+      maxTransfers,
+      transferBuffer,
+      requireBikeTransport,
+      bikeHillPreference,
+      accessModes,
+      deutschlandticketActive,
+      activePlanningMetadata,
+    ],
+  );
+  const { data: transitChainData } = useTransitChainPlan(transitChainRequest);
+
   const transitPlanQuery = useTransitPlan({
-    origin: isTransitMode ? origin : null,
-    destination: isTransitMode ? destination : null,
+    origin: isTransitMode && !transitIsChained ? origin : null,
+    destination: isTransitMode && !transitIsChained ? destination : null,
     departAt: transitDepartAtStr,
     arriveBy: transitArriveByStr,
     numItineraries: effectiveNumItineraries,
@@ -644,16 +746,13 @@ export function DirectionsPanelContent() {
       },
       {
         onSuccess: (result) => {
-          if (result.optimizedOrder) {
-            const order = result.optimizedOrder;
-            const currentWps = useDirectionsStore.getState().waypoints;
-            const reordered = order.map((i) => currentWps[i]);
-            for (let i = 0; i < reordered.length; i++) {
-              const wp = reordered[i];
-              setWaypoint(i, wp.coords, wp.label);
-            }
-            setSnackbar(t("routeOptimized"));
-          }
+          if (!result.optimizedOrder) return;
+          // Moves each waypoint whole, so a stop's dwell travels with it.
+          setSnackbar(
+            applyWaypointOrder(result.optimizedOrder)
+              ? t("routeOptimized")
+              : t("scheduleOptimizeBlocked"),
+          );
         },
         onError: () => {
           setSnackbar(t("noRoutesFound"));
@@ -668,13 +767,21 @@ export function DirectionsPanelContent() {
     avoidFerries,
     units,
     optimizeMutation,
-    setWaypoint,
+    applyWaypointOrder,
     t,
   ]);
 
   const hasMultipleStops = waypoints.length > 2;
   const showOptimize =
     hasMultipleStops && allWaypointsFilled && !isTransitMode && !hidesRouteControls;
+  // Reordering could move a stop past its appointment, and the optimize engine
+  // has no notion of time windows, so it is refused rather than silently wrong.
+  const optimizeBlocked = waypoints.some(
+    (wp) =>
+      wp.schedule?.departAfter !== undefined ||
+      wp.schedule?.arriveBy !== undefined ||
+      wp.schedule?.fixedAt !== undefined,
+  );
   const lowestCo2Grams = useMemo(() => {
     const values = transitItineraries
       .map((itinerary) => itinerary.co2Grams)
@@ -719,7 +826,7 @@ export function DirectionsPanelContent() {
   // local state; transit uses the store). `activeTime*` adapt the shared
   // controlled picker to whichever flow is active.
   const showTimePicker = isTransitMode || isDrivingTimeMode;
-  const activeTimeMode: TimeMode = isTransitMode ? transitTimeMode : drivingTimeMode;
+  const activeTimeMode: TimeMode = isTransitMode ? transitTimeMode : timeMode;
   const activeTimeValue: Date | null = isTransitMode
     ? activeTimeMode === "depart"
       ? transitDepartureTime instanceof Date
@@ -730,7 +837,7 @@ export function DirectionsPanelContent() {
           ? transitArrivalTime
           : null
         : null
-    : drivingTime;
+    : tripTime;
   const handleTimeModeChange = (m: TimeMode) => {
     if (isTransitMode) {
       setTransitTimeMode(m);
@@ -743,8 +850,8 @@ export function DirectionsPanelContent() {
         setTransitArrivalTime(new Date());
       }
     } else {
-      setDrivingTimeMode(m);
-      if (m !== "now" && !drivingTime) setDrivingTime(new Date());
+      setTimeMode(m);
+      if (m !== "now" && !tripTime) setTripTime(new Date());
     }
   };
   const handleTimeValueChange = (d: Date) => {
@@ -752,7 +859,7 @@ export function DirectionsPanelContent() {
       if (transitTimeMode === "depart") setTransitDepartureTime(d);
       else setTransitArrivalTime(d);
     } else {
-      setDrivingTime(d);
+      setTripTime(d);
     }
   };
 
@@ -884,7 +991,7 @@ export function DirectionsPanelContent() {
         onRemove={handleRemove}
         onReverse={handleReverse}
         onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
-        isTransitMode={isTransitMode}
+        onEditSchedule={isEvMode || isFlightMode ? undefined : setScheduleEditIndex}
         isEvMode={isEvMode}
         t={t}
       />
@@ -906,19 +1013,26 @@ export function DirectionsPanelContent() {
             }}
           >
             <Typography
+              component="button"
+              type="button"
               variant="body2"
               onClick={handleOptimize}
+              disabled={optimizeBlocked}
+              title={optimizeBlocked ? t("scheduleOptimizeBlocked") : undefined}
               sx={{
-                color: BRAND,
-                cursor: "pointer",
+                color: optimizeBlocked ? "text.disabled" : BRAND,
+                cursor: optimizeBlocked ? "not-allowed" : "pointer",
                 fontWeight: 500,
                 display: "inline-flex",
                 alignItems: "center",
                 gap: 0.75,
                 px: 1.5,
                 py: 0.5,
+                border: "none",
+                background: "none",
+                font: "inherit",
                 borderRadius: 99,
-                "&:hover": { bgcolor: `${BRAND}18` },
+                "&:hover": { bgcolor: optimizeBlocked ? "transparent" : `${BRAND}18` },
                 transition: "background-color 0.15s",
               }}
             >
@@ -1111,6 +1225,11 @@ export function DirectionsPanelContent() {
               />
             ) : null}
           </>
+        ) : transitChainData ? (
+          <TransitChainView
+            plan={transitChainData}
+            waypointLabels={waypoints.map((wp) => wp.label)}
+          />
         ) : isTransitMode ? (
           transitLoading ? (
             <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
@@ -1319,6 +1438,35 @@ export function DirectionsPanelContent() {
               label={tc("dataSources")}
             />
           </>
+        ) : scheduledData ? (
+          <>
+            {scheduledData.routes.map((route, i) => (
+              // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
+              <Box key={i}>
+                <RouteCard
+                  route={route}
+                  index={i}
+                  active
+                  onSelect={() => snapTo("peek")}
+                  onDetails={() => setDetailsRouteIndex(i)}
+                  units={units}
+                  provider={scheduledData.provider}
+                />
+              </Box>
+            ))}
+            <Divider />
+            <TripScheduleCard
+              schedule={scheduledData.schedule}
+              fidelity={scheduledData.fidelity}
+              warnings={scheduledData.warnings}
+              waypointLabels={waypoints.map((wp) => wp.label)}
+            />
+            <AttributionStrip
+              attributions={routingAttributions}
+              variant="panel-header"
+              label={tc("dataSources")}
+            />
+          </>
         ) : data?.routes.length ? (
           <>
             {data.routes.map((route, i) => (
@@ -1395,6 +1543,16 @@ export function DirectionsPanelContent() {
         open={shareRouteDialogOpen}
         onClose={() => setShareRouteDialogOpen(false)}
       />
+      {scheduleEditIndex !== null && waypoints[scheduleEditIndex]?.coords && (
+        <WaypointScheduleDialog
+          open
+          waypointLabel={waypoints[scheduleEditIndex].label}
+          coords={waypoints[scheduleEditIndex].coords}
+          schedule={waypoints[scheduleEditIndex].schedule}
+          onSave={(schedule) => setWaypointSchedule(scheduleEditIndex, schedule)}
+          onClose={() => setScheduleEditIndex(null)}
+        />
+      )}
     </Box>
   );
 }

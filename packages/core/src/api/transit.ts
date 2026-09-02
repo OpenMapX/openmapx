@@ -1,6 +1,8 @@
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan, VehicleJourney } from "@openmapx/mobility-core/transit";
 import type { LngLat } from "../types/geometry";
+import type { WaypointSchedule } from "../types/routing";
+import type { ChainedTripPlan } from "../types/transitChain";
 import { type ApiClient, type ApiRequestOptions, apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
@@ -101,6 +103,36 @@ export function fetchTransitPlan(
     buildTransitPlanParams(params),
     options,
   );
+}
+
+/** Request body for `POST /transit/plan/chain`. */
+export interface TransitChainPlanRequest {
+  waypoints: { lat: number; lng: number }[];
+  schedules?: (WaypointSchedule | null)[];
+  departureTime?: string;
+  arrivalTime?: string;
+  modes?: string[];
+  wheelchair?: boolean;
+  wheelchairRequired?: boolean;
+  maxTransfers?: number;
+  transferBuffer?: "standard" | "relaxed" | "extra";
+  requireBikeTransport?: boolean;
+  bikeHillPreference?: "default" | "avoid" | "strongly-avoid";
+  preTransitModes?: string[];
+  postTransitModes?: string[];
+  directModes?: string[];
+  capabilityEpoch?: string;
+  deutschlandticketOnly?: boolean;
+  numItineraries?: number;
+}
+
+/** Plan a multi-stop transit trip, one connection per segment. */
+export function postTransitChainPlan(
+  request: TransitChainPlanRequest,
+  client: ApiClient = apiClient,
+  options: ApiRequestOptions = {},
+): Promise<ChainedTripPlan> {
+  return client.post<ChainedTripPlan>(API_ENDPOINTS.transitPlanChain, request, options);
 }
 
 export interface TransitRefreshResult {

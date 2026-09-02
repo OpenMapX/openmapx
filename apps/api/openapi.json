@@ -4402,6 +4402,23 @@
         "x-openmapx-source": "integrations/routing/index.ts"
       }
     },
+    "/api/integrations/routing/directions/schedule": {
+      "post": {
+        "operationId": "postApiIntegrationsRoutingDirectionsSchedule",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /directions/schedule (routing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "routing",
+        "x-openmapx-source": "integrations/routing/index.ts"
+      }
+    },
     "/api/integrations/routing/match": {
       "post": {
         "operationId": "postApiIntegrationsRoutingMatch",
@@ -4843,6 +4860,23 @@
           }
         },
         "summary": "GET /plan (transit)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "transit",
+        "x-openmapx-source": "integrations/transit/index.ts"
+      }
+    },
+    "/api/integrations/transit/plan/chain": {
+      "post": {
+        "operationId": "postApiIntegrationsTransitPlanChain",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /plan/chain (transit)",
         "tags": [
           "integrations"
         ],

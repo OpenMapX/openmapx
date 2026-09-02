@@ -92,8 +92,14 @@ export class UnsupportedTransitPlanningCapabilitiesError extends Error {
   }
 }
 
-export function requiredPlanningCapabilities(request: TripPlanRequest): string[] {
+export function requiredPlanningCapabilities(
+  request: TripPlanRequest,
+  waypointCount = 2,
+): string[] {
   const required: string[] = [];
+  // A chain segment is only served by a provider that says it can be one leg of
+  // a larger journey; everything else stays a single origin-to-destination plan.
+  if (waypointCount > 2) required.push("chaining");
   if (request.maxTransfers !== undefined) required.push("maxTransfers");
   if (request.transferBuffer && request.transferBuffer !== "standard") {
     required.push("transferBuffer");
@@ -477,7 +483,10 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     };
   }
 
-  async function planTrip(params: TripPlanRequest): Promise<MobilityResult<TripPlan | null>> {
+  async function planTrip(
+    params: TripPlanRequest,
+    waypointCount = 2,
+  ): Promise<MobilityResult<TripPlan | null>> {
     const tripBbox: BBox = [
       Math.min(params.from.lng, params.to.lng) - 0.5,
       Math.min(params.from.lat, params.to.lat) - 0.5,
@@ -486,7 +495,7 @@ export function createTransitOrchestrator(ctx: IntegrationContext) {
     ];
 
     const matching = (await getProvidersForBbox(tripBbox)).filter((p) => p.planTrip);
-    const required = requiredPlanningCapabilities(params);
+    const required = requiredPlanningCapabilities(params, waypointCount);
     const eligible = matching
       .filter((provider) => supportsPlanningRequest(provider, required))
       .sort(compareProviderPolicy);

@@ -38,7 +38,8 @@ interface WaypointListProps {
   onRemove: (index: number) => void;
   onReverse: () => void;
   onUseMyLocation?: () => void;
-  isTransitMode: boolean;
+  /** Opens the per-stop time editor. Omitted where schedules do not apply (EV). */
+  onEditSchedule?: (index: number) => void;
   /** EV mode only supports origin + destination (see ev-plan.ts re-route assumption) — hides the add-stop affordance. */
   isEvMode?: boolean;
   t: ReturnType<typeof useTranslations>;
@@ -55,7 +56,7 @@ export function WaypointList({
   onRemove,
   onReverse,
   onUseMyLocation,
-  isTransitMode,
+  onEditSchedule,
   isEvMode = false,
   t,
 }: WaypointListProps) {
@@ -74,7 +75,7 @@ export function WaypointList({
     }
   };
 
-  const canAddMore = waypoints.length < MAX_WAYPOINTS && !isTransitMode && !isEvMode;
+  const canAddMore = waypoints.length < MAX_WAYPOINTS && !isEvMode;
 
   return (
     <Box sx={{ px: 1.5, pt: 0.75, pb: 0.5 }}>
@@ -103,8 +104,11 @@ export function WaypointList({
                   onBlur={onBlur}
                   onRemove={() => onRemove(i)}
                   onUseMyLocation={onUseMyLocation}
+                  onEditSchedule={onEditSchedule ? () => onEditSchedule(i) : undefined}
                   removeLabel={t("removeStop")}
                   useMyLocationLabel={t("useMyLocation")}
+                  scheduleLabel={t("scheduleStop")}
+                  scheduleEditLabel={t("scheduleEdit")}
                   placeholder={
                     i === 0
                       ? t("chooseOrigin")
@@ -144,20 +148,6 @@ export function WaypointList({
           <AddCircleOutlineIcon sx={{ fontSize: 18, ml: 3 }} />
           <Typography variant="body2">{t("addStop")}</Typography>
         </Box>
-      )}
-      {/* Transit multi-stop warning */}
-      {isTransitMode && waypoints.length > 2 && (
-        <Typography
-          variant="caption"
-          sx={{
-            color: "text.secondary",
-            display: "block",
-            mt: 0.5,
-            px: 3,
-          }}
-        >
-          {t("multiStopTransitUnavailable")}
-        </Typography>
       )}
     </Box>
   );

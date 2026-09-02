@@ -1,6 +1,12 @@
 "use client";
 
-import { type BoundingBox, type LngLat, PANEL } from "@openmapx/core";
+import {
+  type BoundingBox,
+  type LngLat,
+  PANEL,
+  type Waypoint,
+  type WaypointSchedule,
+} from "@openmapx/core";
 
 export const DEEPLINK_UPDATE_EVENT = "openmapx:deeplink:update";
 
@@ -19,6 +25,7 @@ export const DEEPLINK_PARAMS = new Set([
   "avoid",
   "units",
   "wp",
+  "sched",
   "categoryId",
   "bbox",
   "source",
@@ -85,6 +92,8 @@ export interface ParsedDeepLink {
     avoid: string[];
     units?: string;
     waypoints: LabeledPointDeepLink[];
+    /** Per-waypoint time constraints, keyed by waypoint index. */
+    schedules: Record<number, WaypointSchedule>;
   };
   category?: {
     id: string;
@@ -224,6 +233,82 @@ export function buildDirectionsDeepLinkUrl(origin: string, target: DirectionsSha
   return url.toString();
 }
 
+export const SCHEDULE_PARAM_VERSION = 1;
+
+const SCHEDULE_KEYS: Record<string, "departAfter" | "arriveBy" | "fixedAt" | "timeZone"> = {
+  d: "departAfter",
+  a: "arriveBy",
+  f: "fixedAt",
+  z: "timeZone",
+};
+const SCHEDULE_WALL_CLOCK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const MAX_SCHEDULE_DWELL_MINUTES = 1440;
+
+/**
+ * Records are separated by `;`, fields within a record by `,`. Not by `:` —
+ * a wall clock contains one, and a comma appears in neither `YYYY-MM-DDTHH:mm`
+ * nor an IANA zone id.
+ */
+export function parseScheduleParam(value: string | null): Record<number, WaypointSchedule> {
+  if (!value) return {};
+  const separator = value.indexOf("|");
+  if (separator < 0) return {};
+  const version = value.slice(0, separator);
+  const body = value.slice(separator + 1);
+  if (Number(version) !== SCHEDULE_PARAM_VERSION || !body) return {};
+
+  const result: Record<number, WaypointSchedule> = {};
+  for (const record of body.split(";")) {
+    const [rawIndex, ...fields] = record.split(",");
+    const index = Number(rawIndex);
+    if (!Number.isInteger(index) || index < 0) continue;
+
+    const schedule: WaypointSchedule = {};
+    let valid = true;
+    for (const field of fields) {
+      const eq = field.indexOf("=");
+      if (eq < 0) continue;
+      const key = field.slice(0, eq);
+      const raw = field.slice(eq + 1);
+      if (key === "w") {
+        const minutes = Number(raw);
+        if (!Number.isInteger(minutes) || minutes < 0 || minutes > MAX_SCHEDULE_DWELL_MINUTES) {
+          valid = false;
+          break;
+        }
+        if (minutes > 0) schedule.dwellSeconds = minutes * 60;
+        continue;
+      }
+      const target = SCHEDULE_KEYS[key];
+      if (!target) continue;
+      if (target !== "timeZone" && !SCHEDULE_WALL_CLOCK.test(raw)) {
+        valid = false;
+        break;
+      }
+      schedule[target] = raw;
+    }
+    if (valid && Object.keys(schedule).length > 0) result[index] = schedule;
+  }
+  return result;
+}
+
+/** `null` when no waypoint is constrained, so an ordinary link is unchanged. */
+export function formatScheduleParam(waypoints: Waypoint[]): string | null {
+  const records: string[] = [];
+  waypoints.forEach((waypoint, index) => {
+    const schedule = waypoint.schedule;
+    if (!schedule) return;
+    const fields: string[] = [];
+    if (schedule.departAfter) fields.push(`d=${schedule.departAfter}`);
+    if (schedule.arriveBy) fields.push(`a=${schedule.arriveBy}`);
+    if (schedule.fixedAt) fields.push(`f=${schedule.fixedAt}`);
+    if (schedule.timeZone) fields.push(`z=${schedule.timeZone}`);
+    if (schedule.dwellSeconds) fields.push(`w=${Math.round(schedule.dwellSeconds / 60)}`);
+    if (fields.length > 0) records.push([index, ...fields].join(","));
+  });
+  return records.length > 0 ? `${SCHEDULE_PARAM_VERSION}|${records.join(";")}` : null;
+}
+
 export function parseCameraParam(value: string | null): CameraDeepLink | null {
   if (!value) return null;
   const parts = value.split(",");
@@ -357,6 +442,7 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
               .getAll("wp")
               .map(parseLabeledPoint)
               .filter((wp): wp is LabeledPointDeepLink => Boolean(wp)),
+            schedules: parseScheduleParam(params.get("sched")),
           }
         : undefined,
     category: categoryId

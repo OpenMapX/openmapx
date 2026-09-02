@@ -21,12 +21,26 @@ export interface RouteShareWaypoint {
   label?: string;
 }
 
+/** Mirrors `WaypointSchedule` in `@openmapx/core`; kept structural so this
+ * service does not depend on the web package's type graph. */
+export interface ShareWaypointSchedule {
+  departAfter?: string;
+  arriveBy?: string;
+  fixedAt?: string;
+  dwellSeconds?: number;
+  timeZone?: string;
+}
+
 export interface RouteSharePayload {
   waypoints: RouteShareWaypoint[];
   mode: RouteShareMode;
   avoidHighways?: boolean;
   avoidTolls?: boolean;
   avoidFerries?: boolean;
+  /** Bumped when the schedule encoding changes; readers reject an unknown value. */
+  scheduleVersion?: 1;
+  /** Per-waypoint constraints, aligned to `waypoints`. */
+  schedules?: (ShareWaypointSchedule | null)[];
 }
 
 export interface StoredListSnapshot {
@@ -70,6 +84,52 @@ export function isExpired(row: { expiresAt: Date | null }, now: Date): boolean {
   return row.expiresAt !== null && row.expiresAt.getTime() <= now.getTime();
 }
 
+const SHARE_WALL_CLOCK = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
+const MAX_SHARE_DWELL_SECONDS = 86_400;
+
+/**
+ * `undefined` means "reject the whole payload"; `null` means "this waypoint is
+ * unconstrained". A malformed schedule is never trimmed away — a share link
+ * that silently dropped an appointment would be worse than no link.
+ */
+function validSchedule(value: unknown): ShareWaypointSchedule | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object" || Array.isArray(value)) return undefined;
+  const source = value as Record<string, unknown>;
+  const known = new Set(["departAfter", "arriveBy", "fixedAt", "dwellSeconds", "timeZone"]);
+  if (Object.keys(source).some((key) => !known.has(key))) return undefined;
+
+  const schedule: ShareWaypointSchedule = {};
+  for (const field of ["departAfter", "arriveBy", "fixedAt"] as const) {
+    const raw = source[field];
+    if (raw === undefined) continue;
+    if (typeof raw !== "string" || !SHARE_WALL_CLOCK.test(raw)) return undefined;
+    schedule[field] = raw;
+  }
+  if (source.timeZone !== undefined) {
+    if (typeof source.timeZone !== "string") return undefined;
+    try {
+      new Intl.DateTimeFormat("en-US", { timeZone: source.timeZone });
+    } catch {
+      return undefined;
+    }
+    schedule.timeZone = source.timeZone;
+  }
+  if (source.dwellSeconds !== undefined) {
+    const dwell = source.dwellSeconds;
+    if (
+      typeof dwell !== "number" ||
+      !Number.isInteger(dwell) ||
+      dwell < 0 ||
+      dwell > MAX_SHARE_DWELL_SECONDS
+    ) {
+      return undefined;
+    }
+    schedule.dwellSeconds = dwell;
+  }
+  return Object.keys(schedule).length > 0 ? schedule : null;
+}
+
 function validWaypoint(value: unknown): RouteShareWaypoint | null {
   if (typeof value !== "object" || value === null) return null;
   const { lat, lng, label } = value as Record<string, unknown>;
@@ -88,10 +148,8 @@ function validWaypoint(value: unknown): RouteShareWaypoint | null {
  */
 export function validateRouteShare(input: unknown): RouteSharePayload | null {
   if (typeof input !== "object" || input === null) return null;
-  const { waypoints, mode, avoidHighways, avoidTolls, avoidFerries } = input as Record<
-    string,
-    unknown
-  >;
+  const { waypoints, mode, avoidHighways, avoidTolls, avoidFerries, scheduleVersion, schedules } =
+    input as Record<string, unknown>;
   if (!ROUTE_SHARE_MODES.includes(mode as RouteShareMode)) return null;
   if (!Array.isArray(waypoints) || waypoints.length < 2 || waypoints.length > MAX_WAYPOINTS) {
     return null;
@@ -109,6 +167,21 @@ export function validateRouteShare(input: unknown): RouteSharePayload | null {
   if (avoidHighways !== undefined) payload.avoidHighways = avoidHighways as boolean;
   if (avoidTolls !== undefined) payload.avoidTolls = avoidTolls as boolean;
   if (avoidFerries !== undefined) payload.avoidFerries = avoidFerries as boolean;
+
+  if (scheduleVersion !== undefined && scheduleVersion !== 1) return null;
+  if (schedules !== undefined) {
+    if (!Array.isArray(schedules) || schedules.length !== parsed.length) return null;
+    const parsedSchedules: (ShareWaypointSchedule | null)[] = [];
+    for (const candidate of schedules) {
+      const schedule = validSchedule(candidate);
+      if (schedule === undefined) return null;
+      parsedSchedules.push(schedule);
+    }
+    if (parsedSchedules.some((schedule) => schedule !== null)) {
+      payload.scheduleVersion = 1;
+      payload.schedules = parsedSchedules;
+    }
+  }
   return payload;
 }
 

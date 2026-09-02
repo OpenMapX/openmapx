@@ -164,6 +164,7 @@ export type {
 export * from "./offline";
 export * from "./panels";
 export * from "./platform";
+export * from "./routing";
 export * from "./schemas";
 export * from "./stores";
 export * from "./types";

@@ -5,11 +5,14 @@ import { CSS } from "@dnd-kit/utilities";
 import CloseIcon from "@mui/icons-material/Close";
 import DragIndicatorIcon from "@mui/icons-material/DragIndicator";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
+import ScheduleOutlinedIcon from "@mui/icons-material/ScheduleOutlined";
 import Box from "@mui/material/Box";
 import IconButton from "@mui/material/IconButton";
 import Tooltip from "@mui/material/Tooltip";
+import Typography from "@mui/material/Typography";
 import type { Waypoint } from "@openmapx/core";
 import { WaypointInput } from "@/components/panels/directions/WaypointInput";
+import { describeSchedule } from "@/components/panels/directions/WaypointScheduleDialog";
 import { BRAND } from "@/integration-api/runtime/theme";
 
 interface WaypointRowProps {
@@ -22,8 +25,11 @@ interface WaypointRowProps {
   onBlur: () => void;
   onRemove: () => void;
   onUseMyLocation?: () => void;
+  onEditSchedule?: () => void;
   removeLabel: string;
   useMyLocationLabel?: string;
+  scheduleLabel?: string;
+  scheduleEditLabel?: string;
   placeholder: string;
 }
 
@@ -37,8 +43,11 @@ export function WaypointRow({
   onBlur,
   onRemove,
   onUseMyLocation,
+  onEditSchedule,
   removeLabel,
   useMyLocationLabel,
+  scheduleLabel,
+  scheduleEditLabel,
   placeholder,
 }: WaypointRowProps) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -55,6 +64,11 @@ export function WaypointRow({
   const isOrigin = index === 0;
   const isDestination = index === total - 1;
   const canRemove = total > 2;
+  // The stop's wall clock is already local to it, so it is shown verbatim
+  // rather than reformatted through the viewer's zone.
+  const scheduleSummary = describeSchedule(waypoint.schedule, (wallClock) =>
+    wallClock.slice(11, 16),
+  );
   const waypointNumber = index; // intermediates are 1-based, but origin is 0
 
   return (
@@ -129,6 +143,39 @@ export function WaypointRow({
           useMyLocationLabel={useMyLocationLabel}
         />
       </Box>
+
+      {/* Stop time */}
+      {onEditSchedule && (
+        <Tooltip title={scheduleSummary ? (scheduleEditLabel ?? "") : (scheduleLabel ?? "")}>
+          <IconButton
+            size="small"
+            onClick={onEditSchedule}
+            aria-label={
+              scheduleSummary
+                ? `${scheduleEditLabel ?? ""}: ${scheduleSummary}`
+                : (scheduleLabel ?? "")
+            }
+            sx={{
+              p: 0.25,
+              flexShrink: 0,
+              color: scheduleSummary ? BRAND : "text.disabled",
+              // Stay out of the way on an unconstrained trip. Focus-within still
+              // reveals it, so it stays reachable by keyboard.
+              opacity: scheduleSummary ? 1 : 0,
+              "*:hover > &, &:focus-visible": { opacity: 1 },
+              "&:hover": { color: scheduleSummary ? BRAND : "text.secondary" },
+            }}
+          >
+            {scheduleSummary ? (
+              <Typography variant="caption" sx={{ fontWeight: 600, whiteSpace: "nowrap" }}>
+                {scheduleSummary}
+              </Typography>
+            ) : (
+              <ScheduleOutlinedIcon sx={{ fontSize: 16 }} />
+            )}
+          </IconButton>
+        </Tooltip>
+      )}
 
       {/* Remove button */}
       {canRemove && (

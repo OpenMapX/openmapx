@@ -24,6 +24,9 @@ unless you point an engine at a third-party host.
   duration, and a road-level summary (for example, "via A57").
 - **Add stops.** A route can carry intermediate waypoints, and OpenMapX can
   reorder them into the shortest multi-stop trip.
+- **Give a stop a time.** Leave after 10:00, be somewhere by 11:30, stay twenty
+  minutes — OpenMapX plans the whole trip around it and says plainly when the
+  schedule does not fit.
 - **Compare alternatives.** For a two-point trip the engine returns up to a few
   alternative routes; pick the one you prefer and it becomes the active route on
   the map.
@@ -106,11 +109,54 @@ the leave-now / depart-at / arrive-by picker is surfaced for transit journeys an
 for the driving and motorcycle modes; the same time-aware capability is available
 to cycling and walking through the API.
 
+What a routing engine can honor here depends on the engine. A time-aware engine
+(Valhalla) plans genuinely time-of-day-dependent legs and models a stop's service
+time natively, so the hour you arrive at a later stop is costed for that hour. A
+time-agnostic engine (OSRM) still produces a correct schedule — the arithmetic is
+the same — but from travel times that ignore traffic and time of day, so the app
+labels those times as estimates rather than hiding the difference.
+
 When a timed route is requested, the routing system dynamically evaluates active
 road closures. Planned closures are only avoided if they are actually in effect at the
 selected travel time. The system evaluates these in the closure's local timezone (supporting
 fine-grained recurring schedule windows). This prevents routing detours around
 future closures that haven't started yet or nightly closures during daytime trips.
+
+## Stop times and dwell
+
+Any stop on a trip can carry a time of its own. The clock button on a waypoint
+row opens four choices:
+
+- **Leave after** — do not depart this stop before the given time. Arriving
+  early simply means waiting.
+- **Be there by** — a deadline for arriving.
+- **Appointment at** — both at once. You arrive by that time, and you leave at
+  the appointment plus however long you stay, so getting there twenty minutes
+  early does not move your departure.
+- **Time at this stop** — how long you stay, from zero minutes up to a day. It
+  combines with any of the three above.
+
+Dwell is never folded into the driving time. The route card keeps showing travel
+time; a timeline underneath shows arrival, stay, wait and departure at every
+stop, together with the whole-trip span and how much of it is spent standing
+still.
+
+Every time is local to the stop it belongs to. On a trip that crosses a
+time-zone boundary or a daylight-saving change, each stop is shown on its own
+clock, with the offset labelled wherever it differs from yours. A departure
+written for a moment that does not exist — the hour a spring-forward skips —
+resolves to the first valid instant after it.
+
+An impossible schedule is not quietly rounded away. OpenMapX names the stop, the
+deadline it misses and by how much, and still shows the best schedule it could
+build so you can see where the time goes. Contradictions that need no routing to
+spot — leaving one stop after you were due at a later one — are reported before
+any route is requested.
+
+Stop order cannot be optimised while a stop has a set time, because reordering
+could move you past an appointment. Clear the times, optimise, then set them
+again. Stops that only carry a dwell still optimise normally: the total time
+spent at stops is the same in any order.
 
 ## Route options
 

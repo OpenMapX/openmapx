@@ -222,8 +222,19 @@ export type {
   RouteLeg,
   RouteStep,
   RoutingOptions,
+  ScheduleDirectionsRequest,
+  ScheduledDirectionsResult,
+  ScheduledLeg,
+  ScheduledStop,
+  ScheduleFidelity,
+  SchedulePlanWarning,
+  ScheduleViolation,
+  TemporalCapabilities,
+  TemporalSupport,
   TravelMode,
+  TripSchedule,
   Waypoint,
+  WaypointSchedule,
 } from "./routing";
 export type { LabeledPlace, SavedList, SavedPlace } from "./saved";
 export type { SearchIntent, SpatialConstraint, TimeConstraint } from "./search";
@@ -263,6 +274,11 @@ export type {
   TidesResponse,
   WaterLevelObservation,
 } from "./tides";
+export type {
+  ChainedTripPlan,
+  ChainedTripSegment,
+  ChainPlanWarning,
+} from "./transitChain";
 export type {
   CurrentWeather,
   DailyForecastPoint,

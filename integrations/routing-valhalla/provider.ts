@@ -579,12 +579,52 @@ interface ValhallaMatrixResponse {
   >;
 }
 
+interface ValhallaLocation {
+  lon: number;
+  lat: number;
+  type: "break";
+  waiting?: number;
+}
+
+/**
+ * Valhalla honours `waiting` on `break` locations only, and forces it to zero at
+ * the origin and destination, so sending it there would be silently dropped.
+ * Setting it lets the engine advance its own clock across a stop, which is what
+ * makes the time-dependent costing on later legs reflect the later hour.
+ *
+ * https://valhalla.github.io/valhalla/api/route/api-reference/
+ */
+export function buildLocations(
+  waypoints: [number, number][],
+  options: RoutingOptions,
+): ValhallaLocation[] {
+  const last = waypoints.length - 1;
+  return waypoints.map((wp, index) => {
+    const dwell = options.dwellSeconds?.[index];
+    const waiting = index > 0 && index < last && typeof dwell === "number" && dwell > 0 ? dwell : 0;
+    return {
+      lon: wp[0],
+      lat: wp[1],
+      type: "break" as const,
+      ...(waiting > 0 ? { waiting } : {}),
+    };
+  });
+}
+
 export const valhallaService: RoutingProvider = {
   id: "valhalla",
   priority: 10,
   supportedModes: ["walking", "cycling", "driving", "motorcycle"] as TravelMode[],
   supportsTimeAware: true,
   supportsExclusions: true,
+  temporal: {
+    tripDepartAt: "native",
+    tripArriveBy: "native",
+    dwell: "native",
+    waypointDepartAfter: "emulated",
+    waypointArriveBy: "emulated",
+    timeDependentTravel: "native",
+  },
 
   async getRoute(
     waypoints: [number, number][],
@@ -593,7 +633,7 @@ export const valhallaService: RoutingProvider = {
   ): Promise<DirectionsResult> {
     const costingOptions = buildCostingOptions(options, COSTING_MAP[mode]);
 
-    const locations = waypoints.map((wp) => ({ lon: wp[0], lat: wp[1], type: "break" as const }));
+    const locations = buildLocations(waypoints, options);
 
     const body: Record<string, unknown> = {
       locations,

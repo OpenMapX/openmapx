@@ -3,6 +3,8 @@ import type {
   DirectionsResult,
   EvDirectionsRequest,
   EvDirectionsResult,
+  ScheduleDirectionsRequest,
+  ScheduledDirectionsResult,
   TravelMode,
 } from "../types/routing";
 import { type ApiClient, type ApiRequestOptions, apiClient } from "./client";
@@ -72,4 +74,13 @@ export function postEvDirections(
   options: ApiRequestOptions = {},
 ): Promise<EvDirectionsResult> {
   return client.post<EvDirectionsResult>(API_ENDPOINTS.directionsEv, req, options);
+}
+
+/** Plan a trip with per-waypoint time constraints, via `POST /directions/schedule`. */
+export function postScheduledDirections(
+  req: ScheduleDirectionsRequest,
+  client: ApiClient = apiClient,
+  options: ApiRequestOptions = {},
+): Promise<ScheduledDirectionsResult> {
+  return client.post<ScheduledDirectionsResult>(API_ENDPOINTS.directionsSchedule, req, options);
 }

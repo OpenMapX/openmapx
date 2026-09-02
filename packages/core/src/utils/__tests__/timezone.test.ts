@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { formatInTimeZone, tzDiffMinutes, tzOffsetLabel, tzOffsetMinutes } from "../timezone";
+import {
+  formatInTimeZone,
+  isoWithOffsetInZone,
+  tzDiffMinutes,
+  tzOffsetLabel,
+  tzOffsetMinutes,
+} from "../timezone";
 
 const WINTER = new Date("2026-01-15T12:00:00Z");
 const SUMMER = new Date("2026-07-15T12:00:00Z");
@@ -220,5 +226,29 @@ describe("formatInTimeZone", () => {
 
   it("returns null for an unrecognized zone id", () => {
     expect(formatInTimeZone(new Date("2026-07-15T10:00:00Z"), "Mars/Olympus", "en-GB")).toBeNull();
+  });
+});
+
+describe("isoWithOffsetInZone", () => {
+  it("renders the instant in the zone with that zone's offset", () => {
+    const summer = new Date(Date.UTC(2026, 8, 1, 12, 34, 56));
+    expect(isoWithOffsetInZone(summer, "Europe/Berlin")).toBe("2026-09-01T14:34:56+02:00");
+    expect(isoWithOffsetInZone(summer, "America/New_York")).toBe("2026-09-01T08:34:56-04:00");
+    expect(isoWithOffsetInZone(summer, "UTC")).toBe("2026-09-01T12:34:56+00:00");
+  });
+
+  it("uses the winter offset on the other side of a transition", () => {
+    const winter = new Date(Date.UTC(2026, 11, 1, 12, 0, 0));
+    expect(isoWithOffsetInZone(winter, "Europe/Berlin")).toBe("2026-12-01T13:00:00+01:00");
+  });
+
+  it("renders a half-hour offset zone", () => {
+    const at = new Date(Date.UTC(2026, 8, 1, 6, 0, 0));
+    expect(isoWithOffsetInZone(at, "Asia/Kolkata")).toBe("2026-09-01T11:30:00+05:30");
+  });
+
+  it("falls back to UTC for an unrecognized zone", () => {
+    const at = new Date(Date.UTC(2026, 8, 1, 6, 0, 0));
+    expect(isoWithOffsetInZone(at, "Not/AZone")).toBe("2026-09-01T06:00:00+00:00");
   });
 });

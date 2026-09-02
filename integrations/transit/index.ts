@@ -4,6 +4,7 @@ import {
   normalizeSearchTerm,
   type SearchSuggestionProviderResult,
   type SearchSuggestionQuery,
+  TIME_AWARE_TEMPORAL_DEFAULT,
 } from "@openmapx/core";
 import {
   type BoundingBoxLimits,
@@ -36,6 +37,8 @@ import {
   type TransitReachabilityCheckRequest,
   type TransitReachabilitySurfaceRequest,
 } from "@openmapx/mobility-core/transit-reachability";
+import { planTransitChain } from "./chain-plan.js";
+import { ChainRequestValidationError, parseChainRequest } from "./chain-request.js";
 import {
   buildIsochroneFeatureCollection,
   samplingFromField,
@@ -827,6 +830,54 @@ export function setup(ctx: IntegrationContext): void {
       }
     }
     reply.send(toEnvelope(planRes));
+  });
+
+  /**
+   * POST /plan/chain — a multi-stop transit trip planned around per-waypoint
+   * time windows and dwell. One `planTrip` call per segment; no paging, since a
+   * chain has no single cursor.
+   */
+  ctx.registerRoute("POST", "/plan/chain", async (req, reply) => {
+    let request: ReturnType<typeof parseChainRequest>;
+    try {
+      request = parseChainRequest(req.body);
+    } catch (error) {
+      if (!(error instanceof ChainRequestValidationError)) throw error;
+      reply.status(400).send({ error: error.message });
+      return;
+    }
+
+    // Read the temporal contract from a provider that actually declared it can
+    // serve a chain segment; the default covers a provider that declared none.
+    const chainProvider = orchestrator
+      .collectProviders()
+      .find((provider) => provider.capabilities.planningFeatures?.chaining === true);
+    const capabilities =
+      chainProvider?.capabilities.planningFeatures?.temporal ?? TIME_AWARE_TEMPORAL_DEFAULT;
+
+    try {
+      const plan = await planTransitChain({
+        waypoints: request.waypoints,
+        schedules: request.schedules,
+        anchor: request.anchor,
+        baseRequest: request.baseRequest,
+        planTrip: (segmentRequest) =>
+          orchestrator.planTrip(segmentRequest, request.waypoints.length),
+        capabilities,
+        numItinerariesPerSegment: request.numItineraries,
+      });
+      reply.header("Cache-Control", "private, max-age=30");
+      reply.send(plan);
+    } catch (error) {
+      if (error instanceof UnsupportedTransitPlanningCapabilitiesError) {
+        reply.status(422).send({
+          error: "No transit planner can honor the selected requirements",
+          unsupportedCapabilities: error.capabilities,
+        });
+        return;
+      }
+      throw error;
+    }
   });
 
   // POST /plan/refresh — opaque, one-time, server-side-bound MOTIS refresh.

@@ -7,7 +7,7 @@ import type {
 } from "../constants/transit";
 import { getStorage } from "../platform/storage";
 import type { LngLat } from "../types/geometry";
-import type { TravelMode, Waypoint } from "../types/routing";
+import type { TravelMode, Waypoint, WaypointSchedule } from "../types/routing";
 
 // Route-avoidance defaults persist so a chosen preference (also editable in the
 // nav settings screen) applies to every route rather than resetting each session.
@@ -37,6 +37,15 @@ function makeEmptyWaypoint(): Waypoint {
 
 const MAX_WAYPOINTS = 10;
 
+function hasWindow(schedule: WaypointSchedule | undefined): boolean {
+  return (
+    schedule !== undefined &&
+    (schedule.departAfter !== undefined ||
+      schedule.arriveBy !== undefined ||
+      schedule.fixedAt !== undefined)
+  );
+}
+
 export interface DirectionsState {
   isOpen: boolean;
   waypoints: Waypoint[];
@@ -59,6 +68,14 @@ export interface DirectionsState {
    * and call `useEvDirections` instead of `useDirections`.
    */
   isEvMode: boolean;
+  /**
+   * Trip-level time selection, shared by the ground and transit flows. It lives
+   * here rather than in the panel because the map's independent directions
+   * query has to build the same request — otherwise the two split the cache and
+   * draw different routes.
+   */
+  timeMode: "now" | "depart" | "arrive";
+  tripTime: Date | null;
   /** Transient (not persisted) current battery state of charge, 0–100. */
   evSocStartPct: number;
   /** Transient (not persisted) minimum arrival-reserve state of charge, 0–100. */
@@ -104,6 +121,18 @@ export interface DirectionsState {
   setMode: (mode: TravelMode) => void;
   /** Toggle EV trip-planning mode. Turning it on forces `mode` back to `"driving"`. */
   setEvMode: (on: boolean) => void;
+  setTimeMode: (mode: "now" | "depart" | "arrive") => void;
+  setTripTime: (t: Date | null) => void;
+  /** `null` clears the waypoint's constraints entirely. */
+  setWaypointSchedule: (index: number, schedule: WaypointSchedule | null) => void;
+  /**
+   * Reorder waypoints by original index, moving each waypoint object whole so
+   * its schedule travels with it. Returns false — leaving the order untouched —
+   * when a time window is set, because reordering could break an appointment.
+   */
+  applyWaypointOrder: (order: number[]) => boolean;
+  /** Any waypoint carries `departAfter`, `arriveBy` or `fixedAt`. */
+  hasScheduleConstraints: () => boolean;
   setEvSocStartPct: (v: number) => void;
   setEvSocArrivalMinPct: (v: number) => void;
   setEvForceNonExclusive: (v: boolean) => void;
@@ -142,6 +171,8 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     waypoints: initWps,
     mode: "driving",
     isEvMode: false,
+    timeMode: "now" as const,
+    tripTime: null,
     evSocStartPct: 80,
     evSocArrivalMinPct: 10,
     evForceNonExclusive: false,
@@ -171,6 +202,8 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
         waypoints: wps,
         activeRouteIndex: 0,
         isEvMode: false,
+        timeMode: "now" as const,
+        tripTime: null,
         evSocStartPct: 80,
         evSocArrivalMinPct: 10,
         evForceNonExclusive: false,
@@ -250,6 +283,31 @@ export const useDirectionsStore = create<DirectionsState>((set, get) => {
     setEvSocStartPct: (evSocStartPct) => set({ evSocStartPct }),
     setEvSocArrivalMinPct: (evSocArrivalMinPct) => set({ evSocArrivalMinPct }),
     setEvForceNonExclusive: (evForceNonExclusive) => set({ evForceNonExclusive }),
+    setTimeMode: (timeMode) =>
+      set(timeMode === "now" ? { timeMode, tripTime: null } : { timeMode }),
+    setTripTime: (tripTime) => set({ tripTime }),
+
+    setWaypointSchedule: (index, schedule) => {
+      const wps = get().waypoints;
+      if (index < 0 || index >= wps.length) return;
+      const next = [...wps];
+      const { schedule: _previous, ...rest } = next[index];
+      next[index] = schedule === null ? rest : { ...rest, schedule };
+      set({ waypoints: next, activeRouteIndex: 0 });
+    },
+
+    applyWaypointOrder: (order) => {
+      const wps = get().waypoints;
+      if (order.length !== wps.length) return false;
+      if (wps.some((wp) => hasWindow(wp.schedule))) return false;
+      const reordered = order.map((index) => wps[index]);
+      if (reordered.some((wp) => wp === undefined)) return false;
+      set({ waypoints: deriveTypes(reordered), activeRouteIndex: 0 });
+      return true;
+    },
+
+    hasScheduleConstraints: () => get().waypoints.some((wp) => hasWindow(wp.schedule)),
+
     setActiveRouteIndex: (activeRouteIndex) => set({ activeRouteIndex }),
     setAvoidHighways: (avoidHighways) => {
       getStorage().setString(AVOID_HIGHWAYS_STORAGE_KEY, String(avoidHighways));

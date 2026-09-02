@@ -3,6 +3,7 @@ import {
   joinSegmentSpeedLimits,
   osrmRouteSegmentSpeedLimits,
   osrmSegmentSpeedLimits,
+  osrmService,
   transformOsrmStep,
 } from "./provider.js";
 
@@ -241,5 +242,18 @@ describe("joinSegmentSpeedLimits", () => {
         4,
       ),
     ).toBeUndefined();
+  });
+});
+
+describe("osrmService.temporal", () => {
+  it("declares every semantic approximate and travel time not time-dependent", () => {
+    expect(osrmService.temporal).toEqual({
+      tripDepartAt: "approximate",
+      tripArriveBy: "approximate",
+      dwell: "approximate",
+      waypointDepartAfter: "approximate",
+      waypointArriveBy: "approximate",
+      timeDependentTravel: "unsupported",
+    });
   });
 });

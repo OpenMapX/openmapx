@@ -6,6 +6,7 @@ import type {
   MatchResult,
   MatchTracePoint,
   RoutingOptions,
+  TemporalCapabilities,
   TravelMode,
 } from "@openmapx/core";
 
@@ -29,8 +30,17 @@ export type {
   RouteLeg,
   RouteStep,
   RoutingOptions,
+  ScheduleDirectionsRequest,
+  ScheduledDirectionsResult,
+  ScheduleFidelity,
+  SchedulePlanWarning,
+  ScheduleViolation,
+  TemporalCapabilities,
+  TemporalSupport,
   TravelMode,
+  TripSchedule,
   Waypoint,
+  WaypointSchedule,
 } from "@openmapx/core";
 
 export interface RoutingProvider {
@@ -54,6 +64,12 @@ export interface RoutingProvider {
    * in `RoutingOptions.excludeLocations` / `excludePolygons`.
    */
   readonly supportsExclusions?: boolean;
+  /**
+   * Per-semantic temporal support, read by the schedule planner. Providers that
+   * omit it are interpreted through `supportsTimeAware` by
+   * `resolveTemporalCapabilities`, so an existing provider keeps working.
+   */
+  readonly temporal?: TemporalCapabilities;
   getRoute(
     waypoints: LngLat[],
     mode: TravelMode,

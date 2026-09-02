@@ -275,6 +275,18 @@ export const osrmService: RoutingProvider = {
   id: "osrm",
   priority: 20,
   supportedModes: ["driving"] as TravelMode[],
+  // OSRM's durations do not vary with the departure instant, so the schedule
+  // arithmetic is exact but the wall clocks it produces are estimates. Declaring
+  // this rather than omitting it is what lets the schedule endpoint serve an
+  // OSRM-only deployment with an honest label instead of a 503.
+  temporal: {
+    tripDepartAt: "approximate",
+    tripArriveBy: "approximate",
+    dwell: "approximate",
+    waypointDepartAfter: "approximate",
+    waypointArriveBy: "approximate",
+    timeDependentTravel: "unsupported",
+  },
 
   async getRoute(
     waypoints: [number, number][],

@@ -84,6 +84,19 @@ transfers* and *less walking* are applied to the returned set — the engine
 already computes a multi-criteria spread of alternatives, so OpenMapX re-orders
 that spread rather than asking for a narrower search that might come back empty.
 
+### Journeys with intermediate stops
+
+A journey can carry stops between its ends, each with its own time and dwell.
+OpenMapX plans one connection per segment and hands the previous segment's real
+arrival to the next as its departure, so a delay carried into a leg shapes what
+it can catch. That delay is shown on the leg it belongs to, alongside the
+scheduled time it drifted from.
+
+A chained journey has no combined earlier/later paging: each leg has its own
+alternatives, because there is no single cursor that means the same thing across
+all of them. When a leg has no connection at all the chain stops there and says
+so, keeping the part of the schedule it did work out.
+
 ## Departures, stops, and alerts
 
 Open any stop or station and OpenMapX shows a live departure board: the next

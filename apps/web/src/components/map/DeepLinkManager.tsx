@@ -69,6 +69,7 @@ import {
   formatLabeledPoint,
   formatLngLat,
   formatLngLatList,
+  formatScheduleParam,
   type ParsedDeepLink,
   paramsWithoutDeepLink,
   parseDeepLinkSearch,
@@ -418,6 +419,10 @@ function applyDirections(parsed: ParsedDeepLink["directions"]): void {
     const waypoint = waypoints[index];
     directions.setWaypoint(index, waypoint.coords, waypoint.label);
   }
+  // Applied after the waypoints exist; an out-of-range index is a store no-op.
+  for (const [index, schedule] of Object.entries(parsed.schedules ?? {})) {
+    directions.setWaypointSchedule(Number(index), schedule);
+  }
 
   directions.open();
   useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
@@ -552,6 +557,9 @@ function encodeDirections(params: URLSearchParams): void {
     if (!waypoint.coords) continue;
     params.append("wp", formatLabeledPoint({ coords: waypoint.coords, label: waypoint.label }));
   }
+
+  const schedule = formatScheduleParam(directions.waypoints);
+  if (schedule) params.set("sched", schedule);
 }
 
 function encodePanelState(params: URLSearchParams, map: maplibregl.Map | null): void {

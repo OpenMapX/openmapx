@@ -376,6 +376,47 @@ entries into the canonical attribution shape, so credit metadata lives only in
 the manifest. The two mobility contracts have extra rules (capability
 self-description, coverage, priority) covered on their own pages.
 
+### Declaring temporal support
+
+A routing provider that can be used for trips with per-stop times declares what
+it can honor, one line per semantic:
+
+```ts
+export const valhallaService: RoutingProvider = {
+  // …
+  temporal: {
+    tripDepartAt: "native",
+    tripArriveBy: "native",
+    dwell: "native",
+    waypointDepartAfter: "emulated",
+    waypointArriveBy: "emulated",
+    timeDependentTravel: "native",
+  },
+};
+```
+
+The four levels mean exactly this:
+
+- `native` — the engine itself enforces the semantic.
+- `emulated` — OpenMapX enforces it exactly, by orchestrating several engine
+  calls. The result is correct.
+- `approximate` — enforced arithmetically, but on travel times that do not vary
+  with the departure instant. The wall clocks are estimates, and the app says so.
+- `unsupported` — cannot be honored. A request needing it is rejected with the
+  reason rather than served with something else.
+
+One rule is checked repo-wide: a provider whose `timeDependentTravel` is
+`unsupported` must not claim `native` on anything else, because a schedule built
+on time-invariant durations cannot be exact no matter how the arithmetic is done.
+OSRM, for instance, declares every semantic `approximate`.
+
+Declaring nothing is fine. A provider that omits the block is read through its
+`supportsTimeAware` flag: time-aware providers get native trip anchors and
+emulated per-waypoint semantics (leg chaining works against any `getRoute`),
+everything else gets the approximate defaults. Transit providers declare the same
+block under `capabilities.planningFeatures.temporal`, alongside a `chaining` flag
+that says they can serve one segment of a multi-stop journey.
+
 ### Localized strings
 
 Drop an English `strings/en.json` (and any translations) next to `index.ts`. The

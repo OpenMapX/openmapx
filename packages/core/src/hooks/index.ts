@@ -37,6 +37,10 @@ export {
   isTransitName,
   isTransitRawCategory,
 } from "./transit/transitEligibility";
+export {
+  transitChainQueryKey,
+  useTransitChainPlan,
+} from "./transit/useTransitChainPlan";
 export { useActiveSidePanel } from "./useActiveSidePanel";
 export { useAdaptiveDebounce } from "./useAdaptiveDebounce";
 export { type AirportSearchHit, useAirportSearch } from "./useAirportSearch";
@@ -177,6 +181,11 @@ export {
   useUpdateList,
   useUpdatePlace,
 } from "./useSavedPlaces";
+export {
+  scheduledDirectionsQueryKey,
+  stableRequestKey,
+  useScheduledDirections,
+} from "./useScheduledDirections";
 export { useSearchSuggestions } from "./useSearchSuggestions";
 export { useCreateShare, useRevokeShare, useRotateShare, useShares } from "./useShares";
 export { type SunTimesResponse, useSunTimes } from "./useSunTimes";

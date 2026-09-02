@@ -374,6 +374,15 @@ export function setupLocal(ctx: IntegrationContext, instances: TransitMotisInsta
       routes: { lookup: true, forStop: true, stops: true, geometry: true },
       planning: true,
       planningFeatures: {
+        chaining: true,
+        temporal: {
+          tripDepartAt: "native",
+          tripArriveBy: "native",
+          dwell: "emulated",
+          waypointDepartAfter: "emulated",
+          waypointArriveBy: "emulated",
+          timeDependentTravel: "native",
+        },
         maxTransfers: true,
         transferBuffer: true,
         wheelchairRequired: true,

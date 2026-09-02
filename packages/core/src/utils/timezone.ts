@@ -258,3 +258,25 @@ export function formatInTimeZone(date: Date, timeZone: string, locale?: string):
     return null;
   }
 }
+
+/**
+ * The instant rendered in `timeZone` as ISO-8601 carrying that zone's offset,
+ * e.g. `2026-09-02T14:30:00+02:00`. Callers render schedules across several
+ * zones, so the offset has to travel with the string rather than being implied
+ * by the reader's locale. An unrecognized zone degrades to `+00:00`, matching
+ * how the other helpers here treat a bad zone id.
+ */
+export function isoWithOffsetInZone(date: Date, timeZone: string): string {
+  const offset = tzOffsetMinutes(date, timeZone) ?? 0;
+  const shifted = new Date(date.getTime() + offset * 60_000);
+  const pad = (value: number) => String(value).padStart(2, "0");
+  const sign = offset < 0 ? "-" : "+";
+  const absolute = Math.abs(offset);
+  const calendar = `${String(shifted.getUTCFullYear()).padStart(4, "0")}-${pad(
+    shifted.getUTCMonth() + 1,
+  )}-${pad(shifted.getUTCDate())}`;
+  const clock = `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}:${pad(
+    shifted.getUTCSeconds(),
+  )}`;
+  return `${calendar}T${clock}${sign}${pad(Math.floor(absolute / 60))}:${pad(absolute % 60)}`;
+}

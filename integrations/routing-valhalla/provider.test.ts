@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   buildCostingOptions,
   buildExclusions,
+  buildLocations,
   buildTrafficRequestExtras,
   setValhallaBidirectionalAlternates,
   TRACE_ATTRIBUTE_FILTER,
@@ -591,5 +592,46 @@ describe("getRoute request body", () => {
     const body = bodyOf(spy);
     expect(body).not.toHaveProperty("prioritize_bidirectional");
     expect(body).not.toHaveProperty("recostings");
+  });
+});
+
+describe("buildLocations", () => {
+  const dwellWaypoints: [number, number][] = [
+    [6.96, 50.94],
+    [7.1, 51.0],
+    [7.2, 51.1],
+  ];
+
+  it("marks every waypoint as a break and omits waiting when no dwell is set", () => {
+    expect(buildLocations(dwellWaypoints, {})).toEqual([
+      { lon: 6.96, lat: 50.94, type: "break" },
+      { lon: 7.1, lat: 51.0, type: "break" },
+      { lon: 7.2, lat: 51.1, type: "break" },
+    ]);
+  });
+
+  it("sets waiting on intermediate waypoints only", () => {
+    const locations = buildLocations(dwellWaypoints, { dwellSeconds: [300, 900, 600] });
+    expect(locations[0]).not.toHaveProperty("waiting");
+    expect(locations[1]).toMatchObject({ waiting: 900 });
+    expect(locations[2]).not.toHaveProperty("waiting");
+  });
+
+  it("omits waiting for a zero or missing dwell", () => {
+    const locations = buildLocations(dwellWaypoints, { dwellSeconds: [undefined, 0, undefined] });
+    expect(locations[1]).not.toHaveProperty("waiting");
+  });
+});
+
+describe("valhallaService.temporal", () => {
+  it("declares dwell as native and the waypoint windows as emulated", () => {
+    expect(valhallaService.temporal).toEqual({
+      tripDepartAt: "native",
+      tripArriveBy: "native",
+      dwell: "native",
+      waypointDepartAfter: "emulated",
+      waypointArriveBy: "emulated",
+      timeDependentTravel: "native",
+    });
   });
 });

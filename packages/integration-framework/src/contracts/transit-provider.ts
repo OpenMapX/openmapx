@@ -1,4 +1,10 @@
-import type { BBox } from "@openmapx/core";
+import type { BBox, TemporalCapabilities } from "@openmapx/core";
+
+// The chained-plan shapes need both `TripSchedule` (core) and `TripItinerary`
+// (mobility-core), so they are defined in core — which depends on both — and
+// surfaced here for provider authors.
+export type { ChainedTripPlan, ChainedTripSegment, ChainPlanWarning } from "@openmapx/core";
+
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { TravelTimeField } from "@openmapx/mobility-core/isoline";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
@@ -92,6 +98,10 @@ export interface TransitPlanningCapabilities {
   detailedTransfers: boolean;
   paging: boolean;
   refresh: boolean;
+  /** Can serve one segment of a multi-stop chained plan. */
+  chaining?: boolean;
+  /** Per-semantic temporal support for chained planning. */
+  temporal?: TemporalCapabilities;
 }
 
 export type TransitRentalFormFactor =
