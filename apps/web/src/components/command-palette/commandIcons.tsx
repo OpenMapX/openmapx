@@ -4,6 +4,7 @@ import BookmarkBorderIcon from "@mui/icons-material/BookmarkBorder";
 import DirectionsIcon from "@mui/icons-material/Directions";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import ExploreIcon from "@mui/icons-material/Explore";
+import Grid4x4Icon from "@mui/icons-material/Grid4x4";
 import HelpOutlineIcon from "@mui/icons-material/HelpOutlined";
 import LayersIcon from "@mui/icons-material/Layers";
 import LightModeIcon from "@mui/icons-material/LightMode";
@@ -12,6 +13,7 @@ import LocalParkingIcon from "@mui/icons-material/LocalParking";
 import MapIcon from "@mui/icons-material/Map";
 import MenuIcon from "@mui/icons-material/Menu";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
+import NavigationIcon from "@mui/icons-material/Navigation";
 import NearMeIcon from "@mui/icons-material/NearMe";
 import PublicIcon from "@mui/icons-material/Public";
 import RestaurantIcon from "@mui/icons-material/Restaurant";
@@ -47,6 +49,8 @@ const ICONS: Record<string, ReactNode> = {
   theme: <LightModeIcon fontSize="small" />,
   language: <TranslateIcon fontSize="small" />,
   "my-location": <MyLocationIcon fontSize="small" />,
+  "align-streets": <Grid4x4Icon fontSize="small" />,
+  "north-up": <NavigationIcon fontSize="small" />,
   help: <HelpOutlineIcon fontSize="small" />,
   expand: <ExpandMoreIcon fontSize="small" />,
 };

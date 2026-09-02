@@ -30,6 +30,7 @@ import { localeNames, locales } from "@/i18n/config";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { setLocaleAndReload } from "@/lib/setLocale";
+import { useAlignToStreets } from "@/lib/useAlignToStreets";
 import { LAYER_SELECTOR_OPEN_EVENT } from "./constants";
 import { useMyLocation } from "./useMyLocation";
 
@@ -62,7 +63,9 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
   const locale = useLocale();
   const { setMode, mode } = useColorScheme();
   const myLocation = useMyLocation();
-  const hasMap = useMapOptional() !== null;
+  const mapCtx = useMapOptional();
+  const hasMap = mapCtx !== null;
+  const { available: alignAvailable, align } = useAlignToStreets();
   const integrations = useIntegrationRegistry();
   const { data: session } = useSession();
   const isSignedIn = !!session?.user?.id;
@@ -291,6 +294,26 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
           myLocation();
         },
       });
+      if (alignAvailable) {
+        out.push({
+          id: "actions.alignToStreets",
+          group: "actions",
+          label: t("cmdAlignToStreets"),
+          iconKey: "align-streets",
+          run: () => {
+            align();
+          },
+        });
+      }
+      out.push({
+        id: "actions.northUp",
+        group: "actions",
+        label: t("cmdNorthUp"),
+        iconKey: "north-up",
+        run: () => {
+          mapCtx?.resetBearing();
+        },
+      });
     }
 
     out.push({
@@ -339,6 +362,9 @@ export function useCommandSources({ openShortcutsDialog }: UseCommandSourcesOpti
     setMode,
     myLocation,
     hasMap,
+    mapCtx,
+    align,
+    alignAvailable,
     openShortcutsDialog,
   ]);
 }
