@@ -19,7 +19,12 @@ import { publishMapObstruction } from "./mapObstructions";
 const ZERO: ResolvedPadding = { top: 0, bottom: 0, left: 0, right: 0 };
 const VIEWPORT = { width: 1200, height: 800 };
 
-function fitRequest(inner: ResolvedPadding, target: ResolvedPadding): CameraRequest {
+function fitRequest(
+  inner: ResolvedPadding,
+  target: ResolvedPadding,
+  bearing?: number,
+  pitch?: number,
+): CameraRequest {
   return {
     kind: "fitBounds",
     bounds: [
@@ -27,6 +32,8 @@ function fitRequest(inner: ResolvedPadding, target: ResolvedPadding): CameraRequ
       [2, 2],
     ],
     inner,
+    bearing,
+    pitch,
     duration: 0,
     startedAt: 0,
     padding: target,
@@ -40,6 +47,7 @@ function flyRequest(padding: ResolvedPadding, duration: number, startedAt: numbe
 interface BoundsCall {
   padding: ResolvedPadding;
   offset: [number, number];
+  bearing: number;
   maxZoom?: number;
 }
 
@@ -51,17 +59,23 @@ function lastBoundsCall(fake: FakeMap): BoundsCall {
 
 /**
  * Where MapLibre lands the framed box on screen, given the arguments we handed
- * `cameraForBounds`. It frames at bearing 0 unless asked for another one, so
- * screen axes are world axes: the box sits at `offset` plus the asymmetry of
- * the padding argument away from the camera's padding-derived centre point.
+ * `cameraForBounds` and the bearing it framed at. MapLibre turns the padding's
+ * own asymmetry into the world before it applies it, so that half arrives on
+ * screen unturned; `offset` it applies as given, so that one arrives turned by
+ * the bearing the other way. The centre point they hang off is the padding
+ * target, which the same camera move carries.
  */
 function framedBoxCentre(call: BoundsCall, target: ResolvedPadding): [number, number] {
+  const radians = (-call.bearing * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  const [x, y] = call.offset;
   return [
     (target.left + VIEWPORT.width - target.right) / 2 +
-      call.offset[0] +
+      (x * cos - y * sin) +
       (call.padding.left - call.padding.right) / 2,
     (target.top + VIEWPORT.height - target.bottom) / 2 +
-      call.offset[1] +
+      (x * sin + y * cos) +
       (call.padding.top - call.padding.bottom) / 2,
   ];
 }
@@ -141,10 +155,48 @@ describe("cameraForRequest", () => {
     expect(320 - call.padding.left - call.padding.right).toBeCloseTo(1);
   });
 
-  it("frames a rotated map back to north with the box still centred", () => {
-    const fake = createFakeMap({ containerWidth: 1200, containerHeight: 800, bearing: 90 });
+  it("keeps the bearing the map is on, so an alignment survives the next framing", () => {
+    const fake = createFakeMap({ containerWidth: 1200, containerHeight: 800, bearing: 30 });
     const target: ResolvedPadding = { top: 0, bottom: 0, left: 400, right: 0 };
     const camera = cameraForRequest(fake.map, fitRequest(toInsets(80, 80), target));
+    expect(lastBoundsCall(fake).bearing).toBe(30);
+    expect(camera?.bearing).toBe(30);
+  });
+
+  it("centres the box in the visible strip while the map stays turned", () => {
+    const fake = createFakeMap({ containerWidth: 1200, containerHeight: 800, bearing: 30 });
+    const target: ResolvedPadding = { top: 0, bottom: 0, left: 400, right: 0 };
+    const inner: ResolvedPadding = { top: 120, bottom: 40, left: 60, right: 0 };
+    cameraForRequest(fake.map, fitRequest(inner, target));
+    const call = lastBoundsCall(fake);
+    // The strip runs from x=400 to x=1200 and the whole height; the breathing
+    // room shifts the box 30px right of its middle and 40px down.
+    const [x, y] = framedBoxCentre(call, target);
+    expect(x).toBeCloseTo(830);
+    expect(y).toBeCloseTo(440);
+    // The correction is the bearing-0 one, turned — not the raw vector, and not
+    // turned the other way.
+    expect(call.offset[0]).toBeCloseTo(-200 * Math.cos(Math.PI / 6));
+    expect(call.offset[1]).toBeCloseTo(-200 * Math.sin(Math.PI / 6));
+  });
+
+  it("lands flat when the caller asks for north, and leaves the tilt alone otherwise", () => {
+    const fake = createFakeMap({ containerWidth: 1200, containerHeight: 800, pitch: 55 });
+    const target: ResolvedPadding = { top: 0, bottom: 0, left: 400, right: 0 };
+    // Framing measures a flat map, so a box fitted for one has to arrive on one:
+    // asking for north while the camera stays tilted frames against a viewport
+    // the tilt no longer matches.
+    const flat = cameraForRequest(fake.map, fitRequest(toInsets(80, 80), target, 0, 0));
+    expect(flat?.pitch).toBe(0);
+
+    const untouched = cameraForRequest(fake.map, fitRequest(toInsets(80, 80), target));
+    expect(untouched).not.toHaveProperty("pitch");
+  });
+
+  it("frames a rotated map back to north when the caller asks for it", () => {
+    const fake = createFakeMap({ containerWidth: 1200, containerHeight: 800, bearing: 90 });
+    const target: ResolvedPadding = { top: 0, bottom: 0, left: 400, right: 0 };
+    const camera = cameraForRequest(fake.map, fitRequest(toInsets(80, 80), target, 0));
     const call = lastBoundsCall(fake);
     expect(call.offset).toEqual([-200, 0]);
     expect(framedBoxCentre(call, target)).toEqual([800, 400]);

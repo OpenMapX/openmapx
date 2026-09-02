@@ -275,6 +275,16 @@ describe("camera recording", () => {
     ]);
   });
 
+  it("echoes the framing bearing it was asked for, north when it was asked for none", () => {
+    const fake = createFakeMap({ bearing: 75 });
+    const bounds: [[number, number], [number, number]] = [
+      [0, 0],
+      [2, 4],
+    ];
+    expect(fake.map.cameraForBounds(bounds, { bearing: 30 })?.bearing).toBe(30);
+    expect(fake.map.cameraForBounds(bounds)?.bearing).toBe(0);
+  });
+
   it("projects through the supplied projection and exposes isMoving", () => {
     const fake = createFakeMap({ project: ([lng, lat]) => ({ x: lng * 10, y: -lat * 10 }) });
     expect(fake.map.project([1, 2])).toEqual({ x: 10, y: -20 });

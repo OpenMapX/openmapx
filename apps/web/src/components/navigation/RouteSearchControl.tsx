@@ -134,12 +134,17 @@ export function RouteSearchControl() {
     if (coords.length === 0) return;
     const box = geoJsonBBox({ type: "MultiPoint", coordinates: coords } as GeoJSON.MultiPoint);
     if (box) {
+      // North-up and level again, not "wherever the reset ease has reached":
+      // cached results can arrive while it is still running, and this framing
+      // stops it where it stands — so the view it was heading for has to be
+      // asked for here too.
       mapCtx?.fitBounds(
         [
           [box[0], box[1]],
           [box[2], box[3]],
         ],
         80,
+        { bearing: 0, pitch: 0 },
       );
     }
   };

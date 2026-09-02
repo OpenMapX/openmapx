@@ -424,14 +424,18 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     addControl: () => {},
     removeControl: () => {},
     // MapLibre answers with a `LngLat`-shaped centre, not a tuple; code that
-    // reads `.lng` has to work here exactly as it does in a browser.
+    // reads `.lng` has to work here exactly as it does in a browser. It also
+    // frames at `options.bearing || 0` and echoes that bearing back, so a caller
+    // that wants the map's own rotation kept has to say so — modelling anything
+    // friendlier would hide a caller that never asks.
     cameraForBounds: (bounds: unknown, cameraOptions?: Record<string, unknown>) => {
       state.cameraForBoundsCalls.push({ bounds, options: cameraOptions });
       const [[west, south], [east, north]] = bounds as [[number, number], [number, number]];
+      const asked = cameraOptions?.bearing;
       return {
         center: { lng: (west + east) / 2, lat: (south + north) / 2 },
         zoom: state.zoom,
-        bearing: 0,
+        bearing: typeof asked === "number" ? asked : 0,
       };
     },
     flyTo: (options: Record<string, unknown>, eventData?: Record<string, unknown>) => {

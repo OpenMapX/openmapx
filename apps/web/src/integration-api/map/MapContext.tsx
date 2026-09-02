@@ -19,6 +19,10 @@ const FIT_MS = 1000;
 export interface FitBoundsOptions {
   duration?: number;
   maxZoom?: number;
+  /** Frame at this bearing; omitted keeps whichever one the map is on. */
+  bearing?: number;
+  /** Land at this pitch; omitted keeps whichever one the map is on. */
+  pitch?: number;
 }
 
 export interface MapContextValue {
@@ -32,7 +36,8 @@ export interface MapContextValue {
   /**
    * Frames `bounds` in the visible viewport. `padding` is breathing room inside
    * the visible area; panels, sheets, and navigation chrome are accounted for
-   * automatically.
+   * automatically. The map's rotation and tilt are left alone unless
+   * `options.bearing` and `options.pitch` ask for others.
    */
   fitBounds: (bounds: MapBounds, padding?: InnerPadding, options?: FitBoundsOptions) => void;
   zoomIn: () => void;
@@ -94,6 +99,8 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
         bounds,
         inner: toInsets(padding, DEFAULT_INNER_PADDING),
         maxZoom: options?.maxZoom,
+        bearing: options?.bearing,
+        pitch: options?.pitch,
         duration: prefersReducedMotion() ? 0 : (options?.duration ?? FIT_MS),
         startedAt: performance.now(),
         padding: getCameraPaddingTarget(map),

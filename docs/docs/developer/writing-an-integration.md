@@ -457,10 +457,12 @@ fitBounds([[west, south], [east, north]], 60, { maxZoom: 16 });
 
 `fitBounds`' padding is breathing room *inside* the visible area. The app
 subtracts the side panel, the mobile sheet, and the navigation chrome itself, so
-an integration never needs to know how wide the panel is. A structural test
-(`apps/web/src/lib/cameraFramingGate.test.ts`) rejects raw `map.fitBounds`,
-`map.flyTo`, and `map.jumpTo` calls outside the few files that own a standalone
-map.
+an integration never needs to know how wide the panel is. It also leaves the
+map's rotation alone — a user who aligned the map to the street grid keeps that
+alignment — so pass `{ bearing: 0 }` only for a view that has to be read
+north-up. A structural test (`apps/web/src/lib/cameraFramingGate.test.ts`)
+rejects raw `map.fitBounds`, `map.flyTo`, and `map.jumpTo` calls outside the few
+files that own a standalone map.
 
 ## Where to go next
 

@@ -101,12 +101,17 @@ export function TransitNavigationView() {
     if (!mapCtx || coords.length < 2) return;
     const box = geoJsonBBox({ type: "LineString", coordinates: coords } as GeoJSON.LineString);
     if (!box) return;
+    // North-up and level: an overview is read like a map, not like the view the
+    // follow camera was holding. Both asked for through the framing, which
+    // measures a flat map and would otherwise fit the trip to a viewport the
+    // tilt no longer matches.
     mapCtx.fitBounds(
       [
         [box[0], box[1]],
         [box[2], box[3]],
       ],
       64,
+      { bearing: 0, pitch: 0 },
     );
   };
 

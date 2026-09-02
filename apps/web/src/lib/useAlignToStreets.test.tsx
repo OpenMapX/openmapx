@@ -18,6 +18,7 @@ vi.mock("./streetGrid", async () => ({
 }));
 
 import { clearAlignAnnouncement, useAlignAnnouncement } from "./alignAnnouncement";
+import { frameBoundsInstant } from "./cameraFraming";
 import { useAlignToStreets } from "./useAlignToStreets";
 
 describe("useAlignToStreets", () => {
@@ -125,6 +126,25 @@ describe("useAlignToStreets", () => {
       result.current.align();
     });
     expect(result.current.announcement?.text).toBe(message);
+  });
+
+  it("survives the next framing: a search result lands without straightening the grid", () => {
+    compute.mockReturnValue({ status: "ok", bearing: 30 });
+    const { result } = renderHook(() => useAlignToStreets());
+    act(() => {
+      result.current.align();
+    });
+    // The fake keeps `bearing` a test-driven input, so land the ease by hand.
+    fake.state.bearing = 30;
+
+    frameBoundsInstant(fake.map, [
+      [8, 50],
+      [8.1, 50.1],
+    ]);
+    expect(fake.state.cameraTransitions.at(-1)).toMatchObject({
+      method: "jumpTo",
+      options: { bearing: 30 },
+    });
   });
 
   it("stays silent when the map rotates", () => {

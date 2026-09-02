@@ -35,12 +35,22 @@ export type CameraRequest =
       bounds: MapBounds;
       inner: ResolvedPadding;
       maxZoom?: number;
+      /** Bearing to frame at; absent keeps whichever one the map is on. */
+      bearing?: number;
+      /**
+       * Pitch to land at; absent keeps whichever one the map is on. Framing
+       * measures a flat map, so a request that wants its box read the way it
+       * was measured asks for 0 here rather than levelling the map separately —
+       * a camera move stops whatever ease was running, halfway or not.
+       */
+      pitch?: number;
     });
 
 export interface CameraTarget {
   center: LngLat;
   zoom?: number;
   bearing?: number;
+  pitch?: number;
 }
 
 /** Drops `undefined` members: MapLibre treats `'bearing' in options` as a request. */
@@ -84,12 +94,24 @@ function fitInner(near: number, far: number, visible: number): [number, number] 
   return [near * scale, far * scale];
 }
 
+/** Turns a screen vector by `degrees`, the way MapLibre's `Point.rotate` does. */
+function rotate([x, y]: [number, number], degrees: number): [number, number] {
+  const radians = (degrees * Math.PI) / 180;
+  const cos = Math.cos(radians);
+  const sin = Math.sin(radians);
+  return [x * cos - y * sin, x * sin + y * cos];
+}
+
 /**
  * The camera a request resolves to when the map carries the request's padding
  * target. `cameraForBounds` measures against the map's *current* padding, so
  * the inner breathing room carries the difference to the target — negative
  * where the target is the smaller of the two, which is exactly what a closing
  * panel needs.
+ *
+ * Framing keeps the map's rotation and tilt unless the request names them:
+ * turning back to north is the compass's job, not a side effect of showing
+ * something.
  */
 export function cameraForRequest(map: maplibregl.Map, request: CameraRequest): CameraTarget | null {
   if (request.kind === "flyTo") return compact({ center: request.center, zoom: request.zoom });
@@ -112,21 +134,31 @@ export function cameraForRequest(map: maplibregl.Map, request: CameraRequest): C
     left: left + target.left - (current.left ?? 0),
     right: right + target.right - (current.right ?? 0),
   };
+  const bearing = request.bearing ?? map.getBearing();
   // MapLibre centres the box on the asymmetry of the padding it is handed, but
   // only the inner asymmetry belongs there — the target half is already carried
   // by the camera's own centre offset, and counting it twice pushes the box off
-  // the visible strip. `offset` cancels the excess, in screen pixels: framing
-  // resolves at bearing 0, so no rotation stands between the two.
-  const offset: [number, number] = [
-    (left - right - (padding.left - padding.right)) / 2,
-    (top - bottom - (padding.top - padding.bottom)) / 2,
-  ];
+  // the visible strip. `offset` cancels the excess. MapLibre turns the padding's
+  // own half into the world before it applies it, but takes `offset` as it comes,
+  // so ours goes in pre-turned to land on the screen pixels it means.
+  const offset = rotate(
+    [
+      (left - right - (padding.left - padding.right)) / 2,
+      (top - bottom - (padding.top - padding.bottom)) / 2,
+    ],
+    bearing,
+  );
   const camera = map.cameraForBounds(
     request.bounds,
-    compact({ padding, offset, maxZoom: request.maxZoom }),
+    compact({ padding, offset, bearing, maxZoom: request.maxZoom }),
   );
   if (!camera?.center) return null;
-  return compact({ center: toLngLat(camera.center), zoom: camera.zoom, bearing: camera.bearing });
+  return compact({
+    center: toLngLat(camera.center),
+    zoom: camera.zoom,
+    bearing: camera.bearing,
+    pitch: request.pitch,
+  });
 }
 
 interface FramingState {

@@ -74,6 +74,7 @@ describe("MapContext camera wrappers", () => {
     expect(fake.state.cameraForBoundsCalls.at(-1)?.options).toEqual({
       padding: { top: 80, bottom: 80, left: 380, right: 80 },
       offset: [-150, 0],
+      bearing: 0,
       maxZoom: 17,
     });
     expect(last(fake)).toMatchObject({
@@ -99,6 +100,22 @@ describe("MapContext camera wrappers", () => {
       left: 30,
       right: 40,
     });
+  });
+
+  it("frames at the pose the map is on, and at a flat north only when asked", () => {
+    const { fake, ctx } = setup();
+    fake.state.bearing = 40;
+    fake.state.pitch = 55;
+    const bounds: [[number, number], [number, number]] = [
+      [0, 0],
+      [2, 2],
+    ];
+    act(() => ctx().fitBounds(bounds, 80));
+    expect(last(fake)?.options).toMatchObject({ bearing: 40 });
+    expect(last(fake)?.options).not.toHaveProperty("pitch");
+
+    act(() => ctx().fitBounds(bounds, 80, { bearing: 0, pitch: 0 }));
+    expect(last(fake)?.options).toMatchObject({ bearing: 0, pitch: 0 });
   });
 
   it("jumps instead of animating under reduced motion and stamps the instant request", () => {

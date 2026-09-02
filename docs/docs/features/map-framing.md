@@ -13,10 +13,16 @@ areas are all treated as covering the map, so the content lands beside or above
 them rather than underneath. Opening or collapsing a panel slides the map by the
 same amount; the slide is instant when your system asks for reduced motion.
 
+Framing keeps the way you are looking at the map. If you have turned it — by
+dragging, or with the grid button below — the next place or route you open
+arrives at that same angle, and it stays there until you ask for north back.
+
 During turn-by-turn navigation the position marker keeps sitting three quarters
 of the way down the visible strip between the instruction banner and the bottom
-panel, and dragging the panel up moves the map with it. "Overview" frames the
-whole route in the visible area.
+panel, and dragging the panel up moves the map with it. "Overview" is the one
+deliberate exception to the rule above: it frames the whole route in the visible
+area and returns you to a flat, north-up view, so you can take in the shape of
+the journey instead of the road ahead.
 
 ## Align to streets
 

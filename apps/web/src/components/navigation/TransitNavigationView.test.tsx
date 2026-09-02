@@ -1,13 +1,21 @@
 import { setNavigationAuthority, useNavigationStore } from "@openmapx/core";
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { act, cleanup, render } from "@testing-library/react";
+import { act, cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { NAV_LANDSCAPE_PANEL_WIDTH } from "@/lib/layout";
 import { getMapObstructionInsets } from "@/lib/mapObstructions";
 import { CHANNEL_GLOBAL } from "@/lib/mobile/mobileShellEnvironment";
 
 const calls = { engine: 0, liveRefresh: [] as boolean[], wakeLock: [] as boolean[] };
+const mapCtx = { fitBounds: vi.fn() };
+
+vi.mock("@/integration-api/map/MapContext", async () => ({
+  ...(await vi.importActual<typeof import("@/integration-api/map/MapContext")>(
+    "@/integration-api/map/MapContext",
+  )),
+  useMapOptional: () => mapCtx,
+}));
 
 vi.mock("@/lib/navigation/useTransitNavigationEngine", () => ({
   useTransitNavigationEngine: () => {
@@ -115,6 +123,34 @@ describe("TransitNavigationView runtime ownership", () => {
 
     // The WebView remains the product UI; only the ownership moved.
     expect(view.container.textContent).not.toBe("");
+  });
+});
+
+describe("TransitNavigationView overview", () => {
+  beforeEach(() => {
+    mapCtx.fitBounds.mockClear();
+    useNavigationStore.setState({ status: "navigating", kind: "transit", itinerary });
+  });
+  afterEach(() => {
+    cleanup();
+    useNavigationStore.getState().stopNavigation();
+  });
+
+  it("frames the whole trip north-up and level", () => {
+    const view = mount({});
+    fireEvent.click(view.getByLabelText("navigation.moreOptions"));
+    fireEvent.click(view.getByText("navigation.overview"));
+
+    // A trip overview is read like a map, whatever pose the follow camera was
+    // holding — and the framing only straightens and levels when it is asked to.
+    expect(mapCtx.fitBounds).toHaveBeenCalledWith(
+      [
+        [8, 50],
+        [8.1, 50.1],
+      ],
+      64,
+      { bearing: 0, pitch: 0 },
+    );
   });
 });
 
