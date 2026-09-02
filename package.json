@@ -14,7 +14,7 @@
     "check-duplicates": "jscpd --config .jscpd.json --cross-formats js-ts --no-tips apps packages integrations services scripts",
     "check-infrastructure": "bash scripts/check-infrastructure.sh",
     "test": "vitest run",
-    "test:database": "OPENMAPX_RUN_DATABASE_TESTS=1 vitest run --project node --maxWorkers=2 apps/api/src/services/mobileAuthHandoff.test.ts apps/api/src/services/capability-bindings.test.ts services/data-manager/__tests__/poi-ingest/e2e-bnetza.test.ts services/data-manager/__tests__/search-index/schema-postgres.test.ts services/data-manager/__tests__/search-index/build-postgres.test.ts services/data-manager/__tests__/overture/schema-postgres.test.ts services/data-manager/__tests__/overture/runtime-postgres.test.ts",
+    "test:database": "OPENMAPX_RUN_DATABASE_TESTS=1 vitest run --project node --maxWorkers=2 apps/api/src/services/mobileAuthHandoff.test.ts apps/api/src/services/capability-bindings.test.ts apps/api/src/db/__tests__/vehicles-parking-postgres.test.ts services/data-manager/__tests__/poi-ingest/e2e-bnetza.test.ts services/data-manager/__tests__/search-index/schema-postgres.test.ts services/data-manager/__tests__/search-index/build-postgres.test.ts services/data-manager/__tests__/overture/schema-postgres.test.ts services/data-manager/__tests__/overture/runtime-postgres.test.ts",
     "test:watch": "vitest",
     "test:coverage": "OPENMAPX_SKIP_SLOW_CRYPTO=1 vitest run --coverage",
     "prepare": "husky",
