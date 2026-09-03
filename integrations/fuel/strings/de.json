@@ -33,7 +33,7 @@
   },
   "column": {
     "fuelType": "Kraftstoffart",
-    "priceEur": "Preis (€)"
+    "price": "Preis"
   },
   "fuel": {
     "diesel": "Diesel",

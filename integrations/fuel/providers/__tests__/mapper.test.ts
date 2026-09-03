@@ -8,6 +8,7 @@ function makeStation(overrides: Partial<FuelStation> = {}): FuelStation {
     id: "tankerkoenig/abc-123",
     name: "Test Station",
     coordinates: [11.5, 48.5],
+    currency: "EUR",
     fuelPrices: { diesel: 1.559, e5: 1.699, e10: 1.639 },
     ...overrides,
   };
@@ -48,7 +49,7 @@ describe("fuel mapper", () => {
     const detail = mapFuelStationToDetail(makeStation());
     const priceSection = detail.sections.find((s) => s.sectionIcon === "fuel");
     expect(priceSection?.title).toEqual({ $t: "section.fuelPrices" });
-    expect(priceSection?.columns).toEqual([{ $t: "column.fuelType" }, { $t: "column.priceEur" }]);
+    expect(priceSection?.columns).toEqual([{ $t: "column.fuelType" }, { $t: "column.price" }]);
   });
 
   it("emits fuel-row tokens keyed by fuel type", () => {
@@ -73,6 +74,28 @@ describe("fuel mapper", () => {
   it("returns undefined summary when no prices are present", () => {
     const result = mapFuelStationToResult(makeStation({ fuelPrices: {} }));
     expect(result.summary).toBeUndefined();
+  });
+
+  it("preserves the price observation time and currency on search results", () => {
+    const result = mapFuelStationToResult(
+      makeStation({ fuelPricesUpdatedAt: "2026-09-03T12:34:56Z" }),
+    );
+
+    expect(result.observedAt).toBe("2026-09-03T12:34:56Z");
+    expect(result.currency).toBe("EUR");
+  });
+
+  it("preserves the station currency instead of assuming euros", () => {
+    const station = makeStation({ currency: "CHF", fuelPrices: { diesel: 1.73 } });
+    const result = mapFuelStationToResult(station);
+    const detail = mapFuelStationToDetail(station);
+
+    expect(result.currency).toBe("CHF");
+    expect(result.summary).toEqual({
+      $t: "summary.priceList",
+      values: { prices: "D 1.730 CHF" },
+    });
+    expect(detail.sections[0]?.rows?.[0]?.[1]).toBe("1.730 CHF");
   });
 
   // FuelStation.osmTags is only ever populated when OSM contributed the

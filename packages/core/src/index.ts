@@ -47,6 +47,7 @@ export {
   InvalidGitUrlError,
 } from "./git-url";
 export * from "./hooks";
+export * from "./impact";
 export {
   type ActiveAlert,
   type AlongRouteOptions,

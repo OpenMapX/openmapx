@@ -33,7 +33,7 @@
   },
   "column": {
     "fuelType": "Fuel Type",
-    "priceEur": "Price (€)"
+    "price": "Price"
   },
   "fuel": {
     "diesel": "Diesel",

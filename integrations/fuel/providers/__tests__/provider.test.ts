@@ -76,6 +76,7 @@ function makeStation(id: string, prices: FuelStation["fuelPrices"] = {}): FuelSt
     id,
     name: `Station ${id}`,
     coordinates: [11.5, 48.5],
+    currency: "EUR",
     fuelPrices: prices,
   };
 }
@@ -123,6 +124,16 @@ describe("fuelProvider.search", () => {
     expect(searchByCategory).toHaveBeenCalled();
     expect(results).toHaveLength(1);
     expect(results[0].source).toBe("osm");
+  });
+
+  it("does not query or return unpriced OSM stations for a prices-only search", async () => {
+    vi.mocked(searchFuelStations).mockResolvedValue(null as never);
+    vi.mocked(searchByCategory).mockClear();
+
+    const results = (await fuelProvider.search(makeBbox(), { pricesOnly: true })).data;
+
+    expect(results).toEqual([]);
+    expect(searchByCategory).not.toHaveBeenCalled();
   });
 
   it("fuelType filter: filters by price data presence in station cache", async () => {

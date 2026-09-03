@@ -89,6 +89,7 @@ export class FrPrixcarburantsService implements FuelPriceProvider {
         coordinates: [r.geom.lon, r.geom.lat],
         address,
         fuelPricesUpdatedAt: updatedAt,
+        currency: "EUR",
         fuelPrices: {
           diesel: r.gazole_prix ?? undefined,
           e5: r.sp95_prix ?? undefined,

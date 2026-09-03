@@ -91,6 +91,7 @@ export class DeTankerkoenigService implements FuelPriceProvider {
         coordinates: [s.lng, s.lat],
         address,
         isOpen: s.isOpen,
+        currency: "EUR",
         fuelPrices: {
           e5: s.e5 != null && s.e5 !== false ? s.e5 : undefined,
           e10: s.e10 != null && s.e10 !== false ? s.e10 : undefined,

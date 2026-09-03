@@ -152,6 +152,12 @@ export interface Route {
   elevation?: number[];
   /** Distance in metres between elevation samples */
   elevationInterval?: number;
+  /**
+   * Provider-reported transit CO2 per passenger for the whole route (grams).
+   * Set by transit engines that return their own emissions estimate; when
+   * present the impact engine prefers it over the regional average.
+   */
+  co2Grams?: number;
 }
 
 export interface DirectionsResult {

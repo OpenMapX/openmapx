@@ -91,6 +91,7 @@ export class AtEcontrolService implements FuelPriceProvider {
         coordinates: [s.location.longitude, s.location.latitude],
         address,
         isOpen: s.open,
+        currency: "EUR",
         fuelPrices: {
           diesel: dieselPrice,
           e5: superPriceById.get(s.id),

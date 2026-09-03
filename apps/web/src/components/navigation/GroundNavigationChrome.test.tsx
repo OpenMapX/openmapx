@@ -1,5 +1,5 @@
 import type { Route } from "@integrations/routing/types";
-import { useNavigationStore } from "@openmapx/core";
+import { useDirectionsStore, useNavigationStore } from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import type { ReactNode } from "react";
@@ -34,7 +34,13 @@ vi.mock("./NavAlertSlot", () => ({ NavAlertSlot: () => null }));
 vi.mock("./NavStatusSlot", () => ({ NavStatusSlot: () => null }));
 vi.mock("./NavSpeedLimitSlot", () => ({ NavSpeedLimitSlot: () => null }));
 vi.mock("./FasterRouteBanner", () => ({ FasterRouteBanner: () => null }));
-vi.mock("./ArrivalCard", () => ({ ArrivalCard: () => null }));
+const arrivalProps = vi.hoisted(() => ({ destinationName: null as string | null }));
+vi.mock("./ArrivalCard", () => ({
+  ArrivalCard: ({ destinationName }: { destinationName?: string | null }) => {
+    arrivalProps.destinationName = destinationName ?? null;
+    return null;
+  },
+}));
 vi.mock("./NavDirectionsDialog", () => ({ NavDirectionsDialog: () => null }));
 vi.mock("./NavPerfControl", () => ({ NavPerfControl: () => null }));
 vi.mock("./NavSimControl", () => ({ NavSimControl: () => null }));
@@ -90,5 +96,53 @@ describe("GroundNavigationChrome overview", () => {
       { bearing: 0, pitch: 0 },
     );
     expect(useNavigationStore.getState().cameraMode).toBe("overview");
+  });
+});
+
+describe("GroundNavigationChrome arrival metadata", () => {
+  beforeEach(() => {
+    arrivalProps.destinationName = null;
+    useNavigationStore.setState({
+      status: "arrived",
+      kind: "ground",
+      mode: "driving",
+      route,
+      destinationWaypoints: [
+        [8, 50],
+        [8.1, 50.1],
+      ],
+    });
+  });
+
+  afterEach(() => {
+    cleanup();
+    useNavigationStore.getState().stopNavigation();
+    useDirectionsStore.getState().close();
+  });
+
+  it("keeps the destination label when its waypoint matches the active session", () => {
+    useDirectionsStore.setState({
+      waypoints: [
+        { id: "a", coords: [8, 50], label: "Start", type: "origin" },
+        { id: "b", coords: [8.1, 50.1], label: "Museum", type: "destination" },
+      ],
+    });
+
+    mount();
+
+    expect(arrivalProps.destinationName).toBe("Museum");
+  });
+
+  it("rejects a stale label from a different directions request", () => {
+    useDirectionsStore.setState({
+      waypoints: [
+        { id: "a", coords: [8, 50], label: "Start", type: "origin" },
+        { id: "b", coords: [9, 51], label: "Wrong place", type: "destination" },
+      ],
+    });
+
+    mount();
+
+    expect(arrivalProps.destinationName).toBeNull();
   });
 });

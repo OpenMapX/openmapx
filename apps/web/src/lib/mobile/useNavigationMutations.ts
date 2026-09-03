@@ -39,18 +39,20 @@ export function useNavigationMutations() {
     }
   }, [browserAuthority, commands]);
 
-  const completeArrival = useCallback(async () => {
+  const completeArrival = useCallback(async (): Promise<boolean> => {
     const store = useNavigationStore.getState();
     if (browserAuthority) {
       store.stopNavigation();
-      return;
+      return true;
     }
-    if (!commands) return;
+    if (!commands) return false;
     try {
       await commands.stop(true);
       store.clearNativeReadModel();
+      return true;
     } catch {
       void commands.requestSnapshot();
+      return false;
     }
   }, [browserAuthority, commands]);
 

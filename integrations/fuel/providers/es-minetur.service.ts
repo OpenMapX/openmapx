@@ -99,6 +99,7 @@ export class EsMineturService implements FuelPriceProvider {
           name: s.Rótulo || address || s.IDEESS,
           coordinates: [lng, lat],
           address,
+          currency: "EUR",
           fuelPrices: {
             diesel: parseSpanishPrice(s["Precio Gasoleo A"]),
             e5: parseSpanishPrice(s["Precio Gasolina 95 E5"]),

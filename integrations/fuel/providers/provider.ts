@@ -129,6 +129,8 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
         this.cacheStation(station);
       }
       results = fuelStations.map(mapFuelStationToResult);
+    } else if (filters?.pricesOnly === true) {
+      results = [];
     } else {
       // Fallback to Overpass for areas without dedicated fuel price providers
       const osmFilters = CATEGORY_FILTERS.fuel;
@@ -201,6 +203,7 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
               name: s.brand && s.brand !== s.name ? `${s.brand} ${s.name}` : s.name,
               brand: s.brand || undefined,
               coordinates: [0, 0], // Will be overridden if cached
+              currency: "EUR",
               fuelPrices: {
                 e5: s.e5 != null && s.e5 !== false ? s.e5 : undefined,
                 e10: s.e10 != null && s.e10 !== false ? s.e10 : undefined,

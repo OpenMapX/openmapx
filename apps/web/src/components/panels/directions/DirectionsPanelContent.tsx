@@ -97,6 +97,7 @@ import {
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
+import { useRouteImpacts } from "./useRouteImpacts";
 
 export function DirectionsPanelContent() {
   const t = useTranslations("directions");
@@ -361,6 +362,28 @@ export function DirectionsPanelContent() {
     lang: locale,
     departAt: drivingDepartAtStr,
     arriveBy: drivingArriveByStr,
+  });
+
+  const routesForImpact = scheduledData?.routes ?? data?.routes ?? [];
+  const fastestRouteIndex = useMemo(() => {
+    if (routesForImpact.length === 0) return -1;
+    return routesForImpact.reduce(
+      (fastestIndex, route, index) =>
+        route.duration < routesForImpact[fastestIndex].duration ? index : fastestIndex,
+      0,
+    );
+  }, [routesForImpact]);
+  const {
+    impacts: routeImpacts,
+    unavailableReason: routeImpactUnavailableReason,
+    compatibleVehicles: impactVehicles,
+    updateAssumptions: handleUpdateAssumptions,
+  } = useRouteImpacts({
+    routes: routesForImpact,
+    destination,
+    vehicles: garageVehicles,
+    homeElectricityPrice: evHomePricePerKwh,
+    homeElectricityCurrency: evHomeCurrency,
   });
 
   // EV plan query — built identically to RouteLayer's independent request
@@ -1447,10 +1470,15 @@ export function DirectionsPanelContent() {
                   route={route}
                   index={i}
                   active
+                  isFastest={i === fastestRouteIndex}
                   onSelect={() => snapTo("peek")}
                   onDetails={() => setDetailsRouteIndex(i)}
                   units={units}
                   provider={scheduledData.provider}
+                  impact={routeImpacts[i]}
+                  impactUnavailableReason={routeImpactUnavailableReason}
+                  vehicles={impactVehicles}
+                  onUpdateAssumptions={handleUpdateAssumptions}
                 />
               </Box>
             ))}
@@ -1476,6 +1504,7 @@ export function DirectionsPanelContent() {
                   route={route}
                   index={i}
                   active={i === activeRouteIndex}
+                  isFastest={i === fastestRouteIndex}
                   onSelect={() => {
                     setActiveRouteIndex(i);
                     snapTo("peek");
@@ -1484,6 +1513,10 @@ export function DirectionsPanelContent() {
                   units={units}
                   alternatives={data.routes.filter((_, idx) => idx !== i)}
                   provider={data.provider}
+                  impact={routeImpacts[i]}
+                  impactUnavailableReason={routeImpactUnavailableReason}
+                  vehicles={impactVehicles}
+                  onUpdateAssumptions={handleUpdateAssumptions}
                 />
                 {i < data.routes.length - 1 && <Divider />}
               </Box>

@@ -1,10 +1,10 @@
-import type { Route } from "@openmapx/core";
+import type { PersonalVehicle, Route, RouteImpact } from "@openmapx/core";
 import { setNavigationAuthority, useDirectionsStore, useNavigationStore } from "@openmapx/core";
 import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
 import { en } from "@openmapx/i18n";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileRuntimeProvider } from "@/lib/mobile/MobileRuntimeProvider";
 import { RouteCard } from "./RouteCard";
 
@@ -274,5 +274,303 @@ describe("RouteCard Start under browser authority", () => {
     fireEvent.click(view.getByRole("button", { name: "Start" }));
 
     await waitFor(() => expect(useNavigationStore.getState().status).toBe("navigating"));
+  });
+});
+
+const mockDieselComparison: NonNullable<RouteImpact["comparison"]> = {
+  isLowestEmissions: false,
+  isLowestCost: false,
+  isFastest: true,
+  emissionsDeltaGrams: 0,
+  emissionsDeltaPct: 0,
+  costDelta: 0,
+  reason: null,
+};
+
+const mockDieselImpact: RouteImpact = {
+  routeIndex: 0,
+  vehicleId: "v1",
+  vehicleName: "VW Golf 2.0 TDI",
+  vehiclePowertrain: "diesel",
+  occupancy: 1,
+  energy: {
+    fuelLiters: 4.2,
+    electricityKwh: null,
+    provenance: {
+      kind: "calculated",
+      timestamp: "2026-09-03T12:00:00Z",
+      calculatedAt: "2026-09-03T12:00:00Z",
+      citation: "VW Golf 2.0 TDI (5.2 L/100km)",
+      assumptions: [{ kind: "base_fuel_consumption", litersPer100Km: 5.2 }],
+    },
+  },
+  emissions: {
+    totalGrams: 8400,
+    tailpipeGrams: 7000,
+    upstreamGrams: 1400,
+    provenance: {
+      kind: "defaulted",
+      timestamp: "2026-09-03T12:00:00Z",
+      calculatedAt: "2026-09-03T12:00:00Z",
+      citation: "EEA 2024",
+      assumptions: [{ kind: "tailpipe_factor", gramsPerLiter: 2640 }],
+    },
+  },
+  cost: {
+    costType: "road",
+    currency: "EUR",
+    energyCost: 6.8,
+    tollStatus: "no_tolls",
+    tollCost: null,
+    transitFare: null,
+    knownCost: 6.8,
+    totalCost: 6.8,
+    costCompleteness: "complete",
+    energyCostProvenance: {
+      kind: "provider",
+      timestamp: "2026-09-03T12:00:00Z",
+      calculatedAt: "2026-09-03T12:00:00Z",
+      citation: "Tankerkönig DE",
+      assumptions: [{ kind: "unit_price", value: 1.62, currency: "EUR" }],
+    },
+  },
+  comparison: mockDieselComparison,
+};
+
+const mockVehicles: PersonalVehicle[] = [
+  {
+    id: "v1",
+    name: "VW Golf 2.0 TDI",
+    kind: "car",
+    powertrain: "diesel",
+    isDefault: true,
+    presetId: null,
+    ev: null,
+    fuelConsumptionLPer100Km: 5.2,
+    createdAt: "2026-09-03T00:00:00Z",
+    updatedAt: "2026-09-03T00:00:00Z",
+  },
+];
+
+describe("RouteCard impact integration", () => {
+  it("renders RouteImpactBadge when impact prop is provided", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impact={mockDieselImpact}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    const badge = screen.getByTestId("route-impact-badge");
+    expect(badge).toBeDefined();
+    // Displays vehicle-aware emissions and cost instead of static 170 g/km estimate
+    expect(badge.textContent).toContain("8.4 kg CO2");
+    expect(badge.textContent).toContain("~€6.80");
+    // Ensure static ~20 kg CO2 is not rendered
+    expect(screen.queryByText(/20\.1 kg CO2/)).toBeNull();
+  });
+
+  it("displays Eco Choice badge on alternative with lowest emissions", () => {
+    const ecoImpact: RouteImpact = {
+      ...mockDieselImpact,
+      comparison: {
+        isLowestEmissions: true,
+        isLowestCost: false,
+        isFastest: false,
+        emissionsDeltaGrams: -500,
+        emissionsDeltaPct: -5.9,
+        costDelta: 0,
+        reason: { kind: "shorter", distanceMeters: 3200 },
+      },
+    };
+
+    render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={1}
+          active={false}
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impact={ecoImpact}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    const ecoChip = screen.getByTestId("eco-choice-chip");
+    expect(ecoChip).toBeDefined();
+    expect(ecoChip.textContent).toBe("Eco Choice");
+  });
+
+  it("tapping the impact badge opens RouteImpactDetailsDialog", async () => {
+    const handleUpdateAssumptions = vi.fn();
+
+    render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impact={mockDieselImpact}
+          vehicles={mockVehicles}
+          onUpdateAssumptions={handleUpdateAssumptions}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    // Dialog is initially closed
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    // Tap badge
+    fireEvent.click(screen.getByTestId("route-impact-badge"));
+
+    // Dialog is now open
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(screen.getByText("Route Impact")).toBeDefined();
+    expect(screen.getByTestId("dialog-vehicle-name").textContent).toBe("VW Golf 2.0 TDI");
+
+    // Close dialog
+    fireEvent.click(screen.getByTestId("dialog-close-button"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+  });
+
+  it("falls back to legacy estimateDrivingCo2Grams when impact is omitted", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(screen.queryByTestId("route-impact-badge")).toBeNull();
+    // 118.132 km * 170 g/km = 20082 g = 20.1 kg CO2
+    expect(screen.getByText(/20\.1 kg CO2/)).toBeDefined();
+  });
+
+  it("explains why a plug-in hybrid estimate is unavailable", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impactUnavailableReason="plugin_hybrid_inputs_missing"
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(screen.getByText("Impact estimate unavailable for plug-in hybrids")).toBeDefined();
+    expect(screen.queryByText(/20\.1 kg CO2/)).toBeNull();
+  });
+
+  it("explains why an unknown motorized powertrain cannot be estimated", () => {
+    render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impactUnavailableReason="unsupported_powertrain"
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(screen.getByText("Impact estimate unavailable for this powertrain")).toBeDefined();
+    expect(screen.queryByText(/20\.1 kg CO2/)).toBeNull();
+  });
+
+  it("uses the calculated fastest route instead of assuming index zero", () => {
+    const { rerender } = render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impact={{
+            ...mockDieselImpact,
+            comparison: { ...mockDieselComparison, isFastest: false },
+          }}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByText("Fastest route")).toBeNull();
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={1}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impact={{
+            ...mockDieselImpact,
+            comparison: { ...mockDieselComparison, isFastest: true },
+          }}
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByText("Fastest route")).toBeDefined();
+  });
+
+  it("uses route timing when an impact estimate is unavailable", () => {
+    const { rerender } = render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          isFastest={false}
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impactUnavailableReason="plugin_hybrid_inputs_missing"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.queryByText("Fastest route")).toBeNull();
+
+    rerender(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={1}
+          active
+          isFastest
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          impactUnavailableReason="plugin_hybrid_inputs_missing"
+        />
+      </NextIntlClientProvider>,
+    );
+    expect(screen.getByText("Fastest route")).toBeDefined();
   });
 });

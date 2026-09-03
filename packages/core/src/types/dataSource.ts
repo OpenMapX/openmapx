@@ -111,6 +111,10 @@ export interface DataSourceResult {
   mapContext?: DataSourceMapContextSelection;
   /** Structured numeric values for client-side sorting (e.g., fuel prices by type). */
   sortValues?: Record<string, number>;
+  /** ISO timestamp reported by the upstream source for the structured values. */
+  observedAt?: string;
+  /** ISO 4217 currency for monetary structured values. */
+  currency?: string;
 }
 
 export interface PricingPlanEntry {

@@ -8,7 +8,12 @@ import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
-import type { Route } from "@openmapx/core";
+import type {
+  PersonalVehicle,
+  Route,
+  RouteImpact,
+  RouteImpactUnavailableReason,
+} from "@openmapx/core";
 import {
   bandForDelayRatio,
   estimateDrivingCo2Grams,
@@ -19,6 +24,11 @@ import {
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
+import { RouteImpactBadge } from "@/components/panels/directions/RouteImpactBadge";
+import {
+  type RouteImpactAssumptions,
+  RouteImpactDetailsDialog,
+} from "@/components/panels/directions/RouteImpactDetailsDialog";
 import { BRAND, TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
 import { formatCo2Emission } from "@/lib/formatCo2";
 import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
@@ -30,19 +40,12 @@ const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "m
 /** Absolute floor for showing a traffic delay, in seconds. */
 const MIN_TRAFFIC_DELAY_SECONDS = 300;
 
-export function RouteCard({
-  route,
-  index,
-  active,
-  onSelect,
-  onDetails,
-  units,
-  alternatives = [],
-  provider,
-}: {
+export interface RouteCardProps {
   route: Route;
   index: number;
   active: boolean;
+  /** Whether this route has the shortest provider-reported duration. */
+  isFastest?: boolean;
   onSelect: () => void;
   onDetails: () => void;
   units: "metric" | "imperial";
@@ -50,7 +53,27 @@ export function RouteCard({
   alternatives?: Route[];
   /** Integration id of the routing provider that served this route, for nav attribution. */
   provider?: string;
-}) {
+  impact?: RouteImpact;
+  impactUnavailableReason?: RouteImpactUnavailableReason | null;
+  vehicles?: PersonalVehicle[];
+  onUpdateAssumptions?: (assumptions: RouteImpactAssumptions) => void;
+}
+
+export function RouteCard({
+  route,
+  index,
+  active,
+  isFastest = false,
+  onSelect,
+  onDetails,
+  units,
+  alternatives = [],
+  provider,
+  impact,
+  impactUnavailableReason,
+  vehicles,
+  onUpdateAssumptions,
+}: RouteCardProps) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
   const tNav = useTranslations("navigation");
@@ -65,6 +88,7 @@ export function RouteCard({
   // than a synchronous store write.
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const [impactDetailsOpen, setImpactDetailsOpen] = useState(false);
 
   const handleStart = async () => {
     const coords = waypoints.map((w) => w.coords).filter((c): c is [number, number] => c !== null);
@@ -200,7 +224,24 @@ export function RouteCard({
         >
           {dist}
         </Typography>
-        {route.mode === "driving" &&
+        {impact ? (
+          <Box
+            sx={{ mt: 0.5 }}
+            onClick={(e) => {
+              e.stopPropagation();
+            }}
+          >
+            <RouteImpactBadge impact={impact} onClick={() => setImpactDetailsOpen(true)} />
+          </Box>
+        ) : impactUnavailableReason ? (
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+            {t(
+              impactUnavailableReason === "plugin_hybrid_inputs_missing"
+                ? "impactPluginHybridUnavailable"
+                : "impactUnsupportedPowertrain",
+            )}
+          </Typography>
+        ) : route.mode === "driving" ? (
           (() => {
             const co2 = formatCo2Emission(estimateDrivingCo2Grams(route.distance), locale);
             return co2 ? (
@@ -208,8 +249,9 @@ export function RouteCard({
                 {t("co2Estimate", { co2 })}
               </Typography>
             ) : null;
-          })()}
-        {active && index === 0 && (
+          })()
+        ) : null}
+        {active && (impact ? impact.comparison?.isFastest === true : isFastest) && (
           <Typography
             variant="caption"
             sx={{
@@ -272,6 +314,17 @@ export function RouteCard({
           </Typography>
         )}
       </Box>
+      {impact && (
+        <Box onClick={(e) => e.stopPropagation()}>
+          <RouteImpactDetailsDialog
+            open={impactDetailsOpen}
+            onClose={() => setImpactDetailsOpen(false)}
+            impact={impact}
+            vehicles={vehicles}
+            onUpdateAssumptions={onUpdateAssumptions}
+          />
+        </Box>
+      )}
     </Box>
   );
 }

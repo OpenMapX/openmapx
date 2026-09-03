@@ -14,6 +14,8 @@ export interface FuelStation {
   coordinates: [number, number];
   address?: string;
   isOpen?: boolean;
+  /** ISO 4217 currency shared by all prices on this station record. */
+  currency: string;
   fuelPrices: FuelPrices;
   /** ISO 8601 timestamp of the most recent price update, if available. */
   fuelPricesUpdatedAt?: string;

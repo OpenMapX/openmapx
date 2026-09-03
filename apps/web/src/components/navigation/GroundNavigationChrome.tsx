@@ -9,7 +9,13 @@ import Snackbar from "@mui/material/Snackbar";
 import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { geoJsonBBox, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import {
+  geoJsonBBox,
+  haversineDistance,
+  useDirectionsStore,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { NavigationSettingsDialog } from "@/components/settings/NavigationSettingsDialog";
@@ -20,6 +26,7 @@ import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeigh
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
 import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructions";
 import { ArrivalCard } from "./ArrivalCard";
+import { ARRIVAL_WAYPOINT_MATCH_TOLERANCE_METERS } from "./arrivalHandoffState";
 import { FasterRouteBanner } from "./FasterRouteBanner";
 import { NavAlertSlot } from "./NavAlertSlot";
 import { NavBottomBarSlot } from "./NavBottomBarSlot";
@@ -50,6 +57,15 @@ interface Props {
 export function GroundNavigationChrome({ coverage }: Props) {
   const route = useNavigationStore((s) => s.route);
   const status = useNavigationStore((s) => s.status);
+  const navigationDestination = useNavigationStore((s) => s.destinationWaypoints.at(-1) ?? null);
+  const directionsDestination = useDirectionsStore((s) => s.waypoints.at(-1) ?? null);
+  const destinationName =
+    navigationDestination &&
+    directionsDestination?.coords &&
+    haversineDistance(navigationDestination, directionsDestination.coords) <=
+      ARRIVAL_WAYPOINT_MATCH_TOLERANCE_METERS
+      ? directionsDestination.label || null
+      : null;
   const rerouteFailedNonce = useNavigationStore((s) => s.rerouteFailedNonce);
   const setCameraMode = useNavigationStore((s) => s.setCameraMode);
   const { completeArrival } = useNavigationMutations();
@@ -144,9 +160,20 @@ export function GroundNavigationChrome({ coverage }: Props) {
       <NavPerfControl />
       {status === "arrived" ? (
         <Box
-          sx={{ pointerEvents: "auto", m: "auto", bgcolor: "background.paper", borderRadius: 3 }}
+          sx={{
+            pointerEvents: "auto",
+            m: "auto",
+            width: "100%",
+            maxWidth: { xs: "calc(100% - 32px)", sm: 440 },
+            maxHeight: { xs: "calc(100dvh - 96px)", sm: "calc(100dvh - 64px)" },
+            overflowY: "auto",
+            bgcolor: "background.paper",
+            borderRadius: 3,
+            boxShadow: 6,
+            overflowX: "hidden",
+          }}
         >
-          <ArrivalCard onClose={() => void completeArrival()} />
+          <ArrivalCard onClose={() => void completeArrival()} destinationName={destinationName} />
         </Box>
       ) : (
         <>

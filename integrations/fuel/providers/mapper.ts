@@ -49,11 +49,11 @@ function formatPriceSummary(station: FuelStation): I18nToken | undefined {
   for (const [key, label] of SUMMARY_LABELS) {
     const price = station.fuelPrices[key];
     if (price !== undefined) {
-      parts.push(`${label} ${price.toFixed(3)} \u20AC`);
+      parts.push(`${label} ${price.toFixed(3)} ${station.currency}`);
     }
   }
   if (parts.length === 0) return undefined;
-  // Summary wraps the locale-agnostic price list (numbers + \u20AC) in a token so
+  // Summary wraps the locale-agnostic price list (numbers + ISO currency) in a token so
   // it can be widened to I18nToken-only in Task 4.1 without churn.
   return token("summary.priceList", { prices: parts.join(" \u00B7 ") });
 }
@@ -84,6 +84,8 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
     summary: formatPriceSummary(station),
     operator: station.brand,
     sortValues: buildSortValues(station),
+    observedAt: station.fuelPricesUpdatedAt,
+    currency: station.currency,
   };
 }
 
@@ -93,7 +95,7 @@ function buildFuelPricesTable(station: FuelStation): DataSourceDetailSection | n
   for (const [key, label] of Object.entries(FUEL_TOKEN)) {
     const price = station.fuelPrices[key as keyof typeof station.fuelPrices];
     if (price !== undefined) {
-      rows.push([label, `${price.toFixed(3)} \u20AC`]);
+      rows.push([label, `${price.toFixed(3)} ${station.currency}`]);
     }
   }
 
@@ -102,7 +104,7 @@ function buildFuelPricesTable(station: FuelStation): DataSourceDetailSection | n
   return {
     title: token("section.fuelPrices"),
     type: "table",
-    columns: [token("column.fuelType"), token("column.priceEur")],
+    columns: [token("column.fuelType"), token("column.price")],
     rows,
     sectionIcon: "fuel",
   };
