@@ -81,9 +81,10 @@ OPENMAPX_HOST_DIR=         # absolute path of this checkout — run `pwd` here
 DOCKER_GID=                # docker-socket group id — `stat -c %g /var/run/docker.sock`
 ```
 
-`OPENMAPX_HOST_DIR` and `DOCKER_GID` let the app-api and data-manager containers
+`OPENMAPX_HOST_DIR` and `DOCKER_GID` let the private `ops-agent` broker container
 drive Docker on the host, so the CLI's lifecycle and data commands work from
-inside the stack. The `.env.example` file documents how to generate each secret
+inside the stack while keeping privileged Docker authority isolated from `app-api`
+and `data-manager`. The `.env.example` file documents how to generate each secret
 inline.
 
 The CLI performs the database-password check before any Docker command, and
@@ -115,6 +116,8 @@ If you do nothing, the default selection is just the core:
 - `app-api` and `app-web` (the Fastify API and the Next.js frontend)
 - `postgis` and `redis` (database + cache)
 - `data-manager` (owns the `/data` tree and downloads source data)
+- `ops-agent` (private typed broker executing host Docker operations)
+- `transitous-runner` (automated GTFS schedule updates)
 
 That core renders maps and serves the app, but self-hosted search, routing, and
 transit come from the optional engines you opt into. For a first boot, a small

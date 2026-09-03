@@ -246,6 +246,25 @@ pnpm openmapx data convert overpass europe/germany
 This produces the bz2 variant in `data/osm-bz2/` from the matching PBF, in
 parallel across CPU cores.
 
+### Search index and Overture Places
+
+The CLI provides dedicated commands for managing regional search indexes and
+Overture Maps POI datasets:
+
+```bash
+# Build or check status of the local search index
+pnpm openmapx data search-index build [region]
+pnpm openmapx data search-index status
+
+# Regional Overture Places synchronization and conflation
+pnpm openmapx data overture-sync [region]     # end-to-end pull, ingest, and conflation
+pnpm openmapx data overture-pull [region]     # pull Parquet partitions from STAC catalog
+pnpm openmapx data overture-ingest [region]   # ingest raw Places into database staging
+pnpm openmapx data overture-conflate [region] # rebuild OSM <-> Overture GERS entity links
+pnpm openmapx data overture-status            # inspect active and staging Overture snapshots
+pnpm openmapx data overture-extract           # extract regional boundaries from OSM PBF
+```
+
 ## Sharing data with hardlinks
 
 Several services consume the same files. Rather than copy a multi-gigabyte extract

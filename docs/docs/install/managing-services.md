@@ -70,7 +70,7 @@ pnpm openmapx services capabilities --unrecognised      # flag non-standard capa
 
 The set of services that participate in your deployment is the **selection**.
 The always-on core — `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
-`redis`, and `data-manager` — is selected by default; everything heavy
+`redis`, `data-manager`, and `ops-agent` — is selected by default; everything heavy
 (routing, geocoding, transit, OSM queries, tiles) is opt-in.
 
 ```bash
@@ -100,7 +100,7 @@ pnpm openmapx services selected
 ```
 Source: file
 Requested: valhalla, photon
-Effective: traefik, well-known, app-api, app-web, postgis, redis, data-manager, valhalla, photon
+Effective: traefik, well-known, app-api, app-web, postgis, redis, data-manager, ops-agent, valhalla, photon
 ```
 
 The selection is resolved from the first source that's present, in this order:
@@ -139,6 +139,11 @@ routing stack" instead of listing every id. Presets work on `services start`,
 | `overpass`  | `overpass`                                                |
 | `tiles`     | `tileserver`                                              |
 | `martin`    | `martin`                                                  |
+
+Services that are not grouped into a preset — including `data-manager`,
+`ops-agent`, `local-ai`, `dawarich-app`, `dawarich-postgis`, `dawarich-redis`,
+`dawarich-sidekiq`, `transitous-runner`, and `motis-staging` — are targeted
+directly by service id.
 
 Presets compose, and they mix freely with explicit ids:
 
@@ -203,6 +208,9 @@ pnpm openmapx services restart app-api                 # in-place reboot (does N
 pnpm openmapx services update valhalla                 # pull images + replace container
 pnpm openmapx services status                          # container table (all services)
 pnpm openmapx services status valhalla                 # one service
+pnpm openmapx compose pull [ids...]                    # pull images without starting containers
+pnpm openmapx compose release                          # update release pin against release manifest
+pnpm openmapx compose rotate-redis-password --confirm-clients-stopped # rotate Redis ACL/secret
 ```
 
 The distinction between `restart` and `start`/`update` matters:
@@ -213,11 +221,21 @@ The distinction between `restart` and `start`/`update` matters:
 - **`start`** re-renders first, so it picks up compose-file changes.
 - **`update`** re-renders, pulls the latest images, and replaces the container — the
   command to reach for after a `git pull` that bumps image tags.
+- **`compose rotate-redis-password`** atomically rotates Redis credentials while
+  Redis clients (`app-api`, `data-manager`) are stopped, updating both secret files
+  and Redis ACL configuration safely.
 
 For a single one-off check of the running containers across the stack:
 
 ```bash
 pnpm openmapx check
+```
+
+You can also audit declared capabilities across installed service manifests:
+
+```bash
+pnpm openmapx services capabilities
+pnpm openmapx services capabilities --unrecognised
 ```
 
 ## Viewing logs

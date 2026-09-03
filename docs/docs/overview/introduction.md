@@ -13,11 +13,11 @@ modern map application — place and voice search, traffic-aware and EV
 directions, public-transit planning and navigation, map layers, crowd reports,
 and street-level imagery — that runs on infrastructure you control.
 
-The lightweight application, proxy, database, cache, and data-manager form the
-core deployment. Heavy or provider-specific engines are not locked in: routing,
-geocoding, transit, tiles, and most user-facing features are plugins, and the
-whole Docker deployment is generated from their manifests. You decide which
-optional engines and data sources to run.
+The lightweight application, proxy, database, cache, data-manager, and ops-agent
+form the core deployment. Heavy or provider-specific engines are not locked in:
+routing, geocoding, transit, tiles, and most user-facing features are plugins,
+and the whole Docker deployment is generated from their manifests. You decide
+which optional engines and data sources to run.
 
 ## What you get
 
@@ -28,7 +28,7 @@ optional engines and data sources to run.
 - **A pluggable backend** — each daemon (the routing engine, the geocoder, the
   transit engine, the tile server, …) is described by a manifest and runs as a
   container.
-- **A pluggable feature set** — 95 built-in *integrations* span search,
+- **A pluggable feature set** — 105 built-in *integrations* span search,
   routing, transit, live mobility, places, overlays, weather, and more.
   Community extensions — integrations, services, or bundles of both —
   install from one unified **Extensions** store.
@@ -53,7 +53,7 @@ makes the rest of the documentation easier to follow.
 | **Are**          | Backend daemons that run as containers — databases, routing engines, geocoders, transit engines, tile servers | App-level features that consume services and external APIs to deliver functionality to users            |
 | **Declare**      | Image, ports, volumes, the capabilities they *provide*, the data they *consume*, host/proxy exposure          | Domain, frontend components, backend routes, config schema, attribution, the services they *require*    |
 
-The compose renderer turns the enabled **services** into a generated
+The compose renderer turns the enabled **services** (29 built-in plus community additions) into a generated
 `docker-compose` stack — there is no hand-maintained compose file. The API
 server hosts the **integrations** and resolves each integration's `requires:`
 against the running services.

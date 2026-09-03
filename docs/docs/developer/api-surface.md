@@ -14,7 +14,7 @@ database, a cache, or network access, and a gate fails the build when it drifts.
 The point is accountability, not developer documentation. Because it is
 committed, a route that appears, disappears, changes method, or loses its
 authentication requirement shows up as a diff line in review. Nothing else in
-the repository makes that visible — in particular the ~135 integration routes
+the repository makes that visible — in particular the 150+ integration routes
 have no other inventory.
 
 ```bash
@@ -57,11 +57,11 @@ wildcard routes, so Fastify's own introspection sees `/api/integrations/:id` and
 nothing else.
 
 They are therefore read **statically**, by parsing the `registerRoute` call
-sites with the TypeScript compiler API. Running every integration's `setup()`
-against a stub context was prototyped and works for 90 of 91 integrations, but
-it executes arbitrary integration code — including registry loads — inside a
-commit gate, so the static scan was preferred. Both approaches independently
-found the same 135 routes.
+sites with the TypeScript compiler API across the 105 built-in integrations.
+Running every integration's `setup()` against a stub context executes arbitrary
+integration code — including registry loads — inside a commit gate, so the
+static scan was preferred. Both approaches independently verify the declared
+integration route surface.
 
 The consequence is a constraint: **`registerRoute` must be called with literal
 method and path strings.** A computed path fails the scan with an explanatory

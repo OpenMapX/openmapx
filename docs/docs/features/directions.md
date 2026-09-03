@@ -187,10 +187,16 @@ ground routing. See [Public transit](./public-transit.md).
 
 Signed-in users can turn the current ground route (driving, walking, cycling,
 motorcycle) into a revocable **share link**: the Share button offers "Create
-share link" next to the classic copy-the-URL option. The link stores only the
-route *inputs* — waypoints, mode, and avoid options — so viewers always get a
-fresh route from the routing engine, and it can be reset or deleted at any
-time from **Account settings → Shared links**.
+share link" next to the classic copy-the-URL option.
+
+Route shares are created in snapshot mode without expiration (they remain valid
+until explicitly rotated or deleted). The link stores only the route *inputs* —
+between 2 and 10 waypoints (with coordinates and labels up to 200 characters),
+the selected travel mode, and avoid options (highways, tolls, ferries) — so viewers
+always get a fresh, traffic-evaluated route calculated by the engine upon opening.
+Route shares count against the 100-link per-user quota and can be rotated (generating
+a new token and revoking the old one immediately) or deleted at any time from
+**Account settings → Shared links**.
 
 ## Elevation
 

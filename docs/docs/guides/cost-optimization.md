@@ -21,7 +21,7 @@ most can be replaced by a hosted endpoint with no loss of functionality.
 ## 1. Run only the engines you need
 
 The core — `traefik`, `well-known`, `app-api`, `app-web`, `postgis`, `redis`,
-and `data-manager` — is what runs by default, and it fits comfortably in ~4 GB.
+`data-manager`, and `ops-agent` — is what runs by default, and it fits comfortably in ~4 GB.
 Everything that pushes a host into the 16–64 GB range is one of the heavy
 engines, each of which declares a memory ceiling in its
 `services/<id>/service.json` manifest:
@@ -33,9 +33,11 @@ engines, each of which declares a memory ceiling in its
 | Valhalla | 16 GB | planet-scale [routing](./routing-engines.md) |
 | MOTIS | 16 GB | planet-scale [transit](./transit-engines.md) |
 | OTP | 16 GB | region-scale transit |
+| Local AI (Ollama) | 8 GB | natural-language search query embeddings |
 | Photon | 8 GB | search-as-you-type [geocoding](./geocoders.md) |
 | OSRM | 8 GB | region-scale driving routes |
 | Elasticsearch (Pelias) | 4 GB | composite geocoding store |
+| Dawarich (App + Sidekiq) | ~2 GB | self-hosted personal timeline |
 
 Before enabling any of these, ask which user-facing features you actually need.
 If you don't offer transit directions, skip MOTIS and OTP. If you never surface

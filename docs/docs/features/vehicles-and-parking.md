@@ -12,15 +12,19 @@ Settings → Vehicles holds up to 12 vehicles. Each has a name, a type (car,
 motorcycle, bicycle) and a powertrain. Electric and plug-in-hybrid vehicles carry
 a battery spec — battery size, consumption, maximum DC and AC power, connectors —
 which you can seed from a model in the bundled open-ev-data table and then adjust.
-One vehicle is the default; that is the one route planning and parking use unless
-you pick another.
+Petrol, diesel, and hybrid vehicles can record `fuelConsumptionLPer100Km` (litres
+per 100 km, up to 60 L/100km). The first vehicle you create automatically becomes
+the default; deleting the default vehicle automatically promotes your oldest
+remaining vehicle.
 
 EV trip planning reads this list directly: the vehicle picker in Directions shows
 your garage above the built-in model dataset.
 
-Signed in, your vehicles sync across devices. Signed out, they are stored only in
-this browser. Signing in for the first time uploads what the browser held; a
-vehicle whose name already exists on the account is kept as the account has it.
+Signed in, your vehicles and parked locations sync across devices via the
+`/api/garage/*` endpoints. Signed out, they are stored only in this browser.
+Signing in for the first time uploads what the browser held: vehicles are merged
+(keeping the account's version if a vehicle name collides), and browser parked
+locations upload with `vehicleId: null` (unassigned) to cleanly link to your account.
 
 ## Parking
 
@@ -28,21 +32,26 @@ Save where you parked from three places, all of them a deliberate press:
 
 - right-click (or the context key) on the map → **Save parking here**
 - tap the blue location dot → **Save parking**
-- the arrival card after driving or riding → **Save parking**
+- the arrival card after driving or motorcycling → **Save parking**
 
-The pin then stays on the map until you clear it. Tapping it opens the parking
-panel, where you can get directions back to it, share it, add a note, record when
-the parking expires, move the pin, or clear it.
+The pin then stays on the map until you clear it. In addition, the main **Hamburger
+menu** displays a persistent **Parked vehicle** entry with elapsed parking time or
+an expiry countdown. Tapping either opens the parking panel, where you can get
+walking directions back to it, share its coordinates, add a note (up to 500 characters),
+record when parking expires (up to 30 days ahead), move the pin, or clear it. Moving
+or dragging the pin explicitly clears any previously reverse-geocoded address
+(`address: null`) so stale street labels are never retained.
 
 ## What OpenMapX does not do here
 
 - **No automatic detection.** Nothing is recorded unless you press a button.
-  There is no motion, Bluetooth, or arrival heuristic.
+  There is no motion, Bluetooth, or arrival heuristic. Walking and cycling arrivals
+  do not prompt for parking.
 - **No history.** There is one current record per vehicle. Saving again replaces
   it; clearing deletes it outright. Deleting a vehicle also deletes where it was
   parked.
-- **No reminder.** "Parking expires" is a note to yourself with a live countdown
-  in the app. OpenMapX does not send a notification when it elapses.
+- **No push notification.** "Parking expires" is a note to yourself with a live countdown
+  in the app. OpenMapX does not send a push notification when it elapses.
 
 ## How the data is protected
 

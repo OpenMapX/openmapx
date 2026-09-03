@@ -52,8 +52,8 @@ ship the placeholders.
 | `DOMAIN`                  | Public domain. Drives Traefik routing, the auth URLs (`BETTER_AUTH_URL`, `PASSKEY_RP_ID`, `PASSKEY_ORIGIN`), the web app's `NEXT_PUBLIC_API_URL`, tile-server URLs, and the outbound contact identity (the contact address in third-party User-Agent strings and the email `From` fallback). Point both an A and an AAAA record at the host. | Default `localhost`           |
 | `ACME_EMAIL`              | Contact email for Traefik's automatic Let's Encrypt TLS certificates.                                                                   | Default `admin@example.com`   |
 | `POSTGRES_PASSWORD`       | Unique password for the PostgreSQL/PostGIS database (used by `postgis`, `app-api`, and `data-manager`). Generate it before the first render with `openssl rand -hex 32`; it must be at least 24 characters and must not be a known placeholder or match `POSTGRES_USER`. | **Required**                  |
-| `OPENMAPX_HOST_DIR`       | Absolute host path of the OpenMapX repo checkout. The `app-api` container shells out to `docker compose` from inside the container and bind-mounts this path at the same path on both sides, so generated bind sources like `./data` resolve correctly. Find it with `pwd` from the repo root. | **Required** (no default)     |
-| `DOCKER_GID`              | The host's docker-socket group id. Containers that mount the docker socket run as a non-root user and must join this group, or the data-manager's MOTIS import/promote fails with "permission denied". Host-specific — find it with `stat -c %g /var/run/docker.sock`. Compose has no fallback, so it must be set; `.env.example` pre-fills `999`. | **Required**                  |
+| `OPENMAPX_HOST_DIR`       | Absolute host path of the OpenMapX repo checkout. The `ops-agent` container shells out to `docker compose` and mounts this path at the same path inside the container, so generated bind sources like `./data` resolve correctly. Find it with `pwd` from the repo root. | **Required** (no default)     |
+| `DOCKER_GID`              | The host's docker-socket group id. The `ops-agent` container mounts the Docker socket (`/var/run/docker.sock`) as a non-root user and must join this group, or host container lifecycle operations fail with "permission denied". Host-specific — find it with `stat -c %g /var/run/docker.sock`. Compose has no fallback, so it must be set; `.env.example` pre-fills `999`. | **Required**                  |
 
 :::note[Domain and TLS networking]
 Traefik serves HTTP/3 (QUIC) on UDP/443 and the OpenMapX Docker network is
@@ -102,7 +102,7 @@ required pieces of this group are listed under [Core / required](#core--required
 | `OPENMAPX_FETCH_JSON_MAX_BYTES`     | Ceiling in bytes for upstream JSON responses fetched by integrations that do not set their own limit. Lower it to tighten memory use, or raise it for a large regional feed; a raised value is logged once at first use. | 8 MiB |
 | `OPENMAPX_RELEASE_MANIFEST_IMAGE`   | Release-manifest image the admin updater and `pnpm openmapx compose release` resolve. Forks or mirrored registries point it at their own `<registry>/<namespace>/release-manifest[:tag]`; every pinned image must then live under that `<registry>/<namespace>` and carry a digest. Set it to an **empty** value to disable release pinning for local-image workflows (no registry pull on start; `services update` of core apps then pulls manifest tags). | `ghcr.io/openmapx/release-manifest:latest` |
 | `OPENMAPX_ENABLED_SERVICES`         | Pin a specific service selection (comma- or space-separated) for CI/repeatable deploys. Wins over the `service-selection.json` written by the admin UI / CLI. | Optional. Default: `service-selection.json` |
-| `OPENMAPX_DOCKER_CONFIG_DIR`        | Host directory holding Docker registry credentials, mounted into `app-api` so the extension store's **Update** can pull private GHCR images. On the reference deploy this is `/home/ubuntu/.docker`. | Optional. Default unset |
+| `OPENMAPX_DOCKER_CONFIG_DIR`        | Host directory holding Docker registry credentials, mounted into `ops-agent` at `/home/node/.docker` so the extension store's **Update** and `compose pull` can authenticate against private container registries (such as private GHCR images). On the reference deploy this is `/home/ubuntu/.docker`. | Optional. Default unset |
 
 ## Authentication & OAuth
 
@@ -151,10 +151,18 @@ Register the redirect URL exactly as Better Auth's generic-OAuth route expects:
 <BETTER_AUTH_URL>/api/auth/oauth2/callback/openstreetmap
 ```
 
-For a default local API that is:
+For a standalone local API dev setup (`pnpm dev`) that is:
 
 ```text
 http://127.0.0.1:3001/api/auth/oauth2/callback/openstreetmap
+```
+
+In Docker Compose, port 3001 has no direct host port binding; external traffic
+routes through Traefik, so use your public domain (or localhost when running
+without TLS):
+
+```text
+https://<DOMAIN>/api/auth/oauth2/callback/openstreetmap
 ```
 
 Ordinary sign-in requests only `openid read_prefs`. The write permissions
@@ -285,6 +293,20 @@ deployments.
 | `NOMINATIM_IMPORT_US_POSTCODES` | Import US postcodes.                                                       | Default `false`           |
 | `OVERPASS_SPACE`                | Overpass database space limit, in bytes.                                  | Default `107374182400` (~100 GiB) |
 | `OVERPASS_FASTCGI_PROCESSES`    | Number of Overpass FastCGI worker processes.                             | Default `4`               |
+| `MOTIS_OPERATIONS_PROFILE`      | Transit operations profile (`regional-assisted`, `regional-sovereign`, `planet`). | Default `regional-assisted` |
+| `MOTIS_FREE_DISK_BYTES`         | Minimum free disk space in bytes required before MOTIS import proceeds.    | Optional. Default unset   |
+| `MOTIS_IMPORT_TIMEOUT_MS`       | Timeout for MOTIS initial import.                                          | Default `1800000` (30 min)|
+| `MOTIS_PROMOTE_RESTART_TIMEOUT_MS` | Timeout for promoted MOTIS restart.                                     | Default `3600000` (1 hr)  |
+| `MOTIS_PROMOTE_RESTART_POLL_INTERVAL_MS` | Polling interval for promoted MOTIS restart.                     | Default `5000` ms         |
+| `MOTIS_ROUTE_SHAPES`            | Shape synthesis behavior (`missing` or `all`).                             | Optional. Default unset   |
+| `MOTIS_ELEVATORS_URL`           | Station elevator live status feed URL.                                     | Optional. Default unset   |
+| `MOTIS_ELEVATORS_AUTH`          | Authorization header/token for elevator feed.                              | Optional. Default unset   |
+| `MOTIS_OSR_FOOTPATH`            | Footpath routing calculation on OpenStreetMap graphs.                      | Default `true`            |
+| `MOTIS_TILES`                   | MOTIS internal vector tile rendering toggle.                               | Optional. Default unset   |
+| `MOTIS_INCREMENTAL_RT_UPDATE`   | Toggle incremental real-time transit schedule updates.                     | Optional. Default unset   |
+| `VALHALLA_CONTAINER`            | Docker container name for data-manager traffic extraction.                 | Default `docker-valhalla-1` |
+| `TRUST_PROXY_RANGES`            | IP ranges trusted by Fastify for reverse-proxy headers.                    | Default `uniquelocal`     |
+| `OPENMAPX_API_NODE_OPTIONS`     | Node.js memory options for the `app-api` container.                        | Default `--max-old-space-size=1536` |
 
 ## Traffic & extra tile providers
 
@@ -303,6 +325,10 @@ Keys and overrides for the `app-api` traffic and tile proxies.
 | `CYCLOSM_TILE_URL`             | Override URL for the CyclOSM tile proxy.                                                     | Optional. Commented       |
 | `WAYMARKED_CYCLING_TILE_URL`   | Override URL for the Waymarked Trails cycling layer.                                         | Optional. Commented       |
 | `OPENTOPOMAP_TILE_URL`         | Override URL for the OpenTopoMap layer.                                                      | Optional. Commented       |
+| `TRAFFIC_EXTRACT_CRON`         | Cron schedule for extracting Valhalla traffic CSVs.                                          | Default `0 */6 * * *`     |
+| `NEXT_PUBLIC_TRAFFIC_MIN_ZOOM` | Minimum zoom level where traffic overlays render in the frontend.                            | Default `6`               |
+| `INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER` | Preferred order for street-level imagery providers (`panoramax,mapillary`).    | Optional. Default unset   |
+| `OPENMAPTILES_FONTS_URL`       | Custom source archive URL for downloading glyph font stacks.                                 | Optional. Default upstream |
 
 ## Email
 
@@ -331,6 +357,8 @@ Schedules and tuning for the daily Transitous transit-data sync.
 | ------------------------------------- | ---------------------------------------------------------------------------------------------------------- | ----------------------------- |
 | `TRANSIT_SOURCE`                      | How the Transitous dataset is obtained: `mirror` (default — download the prebuilt community bundle) or `build` (assemble it locally from feeds). See [Transit engines](../guides/transit-engines.md). | Optional. Default `mirror` |
 | `TRANSITOUS_ARTIFACT_BASE_URL`        | Base URL the `mirror` mode pulls the prebuilt Transitous artifact from. | Optional. Default unset (upstream) |
+| `TRANSITOUS_API_KEYS_PATH`            | Host/container path to Transitous secret API keys file for restricted feeds. | Default `/config/transitous/api-keys.json` |
+| `TRANSITOUS_FEEDS_OVERLAY_PATH`       | Host/container path to feeds overlay configuration file.                                                    | Optional. Default unset       |
 | `TRANSITOUS_SYNC_CRON`                | Cron schedule for the daily Transitous sync. Leaving it unset (or empty) uses the built-in `0 3 * * *`; set it to `disabled` (or `off`/`false`) to turn it off (e.g. on a staging host where you trigger manually). | Optional. Commented `0 3 * * *` |
 | `TRANSITOUS_STALENESS_CHECK_CRON`     | Cron schedule for the staleness sweep that flags feeds that have stopped updating. Set to `disabled` (or `off`/`false`) to turn it off. | Optional. Commented `0 4 * * *` |
 | `TRANSITOUS_FEED_PROXY_RELOAD_CRON`   | Cron schedule for the feed-proxy nginx-reload heartbeat — a safety net against a missed reload during sync. | Optional. Commented `*/15 * * * *` |
@@ -338,6 +366,14 @@ Schedules and tuning for the daily Transitous transit-data sync.
 | `TRANSITOUS_RUNNER_URL`               | Base URL of the private Transitous runner — the unprivileged container that executes the upstream catalog scripts. Compose wires this automatically; override it only if you run the runner elsewhere. Leaving it empty disables upstream script execution (the sync fails closed rather than running third-party Python inside the data manager). | Optional. Default `http://transitous-runner:4400` |
 | `TRANSITOUS_ALERT_GH_TOKEN` / `TRANSITOUS_ALERT_GH_REPO` | When both are set, sync/auto-bump failures and stale feeds open deduped GitHub issues instead of being log-only. Without them a canary rejection can silently freeze the live dataset for days. | Optional. Default log-only |
 | `MOTIS_RENTALS_WARMUP_MS` / `MOTIS_RENTALS_POLL_INTERVAL_MS` | How long the rentals canary re-polls MOTIS `/rentals` while it enumerates zero providers (GBFS warm-up after a restart) before failing, and the interval between polls. | Optional. Default `180000` / `5000` |
+| `MOTIS_HEALTH_BBOX_MIN_LAT` / `_MIN_LNG` / `_MAX_LAT` / `_MAX_LNG` | Bounding box coordinates used by MOTIS health checks to probe local data coverage. | Optional. Default unset |
+| `MOTIS_HEALTH_PLAN_FROM_LAT` / `_FROM_LNG` / `_TO_LAT` / `_TO_LNG` | Endpoints for synthetic routing plan canary queries during health verification. | Optional. Default unset |
+| `MOTIS_HEALTH_RENTAL_PROVIDER_IDS` / `_PLAN` / `_GROUPS` / `_PROVIDERS` / `_FORM_FACTORS` | Canaries validating rental provider and vehicle availability in live feeds. | Optional. Default unset |
+| `MOTIS_GBFS_CATALOG_ENABLED`          | Automatically discover and sync feeds from the upstream MobilityData GBFS catalog.                         | Optional. Default `false`     |
+| `MOTIS_GBFS_CATALOG_MAX_ADDITIONS`    | Ceiling on new GBFS feeds added in a single sync run.                                                       | Default `50`                  |
+| `MOTIS_GBFS_CATALOG_CONCURRENCY`      | Concurrent downloads when fetching GBFS catalog entries.                                                    | Default `4`                   |
+| `MOTIS_GBFS_CATALOG_TIMEOUT_MS`       | Per-feed probe timeout when testing GBFS discovery endpoints.                                               | Default `15000` (15s)         |
+| `MOTIS_GBFS_CATALOG_MAX_FAILURE_RATIO`| Maximum tolerated fraction of failed GBFS feeds before catalog update aborts.                              | Default `0.2` (20%)           |
 
 :::note[Transitous feed-proxy key]
 The optional age private key used to decrypt `AGE-ENCRYPTED:` feed values has no
@@ -359,6 +395,13 @@ Lower-level toggles, retention, and legal-page metadata. All optional.
 | `ADMIN_JOB_RETENTION_DAYS`        | Days to keep finished admin jobs (in-flight jobs are never pruned).                                              | Optional. Commented `30`  |
 | `GITHUB_TOKEN`                    | GitHub API token — raises the Transitous catalog fetch rate limit from 60 to 5000 req/h. Needed only on multi-tenant hosts. | Optional. Commented       |
 | `EXTENSION_CATALOG_URL`           | Default catalog URL for the **Extensions** store — the curated (verified-tier) list shown under `/admin/extensions`. | Optional. Commented `https://raw.githubusercontent.com/openmapx/community-extensions/main/catalog.json` |
+| `POI_INGEST_ALERT_GH_TOKEN` / `POI_INGEST_ALERT_GH_REPO` | When set, POI ingestion pipeline failures open GitHub issues in this repo.             | Optional. Default unset   |
+| `POI_INGEST_STALENESS_CHECK_CRON` | Cron schedule for the POI source dataset staleness sweep.                                                        | Default `30 4 * * *`      |
+| `OFFLINE_PACKAGE_WORKERS`         | Concurrent worker jobs for offline map package preparation.                                                      | Default `1`               |
+| `OFFLINE_PACKAGE_MAX_BYTES`       | Maximum byte size for a single offline package archive.                                                          | Default `5368709120` (5 GiB) |
+| `OFFLINE_PACKAGE_MAX_COUNT`       | Maximum number of offline packages a single user may hold simultaneously.                                       | Default `5`               |
+| `OFFLINE_PACKAGE_MAX_TOTAL_BYTES` | Maximum cumulative storage for all offline packages owned by one user.                                           | Default `10737418240` (10 GiB) |
+| `OFFLINE_PACKAGE_MIN_FREE_BYTES`  | Minimum host disk free space required to accept a new offline package build job.                                 | Default `10737418240` (10 GiB) |
 | `LEGAL_NAME`                      | Operator legal name shown on `/terms` and `/privacy`.                                                            | Optional. Commented       |
 | `LEGAL_STREET`                    | Operator street address.                                                                                         | Optional. Commented       |
 | `LEGAL_POSTAL_CODE`               | Operator postal code.                                                                                            | Optional. Commented       |

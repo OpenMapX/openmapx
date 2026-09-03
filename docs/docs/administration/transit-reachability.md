@@ -1,17 +1,12 @@
 # Transit reachability
 
-OpenMapX has two deliberately separate public-transit reachability paths:
+OpenMapX provides three public-transit reachability paths:
 
-- an **estimated map surface**, generated from one MOTIS one-to-all request;
-- an **exact finite point check**, used only to filter the currently displayed
-  Explore results and only against a verified self-hosted MOTIS instance.
+- an **estimated map surface**, generated from one MOTIS one-to-all request and rendered via WebGL;
+- an **exact finite point check**, used to filter the currently displayed Explore results against a verified self-hosted MOTIS instance;
+- **sampled exportable polygons**, computed by sampling a spatial lattice over MOTIS one-to-many queries.
 
-MOTIS 2.11 does not return isochrone polygons. Its one-to-all endpoint returns
-reachable stops and their travel times. OpenMapX renders those seeds as an
-estimated WebGL field: from every reached stop it adds the remaining walking
-budget in a straight line. The result is useful visually but is barrier-blind,
-is not an exportable polygon, and must not be used for area or population
-statistics.
+MOTIS 2.11 natively does not return isochrone polygons from its one-to-all endpoint — it returns reachable stops and their travel times. OpenMapX renders those seeds as an estimated WebGL field: from every reached stop it adds the remaining walking budget in a straight line. The result is fast and visually informative, but barrier-blind; for GIS-grade polygon exports, OpenMapX provides the sampled isochrone pipeline detailed below.
 
 ## Fixed assumptions
 

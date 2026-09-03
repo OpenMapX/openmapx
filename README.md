@@ -13,7 +13,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-6-3178c6?logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Next.js](https://img.shields.io/badge/Next.js-16-000?logo=nextdotjs&logoColor=white)](https://nextjs.org)
 [![Fastify](https://img.shields.io/badge/Fastify-5-000?logo=fastify&logoColor=white)](https://fastify.dev)
-[![MapLibre](https://img.shields.io/badge/MapLibre-GL%20JS%205-396cb2?logo=maplibre&logoColor=white)](https://maplibre.org)
+[![MapLibre](https://img.shields.io/badge/MapLibre-GL%20JS%206-396cb2?logo=maplibre&logoColor=white)](https://maplibre.org)
 [![Turborepo](https://img.shields.io/badge/Turborepo-2-EF4444?logo=turborepo&logoColor=white)](https://turborepo.dev)
 [![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen)](#contributing)
 
@@ -29,13 +29,13 @@ OpenMapX is a complete mapping platform you run on your own infrastructure: sear
 
 - **Complete mapping platform** — geocoding, traffic-aware and EV routing, public-transit planning and navigation, live vehicles, street-level imagery, POI search, knowledge enrichment, reviews, crowd reports, weather, and dozens of overlays
 - **Two-layer plugin system** — *services* (containers: Valhalla, Nominatim, MOTIS, …) and *integrations* (app features: providers, overlays, data sources, tools). Both support community plugins from any Git URL
-- **95 built-in integrations** and **23 built-in services** rendered into a generated `docker-compose.yml`
+- **105 built-in integrations** and **29 built-in services** rendered into a generated `docker-compose.yml`
 - **Self-host the provider stack** — routing, geocoding, transit, tiles, search, and data pipelines have local/open implementations; the lightweight app, database, cache, proxy, and data-manager form the required core
 - **Open data** — OpenStreetMap, GTFS via Transitous, Wikidata, Wikipedia, Mapillary, NASA, NOAA, ECCC, DWD, MeteoAlarm, OpenAQ, USGS, NPS, and more
 - **Privacy-first** — no third-party analytics; most upstream calls are proxied through your API server, and unavoidable direct browser asset loads are explicitly documented
 - **[Optional personal timeline](docs/features/personal-timeline.md)** — connect an external or managed Dawarich account and view read-only day history without persisting timeline payloads in OpenMapX
 - **First-class admin UI** — service catalog, integration config, capability bindings, audit log, users, jobs, compose preview, data workflows
-- **Modern stack** — Next.js 16, Fastify 5, MapLibre GL JS 5, MUI 9, PostgreSQL + PostGIS, Valkey (Redis), Drizzle ORM, Better Auth, TypeScript 6 end-to-end
+- **Modern stack** — Next.js 16, Fastify 5, MapLibre GL JS 6, MUI 9, PostgreSQL + PostGIS, Valkey (Redis), Drizzle ORM, Better Auth, TypeScript 6 end-to-end
 
 ## Two plugin systems
 
@@ -61,10 +61,10 @@ graph TD
     Traefik --> Web["app-web :3000<br/>Next.js"]
     Traefik --> API["app-api :3001<br/>Fastify"]
     Traefik --> TileServer["tileserver :8080<br/>Vector + raster tiles"]
-    Traefik --> Martin["martin :3000<br/>PostGIS vector tiles"]
+    Traefik --> Martin["martin :3002<br/>PostGIS vector tiles"]
 
     subgraph "API Server"
-        IntHost["Integration Host<br/>95 built-in + community"]
+        IntHost["Integration Host<br/>105 built-in + community"]
         Orchestrators["Domain orchestrators<br/>(geocoding, routing, transit, ...)"]
         SvcRegistry["Service Registry"]
         Bindings["Capability Bindings"]
@@ -88,7 +88,7 @@ graph TD
     subgraph "Geocoding"
         Photon["photon :2322"]
         Nominatim["nominatim :8088"]
-        Pelias["pelias :4000"]
+        Pelias["pelias :4300"]
     end
 
     subgraph "Infrastructure"
@@ -96,6 +96,8 @@ graph TD
         Redis["redis (Valkey) :6379"]
         ES["elasticsearch :9200"]
         DM["data-manager :4000"]
+        OpsAgent["ops-agent :4300"]
+        TransitousRunner["transitous-runner :4400"]
     end
 
     Orchestrators --> Valhalla
@@ -107,6 +109,9 @@ graph TD
     Orchestrators --> Pelias
     API --> PG
     API --> Redis
+    API --> OpsAgent
+    DM --> OpsAgent
+    DM --> TransitousRunner
     Pelias --> ES
     Martin --> PG
 ```
@@ -119,13 +124,15 @@ The `openmapx` CLI is the operator's command-line front end for the entire self-
 
 ```bash
 pnpm openmapx services enable|disable|list|start|stop|restart|build|status|logs
-pnpm openmapx compose render|up|down
-pnpm openmapx data download|link|status
+pnpm openmapx compose render|up|down|rotate-redis-password
+pnpm openmapx data download|link|status|search-index|sync
 pnpm openmapx ext browse|list|install|update|remove # community extension bundles
-pnpm openmapx integrations list|install|validate|build|package|remove
+pnpm openmapx integrations scaffold|list|install|validate|package|remove
 pnpm openmapx users list|promote|demote|verify
 pnpm openmapx backup create|list|restore|delete
 pnpm openmapx check                                  # environment + manifest validation
+pnpm openmapx cache list|clear
+pnpm openmapx transit-registry bump|show
 ```
 
 See the [CLI Reference](https://docs.openmapx.org/developer/cli-reference/) for every command, flag, and preset.
@@ -148,7 +155,7 @@ See the [Admin panel](https://docs.openmapx.org/administration/admin-panel/) doc
 
 | Layer | Tech |
 |---|---|
-| Frontend | Next.js 16, React 19, MapLibre GL JS 5, MUI 9, Tailwind 4, Zustand, TanStack Query, next-intl, Serwist |
+| Frontend | Next.js 16, React 19, MapLibre GL JS 6, MUI 9, Tailwind 4, Zustand, TanStack Query, next-intl, Serwist |
 | API | Fastify 5, Drizzle ORM, Better Auth (email/password, OAuth OSM/Mapillary, passkeys, 2FA, admin role) |
 | Data | PostgreSQL 18 + PostGIS 3.6, Valkey 8 (Redis-compatible), Elasticsearch (Pelias backend) |
 | Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner |

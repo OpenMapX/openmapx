@@ -95,11 +95,12 @@ hand-written compose file — the renderer derives it from the enabled manifests
 
 | Command | Description |
 | --- | --- |
-| `compose render` | Render `docker-compose.generated.yml` and the hardlink plan from the manifests. Flags: `--domain <d>` (default `$DOMAIN`), `--services <ids>`, `--preset <names>`. |
-| `compose up` | Render, apply hardlinks, resolve the release overlay if it is missing, then `docker compose up -d` the whole selection. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`. |
+| `compose render` | Render `docker-compose.generated.yml` and the hardlink plan from the manifests. Flags: `--domain <d>` (default `$DOMAIN`), `--services <ids>`, `--preset <names>`, `--drop-secrets`. |
+| `compose up` | Render, apply hardlinks, resolve the release overlay if it is missing, then `docker compose up -d` the whole selection. Flags: `--domain <d>`, `--services <ids>`, `--preset <names>`, `--drop-secrets`. |
 | `compose release` | Resolve `ghcr.io/openmapx/release-manifest:latest` and write `infra/docker/docker-compose.release.yml`, pinning `app-api`, `app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous helper image by digest. Every service/compose command includes this overlay automatically once it exists. |
 | `compose down` | Stop the stack (`docker compose down`). Flag: `--volumes` removes named volumes (**destructive**). |
 | `compose pull [ids...]` | Pull the images named in the generated Compose file (no args pulls all services). For core OpenMapX app releases, use the aggregate release-manifest procedure in [Upgrading](../install/upgrading.md). |
+| `compose rotate-redis-password` | Atomically rotate Redis authentication files while Redis clients are stopped. Flag: `--confirm-clients-stopped`. |
 
 For the difference between `services start` (a subset) and `compose up` (the
 whole stack), and how `--services` overrides the persisted selection for a single
@@ -196,7 +197,7 @@ documented in [Integration system](./integration-system.md).
 | `integrations install <source>` | Install a declarative integration from a Git URL, local path, or artifact. Flags: `--ref <ref>`, `--artifact`, `--sha256 <hash>`. Executable runtime entry points are rejected. |
 | `integrations remove <id>` | Remove a community integration. |
 | `integrations validate [id]` | Validate one integration's manifest, or all if `id` is omitted. |
-| `integrations package <source>` | Create a declarative `.tar.gz` artifact for admin/production installs. Requires `--out <file>`; all executable runtime entry points are rejected. Only the declared artifact contract is packaged — source, dotfiles, `.env*`, VCS data, lockfiles, `node_modules/`, and unreferenced assets are never collected. Add `--dry-run` to list the exact files and total bytes without writing an archive. |
+| `integrations package <source>` | Create a declarative `.tar.gz` artifact for admin/production installs. Requires `--out <file>`; all executable runtime entry points are rejected. Only the declared artifact contract is packaged — source, dotfiles, `.env*`, VCS data, lockfiles, `node_modules/`, and unreferenced assets are never collected. |
 
 After installing or removing an integration, restart `app-api` so the
 integration host picks up the change:
@@ -287,6 +288,16 @@ GTFS catalog that the data-manager consumes, recorded in
 transit sync once (`pnpm openmapx data sync`) before the first bump.
 After bumping, restart the data-manager to pick up the new ref, or wait for the
 next scheduled sync.
+
+## `transit-registry`
+
+Manage the pinned commit of the upstream `public-transport/transport-apis` catalog
+used by the dynamic transit registry, recorded in `infra/docker/transport-apis.lock.json`.
+
+| Command | Description |
+| --- | --- |
+| `transit-registry show` | Print the current `transport-apis.lock.json` lockfile contents. |
+| `transit-registry bump` | Fetch the upstream catalog, validate all endpoint declarations, report candidate diffs, and write the new lockfile. Flags: `--yes` (skip interactive prompt), `--branch <name>`. |
 
 ## Where to go next
 

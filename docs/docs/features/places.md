@@ -60,6 +60,9 @@ Overview is a stack of detail rows, each self-hiding when it has nothing to show
   the same clock adds no row.
 - **Weather**, **Sunrise & sunset**, and (on the coast) **Tides** and **Marine
   weather** — expandable readouts for the place's exact location.
+- **Visit history** — when the self-hosted **Dawarich** timeline service is enabled,
+  the card shows whether and when you visited this location (visit counts and last visit date),
+  linking out to your personal timeline.
 
 Restaurants can surface a menu link and a food-delivery hand-off. The delivery
 picker supports Uber Eats, Wolt, Lieferando, DoorDash, Deliveroo, Just Eat,
@@ -189,6 +192,9 @@ plugin model and how integrations resolve against backend services, see
 - **[OpenStreetMap contributions](./osm-contributions.md)** — correcting a name,
   category, hours or contact detail on the underlying OpenStreetMap element from
   the place panel.
+- **[Personal timeline](./personal-timeline.md)** — view personal visit history
+  and past arrival dates when a self-hosted [Dawarich](../guides/dawarich.md)
+  timeline is connected.
 - **[Street-level imagery](./street-level-imagery.md)** — the Mapillary and
   Panoramax viewer that the photo providers also feed.
 - **[Mobility data](./mobility-data.md)** — the data-source detail sections for

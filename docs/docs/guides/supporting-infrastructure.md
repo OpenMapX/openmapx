@@ -19,7 +19,7 @@ stack assumes they're there. This page covers those three.
 - **Traefik** — the reverse proxy, and the only service that faces the public
   internet.
 
-They sit alongside `app-api`, `app-web`, `well-known`, and `data-manager` in the
+They sit alongside `app-api`, `app-web`, `well-known`, `data-manager`, and `ops-agent` in the
 always-on core; [Managing services](../install/managing-services.md) explains how
 the core is selected and rendered, and [How it works](../overview/how-it-works.md)
 covers the service model these three plug into. None of them needs a build step
@@ -30,7 +30,7 @@ or any source data — they boot from their image and are ready.
 The `postgis` service is PostgreSQL with the PostGIS spatial extension, and it is
 the system of record for everything an instance can't regenerate from source
 data. User accounts and sessions, admin and integration settings, the audit log,
-saved places, imported GTFS schedules, and the rows the data-manager's POI ingest
+saved places, and the rows the data-manager's POI ingest
 pipeline writes all live here. `app-api`, `data-manager`, and `martin` (when the
 tile stack is enabled) all connect to it over the private Docker network.
 
@@ -114,12 +114,11 @@ stale password.
 ### Sizing and tuning
 
 The 2 GB memory limit is comfortable for the application workload — accounts,
-settings, and POI rows stay well under 100 MB. GTFS imports are what grow the
-database: a single feed runs from tens to a few hundred megabytes, and a
-country- or planet-scale transit deployment with hundreds of feeds can reach tens
-or hundreds of gigabytes on the `openmapx-pgdata` volume. Plan host disk
-accordingly, and if you import many feeds, raise the limit by setting a per-service
-override and re-rendering:
+settings, and POI rows stay well under a few hundred megabytes even on busy instances.
+(GTFS transit schedules are compiled directly into binary routing artifacts by MOTIS
+on disk rather than stored in PostgreSQL, so the database volume does not bloat from
+transit feeds). If you run extensive spatial queries or heavy POI conflation, you
+can raise the limit by setting a per-service override and re-rendering:
 
 ```bash
 # infra/docker/.env
@@ -174,10 +173,16 @@ entries expire rather than accumulate. The `openmapx-redisdata` volume is flagge
 for backup and captured in snapshots, but because the contents are reconstructible,
 losing the cache only costs a brief warm-up of cold requests — never information.
 If a release changes how something is serialized and you see stale shapes, it's
-safe to flush:
+safe to clear:
 
 ```bash
-docker compose -f infra/docker/docker-compose.generated.yml exec redis redis-cli flushall
+pnpm openmapx cache clear --all
+```
+
+You can also inspect active cache keys and memory stats with:
+
+```bash
+pnpm openmapx cache list
 ```
 
 The cache refills from upstream on the next request.
@@ -197,9 +202,11 @@ stays on the private network.
 | Volume | `openmapx-traefik-acme` at `/etc/traefik` (backed up — holds the certificates) |
 | Published ports | TCP `80`, TCP `443`, UDP `443` (HTTP/3 / QUIC) |
 
-Traefik mounts the Docker socket read-only and discovers services through it. Its
-static config (`services/traefik/config/traefik.yml`) defines two entry points:
-`web` on port 80, which redirects everything to HTTPS, and `websecure` on port
+Traefik holds **no Docker socket**: an internet-facing reverse proxy with host
+authority is an architectural risk OpenMapX explicitly removes. Instead, Traefik
+uses its file provider (`providers.file.directory: /etc/traefik/dynamic, watch: true`).
+Its static configuration (`services/traefik/config/traefik.yml`) defines two entry
+points: `web` on port 80, which redirects everything to HTTPS, and `websecure` on port
 443, which terminates TLS using the `letsencrypt` certificate resolver. UDP/443
 carries HTTP/3.
 
@@ -230,12 +237,14 @@ anything routed is reachable by anyone who can resolve your domain. Plan your
 exposure before pointing DNS at the host.
 :::
 
-### Label-driven routing
+### Generated dynamic routing
 
-There is no hand-maintained route table. Traefik runs with
-`exposedByDefault: false`, so a container is invisible to it until the renderer
-emits routing labels — and the renderer emits those only for a service whose
-manifest opts in with an `exposure.proxy` block. From a manifest like:
+There is no hand-maintained route table and no Docker socket polling. When you
+run `openmapx compose render` (or any command that triggers a render), the Compose
+renderer evaluates the `exposure.proxy` block of every enabled service manifest and
+generates `services/traefik/config/dynamic/generated-routes.yml`.
+
+From a manifest like:
 
 ```json
 {
@@ -249,13 +258,13 @@ manifest opts in with an `exposure.proxy` block. From a manifest like:
 }
 ```
 
-the renderer generates the equivalent Traefik labels — a `Host` + `PathPrefix`
-rule against `DOMAIN`, the `websecure` entry point, the `letsencrypt` resolver,
-the backend port, and (here) a `stripprefix` middleware. The result is that the
-tile server answers at `https://${DOMAIN}/tiles/`, with the `/tiles` prefix
-stripped before the request reaches it. A service with no `pathPrefix` — the web
-app — gets the catch-all rule at the lowest priority, so it handles every path no
-more specific rule claimed. The core layout that ships today:
+the renderer emits the equivalent Traefik dynamic router and service configuration —
+a `Host` + `PathPrefix` rule against `DOMAIN`, the `websecure` entry point, the
+`letsencrypt` resolver, the backend container port, and (here) a `stripprefix`
+middleware. The result is that the tile server answers at `https://${DOMAIN}/tiles/`,
+with the `/tiles` prefix stripped before the request reaches it. A service with
+no `pathPrefix` — the web app — gets the catch-all rule at the lowest priority, so it
+handles every path no more specific rule claimed. The core layout that ships today:
 
 | Path | Service |
 | --- | --- |
@@ -266,14 +275,9 @@ more specific rule claimed. The core layout that ships today:
 | `/*` | `app-web` (catch-all, lowest priority) |
 
 Because routes come from manifests, exposing a service is a render-time decision,
-not a Traefik edit: add the `exposure.proxy` block, re-render, and the labels
-appear. The mechanics — and the alternative host-port binding for non-HTTP
-services — are covered in [Managing services](../install/managing-services.md)
-under exposure, with the field-level reference in the
-[service manifest](../developer/service-manifest.md) docs.
-
-Traefik watches the Docker socket live, so label changes take effect after the
-affected service is re-rendered and applied, without restarting the proxy. After
+not a manual Traefik edit: add the `exposure.proxy` block, re-render, and the routes
+are written to disk. Because Traefik watches its dynamic configuration directory,
+changes take effect immediately on file write without restarting the proxy. After
 editing a manifest:
 
 ```bash

@@ -72,7 +72,7 @@ cover. Two variables dominate:
 ### Baseline: the core app
 
 The always-on core — `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
-`redis`, and `data-manager` — is what you get with the default service selection.
+`redis`, `data-manager`, and `ops-agent` — is what you get with the default service selection.
 It needs only modest resources:
 
 | Resource | Baseline (core only)        |
@@ -102,9 +102,12 @@ called out** — running one or two of them at once is what pushes a host into t
 | **MOTIS** | Planet-scale transit routing | 16 GB | ~50 GB | **Heavy** |
 | **OTP** | Region-scale transit routing | 16 GB | ~10 GB (region) | Region-only |
 | **Photon** | Lightweight search-as-you-type geocoding | 8 GB | ~200 GB (planet index) | Moderate |
+| **Local AI** (Ollama) | Natural-language query embeddings | 8 GB | ~10–20 GB (models) | Moderate |
 | **OSRM** | Region-scale routing | 8 GB | ~30 GB (region) | Region-only |
 | **Elasticsearch** (Pelias backend) | Composite geocoding store | 4 GB | ~100 GB (planet) | Moderate |
+| **Dawarich** (App + Sidekiq) | Personal timeline history | ~2 GB | ~5 GB | Light |
 | **TileServer GL** | Self-hosted vector/raster tiles | 2 GB | ~80 GB (planet MBTiles) | Moderate |
+| **Transitous Runner** | Automated GTFS schedule updates | 512 MB | ~5 GB | Light |
 | **Martin** | PostGIS dynamic vector tiles | — | shares PostGIS | Light |
 
 A few patterns worth knowing:
@@ -161,8 +164,9 @@ start until the required ones are present, so it's worth knowing them up front:
   `DATA_MANAGER_AUTH_TOKEN`, and `OPENMAPX_LOCAL_ADMIN_TOKEN`. The
   `.env.example` file documents how to generate each.
 - **Host wiring** — `OPENMAPX_HOST_DIR` (the absolute path of the repo checkout)
-  and `DOCKER_GID` (the host's docker-socket group id), both required so the
-  app-api and data-manager containers can drive Docker.
+  and `DOCKER_GID` (the host's docker-socket group id), required so the dedicated
+  `ops-agent` broker container can manage Docker containers on behalf of the stack
+  without exposing the Docker socket to web or API services.
 
 External API keys for individual features (tiles, traffic, street-level imagery,
 transit feeds) are mostly managed from the admin panel after the stack is up, not

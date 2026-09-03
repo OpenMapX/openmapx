@@ -49,17 +49,18 @@ overlay integrations are enabled — so the list below describes the full catalo
 not a fixed menu. Toggle an overlay on and its layer is added to the map and its
 attribution joins the credits in the corner; toggle it off and both go away.
 Several overlays can be on at once. A few declare **exclusions** (for example,
-the weather and air-quality overlays don't stack on top of each other), so
+the weather and air-quality overlays don't stack on top of each other, and
+the schematic transit map mutually excludes the standard transit lines layer), so
 turning one on automatically turns its conflicting siblings off.
 
 Because overlays come from integrations, the catalog is yours to shape. Enabling
 or disabling an integration adds or removes its entry from the picker; community
 integrations can contribute new overlays of their own. Some overlays also have
 prerequisites — the cycling and hiking layers query OpenStreetMap through the
-Overpass service, the travel-time tool wants a Valhalla routing engine — and an
-overlay whose required service isn't running is hidden until it is. See
-[Managing services](../install/managing-services.md) for enabling those
-backends, and [How it works](../overview/how-it-works.md) for the
+Overpass service, the travel-time tool uses Valhalla for street isochrones and
+MOTIS for transit reachability — and an overlay whose required service isn't
+running is hidden until it is. See [Managing services](../install/managing-services.md)
+for enabling those backends, and [How it works](../overview/how-it-works.md) for the
 service-and-integration model.
 
 ## The overlay catalog
@@ -73,7 +74,7 @@ The built-in overlays group into a few themes.
 | **Traffic**            | Live traffic-flow coloring on roads                  | TomTom Traffic (needs an API key) |
 | **Traffic flow**       | Congestion coloring from your own road-conditions feeds | [OpenConditions](../developer/building-an-external-extension.md) speed data |
 | **Transit lines**      | Public-transport routes and lines                    | OpenStreetMap                 |
-| **Schematic transit map** | Metro-map style network plans with layout and network-group choice | [LOOM](./schematic-transit-map.md) (University of Freiburg), OpenStreetMap-derived |
+| **Schematic transit map** | Metro-map style network plans with layout and network-group choice (mutually excludes Transit lines) | [LOOM](./schematic-transit-map.md) (University of Freiburg), OpenStreetMap-derived |
 | **Live transit**       | Real-time bus, tram, and train positions             | Live-vehicle feeds (e.g. DB RIS, Entur) |
 | **Airports**           | Airport locations and metadata                       | OurAirports                   |
 | **Road conditions**    | Incidents, roadworks, and closures (community extension) | [OpenConditions](../developer/building-an-external-extension.md) |
@@ -116,13 +117,16 @@ and layers enabled only by the context switch back off when it ends.
 
 | Overlay              | Shows                                                  | Data                                  |
 | -------------------- | ----------------------------------------------------- | ------------------------------------- |
-| **Weather**          | Precipitation radar animation, plus temperature/cloud/wind/pressure tiles | RainViewer, OpenWeather, Open-Meteo |
+| **Weather**          | Precipitation radar animation, plus temperature/precipitation/cloud/wind/pressure tiles | RainViewer, OpenWeather, Open-Meteo |
 | **Weather alerts**   | Active severe-weather warnings                        | NOAA, Environment Canada, DWD, MeteoAlarm |
 | **Air quality**      | Raw pollutant concentrations from monitoring stations | Canonical provider orchestration (including OpenAQ when configured) |
 | **Environment**      | Readings from community environmental sensors         | openSenseMap, Sensor.Community        |
 
-The weather overlay's radar loop works out of the box; its temperature, cloud,
-wind, and pressure tiles need an OpenWeather API key. The weather overlay here is
+The weather overlay's radar loop works out of the box via RainViewer (returning
+HTTP 451 if RainViewer is excluded by policy); its temperature, precipitation, cloud,
+wind, and pressure tiles require an OpenWeather API key (`INTEGRATION_OVERLAY_WEATHER_OWMAPIKEY`).
+If an OpenWeather sublayer is selected while unconfigured or unavailable, the UI
+automatically falls back to the RainViewer radar loop. The weather overlay here is
 the map-wide layer — the per-place forecast lives in the [weather](./weather.md)
 feature.
 
@@ -175,7 +179,9 @@ Two entries in the picker are interactive tools rather than passive layers:
 
 - **Measure** — draw a path on the map to read off its distance and area.
 - **Travel time** — paint an isochrone showing how far you can get within a
-  time budget, computed by a Valhalla routing engine.
+  time budget. Supports street modes (walking, cycling, driving) computed by
+  Valhalla, and public transit reachability computed by MOTIS (rendering a continuous
+  WebGL2 shader surface or sampled exportable GeoJSON transit isochrone polygons).
 
 :::note[Overlays follow your integrations]
 The picker only lists overlays whose integration is enabled and whose required

@@ -1,9 +1,10 @@
 ---
-title: Personal Timeline
+title: Personal timeline
 description: Connect a Dawarich account and view a read-only day timeline inside OpenMapX.
+sidebar_position: 18
 ---
 
-# Personal Timeline
+# Personal timeline
 
 Personal Timeline adds an opt-in **Your timeline** view to OpenMapX. It reads one
 day at a time from [Dawarich](https://dawarich.app/) and presents visits,
@@ -15,6 +16,9 @@ Dawarich through its own apps and import methods.
 An OpenMapX account is required because each connection belongs to one user.
 The feature supports one active connection at a time. Switching mode replaces
 that connection only after the new source and credential validate successfully.
+
+For information on self-hosting Dawarich and configuring mobile tracking apps or
+Google Takeout imports, see [Self-hosting location history (Dawarich)](../guides/dawarich.md).
 
 ## Connect an external Dawarich instance
 
@@ -108,6 +112,5 @@ OpenMapX can add a deliberate migration and reauthorization flow. It will not
 infer API authorization from a browser session or silently change existing
 credentials.
 
-Operators should also read the repository's `docs/self-hosting/dawarich.md`
-guide for provisioning, DNS/TLS, health, backup, restore, release, and purge
-controls.
+Operators should also read [Self-hosting location history (Dawarich)](../guides/dawarich.md)
+for provisioning, DNS/TLS, health, backup, restore, release, and purge controls.

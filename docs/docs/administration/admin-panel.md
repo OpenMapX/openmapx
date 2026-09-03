@@ -97,7 +97,7 @@ The backend control plane, with sub-pages for the day-to-day work:
 - **Compose preview** — the generated `docker-compose` file, so you can see what
   the renderer will do before bringing the stack up.
 - **Data workflows** — the inventory of downloaded data (OSM extracts, GTFS
-  feeds, tiles, styles), GTFS import controls, and Overture Places release and
+  feeds, glyph fonts), GTFS import controls, and Overture Places release and
   durable OSM↔GERS link operations.
 - **Backups** — the on-disk snapshot manager. See [Backup and
   restore](./backup-and-restore.md).
@@ -109,11 +109,11 @@ services](../install/managing-services.md).
 ### Maintenance *(self-hosted only)*
 
 Stages current core images without restarting containers, compares them with
-the running application, and updates Data Manager, Web, and API in a controlled
-order. Updates create a database backup by default and checkpoint the operation
-before replacing the API, so the new API process can finalize the job after its
-migrations succeed. The pre-update backup is recommended but optional in the
-confirmation dialog. The same page runs the CLI-equivalent deep service probes.
+the running application, and updates Data Manager, Web, API, Ops Agent, and
+Transitous Runner in a controlled order. Updates create a database backup by default
+and checkpoint the operation before replacing the API, so the new API process can
+finalize the job after its migrations succeed. The pre-update backup is recommended
+but optional in the confirmation dialog. The same page runs the CLI-equivalent deep service probes.
 
 ### Transit
 

@@ -260,8 +260,9 @@ A few specifics worth knowing as an operator:
   (`TRANSITOUS_STALENESS_CHECK_CRON`, default `0 4 * * *`) flags feeds that have
   stopped updating. Set either to `disabled`, `off`, or `false` to turn it off
   (e.g. on staging where you trigger by hand).
-- **Trigger one by hand.** `curl -X POST http://localhost:3001/api/data-manager/transit/sync`
-  (admin session or `Authorization: Bearer ${DATA_MANAGER_AUTH_TOKEN}`) kicks off a
+- **Trigger one by hand.** `curl -X POST https://${DOMAIN}/api/data-manager/transit/sync`
+  (or direct to data-manager at `http://localhost:4000/transit/sync`, with an admin
+  session or `Authorization: Bearer ${DATA_MANAGER_AUTH_TOKEN}`) kicks off a
   run immediately; it's single-flight, so a manual call while a sync is already
   in flight returns the running job's id instead of starting a second one. Track
   progress at `GET /api/data-manager/transit/jobs`.

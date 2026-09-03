@@ -65,11 +65,16 @@ graph TD
       PG[("PostGIS")]
       Cache[("Valkey")]
       DM["data-manager"]
+      Ops["ops-agent"]
+      TR["transitous-runner"]
     end
 
     API --> PG
     API --> Cache
-    DM -.->|OSM · GTFS · styles| Engines
+    API --> Ops
+    DM --> Ops
+    DM --> TR
+    DM -.->|OSM · GTFS · fonts| Engines
 ```
 
 Every container talks over a private `openmapx` Docker network. Only the reverse
@@ -81,9 +86,12 @@ resolves integration requirements against the service registry.
 ## Where data comes from
 
 OpenMapX runs on open data. A dedicated **data-manager** service owns the
-`/data` tree: it downloads OSM extracts, GTFS feeds (via Transitous), and map
-styles, then hardlinks them into place so multiple services can share the same
-files without copying. Some integrations also call external APIs for data that
+`/data` tree: it downloads OSM extracts, GTFS feeds (via Transitous), and glyph
+fonts (`tile-fonts`), then hardlinks them into place so multiple services can
+share the same files without copying. Map styles and sprites are statically
+bundled directly into the `app-web` frontend. The private **ops-agent** broker
+isolates Docker socket authority and host lifecycle management so application
+containers run unprivileged. Some integrations also call external APIs for data that
 is proprietary, real-time, or impractical to self-host — traffic, street-level
 imagery, certain regional transit — always proxied through your server.
 

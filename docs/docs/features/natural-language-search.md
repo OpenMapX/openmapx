@@ -34,6 +34,12 @@ The intent also carries a confidence score; low-confidence parses — and querie
 that look like a proper place name — are dropped, so a misread never hijacks an
 ordinary search.
 
+Under the hood, OpenMapX validates every parsed category and filter against a
+strict semantic taxonomy of 40+ canonical categories and verified OSM key/value
+pairs (such as `cuisine`, `diet:vegan`, `wheelchair`, `internet_access`, `opening_hours`,
+and `charge:fee`). Any hallucinated or unmappable tags returned by LLM providers are
+safely stripped or demoted to freeform query tokens before hitting search backends.
+
 ## Provider architecture
 
 Parsing runs through one **ordered provider array**, tried from left to right.

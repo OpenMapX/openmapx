@@ -6,31 +6,47 @@ description: How the map keeps places and routes out from under panels, and how 
 # Map framing and street alignment
 
 When you pick a place, a route, a transit line, or a shared link, the map frames
-it in the part of the screen you can actually see. The desktop side panel and
-detail card, the mobile bottom sheet, the search bar and category row on
-phones, the navigation banner and its bottom panel, and your device's safe
-areas are all treated as covering the map, so the content lands beside or above
-them rather than underneath. Opening or collapsing a panel slides the map by the
-same amount; the slide is instant when your system asks for reduced motion.
+it in the part of the screen you can actually see. Under the hood, OpenMapX
+uses a **Map Obstruction Registry** where active UI elements — the desktop side
+panel and detail card, the mobile bottom sheet, the search bar and category row
+on phones, the navigation banner, and safe-area insets — publish their pixel
+extents.
 
-Framing keeps the way you are looking at the map. If you have turned it — by
-dragging, or with the grid button below — the next place or route you open
-arrives at that same angle, and it stays there until you ask for north back.
+A **Camera Padding Resolver** transforms these obstructions into map camera padding,
+with strict safety clamping to ensure at least 30% of each viewport axis and at least
+160px of map space remains visible (`MIN_VISIBLE_FRACTION = 0.3`, `MIN_VISIBLE_PX = 160px`).
+Opening or collapsing a panel dynamically slides the map camera; the slide is instant
+when your system prefers reduced motion.
 
-During turn-by-turn navigation the position marker keeps sitting three quarters
-of the way down the visible strip between the instruction banner and the bottom
-panel, and dragging the panel up moves the map with it. "Overview" is the one
-deliberate exception to the rule above: it frames the whole route in the visible
-area and returns you to a flat, north-up view, so you can take in the shape of
-the journey instead of the road ahead.
+Framing preserves your viewing angle. If you have rotated the map — by dragging
+or using the street grid alignment tool — opening a new place or route maintains
+that bearing until you explicitly return to north.
+
+During turn-by-turn ground navigation, the vehicle position marker is offset to
+sit three-quarters of the way down the visible viewport (`PUCK_SCREEN_RATIO = 0.75`),
+giving maximum visibility to the road ahead. "Overview" mode is the one deliberate
+exception: it frames the full extent of the route and resets the map to a flat,
+north-up orientation.
 
 ## Align to streets
 
-The grid button in the map controls rotates the map so the surrounding streets
-run up and down the screen. It looks only at roads already drawn on screen, so
-it works offline and never sends a request. The button appears once you are
-zoomed in close enough for streets to be worth aligning to — from further out it
-is simply not offered. When you press it and the roads near the middle of the
-view form no clear grid, or the map already lines up with them, a short message
-says so instead. The compass returns the map to north-up at any time, and both
-actions are also available in the command palette.
+The grid button in the map controls rotates the map bearing so surrounding streets
+align vertically with your display. It runs entirely client-side, inspecting vector
+tile features already loaded in the browser with zero network requests.
+
+The alignment engine follows strict geometric heuristics:
+
+- **Zoom threshold**: The control only appears at or above zoom 13 (`ALIGN_MIN_ZOOM = 13`).
+  At lower zooms, road grids are too dense and the button is hidden.
+- **Sample window**: It analyzes vector line geometry from the vector style's
+  `transportation` source layer across the center 70% of the visible viewport.
+- **Road class weighting**: Local and tertiary streets receive full weight (`1.0`),
+  secondary streets `0.9`, primary roads `0.8`, trunks `0.4`, and motorways `0.3`,
+  ensuring local neighborhood grids take precedence over diagonal highways.
+- **Confidence threshold**: Alignment requires at least 800 weighted road pixels
+  and a dominant angle confidence of at least 60% (`ALIGN_MIN_CONFIDENCE = 0.6`).
+- **Dead-band**: If the current bearing is already within 2° of the detected street
+  angle, the button reports that the map is already aligned.
+
+The compass control returns the map to north-up at any time, and both actions are
+accessible from the command palette.

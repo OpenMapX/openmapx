@@ -51,7 +51,7 @@ service tree under `services/.community/` are populated at runtime from Git URLs
 
 | App | Stack | Responsibility |
 | --- | --- | --- |
-| `apps/web` | Next.js 16 · React 19 · MapLibre GL JS 5 · MUI 9 · Tailwind 4 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state. |
+| `apps/web` | Next.js 16 · React 19 · MapLibre GL JS 6 · MUI 9 · Tailwind 4 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state. |
 | `apps/api` | Fastify 5 | The backend-for-frontend (BFF) gateway. It is *also* the integration host: it discovers, validates, configures, and runs every integration, resolves their service requirements, gates the admin API, and runs background jobs. |
 | `apps/ops-agent` | Fastify 5 | A private, authenticated broker for a closed set of typed Docker and trusted-repository effects. It has no public route, host port, or community network attachment. |
 
@@ -131,7 +131,7 @@ graph TD
     API -.->|authenticated typed effects| Ops
     DM -.->|authenticated typed effects| Ops
     Jobs -.->|start/stop/restart| Engines
-    DM -.->|OSM · styles · promoted MOTIS datasets| Engines
+    DM -.->|OSM · fonts · promoted MOTIS datasets| Engines
 ```
 
 **The reverse proxy.** [Traefik](https://traefik.io/) terminates TLS and is the
@@ -145,9 +145,8 @@ lowest priority so that more specific prefixes — `/api`, `/tiles`, `/martin`,
 `/.well-known` — win.
 
 **The always-on core.** A handful of services are selected by default —
-`traefik`, `well-known`, `app-api`, `app-web`, `postgis`, `redis`, and
-`data-manager`; `app-api` and `data-manager` pull in the private `ops-agent`
-dependency. Everything heavy (routing engines, geocoders, transit engines,
+`traefik`, `well-known`, `app-api`, `app-web`, `postgis`, `redis`, `data-manager`,
+and `ops-agent`. Everything heavy (routing engines, geocoders, transit engines,
 the Overpass server, tile servers) is opt-in: you add it to the *selection* and
 re-render. PostGIS is the system of record for application data and operational
 pipeline metadata; it does not store GTFS schedules. Redis (Valkey) is the

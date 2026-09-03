@@ -233,6 +233,36 @@ window parameters and metrics.
 Every result also carries **attribution** for the feeds and operators behind it,
 which OpenMapX de-duplicates and renders as data-source credits in the UI.
 
+## Transit reachability and isochrones
+
+Beyond point-to-point journey itineraries, OpenMapX integrates transit
+**reachability surfaces** and **exportable isochrones** powered by self-hosted MOTIS:
+
+- **Estimated reachability surface**: Using MOTIS one-to-all computation
+  (`foot-1.2-cap-900-v1` profile: 1.2 m/s walking speed, 900-second access/egress/direct
+  walk caps, and configurable time thresholds up to 90 minutes), the backend calculates
+  reachable seeds across the network. The result is thinned server-side on a 100m Web
+  Mercator grid (up to 4,096 seeds) and cached for 300 seconds. In the frontend, a
+  custom WebGL2 shader (`transit-field-layer`) renders smooth, continuous color bands
+  directly on the map.
+- **Anchored explore filtering**: The reachability surface anchors location-based
+  POI discovery. When exploring places "within reach", candidate POIs are filtered
+  against the computed travel-time field, showing only attractions or venues reachable
+  within your selected transit time budget.
+- **Exact point checks**: For sensitive location evaluations, MOTIS
+  `POST /api/experimental/one-to-many-intermodal` verifies exact door-to-door transit
+  feasibility for up to 200 destinations in sequential batches of 128. This check is
+  strictly self-hosted and gated by `exactReachabilityEnabled`; destination coordinates
+  are never dispatched to external cloud endpoints.
+- **Exportable isochrone polygons**: Gated by `exportableIsochronesEnabled`,
+  `POST /api/integrations/transit/reachability/isochrone` samples travel times across
+  a spatial lattice (up to 900 km² ground area) and computes vector polygon contours.
+  The resulting RFC 7946 GeoJSON FeatureCollection includes `openmapx` foreign member
+  metadata (`accuracy: "sampled"`, lattice spacing, resolution, sample count, and
+  feed attributions). To protect latency on interactive trip queries, isochrone builds
+  are single-flight (returning HTTP 429 with `Retry-After: 30` when busy) and cache
+  sampled fields for 15 minutes (900s).
+
 ## Configuring transit
 
 Transit has two configuration surfaces, matching OpenMapX's

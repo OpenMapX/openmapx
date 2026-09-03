@@ -37,7 +37,7 @@ The three engines trade simplicity, completeness, and resource cost differently.
 | Setup | Lowest — one container | Low — one container | High — four containers |
 | Getting data | Auto-downloads a prebuilt index | Imports OSM on first boot | Multi-step build pipeline |
 | Build step | None | None (self-imports) | `openmapx services build pelias` |
-| RAM ceiling (manifest) | 8 GB | 64 GB (import peak) | ~4 GB (Elasticsearch) |
+| RAM ceiling (manifest) | 8 GB | 64 GB (import peak) | ~7 GB (stack total: 4 GB Elasticsearch + 2 GB PIP + 1 GB services) |
 | Disk (planet) | ~200 GB | ~330 GB | ~100 GB |
 | Reverse geocoding | Yes | Yes (also powers enrichment) | Yes |
 | Updates | Re-downloads the index periodically | Built-in OSM replication | Re-import |

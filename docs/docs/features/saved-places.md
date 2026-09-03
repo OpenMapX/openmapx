@@ -65,12 +65,23 @@ list, press **Share**, and choose the link type:
 - **Snapshot** — viewers see the list exactly as it was when the link was
   created.
 
-Links can be given an optional expiry (1, 7, or 30 days), **reset** (the old
-URL stops working and a new one is issued), or **deleted** at any time —
-revocation is immediate. Manage every link you've created under **Account
-settings → Shared links**. Share pages are excluded from search-engine
-indexing and never expose your account details, only the list name, icon, and
-its places.
+Links can be given an optional expiry (Never, 1, 7, or 30 days), **reset**
+(the old URL stops working immediately and a new one is issued), or **deleted**
+at any time — revocation is immediate and responses are strictly non-cacheable
+(`Cache-Control: no-store`).
+
+A few quotas and security properties apply:
+
+- **Quotas**: Each account may hold up to 100 active share links (`MAX_SHARES_PER_USER = 100`).
+  Snapshot links support lists up to 1,000 places (`MAX_SNAPSHOT_PLACES = 1000`).
+- **Cryptographic tokens**: Share URLs use 32 random bytes (43 base64url characters).
+  Tokens are stored in the database exclusively as SHA-256 hashes; the database never
+  stores the raw token.
+- **Privacy**: Share pages are excluded from search-engine indexing (`noindex, nofollow`)
+  and never expose your username, email, or account ID — only the list name, emoji icon,
+  and place entries.
+
+Manage every link you've created under **Account settings → Shared links**.
 
 ## Related features
 

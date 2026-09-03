@@ -92,8 +92,10 @@ cp apps/api/.env.example apps/api/.env
 ```
 
 The defaults already match the `dev` preset — `DATABASE_URL` points at
-`postgres:postgres@localhost:5432/openmapx` and `REDIS_URL` at
-`redis://localhost:6379`. If you set `POSTGRES_PASSWORD` to anything other than
+`postgres:postgres@localhost:5432/openmapx`, `REDIS_URL` at
+`redis://localhost:6379`, and `REDIS_PASSWORD_FILE` at
+`../../infra/docker/secrets/redis-password` (the ACL secret rendered automatically
+when starting the dev preset). If you set `POSTGRES_PASSWORD` to anything other than
 `postgres`, update the password segment of `DATABASE_URL` to match. Set a
 `BETTER_AUTH_SECRET` (any string of at least 32 characters works for dev; the
 example notes the `npx @better-auth/cli@latest secret` generator).
