@@ -24,6 +24,7 @@ import {
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
 import { managedOAuthProviderOptions } from "./managed-oauth-provider";
+import { userErasureHooks } from "./services/user-erasure";
 import { auditAdminActionsHook } from "./utils/auth-audit-hook";
 import { configuredTrustedWebOrigins } from "./utils/csrf.js";
 import { sendMail } from "./utils/email";
@@ -139,6 +140,9 @@ const authOptions = {
     encryptOAuthTokens: true,
   },
   databaseHooks: {
+    user: {
+      delete: userErasureHooks,
+    },
     account: {
       create: {
         after: async (account) => {

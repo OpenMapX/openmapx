@@ -221,7 +221,7 @@ existing row rather than creating one.
 
 ## `backup`
 
-Create, list, restore, and delete on-disk backups of service volumes under
+Create, list, restore, prune, and delete on-disk backups of service volumes under
 `infra/docker/backups/`. See
 [Backup and restore](../administration/backup-and-restore.md) for what's included
 and how restore swaps volumes safely.
@@ -230,7 +230,8 @@ and how restore swaps volumes safely.
 | --- | --- |
 | `backup create` | Back up every backup-enabled service volume. Flag: `--name <name>` (default: ISO timestamp). |
 | `backup list` | List existing backups. |
-| `backup restore <name>` | Restore a backup. Flags: `--services <ids...>` restricts to a subset; `--stop-running` stops the target services first. |
+| `backup restore <name>` | Restore a backup. Flags: `--services <ids...>` restricts to a subset; `--stop-running` stops target services and isolates `app-api` during an OpenMapX database restore. |
+| `backup prune` | Delete backups older than the retention period. Flag: `--retention-days <days>` (defaults to `BACKUP_RETENTION_DAYS`, itself 30). |
 | `backup delete <name>` | Delete a backup directory. |
 
 ## `cache`

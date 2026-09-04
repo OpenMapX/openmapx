@@ -18,6 +18,10 @@
       "types": "./src/deployment-secret-policy.ts",
       "default": "./src/deployment-secret-policy.ts"
     },
+    "./erasure-journal": {
+      "types": "./src/erasure-journal.ts",
+      "default": "./src/erasure-journal.ts"
+    },
     "./server-api": {
       "types": "./src/api/server.ts",
       "default": "./src/api/server.ts"

@@ -1755,7 +1755,7 @@
     "failedRemovePasskey": "Passkey konnte nicht entfernt werden",
     "dangerZone": "Gefahrenbereich",
     "deleteAccount": "Konto löschen",
-    "deleteAccountWarning": "Das lässt sich nicht rückgängig machen. Dein Konto, deine gespeicherten Orte, Einstellungen und dein Signaturschlüssel für Bewertungen werden sofort gelöscht. Von dir im öffentlichen Mangrove-Commons veröffentlichte Bewertungen können wir nicht zurückziehen, und begrenzte Sicherheitsaufzeichnungen werden befristet aufbewahrt und danach von dir entkoppelt.",
+    "deleteAccountWarning": "Das lässt sich nicht rückgängig machen. OpenMapX löscht dein Konto, Anmeldedaten, gespeicherte Orte, Freigaben, Fahrzeuge, Parkstatus, Timeline-Verbindung, Einstellungen und den Signaturschlüssel für Bewertungen. Lösche Mangrove-Bewertungen vorher, solange du den Schlüssel noch kontrollierst. Ein verbundenes Dawarich-Konto und dessen Standortverlauf müssen separat gelöscht werden.",
     "confirmDeletion": "Löschung bestätigen",
     "failedDeleteAccount": "Konto konnte nicht gelöscht werden"
   },
@@ -1916,11 +1916,11 @@
     "deleteAccountSignedOut": "Melde dich unten an und wähle dann „Konto löschen“. Du wirst um eine Bestätigung gebeten, weil sich das nicht rückgängig machen lässt.",
     "deleteAccountInApp": "In der App geht das ebenfalls: Einstellungen → Konto → Konto löschen.",
     "deleteAccountWhatHeading": "Was gelöscht wird",
-    "deleteAccountWhatBody": "Dein Konto und deine Anmeldedaten, deine gespeicherten Orte und Labels, deine App-Einstellungen und dein Signaturschlüssel für Bewertungen. Eine Navigationssitzung auf deinem Gerät wird gelöscht, sobald du sie beendest oder die App entfernst; auf unseren Servern lag sie nie.",
+    "deleteAccountWhatBody": "Dein Konto und deine Anmeldedaten; gespeicherte Orte, Labels und Freigaben; Fahrzeuge und Parkstatus; deine Timeline-Verbindung; App-Einstellungen und dein Signaturschlüssel für Bewertungen. Nach der Bestätigung durch den Server löscht dieser Browser außerdem OpenMapX-Abfragedaten, Offline-Pakete, Caches und lokalen Speicher.",
     "deleteAccountKeptHeading": "Was nicht gelöscht wird",
-    "deleteAccountKeptBody": "Von dir veröffentlichte Bewertungen liegen bei Mangrove.reviews, einem öffentlichen Bewertungs-Commons, und können von uns nicht zurückgezogen werden. Sicherheits- und Audit-Aufzeichnungen, die für den sicheren Betrieb und gesetzliche Pflichten erforderlich sind, werden befristet aufbewahrt und danach nicht mehr mit deinem Konto verknüpft.",
+    "deleteAccountKeptBody": "Öffentliche Bewertungen bleiben bei Mangrove.reviews, sofern du sie dort nicht vor dem Löschen deines Signaturschlüssels entfernst. Ein verbundenes Dawarich-Konto und sein Standortverlauf bleiben in Dawarich und müssen separat gelöscht werden. Minimierte Sicherheits- und Audit-Ereignisse können für die vom Betreiber angegebene Dauer ohne deine Kontokennung aufbewahrt werden.",
     "deleteAccountTimingHeading": "Wie lange es dauert",
-    "deleteAccountTimingBody": "Die Löschung erfolgt sofort. Zuvor erstellte Backups laufen innerhalb von 30 Tagen aus.",
+    "deleteAccountTimingBody": "Aktive OpenMapX-Daten werden sofort gelöscht. Backups laufen nach der konfigurierten Richtlinie des Betreibers ab (standardmäßig 30 Tage); das pseudonyme Löschjournal verhindert, dass eine Wiederherstellung das Konto zurückbringt.",
     "deleteAccountButton": "Konto löschen"
   },
   "navigationSettings": {

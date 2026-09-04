@@ -60,7 +60,7 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 1. September 2026
+        Zuletzt aktualisiert: 4. September 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -158,8 +158,9 @@ export default function PrivacyContentDe({
           Diese Daten werden verarbeitet, um den technischen Betrieb und die Sicherheit des Dienstes
           zu gew&auml;hrleisten. Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;f DSGVO
           (berechtigtes Interesse an der Bereitstellung eines sicheren und funktionsf&auml;higen
-          Dienstes). Server-Protokolle werden nach {serverLogRetentionDays}&nbsp;Tagen automatisch
-          gel&ouml;scht.
+          Dienstes). Gespeicherte OpenMapX-Anwendungsprotokolle werden nach {serverLogRetentionDays}
+          &nbsp;Tagen automatisch gel&ouml;scht. Reverse-Proxy-, Container- und Hosting-Protokolle
+          richten sich nach der separat konfigurierten Infrastruktur-Richtlinie des Betreibers.
         </Typography>
         {hostingProvider && (
           <Typography sx={{ mt: 1 }}>
@@ -295,7 +296,9 @@ export default function PrivacyContentDe({
             <Typography>
               <strong>Passkeys (WebAuthn)</strong> &mdash; wenn Sie einen Passkey registrieren, wird
               ein &ouml;ffentlicher Schl&uuml;ssel auf unserem Server gespeichert; der private
-              Schl&uuml;ssel verlässt niemals Ihr Ger&auml;t
+              Schl&uuml;ssel verlässt niemals Ihr Ger&auml;t. Ein Passkey authentifiziert Sie,
+              verschl&uuml;sselt jedoch nicht Ihre gespeicherten Orte, Routen, Fahrzeuge,
+              Parkpositionen oder Daten des pers&ouml;nlichen Zeitstrahls
             </Typography>
           </li>
           <li>
@@ -992,8 +995,11 @@ export default function PrivacyContentDe({
           unser Server API-Antworten in Redis (einem In-Memory-Datenspeicher) zwischen.
           Zwischengespeicherte Daten umfassen typischerweise Kartensuchergebnisse, Fahrpl&auml;ne,
           Routenantworten und Katalogdaten externer Verzeichnisse. Cache-Eintr&auml;ge laufen
-          automatisch ab (in der Regel innerhalb von Minuten bis 48&nbsp;Stunden). Der Cache
-          speichert keine personenbezogenen Daten wie IP-Adressen oder Kontoinformationen.
+          automatisch ab (in der Regel innerhalb von Minuten bis 48&nbsp;Stunden). Diese
+          Eintr&auml;ge werden Ihrem Konto nicht zugeordnet und enthalten weder Ihre IP-Adresse noch
+          Ihren Authentifizierungsstatus. Such- oder Routeneingaben und -ergebnisse k&ouml;nnen
+          dennoch Koordinaten oder Ortsnamen enthalten, die ein geografisches Interessengebiet
+          erkennen lassen.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Antworten des pers&ouml;nlichen Zeitstrahls sind ausdr&uuml;cklich von Redis-,
@@ -1004,10 +1010,12 @@ export default function PrivacyContentDe({
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Wir betreiben au&szlig;erdem eine PostgreSQL-Datenbank f&uuml;r Benutzerkonten,
-          gespeicherte Orte und gecachte Ortsanreicherungsdaten (z.&nbsp;B. Wikidata-Fakten,
-          Wikipedia-Zusammenfassungen). Wenn GTFS-Nahverkehrs-Feeds importiert werden, werden
-          Fahrplandaten (Haltestellennamen, Linien, Abfahrtszeiten) in separaten Datenbank-Schemas
-          gespeichert. Diese Daten stellen keine personenbezogenen Daten von Endnutzern dar.
+          gespeicherte Orte, Fahrzeuge und Parkpositionen, Freigabeinhalte sowie gecachte
+          Ortsanreicherungsdaten (z.&nbsp;B. Wikidata-Fakten, Wikipedia-Zusammenfassungen). Die
+          Konto- und synchronisierten Inhalte sind personenbezogene und serverseitig lesbare Daten.
+          Wenn GTFS-Nahverkehrs-Feeds importiert werden, werden Fahrplandaten (Haltestellennamen,
+          Linien, Abfahrtszeiten) in separaten Datenbank-Schemas gespeichert; gecachte
+          &ouml;ffentliche Ortsinformationen und Fahrpl&auml;ne sind keine Kontodaten.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Wenn Sie die OpenStreetMap-Beitragsfunktion nutzen, werden kurzzeitig eine Sperre und ein
@@ -1218,8 +1226,10 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Server-Protokolle</strong> &mdash; werden nach {serverLogRetentionDays}
-              &nbsp;Tagen automatisch gel&ouml;scht.
+              <strong>Gespeicherte Anwendungsprotokolle</strong> &mdash; werden nach{" "}
+              {serverLogRetentionDays}
+              &nbsp;Tagen automatisch gel&ouml;scht. Container- und Laufzeitprotokolle richten sich
+              nach der Infrastruktur-Richtlinie des Betreibers.
             </Typography>
           </li>
           <li>
@@ -1230,9 +1240,20 @@ export default function PrivacyContentDe({
           </li>
           <li>
             <Typography>
-              <strong>Lokaler Speicher und Service-Worker-Cache</strong> &mdash; verbleibt auf Ihrem
-              Ger&auml;t, bis Sie Ihre Browserdaten l&ouml;schen oder die Cache-Eintr&auml;ge
-              automatisch ablaufen.
+              <strong>Sicherungskopien</strong> &mdash; Konto- und synchronisierte Inhalte, die bei
+              Erstellung einer Datenbanksicherung vorhanden waren, k&ouml;nnen bis zum Ablauf der
+              konfigurierten Aufbewahrungsfrist (standardm&auml;&szlig;ig 30 Tage) darin verbleiben.
+              Das L&ouml;schen von Live-Daten schreibt Archive nicht um; bei einer Wiederherstellung
+              wird ein pseudonymes L&ouml;schjournal abgespielt, damit gel&ouml;schte Konten nicht
+              zur&uuml;ckkehren.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Lokaler Speicher und Service-Worker-Cache</strong> &mdash; die OpenMapX-Daten
+              dieses Browsers werden nach erfolgreicher Kontol&ouml;schung entfernt. Auf anderen
+              Ger&auml;ten bleiben lokale Daten, bis dort Browser-/App-Daten gel&ouml;scht werden
+              oder Cache-Eintr&auml;ge ablaufen.
             </Typography>
           </li>
         </ul>
@@ -1247,6 +1268,17 @@ export default function PrivacyContentDe({
         </Typography>
         <Typography sx={{ mt: 1 }}>
           <strong>
+            Gew&ouml;hnliche synchronisierte Inhalte sind nicht Ende-zu-Ende-verschl&uuml;sselt.
+          </strong>{" "}
+          Gespeicherte Orte, geteilte Routen- oder Listenschnappsch&uuml;sse, Fahrzeugprofile,
+          Parkpositionen und Verbindungsmetadaten des pers&ouml;nlichen Zeitstrahls m&uuml;ssen dem
+          OpenMapX-Server zur Synchronisierung, Freigabe oder Verarbeitung zug&auml;nglich sein. Sie
+          k&ouml;nnen daher vom Betreiber dieser Installation und von einem kompromittierten
+          Anwendungsserver eingesehen werden. Die Verschl&uuml;sselung ausgew&auml;hlter
+          Zugangsdaten im Ruhezustand und TLS beim Transport &auml;ndern diese Grenze nicht.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
+          <strong>
             Vertrauensmodell f&uuml;r das Mangrove-Schl&uuml;sselpaar (Abschnitt&nbsp;5).
           </strong>{" "}
           Im Passphrase-Modus sowie im kombinierten Passphrase- und Passkey-Modus verl&auml;sst der
@@ -1257,7 +1289,10 @@ export default function PrivacyContentDe({
           &bdquo;unverschl&uuml;sselten Opt-in-Modus&ldquo; hingegen wird der private Schl&uuml;ssel
           im Klartext gespeichert; Personen mit Datenbankzugriff k&ouml;nnten daher Bewertungen in
           Ihrem Namen signieren. Wir empfehlen, einen der verschl&uuml;sselten Modi zu w&auml;hlen
-          und Ihre Passphrase niemals weiterzugeben.
+          und Ihre Passphrase niemals weiterzugeben. Diese Modi sch&uuml;tzen den gespeicherten
+          Schl&uuml;ssel bei einer ausschlie&szlig;lichen Offenlegung der Datenbank; sie k&ouml;nnen
+          einen kompromittierten Webserver nicht daran hindern, den Schl&uuml;ssel oder
+          Bewertungsinhalt anzugreifen, nachdem Ihr Browser ihn entsperrt hat.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           <strong>OAuth-Anbieter-Token.</strong> Von OpenStreetMap und Mapillary ausgestellte Token

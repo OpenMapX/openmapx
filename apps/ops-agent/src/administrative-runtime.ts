@@ -676,6 +676,25 @@ function acquireBackupStoreLock(rootDir: string): Promise<ReleaseStoreLock> {
   return acquireStoreLock(root, BACKUP_STORE_LOCK_NAME);
 }
 
+export async function pruneBackupRetention(
+  rootDir: string,
+  retentionDays: number,
+  runFixedCli: FixedCliRunner,
+): Promise<void> {
+  if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
+    throw new Error("Backup retention days must be an integer between 1 and 36500");
+  }
+  const lock = await acquireBackupStoreLock(rootDir);
+  try {
+    await runFixedCli(["backup", "prune", "--retention-days", String(retentionDays)], {
+      signal: new AbortController().signal,
+      emitLog: () => {},
+    });
+  } finally {
+    lock.release();
+  }
+}
+
 /**
  * Digest of the exact canonical backup-manifest bytes, or null when the backup
  * is absent or unreadable. Used to prove that the bytes an effect acts on are
@@ -1376,10 +1395,15 @@ export function createAdministrativeRuntime(
   };
   runtime["backup.list"] = async () => inspectBackupInventory(options.rootDir);
   runtime["backup.create"] = async (operation, context) => {
-    await runFixedCli(["backup", "create", "--name", operation.backupId], {
-      signal: context.signal,
-      emitLog: context.emitLog,
-    });
+    const lock = await acquireBackupStoreLock(options.rootDir);
+    try {
+      await runFixedCli(["backup", "create", "--name", operation.backupId], {
+        signal: context.signal,
+        emitLog: context.emitLog,
+      });
+    } finally {
+      lock.release();
+    }
     return { backupId: operation.backupId };
   };
   runtime["backup.restore"] = async (operation, context) => {

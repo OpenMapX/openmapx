@@ -21,8 +21,9 @@ const INVALID_OR_OVERSIZED_RECORD = "[invalid-or-oversized-record]";
 const URL_PATTERN = /\b[a-z][a-z0-9+.-]*:\/\/[^\s"'<>]+/giu;
 const ORIGIN_FORM_QUERY_PATTERN = /(^|[\s("'])\/[^\s"'<>]*[?#][^\s"'<>]*/gu;
 const BEARER_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/giu;
+const EMAIL_PATTERN = /\b[A-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/giu;
 const SENSITIVE_KEY_PATTERN =
-  /(authorization|cookie|token|password|secret|apikey|credential|session|url)/iu;
+  /(authorization|cookie|token|password|secret|apikey|credential|session|url|user.?id|email)/iu;
 const URL_KEY_PATTERN = /url/iu;
 const DANGEROUS_KEYS = new Set(["__proto__", "constructor", "prototype"]);
 
@@ -85,7 +86,8 @@ export function sanitizeLogString(value: string): string {
   const withoutUrls = value
     .replace(URL_PATTERN, "[redacted-url]")
     .replace(ORIGIN_FORM_QUERY_PATTERN, "$1[redacted-url]")
-    .replace(BEARER_PATTERN, "Bearer [redacted]");
+    .replace(BEARER_PATTERN, "Bearer [redacted]")
+    .replace(EMAIL_PATTERN, "[redacted-email]");
   return truncateMessage(withoutUrls);
 }
 

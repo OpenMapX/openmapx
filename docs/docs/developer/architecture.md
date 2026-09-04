@@ -18,6 +18,12 @@ If you are new to the project, read [How it works](../overview/how-it-works.md)
 first. If you operate a deployment, [Managing services](../install/managing-services.md)
 is the day-to-day companion to the runtime topology below.
 
+The topology also defines who can see user data. Ordinary synchronized content
+is processed by `apps/api` and is not end-to-end encrypted; server-side
+credential encryption, TLS, signing, and client encryption are separate
+controls. Read the [user-data trust model](./user-data-trust-model.md) before
+adding a user-data field, cache, processor, or privacy claim.
+
 ## The monorepo
 
 The repository is a [Turborepo](https://turborepo.com/) workspace driven by pnpm.

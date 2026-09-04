@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { render, screen, userEvent, waitFor } from "@/test";
+import { createQueryWrapper, render, screen, userEvent, waitFor } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@/integration-api/runtime/useFullScreenOnMobile", () => ({
@@ -79,7 +79,9 @@ describe("AccountSettingsDialog timeline targeting", () => {
   it("focuses and scrolls the stable Timeline heading after opening", async () => {
     const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
 
-    render(<AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />);
+    render(<AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />, {
+      wrapper: createQueryWrapper(),
+    });
 
     const heading = await screen.findByRole("heading", {
       name: "account.timeline.heading",
@@ -96,7 +98,9 @@ describe("AccountSettingsDialog timeline targeting", () => {
     );
     const scrollIntoView = vi.spyOn(Element.prototype, "scrollIntoView");
 
-    render(<AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />);
+    render(<AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />, {
+      wrapper: createQueryWrapper(),
+    });
 
     const heading = await screen.findByRole("heading", { name: "account.timeline.heading" });
     await waitFor(() => expect(heading).toHaveFocus());
@@ -107,6 +111,7 @@ describe("AccountSettingsDialog timeline targeting", () => {
     const interaction = userEvent.setup();
     const view = render(
       <AccountSettingsDialog open onClose={vi.fn()} user={user} initialSection="timeline" />,
+      { wrapper: createQueryWrapper() },
     );
     const profileName = screen.getByLabelText("account.name");
     await interaction.clear(profileName);

@@ -57,7 +57,9 @@ export async function handleAdminAuditEvent(ctx: AdminAuditCtx): Promise<void> {
   const actorId = session?.user?.id ?? null;
 
   const body = (ctx.body ?? {}) as AdminAuditBody;
-  const targetId = pickString(body.userId) ?? null;
+  // The deletion receipt lives in the pseudonymous erasure journal. Retaining
+  // the raw deleted user id here would recreate personal data after cleanup.
+  const targetId = route.action === "user.delete" ? null : (pickString(body.userId) ?? null);
 
   const details: Record<string, unknown> = {};
   if (route.action === "user.role.change") {

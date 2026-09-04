@@ -22,6 +22,10 @@
       "REDIS_PASSWORD_FILE": "/run/secrets/redis-password",
       "OFFLINE_PACKAGE_PRINCIPAL_KEY_FILE": "/run/secrets/offline-package-principal-key",
       "OFFLINE_PACKAGE_PRINCIPAL_KEY_UID": "${UID:-1000}",
+      "ERASURE_JOURNAL_PATH": "/var/lib/openmapx/erasure/journal.jsonl",
+      "ERASURE_JOURNAL_KEY_FILE": "/run/secrets/erasure-journal-key",
+      "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}",
+      "LEGAL_SERVER_LOG_RETENTION_DAYS": "${LEGAL_SERVER_LOG_RETENTION_DAYS:-30}",
       "OPS_AGENT_URL": "${OPS_AGENT_URL:-http://ops-agent:4300}",
       "OPS_AGENT_TOKEN_FILE": "/run/secrets/ops-agent-api-token",
       "OPS_TRUSTED_CONFIG_DIR": "/var/lib/openmapx/trusted-config",
@@ -121,6 +125,11 @@
       "readOnly": false
     },
     {
+      "source": "@infra:data/erasure",
+      "target": "/var/lib/openmapx/erasure",
+      "readOnly": false
+    },
+    {
       "source": "@infra:secrets/ops-agent-api-token",
       "target": "/run/secrets/ops-agent-api-token",
       "readOnly": true
@@ -133,6 +142,11 @@
     {
       "source": "@infra:secrets/offline-package-principal-key",
       "target": "/run/secrets/offline-package-principal-key",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/erasure-journal-key",
+      "target": "/run/secrets/erasure-journal-key",
       "readOnly": true
     },
     {

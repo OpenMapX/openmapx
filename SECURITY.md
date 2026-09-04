@@ -130,6 +130,11 @@ If you self-host OpenMapX, a few recommendations:
   database and follow the operator-controlled cutoff procedure in
   [Monitoring & logs](docs/docs/administration/monitoring.md#purging-historical-application-logs);
   upgrades never delete these records automatically.
+- Treat PostgreSQL snapshots as sensitive user-data copies. Ordinary synchronized
+  content is not end-to-end encrypted, and deleting a live account does not
+  rewrite an existing backup. Restrict and encrypt off-host copies as appropriate,
+  set an expiry policy, and review the
+  [user-data trust model](docs/docs/developer/user-data-trust-model.md).
 - Subscribe to the repository's "Releases only" notifications so security
   releases reach you.
 

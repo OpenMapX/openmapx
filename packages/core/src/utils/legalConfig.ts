@@ -24,7 +24,7 @@ export const legalConfig = {
   // provider vary by jurisdiction / hosting setup, so they live in env rather
   // than hardcoded in the privacy page; an empty value omits the corresponding
   // sentence so an unconfigured deployment never renders a dangling fragment.
-  // Log retention defaults to the project's standard 30 days.
+  // Persisted API log retention defaults to the project's standard 30 days.
   supervisoryAuthority: process.env.LEGAL_SUPERVISORY_AUTHORITY ?? "",
   supervisoryAuthorityUrl: process.env.LEGAL_SUPERVISORY_AUTHORITY_URL ?? "",
   hostingProvider: process.env.LEGAL_HOSTING_PROVIDER ?? "",

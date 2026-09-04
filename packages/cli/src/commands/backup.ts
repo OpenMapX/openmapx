@@ -1,6 +1,7 @@
 import {
   createWriteStream,
   existsSync,
+  lstatSync,
   mkdirSync,
   readdirSync,
   readFileSync,
@@ -11,6 +12,7 @@ import {
 import { join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
+import { isErasedSubject, readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { PLATFORM_VERSION } from "@openmapx/integration-framework";
 import type { Command } from "commander";
@@ -18,6 +20,7 @@ import { execa } from "execa";
 import kleur from "kleur";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
+import { readPlatformSecretFile } from "../lib/platform-secret-files";
 import { applyServiceSelection } from "../lib/service-selection";
 
 const { ServiceRegistry, isSafePostgresIdentifier } = coreServices;
@@ -403,6 +406,8 @@ export interface CreateBackupResult {
 export async function createBackup(opts: CreateBackupOptions = {}): Promise<CreateBackupResult> {
   const name = opts.name ?? defaultBackupName();
   assertValidBackupName(name);
+  // Validate policy before creating files or stopping services.
+  const retentionDays = configuredBackupRetentionDays();
 
   const backupDir = resolveBackupDir(opts.rootDir, name);
 
@@ -544,6 +549,17 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
     log.ok(
       `Backup ${kleur.bold(name)} created — ${volCount} volumes, ${formatBytes(totalBytes)} total`,
     );
+
+    try {
+      const pruned = pruneExpiredBackups({ rootDir: opts.rootDir, retentionDays });
+      if (pruned.deleted.length > 0) {
+        log.info(`Pruned ${pruned.deleted.length} backup(s) outside the retention period`);
+      }
+    } catch (error) {
+      // The completed backup remains valid; the scheduled operations-agent
+      // prune will retry instead of rolling back the new backup.
+      log.warn(`Backup created but retention prune failed: ${(error as Error).message}`);
+    }
 
     return { name, directory: backupDir, manifest };
   } catch (err) {
@@ -717,6 +733,253 @@ export function formatBackupsTable(rows: ListedBackup[]): string {
   );
 }
 
+export interface PruneExpiredBackupsOptions {
+  rootDir?: string;
+  retentionDays: number;
+  now?: Date;
+  onWarning?: (message: string) => void;
+}
+
+export interface PruneExpiredBackupsResult {
+  deleted: string[];
+  retained: string[];
+}
+
+export function pruneExpiredBackups(opts: PruneExpiredBackupsOptions): PruneExpiredBackupsResult {
+  if (
+    !Number.isSafeInteger(opts.retentionDays) ||
+    opts.retentionDays <= 0 ||
+    opts.retentionDays > 36_500
+  ) {
+    throw new Error("Backup retention days must be an integer between 1 and 36500");
+  }
+  const now = (opts.now ?? new Date()).getTime();
+  const cutoff = now - opts.retentionDays * 24 * 60 * 60 * 1000;
+  const deleted: string[] = [];
+  const retained: string[] = [];
+  const backupsRoot = join(repoPaths(opts.rootDir).infraDir, "backups");
+  if (!existsSync(backupsRoot)) return { deleted, retained };
+  for (const entry of readdirSync(backupsRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || !isValidBackupName(entry.name)) continue;
+    const backupDir = resolveBackupDir(opts.rootDir, entry.name);
+    const directoryStats = lstatSync(backupDir);
+    if (!directoryStats.isDirectory() || directoryStats.isSymbolicLink()) continue;
+    let timestamp = directoryStats.mtimeMs;
+    try {
+      const manifest = readBackupManifest(join(backupDir, "manifest.json"));
+      const createdAt = Date.parse(manifest.createdAt);
+      if (Number.isFinite(createdAt) && createdAt <= now) timestamp = createdAt;
+      else opts.onWarning?.(`using directory age for ${entry.name}: invalid creation timestamp`);
+    } catch (error) {
+      opts.onWarning?.(`using directory age for ${entry.name}: ${(error as Error).message}`);
+    }
+    if (timestamp < cutoff) {
+      deleteBackup({ rootDir: opts.rootDir, name: entry.name });
+      deleted.push(entry.name);
+    } else {
+      retained.push(entry.name);
+    }
+  }
+  deleted.sort();
+  retained.sort();
+  return { deleted, retained };
+}
+
+function configuredBackupRetentionDays(): number {
+  const raw = process.env.BACKUP_RETENTION_DAYS?.trim() || "30";
+  const days = Number(raw);
+  if (!Number.isSafeInteger(days) || days <= 0 || days > 36_500) {
+    throw new Error("BACKUP_RETENTION_DAYS must be an integer between 1 and 36500");
+  }
+  return days;
+}
+
+function containsOpenMapXDatabase(manifest: BackupManifest): boolean {
+  return manifest.services.some((service) =>
+    service.volumes.some((volume) => volume.mode === "pg_dump" && volume.postgresDb === "openmapx"),
+  );
+}
+
+/**
+ * Services outside the restore manifest that must be isolated while the
+ * account database is restored. Keeping the API stopped prevents a deleted
+ * account from becoming observable between pg_restore and erasure replay.
+ */
+export function requiredDependentStops(
+  manifest: BackupManifest,
+  running: ReadonlySet<string>,
+): string[] {
+  return containsOpenMapXDatabase(manifest) && running.has("app-api") ? ["app-api"] : [];
+}
+
+function erasureJournalPaths(rootDir?: string): { journalPath: string; keyPath: string } {
+  const infraDir = repoPaths(rootDir).infraDir;
+  return {
+    journalPath: join(infraDir, "data", "erasure", "journal.jsonl"),
+    keyPath: join(infraDir, "secrets", "erasure-journal-key"),
+  };
+}
+
+function readErasureJournalKey(rootDir?: string): Buffer {
+  const encoded = readPlatformSecretFile(erasureJournalPaths(rootDir).keyPath);
+  if (!/^[A-Za-z0-9_-]{43}$/.test(encoded)) {
+    throw new Error("Erasure journal key is not canonical base64url");
+  }
+  const key = Buffer.from(encoded, "base64url");
+  if (key.byteLength !== 32 || key.toString("base64url") !== encoded) {
+    throw new Error("Erasure journal key must contain exactly 32 bytes");
+  }
+  return key;
+}
+
+export function validateRestoreDataProtection(
+  manifest: BackupManifest,
+  opts: { rootDir?: string; retentionDays?: number; now?: Date } = {},
+): void {
+  if (!containsOpenMapXDatabase(manifest)) return;
+  const retentionDays = opts.retentionDays ?? configuredBackupRetentionDays();
+  if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
+    throw new Error("Backup retention days must be an integer between 1 and 36500");
+  }
+  const createdAt = Date.parse(manifest.createdAt);
+  if (!Number.isFinite(createdAt)) throw new Error("Backup has an invalid creation timestamp");
+  const now = (opts.now ?? new Date()).getTime();
+  if (createdAt < now - retentionDays * 24 * 60 * 60 * 1000) {
+    throw new Error(
+      `Backup exceeds the ${retentionDays}-day retention policy and cannot be restored`,
+    );
+  }
+  const { journalPath } = erasureJournalPaths(opts.rootDir);
+  const journal = readErasureJournal(journalPath);
+  readErasureJournalKey(opts.rootDir);
+  if (createdAt < journal.coverageStartedAt.getTime()) {
+    throw new Error("Backup predates erasure journal coverage and cannot be restored safely");
+  }
+}
+
+interface RestoredUser {
+  id: string;
+  email: string;
+}
+
+export async function replayErasureRequests(opts: {
+  journalPath: string;
+  key: Uint8Array;
+  listUsers(): Promise<RestoredUser[]>;
+  eraseUser(user: RestoredUser): Promise<void>;
+}): Promise<number> {
+  const journal = readErasureJournal(opts.journalPath);
+  const users = await opts.listUsers();
+  let erased = 0;
+  for (const user of users) {
+    if (!isErasedSubject(journal, opts.key, user.id)) continue;
+    await opts.eraseUser(user);
+    erased += 1;
+  }
+  return erased;
+}
+
+async function listRestoredUsers(
+  ctx: ComposeContext,
+  serviceId: string,
+  user: string,
+  database: string,
+): Promise<RestoredUser[]> {
+  const result = await execa(
+    "docker",
+    [
+      "compose",
+      "-f",
+      ctx.composeFile,
+      "exec",
+      "-T",
+      serviceId,
+      "psql",
+      "-U",
+      user,
+      "-d",
+      database,
+      "-At",
+      "-c",
+      `SELECT json_build_object('id', id, 'email', email)::text FROM "user"`,
+    ],
+    { cwd: ctx.cwd, reject: false, maxBuffer: 16 * 1024 * 1024 },
+  );
+  if (result.exitCode !== 0)
+    throw new Error(`Unable to enumerate restored users: ${result.stderr}`);
+  return (result.stdout ?? "")
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => {
+      const parsed = JSON.parse(line) as Partial<RestoredUser>;
+      if (typeof parsed.id !== "string" || typeof parsed.email !== "string") {
+        throw new Error("Restored user query returned invalid data");
+      }
+      return { id: parsed.id, email: parsed.email };
+    });
+}
+
+async function eraseRestoredUser(
+  ctx: ComposeContext,
+  serviceId: string,
+  postgresUser: string,
+  database: string,
+  restoredUser: RestoredUser,
+): Promise<void> {
+  const statement = `BEGIN;
+DELETE FROM verification WHERE value = :'user_id' OR lower(identifier) = lower(:'user_email') OR right(lower(identifier), length(:'user_email')) = lower(:'user_email');
+UPDATE system_settings SET updated_by = NULL WHERE updated_by = :'user_id';
+UPDATE admin_audit_log SET actor_id = NULL, ip_address = NULL, user_agent = NULL WHERE actor_id = :'user_id';
+UPDATE admin_audit_log SET target_id = NULL WHERE target_id = :'user_id';
+UPDATE admin_audit_log SET details = NULL WHERE position(:'user_id' in details::text) > 0 OR position(lower(:'user_email') in lower(details::text)) > 0;
+DELETE FROM app_logs WHERE position(:'user_id' in msg) > 0 OR position(lower(:'user_email') in lower(msg)) > 0 OR position(:'user_id' in metadata::text) > 0 OR position(lower(:'user_email') in lower(metadata::text)) > 0;
+DELETE FROM "user" WHERE id = :'user_id';
+COMMIT;`;
+  const result = await execa(
+    "docker",
+    [
+      "compose",
+      "-f",
+      ctx.composeFile,
+      "exec",
+      "-T",
+      serviceId,
+      "psql",
+      "-U",
+      postgresUser,
+      "-d",
+      database,
+      "-v",
+      "ON_ERROR_STOP=1",
+      "--set",
+      `user_id=${restoredUser.id}`,
+      "--set",
+      `user_email=${restoredUser.email}`,
+      "-c",
+      statement,
+    ],
+    { cwd: ctx.cwd, reject: false },
+  );
+  if (result.exitCode !== 0) throw new Error(`Unable to replay user erasure: ${result.stderr}`);
+}
+
+async function replayOpenMapXErasures(
+  ctx: ComposeContext,
+  rootDir: string | undefined,
+  serviceId: string,
+  postgresUser: string,
+  database: string,
+): Promise<number> {
+  const { journalPath } = erasureJournalPaths(rootDir);
+  return replayErasureRequests({
+    journalPath,
+    key: readErasureJournalKey(rootDir),
+    listUsers: () => listRestoredUsers(ctx, serviceId, postgresUser, database),
+    eraseUser: (restoredUser) =>
+      eraseRestoredUser(ctx, serviceId, postgresUser, database, restoredUser),
+  });
+}
+
 // ─── Restore ───────────────────────────────────────────────────────────────
 
 export interface RestoreOptions {
@@ -776,6 +1039,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
   const pre = preflightRestore(opts);
   if (pre.versionError) throw new Error(pre.versionError);
   if (pre.versionWarning) log.warn(pre.versionWarning);
+  validateRestoreDataProtection(pre.manifest, { rootDir: opts.rootDir });
 
   const ctx = ctxFromRepo(opts.rootDir);
   const running = await listRunningServices(ctx);
@@ -783,9 +1047,11 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
     .filter((service) => service.volumes.some((volume) => volume.mode === "tar"))
     .map((service) => service.id)
     .filter((id) => running.has(id));
-  if (runningTarTargets.length > 0 && !opts.stopRunning) {
+  const dependentStops = requiredDependentStops(pre.manifest, running);
+  const requiredStops = [...new Set([...runningTarTargets, ...dependentStops])];
+  if (requiredStops.length > 0 && !opts.stopRunning) {
     throw new Error(
-      `Refusing to restore — these target services are running: ${runningTarTargets.join(
+      `Refusing to restore — these services must be stopped: ${requiredStops.join(
         ", ",
       )}. Pass --stop-running to stop them automatically.`,
     );
@@ -793,7 +1059,15 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
 
   const stopped: string[] = [];
   const active = new Set(running);
+  let protectedDatabaseSafe = true;
   try {
+    for (const id of dependentStops) {
+      log.dim(`  stopping ${id} to isolate account-database restore…`);
+      await dockerCompose(ctx, ["stop", id]);
+      active.delete(id);
+      stopped.push(id);
+    }
+
     for (const svc of pre.targets) {
       log.info(kleur.bold(`◆ ${svc.id}`));
       const pgVolumes = svc.volumes.filter((volume) => volume.mode === "pg_dump");
@@ -824,7 +1098,13 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         const user = vol.postgresUser;
         const db = vol.postgresDb;
         log.dim(`  restoring database ${db} (user=${user}) from ${vol.file}…`);
+        if (db === "openmapx") protectedDatabaseSafe = false;
         await pgRestoreFromFile(ctx, svc.id, file, user, db);
+        if (db === "openmapx") {
+          const erased = await replayOpenMapXErasures(ctx, opts.rootDir, svc.id, user, db);
+          protectedDatabaseSafe = true;
+          log.dim(`  replayed ${erased} retained user-erasure request(s)`);
+        }
       }
 
       if (tarVolumes.length > 0 && active.has(svc.id)) {
@@ -866,6 +1146,12 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
     log.err(`Restore failed: ${(err as Error).message}`);
     // Best-effort restart of everything we stopped, even on failure.
     for (const id of [...stopped].reverse()) {
+      if (id === "app-api" && !protectedDatabaseSafe) {
+        log.warn(
+          "Leaving app-api stopped because the account database was not safely replayed after restore",
+        );
+        continue;
+      }
       try {
         await dockerCompose(ctx, ["start", id]);
       } catch (e) {
@@ -1009,6 +1295,10 @@ export function deleteBackup(opts: DeleteBackupOptions): void {
   if (!existsSync(backupDir)) {
     throw new Error(`Backup not found: ${opts.name}`);
   }
+  const stats = lstatSync(backupDir);
+  if (!stats.isDirectory() || stats.isSymbolicLink()) {
+    throw new Error(`Backup is not a safe directory: ${opts.name}`);
+  }
   rmSync(backupDir, { recursive: true, force: true });
   log.ok(`Deleted backup ${kleur.bold(opts.name)}`);
 }
@@ -1018,7 +1308,7 @@ export function deleteBackup(opts: DeleteBackupOptions): void {
 export function registerBackupCommands(program: Command): void {
   const backup = program
     .command("backup")
-    .description("Create, list, restore, and delete on-disk backups of service volumes");
+    .description("Create, list, restore, prune, and delete on-disk backups of service volumes");
 
   backup
     .command("create")
@@ -1053,6 +1343,24 @@ export function registerBackupCommands(program: Command): void {
           serviceIds: options.services,
           stopRunning: options.stopRunning,
         });
+      } catch (err) {
+        log.err((err as Error).message);
+        process.exit(1);
+      }
+    });
+
+  backup
+    .command("prune")
+    .description("Delete backups older than the configured retention period")
+    .option("--retention-days <days>", "Retention period in days")
+    .action((options: { retentionDays?: string }) => {
+      try {
+        const retentionDays =
+          options.retentionDays === undefined
+            ? configuredBackupRetentionDays()
+            : Number(options.retentionDays);
+        const result = pruneExpiredBackups({ retentionDays });
+        log.ok(`Pruned ${result.deleted.length} expired backup(s)`);
       } catch (err) {
         log.err((err as Error).message);
         process.exit(1);

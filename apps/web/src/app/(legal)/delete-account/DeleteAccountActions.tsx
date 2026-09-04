@@ -5,8 +5,10 @@ import Button from "@mui/material/Button";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
 import { authClient, useSession } from "@openmapx/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useState } from "react";
+import { clearPrivateDeviceData } from "@/lib/accountDeletionCleanup";
 
 /**
  * The actionable half of the public deletion page.
@@ -22,6 +24,7 @@ export function DeleteAccountActions() {
   const tAuth = useTranslations("auth");
   const tCommon = useTranslations("common");
   const { data: session, isPending } = useSession();
+  const queryClient = useQueryClient();
   const [confirming, setConfirming] = useState(false);
   const [state, setState] = useState<"idle" | "working" | "done" | "error">("idle");
 
@@ -29,11 +32,16 @@ export function DeleteAccountActions() {
     setState("working");
     try {
       const { error } = await authClient.deleteUser({ callbackURL: "/" });
-      setState(error ? "error" : "done");
+      if (error) {
+        setState("error");
+        return;
+      }
+      await clearPrivateDeviceData({ queryClient });
+      setState("done");
     } catch {
       setState("error");
     }
-  }, []);
+  }, [queryClient]);
 
   if (isPending) return null;
 

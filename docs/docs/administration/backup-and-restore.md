@@ -26,10 +26,11 @@ Every service declares its volumes in its manifest, and each volume carries a
 the volumes flagged `backup: true`. Three of them are:
 
 - **`postgis`** — the PostgreSQL/PostGIS database. This is the important one: user
-  accounts and sessions, the audit log, all admin and integration configuration,
-  and ingested data-source rows (EV charging, parking, and the rest) live here. It
-  is captured with a streamed `pg_dump` piped through gzip while the database
-  stays running.
+  accounts and sessions, saved places, vehicle and parking state, share payloads,
+  Timeline connection metadata, the audit log, all admin and integration
+  configuration, and ingested data-source rows (EV charging, parking, and the
+  rest) live here. It is captured with a streamed `pg_dump` piped through gzip
+  while the database stays running.
 - **`redis`** — the Valkey (Redis-compatible) cache. Holds the transit registry
   snapshot and assorted app caches. Captured as a gzipped `tar` of the volume.
 - **`traefik`** — the reverse proxy's ACME state, i.e. the Let's Encrypt
@@ -87,6 +88,22 @@ the backups with it. The tooling produces the archive; getting a second copy
 somewhere else is up to you. See [Configuration](../install/configuration.md) for
 the full `.env` reference.
 
+:::warning[Backups retain user data independently]
+Ordinary synchronized content is not end-to-end encrypted. A database snapshot
+contains the server-readable user fields and encrypted credentials that existed
+when it was created. Deleting an account or individual row from the live
+database does not rewrite existing snapshots.
+
+Local backups are automatically removed after `BACKUP_RETENTION_DAYS` (30 by
+default), and an expired backup is refused even if its directory was copied back.
+Database restores replay the external pseudonymous erasure journal before they
+finish, so an account deleted after the snapshot is deleted again. Restrict and
+encrypt every local and off-host copy, and apply the same expiry to off-host
+copies—the local scheduler cannot delete objects in storage it does not control. The
+[user-data trust model](../developer/user-data-trust-model.md) describes the
+boundaries in detail.
+:::
+
 ## Creating a backup
 
 From the repo root, the CLI snapshots every backup-enabled volume in one command:
@@ -98,7 +115,9 @@ pnpm openmapx backup create --name weekly      # explicit name
 
 With no `--name` the snapshot is named after the current timestamp. A custom name
 may contain letters, numbers, dots, dashes, and underscores. Creating a snapshot
-whose directory already exists is refused rather than overwriting it.
+whose directory already exists is refused rather than overwriting it. After a
+successful snapshot, the CLI prunes backups older than `BACKUP_RETENTION_DAYS`;
+the operations agent also performs that prune at startup and daily.
 
 The same actions are available without a shell, on the **Backups** page under
 [Services](./services-administration.md) in the admin panel
@@ -133,20 +152,32 @@ pnpm openmapx backup list                       # find the snapshot name
 pnpm openmapx backup restore weekly             # restore everything in it
 ```
 
-Two things happen before any data is touched. First, the platform version in the
-snapshot's manifest is compared with the running version: a **major-version**
+For an OpenMapX database, four checks happen before any data is touched: the
+backup must be within `BACKUP_RETENTION_DAYS`; the erasure journal and its key
+must be readable; the backup must not predate the journal's coverage marker; and
+the platform version in the snapshot's manifest must be compatible. A **major-version**
 mismatch is refused outright, while a minor mismatch prints a warning and
-proceeds. Second, if any targeted service other than the database is currently
-running, the restore refuses to clobber a live volume unless you opt in:
+proceeds. If a targeted volume service is running, or if `app-api` is serving
+the OpenMapX database being restored, the restore refuses unless you opt in:
 
 ```bash
 pnpm openmapx backup restore weekly --stop-running
 ```
 
-With `--stop-running`, the CLI stops each running target, restores it, and brings
-it back up in the original order. The database is handled differently — it stays
-running, because the restore replaces it by dropping and recreating the database
-and replaying the dump through `psql`, which needs a live server.
+With `--stop-running`, the CLI stops each running volume target and brings it
+back after restoration. The database server stays running because replaying the
+dump through `psql` needs it. For an OpenMapX database restore, the CLI also
+stops `app-api` before the database is replaced and restarts it only after the
+erasure journal has been replayed. If restore or replay fails, the API remains
+stopped so it cannot expose resurrected account data.
+
+Immediately after the database dump is loaded, the CLI HMAC-matches restored
+user IDs against `infra/docker/data/erasure/journal.jsonl` and removes every
+match. The journal contains neither raw user IDs nor email addresses. The journal
+and `infra/docker/secrets/erasure-journal-key` are deliberately outside the
+PostgreSQL backup. Disaster-recovery copies must include both. Do not rotate or
+discard the key while a backup that could contain an erased account exists;
+without it, OpenMapX refuses the restore rather than risk resurrecting data.
 
 To restore only part of a snapshot, name the services:
 
@@ -191,8 +222,8 @@ A practical baseline for a self-hosted instance:
 - Take a regular snapshot — daily or weekly, depending on how much data your
   instance ingests — and copy both the snapshot directory and `infra/docker/.env`
   off the host.
-- Prune old snapshots you no longer need with `backup delete <name>`, since they
-  accumulate under `infra/docker/backups/`.
+- Verify the automatic policy with `backup prune --retention-days 30`; use
+  `backup delete <name>` for an exceptional early removal.
 - Keep the rebuildable indexes out of mind for backup purposes; plan to rebuild
   them from source data after a recovery, as covered in
   [Preparing data](../install/preparing-data.md).

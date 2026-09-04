@@ -97,6 +97,15 @@ return the key after connection. Fetched history is transient: it is excluded
 from PostgreSQL timeline storage, Redis/shared caches, the Service Worker,
 persisted query caches, logs, audit details, analytics, and metric labels.
 
+This is server-side processing, not end-to-end encryption. The OpenMapX backend
+must decrypt the API key and can read the requested day while forwarding and
+validating it; the deployment operator can access the connection metadata and
+the running server's processing. Existing database backups may retain the
+connection metadata and encrypted credential after live deletion until the
+operator's backup-retention period expires. See the
+[user-data trust model](../developer/user-data-trust-model.md) for the exact
+boundary.
+
 Disconnect deletes the OpenMapX connection and encrypted credential. Deleting
 the OpenMapX account does the same through database cascade. Neither action
 deletes data held by Dawarich. Use the direct Dawarich account settings and the

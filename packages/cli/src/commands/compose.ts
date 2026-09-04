@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import type { Command } from "commander";
 import { assertCliDeploymentSecret } from "../lib/deployment-secret-policy";
@@ -199,6 +200,9 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   const paths = repoPaths(opts.rootDir);
   assertCliDeploymentSecret();
   ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));
+  const erasureDirectory = join(paths.infraDir, "data", "erasure");
+  ensurePlatformPrivateDirectory(erasureDirectory);
+  initializeErasureJournal(join(erasureDirectory, "journal.jsonl"));
   const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
   const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");
   const opsAgentApiTokenPath = join(paths.infraDir, "secrets", "ops-agent-api-token");
@@ -212,6 +216,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     "secrets",
     "offline-package-principal-key",
   );
+  const erasureJournalKeyPath = join(paths.infraDir, "secrets", "erasure-journal-key");
   // Shared only between data-manager and the private Transitous runner: it
   // signs the single-use capability tokens that authorize one upstream run.
   const transitousRunnerCapabilityPath = join(
@@ -221,6 +226,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   );
   ensurePlatformSecretFile(redisPasswordPath);
   ensurePlatformSecretFile(offlinePackagePrincipalKeyPath);
+  ensurePlatformSecretFile(erasureJournalKeyPath);
   ensurePlatformSecretFile(transitousRunnerCapabilityPath);
   const opsAgentApiToken = ensurePlatformSecretFile(opsAgentApiTokenPath);
   const opsAgentDataManagerToken = ensurePlatformSecretFile(opsAgentDataManagerTokenPath);

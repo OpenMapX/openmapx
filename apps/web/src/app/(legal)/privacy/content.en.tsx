@@ -60,7 +60,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: September 1, 2026
+        Last updated: September 4, 2026
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -154,7 +154,9 @@ export default function PrivacyContent({
         <Typography sx={{ mt: 1 }}>
           This data is processed to ensure the technical operation and security of the service. The
           legal basis is Art. 6(1)(f) GDPR (legitimate interest in providing a secure and functional
-          service). Server logs are automatically deleted after {serverLogRetentionDays} days.
+          service). Persisted OpenMapX application logs are automatically deleted after{" "}
+          {serverLogRetentionDays} days. Reverse-proxy, container, and hosting logs follow the
+          deployment operator&apos;s separately configured infrastructure policy.
         </Typography>
         {hostingProvider && (
           <Typography sx={{ mt: 1 }}>
@@ -282,7 +284,9 @@ export default function PrivacyContent({
           <li>
             <Typography>
               <strong>Passkeys (WebAuthn)</strong> — if you register a passkey, a public-key
-              credential is stored on our server; the private key never leaves your device
+              credential is stored on our server; the private key never leaves your device. A
+              passkey authenticates you but does not encrypt your saved places, routes, vehicle,
+              parking, or Personal Timeline data
             </Typography>
           </li>
           <li>
@@ -908,8 +912,10 @@ export default function PrivacyContent({
           To improve performance and reduce load on third-party APIs, our server caches API
           responses in Redis (an in-memory data store). Cached data typically includes map search
           results, transit schedules, routing responses, and catalog data from external registries.
-          Cache entries expire automatically (usually within minutes to 48 hours). The cache does
-          not store personal data such as IP addresses or account information.
+          Cache entries expire automatically (usually within minutes to 48 hours). These entries are
+          not associated with your account and do not contain your IP address or authentication
+          state. Search or routing inputs and results may nevertheless contain coordinates or place
+          names that reveal a geographic area of interest.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           Personal Timeline responses are specifically excluded from Redis, Service Worker,
@@ -918,10 +924,12 @@ export default function PrivacyContent({
           credential, hostname or request-date data.
         </Typography>
         <Typography sx={{ mt: 1 }}>
-          We also operate a PostgreSQL database for user accounts, saved places, and cached place
-          knowledge data (e.g., Wikidata facts, Wikipedia summaries). If GTFS transit feeds are
-          imported, schedule data (stop names, routes, departure times) is stored in separate
-          database schemas. None of this data constitutes personal data of end users.
+          We also operate a PostgreSQL database for user accounts, saved places, vehicles and
+          parking positions, share payloads, and cached place knowledge data (e.g., Wikidata facts,
+          Wikipedia summaries). The account and synchronized content is personal data and is
+          server-readable. If GTFS transit feeds are imported, schedule data (stop names, routes,
+          departure times) is stored in separate database schemas; cached public place knowledge and
+          transit schedules are not account data.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           If you use the OpenStreetMap contribution feature, a short-lived submission lock and
@@ -1110,8 +1118,9 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
-              <strong>Server logs</strong> — automatically deleted after {serverLogRetentionDays}{" "}
-              days.
+              <strong>Persisted application logs</strong> — automatically deleted after{" "}
+              {serverLogRetentionDays} days. Container/runtime logs follow the deployment
+              operator&apos;s infrastructure policy.
             </Typography>
           </li>
           <li>
@@ -1121,8 +1130,18 @@ export default function PrivacyContent({
           </li>
           <li>
             <Typography>
-              <strong>Local storage and Service Worker cache</strong> — remains on your device until
-              you clear your browser data or the cache entries expire automatically.
+              <strong>Backups</strong> — account and synchronized content that existed when a
+              database backup was created may remain until the configured backup retention period
+              expires (30 days by default). Deleting live data does not rewrite an archive; a
+              pseudonymous erasure journal is replayed during restore so a deleted account is not
+              brought back.
+            </Typography>
+          </li>
+          <li>
+            <Typography>
+              <strong>Local storage and Service Worker cache</strong> — this browser&apos;s OpenMapX
+              data is cleared after a successful account deletion. Other devices retain their local
+              data until their browser/app data is cleared or cache entries expire.
             </Typography>
           </li>
         </ul>
@@ -1135,13 +1154,23 @@ export default function PrivacyContent({
           method of transmission over the Internet is 100% secure.
         </Typography>
         <Typography sx={{ mt: 1 }}>
+          <strong>Ordinary synchronized content is not end-to-end encrypted.</strong> Saved places,
+          shared route or list snapshots, vehicle profiles, parking positions, and Personal Timeline
+          connection metadata must be available to the OpenMapX server for synchronization, sharing,
+          or processing. They can therefore be accessed by the operator of this deployment and by a
+          compromised application server. Encryption at rest for selected credentials and TLS in
+          transit do not change that boundary.
+        </Typography>
+        <Typography sx={{ mt: 1 }}>
           <strong>Trust model for the Mangrove keypair (Section&nbsp;5).</strong> In passphrase mode
           and passphrase + passkey mode, the private signing key never leaves your browser in
           cleartext. Even a full compromise of our database would only reveal age-encrypted
           ciphertext, which cannot be decrypted without your passphrase or a registered passkey. In
           contrast, the &ldquo;unencrypted&rdquo; opt-in mode stores the private key in cleartext;
           anyone with database access could therefore sign reviews in your name. We recommend
-          choosing one of the encrypted modes and never sharing your passphrase.
+          choosing one of the encrypted modes and never sharing your passphrase. These modes protect
+          the stored key against a database-only disclosure; they cannot prevent a compromised web
+          application from targeting the key or review content after your browser unlocks it.
         </Typography>
         <Typography sx={{ mt: 1 }}>
           <strong>OAuth provider tokens.</strong> Tokens issued by OpenStreetMap and Mapillary are

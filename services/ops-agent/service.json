@@ -22,7 +22,8 @@
       "DOCKER_CONFIG": "/home/node/.docker",
       "OPS_AGENT_API_TOKEN_FILE": "/run/secrets/ops-agent-api-token",
       "OPS_AGENT_DATA_MANAGER_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
-      "OPS_TRUSTED_CONFIG_DIR": "/var/lib/openmapx/trusted-config"
+      "OPS_TRUSTED_CONFIG_DIR": "/var/lib/openmapx/trusted-config",
+      "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}"
     },
     "capDrop": ["ALL"],
     "memory": "256m",

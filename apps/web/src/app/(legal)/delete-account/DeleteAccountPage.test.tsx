@@ -1,4 +1,5 @@
 import { en } from "@openmapx/i18n";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -37,12 +38,16 @@ beforeEach(() => {
 
 afterEach(cleanup);
 
-const renderActions = () =>
-  render(
-    <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-      <DeleteAccountActions />
-    </NextIntlClientProvider>,
+const renderActions = () => {
+  const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <DeleteAccountActions />
+      </NextIntlClientProvider>
+    </QueryClientProvider>,
   );
+};
 
 describe("DeleteAccountActions", () => {
   it("asks for confirmation before deleting anything", () => {
@@ -62,7 +67,7 @@ describe("DeleteAccountActions", () => {
     // Not only further up the page, where it can be scrolled past.
     const warning = view.getByText(en.account.deleteAccountWarning).textContent ?? "";
     expect(warning).toContain("Mangrove");
-    expect(warning).toContain("security records");
+    expect(warning).toContain("Dawarich");
   });
 
   it("deletes once confirmed", async () => {
@@ -101,9 +106,11 @@ describe("DeleteAccountActions", () => {
 describe("DeleteAccountPage", () => {
   it("names what is deleted and what is not", async () => {
     const view = render(
-      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-        {await DeleteAccountPage()}
-      </NextIntlClientProvider>,
+      <QueryClientProvider client={new QueryClient()}>
+        <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+          {await DeleteAccountPage()}
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
     );
 
     expect(view.getByText(en.legal.deleteAccountWhatBody)).toBeInTheDocument();
@@ -113,9 +120,11 @@ describe("DeleteAccountPage", () => {
 
   it("says how long it takes", async () => {
     const view = render(
-      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-        {await DeleteAccountPage()}
-      </NextIntlClientProvider>,
+      <QueryClientProvider client={new QueryClient()}>
+        <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+          {await DeleteAccountPage()}
+        </NextIntlClientProvider>
+      </QueryClientProvider>,
     );
 
     expect(view.getByText(en.legal.deleteAccountTimingBody)).toBeInTheDocument();

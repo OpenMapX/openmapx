@@ -78,3 +78,12 @@ export async function idbDelete(key: string): Promise<void> {
     // best-effort
   }
 }
+
+export async function idbClear(): Promise<void> {
+  if (!idbSupported()) return;
+  try {
+    await withStore("readwrite", (store) => store.clear());
+  } catch {
+    // Best-effort cleanup after the server has already deleted the account.
+  }
+}

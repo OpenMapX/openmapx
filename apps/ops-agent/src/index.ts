@@ -10,6 +10,7 @@ import {
   inspectDataTypeAuthority,
   inspectReleaseAuthority,
   loadConfiguredResourceAuthority,
+  pruneBackupRetention,
 } from "./administrative-runtime";
 import { loadOpsAgentConfig } from "./config";
 import { createDockerRuntime } from "./docker-runtime";
@@ -91,6 +92,16 @@ async function main(): Promise<void> {
           ...(service.manifest.buildCommand ? { buildCommand: service.manifest.buildCommand } : {}),
         })),
     });
+    const retentionDays = Number(process.env.BACKUP_RETENTION_DAYS?.trim() || "30");
+    if (!Number.isSafeInteger(retentionDays) || retentionDays <= 0 || retentionDays > 36_500) {
+      throw new Error("Invalid BACKUP_RETENTION_DAYS");
+    }
+    const runBackupRetention = () =>
+      void pruneBackupRetention(config.rootDir, retentionDays, administrativeCli).catch(() => {
+        process.stderr.write("Scheduled backup retention failed\n");
+      });
+    runBackupRetention();
+    setInterval(runBackupRetention, 24 * 60 * 60 * 1_000);
     const policyAuthority = async () => {
       const authority = await authorityLoader();
       const resources = loadConfiguredResourceAuthority();

@@ -6,6 +6,8 @@ vi.mock("../../db", () => ({ db: dbMock.db }));
 vi.mock("../../db/schema", () => ({
   adminAuditLog: { id: "auditId", createdAt: "auditCreatedAt" },
   adminJob: { id: "jobId", finishedAt: "jobFinishedAt" },
+  appLog: { id: "appLogId", createdAt: "appLogCreatedAt" },
+  verification: { id: "verificationId", expiresAt: "verificationExpiresAt" },
 }));
 vi.mock("drizzle-orm", async (importOriginal) => {
   const actual = await importOriginal<typeof import("drizzle-orm")>();
@@ -13,7 +15,13 @@ vi.mock("drizzle-orm", async (importOriginal) => {
 });
 
 const { lt } = await import("drizzle-orm");
-const { pruneAuditLog, pruneCompletedJobs } = await import("../activity-retention.js");
+const {
+  parseRequiredRetentionDays,
+  pruneAppLogs,
+  pruneAuditLog,
+  pruneCompletedJobs,
+  pruneExpiredVerifications,
+} = await import("../activity-retention.js");
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 const NOW = new Date("2026-07-03T00:00:00.000Z");
@@ -42,6 +50,11 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
       fn: pruneCompletedJobs,
       happyDays: 7,
     },
+    {
+      name: "pruneAppLogs",
+      fn: pruneAppLogs,
+      happyDays: 14,
+    },
   ])("$name", ({ fn, happyDays }) => {
     it.each([
       ["0", 0],
@@ -63,5 +76,26 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
       const expectedCutoff = new Date(NOW.getTime() - happyDays * MS_PER_DAY);
       expect(lt).toHaveBeenCalledWith(expect.anything(), expectedCutoff);
     });
+  });
+
+  it("deletes verification challenges that have expired", async () => {
+    dbMock.queueDelete([{ id: "v1" }]);
+    const result = await pruneExpiredVerifications();
+    expect(result).toBe(1);
+    expect(lt).toHaveBeenCalledWith(expect.anything(), NOW);
+  });
+});
+
+describe("parseRequiredRetentionDays", () => {
+  it("uses the documented fallback when the setting is absent", () => {
+    expect(parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30, {})).toBe(30);
+  });
+
+  it.each(["0", "-1", "1.5", "NaN", "36501"])("rejects unsafe value %s", (value) => {
+    expect(() =>
+      parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30, {
+        BACKUP_RETENTION_DAYS: value,
+      }),
+    ).toThrow(/BACKUP_RETENTION_DAYS/);
   });
 });

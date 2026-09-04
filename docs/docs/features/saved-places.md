@@ -55,6 +55,20 @@ Export is server-side and dependency-free — it reads your own saved places and
 runs the converters in the API, so it works on any deployment that has the user
 database, with no extra service or credentials.
 
+## How saved data is protected
+
+Signed-in lists, labels, names, coordinates, addresses, notes, and place metadata
+are stored as server-readable rows in this deployment's PostgreSQL database.
+TLS protects them in transit and every API request is scoped to the signed-in
+account, but the content is **not end-to-end encrypted**: the API and an operator
+with database access can read it. Database backups retain the rows that existed
+when each backup was made, until the operator's backup-retention period expires.
+
+This server-readable design is also what makes server-side export, search, and
+live sharing possible. The [user-data trust model](../developer/user-data-trust-model.md)
+explains the accepted boundary and the review gates for any future client
+encryption.
+
 ## Sharing a list
 
 Any list can be published through a **share link** — a short URL
@@ -79,7 +93,9 @@ A few quotas and security properties apply:
   stores the raw token.
 - **Privacy**: Share pages are excluded from search-engine indexing (`noindex, nofollow`)
   and never expose your username, email, or account ID — only the list name, emoji icon,
-  and place entries.
+  and place entries. The server must still read those entries to render a live share,
+  and stores snapshot content as server-readable JSON; hashing the bearer token does
+  not encrypt the shared payload.
 
 Manage every link you've created under **Account settings → Shared links**.
 

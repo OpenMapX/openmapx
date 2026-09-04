@@ -285,7 +285,7 @@ const SETTING_DEFS: SettingDef[] = [
     key: "legalServerLogRetentionDays",
     label: "Server-Log Retention (days)",
     description:
-      "How long server access logs are kept before automatic deletion. Stated verbatim in the privacy policy. Must be a positive whole number; defaults to 30.",
+      "How long persisted API warning/error logs are kept before automatic deletion. Infrastructure logs use the operator's separate policy. Must be a positive whole number; defaults to 30.",
     type: "number",
     env: "LEGAL_SERVER_LOG_RETENTION_DAYS",
     default: 30,

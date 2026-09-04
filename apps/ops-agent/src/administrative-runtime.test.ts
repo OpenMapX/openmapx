@@ -18,6 +18,7 @@ import {
   inspectRegionAuthority,
   inspectReleaseAuthority,
   loadConfiguredResourceAuthority,
+  pruneBackupRetention,
 } from "./administrative-runtime";
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 
@@ -49,6 +50,15 @@ afterEach(async () => {
 });
 
 describe("administrative backup runtime", () => {
+  it("runs scheduled retention through the fixed CLI under validated bounds", async () => {
+    const calls: string[][] = [];
+    await pruneBackupRetention(temporaryRoot(), 30, async (args) => {
+      calls.push([...args]);
+    });
+    expect(calls).toEqual([["backup", "prune", "--retention-days", "30"]]);
+    await expect(pruneBackupRetention(temporaryRoot(), 0, vi.fn())).rejects.toThrow(/retention/i);
+  });
+
   it("maps typed backup effects to exact fixed CLI argv without a path or general runner", async () => {
     const rootDir = temporaryRoot();
     // Restore revalidates the exact manifest bytes before dispatch, so the

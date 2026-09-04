@@ -15,9 +15,9 @@ What makes reviews here different from a typical maps app is where the data come
 from and who owns it. OpenMapX does not run a review database. Ratings and
 written reviews are read from [Mangrove](https://mangrove.reviews/), an open,
 federated reviews network, and when you write one it is signed in your browser
-with a key that only you hold. Your reviews are not locked to OpenMapX — any
-application that speaks the same open standard can read them, and you can take
-your identity with you.
+with a private key protected according to the mode you choose. Your reviews are
+not locked to OpenMapX — any application that speaks the same open standard can
+read them, and you can take your identity with you.
 
 ## What you get
 
@@ -81,13 +81,17 @@ upshot is that the Reviews tab tries hard to show reviews that are really about
 Mangrove has no passwords and no accounts in the usual sense. A review is a small
 record **cryptographically signed** with a keypair, and your **public key is your
 identity** — it's what ties all of your reviews together and lets the app
-recognize "your" review on a place. The **private key never leaves your browser**;
-it is what signs each review, and it is the one piece you must not lose.
+recognize "your" review on a place. Signing happens in the browser. In either
+encrypted mode the **private key never leaves your browser in plaintext**; in the
+explicit unencrypted mode it is stored on the server and is readable by the
+operator. The private key is the one piece you must not lose or expose.
 
 When you write, edit, or delete a review, OpenMapX assembles the review, signs it
 locally with your private key, and sends the finished signed record to Mangrove
-through your API server. The server only ever forwards an already-signed record —
-it cannot author a review on your behalf.
+through your API server. In normal operation the server forwards an already-signed
+record. That does not protect the signing key from the operator in unencrypted
+mode, or from an application server compromised while an encrypted key is
+unlocked in the web client.
 
 #### Setting up your signing key
 
@@ -96,8 +100,9 @@ a short setup wizard creates your signing key and asks how to protect it. There
 are three options:
 
 - **Passphrase (recommended)** — your private key is encrypted with a passphrase
-  before it leaves the browser. The server stores only the encrypted blob and can
-  never read your key; you re-enter the passphrase to unlock it for signing.
+  before it leaves the browser. The server stores only the encrypted blob and
+  does not receive plaintext in the normal protocol; you re-enter the passphrase
+  to unlock it for signing.
 - **Passphrase + passkey** — the same encryption, plus the option to unlock with
   a device passkey (WebAuthn / biometrics) instead of typing the passphrase.
 - **Unencrypted** — the key is stored without a passphrase. Convenient, but the
@@ -107,6 +112,15 @@ are three options:
 In the encrypted modes the unlocked key is held in memory only for the session
 and auto-locks after a period of inactivity, so you re-authenticate before
 signing again.
+
+:::note[What the encrypted modes protect]
+The encrypted modes keep a database-only disclosure from yielding the private
+key. They are not protection from an actively compromised web application: code
+served from the OpenMapX origin can target the key or review content after the
+browser unlocks it. Passkeys here are an optional way to unlock this specific
+key; registering a passkey does not encrypt other OpenMapX content. See the
+[user-data trust model](../developer/user-data-trust-model.md).
+:::
 
 :::caution[Don't lose your key]
 Your private key *is* your reviewing identity. If you lose it — and have no

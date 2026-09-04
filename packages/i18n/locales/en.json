@@ -1755,7 +1755,7 @@
     "failedRemovePasskey": "Failed to remove passkey",
     "dangerZone": "Danger zone",
     "deleteAccount": "Delete account",
-    "deleteAccountWarning": "This cannot be undone. Your account, saved places, settings and review signing key are deleted immediately. Reviews you published to the public Mangrove commons are not ours to retract, and limited security records are kept for a period and then unlinked from you.",
+    "deleteAccountWarning": "This cannot be undone. OpenMapX deletes your account, sign-in data, saved places, shares, vehicles, parking state, Timeline connection, settings and review signing key. Delete any Mangrove reviews first while you still control that key. A connected Dawarich account and its location history must be deleted separately.",
     "confirmDeletion": "Confirm deletion",
     "failedDeleteAccount": "Failed to delete account"
   },
@@ -1916,11 +1916,11 @@
     "deleteAccountSignedOut": "Sign in below, then choose Delete account. You will be asked to confirm, because this cannot be undone.",
     "deleteAccountInApp": "You can also do this in the app: open Settings, then Account, then Delete account.",
     "deleteAccountWhatHeading": "What is deleted",
-    "deleteAccountWhatBody": "Your account and sign-in details, your saved places and labels, your app settings, and your review signing key. Any navigation session on your device is deleted when you end it or when the app is removed; it was never on our servers.",
+    "deleteAccountWhatBody": "Your account and sign-in details; saved places, labels and shares; vehicles and parking state; your Timeline connection; app settings; and your review signing key. After the server confirms deletion, this browser also clears its OpenMapX query data, offline packages, caches and local storage.",
     "deleteAccountKeptHeading": "What is not deleted",
-    "deleteAccountKeptBody": "Reviews you chose to publish are held by Mangrove.reviews, a public review commons, and are not ours to retract. Security and audit records required to keep the service safe and to meet legal obligations are retained for a limited period and are not linked to your account afterwards.",
+    "deleteAccountKeptBody": "Public reviews remain at Mangrove.reviews unless you delete them there before deleting your signing key. A connected Dawarich account and its location history remain in Dawarich and require separate deletion. Minimized security and audit events may be retained for the operator's stated period without your account identifier.",
     "deleteAccountTimingHeading": "How long it takes",
-    "deleteAccountTimingBody": "Deletion happens immediately. Backups made before deletion are rotated out within 30 days.",
+    "deleteAccountTimingBody": "Live OpenMapX data is deleted immediately. Backups expire under the operator's configured policy (30 days by default), and the pseudonymous erasure journal prevents a restore from bringing the account back.",
     "deleteAccountButton": "Delete account"
   },
   "navigationSettings": {

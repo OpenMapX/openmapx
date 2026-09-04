@@ -5,6 +5,19 @@ at runtime. Files in this directory are gitignored by default (see `.gitignore`)
 
 ## Files
 
+### `erasure-journal-key` (generated, API and restore CLI)
+
+Compose rendering creates this canonical 32-byte base64url HMAC key and reuses
+it on later renders. The API uses it to pseudonymise account IDs in
+`infra/docker/data/erasure/journal.jsonl`; database restore uses it to match and
+re-delete users without storing a raw identifier in the journal.
+
+Treat the key and journal as one disaster-recovery set and copy both alongside
+off-host database backups. They are deliberately not inside the database dump.
+Do not rotate, edit, or delete this key while a retained backup exists: old
+journal digests cannot be matched with a new key, and restore therefore fails
+closed. The key is not a substitute for encrypting the backup itself.
+
 ### `offline-package-principal-key` (generated, API only)
 
 Every CLI compose render creates this HMAC key when it is absent. It is exactly

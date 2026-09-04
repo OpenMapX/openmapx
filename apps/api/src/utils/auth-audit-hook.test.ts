@@ -100,4 +100,13 @@ describe("handleAdminAuditEvent", () => {
       }),
     );
   });
+
+  it("does not reintroduce the deleted user's identifier into the audit log", async () => {
+    await handleAdminAuditEvent(
+      makeCtx({ path: "/admin/remove-user", body: { userId: "deleted-user" } }),
+    );
+    expect(write).toHaveBeenCalledWith(
+      expect.objectContaining({ action: "user.delete", targetId: null }),
+    );
+  });
 });

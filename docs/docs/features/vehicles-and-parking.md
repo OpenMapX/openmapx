@@ -63,7 +63,10 @@ out of application logs, and parked positions are never included in share links 
 in a saved-list export.
 
 They are **not** end-to-end encrypted: an operator with database access can read
-them. Whether and how OpenMapX adopts client-side encryption for user data is
-being decided separately, in the user-data trust model
-([issue #312](https://github.com/OpenMapX/openmapx/issues/312)). Do not treat a
-parked position as secret from the instance operator.
+them. OpenMapX has adopted a staged confidentiality architecture, but any future
+client encryption remains gated on device, recovery, sharing, migration, and
+independent security review. See the
+[user-data trust model](../developer/user-data-trust-model.md). Do not treat a
+parked position as secret from the instance operator. Existing database backups
+may retain deleted vehicle or parking rows until the backup-retention period
+expires.

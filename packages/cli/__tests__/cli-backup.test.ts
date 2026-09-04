@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
+import { appendErasureRequest, initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { execa } from "execa";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
@@ -17,9 +18,13 @@ import {
   isValidBackupName,
   listBackups,
   preflightRestore,
+  pruneExpiredBackups,
   readBackupManifest,
+  replayErasureRequests,
+  requiredDependentStops,
   resolveBackupDir,
   restoreBackup,
+  validateRestoreDataProtection,
 } from "../src/commands/backup";
 
 vi.mock("execa", () => ({ execa: vi.fn() }));
@@ -69,11 +74,21 @@ const baseService = {
 
 beforeEach(() => {
   delete process.env.OPENMAPX_ENABLED_SERVICES;
+  process.env.BACKUP_RETENTION_DAYS = "3650";
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-backup-"));
   setupRepo();
+  const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
+  mkdirSync(join(tmp, "infra", "docker", "data", "erasure"), { recursive: true });
+  initializeErasureJournal(journalPath, new Date("2000-01-01T00:00:00.000Z"));
+  mkdirSync(join(tmp, "infra", "docker", "secrets"), { recursive: true });
+  writeFileSync(
+    join(tmp, "infra", "docker", "secrets", "erasure-journal-key"),
+    Buffer.from("0123456789abcdef0123456789abcdef").toString("base64url"),
+  );
 });
 
 afterEach(() => {
+  delete process.env.BACKUP_RETENTION_DAYS;
   vi.mocked(execa).mockReset();
   rmSync(tmp, { recursive: true, force: true });
 });
@@ -141,6 +156,52 @@ describe("defaultBackupName", () => {
     const name = defaultBackupName(new Date("2026-04-19T15:23:00.000Z"));
     expect(name).toBe("2026-04-19T15-23-00Z");
     expect(isValidBackupName(name)).toBe(true);
+  });
+});
+
+describe("backup retention", () => {
+  it("deletes only valid backups strictly older than the retention boundary", () => {
+    writeBackup("old", { name: "old", createdAt: "2026-07-01T00:00:00.000Z", services: [] });
+    writeBackup("boundary", {
+      name: "boundary",
+      createdAt: "2026-08-01T00:00:00.000Z",
+      services: [],
+    });
+    writeBackup("fresh", { name: "fresh", createdAt: "2026-08-02T00:00:00.000Z", services: [] });
+
+    const result = pruneExpiredBackups({
+      rootDir: tmp,
+      retentionDays: 30,
+      now: new Date("2026-08-31T00:00:00.000Z"),
+    });
+
+    expect(result.deleted).toEqual(["old"]);
+    expect(existsSync(join(tmp, "infra", "docker", "backups", "old"))).toBe(false);
+    expect(existsSync(join(tmp, "infra", "docker", "backups", "boundary"))).toBe(true);
+    expect(existsSync(join(tmp, "infra", "docker", "backups", "fresh"))).toBe(true);
+  });
+
+  it("rejects invalid retention values without deleting anything", () => {
+    writeBackup("old", { name: "old", createdAt: "2026-01-01T00:00:00.000Z", services: [] });
+    expect(() => pruneExpiredBackups({ rootDir: tmp, retentionDays: 0 })).toThrow(/retention/i);
+    expect(existsSync(join(tmp, "infra", "docker", "backups", "old"))).toBe(true);
+  });
+
+  it("expires an old incomplete backup directory that has no readable manifest", () => {
+    const incomplete = join(tmp, "infra", "docker", "backups", "incomplete");
+    mkdirSync(incomplete);
+    writeFileSync(join(incomplete, "partial.sql.gz"), "sensitive partial dump");
+    const old = new Date("2026-07-01T00:00:00.000Z");
+    utimesSync(incomplete, old, old);
+
+    const result = pruneExpiredBackups({
+      rootDir: tmp,
+      retentionDays: 30,
+      now: new Date("2026-08-31T00:00:00.000Z"),
+    });
+
+    expect(result.deleted).toContain("incomplete");
+    expect(existsSync(incomplete)).toBe(false);
   });
 });
 
@@ -812,6 +873,60 @@ describe("backup volume modes", () => {
     expect(start).toBeGreaterThan(tar);
     expect(calls.some(([, args]) => args.includes("-U timeline_2026$archive"))).toBe(true);
   });
+
+  it("keeps the API offline from account-database restore through erasure replay", async () => {
+    const dir = writeBackup("protected-restore", {
+      name: "protected-restore",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-pgdata",
+              mode: "pg_dump",
+              file: "postgis__openmapx-pgdata.sql.gz",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    });
+    writeFileSync(join(dir, "postgis__openmapx-pgdata.sql.gz"), "dump");
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "gunzip") {
+        return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
+          stdout: Readable.from(["dump"]),
+        });
+      }
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stderr: "",
+        });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+
+    await restoreBackup({ rootDir: tmp, name: "protected-restore", stopRunning: true });
+
+    const calls = mockedCommandCalls();
+    const stopApi = calls.findIndex(([, args]) => args.includes(" stop app-api"));
+    const restore = calls.findIndex(
+      ([, args]) => args.includes(" psql ") && !args.includes(" -At "),
+    );
+    const replay = calls.findIndex(([, args]) => args.includes(" psql ") && args.includes(" -At "));
+    const startApi = calls.findIndex(([, args]) => args.includes(" start app-api"));
+
+    expect(stopApi).toBeGreaterThanOrEqual(0);
+    expect(restore).toBeGreaterThan(stopApi);
+    expect(replay).toBeGreaterThan(restore);
+    expect(startApi).toBeGreaterThan(replay);
+  });
 });
 
 // ─── List + format ────────────────────────────────────────────────────────
@@ -942,6 +1057,106 @@ describe("preflightRestore", () => {
   it("rejects when manifest.json is missing", () => {
     mkdirSync(join(tmp, "infra", "docker", "backups", "empty"), { recursive: true });
     expect(() => preflightRestore({ rootDir: tmp, name: "empty" })).toThrow(/not found/);
+  });
+});
+
+describe("restore data-protection preflight", () => {
+  function protectedManifest(createdAt: string): BackupManifest {
+    return {
+      name: "protected",
+      createdAt,
+      openmapxVersion: "1.0.0",
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "db",
+              mode: "pg_dump",
+              file: "db.sql.gz",
+              sizeBytes: 1,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    };
+  }
+
+  it("accepts an in-policy OpenMapX backup covered by the external journal", () => {
+    const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
+    mkdirSync(join(journalPath, ".."), { recursive: true });
+    rmSync(journalPath);
+    initializeErasureJournal(journalPath, new Date("2026-08-01T00:00:00.000Z"));
+    expect(() =>
+      validateRestoreDataProtection(protectedManifest("2026-08-02T00:00:00.000Z"), {
+        rootDir: tmp,
+        retentionDays: 30,
+        now: new Date("2026-08-31T00:00:00.000Z"),
+      }),
+    ).not.toThrow();
+  });
+
+  it("rejects expired backups and backups predating journal coverage", () => {
+    const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
+    mkdirSync(join(journalPath, ".."), { recursive: true });
+    rmSync(journalPath);
+    initializeErasureJournal(journalPath, new Date("2026-08-01T00:00:00.000Z"));
+    expect(() =>
+      validateRestoreDataProtection(protectedManifest("2026-07-01T00:00:00.000Z"), {
+        rootDir: tmp,
+        retentionDays: 30,
+        now: new Date("2026-08-31T00:00:00.000Z"),
+      }),
+    ).toThrow(/retention/i);
+    expect(() =>
+      validateRestoreDataProtection(protectedManifest("2026-07-31T23:59:59.000Z"), {
+        rootDir: tmp,
+        retentionDays: 90,
+        now: new Date("2026-08-31T00:00:00.000Z"),
+      }),
+    ).toThrow(/coverage/i);
+  });
+
+  it("requires the API to be stopped while a restored account database is replayed", () => {
+    expect(
+      requiredDependentStops(
+        protectedManifest("2026-08-02T00:00:00.000Z"),
+        new Set(["app-api", "postgis"]),
+      ),
+    ).toEqual(["app-api"]);
+    expect(
+      requiredDependentStops(
+        { ...protectedManifest("2026-08-02T00:00:00.000Z"), services: [] },
+        new Set(["app-api"]),
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("restore erasure replay", () => {
+  it("deletes only restored users named by pseudonymous journal requests", async () => {
+    const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
+    const key = Buffer.from("0123456789abcdef0123456789abcdef");
+    await appendErasureRequest(journalPath, key, "deleted-user");
+    const erased: string[] = [];
+
+    const count = await replayErasureRequests({
+      journalPath,
+      key,
+      listUsers: async () => [
+        { id: "active-user", email: "active@example.test" },
+        { id: "deleted-user", email: "deleted@example.test" },
+      ],
+      eraseUser: async (user) => {
+        erased.push(user.id);
+      },
+    });
+
+    expect(count).toBe(1);
+    expect(erased).toEqual(["deleted-user"]);
   });
 });
 

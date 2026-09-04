@@ -134,6 +134,13 @@
       "when": 1788288536405,
       "tag": "0018_personal_vehicles_and_parking",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1788519779834,
+      "tag": "0019_user_erasure_retention",
+      "breakpoints": true
     }
   ]
 }

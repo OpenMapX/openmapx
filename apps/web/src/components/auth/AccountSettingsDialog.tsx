@@ -31,6 +31,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import type { User } from "@openmapx/core";
 import { authClient, getInitials, oauthProviders, proxyImageUrl } from "@openmapx/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import QRCode from "qrcode";
 import { useEffect, useRef, useState } from "react";
@@ -39,6 +40,7 @@ import {
   mobileFullScreenDialogPaperSx,
   useFullScreenOnMobile,
 } from "@/integration-api/runtime/useFullScreenOnMobile";
+import { clearPrivateDeviceData } from "@/lib/accountDeletionCleanup";
 import type { AccountSettingsSection } from "@/stores/accountSettingsStore";
 import { MangroveAccountSection } from "./MangroveAccountSection";
 import { SharedLinksSection } from "./SharedLinksSection";
@@ -61,6 +63,7 @@ export function AccountSettingsDialog({
   const tc = useTranslations("common");
   const fmt = useDateTimeFormat();
   const fullScreen = useFullScreenOnMobile();
+  const queryClient = useQueryClient();
   const avatarSrc = user.image ? proxyImageUrl(user.image) : undefined;
   const [name, setName] = useState(user.name);
   const [saving, setSaving] = useState(false);
@@ -436,6 +439,7 @@ export function AccountSettingsDialog({
         setMessage({ type: "error", text: t("failedDeleteAccount") });
         return;
       }
+      await clearPrivateDeviceData({ queryClient });
       onClose();
     } catch {
       setMessage({ type: "error", text: t("failedDeleteAccount") });

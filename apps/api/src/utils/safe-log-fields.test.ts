@@ -121,6 +121,8 @@ describe("sanitizeLogMetadata", () => {
         apiKey: "fixture-api-key",
         credentials: "fixture-credential",
         sessionId: "fixture-session",
+        userId: "fixture-user",
+        email: "person@example.test",
         sourceURL: PRIVATE_URL,
       },
     });
@@ -135,6 +137,8 @@ describe("sanitizeLogMetadata", () => {
       apiKey: "[redacted]",
       credentials: "[redacted]",
       sessionId: "[redacted]",
+      userId: "[redacted]",
+      email: "[redacted]",
       sourceURL: "[redacted]",
     });
     expect(Object.getPrototypeOf(sanitized)).toBeNull();
@@ -294,6 +298,12 @@ describe("sanitizeLogMetadata", () => {
 });
 
 describe("log string and Error sanitization", () => {
+  it("redacts email addresses from free-form log messages", () => {
+    expect(sanitizeLogString("delivery failed for person@example.test")).toBe(
+      "delivery failed for [redacted-email]",
+    );
+  });
+
   it("removes ordinary URL and bearer patterns and caps the result", () => {
     const sanitized = sanitizeLogString(
       `fetch ${PRIVATE_URL} failed with Bearer fixture-bearer-token ${"z".repeat(3_000)}`,

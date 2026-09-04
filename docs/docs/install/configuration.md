@@ -393,6 +393,7 @@ Lower-level toggles, retention, and legal-page metadata. All optional.
 | `ISOCHRONE_PROVIDER`              | Isochrone provider. Use `otp` to route isochrones through OpenTripPlanner instead of Valhalla.                   | Optional. Commented. Default `valhalla` |
 | `AUDIT_LOG_RETENTION_DAYS`        | Days to keep admin audit-log entries before the daily prune.                                                     | Optional. Commented `90`  |
 | `ADMIN_JOB_RETENTION_DAYS`        | Days to keep finished admin jobs (in-flight jobs are never pruned).                                              | Optional. Commented `30`  |
+| `BACKUP_RETENTION_DAYS`           | Days to keep local backups. Expired backups are pruned and refused by restore; apply the same lifecycle to off-host copies. | Optional. Default `30` |
 | `GITHUB_TOKEN`                    | GitHub API token — raises the Transitous catalog fetch rate limit from 60 to 5000 req/h. Needed only on multi-tenant hosts. | Optional. Commented       |
 | `EXTENSION_CATALOG_URL`           | Default catalog URL for the **Extensions** store — the curated (verified-tier) list shown under `/admin/extensions`. | Optional. Commented `https://raw.githubusercontent.com/openmapx/community-extensions/main/catalog.json` |
 | `POI_INGEST_ALERT_GH_TOKEN` / `POI_INGEST_ALERT_GH_REPO` | When set, POI ingestion pipeline failures open GitHub issues in this repo.             | Optional. Default unset   |
@@ -414,7 +415,7 @@ Lower-level toggles, retention, and legal-page metadata. All optional.
 | `LEGAL_SUPERVISORY_AUTHORITY_URL` | URL of the supervisory authority above.                                                                          | Optional. Commented       |
 | `LEGAL_HOSTING_PROVIDER`          | Hosting provider (name + address) disclosed on `/privacy`. Leave blank to omit.                                  | Optional. Commented       |
 | `LEGAL_HOSTING_LOCATIONS`         | Human-readable hosting locations shown on `/privacy`, e.g. `Germany and Finland (EU)`.                           | Optional. Commented       |
-| `LEGAL_SERVER_LOG_RETENTION_DAYS` | Days server logs are retained, stated on `/privacy`. Must be a whole number; a non-numeric value is ignored.     | Optional. Default `30`    |
+| `LEGAL_SERVER_LOG_RETENTION_DAYS` | Days persisted API warning/error logs are retained and disclosed on `/privacy`. Container logs remain an infrastructure setting. | Optional. Default `30` |
 
 :::tip[Legal pages]
 The legal fields are optional but required for complete production

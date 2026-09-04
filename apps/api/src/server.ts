@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { isDeepStrictEqual } from "node:util";
 import cors from "@fastify/cors";
 import helmet from "@fastify/helmet";
+import { compactErasureJournal } from "@openmapx/core/erasure-journal";
 import { createFatalProcessHandler, findRepoRoot } from "@openmapx/core/server";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
@@ -36,7 +37,13 @@ import {
   trustProxyConfig,
   uniformErrorHandler,
 } from "./server-wiring";
-import { pruneAuditLog, pruneCompletedJobs } from "./services/activity-retention";
+import {
+  parseRequiredRetentionDays,
+  pruneAppLogs,
+  pruneAuditLog,
+  pruneCompletedJobs,
+  pruneExpiredVerifications,
+} from "./services/activity-retention";
 import {
   handleBackupOperationJob,
   handleDataOperationJob,
@@ -312,6 +319,8 @@ await initIntegrations(server, [
 const ONE_DAY_MS = 24 * 60 * 60 * 1000;
 const AUDIT_RETENTION_DAYS = envInt("AUDIT_LOG_RETENTION_DAYS", 90);
 const JOB_RETENTION_DAYS = envInt("ADMIN_JOB_RETENTION_DAYS", 30);
+const APP_LOG_RETENTION_DAYS = parseRequiredRetentionDays("LEGAL_SERVER_LOG_RETENTION_DAYS", 30);
+const BACKUP_RETENTION_DAYS = parseRequiredRetentionDays("BACKUP_RETENTION_DAYS", 30);
 
 setInterval(
   () =>
@@ -319,14 +328,33 @@ setInterval(
   ONE_DAY_MS,
 );
 
-setInterval(() => {
+const runRetention = () => {
   void pruneAuditLog(AUDIT_RETENTION_DAYS).catch((err) =>
     server.log.warn(err, "Audit log prune failed"),
   );
   void pruneCompletedJobs(JOB_RETENTION_DAYS).catch((err) =>
     server.log.warn(err, "Admin job prune failed"),
   );
-}, ONE_DAY_MS);
+  void pruneAppLogs(APP_LOG_RETENTION_DAYS).catch((err) =>
+    server.log.warn(err, "Application log prune failed"),
+  );
+  void pruneExpiredVerifications().catch((err) =>
+    server.log.warn(err, "Expired verification prune failed"),
+  );
+  const erasureJournalPath = process.env.ERASURE_JOURNAL_PATH?.trim();
+  if (erasureJournalPath) {
+    try {
+      compactErasureJournal(
+        erasureJournalPath,
+        new Date(Date.now() - (BACKUP_RETENTION_DAYS + 7) * ONE_DAY_MS),
+      );
+    } catch (err) {
+      server.log.warn(err, "Erasure journal compaction failed");
+    }
+  }
+};
+runRetention();
+setInterval(runRetention, ONE_DAY_MS);
 
 // Register job handlers
 jobRunner.register("service.start", async (ctx) => {
