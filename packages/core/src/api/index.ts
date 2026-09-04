@@ -30,6 +30,25 @@ export {
   type PlaceDetailsRequestInput,
 } from "./placeDetails";
 export {
+  completePrivacyReauthentication,
+  createPrivacyDataRequest,
+  getPrivacyDataRequest,
+  getPrivacyDataRequests,
+  type PrivacyAdminRole,
+  type PrivacyArtifactView,
+  type PrivacyRequestDetail,
+  type PrivacyRequestKind,
+  type PrivacyRequestState,
+  type PrivacyRequestView,
+  type PrivacyTaskView,
+  privacyArtifactDownloadUrl,
+  regeneratePrivacyDataRequest,
+  revokePrivacyArtifact,
+  setPrivacyAdminRole,
+  startPrivacyReauthentication,
+  withdrawPrivacyDataRequest,
+} from "./privacy";
+export {
   type ApiQueryPolicy,
   apiQueryRequestOptions,
   configureOfflineQueryRetention,

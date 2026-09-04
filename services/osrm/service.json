@@ -6,6 +6,12 @@
   "license": "BSD-2-Clause",
   "quality": "built-in",
   "homepage": "https://project-osrm.org/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "ghcr.io/project-osrm/osrm-backend",
     "tag": "latest",

@@ -40,6 +40,7 @@ export function AdminLayout({ children, user, selfHosted = false }: AdminLayoutP
             open={sidebarOpen}
             onClose={() => setSidebarOpen(false)}
             selfHosted={selfHosted}
+            role={user.role}
           />
           <Box
             component="main"

@@ -616,6 +616,29 @@ const backupInventoryEntry = z.strictObject({
   backupId: backupIdSchema,
   createdAt: timestampSchema,
   platformVersion: z.string().min(1).max(64).optional(),
+  /** Present when the agent could authenticate the exact manifest bytes. */
+  manifestDigest: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
+  formatVersion: z.union([z.literal(1), z.literal(2)]).optional(),
+  /** A v2 manifest is only trusted for extraction when every listed file has a digest. */
+  verified: z.boolean().optional(),
+  volumes: z
+    .array(
+      z.strictObject({
+        serviceId: serviceIdSchema,
+        volumeId: z.string().min(1).max(255),
+        mode: z.enum(["tar", "pg_dump"]),
+        sizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+        sha256: z
+          .string()
+          .regex(/^[a-f0-9]{64}$/)
+          .nullable(),
+      }),
+    )
+    .max(4_096)
+    .optional(),
   serviceCount: z.number().int().min(0).max(256),
   volumeCount: z.number().int().min(0).max(4_096),
   totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),

@@ -1,0 +1,2 @@
+ALTER TABLE "data_subject_request" DROP CONSTRAINT "data_subject_request_state_check";--> statement-breakpoint
+ALTER TABLE "data_subject_request" ADD CONSTRAINT "data_subject_request_state_check" CHECK ("data_subject_request"."state" in ('received', 'identity_pending', 'preserving', 'collecting', 'pending_processor', 'operator_review', 'assembling', 'ready', 'delivered', 'artifact_expired', 'clarification_needed', 'withdrawn', 'refused', 'closed'));

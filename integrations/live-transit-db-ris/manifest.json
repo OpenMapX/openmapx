@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://developers.deutschebahn.com/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["live-transit"],
   "backend": {
     "routes": false

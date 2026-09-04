@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.example/privacy/portable-profile-v1",
+  "type": "array",
+  "items": {
+    "type": "object",
+    "required": ["id"],
+    "properties": { "id": { "type": "string" } },
+    "additionalProperties": true
+  }
+}

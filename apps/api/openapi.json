@@ -87,6 +87,10 @@
       "description": "Routes under /api/places."
     },
     {
+      "name": "privacy",
+      "description": "Routes under /api/privacy."
+    },
+    {
       "name": "reviews",
       "description": "Routes under /api/reviews."
     },
@@ -6227,6 +6231,894 @@
           "places"
         ],
         "x-openmapx-auth": "public"
+      }
+    },
+    "/api/privacy/admin/approvals": {
+      "post": {
+        "operationId": "postApiPrivacyAdminApprovals",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/backups": {
+      "get": {
+        "operationId": "getApiPrivacyAdminBackups",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/queue": {
+      "get": {
+        "operationId": "getApiPrivacyAdminQueue",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/readiness": {
+      "get": {
+        "operationId": "getApiPrivacyAdminReadiness",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequests",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}": {
+      "get": {
+        "operationId": "getApiPrivacyAdminRequestsRequestId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/artifacts/{artifactId}/download": {
+      "get": {
+        "operationId": "getApiPrivacyAdminRequestsRequestIdArtifactsArtifactIdDownload",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/artifacts/{artifactId}/reauth/complete": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdArtifactsArtifactIdReauthComplete",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/artifacts/{artifactId}/reauth/start": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdArtifactsArtifactIdReauthStart",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/attachments": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdAttachments",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/attachments/{attachmentId}": {
+      "delete": {
+        "operationId": "deleteApiPrivacyAdminRequestsRequestIdAttachmentsAttachmentId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "attachmentId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/attachments/{attachmentId}/download": {
+      "get": {
+        "operationId": "getApiPrivacyAdminRequestsRequestIdAttachmentsAttachmentIdDownload",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "attachmentId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/backup-omissions": {
+      "get": {
+        "operationId": "getApiPrivacyAdminRequestsRequestIdBackupOmissions",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/backup-omissions/accept": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdBackupOmissionsAccept",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/backup-reviews": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdBackupReviews",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/decision": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdDecision",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/extension": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdExtension",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/generate": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdGenerate",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/identity": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdIdentity",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/identity/email-challenges": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdIdentityEmailChallenges",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/identity/email-challenges/{challengeId}/complete": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdIdentityEmailChallengesChallengeIdComplete",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "challengeId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/tasks/{taskId}/assignment": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdTasksTaskIdAssignment",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "taskId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/tasks/{taskId}/decision": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdTasksTaskIdDecision",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "taskId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/requests/{requestId}/verify": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRequestsRequestIdVerify",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "privacy_admin"
+      }
+    },
+    "/api/privacy/admin/roles/{userId}/grant": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRolesUserIdGrant",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/privacy/admin/roles/{userId}/revoke": {
+      "post": {
+        "operationId": "postApiPrivacyAdminRolesUserIdRevoke",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "userId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/privacy/assisted-requests/{requestId}/identity/account-login": {
+      "post": {
+        "operationId": "postApiPrivacyAssistedRequestsRequestIdIdentityAccountLogin",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/privacy/data-requests": {
+      "get": {
+        "operationId": "getApiPrivacyDataRequests",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      },
+      "post": {
+        "operationId": "postApiPrivacyDataRequests",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/privacy/data-requests/{requestId}": {
+      "get": {
+        "operationId": "getApiPrivacyDataRequestsRequestId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/privacy/data-requests/{requestId}/artifacts/{artifactId}": {
+      "delete": {
+        "operationId": "deleteApiPrivacyDataRequestsRequestIdArtifactsArtifactId",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/privacy/data-requests/{requestId}/artifacts/{artifactId}/download": {
+      "get": {
+        "operationId": "getApiPrivacyDataRequestsRequestIdArtifactsArtifactIdDownload",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/privacy/data-requests/{requestId}/artifacts/{artifactId}/reauth/complete": {
+      "post": {
+        "operationId": "postApiPrivacyDataRequestsRequestIdArtifactsArtifactIdReauthComplete",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/privacy/data-requests/{requestId}/artifacts/{artifactId}/reauth/start": {
+      "post": {
+        "operationId": "postApiPrivacyDataRequestsRequestIdArtifactsArtifactIdReauthStart",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "artifactId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/privacy/data-requests/{requestId}/regenerate": {
+      "post": {
+        "operationId": "postApiPrivacyDataRequestsRequestIdRegenerate",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
+      }
+    },
+    "/api/privacy/data-requests/{requestId}/withdraw": {
+      "post": {
+        "operationId": "postApiPrivacyDataRequestsRequestIdWithdraw",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "requestId",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "privacy"
+        ],
+        "x-openmapx-auth": "session"
       }
     },
     "/api/reviews/keypair": {

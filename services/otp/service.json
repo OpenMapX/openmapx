@@ -6,6 +6,12 @@
   "license": "LGPL-3.0",
   "quality": "built-in",
   "homepage": "https://www.opentripplanner.org/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "opentripplanner/opentripplanner",
     "tag": "latest",

@@ -1,6 +1,12 @@
 {
   "id": "overlay-traffic-flow",
   "version": "1.0.0",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,

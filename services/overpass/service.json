@@ -6,6 +6,12 @@
   "license": "AGPL-3.0",
   "quality": "built-in",
   "homepage": "https://wiki.openstreetmap.org/wiki/Overpass_API",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "wiktorn/overpass-api",
     "tag": "latest",

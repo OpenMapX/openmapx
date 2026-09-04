@@ -12,6 +12,7 @@ import {
   type PersonalTimelineConnectionRow,
   personalTimelineConnection,
 } from "../../db/timeline-connection-schema.js";
+import { recordDataDisclosureBestEffort } from "../../privacy/disclosures.js";
 import { type AuditLogEntry, writeAuditLog } from "../../utils/audit-log.js";
 import {
   type PersonalTimelineRequestLabels,
@@ -225,6 +226,17 @@ export class DrizzleTimelineConnectionStore implements TimelineConnectionStore {
 type ValidationClient = Pick<DawarichClient, "getCurrentUser" | "getSettings" | "getTimeline">;
 type ClientFactory = (options: DawarichClientOptions) => ValidationClient;
 type AuditWriter = (entry: AuditLogEntry) => Promise<void>;
+type DisclosureWriter = (input: {
+  userId: string;
+  occurredAt: Date;
+  recipientId: string;
+  categoryCode: string;
+  purposeCode: string;
+  legalBasisCode: string;
+  operationCode: string;
+  externalReference?: string;
+  idempotencyKey?: string;
+}) => Promise<void>;
 
 export interface TimelineConnectionServiceOptions {
   store?: TimelineConnectionStore;
@@ -236,6 +248,7 @@ export interface TimelineConnectionServiceOptions {
   id?: () => string;
   metricNow?: () => number;
   recordMetric?: (labels: PersonalTimelineRequestLabels, latencyMs: number) => void;
+  recordDisclosure?: DisclosureWriter;
 }
 
 interface ResolvedCandidate {
@@ -361,6 +374,7 @@ export class TimelineConnectionService {
   private readonly id: () => string;
   private readonly metricNow: () => number;
   private readonly recordMetric: (labels: PersonalTimelineRequestLabels, latencyMs: number) => void;
+  private readonly recordDisclosure?: DisclosureWriter;
 
   constructor(options: TimelineConnectionServiceOptions = {}) {
     this.store = options.store ?? new DrizzleTimelineConnectionStore();
@@ -373,6 +387,7 @@ export class TimelineConnectionService {
     this.id = options.id ?? randomUUID;
     this.metricNow = options.metricNow ?? (() => performance.now());
     this.recordMetric = options.recordMetric ?? recordPersonalTimelineRequest;
+    this.recordDisclosure = options.recordDisclosure;
   }
 
   async connect(
@@ -505,6 +520,16 @@ export class TimelineConnectionService {
         },
         row.encryptedApiKey,
       );
+      await this.recordDisclosure?.({
+        userId,
+        occurredAt: now,
+        recipientId: row.mode === "managed" ? "dawarich-managed" : "openmapx-controller",
+        categoryCode: row.mode === "managed" ? "managed-dawarich" : "timeline-connections",
+        purposeCode: "timeline-processing",
+        legalBasisCode: "contract",
+        operationCode: "timeline.connection.test",
+        idempotencyKey: `timeline-${this.id()}`,
+      }).catch(() => undefined);
       await this.writeLifecycleAudit(userId, "timeline.test", auditCandidate, "success");
       return this.getConnectionView(userId);
     } catch (error) {
@@ -557,6 +582,22 @@ export class TimelineConnectionService {
       consecutiveFailures: 0,
       updatedAt: now,
     });
+    // A successful managed read is an actual processor disclosure.  The
+    // connection snapshot is the durable operation boundary; use a coarse
+    // timestamped key so retries of the same request cannot duplicate the
+    // ledger entry, while never retaining the timeline range or payload.
+    if (row?.mode === "managed") {
+      await this.recordDisclosure?.({
+        userId,
+        occurredAt: now,
+        recipientId: "dawarich-managed",
+        categoryCode: "managed-dawarich",
+        purposeCode: "timeline-processing",
+        legalBasisCode: "contract",
+        operationCode: "timeline.read",
+        idempotencyKey: `timeline-read-${row.id}-${now.toISOString()}`,
+      }).catch(() => undefined);
+    }
     return row !== null;
   }
 
@@ -727,4 +768,6 @@ export class TimelineConnectionService {
   }
 }
 
-export const timelineConnectionService = new TimelineConnectionService();
+export const timelineConnectionService = new TimelineConnectionService({
+  recordDisclosure: (input) => recordDataDisclosureBestEffort(input),
+});

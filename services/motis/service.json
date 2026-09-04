@@ -6,6 +6,12 @@
   "license": "MIT",
   "quality": "built-in",
   "homepage": "https://github.com/motis-project/motis",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "ghcr.io/motis-project/motis",
     "tag": "2.11.0",

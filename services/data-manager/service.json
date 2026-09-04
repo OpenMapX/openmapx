@@ -5,6 +5,12 @@
   "description": "Downloads and shares source data (OSM PBFs, GTFS feeds, tile assets) with consumer services.",
   "license": "MIT",
   "quality": "built-in",
+  "subjectData": {
+    "storesPersonalData": true,
+    "strategy": "operator_task",
+    "registrationIds": ["data-manager-trigger-attribution", "offline-package-ownership"],
+    "operatorInstructions": "Review exact triggered_by and HMAC-owned offline package records using the privacy case workflow."
+  },
   "container": {
     "image": "ghcr.io/openmapx/data-manager",
     "tag": "latest",

@@ -6,6 +6,12 @@
   "license": "MIT",
   "quality": "built-in",
   "homepage": "https://traefik.io/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "traefik",
     "tag": "v3.6",

@@ -3,6 +3,12 @@
   "version": "1.0.0",
   "author": "OpenMapX",
   "documentation": "https://loom.cs.uni-freiburg.de/tiles",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,

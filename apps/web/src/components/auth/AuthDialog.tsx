@@ -33,9 +33,11 @@ interface AuthDialogProps {
   open: boolean;
   onClose: () => void;
   dismissible?: boolean;
+  /** Fixed same-origin return path supplied by the hosting page. */
+  callbackPath?: string;
 }
 
-export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProps) {
+export function AuthDialog({ open, onClose, dismissible = true, callbackPath }: AuthDialogProps) {
   const t = useTranslations("auth");
   const tMobile = useTranslations("mobileAuth");
   const systemAuth = useSystemAuth();
@@ -110,7 +112,9 @@ export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProp
           email,
           password,
           name,
-          callbackURL: window.location.origin,
+          callbackURL: callbackPath
+            ? new URL(callbackPath, window.location.origin).href
+            : window.location.origin,
         });
         if (signUpError) {
           setError(signUpError.message ?? t("signUpFailed"));
@@ -281,7 +285,9 @@ export function AuthDialog({ open, onClose, dismissible = true }: AuthDialogProp
       }
       await authClient.signIn.social({
         provider: providerId,
-        callbackURL: window.location.origin,
+        callbackURL: callbackPath
+          ? new URL(callbackPath, window.location.origin).href
+          : window.location.origin,
       });
     } catch {
       setError(t("oauthSignInFailed", { provider: providerName }));

@@ -141,6 +141,125 @@
       "when": 1788519779834,
       "tag": "0019_user_erasure_retention",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1788530052784,
+      "tag": "0020_gdpr_subject_requests",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1788530619379,
+      "tag": "0021_gdpr_subject_request_states",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1788530998543,
+      "tag": "0022_gdpr_disclosure_events",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1788531492335,
+      "tag": "0023_gdpr_export_reauthentication",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1788533583263,
+      "tag": "0024_gdpr_disclosure_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1788534508783,
+      "tag": "0025_gdpr_case_reviews_and_approvals",
+      "breakpoints": true
+    },
+    {
+      "idx": 26,
+      "version": "7",
+      "when": 1788538841863,
+      "tag": "0026_gdpr_reauthentication_channels",
+      "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "7",
+      "when": 1788539323368,
+      "tag": "0027_gdpr_privacy_notification_outbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1788539901054,
+      "tag": "0028_gdpr_request_portability_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1788540008197,
+      "tag": "0029_gdpr_protected_notes_envelope",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1788543386940,
+      "tag": "0030_gdpr_attachment_provenance",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1788544937783,
+      "tag": "0031_gdpr_privacy_escalation_notifications",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1788551405082,
+      "tag": "0032_gdpr_approval_idempotency",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1788560363245,
+      "tag": "0033_gdpr_assisted_request_workflow",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1788562394886,
+      "tag": "0034_gdpr_email_identity_challenges",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1788562802838,
+      "tag": "0035_gdpr_email_challenge_delivery_lease",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1788564112552,
+      "tag": "0036_aberrant_bullseye",
+      "breakpoints": true
     }
   ]
 }

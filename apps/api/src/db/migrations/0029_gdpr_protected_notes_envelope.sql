@@ -1,0 +1,1 @@
+ALTER TABLE "data_subject_request" RENAME COLUMN "protected_notes" TO "protected_notes_envelope";

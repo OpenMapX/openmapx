@@ -5,6 +5,12 @@
   "description": "nginx serving /.well-known/ for passkey RP and mobile app linking.",
   "license": "BSD-2-Clause",
   "quality": "built-in",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "nginx",
     "tag": "alpine",

@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.example/privacy/export-manifest-v2",
+  "type": "object",
+  "required": [
+    "version",
+    "generatedAt",
+    "expiresAt",
+    "root",
+    "locale",
+    "request",
+    "controller",
+    "deployment",
+    "timing",
+    "collectorOutcomes",
+    "reviewContact",
+    "translationFallbacks",
+    "members"
+  ],
+  "properties": {
+    "version": { "const": 2 },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "root": { "const": "openmapx-data-export/" },
+    "locale": { "enum": ["en", "de"] },
+    "request": {
+      "type": "object",
+      "required": ["id", "kind", "rights"],
+      "properties": {
+        "id": { "type": "string" },
+        "kind": { "enum": ["access", "portability", "access_and_portability"] },
+        "rights": {
+          "type": "object",
+          "required": ["access", "portability"],
+          "properties": { "access": { "type": "boolean" }, "portability": { "type": "boolean" } },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "controller": { "type": "object" },
+    "deployment": { "type": "object" },
+    "timing": { "type": "object" },
+    "collectorOutcomes": { "type": "array", "items": { "type": "object" } },
+    "reviewContact": { "type": "string" },
+    "translationFallbacks": { "type": "array", "items": { "type": "object" } },
+    "members": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "logicalId", "mediaType", "bytes", "sha256"],
+        "properties": {
+          "path": { "type": "string" },
+          "logicalId": { "type": "string" },
+          "mediaType": { "type": "string" },
+          "bytes": { "type": "integer", "minimum": 0 },
+          "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "records": { "type": ["integer", "null"], "minimum": 0 },
+          "schema": { "type": ["string", "null"] }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

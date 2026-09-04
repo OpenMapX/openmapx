@@ -5,6 +5,12 @@
   "description": "Pelias fallback geocoder for hierarchical place lookups.",
   "license": "MIT",
   "quality": "built-in",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "pelias/placeholder",
     "tag": "latest",

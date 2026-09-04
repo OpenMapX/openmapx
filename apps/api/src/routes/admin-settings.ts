@@ -1,3 +1,4 @@
+import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
 import { envString } from "@openmapx/core/server-env";
 import type { FastifyInstance } from "fastify";
 import { db } from "../db";
@@ -32,9 +33,26 @@ interface SettingDef {
    * state — lets a panel hide fields that don't apply to the current choice.
    */
   showWhen?: { key: string; equals: unknown | unknown[] };
+  parse?: (raw: string) => unknown;
+  validate?: (value: unknown) => boolean;
 }
 
-const SETTING_DEFS: SettingDef[] = [
+const validEmail = (value: unknown): boolean =>
+  typeof value === "string" &&
+  value.length <= 320 &&
+  (value === "" || /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value));
+const boundedInteger =
+  (min: number, max: number) =>
+  (value: unknown): boolean =>
+    typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
+const validJurisdiction = (value: unknown): boolean =>
+  typeof value === "string" && (value === "" || /^[A-Z]{2}(?:-[A-Z0-9]{1,8})?$/.test(value));
+const parsePrivacySources = (raw: string): PrivacySource[] => {
+  const parsed: unknown = JSON.parse(raw);
+  return privacySourceSchema.array().parse(parsed);
+};
+
+export const SETTING_DEFS: SettingDef[] = [
   // General
   {
     group: "general",
@@ -290,6 +308,65 @@ const SETTING_DEFS: SettingDef[] = [
     env: "LEGAL_SERVER_LOG_RETENTION_DAYS",
     default: 30,
   },
+  {
+    group: "legal",
+    key: "legalDataRequestEmail",
+    label: "Data-subject request email",
+    description: "Controller contact for access requests. Falls back to LEGAL_EMAIL when unset.",
+    type: "string",
+    env: "LEGAL_DATA_REQUEST_EMAIL",
+    default: "",
+    validate: validEmail,
+  },
+  {
+    group: "legal",
+    key: "legalDsarCaseRetentionDays",
+    label: "DSAR case retention (days)",
+    type: "number",
+    env: "LEGAL_DSAR_CASE_RETENTION_DAYS",
+    default: 1095,
+    validate: boundedInteger(30, 3650),
+  },
+  {
+    group: "legal",
+    key: "legalIdentityEvidenceRetentionDays",
+    label: "Identity evidence retention (days)",
+    type: "number",
+    env: "LEGAL_IDENTITY_EVIDENCE_RETENTION_DAYS",
+    default: 30,
+    validate: boundedInteger(1, 365),
+  },
+  {
+    group: "legal",
+    key: "legalExportArtifactRetentionHours",
+    label: "Export artifact retention (hours)",
+    type: "number",
+    env: "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
+    default: 168,
+    validate: boundedInteger(24, 720),
+  },
+  {
+    group: "legal",
+    key: "legalDeploymentJurisdiction",
+    label: "Deployment jurisdiction",
+    description: "Informational ISO 3166-1 alpha-2 jurisdiction, optionally with a subdivision.",
+    type: "string",
+    env: "LEGAL_DEPLOYMENT_JURISDICTION",
+    default: "",
+    validate: validJurisdiction,
+  },
+  {
+    group: "legal",
+    key: "legalPrivacySources",
+    label: "Privacy sources",
+    description: "Strict JSON source declarations used by the access report.",
+    type: "object",
+    env: "LEGAL_PRIVACY_SOURCES",
+    default: [],
+    parse: parsePrivacySources,
+    validate: (value) =>
+      Array.isArray(value) && privacySourceSchema.array().safeParse(value).success,
+  },
 ];
 
 type SettingSource = "default" | "database" | "env";
@@ -325,13 +402,16 @@ const GROUP_LABELS: Record<string, string> = {
   legal: "Legal",
 };
 
-function parseEnvValue(raw: string, type: SettingDef["type"]): unknown {
+function parseEnvValue(raw: string, def: SettingDef): unknown {
+  if (def.parse) return def.parse(raw);
+  const type = def.type;
   if (type === "boolean") return raw === "true" || raw === "1";
   if (type === "number") return Number(raw);
   return raw;
 }
 
 function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
+  if (def.validate && !def.validate(value)) return false;
   switch (def.type) {
     case "number":
       return typeof value === "number" && Number.isFinite(value);
@@ -342,7 +422,11 @@ function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
     case "select":
       return typeof value === "string" && (def.options?.includes(value) ?? true);
     case "object":
-      return typeof value === "object" && value !== null && !Array.isArray(value);
+      return (
+        typeof value === "object" &&
+        value !== null &&
+        (def.key === "legalPrivacySources" || !Array.isArray(value))
+      );
   }
 }
 
@@ -360,14 +444,36 @@ export async function resolveSettings(): Promise<SettingsGroup[]> {
     let source: SettingSource;
 
     if (envVal !== undefined && envVal !== "") {
-      value = parseEnvValue(envVal, def.type);
-      source = "env";
-    } else if (dbVal !== undefined) {
+      try {
+        const parsed = parseEnvValue(envVal, def);
+        if (matchesDeclaredType(def, parsed)) {
+          value = parsed;
+          source = "env";
+        } else {
+          throw new Error("value outside declared bounds");
+        }
+      } catch {
+        appLogger.add({
+          level: "warn",
+          source: "privacy-settings",
+          msg: "Invalid legal setting ignored",
+          time: Date.now(),
+          metadata: { setting: def.key, reason: "invalid-value" },
+        });
+        value = dbVal;
+        source = dbVal === undefined ? "default" : "database";
+      }
+    } else if (dbVal !== undefined && matchesDeclaredType(def, dbVal)) {
       value = dbVal;
       source = "database";
     } else {
       value = def.default;
       source = "default";
+    }
+
+    if (def.key === "legalDataRequestEmail" && value === "") {
+      const fallback = process.env.LEGAL_EMAIL?.trim() ?? "";
+      if (validEmail(fallback)) value = fallback;
     }
 
     // Never send a raw secret to the client, whatever its source. "***" is a

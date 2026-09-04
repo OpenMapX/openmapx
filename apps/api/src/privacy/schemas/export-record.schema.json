@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.example/privacy/article-15-record-v1",
+  "type": "object",
+  "required": ["id"],
+  "properties": {
+    "id": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "policyCodes": { "type": "array", "items": { "type": "string" } }
+  },
+  "additionalProperties": true
+}

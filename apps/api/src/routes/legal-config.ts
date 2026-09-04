@@ -1,3 +1,4 @@
+import { type PrivacySource, privacySourceSchema } from "@openmapx/core/privacy";
 import type { FastifyPluginAsync } from "fastify";
 import { declareRouteAuth } from "../utils/route-auth";
 import { resolveSettings } from "./admin-settings";
@@ -18,6 +19,22 @@ function retentionDays(raw: unknown): number {
   return Number.isInteger(n) && n > 0 ? n : 30;
 }
 
+function boundedNumber(raw: unknown, fallback: number, min: number, max: number): number {
+  const n = typeof raw === "number" ? raw : Number(raw);
+  return Number.isInteger(n) && n >= min && n <= max ? n : fallback;
+}
+
+function safePrivacySources(
+  raw: unknown,
+): Array<Omit<PrivacySource, "contactCode" | "instructionsCode">> {
+  const result = privacySourceSchema.array().safeParse(raw);
+  if (!result.success) return [];
+  return result.data.map(
+    ({ contactCode: _contactCode, instructionsCode: _instructionsCode, ...publicSource }) =>
+      publicSource,
+  );
+}
+
 const asString = (v: unknown): string => (typeof v === "string" ? v : "");
 
 export const legalConfigRoute: FastifyPluginAsync = async (fastify) => {
@@ -35,6 +52,22 @@ export const legalConfigRoute: FastifyPluginAsync = async (fastify) => {
       supervisoryAuthority: asString(values.legalSupervisoryAuthority),
       supervisoryAuthorityUrl: asString(values.legalSupervisoryAuthorityUrl),
       serverLogRetentionDays: retentionDays(values.legalServerLogRetentionDays),
+      dataRequestEmail: asString(values.legalDataRequestEmail),
+      dsarCaseRetentionDays: boundedNumber(values.legalDsarCaseRetentionDays, 1095, 30, 3650),
+      identityEvidenceRetentionDays: boundedNumber(
+        values.legalIdentityEvidenceRetentionDays,
+        30,
+        1,
+        365,
+      ),
+      exportArtifactRetentionHours: boundedNumber(
+        values.legalExportArtifactRetentionHours,
+        168,
+        24,
+        720,
+      ),
+      deploymentJurisdiction: asString(values.legalDeploymentJurisdiction),
+      privacySources: safePrivacySources(values.legalPrivacySources),
     });
   });
 };

@@ -60,7 +60,8 @@ export default function PrivacyContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 4. September 2026
+        Zuletzt aktualisiert: 4. September 2026 (Abschnitte zu Auskunft und Datenübertragbarkeit
+        überarbeitet)
       </Typography>
       <Section title={T.controller}>
         <Typography>
@@ -194,6 +195,15 @@ export default function PrivacyContentDe({
             </Typography>
           </li>
         </ul>
+        <Typography sx={{ mt: 1 }}>
+          Sie können einen Auskunftsantrag in Ihren Kontoeinstellungen starten. Wir stellen eine
+          verständliche Erläuterung und, soweit Art.&nbsp;20 DSGVO greift, zusätzlich eine getrennte
+          maschinenlesbare Kopie bereit. Das Archiv ist verschlüsselt, erst nach einer erneuten
+          Anmeldung verfügbar und läuft automatisch ab. Verbundene Dawarich-Daten werden, sofern
+          verfügbar, bei diesem verwalteten Dienst angefordert; Daten unabhängiger Verantwortlicher,
+          externe Sicherungskopien und reine Browserdaten werden gesondert erklärt und nicht
+          stillschweigend als vollständig dargestellt.
+        </Typography>
         <Typography sx={{ mt: 1 }}>
           Rechtsgrundlage ist Art.&nbsp;6 Abs.&nbsp;1 lit.&nbsp;a DSGVO (Ihre ausdr&uuml;ckliche
           Einwilligung &uuml;ber die Browser-Berechtigungsabfrage).

@@ -1,5 +1,6 @@
 import ChevronRightIcon from "@mui/icons-material/ChevronRight";
 import DownloadForOfflineIcon from "@mui/icons-material/DownloadForOffline";
+import PrivacyTipIcon from "@mui/icons-material/PrivacyTip";
 import TuneIcon from "@mui/icons-material/Tune";
 import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
@@ -11,6 +12,7 @@ import { getTranslations } from "next-intl/server";
 
 export default async function SettingsHomePage() {
   const t = await getTranslations("settings");
+  const privacy = await getTranslations("account.privacyData");
   return (
     <Paper variant="outlined" sx={{ borderRadius: 2 }}>
       <List disablePadding>
@@ -29,6 +31,15 @@ export default async function SettingsHomePage() {
               <TuneIcon />
             </ListItemIcon>
             <ListItemText primary={t("preferencesTitle")} secondary={t("preferencesDescription")} />
+            <ChevronRightIcon color="action" />
+          </ListItemButton>
+        </Link>
+        <Link href="/settings/privacy" style={{ textDecoration: "none", color: "inherit" }}>
+          <ListItemButton>
+            <ListItemIcon>
+              <PrivacyTipIcon />
+            </ListItemIcon>
+            <ListItemText primary={privacy("title")} />
             <ChevronRightIcon color="action" />
           </ListItemButton>
         </Link>

@@ -1,6 +1,10 @@
-import { lt } from "drizzle-orm";
+import { and, lt, sql } from "drizzle-orm";
 import { db } from "../db";
 import { adminAuditLog, adminJob, appLog, verification } from "../db/schema";
+import {
+  preservationAllowsDeletion,
+  withPreservationRetentionLock,
+} from "../privacy/preservation.js";
 
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
@@ -30,10 +34,21 @@ export async function pruneAuditLog(days: number): Promise<number> {
     return 0;
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
-  const result = await db
-    .delete(adminAuditLog)
-    .where(lt(adminAuditLog.createdAt, cutoff))
-    .returning({ id: adminAuditLog.id });
+  const result = await withPreservationRetentionLock(db, (tx) =>
+    tx
+      .delete(adminAuditLog)
+      .where(
+        and(
+          lt(adminAuditLog.createdAt, cutoff),
+          preservationAllowsDeletion({
+            registrationId: "admin-audit-attribution",
+            candidateTimestamp: adminAuditLog.createdAt,
+            subjectIds: [adminAuditLog.actorId, adminAuditLog.targetId],
+          }),
+        ),
+      )
+      .returning({ id: adminAuditLog.id }),
+  );
   return result.length;
 }
 
@@ -51,10 +66,21 @@ export async function pruneCompletedJobs(days: number): Promise<number> {
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
   // adminJobLog has ON DELETE CASCADE so deleting parent rows clears logs.
-  const result = await db
-    .delete(adminJob)
-    .where(lt(adminJob.finishedAt, cutoff))
-    .returning({ id: adminJob.id });
+  const result = await withPreservationRetentionLock(db, (tx) =>
+    tx
+      .delete(adminJob)
+      .where(
+        and(
+          lt(adminJob.finishedAt, cutoff),
+          preservationAllowsDeletion({
+            registrationId: "admin-jobs-attribution",
+            candidateTimestamp: adminJob.createdAt,
+            subjectIds: [adminJob.createdBy],
+          }),
+        ),
+      )
+      .returning({ id: adminJob.id }),
+  );
   return result.length;
 }
 
@@ -67,10 +93,21 @@ export async function pruneAppLogs(days: number): Promise<number> {
     return 0;
   }
   const cutoff = new Date(Date.now() - days * MS_PER_DAY);
-  const result = await db
-    .delete(appLog)
-    .where(lt(appLog.createdAt, cutoff))
-    .returning({ id: appLog.id });
+  const result = await withPreservationRetentionLock(db, (tx) =>
+    tx
+      .delete(appLog)
+      .where(
+        and(
+          lt(appLog.createdAt, cutoff),
+          preservationAllowsDeletion({
+            registrationId: "application-logs",
+            candidateTimestamp: appLog.createdAt,
+            subjectIds: [sql`${appLog.metadata} ->> 'subjectId'`],
+          }),
+        ),
+      )
+      .returning({ id: appLog.id }),
+  );
   return result.length;
 }
 

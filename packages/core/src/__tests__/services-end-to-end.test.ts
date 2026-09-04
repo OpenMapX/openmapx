@@ -355,6 +355,16 @@ describe.skipIf(!manifestsPresent)(
             target: "/usr/local/bin/openmapx-entrypoint.sh",
             readOnly: true,
           },
+          {
+            source: "scripts/openmapx-subject-export.rb",
+            target: "/opt/openmapx/subject-export/openmapx-subject-export.rb",
+            readOnly: true,
+          },
+          {
+            source: "scripts/subject_export/schema.rb",
+            target: "/opt/openmapx/subject-export/subject_export/schema.rb",
+            readOnly: true,
+          },
         ]);
         expect(app?.volumes).toEqual([
           {

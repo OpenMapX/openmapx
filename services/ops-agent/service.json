@@ -5,6 +5,12 @@
   "description": "Private typed broker for trusted Docker and host-repository operations.",
   "license": "AGPL-3.0-or-later",
   "quality": "built-in",
+  "subjectData": {
+    "storesPersonalData": true,
+    "strategy": "operator_task",
+    "registrationIds": ["backup-retained-copies"],
+    "operatorInstructions": "Review retained backup inventory and perform only approved isolated extraction."
+  },
   "container": {
     "image": "ghcr.io/openmapx/ops-agent",
     "tag": "latest",
@@ -23,6 +29,10 @@
       "OPS_AGENT_API_TOKEN_FILE": "/run/secrets/ops-agent-api-token",
       "OPS_AGENT_DATA_MANAGER_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",
       "OPS_TRUSTED_CONFIG_DIR": "/var/lib/openmapx/trusted-config",
+      "OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE": "/run/secrets/privacy-backup-capability-key",
+      "OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED": "${OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED:-false}",
+      "OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE": "${OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE:-}",
+      "OPS_PRIVACY_BACKUP_SCRATCH_ROOT": "/var/lib/openmapx/privacy-extraction",
       "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}"
     },
     "capDrop": ["ALL"],
@@ -45,6 +55,11 @@
       "readOnly": false
     },
     {
+      "source": "@infra:data/privacy-extraction",
+      "target": "/var/lib/openmapx/privacy-extraction",
+      "readOnly": false
+    },
+    {
       "source": "@infra:secrets/ops-agent-api-token",
       "target": "/run/secrets/ops-agent-api-token",
       "readOnly": true
@@ -52,6 +67,11 @@
     {
       "source": "@infra:secrets/ops-agent-data-manager-token",
       "target": "/run/secrets/ops-agent-data-manager-token",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/privacy-backup-capability-key",
+      "target": "/run/secrets/privacy-backup-capability-key",
       "readOnly": true
     },
     { "source": "@docker-socket", "target": "/var/run/docker.sock", "readOnly": false },

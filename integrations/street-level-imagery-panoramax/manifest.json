@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "AGPL-3.0-or-later",
   "documentation": "https://docs.panoramax.fr/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["street-level-imagery", "map-overlay"],
   "frontend": {
     "mapLayer": true,

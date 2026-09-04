@@ -12,14 +12,14 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     const result = await db.execute(sql`
       SELECT child.relname AS table_name,
              child_column.attname AS column_name,
-             constraint.confdeltype AS delete_action
-      FROM pg_constraint constraint
-      JOIN pg_class parent ON parent.oid = constraint.confrelid
-      JOIN pg_class child ON child.oid = constraint.conrelid
+             fk.confdeltype AS delete_action
+      FROM pg_constraint fk
+      JOIN pg_class parent ON parent.oid = fk.confrelid
+      JOIN pg_class child ON child.oid = fk.conrelid
       JOIN pg_attribute child_column
         ON child_column.attrelid = child.oid
-       AND child_column.attnum = constraint.conkey[1]
-      WHERE constraint.contype = 'f'
+       AND child_column.attnum = fk.conkey[1]
+      WHERE fk.contype = 'f'
         AND parent.relname = 'user'
       ORDER BY child.relname, child_column.attname
     `);
@@ -27,10 +27,27 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     const rows = Array.from(result as Iterable<Record<string, unknown>>).map(
       (row) => `${row.table_name}.${row.column_name}:${row.delete_action}`,
     );
+    const { DIRECT_USER_FK_CLASSIFICATIONS } = await import(
+      "../../../../../scripts/check-subject-data"
+    );
+    expect(rows.map((row) => row.split(":")[0]).sort()).toEqual(
+      Object.keys(DIRECT_USER_FK_CLASSIFICATIONS).sort(),
+    );
     expect(rows).toEqual([
       "account.user_id:c",
       "admin_audit_log.actor_id:n",
       "admin_job.created_by:n",
+      "data_disclosure_event.user_id:n",
+      "data_export_reauthentication.initiating_admin_user_id:n",
+      "data_export_reauthentication.user_id:n",
+      "data_subject_request.actor_user_id:n",
+      "data_subject_request.user_id:n",
+      "data_subject_request_approval.approver_user_id:n",
+      "data_subject_request_attachment.owner_id:n",
+      "data_subject_request_backup_review.reviewed_by:n",
+      "data_subject_request_identity.verified_by:n",
+      "data_subject_request_notification.recipient_user_id:n",
+      "data_subject_request_task.assigned_to:n",
       "installed_extension.installed_by:n",
       "installed_integration.installed_by:n",
       "integration_secret.updated_by:n",
@@ -48,6 +65,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       "saved_list.user_id:c",
       "service_secret.updated_by:n",
       "session.user_id:c",
+      "session_auth_assurance.user_id:n",
       "share_link.user_id:c",
       "two_factor.user_id:c",
     ]);

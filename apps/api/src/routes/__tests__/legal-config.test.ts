@@ -79,6 +79,12 @@ describe("GET /legal-config", () => {
       supervisoryAuthority: "",
       supervisoryAuthorityUrl: "",
       serverLogRetentionDays: 30,
+      dataRequestEmail: "",
+      dsarCaseRetentionDays: 1095,
+      identityEvidenceRetentionDays: 30,
+      exportArtifactRetentionHours: 168,
+      deploymentJurisdiction: "",
+      privacySources: [],
     });
   });
 
@@ -97,6 +103,12 @@ describe("GET /legal-config", () => {
       supervisoryAuthority: "BfDI",
       supervisoryAuthorityUrl: "https://www.bfdi.bund.de",
       serverLogRetentionDays: 14,
+      dataRequestEmail: "",
+      dsarCaseRetentionDays: 1095,
+      identityEvidenceRetentionDays: 30,
+      exportArtifactRetentionHours: 168,
+      deploymentJurisdiction: "",
+      privacySources: [],
     });
   });
 

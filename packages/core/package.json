@@ -54,6 +54,10 @@
       "types": "./src/legal.ts",
       "default": "./src/legal.ts"
     },
+    "./privacy": {
+      "types": "./src/privacy/index.ts",
+      "default": "./src/privacy/index.ts"
+    },
     "./ops": {
       "types": "./src/ops/index.ts",
       "default": "./src/ops/index.ts"

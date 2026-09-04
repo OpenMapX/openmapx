@@ -3,12 +3,23 @@ import type { EmailDisclosure, TransferSafeguard } from "@openmapx/integration-f
 import { createTransport } from "nodemailer";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
+import { recordDataDisclosureBestEffort } from "../privacy/disclosures.js";
 
-interface MailOptions {
+export interface MailOptions {
   to: string;
   subject: string;
   text: string;
   html?: string;
+  /** Optional account-linked disclosure context. The address/body never enter
+   * the ledger; only the controlled operation/category codes do. */
+  disclosure?: {
+    userId: string;
+    operationCode: string;
+    categoryCode?: string;
+    purposeCode?: string;
+    legalBasisCode?: string;
+    idempotencyKey?: string;
+  };
 }
 
 type Provider = "emaillabs" | "lettermint" | "smtp";
@@ -145,17 +156,35 @@ async function sendViaSmtp(opts: MailOptions, config: EmailConfig): Promise<void
 
 export async function sendMail(opts: MailOptions): Promise<void> {
   const config = await loadEmailConfig();
+  const { disclosure, ...message } = opts;
   switch (config.provider) {
     case "emaillabs":
-      return sendViaEmailLabs(opts, config);
+      await sendViaEmailLabs(message, config);
+      break;
     case "lettermint":
-      return sendViaLettermint(opts, config);
+      await sendViaLettermint(message, config);
+      break;
     case "smtp":
-      return sendViaSmtp(opts, config);
+      await sendViaSmtp(message, config);
+      break;
     default: {
       const _exhaustive: never = config.provider;
       throw new Error(`Unknown email provider: ${String(_exhaustive)}`);
     }
+  }
+  if (disclosure) {
+    // Mail delivery is irreversible. A missing ledger write is surfaced only
+    // to the reconciliation metric; it must not make the caller resend mail.
+    await recordDataDisclosureBestEffort({
+      userId: disclosure.userId,
+      occurredAt: new Date(),
+      recipientId: "email-processor",
+      operationCode: disclosure.operationCode,
+      categoryCode: disclosure.categoryCode ?? "email-delivery",
+      purposeCode: disclosure.purposeCode ?? "communications",
+      legalBasisCode: disclosure.legalBasisCode ?? "contract",
+      ...(disclosure.idempotencyKey ? { idempotencyKey: disclosure.idempotencyKey } : {}),
+    });
   }
 }
 

@@ -6,6 +6,12 @@
   "license": "MIT",
   "quality": "built-in",
   "homepage": "https://github.com/public-transport/transitous",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "nginx",
     "tag": "1.27-alpine",

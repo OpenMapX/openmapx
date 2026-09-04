@@ -83,11 +83,29 @@ COPY --from=deps /app ./
 
 COPY --exclude=*/package.json packages/ packages/
 COPY apps/api/ apps/api/
+# The privacy source fingerprint is computed inside this build stage. Copy
+# every reviewed external source boundary with its repository-relative path so
+# the strict fingerprint is identical to a local build and fails if a required
+# input is removed.
+COPY apps/ops-agent/src/ apps/ops-agent/src/
+COPY apps/ops-agent/Dockerfile apps/ops-agent/package.json apps/ops-agent/tsconfig.json apps/ops-agent/tsconfig.build.json apps/ops-agent/
+COPY apps/web/src/app/(legal)/privacy/ apps/web/src/app/(legal)/privacy/
+COPY apps/web/src/app/admin/privacy/ apps/web/src/app/admin/privacy/
+COPY apps/web/src/app/auth/privacy/ apps/web/src/app/auth/privacy/
+COPY apps/web/src/app/settings/privacy/ apps/web/src/app/settings/privacy/
+COPY apps/web/src/components/auth/AuthDialog.tsx apps/web/src/components/auth/AuthDialog.tsx
+COPY apps/web/src/components/auth/PrivacyDataSection.tsx apps/web/src/components/auth/PrivacyDataSection.tsx
+COPY scripts/check-subject-data.ts scripts/check-subject-data.ts
+COPY scripts/validate-privacy-release.mjs scripts/validate-privacy-release.mjs
+COPY services/ services/
 COPY tsconfig.base.json ./
 COPY turbo.json ./
 
 WORKDIR /app/apps/api
-RUN pnpm build
+# The dependency stage already installed the reviewed lockfile with --frozen-lockfile.
+# pnpm 11 otherwise performs an implicit, unfrozen install after workspace COPYs,
+# mutating the lockfile that the release fingerprint must identify exactly.
+RUN --network=none pnpm --config.verify-deps-before-run=false build
 
 # Production image
 FROM node:24-alpine@sha256:f70403e87646dc51b45295f4b8b70cdad0b63d2297c4c9899119b03f7af7a6b3 AS runner
@@ -133,6 +151,7 @@ COPY --from=prod-deps /app/apps/api/node_modules ./apps/api/node_modules
 # .ts file's location upward, so `@better-auth/passkey` imported from
 # packages/core must be reachable via packages/core/node_modules).
 COPY packages/core/ packages/core/
+COPY packages/i18n/ packages/i18n/
 COPY packages/db-schema/ packages/db-schema/
 COPY packages/hardlinks/ packages/hardlinks/
 COPY packages/mobility-core/ packages/mobility-core/
@@ -151,6 +170,7 @@ COPY packages/poi-source-registry/ packages/poi-source-registry/
 COPY packages/presets/ packages/presets/
 COPY packages/brands/ packages/brands/
 COPY --from=prod-deps /app/packages/core/node_modules ./packages/core/node_modules
+COPY --from=prod-deps /app/packages/i18n/node_modules ./packages/i18n/node_modules
 COPY --from=prod-deps /app/packages/db-schema/node_modules ./packages/db-schema/node_modules
 COPY --from=prod-deps /app/packages/mobility-core/node_modules ./packages/mobility-core/node_modules
 COPY --from=prod-deps /app/packages/ev-charge-planner/node_modules ./packages/ev-charge-planner/node_modules

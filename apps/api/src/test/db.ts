@@ -47,6 +47,7 @@ export interface DbMock {
     insert: ReturnType<typeof vi.fn>;
     update: ReturnType<typeof vi.fn>;
     delete: ReturnType<typeof vi.fn>;
+    execute: ReturnType<typeof vi.fn>;
     /** `db.transaction(fn)` runs `fn` with the same mock as the `tx` arg. */
     transaction: ReturnType<typeof vi.fn>;
   };
@@ -70,6 +71,7 @@ export function createDbMock(): DbMock {
     insert: make("insert"),
     update: make("update"),
     delete: make("delete"),
+    execute: vi.fn(async () => []),
     transaction: vi.fn(async (fn: (tx: DbMock["db"]) => unknown) => fn(db)),
   };
   return {

@@ -25,8 +25,16 @@ import {
   redactedOpsError,
 } from "@openmapx/core/ops";
 import Fastify, { type FastifyInstance } from "fastify";
+import {
+  type DawarichSubjectExportRouteOptions,
+  registerDawarichSubjectExportRoute,
+} from "./dawarich-subject-export";
 import type { OpsJobJournal, PersistedOpsJob } from "./journal";
 import { createPolicyResourceClaimer, type OpsResourceClaimer } from "./policy";
+import {
+  type PrivacyBackupExtractionRouteOptions,
+  registerPrivacyBackupExtractionRoute,
+} from "./privacy-backup-extraction";
 import {
   createUnavailableRuntime,
   dispatchOpsOperation,
@@ -89,6 +97,15 @@ export interface BuildOpsAgentServerOptions {
   maxJobEntries?: number;
   jobRetentionMs?: number;
   claimTimeoutMs?: number;
+  /** Dedicated streaming managed-Dawarich collector; absent in minimal/dev agents. */
+  dawarichExport?: Omit<DawarichSubjectExportRouteOptions, "apiToken">;
+  /** Dedicated case-scoped backup extraction; absent in minimal agents. */
+  privacyBackupExtraction?: Omit<PrivacyBackupExtractionRouteOptions, "apiToken">;
+  privacyBackupHealth?: () => Promise<{
+    ready: boolean;
+    inventoryReadable: boolean;
+    collectorImage: string | null;
+  }>;
 }
 
 interface JobRecord {
@@ -228,6 +245,18 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
     requestTimeout: DEFAULT_ADMISSION_TIMEOUT_MS,
     connectionTimeout: DEFAULT_ADMISSION_TIMEOUT_MS,
   });
+  if (options.dawarichExport) {
+    registerDawarichSubjectExportRoute(app, {
+      ...options.dawarichExport,
+      apiToken: options.tokens.api,
+    });
+  }
+  if (options.privacyBackupExtraction) {
+    registerPrivacyBackupExtractionRoute(app, {
+      ...options.privacyBackupExtraction,
+      apiToken: options.tokens.api,
+    });
+  }
   const runtime = options.runtime ?? createUnavailableRuntime();
   const dispatch =
     options.dispatch ??
@@ -616,7 +645,19 @@ export function buildOpsAgentServer(options: BuildOpsAgentServerOptions): Fastif
       .code(statusCode)
       .send(redactedOpsError(requestIdFromBody(request.body), "validation", error));
   });
-  app.get("/health", async () => ({ ok: true }));
+  app.get("/health", async () => {
+    let privacyBackup = {
+      ready: false,
+      inventoryReadable: false,
+      collectorImage: null as string | null,
+    };
+    try {
+      privacyBackup = (await options.privacyBackupHealth?.()) ?? privacyBackup;
+    } catch {
+      // Health evidence is fail-closed and never includes Docker/inventory errors.
+    }
+    return { ok: true, privacyBackup };
+  });
 
   app.post("/v1/operations", async (request, reply) => {
     const startedAt = Date.now();

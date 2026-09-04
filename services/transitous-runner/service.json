@@ -5,6 +5,12 @@
   "description": "Private, unprivileged worker that executes the upstream Transitous catalog scripts under a fixed entrypoint.",
   "license": "AGPL-3.0-or-later",
   "quality": "built-in",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "ghcr.io/openmapx/transitous-runner",
     "tag": "latest",

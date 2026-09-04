@@ -27,6 +27,11 @@ import { neighborhoodsRoute } from "./neighborhoods";
 import { offlinePackagesRoute } from "./offline-packages";
 import { osmContributionsRoute } from "./osm-contributions";
 import { placesRoute } from "./places";
+import { privacyAdminRoute } from "./privacy-admin";
+import type { PrivacyAdminRouteOptions } from "./privacy-admin.js";
+import { privacyRequestsRoute } from "./privacy-requests";
+import type { PrivacyRequestsRouteOptions } from "./privacy-requests.js";
+import { privacyRolesRoute } from "./privacy-roles";
 import { reviewsKeypairRoute } from "./reviews-keypair";
 import { savedRoute } from "./saved";
 import { sharesRoute } from "./shares";
@@ -42,6 +47,8 @@ export interface CoreRouteOptions {
   authHandler: (request: Request) => Promise<Response>;
   /** Origin the auth interaction pages redirect to. */
   authUiOrigin: string;
+  privacyRequests?: PrivacyRequestsRouteOptions;
+  privacyAdmin?: PrivacyAdminRouteOptions;
 }
 
 /**
@@ -64,6 +71,12 @@ export async function registerCoreRoutes(
 
   await server.register(capabilitiesRoute, { prefix: "/api" });
   await server.register(legalConfigRoute, { prefix: "/api" });
+  await server.register(privacyRequestsRoute, {
+    prefix: "/api",
+    ...(options.privacyRequests ?? {}),
+  });
+  await server.register(privacyAdminRoute, { prefix: "/api", ...(options.privacyAdmin ?? {}) });
+  await server.register(privacyRolesRoute, { prefix: "/api" });
   await server.register(mobileAuthRoute, { prefix: "/api" });
 
   await server.register(placesRoute, { prefix: "/api" });

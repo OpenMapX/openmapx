@@ -3,7 +3,7 @@ import type {
   AirQualityProviderCallMetrics,
   AirQualityRasterMetrics,
 } from "@openmapx/integration-framework";
-import { type Counter, type Histogram, metrics } from "@opentelemetry/api";
+import { type Counter, type Histogram, metrics, type ObservableGauge } from "@opentelemetry/api";
 import { PrometheusSerializer } from "@opentelemetry/exporter-prometheus";
 import {
   AggregationTemporality,
@@ -91,6 +91,16 @@ export interface MetricsHandle {
   airQualityProviderCallCounter: Counter;
   airQualityProviderCallLatency: Histogram;
   airQualityRasterAge: Histogram;
+  privacyOpenRequests: ObservableGauge;
+  privacyOldestRequestAge: ObservableGauge;
+  privacySourceTasks: ObservableGauge;
+  privacyGenerationFailures: ObservableGauge;
+  privacyArtifactCleanupLag: ObservableGauge;
+  privacyCleanupBacklog: ObservableGauge;
+  privacyKeyReady: ObservableGauge;
+  privacyBackupReviewBacklog: ObservableGauge;
+  privacyNotificationFailures: ObservableGauge;
+  recordPrivacyOperationalSnapshot(snapshot: PrivacyOperationalMetricSnapshot): void;
   /** Render the current metric state as Prometheus text format. */
   renderPrometheus(): Promise<string>;
   /** Shut the meter provider down (idempotent). */
@@ -98,6 +108,20 @@ export interface MetricsHandle {
 }
 
 let singleton: MetricsHandle | null = null;
+
+export interface PrivacyOperationalMetricSnapshot {
+  openRequestsByDueState: Readonly<Record<"on_track" | "due_soon" | "overdue", number>>;
+  oldestRequestAgeSeconds: number;
+  sourceTasksByStatus: Readonly<Record<string, number>>;
+  generationFailures: number;
+  artifactCleanupLagSeconds: number;
+  artifactCleanupBacklog: number;
+  attachmentCleanupBacklog: number;
+  sourceSnapshotCleanupBacklog: number;
+  keyReady: boolean;
+  backupReviewBacklog: number;
+  notificationFailures: number;
+}
 
 /**
  * Initialise the OpenTelemetry metrics pipeline. Idempotent: subsequent calls
@@ -195,6 +219,89 @@ export function initMetrics(): MetricsHandle {
     unit: "s",
   });
 
+  // Privacy operations telemetry is deliberately exported as callbacks rather
+  // than counters.  Each monitor sweep replaces this in-memory snapshot, so
+  // Prometheus sees the current backlog instead of an ever-growing sum of
+  // repeated observations.  All labels are closed vocabularies or bounded
+  // task states; no request/user/source identifiers are accepted.
+  let privacySnapshot: PrivacyOperationalMetricSnapshot = {
+    openRequestsByDueState: { on_track: 0, due_soon: 0, overdue: 0 },
+    oldestRequestAgeSeconds: 0,
+    sourceTasksByStatus: {},
+    generationFailures: 0,
+    artifactCleanupLagSeconds: 0,
+    artifactCleanupBacklog: 0,
+    attachmentCleanupBacklog: 0,
+    sourceSnapshotCleanupBacklog: 0,
+    keyReady: false,
+    backupReviewBacklog: 0,
+    notificationFailures: 0,
+  };
+  const privacyOpenRequests = meter.createObservableGauge("privacy_open_requests", {
+    description: "Open subject requests by bounded due state",
+  });
+  privacyOpenRequests.addCallback((observation) => {
+    for (const [dueState, value] of Object.entries(privacySnapshot.openRequestsByDueState))
+      observation.observe(value, { due_state: dueState });
+  });
+  const privacyOldestRequestAge = meter.createObservableGauge(
+    "privacy_oldest_request_age_seconds",
+    { description: "Age of the oldest open subject request", unit: "s" },
+  );
+  privacyOldestRequestAge.addCallback((observation) =>
+    observation.observe(privacySnapshot.oldestRequestAgeSeconds),
+  );
+  const privacySourceTasks = meter.createObservableGauge("privacy_source_tasks", {
+    description: "Subject source tasks by bounded lifecycle status",
+  });
+  privacySourceTasks.addCallback((observation) => {
+    for (const [status, value] of Object.entries(privacySnapshot.sourceTasksByStatus))
+      observation.observe(value, { status });
+  });
+  const privacyGenerationFailures = meter.createObservableGauge("privacy_generation_failures", {
+    description: "Unresolved privacy export generation failures",
+  });
+  privacyGenerationFailures.addCallback((observation) =>
+    observation.observe(privacySnapshot.generationFailures),
+  );
+  const privacyArtifactCleanupLag = meter.createObservableGauge(
+    "privacy_artifact_cleanup_lag_seconds",
+    { description: "Age of the oldest pending artifact deletion", unit: "s" },
+  );
+  privacyArtifactCleanupLag.addCallback((observation) =>
+    observation.observe(privacySnapshot.artifactCleanupLagSeconds),
+  );
+  const privacyCleanupBacklog = meter.createObservableGauge("privacy_cleanup_backlog", {
+    description: "Pending privacy ciphertext deletions by bounded resource kind",
+  });
+  privacyCleanupBacklog.addCallback((observation) => {
+    observation.observe(privacySnapshot.artifactCleanupBacklog, { resource_kind: "artifact" });
+    observation.observe(privacySnapshot.attachmentCleanupBacklog, {
+      resource_kind: "attachment",
+    });
+    observation.observe(privacySnapshot.sourceSnapshotCleanupBacklog, {
+      resource_kind: "source_snapshot",
+    });
+  });
+  const privacyKeyReady = meter.createObservableGauge("privacy_key_ready", {
+    description: "Whether the dedicated privacy encryption key is ready",
+  });
+  privacyKeyReady.addCallback((observation) =>
+    observation.observe(privacySnapshot.keyReady ? 1 : 0),
+  );
+  const privacyBackupReviewBacklog = meter.createObservableGauge("privacy_backup_review_backlog", {
+    description: "Open backup review tasks",
+  });
+  privacyBackupReviewBacklog.addCallback((observation) =>
+    observation.observe(privacySnapshot.backupReviewBacklog),
+  );
+  const privacyNotificationFailures = meter.createObservableGauge("privacy_notification_failures", {
+    description: "Failed privacy notification outbox items",
+  });
+  privacyNotificationFailures.addCallback((observation) =>
+    observation.observe(privacySnapshot.notificationFailures),
+  );
+
   const osmContributionCounter = meter.createCounter("osm_contribution_operations_total", {
     description: "OpenStreetMap contribution operations by operation and outcome",
   });
@@ -248,6 +355,37 @@ export function initMetrics(): MetricsHandle {
     airQualityProviderCallCounter,
     airQualityProviderCallLatency,
     airQualityRasterAge,
+    privacyOpenRequests,
+    privacyOldestRequestAge,
+    privacySourceTasks,
+    privacyGenerationFailures,
+    privacyArtifactCleanupLag,
+    privacyCleanupBacklog,
+    privacyKeyReady,
+    privacyBackupReviewBacklog,
+    privacyNotificationFailures,
+    recordPrivacyOperationalSnapshot(snapshot) {
+      privacySnapshot = {
+        ...snapshot,
+        oldestRequestAgeSeconds: Math.max(
+          0,
+          Math.min(snapshot.oldestRequestAgeSeconds, 31_536_000_000),
+        ),
+        generationFailures: Math.max(0, Math.floor(snapshot.generationFailures)),
+        artifactCleanupLagSeconds: Math.max(
+          0,
+          Math.min(snapshot.artifactCleanupLagSeconds, 31_536_000_000),
+        ),
+        artifactCleanupBacklog: Math.max(0, Math.floor(snapshot.artifactCleanupBacklog)),
+        attachmentCleanupBacklog: Math.max(0, Math.floor(snapshot.attachmentCleanupBacklog)),
+        sourceSnapshotCleanupBacklog: Math.max(
+          0,
+          Math.floor(snapshot.sourceSnapshotCleanupBacklog),
+        ),
+        backupReviewBacklog: Math.max(0, Math.floor(snapshot.backupReviewBacklog)),
+        notificationFailures: Math.max(0, Math.floor(snapshot.notificationFailures)),
+      };
+    },
     renderPrometheus,
     close,
   };

@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://www.pegelonline.wsv.de/webservice/dokuRestapi",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["knowledge"],
   "frontend": {
     "mapLayer": false,

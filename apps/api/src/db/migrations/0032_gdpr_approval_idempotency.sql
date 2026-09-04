@@ -1,0 +1,2 @@
+ALTER TABLE "data_subject_request_approval" ADD COLUMN "idempotency_key" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "data_subject_request_approval_idempotency_idx" ON "data_subject_request_approval" USING btree ("idempotency_key") WHERE "data_subject_request_approval"."idempotency_key" is not null;

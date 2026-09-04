@@ -255,7 +255,17 @@ jobs:
       - name: Apply the production database migrations
         run: pnpm --filter @openmapx/api exec drizzle-kit migrate
 
+      - name: Verify the pinned managed Dawarich subject export
+        timeout-minutes: 10
+        run: OPENMAPX_RUN_DAWARICH_EXPORT_TESTS=1 pnpm exec vitest run --project node apps/ops-agent/src/dawarich-subject-export.integration.test.ts
+
+      - name: Verify the isolated retained-backup export
+        timeout-minutes: 10
+        run: node services/ops-agent/privacy-backup/test-fixture.mjs --output "$RUNNER_TEMP/openmapx-real-backup-result.tar"
+
       - name: Run the required database integration suites
+        env:
+          OPENMAPX_REAL_BACKUP_FIXTURE: ${{ runner.temp }}/openmapx-real-backup-result.tar
         run: pnpm test:database
 
   build:
@@ -417,6 +427,11 @@ jobs:
               - 'apps/ops-agent/**'
               - 'packages/**'
               - 'services/**/service.json'
+            privacy-backup:
+              - '.github/workflows/ci.yml'
+              - '.github/workflows/docker.yml'
+              - '.dockerignore'
+              - 'services/ops-agent/privacy-backup/**'
             transitous-runner:
               - '.github/workflows/ci.yml'
               - '.github/workflows/docker.yml'
@@ -464,6 +479,7 @@ jobs:
             web) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/web/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             data-manager) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/data-manager/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             ops-agent) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/ops-agent/Dockerfile" >> "$GITHUB_OUTPUT" ;;
+            privacy-backup) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/ops-agent/privacy-backup/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             transitous-runner) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=apps/transitous-runner/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             transitous-tools) echo "context=services/motis/tools/transitous" >> "$GITHUB_OUTPUT"; echo "dockerfile=services/motis/tools/transitous/Dockerfile" >> "$GITHUB_OUTPUT" ;;
             docs) echo "context=docs" >> "$GITHUB_OUTPUT"; echo "dockerfile=docs/Dockerfile" >> "$GITHUB_OUTPUT" ;;

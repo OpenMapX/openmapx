@@ -20,6 +20,31 @@ and session storage after the server confirms deletion. The operator cannot
 remotely erase browser storage on other devices; tell the user to clear the app
 or site data there.
 
+## Access and portability requests
+
+The account settings **Your data and access request** section starts an
+Article 15 request and, by default, asks for a separate Article 20 portable
+copy. The response deadline is recorded when the request is received. A fresh
+sign-in (including configured MFA) is required for each archive download; the
+one-time authorization is consumed before streaming and the encrypted archive
+expires automatically. A download link is never sent by email.
+
+The archive covers explicit OpenMapX projections and connected managed Dawarich
+data when that processor responds. Other controllers, off-host backups,
+operator logs and unavailable sources appear as reviewed omissions or tasks.
+The **Download browser data** action is a separate local JSON supplement: it
+contains only an allowlisted preference snapshot and offline-map metadata, not
+cookies, sessions, credentials, caches or raw map archives.
+
+An active access case can retain its already captured, minimized encrypted
+source material and prepared response after account deletion for verified
+assisted delivery. This does not retain usable account credentials or restore
+login access. Terminal case outcomes and source/artifact expiry trigger
+separate physical cleanup; key metadata is cleared only after deletion is
+confirmed. Case accounting retention does not extend full source-data retention.
+After a receipt snapshot expires, regeneration requires explicit review of the
+missing source rather than silently collecting a later state.
+
 ## Backups
 
 Keep `BACKUP_RETENTION_DAYS` aligned with the period disclosed in your privacy

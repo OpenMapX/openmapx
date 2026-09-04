@@ -1757,7 +1757,48 @@
     "deleteAccount": "Delete account",
     "deleteAccountWarning": "This cannot be undone. OpenMapX deletes your account, sign-in data, saved places, shares, vehicles, parking state, Timeline connection, settings and review signing key. Delete any Mangrove reviews first while you still control that key. A connected Dawarich account and its location history must be deleted separately.",
     "confirmDeletion": "Confirm deletion",
-    "failedDeleteAccount": "Failed to delete account"
+    "failedDeleteAccount": "Failed to delete account",
+    "privacyData": {
+      "title": "Your data and access request",
+      "description": "Request a copy of the personal data OpenMapX processes about you. The archive includes live OpenMapX data and connected Dawarich data when available. A fresh sign-in is required before download.",
+      "requestCopy": "Request data copy",
+      "downloadDevice": "Download browser data",
+      "noRequests": "You have no data-access requests.",
+      "loadFailed": "Data requests are temporarily unavailable.",
+      "requestFailed": "The data request could not be created.",
+      "actionFailed": "The requested action could not be completed.",
+      "reauthenticationFailed": "Please sign in again before downloading your archive.",
+      "assistedProofTitle": "Link an assisted request",
+      "assistedProofDescription": "If the privacy team gave you a case reference, sign in again to prove that this account belongs to the subject. The reference is kept in this browser during sign-in and is not added to the URL.",
+      "assistedRequestReference": "Case reference",
+      "assistedProofAction": "Sign in and prove account",
+      "assistedProofComplete": "Your account login was verified for the assisted request.",
+      "assistedProofFailed": "The account login could not be matched to that assisted request.",
+      "access": "Access",
+      "portability": "Portable data",
+      "accessAndPortability": "Access + portable copy",
+      "due": "Response deadline: {date}",
+      "download": "Download archive",
+      "revoke": "Delete archive",
+      "withdraw": "Withdraw request",
+      "regenerate": "Create fresh copy",
+      "states": {
+        "received": "Received",
+        "identity_pending": "Identity check pending",
+        "preserving": "Preparing data",
+        "collecting": "Collecting data",
+        "pending_processor": "Waiting for a connected processor",
+        "operator_review": "Manual review",
+        "assembling": "Building archive",
+        "ready": "Ready to download",
+        "delivered": "Delivered",
+        "artifact_expired": "Archive expired",
+        "clarification_needed": "Clarification needed",
+        "withdrawn": "Withdrawn",
+        "refused": "Declined",
+        "closed": "Closed"
+      }
+    }
   },
   "auth": {
     "signIn": "Sign in",
@@ -2977,5 +3018,360 @@
     "myVehicles": "My vehicles",
     "empty": "No vehicles yet",
     "connectors": "Connectors"
+  },
+  "privacyExport": {
+    "report": {
+      "title": "OpenMapX privacy response",
+      "intro": "This response was generated for privacy request {requestId}.",
+      "controllerHeading": "Controller and contact",
+      "emailLabel": "Email",
+      "phoneLabel": "Phone",
+      "jurisdictionLabel": "Deployment jurisdiction",
+      "requestHeading": "Request, scope and timing",
+      "requestIdLabel": "Request ID",
+      "requestKindLabel": "Request kind",
+      "scopeAccess": "This archive contains the Article 15 access response.",
+      "scopePortability": "This archive contains the Article 20 portable package. Article 15 security and case material is outside this request scope.",
+      "scopeCombined": "This archive contains the Article 15 access response and a separate Article 20 portable package.",
+      "receivedAtLabel": "Received",
+      "registeredAtLabel": "Registered",
+      "preservationAtLabel": "Preservation started",
+      "snapshotAtLabel": "Source snapshot cutoff",
+      "generatedAtLabel": "Generated",
+      "expiresAtLabel": "Download expires",
+      "caseRetention": "Case records are retained for {caseDays, plural, one {# day} other {# days}}, identity evidence for {identityDays, plural, one {# day} other {# days}}, and the download artifact for {artifactHours, plural, one {# hour} other {# hours}} according to the configured policy.",
+      "notRecorded": "not recorded",
+      "notApplicable": "not applicable",
+      "recordedCode": "{code} (recorded policy code)",
+      "requestKinds": {
+        "access": "Access",
+        "portability": "Data portability",
+        "access_and_portability": "Access and data portability"
+      },
+      "outcomes": {
+        "included": "Included",
+        "not_applicable": "Not applicable",
+        "unavailable": "Unavailable",
+        "reviewed_no_match": "Reviewed; no matching data",
+        "omitted_with_reason": "Omitted after review"
+      },
+      "purposes": {
+        "account-management": "Account management",
+        "authentication": "Authentication",
+        "communications": "Communications",
+        "legal-accountability": "Legal accountability",
+        "navigation": "Navigation",
+        "personalization": "Personalization",
+        "publication": "Publication requested by the subject",
+        "saved-content": "Saving subject content",
+        "security-and-abuse-prevention": "Security and abuse prevention",
+        "service-provisioning": "Providing the requested service",
+        "support-and-operations": "Support and service operations",
+        "timeline-processing": "Processing the connected timeline"
+      },
+      "legalBases": {
+        "consent": "Consent",
+        "contract": "Performance of the service contract",
+        "legal-obligation": "Compliance with a legal obligation",
+        "legitimate-interest": "Legitimate interests in secure and accountable service operation"
+      },
+      "origins": {
+        "controller": "Generated by the controller",
+        "operator": "Provided or managed by the operator",
+        "processor": "Received from an instructed processor",
+        "public-source": "Obtained from a public source",
+        "subject": "Provided or created by the data subject"
+      },
+      "recipientRoles": {
+        "controller": "Controller",
+        "independent-controller": "Independent controller",
+        "processor": "Processor",
+        "public-recipient": "Recipient of public publication",
+        "operator": "Operator"
+      },
+      "recipientNames": {
+        "dawarich-managed": "Managed Dawarich processor",
+        "mangrove-reviews": "Mangrove Reviews",
+        "public-recipient": "Recipients of a subject-published link",
+        "openstreetmap": "OpenStreetMap API",
+        "mapillary": "Mapillary"
+      },
+      "retentionFixed": "{days, plural, one {# day} other {# days}} from the applicable record event, and up to {afterClosure, plural, one {# day} other {# days}} after account closure; policy trigger: {trigger}",
+      "retentionEphemeral": "{hours, plural, one {# hour} other {# hours}} from creation or last applicable security event, and up to {afterClosure, plural, one {# day} other {# days}} after account closure; policy trigger: {trigger}",
+      "retentionAccount": "For the account lifetime, and up to {afterClosure, plural, one {# day} other {# days}} after account closure; policy trigger: {trigger}",
+      "retentionLegalHold": "For the duration of the applicable legal hold, and up to {afterClosure, plural, one {# day} other {# days}} after account closure; policy trigger: {trigger}",
+      "retentionReasons": {
+        "account-content": "content deletion or account closure",
+        "accountability": "creation of the accountability record",
+        "administrative-record": "creation of the administrative record",
+        "backup-retention": "rotation of the retained backup",
+        "case-accountability": "completion or closure of the privacy case",
+        "challenge-expiry": "issuance of the authentication challenge",
+        "connection-revocation": "revocation of the timeline connection",
+        "control-expiry": "creation or refresh of the security control",
+        "current-state": "creation of the current location state",
+        "erasure-replay": "account closure or erasure processing",
+        "handoff-expiry": "creation of the mobile handoff",
+        "key-revocation": "revocation of the publication key",
+        "log-retention": "creation of the operational log record",
+        "offline-job-retention": "completion of the offline package job",
+        "processor-retention": "termination of the connected processor service",
+        "public-dataset": "publication of the public dataset version",
+        "recipient-accountability": "recording of the recipient event",
+        "revocation": "revocation or deletion of the published link",
+        "security-retention": "security retention period"
+      },
+      "snapshotLimitations": "The response reflects controller and instructed-processor sources available at the stated snapshot cutoff. Later changes and unavailable or expired sources are identified below.",
+      "sourcesHeading": "Processing categories, sources and limitations",
+      "sourceRow": "{id} — {category}; outcome: {outcome}; records: {count}; captured: {capturedAt}; purposes: {purposes}; legal bases: {legalBases}; origin: {origin}; retention rule and trigger: {retention}.",
+      "sourcePolicy": "Processing purpose: {purpose}. Source: {source}. Safe representation: {safeRepresentation}. Portability: {portability}. Rights of others: {rightsOfOthers}.",
+      "sourceRecipients": "Configured recipient categories, countries and transfer safeguards: {recipients}.",
+      "sourceRecipient": "{name} ({role}; country: {country}; transfer safeguard: {safeguard})",
+      "sourceWarnings": "Omissions, redactions or limitations: {codes}",
+      "warningExplanation": "{code}: {explanation}",
+      "warningUnknown": "An authorized caseworker recorded a source-specific limitation; request the reviewed public explanation from {contact}.",
+      "warnings": {
+        "source-not-collected": "This source was not collected or no completed source result was available for this snapshot.",
+        "operator-review-required": "This source requires an authorized manual review before disclosure.",
+        "operator-review-completed": "An authorized manual source review found no releasable matching records.",
+        "external-source-review-required": "An external or operator-held source requires caseworker review.",
+        "approved-encrypted-supplement": "A reviewed operator supplement is included in the Article 15 section.",
+        "supplement-key-unavailable": "The approved supplement could not be decrypted for this response.",
+        "supplement-limit-exceeded": "The supplement exceeded the permitted response size or count.",
+        "schema-missing": "The retained source lacked the required reviewed schema.",
+        "storage-missing": "The retained source material was no longer available."
+      },
+      "deploymentSourcesHeading": "Deployment and operator sources",
+      "noDeploymentSources": "No additional deployment sources were configured.",
+      "deploymentSourceRow": "{id} — {kind}; relationship: {relationship}; location: {location}; retention: {retention}; access strategy: {accessStrategy}.",
+      "recipientsHeading": "Recipients and transfers",
+      "recipientsNotInScope": "Recipient-event information is excluded because this response is limited to data portability.",
+      "noActualRecipients": "No recipient events were recorded for this subject and snapshot.",
+      "recipientSummary": "The archive contains {archiveRecordCount} archived recipient events at the snapshot cutoff. This bounded convenience summary, assembled separately at {summarizedAt}, shows {shownGroupCount} of {totalGroupCount} recipient groups covering {matchingEventCount} matching events, with a limit of {entryLimit} groups.",
+      "recipientSummaryComplete": "The grouped convenience summary is complete.",
+      "recipientSummaryTruncated": "The summary is capped; use the authoritative source member for all recorded events.",
+      "recipientRow": "{name} — role: {role}; country: {country}; latest event: {lastOccurredAt}; events in group: {eventCount}; category: {category}; purpose: {purpose}; legal basis: {legalBasis}; transfer safeguard: {safeguard}.",
+      "recipientPointer": "The authoritative source for complete recorded recipient-event detail is {source}.",
+      "rightsHeading": "Your rights and review",
+      "rights": "Subject to the GDPR conditions, you may request rectification, erasure, restriction, object to processing, receive portable data, withdraw consent at any time without affecting earlier lawful processing, lodge a complaint, and seek a judicial remedy.",
+      "complaint": "You may lodge a complaint with {authority} ({url}) or another competent supervisory authority.",
+      "reviewContact": "For review of omissions or redactions in this case, contact {contact}.",
+      "automationHeading": "Automated decisions and profiling",
+      "automation": "OpenMapX does not use the data described in this response for a solely automated decision with legal or similarly significant effects, and does not perform such profiling.",
+      "boundariesHeading": "Controller boundaries",
+      "boundaries": "This response covers data held by this deployment controller and its instructed processors. Independent controllers keep their own records and answer their own requests. Data published to public networks may remain with independent recipients or network operators outside this controller's custody."
+    },
+    "readme": {
+      "title": "OpenMapX data access export",
+      "description": "This file separates the Article 15 access report from the Article 20 portable subset.",
+      "credentials": "Credentials, tokens, private keys and archive keys are withheld.",
+      "text": "This archive contains a safe Article 15 access report and a separate Article 20 portable subset. Secrets, credentials and private keys are never included."
+    },
+    "catalogue": {
+      "entries": {
+        "account-profile": {
+          "category": "Account profile",
+          "purpose": "Provide and secure your OpenMapX account",
+          "source": "Information you provided",
+          "retention": "While the account exists, with limited erasure accountability retention",
+          "safeRepresentation": "Profile fields are shown; credentials are never exported",
+          "portabilityExclusion": "None",
+          "rightsOfOthers": "None"
+        },
+        "auth-accounts": {
+          "category": "Linked sign-in accounts",
+          "purpose": "Authenticate you and maintain linked providers",
+          "source": "Authentication provider and controller records",
+          "retention": "Account lifetime plus erasure replay window",
+          "safeRepresentation": "Provider metadata only; tokens and hashes are withheld",
+          "portabilityExclusion": "Authentication material is not portable",
+          "rightsOfOthers": "None"
+        },
+        "auth-sessions": {
+          "category": "Sessions and security metadata",
+          "purpose": "Keep sessions secure and investigate abuse",
+          "source": "Generated when you sign in",
+          "retention": "Short security retention",
+          "safeRepresentation": "Lifecycle, IP and user-agent metadata; session tokens are withheld",
+          "portabilityExclusion": "Security metadata is not portable",
+          "rightsOfOthers": "Other-device details may be minimized"
+        },
+        "saved-lists": {
+          "category": "Saved lists",
+          "purpose": "Save places and personalize your map",
+          "source": "You created these lists",
+          "retention": "Until deletion or account closure",
+          "safeRepresentation": "List content is included",
+          "portabilityExclusion": "Included as JSON",
+          "rightsOfOthers": "Shared content may require review"
+        },
+        "saved-places": {
+          "category": "Saved places",
+          "purpose": "Save locations for navigation",
+          "source": "You entered or selected these places",
+          "retention": "Until deletion or account closure",
+          "safeRepresentation": "Coordinates and labels are included",
+          "portabilityExclusion": "Included as GeoJSON",
+          "rightsOfOthers": "Shared content may require review"
+        },
+        "managed-dawarich": {
+          "category": "Managed timeline data",
+          "purpose": "Provide your connected timeline service",
+          "source": "You connected the managed Dawarich service",
+          "retention": "According to the connected service and case rules",
+          "safeRepresentation": "Credentials and integration secrets are withheld",
+          "portabilityExclusion": "Derived analytics are access-only",
+          "rightsOfOthers": "Family/shared records may need review"
+        },
+        "backup-retained-copies": {
+          "category": "Retained backups",
+          "purpose": "Restore service and meet accountability duties",
+          "source": "Operator-retained copies",
+          "retention": "According to the disclosed backup window",
+          "safeRepresentation": "Reviewed case-by-case; no automatic completeness claim",
+          "portabilityExclusion": "Backup copies are not a portable source",
+          "rightsOfOthers": "Historical records may contain others"
+        }
+      },
+      "defaults": {
+        "category": "Processing source",
+        "purpose": "Processing source",
+        "source": "OpenMapX records",
+        "retention": "According to the stated retention rule",
+        "safeRepresentation": "Safe metadata only; secrets are withheld",
+        "portabilityExclusion": "Not designated as portable data",
+        "rightsOfOthers": "Rights-of-others review where needed"
+      }
+    },
+    "identityChallenge": {
+      "subject": "Verify your identity for a privacy request",
+      "continue": "Continue",
+      "description": "Enter this code in the OpenMapX privacy request screen within {minutes, plural, one {# minute} other {# minutes}}.",
+      "unexpected": "If you did not request this code, do not share it and contact the controller through the published privacy channel.",
+      "footer": "You received this email because an identity check was requested for an OpenMapX privacy request."
+    },
+    "email": {
+      "templates": {
+        "acknowledgement": {
+          "subject": "We received your privacy request",
+          "description": "Your request has been received and is being reviewed. Sign in and open your account settings to see its status."
+        },
+        "clarification": {
+          "subject": "Action needed for your privacy request",
+          "description": "We need clarification to process your privacy request. Sign in to see the next steps."
+        },
+        "extension": {
+          "subject": "Update about your privacy request",
+          "description": "Your privacy request needs more time to process. Sign in to see the updated deadline and reason."
+        },
+        "ready": {
+          "subject": "Your data access export is ready",
+          "description": "Your data access export is now available in your account settings. Sign in there to start the download."
+        },
+        "delivered": {
+          "subject": "Your data access export was downloaded",
+          "description": "A download of your data access export was recorded. If this was not you, sign in and contact us."
+        },
+        "closed": {
+          "subject": "Your privacy request is closed",
+          "description": "Your privacy request has been closed. Case information remains available according to our retention policy."
+        },
+        "refused": {
+          "subject": "Update about your privacy request",
+          "description": "We could not fulfil your privacy request as submitted. Sign in to see the reason and available next steps."
+        },
+        "escalation_due_soon": {
+          "subject": "Privacy deadline approaching",
+          "description": "A privacy request is approaching its statutory deadline. Please review the privacy queue."
+        },
+        "escalation_overdue": {
+          "subject": "Privacy deadline reached",
+          "description": "A privacy request has reached or passed its statutory deadline. Please review the privacy queue."
+        },
+        "escalation_identity": {
+          "subject": "Privacy request awaiting identity review",
+          "description": "A privacy request is waiting for identity verification or clarification. Please review the privacy queue."
+        },
+        "escalation_extension": {
+          "subject": "Extended privacy deadline approaching",
+          "description": "An extended privacy deadline is approaching. Please review the privacy queue."
+        },
+        "escalation_stuck": {
+          "subject": "Privacy export needs attention",
+          "description": "A privacy export has been in progress unusually long. Please review the privacy queue."
+        }
+      },
+      "continue": "Open your OpenMapX account settings to continue.",
+      "unexpected": "If you did not request this, sign in and contact us.",
+      "footer": "You received this email because of activity on an OpenMapX privacy request."
+    }
+  },
+  "privacyAdmin": {
+    "newAssistedRequest": "Record assisted request",
+    "assistedIntake": "Assisted request intake",
+    "assistedIntakeHelp": "Record the actual receipt channel and a protected exact subject locator. Deleted or inaccessible accounts are not recreated.",
+    "channel": "Receipt channel",
+    "receivedAt": "Actually received at",
+    "channels": {
+      "email": "Email",
+      "post": "Post or letter",
+      "representative": "Representative",
+      "internal": "Other official channel"
+    },
+    "locatorType": "Subject locator type",
+    "locatorTypes": {
+      "email": "Email address",
+      "userId": "Historical user ID",
+      "username": "Username",
+      "erasureReference": "Erasure reference",
+      "otherReference": "Other exact reference"
+    },
+    "accountState": "Account state",
+    "accountStates": {
+      "current": "Current",
+      "inaccessible": "Inaccessible",
+      "deleted": "Deleted",
+      "unknown": "Unknown"
+    },
+    "subjectLocator": "Exact subject locator",
+    "subjectLocatorHelp": "This value is encrypted and is not shown in the case queue.",
+    "representativeContact": "Representative verified-contact address",
+    "representativeContactHelp": "Authority and permission to receive the response are reviewed separately.",
+    "recordRequest": "Record request",
+    "identityParties": "Identity and authority",
+    "identityProofRequired": "Complete a proven account login, verified email challenge, or exceptional-evidence review before collection.",
+    "sendIdentityChallenge": "Send verification code",
+    "identityCode": "Six-digit code",
+    "verifyIdentityCode": "Verify code",
+    "challengeIssueFailed": "The verification code could not be sent. Check that this party has an authoritative email address and try again later.",
+    "challengeCompleteFailed": "The code could not be verified. It may be incorrect, expired, or already used.",
+    "accountLoginProofHelp": "For account-login proof, the subject must sign in again and complete the assisted proof from their own authenticated session.",
+    "parties": { "subject": "Subject", "representative": "Representative" },
+    "loadFailed": "The privacy queue could not be loaded.",
+    "caseFailed": "The case could not be loaded.",
+    "actionFailed": "The privacy action could not be completed.",
+    "title": "Privacy requests",
+    "refresh": "Refresh",
+    "empty": "No open requests.",
+    "selectRequest": "Select a request to inspect its bounded metadata.",
+    "verifyIdentity": "Verify identity",
+    "generate": "Generate archive",
+    "generateAfterReview": "Generate after review",
+    "tasks": "Source tasks",
+    "review": "Review",
+    "archives": "Archives",
+    "readiness": "Readiness",
+    "ready": "Ready for approved release",
+    "notReady": "Not ready for a completeness claim",
+    "backups": "Trusted backup inventory",
+    "noBackups": "No inventory available.",
+    "queue": "Queue ({count})",
+    "queueItem": "{state} · due {date}",
+    "case": "Case {id}",
+    "caseMetadata": "Response deadline: {date} · identity: {identity}",
+    "unknown": "Unknown",
+    "expires": "Expires {date}",
+    "verified": "Verified",
+    "unverified": "Unverified"
   }
 }

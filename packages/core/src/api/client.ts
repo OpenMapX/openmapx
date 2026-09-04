@@ -174,6 +174,8 @@ export interface ApiRequestOptions {
   signal?: AbortSignal;
   /** Abort after this many milliseconds. Omitted means no client-side deadline. */
   timeoutMs?: number;
+  /** Additional per-request headers (for example an idempotency key). */
+  headers?: HeadersInit;
 }
 
 /**
@@ -249,7 +251,12 @@ export class ApiClient {
     try {
       return await fetch(url, {
         ...init,
-        headers: { Accept: "application/json", ...init.headers, ...cfg.headerInterceptor?.() },
+        headers: {
+          Accept: "application/json",
+          ...init.headers,
+          ...options.headers,
+          ...cfg.headerInterceptor?.(),
+        },
         credentials: cfg.credentials ?? "omit",
         signal: controller.signal,
       });

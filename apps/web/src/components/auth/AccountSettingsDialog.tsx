@@ -43,6 +43,7 @@ import {
 import { clearPrivateDeviceData } from "@/lib/accountDeletionCleanup";
 import type { AccountSettingsSection } from "@/stores/accountSettingsStore";
 import { MangroveAccountSection } from "./MangroveAccountSection";
+import { PrivacyDataSection } from "./PrivacyDataSection";
 import { SharedLinksSection } from "./SharedLinksSection";
 import { TimelineConnectionSection } from "./TimelineConnectionSection";
 
@@ -80,6 +81,7 @@ export function AccountSettingsDialog({
   const [confirmUnlinkProvider, setConfirmUnlinkProvider] = useState<string | null>(null);
   const timelineHeadingRef = useRef<HTMLHeadingElement>(null);
   const sharingHeadingRef = useRef<HTMLHeadingElement>(null);
+  const privacyHeadingRef = useRef<HTMLHeadingElement>(null);
 
   const focusInitialSection = () => {
     const heading =
@@ -87,7 +89,9 @@ export function AccountSettingsDialog({
         ? timelineHeadingRef.current
         : initialSection === "sharing"
           ? sharingHeadingRef.current
-          : null;
+          : initialSection === "privacy"
+            ? privacyHeadingRef.current
+            : null;
     if (!heading) return;
     const reducedMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
     heading.focus({ preventScroll: true });
@@ -1100,6 +1104,10 @@ export function AccountSettingsDialog({
         <Divider sx={{ my: 2 }} />
 
         <SharedLinksSection ref={sharingHeadingRef} />
+
+        <Divider sx={{ my: 2 }} />
+
+        <PrivacyDataSection ref={privacyHeadingRef} />
 
         <Divider sx={{ my: 2 }} />
 

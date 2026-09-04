@@ -1,0 +1,2 @@
+ALTER TABLE "data_export_reauthentication" ADD COLUMN "delivery_channel" text DEFAULT 'self_service' NOT NULL;--> statement-breakpoint
+ALTER TABLE "data_export_reauthentication" ADD CONSTRAINT "data_export_reauthentication_channel_check" CHECK ("data_export_reauthentication"."delivery_channel" in ('self_service', 'assisted', 'representative'));

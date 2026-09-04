@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
 import { isAbsolute } from "node:path";
+import { Readable } from "node:stream";
 import {
   OPS_KIND_POLICIES,
   OPS_MAX_EVENT_BATCH,
@@ -13,7 +15,15 @@ import {
   type OpsOperationKind,
   type OpsResultFor,
   type OpsSubmitResult,
+  PRIVACY_BACKUP_TAR_MEDIA_TYPE,
+  type PrivacyBackupSubjectExportRequest,
+  privacyBackupSubjectExportRequestSchema,
 } from "@openmapx/core/ops";
+import {
+  DAWARICH_TAR_MEDIA_TYPE,
+  type DawarichSubjectRequestV1,
+  dawarichSubjectRequestV1Schema,
+} from "@openmapx/core/privacy";
 
 const DEFAULT_POLL_INTERVAL_MS = 250;
 const MAX_WAIT_TIMEOUT_MS = 30 * 60_000 + 5_000;
@@ -29,6 +39,170 @@ export class ApiOpsError extends Error {
     super("Operations request failed");
     this.name = "ApiOpsError";
   }
+}
+
+export class DawarichExportError extends Error {
+  constructor(
+    readonly code: string,
+    readonly statusCode = 502,
+  ) {
+    super("Managed timeline export unavailable");
+    this.name = "DawarichExportError";
+  }
+}
+
+export class PrivacyBackupExportError extends Error {
+  constructor(
+    readonly code: string,
+    readonly statusCode = 502,
+  ) {
+    super("Backup subject export unavailable");
+    this.name = "PrivacyBackupExportError";
+  }
+}
+
+export interface ManagedDawarichExportOptions {
+  request: DawarichSubjectRequestV1;
+  env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+/** Dedicated streaming client; it intentionally bypasses the bounded ops job
+ * result/event protocol because timeline bytes are subject data, not logs. */
+export async function fetchManagedDawarichSubjectExport(
+  options: ManagedDawarichExportOptions,
+): Promise<Readable> {
+  const request = dawarichSubjectRequestV1Schema.parse(options.request);
+  const env = options.env ?? process.env;
+  const baseUrl = env.OPS_AGENT_URL?.trim();
+  const tokenFile = env.OPS_AGENT_TOKEN_FILE?.trim();
+  if (!baseUrl || !tokenFile || !isAbsolute(tokenFile))
+    throw new DawarichExportError("not_configured", 503);
+  let url: URL;
+  try {
+    url = new URL("/v1/privacy/dawarich-subject-export", baseUrl);
+  } catch {
+    throw new DawarichExportError("not_configured", 503);
+  }
+  if (!/^https?:$/.test(url.protocol)) throw new DawarichExportError("not_configured", 503);
+  let token: string;
+  try {
+    token = (await readFile(tokenFile, "utf8")).trim();
+  } catch {
+    throw new DawarichExportError("not_configured", 503);
+  }
+  if (!token || token.length > 4096 || /[\r\n]/u.test(token))
+    throw new DawarichExportError("not_configured", 503);
+  const opsRequestId = `ops1_${createHash("sha256").update("openmapx/dawarich-export/v1\0").update(request.requestId).digest("base64url").slice(0, 32)}`;
+  let response: Response;
+  try {
+    response = await (options.fetchImpl ?? fetch)(url, {
+      method: "POST",
+      redirect: "error",
+      signal: options.signal,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        accept: DAWARICH_TAR_MEDIA_TYPE,
+        "x-ops-request-id": opsRequestId,
+      },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new DawarichExportError("timeout", 504);
+  }
+  if (!response.ok) {
+    let code = "collector_failed";
+    try {
+      const payload = (await response.json()) as { error?: unknown };
+      if (typeof payload.error === "string" && /^[a-z_]{1,64}$/.test(payload.error))
+        code = payload.error;
+    } catch {
+      /* bounded generic error */
+    }
+    throw new DawarichExportError(
+      code,
+      response.status === 409 ? 409 : response.status >= 500 ? 503 : 400,
+    );
+  }
+  if (
+    response.headers.get("content-type")?.split(";", 1)[0] !== DAWARICH_TAR_MEDIA_TYPE ||
+    !response.body
+  )
+    throw new DawarichExportError("schema_mismatch", 502);
+  return Readable.fromWeb(response.body as never);
+}
+
+export interface PrivacyBackupExportOptions {
+  request: PrivacyBackupSubjectExportRequest;
+  env?: NodeJS.ProcessEnv;
+  signal?: AbortSignal;
+  fetchImpl?: typeof fetch;
+}
+
+/** Stream a case-approved backup source part from the dedicated ops endpoint. */
+export async function fetchPrivacyBackupSubjectExport(
+  options: PrivacyBackupExportOptions,
+): Promise<Readable> {
+  const request = privacyBackupSubjectExportRequestSchema.parse(options.request);
+  const env = options.env ?? process.env;
+  const baseUrl = env.OPS_AGENT_URL?.trim();
+  const tokenFile = env.OPS_AGENT_TOKEN_FILE?.trim();
+  if (!baseUrl || !tokenFile || !isAbsolute(tokenFile))
+    throw new PrivacyBackupExportError("not_configured", 503);
+  let url: URL;
+  try {
+    url = new URL("/v1/privacy/backup-subject-export", baseUrl);
+  } catch {
+    throw new PrivacyBackupExportError("not_configured", 503);
+  }
+  if (!/^https?:$/.test(url.protocol)) throw new PrivacyBackupExportError("not_configured", 503);
+  let token: string;
+  try {
+    token = (await readFile(tokenFile, "utf8")).trim();
+  } catch {
+    throw new PrivacyBackupExportError("not_configured", 503);
+  }
+  if (!token || token.length > 4096 || /[\r\n]/u.test(token))
+    throw new PrivacyBackupExportError("not_configured", 503);
+  let response: Response;
+  try {
+    response = await (options.fetchImpl ?? fetch)(url, {
+      method: "POST",
+      redirect: "error",
+      signal: options.signal,
+      headers: {
+        authorization: `Bearer ${token}`,
+        "content-type": "application/json",
+        accept: PRIVACY_BACKUP_TAR_MEDIA_TYPE,
+      },
+      body: JSON.stringify(request),
+    });
+  } catch {
+    throw new PrivacyBackupExportError("timeout", 504);
+  }
+  if (!response.ok) {
+    let code = "collector_failed";
+    try {
+      const payload = (await response.json()) as { error?: unknown };
+      if (typeof payload.error === "string" && /^[a-z_]{1,64}$/.test(payload.error))
+        code = payload.error;
+    } catch {
+      /* bounded generic error */
+    }
+    throw new PrivacyBackupExportError(
+      code,
+      response.status === 409 ? 409 : response.status >= 500 ? 503 : 400,
+    );
+  }
+  if (
+    response.headers.get("content-type")?.split(";", 1)[0] !== PRIVACY_BACKUP_TAR_MEDIA_TYPE ||
+    !response.body
+  ) {
+    throw new PrivacyBackupExportError("schema_mismatch", 502);
+  }
+  return Readable.fromWeb(response.body as never);
 }
 
 export function createApiOpsClient(env: NodeJS.ProcessEnv = process.env): OpsClient {

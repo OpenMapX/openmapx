@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://sunrise-sunset.org/api",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["knowledge"],
   "frontend": {
     "mapLayer": false,

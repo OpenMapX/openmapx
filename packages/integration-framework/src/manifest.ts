@@ -232,6 +232,57 @@ const infrastructureSchema = z.object({
   planetScale: z.boolean().optional(),
 });
 
+export const integrationSubjectDataSchema = z
+  .object({
+    storesPersonalData: z.boolean(),
+    strategy: z.enum(["collector", "operator_task", "not_personal"]),
+    registrationIds: z.array(z.string().regex(/^[a-z0-9][a-z0-9-]*$/)).max(64),
+    operatorInstructions: z.string().min(1).max(2_000).nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.storesPersonalData && value.strategy === "not_personal") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["strategy"],
+        message: "personal data cannot be not_personal",
+      });
+    }
+    if (
+      value.storesPersonalData &&
+      value.strategy === "collector" &&
+      value.registrationIds.length === 0
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["registrationIds"],
+        message: "collector needs a registration id",
+      });
+    }
+    if (
+      value.storesPersonalData &&
+      value.strategy === "operator_task" &&
+      !value.operatorInstructions
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["operatorInstructions"],
+        message: "operator_task needs instructions",
+      });
+    }
+    if (
+      !value.storesPersonalData &&
+      (value.registrationIds.length > 0 || value.operatorInstructions)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["registrationIds"],
+        message: "non-personal integration cannot declare subject data",
+      });
+    }
+  });
+export type IntegrationSubjectData = z.infer<typeof integrationSubjectDataSchema>;
+
 const requireEntrySchema = z
   .object({
     service: z.string().optional(),
@@ -276,6 +327,7 @@ export const integrationManifestSchema = z.object({
   dataSources: z.array(dataSourceSchema).optional(),
 
   infrastructure: infrastructureSchema.optional(),
+  subjectData: integrationSubjectDataSchema.optional(),
 });
 
 export type IntegrationManifest = z.infer<typeof integrationManifestSchema>;

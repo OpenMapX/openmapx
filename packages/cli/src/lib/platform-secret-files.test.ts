@@ -1,4 +1,5 @@
 import {
+  chmodSync,
   linkSync,
   lstatSync,
   mkdirSync,
@@ -16,6 +17,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   assertPlatformSecretMetadata,
   assertPlatformSecretParentOwner,
+  ensurePlatformExportsKeyRingFile,
   ensurePlatformPrivateDirectory,
   ensurePlatformSecretFile,
   rotatePlatformSecretFile,
@@ -332,6 +334,56 @@ describe("ensurePlatformSecretFile", () => {
       }),
     ).toThrow(original);
     expect(readdirSync(secretDir).filter((name) => name.endsWith(".tmp"))).toHaveLength(1);
+  });
+});
+
+describe("ensurePlatformExportsKeyRingFile", () => {
+  it("creates a private legacy-compatible key and reuses a strict versioned overlap ring", () => {
+    const path = join(tempDir(), "secrets", "subject-exports-master-key");
+    const first = ensurePlatformExportsKeyRingFile(path, {
+      randomBytes: () => Buffer.alloc(32, 21),
+    });
+    expect(first).toBe(canonicalPassword(21));
+    expect(statSync(path).mode & 0o777).toBe(0o400);
+
+    const versioned = JSON.stringify({
+      formatVersion: 1,
+      activeVersion: 2,
+      keys: [
+        { version: 1, key: canonicalPassword(21) },
+        { version: 2, key: canonicalPassword(22) },
+      ],
+    });
+    chmodSync(path, 0o600);
+    writeFileSync(path, versioned);
+    chmodSync(path, 0o444);
+
+    expect(ensurePlatformExportsKeyRingFile(path)).toBe(versioned);
+    expect(readFileSync(path, "utf8")).toBe(versioned);
+    expect(statSync(path).mode & 0o777).toBe(0o400);
+  });
+
+  it("rejects malformed versioned rings without changing them or weakening other secret formats", () => {
+    const root = tempDir();
+    const path = join(root, "secrets", "subject-exports-master-key");
+    mkdirSync(join(root, "secrets"));
+    const malformed = JSON.stringify({
+      formatVersion: 1,
+      activeVersion: 2,
+      keys: [{ version: 1, key: canonicalPassword(23) }],
+    });
+    writeFileSync(path, malformed, { mode: 0o400 });
+    expect(() => ensurePlatformExportsKeyRingFile(path)).toThrow(/key ring is invalid/);
+    expect(readFileSync(path, "utf8")).toBe(malformed);
+
+    const ordinary = join(root, "secrets", "redis-password");
+    ensurePlatformSecretFile(ordinary, { randomBytes: () => Buffer.alloc(32, 24) });
+    expect(statSync(ordinary).mode & 0o777).toBe(0o444);
+    expect(() => {
+      chmodSync(ordinary, 0o600);
+      writeFileSync(ordinary, JSON.stringify({ formatVersion: 1, activeVersion: 1, keys: [] }));
+      ensurePlatformSecretFile(ordinary);
+    }).toThrow(/canonical/);
   });
 });
 

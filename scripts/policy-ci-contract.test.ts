@@ -18,6 +18,7 @@ describe("repository policy gate", () => {
       "pnpm check-legal-tables",
       "pnpm check-legal-updated",
       "pnpm check-data-flows",
+      "pnpm check-subject-data",
       "pnpm check-license-metadata",
       "pnpm check-air-quality-release-gates",
       "pnpm check-toolchain-pins",

@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://eonet.gsfc.nasa.gov/docs/v3, https://www.gdacs.org/gdacsapi/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,

@@ -9,6 +9,7 @@ import CatalogIcon from "@mui/icons-material/GridView";
 import CacheIcon from "@mui/icons-material/LayersClear";
 import PoiIcon from "@mui/icons-material/LocationOn";
 import UsersIcon from "@mui/icons-material/People";
+import PrivacyIcon from "@mui/icons-material/PrivacyTip";
 import BackupIcon from "@mui/icons-material/Restore";
 import SettingsIcon from "@mui/icons-material/Settings";
 import DataIcon from "@mui/icons-material/Storage";
@@ -61,66 +62,84 @@ const BASE_NAV_ITEMS = [
     icon: <OverviewIcon fontSize="small" />,
     exact: true,
     selfHostedOnly: false,
+    privacyOnly: false,
+  },
+  {
+    label: "Privacy requests",
+    href: "/admin/privacy",
+    icon: <PrivacyIcon fontSize="small" />,
+    selfHostedOnly: false,
+    privacyOnly: true,
   },
   {
     label: "Users",
     href: "/admin/users",
     icon: <UsersIcon fontSize="small" />,
     selfHostedOnly: false,
+    privacyOnly: false,
   },
   {
     label: "Integrations",
     href: "/admin/integrations",
     icon: <IntegrationsIcon fontSize="small" />,
     selfHostedOnly: false,
+    privacyOnly: false,
   },
   {
     label: "Extensions",
     href: "/admin/extensions",
     icon: <StoreIcon fontSize="small" />,
     selfHostedOnly: false,
+    privacyOnly: false,
   },
   {
     label: "Services",
     href: "/admin/services",
     icon: <ServicesIcon fontSize="small" />,
     selfHostedOnly: true,
+    privacyOnly: false,
   },
   {
     label: "Transit",
     href: "/admin/transit",
     icon: <TransitIcon fontSize="small" />,
     selfHostedOnly: false,
+    privacyOnly: false,
   },
   {
     label: "POI ingest",
     href: "/admin/poi-ingest",
     icon: <PoiIcon fontSize="small" />,
     selfHostedOnly: false,
+    privacyOnly: false,
   },
   {
     label: "Activity",
     href: "/admin/activity",
     icon: <ActivityIcon fontSize="small" />,
     selfHostedOnly: false,
+    privacyOnly: false,
   },
   {
     label: "Settings",
     href: "/admin/settings",
     icon: <SettingsIcon fontSize="small" />,
     selfHostedOnly: false,
+    privacyOnly: false,
   },
   {
     label: "Maintenance",
     href: "/admin/system",
     icon: <SystemUpdateIcon fontSize="small" />,
     selfHostedOnly: true,
+    privacyOnly: false,
   },
   {
     label: "Cache",
     href: "/admin/cache",
     icon: <CacheIcon fontSize="small" />,
     selfHostedOnly: false,
+    privacyOnly: false,
   },
 ] as const;
 
@@ -128,6 +147,7 @@ type NavItem = (typeof BASE_NAV_ITEMS)[number];
 
 const NAV_GROUPS = [
   { label: "Manage", hrefs: ["/admin", "/admin/users"] },
+  { label: "Privacy", hrefs: ["/admin/privacy"] },
   { label: "Platform", hrefs: ["/admin/integrations", "/admin/extensions"] },
   {
     label: "Operations",
@@ -146,6 +166,7 @@ interface AdminSidebarProps {
   open: boolean;
   onClose: () => void;
   selfHosted?: boolean;
+  role?: string;
 }
 
 function NavLink({
@@ -240,10 +261,19 @@ function SubNavLink({ item, active }: { item: SubItem; active: boolean }) {
   );
 }
 
-export function AdminSidebar({ open, onClose, selfHosted = false }: AdminSidebarProps) {
+export function AdminSidebar({
+  open,
+  onClose,
+  selfHosted = false,
+  role = "admin",
+}: AdminSidebarProps) {
   const pathname = usePathname();
 
-  const navItems = BASE_NAV_ITEMS.filter((item) => !item.selfHostedOnly || selfHosted);
+  const navItems = BASE_NAV_ITEMS.filter(
+    (item) =>
+      (!item.selfHostedOnly || selfHosted) &&
+      (!item.privacyOnly || role === "admin" || role === "privacy_admin"),
+  ).filter((item) => role === "admin" || item.privacyOnly);
 
   const isActive = (item: NavItem) => {
     if ("exact" in item && item.exact) return pathname === item.href;

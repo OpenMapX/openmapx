@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "AGPL-3.0-or-later",
   "documentation": "https://open-meteo.com/en/docs/air-quality-api",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["air-quality"],
   "frontend": {
     "mapLayer": false,

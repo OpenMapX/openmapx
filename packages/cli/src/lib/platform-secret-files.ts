@@ -19,6 +19,8 @@ import {
 import { basename, dirname, join } from "node:path";
 
 const MAX_PLATFORM_SECRET_BYTES = 4_096;
+const MAX_EXPORTS_KEY_RING_BYTES = 2_048;
+const MAX_EXPORTS_KEY_RING_KEYS = 8;
 let temporarySequence = 0;
 
 export interface EnsurePlatformSecretOptions {
@@ -189,7 +191,79 @@ function isCanonicalPlatformSecret(value: string): boolean {
   return decoded.length === 32 && decoded.toString("base64url") === value;
 }
 
-function readExistingSecret(path: string, parentStats: Stats): string | null {
+function exactObjectKeys(value: Record<string, unknown>, expected: readonly string[]): boolean {
+  const actual = Object.keys(value).sort();
+  return actual.length === expected.length && actual.every((key, index) => key === expected[index]);
+}
+
+function isCanonicalExportsKeyRing(value: string): boolean {
+  if (isCanonicalPlatformSecret(value)) return true;
+  if (Buffer.byteLength(value, "utf8") > MAX_EXPORTS_KEY_RING_BYTES) return false;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    return false;
+  }
+  if (
+    !parsed ||
+    typeof parsed !== "object" ||
+    Array.isArray(parsed) ||
+    JSON.stringify(parsed) !== value
+  )
+    return false;
+  const ring = parsed as Record<string, unknown>;
+  if (
+    !exactObjectKeys(ring, ["activeVersion", "formatVersion", "keys"]) ||
+    ring.formatVersion !== 1 ||
+    !Number.isSafeInteger(ring.activeVersion) ||
+    (ring.activeVersion as number) < 1 ||
+    !Array.isArray(ring.keys) ||
+    ring.keys.length < 1 ||
+    ring.keys.length > MAX_EXPORTS_KEY_RING_KEYS
+  )
+    return false;
+  const versions = new Set<number>();
+  for (const entry of ring.keys) {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) return false;
+    const key = entry as Record<string, unknown>;
+    if (
+      !exactObjectKeys(key, ["key", "version"]) ||
+      !Number.isSafeInteger(key.version) ||
+      (key.version as number) < 1 ||
+      typeof key.key !== "string" ||
+      versions.has(key.version as number) ||
+      !isCanonicalPlatformSecret(key.key)
+    )
+      return false;
+    versions.add(key.version as number);
+  }
+  return versions.has(ring.activeVersion as number);
+}
+
+interface PlatformSecretFormat {
+  finalMode: number;
+  invalidMessage: string;
+  validate: (value: string) => boolean;
+}
+
+const ordinarySecretFormat: PlatformSecretFormat = {
+  finalMode: 0o444,
+  invalidMessage: "Platform secret file is not canonical base64url-encoded 32-byte data",
+  validate: isCanonicalPlatformSecret,
+};
+
+const exportsKeyRingFormat: PlatformSecretFormat = {
+  finalMode: 0o400,
+  invalidMessage: "Platform exports key ring is invalid",
+  validate: isCanonicalExportsKeyRing,
+};
+
+function readExistingSecret(
+  path: string,
+  parentStats: Stats,
+  format: PlatformSecretFormat = ordinarySecretFormat,
+): string | null {
   let fd: number;
   try {
     fd = openSync(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);
@@ -214,13 +288,11 @@ function readExistingSecret(path: string, parentStats: Stats): string | null {
     }
     if (bytesRead === 0) throw new Error("Platform secret file is empty");
     const value = bytes.subarray(0, bytesRead).toString("utf8");
-    if (!isCanonicalPlatformSecret(value)) {
-      throw new Error("Platform secret file is not canonical base64url-encoded 32-byte data");
-    }
-    // Docker Compose mounts source-file permissions unchanged. The 0700
-    // parent is the host boundary; 0444 lets non-root container users read the
-    // individual bind-mounted file, matching the existing Compose-secret model.
-    fchmodSync(fd, 0o444);
+    if (!format.validate(value)) throw new Error(format.invalidMessage);
+    // Docker Compose mounts source-file permissions unchanged. Ordinary shared
+    // secrets use 0444 inside a protected parent; the exports ring uses 0400
+    // because app-api runs with the same configured uid as the host owner.
+    fchmodSync(fd, format.finalMode);
     return value;
   } finally {
     closeSync(fd);
@@ -247,6 +319,7 @@ function createTemporaryFile(
   path: string,
   contents: string,
   overrides: PlatformTemporaryFileOps = {},
+  finalMode = 0o444,
 ): string {
   const parent = dirname(path);
   const ops = resolveTemporaryFileOps(overrides);
@@ -267,7 +340,7 @@ function createTemporaryFile(
     let failure: unknown;
     try {
       ops.write(fd, contents);
-      ops.chmod(fd, 0o444);
+      ops.chmod(fd, finalMode);
       // Sync after the final chmod so both data and candidate metadata are
       // durable before any publication or authoritative rename.
       ops.fsync(fd);
@@ -416,11 +489,12 @@ function readPublicationWinner(
   path: string,
   parentStats: Stats,
   hooks: PlatformSecretPublicationHooks = {},
+  format: PlatformSecretFormat = ordinarySecretFormat,
 ): string {
   const maxAttempts = 25;
   for (let attempt = 0; attempt < maxAttempts; attempt += 1) {
     try {
-      const winner = readExistingSecret(path, parentStats);
+      const winner = readExistingSecret(path, parentStats, format);
       if (winner === null) throw new Error("Platform secret race winner disappeared");
       return winner;
     } catch (error) {
@@ -438,18 +512,26 @@ export function ensurePlatformSecretFile(
   path: string,
   options: EnsurePlatformSecretOptions = {},
 ): string {
+  return ensurePlatformSecretFileWithFormat(path, options, ordinarySecretFormat);
+}
+
+function ensurePlatformSecretFileWithFormat(
+  path: string,
+  options: EnsurePlatformSecretOptions,
+  format: PlatformSecretFormat,
+): string {
   const parentStats = ensureSecureParent(path);
-  const existing = readExistingSecret(path, parentStats);
+  const existing = readExistingSecret(path, parentStats, format);
   if (existing !== null) return existing;
 
   const value = generatePlatformSecret(options);
-  const temporary = createTemporaryFile(path, value, options.temporaryFileOps);
+  const temporary = createTemporaryFile(path, value, options.temporaryFileOps, format.finalMode);
   try {
     // A hard link is an atomic create-without-replace operation. If another
     // renderer won the race, EEXIST preserves its value and we reuse it.
     linkSync(temporary, path);
     unlinkAuthoritativeTemporary(temporary, options.temporaryFileOps);
-    const authoritative = readExistingSecret(path, parentStats);
+    const authoritative = readExistingSecret(path, parentStats, format);
     if (authoritative === null) throw new Error("Platform secret disappeared after creation");
     return authoritative;
   } catch (error) {
@@ -458,11 +540,20 @@ export function ensurePlatformSecretFile(
       // reuse the winner. Otherwise stale secret material accumulates while the
       // operation incorrectly reports success.
       unlinkAuthoritativeTemporary(temporary, options.temporaryFileOps);
-      return readPublicationWinner(path, parentStats, options.publicationHooks);
+      return readPublicationWinner(path, parentStats, options.publicationHooks, format);
     }
     cleanupTemporaryFile(temporary, options.temporaryFileOps);
     throw error;
   }
+}
+
+/** Provision or preserve the dedicated exports key file. Existing files may
+ * use either the legacy one-key encoding or the strict bounded ring encoding. */
+export function ensurePlatformExportsKeyRingFile(
+  path: string,
+  options: EnsurePlatformSecretOptions = {},
+): string {
+  return ensurePlatformSecretFileWithFormat(path, options, exportsKeyRingFormat);
 }
 
 export function preparePlatformFileReplacement(

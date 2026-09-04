@@ -6,6 +6,12 @@
   "license": "BSD-2-Clause",
   "quality": "built-in",
   "homepage": "https://tileserver.readthedocs.io/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "maptiler/tileserver-gl",
     "tag": "latest",

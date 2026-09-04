@@ -1,0 +1,1 @@
+ALTER TABLE "data_subject_request_attachment" ADD COLUMN "metadata" jsonb DEFAULT '{}'::jsonb NOT NULL;

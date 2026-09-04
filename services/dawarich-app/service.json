@@ -7,6 +7,12 @@
   "quality": "built-in",
   "homepage": "https://dawarich.app/",
   "documentation": "https://dawarich.app/docs/self-hosting/",
+  "subjectData": {
+    "storesPersonalData": true,
+    "strategy": "collector",
+    "registrationIds": ["managed-dawarich"],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "freikin/dawarich",
     "tag": "1.10.3",
@@ -38,6 +44,7 @@
       "OIDC_PROVIDER_NAME": "OpenMapX",
       "OIDC_AUTO_REGISTER": "true",
       "OIDC_PKCE_ENABLED": "true",
+      "OPENMAPX_DAWARICH_COMMIT": "da551a0e32f67b4d8ac6d50132c26634d6ad29a4",
       "ALLOW_EMAIL_PASSWORD_REGISTRATION": "true",
       "ALLOW_EMAIL_PASSWORD_LOGIN": "true"
     },
@@ -102,6 +109,12 @@
       "OIDC_PROVIDER_NAME": { "type": "string", "title": "OIDC provider name" },
       "OIDC_AUTO_REGISTER": { "type": "string", "title": "OIDC automatic registration" },
       "OIDC_PKCE_ENABLED": { "type": "string", "title": "OIDC PKCE requirement" },
+      "OPENMAPX_DAWARICH_COMMIT": {
+        "type": "string",
+        "title": "Pinned Dawarich collector revision",
+        "description": "Internal compatibility marker for the privacy export collector.",
+        "readOnly": true
+      },
       "OPENMAPX_PROVISIONING_GENERATION": {
         "type": "string",
         "title": "OpenMapX managed provisioning generation",
@@ -169,6 +182,16 @@
     {
       "source": "scripts/openmapx-entrypoint.sh",
       "target": "/usr/local/bin/openmapx-entrypoint.sh",
+      "readOnly": true
+    },
+    {
+      "source": "scripts/openmapx-subject-export.rb",
+      "target": "/opt/openmapx/subject-export/openmapx-subject-export.rb",
+      "readOnly": true
+    },
+    {
+      "source": "scripts/subject_export/schema.rb",
+      "target": "/opt/openmapx/subject-export/subject_export/schema.rb",
       "readOnly": true
     }
   ],

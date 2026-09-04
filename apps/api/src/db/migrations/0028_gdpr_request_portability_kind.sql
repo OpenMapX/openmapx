@@ -1,0 +1,2 @@
+ALTER TABLE "data_subject_request" DROP CONSTRAINT "data_subject_request_kind_check";--> statement-breakpoint
+ALTER TABLE "data_subject_request" ADD CONSTRAINT "data_subject_request_kind_check" CHECK ("data_subject_request"."kind" in ('access', 'portability', 'access_and_portability'));

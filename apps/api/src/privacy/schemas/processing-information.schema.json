@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.example/privacy/processing-information-v2",
+  "type": "object",
+  "required": [
+    "version",
+    "request",
+    "controller",
+    "deployment",
+    "generatedAt",
+    "expiresAt",
+    "reviewContact",
+    "recipientSummary",
+    "translationFallbacks",
+    "sources"
+  ],
+  "properties": {
+    "version": { "const": 2 },
+    "request": { "type": "object" },
+    "controller": { "type": "object" },
+    "deployment": { "type": "object" },
+    "generatedAt": { "type": "string", "format": "date-time" },
+    "expiresAt": { "type": "string", "format": "date-time" },
+    "reviewContact": { "type": "string" },
+    "recipientSummary": { "type": ["object", "null"] },
+    "translationFallbacks": { "type": "array", "items": { "type": "object" } },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "version", "category", "outcome", "recordCount", "warningCodes"],
+        "properties": {
+          "id": { "type": "string" },
+          "version": { "type": "integer", "minimum": 1 },
+          "category": { "type": "string" },
+          "outcome": { "type": "string" },
+          "recordCount": { "type": "integer", "minimum": 0 },
+          "warningCodes": { "type": "array", "items": { "type": "string" } }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": false
+}

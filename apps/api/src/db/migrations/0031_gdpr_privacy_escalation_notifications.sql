@@ -1,0 +1,2 @@
+ALTER TABLE "data_subject_request_notification" DROP CONSTRAINT "data_subject_request_notification_template_check";--> statement-breakpoint
+ALTER TABLE "data_subject_request_notification" ADD CONSTRAINT "data_subject_request_notification_template_check" CHECK ("data_subject_request_notification"."template" in ('acknowledgement', 'clarification', 'extension', 'ready', 'delivered', 'closed', 'refused', 'escalation_due_soon', 'escalation_overdue', 'escalation_identity', 'escalation_extension', 'escalation_stuck'));

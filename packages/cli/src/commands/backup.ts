@@ -1,15 +1,24 @@
+import { createHash, randomBytes } from "node:crypto";
 import {
+  chmodSync,
+  closeSync,
+  constants,
+  createReadStream,
   createWriteStream,
   existsSync,
+  fsyncSync,
   lstatSync,
   mkdirSync,
+  openSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
+  unlinkSync,
   writeFileSync,
 } from "node:fs";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
 import { isErasedSubject, readErasureJournal } from "@openmapx/core/erasure-journal";
@@ -42,6 +51,8 @@ export interface BackupVolumeEntry {
   mode: BackupVolumeMode;
   file: string;
   sizeBytes: number;
+  /** Required for privacy extraction in manifest format 2. */
+  sha256?: string;
   /**
    * Postgres credentials captured from the producer service's manifest at
    * backup time (`pg_dump`-mode entries only). Persisted so restore targets
@@ -59,10 +70,21 @@ export interface BackupServiceEntry {
 }
 
 export interface BackupManifest {
+  /** Format 1 is legacy size-only; new backups are format 2. */
+  formatVersion?: 1 | 2;
   name: string;
   createdAt: string;
   openmapxVersion: string;
   services: BackupServiceEntry[];
+  privacySourceProvenance?: {
+    managedDawarich?: {
+      version: "1.10.3";
+      image: "freikin/dawarich";
+      imageDigest: string;
+      upstreamCommit: string;
+      schemaContract: "dawarich-1.10.3";
+    };
+  };
 }
 
 // ─── Validation helpers (pure / unit-testable) ─────────────────────────────
@@ -97,7 +119,7 @@ export function assertValidVolumeEntry(entry: BackupVolumeEntry, context: string
   if (!entry || typeof entry !== "object") {
     throw new Error(`Invalid volume entry in ${context}`);
   }
-  if (typeof entry.name !== "string" || entry.name.length === 0) {
+  if (typeof entry.name !== "string" || !VOLUME_NAME_REGEX.test(entry.name)) {
     throw new Error(`Invalid volume name in ${context}`);
   }
   if (entry.mode !== "tar" && entry.mode !== "pg_dump") {
@@ -112,6 +134,12 @@ export function assertValidVolumeEntry(entry: BackupVolumeEntry, context: string
     entry.sizeBytes < 0
   ) {
     throw new Error(`Invalid backup size in ${context}`);
+  }
+  if (
+    entry.sha256 !== undefined &&
+    (typeof entry.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(entry.sha256))
+  ) {
+    throw new Error(`Invalid backup digest in ${context}`);
   }
   if (
     entry.resolvedName !== undefined &&
@@ -172,8 +200,14 @@ export function isCompatiblePlatformVersion(
  * every field is shape-checked here rather than only at the sinks.
  */
 export function readBackupManifest(filePath: string): BackupManifest {
-  if (!existsSync(filePath)) {
+  let manifestStat: ReturnType<typeof lstatSync>;
+  try {
+    manifestStat = lstatSync(filePath);
+  } catch {
     throw new Error(`Backup manifest not found: ${filePath}`);
+  }
+  if (!manifestStat.isFile() || manifestStat.isSymbolicLink() || manifestStat.nlink !== 1) {
+    throw new Error(`Backup manifest is not a private regular file: ${filePath}`);
   }
   const raw = JSON.parse(readFileSync(filePath, "utf-8")) as Partial<BackupManifest>;
   if (
@@ -185,6 +219,28 @@ export function readBackupManifest(filePath: string): BackupManifest {
   ) {
     throw new Error(`Malformed backup manifest at ${filePath}`);
   }
+  if (raw.formatVersion !== undefined && raw.formatVersion !== 1 && raw.formatVersion !== 2) {
+    throw new Error(`Malformed backup format version in ${filePath}`);
+  }
+  const managed = raw.privacySourceProvenance?.managedDawarich;
+  if (
+    managed &&
+    (managed.version !== "1.10.3" ||
+      managed.image !== "freikin/dawarich" ||
+      !/^sha256:[a-f0-9]{64}$/.test(managed.imageDigest) ||
+      !/^[a-f0-9]{40}$/.test(managed.upstreamCommit) ||
+      managed.schemaContract !== "dawarich-1.10.3")
+  )
+    throw new Error(`Malformed Dawarich privacy provenance in ${filePath}`);
+  // Legacy manifests may contain a non-ISO creation marker; disaster-recovery
+  // callers retain their existing directory-age fallback. New manifests use
+  // an RFC3339 value, but strict timestamp validation belongs to the restore
+  // protection gate rather than this compatibility parser.
+  if (!isValidBackupName(raw.name)) {
+    throw new Error(`Malformed backup identity in ${filePath}`);
+  }
+  const serviceIds = new Set<string>();
+  const files = new Set<string>();
   for (const s of raw.services) {
     if (typeof s.id !== "string" || typeof s.version !== "string" || !Array.isArray(s.volumes)) {
       throw new Error(`Malformed service entry in ${filePath}`);
@@ -192,11 +248,44 @@ export function readBackupManifest(filePath: string): BackupManifest {
     if (!SERVICE_ID_REGEX.test(s.id)) {
       throw new Error(`Invalid service id in ${filePath}: ${s.id}`);
     }
+    if (serviceIds.has(s.id)) throw new Error(`Duplicate service id in ${filePath}: ${s.id}`);
+    serviceIds.add(s.id);
     for (const volume of s.volumes) {
       assertValidVolumeEntry(volume, filePath);
+      if (files.has(volume.file)) throw new Error(`Duplicate backup file in ${filePath}`);
+      files.add(volume.file);
+      if (raw.formatVersion === 2 && !volume.sha256)
+        throw new Error(`Missing backup digest in ${filePath}`);
     }
   }
   return raw as BackupManifest;
+}
+
+export async function sha256File(filePath: string): Promise<string> {
+  const hash = createHash("sha256");
+  const stream = createReadStream(filePath, { flags: "r" });
+  for await (const chunk of stream) hash.update(chunk as Buffer);
+  return hash.digest("hex");
+}
+
+/** Verify a v2 file's size and digest immediately before any restore or
+ * privacy extraction reads it. Legacy manifests remain disaster-recovery-only. */
+export async function verifyBackupVolumeFile(
+  manifest: BackupManifest,
+  volume: BackupVolumeEntry,
+  backupDir: string,
+): Promise<string> {
+  const file = resolve(backupDir, volume.file);
+  if (!file.startsWith(`${resolve(backupDir)}/`) || !existsSync(file))
+    throw new Error("Backup file is unavailable");
+  const stat = lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
+    throw new Error("Backup file is not a regular file");
+  if (manifest.formatVersion !== 2 || !volume.sha256)
+    throw new Error("Backup manifest is an unverified legacy format");
+  if (stat.size !== volume.sizeBytes || (await sha256File(file)) !== volume.sha256)
+    throw new Error("Backup file digest changed");
+  return file;
 }
 
 /** Filter a manifest down to a subset of services. Throws if any id is unknown. */
@@ -390,6 +479,59 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024 / 1024).toFixed(2)} GB`;
 }
 
+/** Flush a directory entry after an atomic rename.  Directory fsync is
+ * supported by the Linux hosts used for deployments; if it is unavailable the
+ * caller receives an error instead of reporting a manifest as durable. */
+function fsyncDirectory(directory: string): void {
+  const descriptor = openSync(directory, constants.O_RDONLY | constants.O_DIRECTORY);
+  try {
+    fsyncSync(descriptor);
+  } finally {
+    closeSync(descriptor);
+  }
+}
+
+/** Write a backup manifest as one private, durable publication.  A partial
+ * manifest must never be mistaken for a valid inventory entry, and a reader
+ * must never observe a half-written JSON document. */
+export function writeBackupManifestAtomically(filePath: string, manifest: BackupManifest): void {
+  const directory = dirname(filePath);
+  const temporary = join(
+    directory,
+    `.manifest-${process.pid}-${randomBytes(16).toString("hex")}.partial`,
+  );
+  const serialized = `${JSON.stringify(manifest, null, 2)}\n`;
+  let descriptor: number | undefined;
+  try {
+    descriptor = openSync(
+      temporary,
+      constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY | constants.O_NOFOLLOW,
+      0o600,
+    );
+    writeFileSync(descriptor, serialized, "utf8");
+    fsyncSync(descriptor);
+    chmodSync(temporary, 0o400);
+    closeSync(descriptor);
+    descriptor = undefined;
+    renameSync(temporary, filePath);
+    fsyncDirectory(directory);
+  } catch (error) {
+    if (descriptor !== undefined) {
+      try {
+        closeSync(descriptor);
+      } catch {
+        /* best effort before removing this exact temporary name */
+      }
+    }
+    try {
+      unlinkSync(temporary);
+    } catch {
+      /* the rename may already have published the manifest */
+    }
+    throw error;
+  }
+}
+
 // ─── Create ────────────────────────────────────────────────────────────────
 
 export interface CreateBackupOptions {
@@ -434,7 +576,7 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   }
   const volumeNames = await resolveVolumeNames(ctx, declaredNames);
 
-  mkdirSync(backupDir, { recursive: true });
+  mkdirSync(backupDir, { recursive: true, mode: 0o700 });
 
   const stoppedServices: string[] = [];
   const cleanupHandlers: Array<() => Promise<void> | void> = [];
@@ -463,10 +605,25 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
   });
 
   const manifest: BackupManifest = {
+    formatVersion: 2,
     name,
     createdAt: new Date().toISOString(),
     openmapxVersion: PLATFORM_VERSION,
     services: [],
+    ...(targets.some((service) => service.id === "dawarich-postgis")
+      ? {
+          privacySourceProvenance: {
+            managedDawarich: {
+              version: "1.10.3",
+              image: "freikin/dawarich",
+              imageDigest:
+                "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b",
+              upstreamCommit: "da551a0e32f67b4d8ac6d50132c26634d6ad29a4",
+              schemaContract: "dawarich-1.10.3",
+            },
+          },
+        }
+      : {}),
   };
 
   try {
@@ -494,6 +651,7 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
           mode: "pg_dump",
           file,
           sizeBytes: safeSize(out),
+          sha256: await sha256File(out),
           // Persist the credentials so restore can target the same
           // database/user even if the manifest changes later.
           postgresUser: user,
@@ -523,17 +681,14 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
           mode: "tar",
           file,
           sizeBytes: safeSize(out),
+          sha256: await sha256File(out),
         });
       }
 
       manifest.services.push(serviceEntry);
     }
 
-    writeFileSync(
-      join(backupDir, "manifest.json"),
-      `${JSON.stringify(manifest, null, 2)}\n`,
-      "utf-8",
-    );
+    writeBackupManifestAtomically(join(backupDir, "manifest.json"), manifest);
 
     // Restart the services we stopped (in reverse order — closer to original
     // dependency direction).
@@ -624,7 +779,7 @@ async function pgDumpToFile(
     throw new Error("pg_dump subprocess has no stdout stream");
   }
 
-  const out = createWriteStream(outFile);
+  const out = createWriteStream(outFile, { mode: 0o600 });
   const gzip = createGzip();
 
   // Run the stream pipeline and the subprocess wait in parallel; both
@@ -664,6 +819,10 @@ async function tarVolumeToFile(
     throw new Error(
       `tar of volume ${volumeName} failed (exit ${result.exitCode}): ${result.stderr ?? ""}`,
     );
+  }
+  const output = join(backupDir, fileName);
+  if (!existsSync(output) || !lstatSync(output).isFile() || lstatSync(output).nlink !== 1) {
+    throw new Error(`tar of volume ${volumeName} did not create ${fileName}`);
   }
 }
 
@@ -1079,9 +1238,9 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
           throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
         }
-        if (!existsSync(file)) {
-          throw new Error(`Backup file missing: ${file}`);
-        }
+        if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
+        if (pre.manifest.formatVersion === 2)
+          await verifyBackupVolumeFile(pre.manifest, vol, pre.backupDir);
 
         // pg_dump restores require a live server. A service can use this mode
         // regardless of its id, so never infer the behavior from `postgis`.
@@ -1119,9 +1278,9 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         if (!file.startsWith(`${resolve(pre.backupDir)}/`)) {
           throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
         }
-        if (!existsSync(file)) {
-          throw new Error(`Backup file missing: ${file}`);
-        }
+        if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
+        if (pre.manifest.formatVersion === 2)
+          await verifyBackupVolumeFile(pre.manifest, vol, pre.backupDir);
         if (!vol.resolvedName) {
           throw new Error(
             `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,

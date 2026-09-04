@@ -4,6 +4,12 @@
   "author": "Your Name",
   "license": "MIT",
   "documentation": "https://example.com/api",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["__DOMAIN__"],
   "frontend": {
     "mapLayer": false,

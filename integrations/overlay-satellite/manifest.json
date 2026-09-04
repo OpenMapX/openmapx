@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "MIT",
   "documentation": "https://nasa-gibs.github.io/gibs-api-docs/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["map-overlay"],
   "frontend": {
     "mapLayer": true,

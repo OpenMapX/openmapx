@@ -2,6 +2,10 @@ import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import { and, eq, gt, isNull, lt, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db";
 import { mobileAuthHandoff } from "../db/schema";
+import {
+  preservationAllowsDeletion,
+  withPreservationRetentionLock,
+} from "../privacy/preservation.js";
 import { decryptHandoffToken, encryptHandoffToken } from "./mobileAuthHandoffCrypto";
 
 /**
@@ -230,6 +234,17 @@ export class MobileAuthHandoffService {
 
   /** Drops rows that can no longer be redeemed. Opportunistic, never required. */
   async scrubExpired(nowMs: number): Promise<void> {
-    await this.db.delete(mobileAuthHandoff).where(lt(mobileAuthHandoff.expiresAt, new Date(nowMs)));
+    await withPreservationRetentionLock(this.db, (tx) =>
+      tx.delete(mobileAuthHandoff).where(
+        and(
+          lt(mobileAuthHandoff.expiresAt, new Date(nowMs)),
+          preservationAllowsDeletion({
+            registrationId: "mobile-auth-handoffs",
+            candidateTimestamp: mobileAuthHandoff.createdAt,
+            subjectIds: [mobileAuthHandoff.userId],
+          }),
+        ),
+      ),
+    );
   }
 }

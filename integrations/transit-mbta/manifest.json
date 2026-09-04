@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "MIT",
   "quality": "built-in",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["transit"],
   "category": "Transit",
   "configSchema": {

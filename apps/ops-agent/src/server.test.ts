@@ -34,6 +34,35 @@ function auth(token: string) {
 }
 
 describe("ops-agent request boundary", () => {
+  it("publishes exact live privacy backup evidence and fails closed", async () => {
+    const collectorImage = `ghcr.io/openmapx/privacy-backup@sha256:${"a".repeat(64)}`;
+    const app = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      privacyBackupHealth: async () => ({
+        ready: true,
+        inventoryReadable: true,
+        collectorImage,
+      }),
+    });
+    expect((await app.inject({ method: "GET", url: "/health" })).json()).toEqual({
+      ok: true,
+      privacyBackup: { ready: true, inventoryReadable: true, collectorImage },
+    });
+    await app.close();
+
+    const failedApp = buildOpsAgentServer({
+      tokens: { api: apiToken, "data-manager": dataManagerToken },
+      privacyBackupHealth: async () => {
+        throw new Error("docker socket detail");
+      },
+    });
+    expect((await failedApp.inject({ method: "GET", url: "/health" })).json()).toEqual({
+      ok: true,
+      privacyBackup: { ready: false, inventoryReadable: false, collectorImage: null },
+    });
+    await failedApp.close();
+  });
+
   it("authenticates and resolves role before operation validation or dispatch", async () => {
     const dispatch = vi.fn();
     const app = buildOpsAgentServer({

@@ -102,6 +102,7 @@ describe("Docker release trust gate", () => {
         "web",
         "data-manager",
         "ops-agent",
+        "privacy-backup",
         "transitous-runner",
         "transitous-tools",
         "docs",
@@ -142,6 +143,7 @@ describe("Docker release trust gate", () => {
           web: `example.invalid/openmapx/web@sha256:${"a".repeat(64)}`,
           "data-manager": `example.invalid/openmapx/data-manager@sha256:${"a".repeat(64)}`,
           "ops-agent": `example.invalid/openmapx/ops-agent@sha256:${"a".repeat(64)}`,
+          "privacy-backup": `example.invalid/openmapx/privacy-backup@sha256:${"a".repeat(64)}`,
           "transitous-runner": `example.invalid/openmapx/transitous-runner@sha256:${"a".repeat(64)}`,
           "transitous-tools": `example.invalid/openmapx/transitous-tools@sha256:${"a".repeat(64)}`,
           docs: `example.invalid/openmapx/docs@sha256:${"a".repeat(64)}`,
@@ -200,5 +202,18 @@ describe("Docker release trust gate", () => {
     ]) {
       expect(read(dockerfile)).toContain("golang.org/x/text@v0.39.0");
     }
+  });
+
+  it("builds and promotes the isolated privacy backup collector", () => {
+    expect(release).toContain("app: privacy-backup");
+    expect(release).toContain("dockerfile: services/ops-agent/privacy-backup/Dockerfile");
+    expect(release).toContain(
+      "for app in api web data-manager ops-agent privacy-backup transitous-runner",
+    );
+    expect(ci).toContain("privacy-backup:");
+    expect(ci).toContain("'services/ops-agent/privacy-backup/**'");
+    expect(ci).toContain(
+      'privacy-backup) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/ops-agent/privacy-backup/Dockerfile"',
+    );
   });
 });

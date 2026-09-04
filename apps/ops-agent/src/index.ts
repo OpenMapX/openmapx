@@ -1,4 +1,5 @@
-import { existsSync } from "node:fs";
+import { constants, existsSync } from "node:fs";
+import { open } from "node:fs/promises";
 import { join } from "node:path";
 import { readOpsTokenFile } from "@openmapx/core/ops";
 import { repoPaths } from "@openmapx/core/server";
@@ -13,9 +14,19 @@ import {
   pruneBackupRetention,
 } from "./administrative-runtime";
 import { loadOpsAgentConfig } from "./config";
+import {
+  createDockerDawarichCollector,
+  createDockerDawarichRuntimeInspector,
+} from "./dawarich-subject-export";
 import { createDockerRuntime } from "./docker-runtime";
 import { openOpsJobJournal } from "./journal";
 import { createProductionRegistryResourceClaimer } from "./policy";
+import type { PrivacyBackupExtractionRouteOptions } from "./privacy-backup-extraction";
+import {
+  createPrivacyBackupExtractionRuntime,
+  janitorPrivacyBackupScratch,
+  probePrivacyBackupRuntime,
+} from "./privacy-backup-runtime";
 import { buildOpsAgentServer } from "./server";
 import {
   afterValidatedServiceAuthority,
@@ -35,11 +46,55 @@ import { createTrustedConfigurationAuthorityLoader } from "./trusted-configurati
 
 async function main(): Promise<void> {
   const config = loadOpsAgentConfig();
+  janitorPrivacyBackupScratch(config.rootDir, process.env.OPS_PRIVACY_BACKUP_SCRATCH_ROOT);
   await afterValidatedServiceAuthority(config.rootDir, async (releaseAuthority) => {
     const [apiToken, dataManagerToken] = await Promise.all([
       readOpsTokenFile(config.apiTokenFile),
       readOpsTokenFile(config.dataManagerTokenFile),
     ]);
+    let privacyBackupExtraction: Omit<PrivacyBackupExtractionRouteOptions, "apiToken"> | undefined;
+    const privacyBackupRuntimeOptions = {
+      rootDir: config.rootDir,
+      collectorImage: process.env.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE?.trim(),
+      scratchRoot: process.env.OPS_PRIVACY_BACKUP_SCRATCH_ROOT?.trim() || undefined,
+    };
+    if (config.privacyBackupCapabilityKeyFile) {
+      let handle: Awaited<ReturnType<typeof open>> | undefined;
+      try {
+        handle = await open(
+          config.privacyBackupCapabilityKeyFile,
+          constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+        );
+        const stat = await handle.stat();
+        const expectedUid = typeof process.getuid === "function" ? process.getuid() : stat.uid;
+        if (
+          !stat.isFile() ||
+          stat.nlink !== 1 ||
+          stat.size !== 43 ||
+          (stat.mode & 0o077) !== 0 ||
+          stat.uid !== expectedUid
+        )
+          throw new Error("invalid capability key");
+        const buffer = Buffer.alloc(43);
+        const read = await handle.read(buffer, 0, buffer.length, 0);
+        const encoded = buffer.subarray(0, read.bytesRead).toString("utf8");
+        if (read.bytesRead !== 43 || !/^[A-Za-z0-9_-]{43}$/.test(encoded))
+          throw new Error("invalid capability key");
+        const key = Buffer.from(encoded, "base64url");
+        if (key.byteLength !== 32 || key.toString("base64url") !== encoded)
+          throw new Error("invalid capability key");
+        const backupRuntime = createPrivacyBackupExtractionRuntime(privacyBackupRuntimeOptions);
+        privacyBackupExtraction = {
+          capabilityKey: key,
+          enabled:
+            process.env.OPS_PRIVACY_BACKUP_COLLECTOR_ENABLED === "true" && backupRuntime.enabled,
+          inspectBackup: backupRuntime.inspectBackup,
+          runCollector: backupRuntime.runCollector,
+        };
+      } finally {
+        await handle?.close().catch(() => undefined);
+      }
+    }
     const builtInServices = releaseAuthority.services.map((service) => structuredClone(service));
     const bootstrapEnabledServiceIds = resolveBootstrapEnabledServiceIds(
       builtInServices,
@@ -76,6 +131,23 @@ async function main(): Promise<void> {
       loadAuthority: authorityLoader,
       infraDir: paths.infraDir,
     });
+    // The managed timeline endpoint is registered only when the trusted
+    // service selection explicitly enables `dawarich-app`.  Its request path,
+    // container name and collector script remain fixed; every call re-checks
+    // the running image digest/revision before sending a subject locator.
+    const managedDawarichEnabled = initialAuthority.services.some(
+      (service) =>
+        service.manifest.id === "dawarich-app" &&
+        service.enabled &&
+        service.manifest.subjectData?.strategy === "collector" &&
+        service.manifest.subjectData.registrationIds?.includes("managed-dawarich"),
+    );
+    const dawarichInspector = managedDawarichEnabled
+      ? createDockerDawarichRuntimeInspector()
+      : undefined;
+    const dawarichCollector = dawarichInspector
+      ? createDockerDawarichCollector({ inspect: dawarichInspector })
+      : undefined;
     const administrativeCli = createDefaultFixedCli(config.rootDir);
     const releaseEffects = createDefaultReleaseEffects(config.rootDir, administrativeCli);
     await releaseEffects.initialize?.();
@@ -153,6 +225,21 @@ async function main(): Promise<void> {
       journal,
       runtime,
       audit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
+      ...(privacyBackupExtraction ? { privacyBackupExtraction } : {}),
+      privacyBackupHealth: () =>
+        probePrivacyBackupRuntime({
+          ...privacyBackupRuntimeOptions,
+          enabled: privacyBackupExtraction?.enabled === true,
+        }),
+      ...(dawarichCollector && dawarichInspector
+        ? {
+            dawarichExport: {
+              enabled: true,
+              inspectRuntime: dawarichInspector,
+              runCollector: dawarichCollector,
+            },
+          }
+        : {}),
     });
     await app.listen({ host: config.host, port: config.port });
   });

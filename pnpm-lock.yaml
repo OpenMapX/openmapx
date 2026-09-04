@@ -61,6 +61,9 @@ importers:
 
   apps/api:
     dependencies:
+      '@archiver/archiver':
+        specifier: 0.2.0
+        version: 0.2.0
       '@better-auth/core':
         specifier: 1.7.1
         version: 1.7.1(@better-auth/utils@0.4.2)(@better-fetch/fetch@1.3.1)(@opentelemetry/api@1.9.1)(better-call@1.4.0(zod@4.4.3))(jose@6.2.10)(kysely@0.29.5)(nanostores@1.5.2)
@@ -97,6 +100,9 @@ importers:
       '@openmapx/db-schema':
         specifier: workspace:^
         version: link:../../packages/db-schema
+      '@openmapx/i18n':
+        specifier: workspace:^
+        version: link:../../packages/i18n
       '@openmapx/integration-framework':
         specifier: workspace:^
         version: link:../../packages/integration-framework
@@ -2677,6 +2683,22 @@ packages:
   '@alloc/quick-lru@5.2.0':
     resolution: {integrity: sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw==}
     engines: {node: '>=10'}
+
+  '@archiver/archiver@0.2.0':
+    resolution: {integrity: sha512-Rh1QtL/61EaSOf9Uc422x/J5o/spt3q8LczBVnVCVcg/stAJ7jK6SLev14Kb+xqSCLv9G8C4u/e1qDDq9VccdQ==}
+    engines: {node: ^22.12.0 || >=24.0.0}
+
+  '@archiver/readdir-glob@0.1.1':
+    resolution: {integrity: sha512-MQLhmp0LxxN6cr970R8zg/gbF0YwCx+K1c0mZKKK8oAXooVI6TQRG1uxsiZ6A5KkkS2Zu1zVuO68GTa5N6orAA==}
+    engines: {node: ^22.12.0 || >=24.0.0}
+
+  '@archiver/tar-stream@0.1.1':
+    resolution: {integrity: sha512-exWmvbQrXrrbM9cQYbKT5RvtyuVcuLqPmwhLsvOQsHeYuJL18VsOemTPVR4ABXhwIViJWf31KveW1K0924z03Q==}
+    engines: {node: ^22.12.0 || >=24.0.0}
+
+  '@archiver/zip-stream@0.1.1':
+    resolution: {integrity: sha512-5DBDQwKJBbtKGblPHC8Xih/bC1CHSEEuRrSiW0YjUCJt7GXGTS/t9QD/BhcCwZZxchzjzQhFm99skIO1KxX91w==}
+    engines: {node: ^22.12.0 || >=24.0.0}
 
   '@asamuzakjp/css-color@6.0.5':
     resolution: {integrity: sha512-mbhpPMmnw/kwW19aRNmSUl1QzLbdGo1SCuE49BT98MNwqF6zaHb3o2owssFc/PEO/4t2UjqtCNwocuDtJornzA==}
@@ -11327,6 +11349,20 @@ snapshots:
       json-schema: 0.4.0
 
   '@alloc/quick-lru@5.2.0': {}
+
+  '@archiver/archiver@0.2.0':
+    dependencies:
+      '@archiver/readdir-glob': 0.1.1
+      '@archiver/tar-stream': 0.1.1
+      '@archiver/zip-stream': 0.1.1
+
+  '@archiver/readdir-glob@0.1.1':
+    dependencies:
+      picomatch: 4.0.7
+
+  '@archiver/tar-stream@0.1.1': {}
+
+  '@archiver/zip-stream@0.1.1': {}
 
   '@asamuzakjp/css-color@6.0.5':
     dependencies:

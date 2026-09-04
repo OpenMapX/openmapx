@@ -339,6 +339,62 @@ const uiSchema = z.object({
   category: z.string().optional(),
 });
 
+/**
+ * Declaration of subject data held by a service.  The declaration is kept
+ * deliberately small: legal meaning belongs to the central privacy
+ * catalogue, while a service only says how its persistence is reached.
+ */
+export const serviceSubjectDataSchema = z
+  .object({
+    storesPersonalData: z.boolean(),
+    strategy: z.enum(["collector", "operator_task", "not_personal"]),
+    registrationIds: z.array(z.string().regex(SERVICE_ID_REGEX)).max(64),
+    operatorInstructions: z.string().min(1).max(2_000).nullable(),
+  })
+  .strict()
+  .superRefine((value, ctx) => {
+    if (value.storesPersonalData && value.strategy === "not_personal") {
+      ctx.addIssue({
+        code: "custom",
+        path: ["strategy"],
+        message: "personal data cannot be not_personal",
+      });
+    }
+    if (
+      value.storesPersonalData &&
+      value.strategy === "collector" &&
+      value.registrationIds.length === 0
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["registrationIds"],
+        message: "collector needs a registration id",
+      });
+    }
+    if (
+      value.storesPersonalData &&
+      value.strategy === "operator_task" &&
+      !value.operatorInstructions
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["operatorInstructions"],
+        message: "operator_task needs instructions",
+      });
+    }
+    if (
+      !value.storesPersonalData &&
+      (value.registrationIds.length > 0 || value.operatorInstructions)
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["registrationIds"],
+        message: "non-personal service cannot declare subject data",
+      });
+    }
+  });
+export type ServiceSubjectData = z.infer<typeof serviceSubjectDataSchema>;
+
 // Capability declaration — accepts either a bare string (the common case)
 // or `{ capability, metadata? }`. The `metadata` slot is reserved for future
 // runtime layers (region routing, per-mode capability selection, etc.); the
@@ -404,6 +460,7 @@ export const serviceManifestSchema = z.object({
   buildCommand: z.string().optional(),
 
   ui: uiSchema.optional(),
+  subjectData: serviceSubjectDataSchema.optional(),
 });
 
 export interface ManifestValidationResult {

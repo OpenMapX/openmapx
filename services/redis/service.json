@@ -6,6 +6,12 @@
   "license": "BSD-3-Clause",
   "quality": "built-in",
   "homepage": "https://valkey.io/",
+  "subjectData": {
+    "storesPersonalData": true,
+    "strategy": "operator_task",
+    "registrationIds": ["redis-subject-controls"],
+    "operatorInstructions": "Review exact subject-derived controls; do not export keys or values."
+  },
   "container": {
     "image": "valkey/valkey",
     "tag": "8-alpine",

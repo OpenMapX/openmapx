@@ -1,16 +1,13 @@
+export {
+  defaultLocale,
+  type Locale,
+  localeNames,
+  locales,
+  messages,
+  resolveLocale,
+} from "./config";
 export { default as de } from "./locales/de.json";
 export { default as en } from "./locales/en.json";
-
-export const locales = ["en", "de"] as const;
-export type Locale = (typeof locales)[number];
-export const defaultLocale: Locale = "en";
-
-/** Native display name for each supported locale (e.g. "English", "Deutsch"). */
-export const localeNames: Record<Locale, string> = {
-  en: "English",
-  de: "Deutsch",
-};
-
 export {
   type FormatCueOptions,
   formatCueDistance,
@@ -19,3 +16,4 @@ export {
   type NavigationCueIntent,
   resetNavigationCueCache,
 } from "./navigationCues";
+export { createTranslator } from "./translator";

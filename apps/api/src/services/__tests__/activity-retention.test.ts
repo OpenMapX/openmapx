@@ -4,9 +4,14 @@ import { createDbMock, type DbMock } from "../../test/db.js";
 const dbMock: DbMock = createDbMock();
 vi.mock("../../db", () => ({ db: dbMock.db }));
 vi.mock("../../db/schema", () => ({
-  adminAuditLog: { id: "auditId", createdAt: "auditCreatedAt" },
-  adminJob: { id: "jobId", finishedAt: "jobFinishedAt" },
-  appLog: { id: "appLogId", createdAt: "appLogCreatedAt" },
+  adminAuditLog: {
+    id: "auditId",
+    actorId: "auditActorId",
+    targetId: "auditTargetId",
+    createdAt: "auditCreatedAt",
+  },
+  adminJob: { id: "jobId", createdBy: "jobCreatedBy", finishedAt: "jobFinishedAt" },
+  appLog: { id: "appLogId", metadata: "appLogMetadata", createdAt: "appLogCreatedAt" },
   verification: { id: "verificationId", expiresAt: "verificationExpiresAt" },
 }));
 vi.mock("drizzle-orm", async (importOriginal) => {
@@ -75,6 +80,15 @@ describe("pruneAuditLog / pruneCompletedJobs retention guard", () => {
       expect(dbMock.db.delete).toHaveBeenCalledTimes(1);
       const expectedCutoff = new Date(NOW.getTime() - happyDays * MS_PER_DAY);
       expect(lt).toHaveBeenCalledWith(expect.anything(), expectedCutoff);
+    });
+
+    it("combines expiry with a durable preservation guard", async () => {
+      dbMock.queueDelete([]);
+      await fn(happyDays);
+      const where = dbMock.db.delete.mock.results.at(-1)?.value.where;
+      expect(where).toHaveBeenCalledWith(
+        expect.objectContaining({ queryChunks: expect.any(Array) }),
+      );
     });
   });
 

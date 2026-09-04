@@ -6,6 +6,12 @@
   "license": "RSALv2 OR SSPL-1.0",
   "quality": "built-in",
   "homepage": "https://redis.io/",
+  "subjectData": {
+    "storesPersonalData": true,
+    "strategy": "operator_task",
+    "registrationIds": ["redis-subject-controls"],
+    "operatorInstructions": "Review exact subject-derived controls; do not export keys or values."
+  },
   "container": {
     "image": "redis",
     "tag": "7.4-alpine",

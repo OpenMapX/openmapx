@@ -1,0 +1,2 @@
+ALTER TABLE "data_disclosure_event" ADD COLUMN "idempotency_key" text;--> statement-breakpoint
+CREATE UNIQUE INDEX "data_disclosure_event_idempotency_idx" ON "data_disclosure_event" USING btree ("idempotency_key") WHERE "data_disclosure_event"."idempotency_key" is not null;

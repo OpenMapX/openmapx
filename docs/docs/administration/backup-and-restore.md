@@ -104,6 +104,24 @@ copies—the local scheduler cannot delete objects in storage it does not contro
 boundaries in detail.
 :::
 
+## Privacy access review
+
+Backups are not automatically searched for every Article 15 request. The
+privacy queue exposes a trusted, path-free inventory and records a review for
+each snapshot family. A reviewer compares its creation time with the request
+cutoff and live snapshot, then records `no_material_difference`, `extract`, or
+an honest unavailable reason. Legacy size-only manifests and changed files
+are never extracted.
+
+An approved extraction runs in a new, egress-free scratch environment with
+fixed, version-compatible collectors. It never restores into production or
+mounts production volumes, secrets, the erasure-journal key, artifact keys or
+the Docker socket. The source part is streamed directly into the encrypted
+case artifact and the scratch database, containers, network and volumes are
+destroyed on success, failure, timeout and restart. The privacy readiness
+report remains false until backup review, cleanup and human release approvals
+are current.
+
 ## Creating a backup
 
 From the repo root, the CLI snapshots every backup-enabled volume in one command:

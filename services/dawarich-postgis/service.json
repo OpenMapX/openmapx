@@ -6,6 +6,12 @@
   "license": "PostgreSQL",
   "quality": "built-in",
   "homepage": "https://github.com/baosystems/docker-postgis",
+  "subjectData": {
+    "storesPersonalData": true,
+    "strategy": "operator_task",
+    "registrationIds": ["managed-dawarich"],
+    "operatorInstructions": "Use the pinned managed Dawarich collector or an approved isolated backup review."
+  },
   "container": {
     "image": "ghcr.io/baosystems/postgis",
     "tag": "17-3.5",

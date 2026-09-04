@@ -24,6 +24,8 @@ import {
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
 import { managedOAuthProviderOptions } from "./managed-oauth-provider";
+import { recordDataDisclosureBestEffort } from "./privacy/disclosures.js";
+import { recordSessionFromAuthContext } from "./privacy/session-assurance.js";
 import { userErasureHooks } from "./services/user-erasure";
 import { auditAdminActionsHook } from "./utils/auth-audit-hook";
 import { configuredTrustedWebOrigins } from "./utils/csrf.js";
@@ -115,7 +117,11 @@ const authOptions = {
     requireEmailVerification: true,
     async sendResetPassword({ user, url }) {
       const mail = resetPasswordEmail(url);
-      await sendMail({ to: user.email, ...mail });
+      await sendMail({
+        to: user.email,
+        ...mail,
+        disclosure: { userId: user.id, operationCode: "auth.reset-password.email" },
+      });
     },
   },
   emailVerification: {
@@ -123,7 +129,11 @@ const authOptions = {
     autoSignInAfterVerification: true,
     async sendVerificationEmail({ user, url }) {
       const mail = verifyEmailEmail(url);
-      await sendMail({ to: user.email, ...mail });
+      await sendMail({
+        to: user.email,
+        ...mail,
+        disclosure: { userId: user.id, operationCode: "auth.verify-email.email" },
+      });
     },
   },
   account: {
@@ -140,6 +150,15 @@ const authOptions = {
     encryptOAuthTokens: true,
   },
   databaseHooks: {
+    session: {
+      create: {
+        // This hook runs after Better Auth has created the usable session. It
+        // intentionally records nothing for unrecognised endpoints.
+        after: async (createdSession, context) => {
+          await recordSessionFromAuthContext(createdSession, context, db);
+        },
+      },
+    },
     user: {
       delete: userErasureHooks,
     },
@@ -147,6 +166,26 @@ const authOptions = {
       create: {
         after: async (account) => {
           await providerAvatarSync.onAccountCreated(account.id, account.providerId, account.userId);
+          // An external provider exchange has completed by the time Better
+          // Auth persists its account row.  Record only the provider and the
+          // stable account operation; OAuth tokens, profile payloads and
+          // redirect/callback values never enter the disclosure ledger.
+          const recipient =
+            account.providerId === "openstreetmap" || account.providerId === "mapillary"
+              ? account.providerId
+              : null;
+          if (recipient) {
+            await recordDataDisclosureBestEffort({
+              subjectUserId: account.userId,
+              occurredAt: new Date(),
+              recipientId: recipient,
+              operationCode: "auth.account.link",
+              categoryCode: "auth-accounts",
+              purposeCode: "authentication",
+              legalBasisCode: "contract",
+              idempotencyKey: `auth-account-${account.id}`,
+            });
+          }
         },
       },
       update: {
@@ -323,13 +362,20 @@ const authOptions = {
       otpOptions: {
         async sendOTP({ user, otp }) {
           const mail = twoFactorOtpEmail(otp);
-          await sendMail({ to: user.email, ...mail });
+          await sendMail({
+            to: user.email,
+            ...mail,
+            disclosure: { userId: user.id, operationCode: "auth.two-factor.email" },
+          });
         },
       },
     }),
     emailOTP({
       async sendVerificationOTP({ email, otp, type }) {
         const mail = emailOtpEmail(otp, type);
+        // Email OTP can be sent during account changes before a user row is
+        // available in this callback; only record it when Better Auth gives us
+        // an exact subject identifier through the typed context.
         await sendMail({ to: email, ...mail });
       },
       changeEmail: {

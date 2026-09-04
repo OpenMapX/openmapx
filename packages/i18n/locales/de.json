@@ -1757,7 +1757,48 @@
     "deleteAccount": "Konto löschen",
     "deleteAccountWarning": "Das lässt sich nicht rückgängig machen. OpenMapX löscht dein Konto, Anmeldedaten, gespeicherte Orte, Freigaben, Fahrzeuge, Parkstatus, Timeline-Verbindung, Einstellungen und den Signaturschlüssel für Bewertungen. Lösche Mangrove-Bewertungen vorher, solange du den Schlüssel noch kontrollierst. Ein verbundenes Dawarich-Konto und dessen Standortverlauf müssen separat gelöscht werden.",
     "confirmDeletion": "Löschung bestätigen",
-    "failedDeleteAccount": "Konto konnte nicht gelöscht werden"
+    "failedDeleteAccount": "Konto konnte nicht gelöscht werden",
+    "privacyData": {
+      "title": "Ihre Daten und Ihr Auskunftsantrag",
+      "description": "Fordern Sie eine Kopie der personenbezogenen Daten an, die OpenMapX über Sie verarbeitet. Das Archiv enthält Live-Daten von OpenMapX und, sofern verfügbar, verbundene Dawarich-Daten. Vor dem Download ist eine erneute Anmeldung erforderlich.",
+      "requestCopy": "Datenkopie anfordern",
+      "downloadDevice": "Browserdaten herunterladen",
+      "noRequests": "Sie haben keine Auskunftsanträge.",
+      "loadFailed": "Datenauskünfte sind vorübergehend nicht verfügbar.",
+      "requestFailed": "Der Auskunftsantrag konnte nicht erstellt werden.",
+      "actionFailed": "Die angeforderte Aktion konnte nicht abgeschlossen werden.",
+      "reauthenticationFailed": "Bitte melden Sie sich vor dem Download erneut an.",
+      "assistedProofTitle": "Unterstützte Anfrage verknüpfen",
+      "assistedProofDescription": "Wenn Ihnen das Datenschutzteam eine Fallreferenz gegeben hat, melden Sie sich erneut an, um dieses Konto als Konto der betroffenen Person nachzuweisen. Die Referenz bleibt während der Anmeldung in diesem Browser und wird nicht in die URL aufgenommen.",
+      "assistedRequestReference": "Fallreferenz",
+      "assistedProofAction": "Anmelden und Konto nachweisen",
+      "assistedProofComplete": "Ihre Kontoanmeldung wurde für die unterstützte Anfrage bestätigt.",
+      "assistedProofFailed": "Die Kontoanmeldung konnte dieser unterstützten Anfrage nicht zugeordnet werden.",
+      "access": "Auskunft",
+      "portability": "Portierbare Daten",
+      "accessAndPortability": "Auskunft + portierbare Kopie",
+      "due": "Antwortfrist: {date}",
+      "download": "Archiv herunterladen",
+      "revoke": "Archiv löschen",
+      "withdraw": "Antrag zurückziehen",
+      "regenerate": "Neue Kopie erstellen",
+      "states": {
+        "received": "Eingegangen",
+        "identity_pending": "Identitätsprüfung ausstehend",
+        "preserving": "Daten werden gesichert",
+        "collecting": "Daten werden gesammelt",
+        "pending_processor": "Warten auf verbundenen Auftragsverarbeiter",
+        "operator_review": "Manuelle Prüfung",
+        "assembling": "Archiv wird erstellt",
+        "ready": "Download bereit",
+        "delivered": "Zugestellt",
+        "artifact_expired": "Archiv abgelaufen",
+        "clarification_needed": "Rückfrage erforderlich",
+        "withdrawn": "Zurückgezogen",
+        "refused": "Abgelehnt",
+        "closed": "Geschlossen"
+      }
+    }
   },
   "auth": {
     "signIn": "Anmelden",
@@ -2977,5 +3018,360 @@
     "myVehicles": "Meine Fahrzeuge",
     "empty": "Noch keine Fahrzeuge",
     "connectors": "Anschlüsse"
+  },
+  "privacyExport": {
+    "report": {
+      "title": "OpenMapX-Datenschutzantwort",
+      "intro": "Diese Antwort wurde für die Datenschutzanfrage {requestId} erstellt.",
+      "controllerHeading": "Verantwortlicher und Kontakt",
+      "emailLabel": "E-Mail",
+      "phoneLabel": "Telefon",
+      "jurisdictionLabel": "Rechtsraum der Bereitstellung",
+      "requestHeading": "Anfrage, Umfang und Zeitpunkte",
+      "requestIdLabel": "Anfrage-ID",
+      "requestKindLabel": "Art der Anfrage",
+      "scopeAccess": "Dieses Archiv enthält die Auskunft nach Artikel 15.",
+      "scopePortability": "Dieses Archiv enthält das übertragbare Paket nach Artikel 20. Sicherheits- und Falldaten nach Artikel 15 liegen außerhalb des Anfrageumfangs.",
+      "scopeCombined": "Dieses Archiv enthält die Auskunft nach Artikel 15 und ein getrenntes übertragbares Paket nach Artikel 20.",
+      "receivedAtLabel": "Eingegangen",
+      "registeredAtLabel": "Registriert",
+      "preservationAtLabel": "Sicherung begonnen",
+      "snapshotAtLabel": "Stichtag der Quelldaten",
+      "generatedAtLabel": "Erstellt",
+      "expiresAtLabel": "Download läuft ab",
+      "caseRetention": "Fallaufzeichnungen werden nach der konfigurierten Richtlinie {caseDays, plural, one {# Tag} other {# Tage}}, Identitätsnachweise {identityDays, plural, one {# Tag} other {# Tage}} und das Download-Artefakt {artifactHours, plural, one {# Stunde} other {# Stunden}} aufbewahrt.",
+      "notRecorded": "nicht erfasst",
+      "notApplicable": "nicht anwendbar",
+      "recordedCode": "{code} (erfasster Richtliniencode)",
+      "requestKinds": {
+        "access": "Auskunft",
+        "portability": "Datenübertragbarkeit",
+        "access_and_portability": "Auskunft und Datenübertragbarkeit"
+      },
+      "outcomes": {
+        "included": "Enthalten",
+        "not_applicable": "Nicht anwendbar",
+        "unavailable": "Nicht verfügbar",
+        "reviewed_no_match": "Geprüft; keine passenden Daten",
+        "omitted_with_reason": "Nach Prüfung ausgelassen"
+      },
+      "purposes": {
+        "account-management": "Kontoverwaltung",
+        "authentication": "Authentifizierung",
+        "communications": "Kommunikation",
+        "legal-accountability": "Rechtlicher Nachweis",
+        "navigation": "Navigation",
+        "personalization": "Personalisierung",
+        "publication": "Von der betroffenen Person veranlasste Veröffentlichung",
+        "saved-content": "Speichern von Inhalten der betroffenen Person",
+        "security-and-abuse-prevention": "Sicherheit und Missbrauchsprävention",
+        "service-provisioning": "Bereitstellung des angeforderten Dienstes",
+        "support-and-operations": "Support und Dienstbetrieb",
+        "timeline-processing": "Verarbeitung des verbundenen Verlaufs"
+      },
+      "legalBases": {
+        "consent": "Einwilligung",
+        "contract": "Erfüllung des Dienstvertrags",
+        "legal-obligation": "Erfüllung einer rechtlichen Verpflichtung",
+        "legitimate-interest": "Berechtigte Interessen an einem sicheren und nachweisbaren Dienstbetrieb"
+      },
+      "origins": {
+        "controller": "Vom Verantwortlichen erzeugt",
+        "operator": "Vom Betreiber bereitgestellt oder verwaltet",
+        "processor": "Von einem angewiesenen Auftragsverarbeiter erhalten",
+        "public-source": "Aus einer öffentlichen Quelle bezogen",
+        "subject": "Von der betroffenen Person bereitgestellt oder erstellt"
+      },
+      "recipientRoles": {
+        "controller": "Verantwortlicher",
+        "independent-controller": "Unabhängiger Verantwortlicher",
+        "processor": "Auftragsverarbeiter",
+        "public-recipient": "Empfänger einer öffentlichen Veröffentlichung",
+        "operator": "Betreiber"
+      },
+      "recipientNames": {
+        "dawarich-managed": "Verwalteter Dawarich-Auftragsverarbeiter",
+        "mangrove-reviews": "Mangrove Reviews",
+        "public-recipient": "Empfänger eines von der betroffenen Person veröffentlichten Links",
+        "openstreetmap": "OpenStreetMap-API",
+        "mapillary": "Mapillary"
+      },
+      "retentionFixed": "{days, plural, one {# Tag} other {# Tage}} ab dem maßgeblichen Datensatzereignis und bis zu {afterClosure, plural, one {# Tag} other {# Tage}} nach Kontoschließung; Richtlinienauslöser: {trigger}",
+      "retentionEphemeral": "{hours, plural, one {# Stunde} other {# Stunden}} ab Erstellung oder dem letzten maßgeblichen Sicherheitsereignis und bis zu {afterClosure, plural, one {# Tag} other {# Tage}} nach Kontoschließung; Richtlinienauslöser: {trigger}",
+      "retentionAccount": "Für die Kontolaufzeit und bis zu {afterClosure, plural, one {# Tag} other {# Tage}} nach Kontoschließung; Richtlinienauslöser: {trigger}",
+      "retentionLegalHold": "Für die Dauer der maßgeblichen rechtlichen Aufbewahrung und bis zu {afterClosure, plural, one {# Tag} other {# Tage}} nach Kontoschließung; Richtlinienauslöser: {trigger}",
+      "retentionReasons": {
+        "account-content": "Löschung des Inhalts oder Kontoschließung",
+        "accountability": "Erstellung des Nachweisdatensatzes",
+        "administrative-record": "Erstellung des Verwaltungsdatensatzes",
+        "backup-retention": "Rotation der aufbewahrten Sicherung",
+        "case-accountability": "Abschluss oder Schließung des Datenschutzfalls",
+        "challenge-expiry": "Ausgabe der Authentifizierungsabfrage",
+        "connection-revocation": "Widerruf der Verlaufsverbindung",
+        "control-expiry": "Erstellung oder Aktualisierung der Sicherheitskontrolle",
+        "current-state": "Erstellung des aktuellen Standortzustands",
+        "erasure-replay": "Kontoschließung oder Löschungsverarbeitung",
+        "handoff-expiry": "Erstellung der mobilen Übergabe",
+        "key-revocation": "Widerruf des Veröffentlichungsschlüssels",
+        "log-retention": "Erstellung des Betriebsprotokolls",
+        "offline-job-retention": "Abschluss des Offline-Paketauftrags",
+        "processor-retention": "Beendigung des verbundenen Auftragsverarbeiterdienstes",
+        "public-dataset": "Veröffentlichung der Version des öffentlichen Datensatzes",
+        "recipient-accountability": "Erfassung des Empfängerereignisses",
+        "revocation": "Widerruf oder Löschung des veröffentlichten Links",
+        "security-retention": "Sicherheitsaufbewahrungsfrist"
+      },
+      "snapshotLimitations": "Die Antwort gibt die zum genannten Stichtag verfügbaren Quellen des Verantwortlichen und seiner Auftragsverarbeiter wieder. Spätere Änderungen sowie nicht verfügbare oder abgelaufene Quellen werden unten ausgewiesen.",
+      "sourcesHeading": "Verarbeitungskategorien, Quellen und Einschränkungen",
+      "sourceRow": "{id} — {category}; Ergebnis: {outcome}; Datensätze: {count}; erfasst: {capturedAt}; Zwecke: {purposes}; Rechtsgrundlagen: {legalBases}; Herkunft: {origin}; Aufbewahrungsregel und Auslöser: {retention}.",
+      "sourcePolicy": "Verarbeitungszweck: {purpose}. Quelle: {source}. Sichere Darstellung: {safeRepresentation}. Übertragbarkeit: {portability}. Rechte anderer: {rightsOfOthers}.",
+      "sourceRecipients": "Konfigurierte Empfängerkategorien, Länder und Übermittlungsgarantien: {recipients}.",
+      "sourceRecipient": "{name} ({role}; Land: {country}; Übermittlungsgarantie: {safeguard})",
+      "sourceWarnings": "Auslassungen, Schwärzungen oder Einschränkungen: {codes}",
+      "warningExplanation": "{code}: {explanation}",
+      "warningUnknown": "Eine berechtigte Fallbearbeitung hat eine quellenspezifische Einschränkung erfasst; fordern Sie die geprüfte öffentliche Erklärung bei {contact} an.",
+      "warnings": {
+        "source-not-collected": "Diese Quelle wurde nicht erhoben oder für diesen Stichtag lag kein abgeschlossenes Quellenergebnis vor.",
+        "operator-review-required": "Diese Quelle erfordert vor der Offenlegung eine berechtigte manuelle Prüfung.",
+        "operator-review-completed": "Eine berechtigte manuelle Quellenprüfung ergab keine freigabefähigen passenden Datensätze.",
+        "external-source-review-required": "Eine externe oder vom Betreiber gehaltene Quelle erfordert eine Fallprüfung.",
+        "approved-encrypted-supplement": "Eine geprüfte Betreiberergänzung ist im Abschnitt nach Artikel 15 enthalten.",
+        "supplement-key-unavailable": "Die freigegebene Ergänzung konnte für diese Antwort nicht entschlüsselt werden.",
+        "supplement-limit-exceeded": "Die Ergänzung überschritt die zulässige Antwortgröße oder Anzahl.",
+        "schema-missing": "Der aufbewahrten Quelle fehlte das erforderliche geprüfte Schema.",
+        "storage-missing": "Das aufbewahrte Quellmaterial war nicht mehr verfügbar."
+      },
+      "deploymentSourcesHeading": "Bereitstellungs- und Betreiberquellen",
+      "noDeploymentSources": "Es wurden keine zusätzlichen Bereitstellungsquellen konfiguriert.",
+      "deploymentSourceRow": "{id} — {kind}; Beziehung: {relationship}; Ort: {location}; Aufbewahrung: {retention}; Zugriffsweg: {accessStrategy}.",
+      "recipientsHeading": "Empfänger und Übermittlungen",
+      "recipientsNotInScope": "Angaben zu Empfängerereignissen sind ausgeschlossen, weil diese Antwort auf Datenübertragbarkeit beschränkt ist.",
+      "noActualRecipients": "Für diese Person und diesen Stichtag wurden keine Empfängerereignisse erfasst.",
+      "recipientSummary": "Das Archiv enthält zum Stichtag {archiveRecordCount} archivierte Empfängerereignisse. Diese begrenzte, separat am {summarizedAt} erstellte Übersicht zeigt {shownGroupCount} von {totalGroupCount} Empfängergruppen für {matchingEventCount} passende Ereignisse; die Grenze beträgt {entryLimit} Gruppen.",
+      "recipientSummaryComplete": "Die gruppierte Übersicht ist vollständig.",
+      "recipientSummaryTruncated": "Die Übersicht ist begrenzt; alle erfassten Ereignisse stehen in der maßgeblichen Quelldatei.",
+      "recipientRow": "{name} — Rolle: {role}; Land: {country}; letztes Ereignis: {lastOccurredAt}; Ereignisse in der Gruppe: {eventCount}; Kategorie: {category}; Zweck: {purpose}; Rechtsgrundlage: {legalBasis}; Übermittlungsgarantie: {safeguard}.",
+      "recipientPointer": "Die maßgebliche Quelle für vollständige Details der erfassten Empfängerereignisse ist {source}.",
+      "rightsHeading": "Ihre Rechte und Prüfung",
+      "rights": "Unter den Voraussetzungen der DSGVO können Sie Berichtigung, Löschung und Einschränkung verlangen, der Verarbeitung widersprechen, übertragbare Daten erhalten, eine Einwilligung jederzeit ohne Auswirkung auf die Rechtmäßigkeit der früheren Verarbeitung widerrufen, Beschwerde einlegen und gerichtlichen Rechtsschutz suchen.",
+      "complaint": "Sie können sich bei {authority} ({url}) oder einer anderen zuständigen Aufsichtsbehörde beschweren.",
+      "reviewContact": "Wenden Sie sich zur Prüfung von Auslassungen oder Schwärzungen dieses Falls an {contact}.",
+      "automationHeading": "Automatisierte Entscheidungen und Profiling",
+      "automation": "OpenMapX verwendet die in dieser Antwort beschriebenen Daten nicht für eine ausschließlich automatisierte Entscheidung mit rechtlicher oder ähnlich erheblicher Wirkung und führt kein solches Profiling durch.",
+      "boundariesHeading": "Grenzen der Verantwortlichkeit",
+      "boundaries": "Diese Antwort umfasst Daten dieses Verantwortlichen und seiner angewiesenen Auftragsverarbeiter. Unabhängige Verantwortliche führen eigene Aufzeichnungen und beantworten eigene Anfragen. In öffentlichen Netzen veröffentlichte Daten können bei unabhängigen Empfängern oder Netzbetreibern außerhalb der Verfügungsgewalt dieses Verantwortlichen verbleiben."
+    },
+    "readme": {
+      "title": "OpenMapX-Datenauskunft",
+      "description": "Diese Datei trennt die Auskunft nach Artikel 15 vom übertragbaren Teil nach Artikel 20.",
+      "credentials": "Zugangsdaten, Token, private Schlüssel und Archivschlüssel sind nicht enthalten.",
+      "text": "Dieses Archiv enthält eine Auskunft nach Artikel 15 und einen separaten übertragbaren Teil nach Artikel 20. Geheimnisse, Zugangsdaten und private Schlüssel sind nicht enthalten."
+    },
+    "catalogue": {
+      "entries": {
+        "account-profile": {
+          "category": "Kontoprofil",
+          "purpose": "Ihr OpenMapX-Konto bereitstellen und schützen",
+          "source": "Von Ihnen bereitgestellte Angaben",
+          "retention": "Während des Kontos, mit begrenzter Aufbewahrung für Löschungsnachweise",
+          "safeRepresentation": "Profilfelder werden angezeigt; Zugangsdaten werden nie exportiert",
+          "portabilityExclusion": "Keine",
+          "rightsOfOthers": "Keine"
+        },
+        "auth-accounts": {
+          "category": "Verknüpfte Anmelde-Konten",
+          "purpose": "Sie authentifizieren und Anbieter verknüpfen",
+          "source": "Anbieter- und Controller-Aufzeichnungen",
+          "retention": "Kontolaufzeit plus Zeitraum für Löschungswiederholung",
+          "safeRepresentation": "Nur Anbieter-Metadaten; Tokens und Hashes fehlen",
+          "portabilityExclusion": "Authentifizierungsmaterial ist nicht portabel",
+          "rightsOfOthers": "Keine"
+        },
+        "auth-sessions": {
+          "category": "Sitzungen und Sicherheitsdaten",
+          "purpose": "Sitzungen schützen und Missbrauch untersuchen",
+          "source": "Beim Anmelden erzeugt",
+          "retention": "Kurze Sicherheitsaufbewahrung",
+          "safeRepresentation": "Lebenszyklus-, IP- und User-Agent-Metadaten; Sitzungstokens fehlen",
+          "portabilityExclusion": "Sicherheitsmetadaten sind nicht portabel",
+          "rightsOfOthers": "Details anderer Geräte können minimiert werden"
+        },
+        "saved-lists": {
+          "category": "Gespeicherte Listen",
+          "purpose": "Orte speichern und die Karte personalisieren",
+          "source": "Von Ihnen erstellte Listen",
+          "retention": "Bis zur Löschung oder Kontoschließung",
+          "safeRepresentation": "Listeninhalte werden aufgenommen",
+          "portabilityExclusion": "Als JSON enthalten",
+          "rightsOfOthers": "Geteilte Inhalte können geprüft werden"
+        },
+        "saved-places": {
+          "category": "Gespeicherte Orte",
+          "purpose": "Orte für die Navigation speichern",
+          "source": "Von Ihnen eingegeben oder ausgewählt",
+          "retention": "Bis zur Löschung oder Kontoschließung",
+          "safeRepresentation": "Koordinaten und Bezeichnungen werden aufgenommen",
+          "portabilityExclusion": "Als GeoJSON enthalten",
+          "rightsOfOthers": "Geteilte Inhalte können geprüft werden"
+        },
+        "managed-dawarich": {
+          "category": "Verlaufsdaten",
+          "purpose": "Den verbundenen Verlaufsdienst bereitstellen",
+          "source": "Von Ihnen verbundener verwalteter Dawarich-Dienst",
+          "retention": "Nach Dienst- und Fallregeln",
+          "safeRepresentation": "Zugangsdaten und Integrationsgeheimnisse fehlen",
+          "portabilityExclusion": "Abgeleitete Analysen sind nur zur Auskunft",
+          "rightsOfOthers": "Familien-/geteilte Daten können geprüft werden"
+        },
+        "backup-retained-copies": {
+          "category": "Aufbewahrte Sicherungen",
+          "purpose": "Dienstwiederherstellung und Nachweispflichten",
+          "source": "Vom Betreiber aufbewahrte Kopien",
+          "retention": "Nach veröffentlichter Sicherungsfrist",
+          "safeRepresentation": "Einzelfallprüfung; keine automatische Vollständigkeitszusage",
+          "portabilityExclusion": "Sicherungen sind keine portable Quelle",
+          "rightsOfOthers": "Historische Daten können andere betreffen"
+        }
+      },
+      "defaults": {
+        "category": "Verarbeitungsquelle",
+        "purpose": "Verarbeitungsquelle",
+        "source": "OpenMapX-Aufzeichnungen",
+        "retention": "Nach der angegebenen Aufbewahrungsregel",
+        "safeRepresentation": "Nur sichere Metadaten; Geheimnisse fehlen",
+        "portabilityExclusion": "Nicht als portable Daten ausgewiesen",
+        "rightsOfOthers": "Prüfung der Rechte anderer bei Bedarf"
+      }
+    },
+    "identityChallenge": {
+      "subject": "Bestätigen Sie Ihre Identität für eine Datenschutzanfrage",
+      "continue": "Weiter",
+      "description": "Geben Sie diesen Code innerhalb von {minutes, plural, one {# Minute} other {# Minuten}} in der OpenMapX-Ansicht für Datenschutzanfragen ein.",
+      "unexpected": "Wenn Sie diesen Code nicht angefordert haben, geben Sie ihn nicht weiter und kontaktieren Sie den Verantwortlichen über den veröffentlichten Datenschutzkanal.",
+      "footer": "Sie erhalten diese E-Mail, weil eine Identitätsprüfung für eine OpenMapX-Datenschutzanfrage angefordert wurde."
+    },
+    "email": {
+      "templates": {
+        "acknowledgement": {
+          "subject": "Ihre Datenschutzanfrage ist eingegangen",
+          "description": "Wir haben Ihre Anfrage erhalten und prüfen sie. Den aktuellen Status finden Sie nach der Anmeldung in Ihren Kontoeinstellungen."
+        },
+        "clarification": {
+          "subject": "Rückfrage zu Ihrer Datenschutzanfrage",
+          "description": "Für die Bearbeitung Ihrer Anfrage benötigen wir noch eine Klärung. Melden Sie sich an, um die nächsten Schritte zu sehen."
+        },
+        "extension": {
+          "subject": "Aktualisierung Ihrer Datenschutzanfrage",
+          "description": "Die Bearbeitung Ihrer Datenschutzanfrage benötigt mehr Zeit. Die aktualisierte Frist und Begründung finden Sie nach der Anmeldung."
+        },
+        "ready": {
+          "subject": "Ihre Datenauskunft ist bereit",
+          "description": "Ihre Datenauskunft kann jetzt in Ihren Kontoeinstellungen abgerufen werden. Melden Sie sich dort an, um den Download zu starten."
+        },
+        "delivered": {
+          "subject": "Ihre Datenauskunft wurde abgerufen",
+          "description": "Der Abruf Ihrer Datenauskunft wurde registriert. Wenn Sie das nicht waren, melden Sie sich an und kontaktieren Sie uns."
+        },
+        "closed": {
+          "subject": "Ihre Datenschutzanfrage ist abgeschlossen",
+          "description": "Ihre Datenschutzanfrage wurde abgeschlossen. Die Fallinformationen bleiben entsprechend unserer Aufbewahrungsfristen verfügbar."
+        },
+        "refused": {
+          "subject": "Aktualisierung Ihrer Datenschutzanfrage",
+          "description": "Wir konnten Ihre Datenschutzanfrage nicht wie gestellt erfüllen. Die Begründung und mögliche nächsten Schritte finden Sie nach der Anmeldung."
+        },
+        "escalation_due_soon": {
+          "subject": "Datenschutzfrist nähert sich",
+          "description": "Eine Datenschutzanfrage nähert sich ihrer gesetzlichen Frist. Bitte prüfen Sie die Datenschutzwarteschlange."
+        },
+        "escalation_overdue": {
+          "subject": "Datenschutzfrist überschritten",
+          "description": "Eine Datenschutzanfrage hat ihre gesetzliche Frist erreicht oder überschritten. Bitte prüfen Sie die Datenschutzwarteschlange."
+        },
+        "escalation_identity": {
+          "subject": "Datenschutzanfrage wartet auf Identitätsprüfung",
+          "description": "Eine Datenschutzanfrage wartet auf Identitätsprüfung oder eine Rückfrage. Bitte prüfen Sie die Datenschutzwarteschlange."
+        },
+        "escalation_extension": {
+          "subject": "Datenschutzfristverlängerung läuft ab",
+          "description": "Eine verlängerte Datenschutzfrist nähert sich ihrem Ende. Bitte prüfen Sie die Datenschutzwarteschlange."
+        },
+        "escalation_stuck": {
+          "subject": "Datenschutzexport benötigt Aufmerksamkeit",
+          "description": "Ein Datenschutzexport ist ungewöhnlich lange in Bearbeitung. Bitte prüfen Sie die Datenschutzwarteschlange."
+        }
+      },
+      "continue": "Öffnen Sie Ihre OpenMapX-Kontoeinstellungen, um fortzufahren.",
+      "unexpected": "Wenn Sie dies nicht angefragt haben, melden Sie sich an und kontaktieren Sie uns.",
+      "footer": "Sie erhalten diese E-Mail aufgrund einer Aktivität zu einer OpenMapX-Datenschutzanfrage."
+    }
+  },
+  "privacyAdmin": {
+    "newAssistedRequest": "Unterstützte Anfrage erfassen",
+    "assistedIntake": "Eingang einer unterstützten Anfrage",
+    "assistedIntakeHelp": "Erfassen Sie den tatsächlichen Eingangskanal und eine geschützte, eindeutige Zuordnung zur betroffenen Person. Gelöschte oder unzugängliche Konten werden nicht neu angelegt.",
+    "channel": "Eingangskanal",
+    "receivedAt": "Tatsächlich eingegangen am",
+    "channels": {
+      "email": "E-Mail",
+      "post": "Post oder Brief",
+      "representative": "Vertretung",
+      "internal": "Anderer offizieller Kanal"
+    },
+    "locatorType": "Art der Personenzuordnung",
+    "locatorTypes": {
+      "email": "E-Mail-Adresse",
+      "userId": "Historische Benutzer-ID",
+      "username": "Benutzername",
+      "erasureReference": "Löschvorgangsreferenz",
+      "otherReference": "Andere eindeutige Referenz"
+    },
+    "accountState": "Kontostatus",
+    "accountStates": {
+      "current": "Aktuell",
+      "inaccessible": "Nicht zugänglich",
+      "deleted": "Gelöscht",
+      "unknown": "Unbekannt"
+    },
+    "subjectLocator": "Eindeutige Personenzuordnung",
+    "subjectLocatorHelp": "Dieser Wert wird verschlüsselt und nicht in der Fallliste angezeigt.",
+    "representativeContact": "Verifizierte Kontaktadresse der Vertretung",
+    "representativeContactHelp": "Vertretungsbefugnis und Empfangsberechtigung werden getrennt geprüft.",
+    "recordRequest": "Anfrage erfassen",
+    "identityParties": "Identität und Vertretungsbefugnis",
+    "identityProofRequired": "Schließen Sie eine nachgewiesene Kontoanmeldung, eine verifizierte E-Mail-Challenge oder eine Ausnahmeprüfung mit Nachweis ab.",
+    "sendIdentityChallenge": "Bestätigungscode senden",
+    "identityCode": "Sechsstelliger Code",
+    "verifyIdentityCode": "Code bestätigen",
+    "challengeIssueFailed": "Der Bestätigungscode konnte nicht gesendet werden. Prüfen Sie, ob für diese Partei eine maßgebliche E-Mail-Adresse hinterlegt ist, und versuchen Sie es später erneut.",
+    "challengeCompleteFailed": "Der Code konnte nicht bestätigt werden. Er ist möglicherweise falsch, abgelaufen oder bereits verwendet.",
+    "accountLoginProofHelp": "Für den Nachweis per Kontoanmeldung muss sich die betroffene Person erneut anmelden und den unterstützten Nachweis in ihrer eigenen authentifizierten Sitzung abschließen.",
+    "parties": { "subject": "Betroffene Person", "representative": "Vertretung" },
+    "loadFailed": "Die Datenschutzwarteschlange konnte nicht geladen werden.",
+    "caseFailed": "Der Fall konnte nicht geladen werden.",
+    "actionFailed": "Die Datenschutzaktion konnte nicht abgeschlossen werden.",
+    "title": "Datenschutzanfragen",
+    "refresh": "Aktualisieren",
+    "empty": "Keine offenen Anfragen.",
+    "selectRequest": "Wählen Sie eine Anfrage aus, um ihre Metadaten einzusehen.",
+    "verifyIdentity": "Identität prüfen",
+    "generate": "Archiv erstellen",
+    "generateAfterReview": "Nach Prüfung erstellen",
+    "tasks": "Aufgaben zu Datenquellen",
+    "review": "Prüfen",
+    "archives": "Archive",
+    "readiness": "Freigabestatus",
+    "ready": "Bereit für die genehmigte Freigabe",
+    "notReady": "Nicht bereit für eine Vollständigkeitszusage",
+    "backups": "Vertrauenswürdiges Sicherungsverzeichnis",
+    "noBackups": "Kein Verzeichnis verfügbar.",
+    "queue": "Warteschlange ({count})",
+    "queueItem": "{state} · Frist {date}",
+    "case": "Fall {id}",
+    "caseMetadata": "Antwortfrist: {date} · Identität: {identity}",
+    "unknown": "Unbekannt",
+    "expires": "Läuft am {date} ab",
+    "verified": "Verifiziert",
+    "unverified": "Nicht verifiziert"
   }
 }

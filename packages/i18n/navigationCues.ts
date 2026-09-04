@@ -1,7 +1,5 @@
 import IntlMessageFormat from "intl-messageformat";
-import type { Locale } from "./index";
-import de from "./locales/de.json";
-import en from "./locales/en.json";
+import { defaultLocale, type Locale, locales, messages } from "./config";
 
 /**
  * Localised spoken and status text for navigation, usable from a headless
@@ -47,7 +45,7 @@ export class NavigationCueError extends Error {}
 const MAX_FREE_TEXT = 120;
 const MAX_INSTRUCTION = 240;
 
-const CATALOGS: Record<Locale, Record<string, unknown>> = { en, de };
+const CATALOGS: Record<Locale, Record<string, unknown>> = messages;
 
 /**
  * Compiled message cache, keyed by `locale:key`.
@@ -61,7 +59,7 @@ function messageFor(locale: Locale, key: string): string {
   const navigation = CATALOGS[locale]?.navigation as unknown as Record<string, string> | undefined;
   // English is the fallback when a locale is missing a key, so a translation
   // gap degrades to a readable cue rather than silence.
-  const fallback = (en.navigation as unknown as Record<string, string>)[key];
+  const fallback = (messages[defaultLocale].navigation as unknown as Record<string, string>)[key];
   const message = navigation?.[key] ?? fallback;
   if (typeof message !== "string") {
     throw new NavigationCueError(`missing navigation message: ${key}`);
@@ -86,8 +84,8 @@ function format(locale: Locale, key: string, values: Record<string, string | num
 }
 
 function assertLocale(locale: unknown): asserts locale is Locale {
-  if (locale !== "en" && locale !== "de") {
-    throw new NavigationCueError("locale must be en or de");
+  if (!locales.includes(locale as Locale)) {
+    throw new NavigationCueError(`locale must be one of ${locales.join(", ")}`);
   }
 }
 

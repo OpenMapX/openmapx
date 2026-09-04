@@ -7,6 +7,12 @@
   "quality": "built-in",
   "homepage": "https://valhalla.github.io/valhalla/",
   "documentation": "https://valhalla.github.io/valhalla/api/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "ghcr.io/valhalla/valhalla-scripted",
     "tag": "latest",

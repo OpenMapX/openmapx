@@ -58,6 +58,18 @@ export interface OsmContributionLogger {
   error(details: Record<string, unknown>, message: string): void;
 }
 
+export type OsmDisclosureWriter = (input: {
+  userId: string;
+  occurredAt: Date;
+  recipientId: string;
+  categoryCode: string;
+  purposeCode: string;
+  legalBasisCode: string;
+  operationCode: string;
+  externalReference?: string;
+  idempotencyKey?: string;
+}) => Promise<void>;
+
 export interface OsmRequestContext {
   headers: Headers;
   userId: string;
@@ -76,6 +88,7 @@ export interface OsmContributionServiceDeps {
     outcome: OsmOperationOutcome,
     durationMs: number,
   ) => void;
+  recordDisclosure?: OsmDisclosureWriter;
 }
 
 export interface OsmContributionService {
@@ -240,6 +253,7 @@ export function createOsmContributionService(
   const { config, account, client, guard } = deps;
   const now = deps.now ?? (() => new Date());
   const logger = deps.logger;
+  const recordDisclosure = deps.recordDisclosure;
 
   function record(
     operation: OsmOperation,
@@ -655,6 +669,17 @@ export function createOsmContributionService(
                 }
               }
               await finish({ kind: "success", at: now().toISOString(), result });
+              await recordDisclosure?.({
+                userId: ctx.userId,
+                occurredAt: now(),
+                recipientId: "osm",
+                categoryCode: "osm-publication",
+                purposeCode: "publication",
+                legalBasisCode: "consent",
+                operationCode: "osm.contribution.publish",
+                externalReference: `${request.ref.type}:${request.ref.id}`,
+                idempotencyKey: `osm-${request.idempotencyKey}`,
+              });
               return result;
             } catch (error) {
               if (isOsmContributionError(error) && error.code === "AMBIGUOUS_RESULT") {
@@ -718,6 +743,17 @@ export function createOsmContributionService(
               status: note.status,
             };
             await finish({ kind: "success", at: now().toISOString(), result });
+            await recordDisclosure?.({
+              userId: ctx.userId,
+              occurredAt: now(),
+              recipientId: "osm",
+              categoryCode: "osm-publication",
+              purposeCode: "publication",
+              legalBasisCode: "consent",
+              operationCode: "osm.note.create",
+              externalReference: `${request.ref.type}:${request.ref.id}`,
+              idempotencyKey: `osm-note-${request.idempotencyKey}`,
+            });
             return result;
           },
         ),

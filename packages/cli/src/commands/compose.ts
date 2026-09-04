@@ -11,6 +11,7 @@ import { log } from "../lib/output";
 import { repoPaths } from "../lib/paths";
 import {
   assertPlatformFileTarget,
+  ensurePlatformExportsKeyRingFile,
   ensurePlatformPrivateDirectory,
   ensurePlatformSecretFile,
   PlatformFileTargetChangedError,
@@ -202,6 +203,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);
+  ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "privacy-extraction"));
   initializeErasureJournal(join(erasureDirectory, "journal.jsonl"));
   const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
   const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");
@@ -217,6 +219,12 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
     "offline-package-principal-key",
   );
   const erasureJournalKeyPath = join(paths.infraDir, "secrets", "erasure-journal-key");
+  const subjectExportsMasterKeyPath = join(paths.infraDir, "secrets", "subject-exports-master-key");
+  const privacyBackupCapabilityKeyPath = join(
+    paths.infraDir,
+    "secrets",
+    "privacy-backup-capability-key",
+  );
   // Shared only between data-manager and the private Transitous runner: it
   // signs the single-use capability tokens that authorize one upstream run.
   const transitousRunnerCapabilityPath = join(
@@ -227,6 +235,8 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   ensurePlatformSecretFile(redisPasswordPath);
   ensurePlatformSecretFile(offlinePackagePrincipalKeyPath);
   ensurePlatformSecretFile(erasureJournalKeyPath);
+  ensurePlatformExportsKeyRingFile(subjectExportsMasterKeyPath);
+  ensurePlatformSecretFile(privacyBackupCapabilityKeyPath);
   ensurePlatformSecretFile(transitousRunnerCapabilityPath);
   const opsAgentApiToken = ensurePlatformSecretFile(opsAgentApiTokenPath);
   const opsAgentDataManagerToken = ensurePlatformSecretFile(opsAgentDataManagerTokenPath);

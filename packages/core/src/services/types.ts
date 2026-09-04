@@ -222,6 +222,13 @@ export interface ServiceUI {
   category?: string;
 }
 
+export interface ServiceSubjectData {
+  storesPersonalData: boolean;
+  strategy: "collector" | "operator_task" | "not_personal";
+  registrationIds: string[];
+  operatorInstructions: string | null;
+}
+
 /**
  * Capability declaration on a service. Two forms are accepted:
  *
@@ -307,6 +314,12 @@ export interface ServiceManifest {
   buildCommand?: string;
 
   ui?: ServiceUI;
+
+  /** Declaration of the personal data a service stores and how it is reached
+   * by the subject-access export pipeline.  Runtime validation is performed
+   * by `serviceManifestSchema`; keeping the type in sync prevents callers from
+   * silently dropping the declaration when loading trusted manifests. */
+  subjectData?: ServiceSubjectData;
 }
 
 /**

@@ -45,6 +45,28 @@ describe("metrics service", () => {
     expect(a).toBe(b);
   });
 
+  it("exports bounded cleanup backlog counts by resource kind", async () => {
+    const handle = getMetrics();
+    handle.recordPrivacyOperationalSnapshot({
+      openRequestsByDueState: { on_track: 0, due_soon: 0, overdue: 0 },
+      oldestRequestAgeSeconds: 0,
+      sourceTasksByStatus: {},
+      generationFailures: 0,
+      artifactCleanupLagSeconds: 0,
+      artifactCleanupBacklog: 3,
+      attachmentCleanupBacklog: 2,
+      sourceSnapshotCleanupBacklog: 1,
+      keyReady: true,
+      backupReviewBacklog: 0,
+      notificationFailures: 0,
+    });
+
+    const text = await handle.renderPrometheus();
+    expect(text).toMatch(/privacy_cleanup_backlog\{[^}]*resource_kind="artifact"[^}]*\} 3/);
+    expect(text).toMatch(/privacy_cleanup_backlog\{[^}]*resource_kind="attachment"[^}]*\} 2/);
+    expect(text).toMatch(/privacy_cleanup_backlog\{[^}]*resource_kind="source_snapshot"[^}]*\} 1/);
+  });
+
   it("renders Prometheus text containing the registered metric names after one call", async () => {
     recordProviderCall(
       { providerId: "transit-motis-local", method: "getDepartures", outcome: "ok" },

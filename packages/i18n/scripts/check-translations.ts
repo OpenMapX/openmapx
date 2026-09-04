@@ -303,6 +303,13 @@ function main() {
       varToNs.set(match[1], match[2]);
     }
 
+    // Headless API/background translations share the canonical catalogues.
+    const headlessPattern =
+      /const\s+(\w+)\s*=\s*createTranslator\(\s*[^,]+,\s*["']([^"']+)["']\s*\)/g;
+    for (const match of content.matchAll(headlessPattern)) {
+      varToNs.set(match[1], match[2]);
+    }
+
     for (const [varName, ns] of varToNs) {
       // Static calls: varName("literal")
       const staticPattern = new RegExp(`\\b${varName}\\(\\s*["']([^"']+)["']`, "g");

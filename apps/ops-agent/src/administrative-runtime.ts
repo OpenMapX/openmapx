@@ -27,7 +27,11 @@ import {
 } from "@openmapx/core/ops";
 import { services as coreServices } from "@openmapx/core/server";
 import { inspectDataInventory } from "./data-inventory";
-import { listDescriptorAnchoredDirectory, readDescriptorAnchoredUtf8 } from "./descriptor-file";
+import {
+  hashDescriptorAnchoredFile,
+  listDescriptorAnchoredDirectory,
+  readDescriptorAnchoredUtf8,
+} from "./descriptor-file";
 import { runContainedProcess } from "./docker-runtime";
 import type { OpsExecutionContext, OpsRuntime } from "./runtime";
 
@@ -118,11 +122,41 @@ type ReleaseTransactionPhase =
   | "rollback_overlay"
   | "rollback_services";
 
-interface ParsedBackupManifest {
+export interface ParsedBackupManifest {
   name: string;
   createdAt: string;
   openmapxVersion: string;
-  services: Array<{ id: string; version: string; volumes: Array<{ sizeBytes: number }> }>;
+  formatVersion: 1 | 2;
+  manifestDigest: string;
+  services: Array<{
+    id: string;
+    version: string;
+    volumes: Array<{
+      name: string;
+      file: string;
+      mode: "tar" | "pg_dump";
+      sizeBytes: number;
+      sha256: string | null;
+    }>;
+  }>;
+  privacySourceProvenance?: {
+    managedDawarich?: {
+      version: string;
+      image: string;
+      imageDigest: string;
+      upstreamCommit: string;
+      schemaContract: string;
+    };
+  };
+}
+
+export interface VerifiedPrivacyBackupInput {
+  serviceId: string;
+  volumeId: string;
+  file: string;
+  mode: "tar" | "pg_dump";
+  sizeBytes: number;
+  sha256: string;
 }
 
 interface DataAuthorityService {
@@ -247,14 +281,14 @@ function isRegularComposeFile(path: string): boolean {
 
 function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest {
   let candidate: unknown;
+  let contents: string;
   try {
-    candidate = JSON.parse(
-      readDescriptorAnchoredUtf8(
-        rootDir,
-        ["infra", "docker", "backups", backupId, "manifest.json"],
-        { minimumBytes: 1, maximumBytes: MAX_BACKUP_MANIFEST_BYTES },
-      ),
+    contents = readDescriptorAnchoredUtf8(
+      rootDir,
+      ["infra", "docker", "backups", backupId, "manifest.json"],
+      { minimumBytes: 1, maximumBytes: MAX_BACKUP_MANIFEST_BYTES },
     );
+    candidate = JSON.parse(contents);
   } catch {
     throw new Error("Backup authority rejected");
   }
@@ -274,6 +308,8 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
   ) {
     throw new Error("Backup authority rejected");
   }
+  const formatVersion = raw.formatVersion === undefined ? 1 : raw.formatVersion;
+  if (formatVersion !== 1 && formatVersion !== 2) throw new Error("Backup authority rejected");
   const seenServices = new Set<string>();
   let volumeCount = 0;
   const services = raw.services.map((value) => {
@@ -299,19 +335,61 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
       if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
         throw new Error("Backup authority rejected");
       }
-      const sizeBytes = (entry as Record<string, unknown>).sizeBytes;
+      const rawVolume = entry as Record<string, unknown>;
+      const sizeBytes = rawVolume.sizeBytes;
       if (typeof sizeBytes !== "number" || !Number.isSafeInteger(sizeBytes) || sizeBytes < 0) {
         throw new Error("Backup authority rejected");
       }
-      return { sizeBytes };
+      const name = rawVolume.name;
+      const file = rawVolume.file;
+      const mode = rawVolume.mode;
+      const sha256 = rawVolume.sha256;
+      if (typeof name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(name)) {
+        throw new Error("Backup authority rejected");
+      }
+      if (mode !== "tar" && mode !== "pg_dump") throw new Error("Backup authority rejected");
+      const expectedFile = `${service.id}__${name}.${mode === "tar" ? "tar.gz" : "sql.gz"}`;
+      if (
+        file !== undefined &&
+        (typeof file !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(file))
+      )
+        throw new Error("Backup authority rejected");
+      if (formatVersion === 2 && file === undefined) throw new Error("Backup authority rejected");
+      if (sha256 !== undefined && (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256))) {
+        throw new Error("Backup authority rejected");
+      }
+      return {
+        name,
+        file: typeof file === "string" ? file : expectedFile,
+        mode: mode as "tar" | "pg_dump",
+        sizeBytes,
+        sha256: typeof sha256 === "string" ? sha256 : null,
+      };
     });
     return { id: service.id, version: service.version, volumes };
   });
+  const provenance = raw.privacySourceProvenance as
+    | ParsedBackupManifest["privacySourceProvenance"]
+    | undefined;
+  const managed = provenance?.managedDawarich;
+  if (
+    managed &&
+    (managed.version !== "1.10.3" ||
+      managed.image !== "freikin/dawarich" ||
+      managed.imageDigest !==
+        "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b" ||
+      managed.upstreamCommit !== "da551a0e32f67b4d8ac6d50132c26634d6ad29a4" ||
+      managed.schemaContract !== "dawarich-1.10.3")
+  )
+    throw new Error("Backup authority rejected");
   return {
     name: backupId,
     createdAt: new Date(raw.createdAt).toISOString(),
     openmapxVersion: raw.openmapxVersion,
+    formatVersion,
+    manifestDigest: createHash("sha256").update(contents).digest("hex"),
     services,
+    ...(managed ? { privacySourceProvenance: { managedDawarich: managed } } : {}),
   };
 }
 
@@ -330,7 +408,7 @@ function corruptEntry(
   };
 }
 
-function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
+export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
   const root = backupRoot(rootDir);
   if (!strictDirectory(root)) return { backups: [], warningCount: 0 };
   const entries = listDescriptorAnchoredDirectory(rootDir, ["infra", "docker", "backups"], {
@@ -365,14 +443,51 @@ function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
       warningCount += 1;
       continue;
     }
-    const volumes = manifest.services.flatMap((service) => service.volumes);
+    const volumeDetails = manifest.services.flatMap((service) =>
+      service.volumes.map((volume) => ({
+        serviceId: service.id,
+        volumeId: volume.name,
+        mode: volume.mode,
+        sizeBytes: volume.sizeBytes,
+        sha256: volume.sha256,
+      })),
+    );
+    let verified =
+      manifest.formatVersion === 2 && volumeDetails.every((volume) => volume.sha256 !== null);
+    if (verified) {
+      for (const service of manifest.services) {
+        for (const volume of service.volumes) {
+          try {
+            const measured = hashDescriptorAnchoredFile(
+              rootDir,
+              ["infra", "docker", "backups", entry.name, volume.file],
+              {
+                maximumBytes: Number.MAX_SAFE_INTEGER,
+                expectedBytes: volume.sizeBytes,
+                expectedSha256: volume.sha256 ?? undefined,
+              },
+            );
+            if (measured.sizeBytes !== volume.sizeBytes || measured.sha256 !== volume.sha256)
+              verified = false;
+          } catch {
+            verified = false;
+          }
+          if (!verified) break;
+        }
+        if (!verified) break;
+      }
+    }
     backups.push({
       backupId: entry.name,
       createdAt: manifest.createdAt,
       platformVersion: manifest.openmapxVersion,
+      manifestDigest: manifest.manifestDigest,
+      formatVersion: manifest.formatVersion,
+      verified,
+      volumes: volumeDetails,
       serviceCount: manifest.services.length,
-      volumeCount: volumes.length,
-      totalBytes: volumes.reduce((total, volume) => total + volume.sizeBytes, 0),
+      volumeCount: volumeDetails.length,
+      totalBytes: volumeDetails.reduce((total, volume) => total + volume.sizeBytes, 0),
     });
   }
   backups.sort(
@@ -380,6 +495,84 @@ function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.list"> {
       right.createdAt.localeCompare(left.createdAt) || left.backupId.localeCompare(right.backupId),
   );
   return { backups, warningCount };
+}
+
+/**
+ * Re-open one format-2 backup and verify every declared member while the
+ * caller's backup-store lease is held. This helper is intentionally scoped to
+ * the ops process: its returned filenames are never serialized through the
+ * public inventory or privacy API.
+ */
+export function readVerifiedPrivacyBackupInputs(
+  rootDir: string,
+  backupId: string,
+  expectedManifestDigest: string,
+): { manifest: ParsedBackupManifest; inputs: VerifiedPrivacyBackupInput[] } {
+  assertBackupId(backupId);
+  if (!/^[a-f0-9]{64}$/.test(expectedManifestDigest)) throw new Error("Backup authority rejected");
+  const manifest = parseManifest(rootDir, backupId);
+  if (manifest.formatVersion !== 2 || manifest.manifestDigest !== expectedManifestDigest) {
+    throw new Error("Backup authority rejected");
+  }
+  const inputs: VerifiedPrivacyBackupInput[] = [];
+  for (const service of manifest.services) {
+    for (const volume of service.volumes) {
+      if (!volume.sha256) throw new Error("Backup authority rejected");
+      const measured = hashDescriptorAnchoredFile(
+        rootDir,
+        ["infra", "docker", "backups", backupId, volume.file],
+        {
+          maximumBytes: Number.MAX_SAFE_INTEGER,
+          expectedBytes: volume.sizeBytes,
+          expectedSha256: volume.sha256,
+        },
+      );
+      if (measured.sizeBytes !== volume.sizeBytes || measured.sha256 !== volume.sha256) {
+        throw new Error("Backup authority rejected");
+      }
+      inputs.push({
+        serviceId: service.id,
+        volumeId: volume.name,
+        file: volume.file,
+        mode: volume.mode,
+        sizeBytes: volume.sizeBytes,
+        sha256: volume.sha256,
+      });
+    }
+  }
+  return { manifest, inputs };
+}
+
+export async function inspectPrivacyBackupLease(
+  rootDir: string,
+  backupId: string,
+  expectedManifestDigest: string,
+  signal: AbortSignal,
+): Promise<{
+  backupId: string;
+  manifestDigest: string;
+  platformVersion: string;
+  formatVersion: 2;
+  verified: true;
+  release: () => void;
+}> {
+  if (signal.aborted) throw new Error("backup inspection aborted");
+  const lock = await acquireBackupStoreLock(rootDir);
+  try {
+    if (signal.aborted) throw new Error("backup inspection aborted");
+    const verified = readVerifiedPrivacyBackupInputs(rootDir, backupId, expectedManifestDigest);
+    return {
+      backupId,
+      manifestDigest: verified.manifest.manifestDigest,
+      platformVersion: verified.manifest.openmapxVersion,
+      formatVersion: 2,
+      verified: true,
+      release: lock.release,
+    };
+  } catch (error) {
+    lock.release();
+    throw error;
+  }
 }
 
 export async function inspectBackupAuthority(

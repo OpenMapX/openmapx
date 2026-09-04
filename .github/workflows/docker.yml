@@ -78,6 +78,9 @@ jobs:
           - app: ops-agent
             context: .
             dockerfile: apps/ops-agent/Dockerfile
+          - app: privacy-backup
+            context: .
+            dockerfile: services/ops-agent/privacy-backup/Dockerfile
           - app: transitous-runner
             context: .
             dockerfile: apps/transitous-runner/Dockerfile
@@ -227,7 +230,7 @@ jobs:
           mkdir -p release-manifest
           first=true
           image_lines=""
-          for app in api web data-manager ops-agent transitous-runner transitous-tools docs; do
+          for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools docs; do
             shopt -s nullglob
             digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then

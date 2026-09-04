@@ -4,6 +4,12 @@
   "author": "OpenMapX",
   "license": "AGPL-3.0-or-later",
   "documentation": "https://openmapx.de/docs/features/air-quality",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "domains": ["air-quality", "map-overlay"],
   "frontend": {
     "mapLayer": true,

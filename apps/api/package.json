@@ -19,6 +19,7 @@
   "author": "",
   "license": "AGPL-3.0-or-later",
   "dependencies": {
+    "@archiver/archiver": "0.2.0",
     "@better-auth/core": "1.7.1",
     "@better-auth/expo": "1.7.1",
     "@better-auth/i18n": "1.7.1",
@@ -31,6 +32,7 @@
     "@motis-project/motis-client": "^2.11.0",
     "@openmapx/core": "workspace:^",
     "@openmapx/db-schema": "workspace:^",
+    "@openmapx/i18n": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/mobility-formats": "workspace:^",

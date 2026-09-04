@@ -6,6 +6,12 @@
   "license": "MIT/Apache-2.0",
   "quality": "built-in",
   "homepage": "https://maplibre.org/martin/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "ghcr.io/maplibre/martin",
     "tag": "latest",

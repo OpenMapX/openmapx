@@ -5,6 +5,12 @@
   "description": "Search backend for Pelias. Single-node, security disabled (internal only).",
   "license": "Elastic-License-2.0",
   "quality": "built-in",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "elasticsearch",
     "tag": "7.17.18",

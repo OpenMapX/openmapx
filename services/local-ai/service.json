@@ -6,6 +6,12 @@
   "license": "MIT",
   "quality": "built-in",
   "homepage": "https://ollama.com/",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "ollama/ollama",
     "tag": "latest",

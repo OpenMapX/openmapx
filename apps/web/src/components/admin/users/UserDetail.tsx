@@ -29,7 +29,7 @@ import Tabs from "@mui/material/Tabs";
 import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { authClient, getInitials, proxyImageUrl } from "@openmapx/core";
+import { authClient, getInitials, proxyImageUrl, setPrivacyAdminRole } from "@openmapx/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -76,14 +76,18 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
   const dirty = name !== user.name || email !== user.email || role !== (user.role ?? "user");
 
   const updateUser = useMutation({
-    mutationFn: () =>
-      authClient.admin.updateUser({
-        userId: user.id,
-        data: {
-          ...(name !== user.name ? { name } : {}),
-          ...(role !== (user.role ?? "user") ? { role } : {}),
-        },
-      }),
+    mutationFn: async () => {
+      if (name !== user.name) {
+        await authClient.admin.updateUser({ userId: user.id, data: { name } });
+      }
+      if (role !== (user.role ?? "user")) {
+        if (role === "privacy_admin" || (user.role === "privacy_admin" && role === "user")) {
+          await setPrivacyAdminRole(user.id, role as "privacy_admin" | "user");
+        } else {
+          await authClient.admin.updateUser({ userId: user.id, data: { role } });
+        }
+      }
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "user", user.id] }),
   });
 
@@ -177,6 +181,7 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
           >
             <MenuItem value="user">User</MenuItem>
             <MenuItem value="admin">Admin</MenuItem>
+            {user.role !== "admin" && <MenuItem value="privacy_admin">Privacy admin</MenuItem>}
           </Select>
         </FormControl>
         {dirty && (

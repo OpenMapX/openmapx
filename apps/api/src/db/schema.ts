@@ -46,6 +46,8 @@ export {
   verification,
 } from "./auth-schema";
 export { type CapabilityBindingRow, capabilityBinding } from "./capability-binding-schema";
+// Account-linked recipient disclosure ledger
+export { dataDisclosureEvent } from "./disclosure-schema";
 // Health history
 export { healthHistory } from "./health-history-schema";
 // Installed extension bundles (parent of integration + service components)
@@ -65,6 +67,25 @@ export { integrationSecret } from "./integration-secret-schema";
 export { mangroveKeypair, mangroveKeypairWrap } from "./mangrove-keypair-schema";
 // Short-lived system-browser → WebView session handoff
 export { mobileAuthHandoff } from "./mobile-auth-handoff-schema";
+// Export-download authentication assurance and purpose-bound challenges
+export { dataExportReauthentication, sessionAuthAssurance } from "./privacy-auth-schema";
+// GDPR subject-access request lifecycle and encrypted artifact metadata
+export {
+  dataExportArtifact,
+  dataExportBackupReview,
+  dataPrivacyApproval,
+  dataSubjectRequest,
+  dataSubjectRequestApproval,
+  dataSubjectRequestAttachment,
+  dataSubjectRequestBackupReview,
+  dataSubjectRequestEmailChallenge,
+  dataSubjectRequestEvent,
+  dataSubjectRequestIdentity,
+  dataSubjectRequestNotification,
+  dataSubjectRequestPreservation,
+  dataSubjectRequestSourceSnapshot,
+  dataSubjectRequestTask,
+} from "./privacy-schema";
 // Saved places tables
 export {
   labeledPlace,

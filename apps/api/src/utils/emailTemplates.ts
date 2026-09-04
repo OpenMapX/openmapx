@@ -1,3 +1,5 @@
+import { createTranslator, defaultLocale, resolveLocale } from "@openmapx/i18n";
+
 const BRAND_COLOR = "#207E23";
 const BRAND_COLOR_DARK = "#1B6A1D";
 const TEXT_PRIMARY = "#202124";
@@ -6,9 +8,9 @@ const BG_BODY = "#f2f4f6";
 const BG_CARD = "#ffffff";
 
 /** Wraps email content in the shared OpenMapX layout. */
-function layout(content: string): string {
+function layout(content: string, locale: string = defaultLocale, footer?: string): string {
   return `<!DOCTYPE html>
-<html lang="en">
+<html lang="${escapeHtml(resolveLocale(locale))}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
@@ -31,8 +33,7 @@ function layout(content: string): string {
     <!-- Footer -->
     <tr><td style="background-color:${BG_CARD};border-top:1px solid #e8eaed;border-radius:0 0 12px 12px;padding:20px 32px;border-left:1px solid #e8eaed;border-right:1px solid #e8eaed;border-bottom:1px solid #e8eaed;">
       <p style="margin:0;font-size:12px;line-height:18px;color:#9aa0a6;text-align:center;">
-        You received this email because an action was performed on your OpenMapX account.<br>
-        If you didn't request this, you can safely ignore it.
+        ${footer ?? "You received this email because an action was performed on your OpenMapX account.<br>If you didn't request this, you can safely ignore it."}
       </p>
     </td></tr>
   </table>
@@ -150,5 +151,85 @@ export function emailOtpEmail(
     subject: c.subject,
     text: `${c.title}\n\nYour code is: ${otp}\n\nThis code expires in 5 minutes.\n\nIf you didn't request this, you can safely ignore this email.`,
     html: layout(heading(c.title) + paragraph(c.description) + otpBlock(otp)),
+  };
+}
+
+export type PrivacyNotificationTemplate =
+  | "acknowledgement"
+  | "clarification"
+  | "extension"
+  | "ready"
+  | "delivered"
+  | "closed"
+  | "refused"
+  | "escalation_due_soon"
+  | "escalation_overdue"
+  | "escalation_identity"
+  | "escalation_extension"
+  | "escalation_stuck";
+
+/**
+ * Static, purpose-limited case notifications.  These messages deliberately
+ * contain no request IDs, download URLs, identity evidence, recipient
+ * addresses, or archive metadata.  The subject signs in through the normal
+ * same-origin account UI and then reads the case there.
+ */
+function escapeHtml(value: string): string {
+  return value.replace(
+    /[&<>"']/g,
+    (char) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char] ?? char,
+  );
+}
+
+export function privacyRequestEmail(
+  template: PrivacyNotificationTemplate,
+  locale: string = defaultLocale,
+): { subject: string; text: string; html: string } {
+  const t = createTranslator(locale, "privacyExport.email");
+  const subject = t(`templates.${template}.subject`);
+  const description = t(`templates.${template}.description`);
+  const continuation = t("continue");
+  const unexpected = t("unexpected");
+  return {
+    subject: `${subject} — OpenMapX`,
+    text: `${subject}\n\n${description}\n\n${continuation}\n\n${unexpected}`,
+    html: layout(
+      heading(escapeHtml(subject)) +
+        paragraph(escapeHtml(description)) +
+        paragraph(escapeHtml(continuation)) +
+        paragraph(escapeHtml(unexpected)),
+      locale,
+      escapeHtml(t("footer")),
+    ),
+  };
+}
+
+/** A short-lived identity code rendered from the same ICU catalogues as the
+ * web application. The message contains no case identifier or URL. */
+export function privacyIdentityChallengeEmail(
+  code: string,
+  locale: string = defaultLocale,
+  expiresInMinutes = 10,
+): { subject: string; text: string; html: string } {
+  if (!/^\d{6}$/.test(code)) throw new Error("invalid privacy identity code");
+  if (!Number.isSafeInteger(expiresInMinutes) || expiresInMinutes < 1 || expiresInMinutes > 60)
+    throw new Error("invalid privacy identity expiry");
+  const resolvedLocale = resolveLocale(locale);
+  const t = createTranslator(resolvedLocale, "privacyExport.identityChallenge");
+  const subject = t("subject");
+  const description = t("description", { minutes: expiresInMinutes });
+  const unexpected = t("unexpected");
+  return {
+    subject: `${subject} — OpenMapX`,
+    text: `${subject}\n\n${description}\n\n${code}\n\n${unexpected}`,
+    html: layout(
+      heading(escapeHtml(subject)) +
+        paragraph(escapeHtml(description)) +
+        otpBlock(code) +
+        paragraph(escapeHtml(unexpected)),
+      resolvedLocale,
+      escapeHtml(t("footer")),
+    ),
   };
 }

@@ -1,4 +1,15 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  linkSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  symlinkSync,
+  utimesSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Readable } from "node:stream";
@@ -25,6 +36,7 @@ import {
   resolveBackupDir,
   restoreBackup,
   validateRestoreDataProtection,
+  writeBackupManifestAtomically,
 } from "../src/commands/backup";
 
 vi.mock("execa", () => ({ execa: vi.fn() }));
@@ -246,6 +258,37 @@ describe("readBackupManifest", () => {
     const m = readBackupManifest(join(dir, "manifest.json"));
     expect(m.name).toBe("good");
     expect(m.services).toHaveLength(1);
+  });
+
+  it("rejects replaced, symlinked and hard-linked manifests", () => {
+    const dir = writeBackup("trusted", {
+      name: "trusted",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [],
+    });
+    const manifest = join(dir, "manifest.json");
+    const symlink = join(dir, "manifest-link.json");
+    symlinkSync(manifest, symlink);
+    expect(() => readBackupManifest(symlink)).toThrow(/private regular file/);
+    const hardlink = join(dir, "manifest-hardlink.json");
+    linkSync(manifest, hardlink);
+    expect(() => readBackupManifest(hardlink)).toThrow(/private regular file/);
+  });
+
+  it("publishes a private manifest atomically and flushes temporary names", () => {
+    const dir = join(tmp, "infra", "docker", "backups", "atomic");
+    mkdirSync(dir, { recursive: true });
+    const manifest: BackupManifest = {
+      formatVersion: 2,
+      name: "atomic",
+      createdAt: "2026-04-19T00:00:00.000Z",
+      openmapxVersion: "1.0.0",
+      services: [],
+    };
+    writeBackupManifestAtomically(join(dir, "manifest.json"), manifest);
+    expect(statSync(join(dir, "manifest.json")).mode & 0o777).toBe(0o400);
+    expect(readBackupManifest(join(dir, "manifest.json"))).toEqual(manifest);
+    expect(readdirSync(dir).filter((name) => name.endsWith(".partial"))).toEqual([]);
   });
 
   it("requires versioned service metadata", () => {
@@ -771,6 +814,15 @@ describe("backup volume modes", () => {
           }),
           stderr: "",
         });
+      }
+      if (command === "docker" && args.includes("tar")) {
+        const mount = args.find((value) => value.includes(":/backup"));
+        const outputIndex = args.indexOf("-czf") + 1;
+        const output = outputIndex > 0 ? args[outputIndex] : undefined;
+        if (mount && output?.startsWith("/backup/")) {
+          const hostDir = mount.slice(0, mount.lastIndexOf(":/backup"));
+          writeFileSync(join(hostDir, output.slice("/backup/".length)), "");
+        }
       }
       return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
     }) as never);

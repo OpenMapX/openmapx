@@ -1,6 +1,6 @@
 import { create } from "zustand";
 
-export type AccountSettingsSection = "timeline" | "sharing" | null;
+export type AccountSettingsSection = "timeline" | "sharing" | "privacy" | null;
 
 interface AccountSettingsState {
   open: boolean;

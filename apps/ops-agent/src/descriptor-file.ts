@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import {
   type BigIntStats,
   closeSync,
@@ -35,6 +36,13 @@ export interface DescriptorReadOptions {
   minimumBytes?: number;
   descriptorAnchorRoot?: string;
   hooks?: DescriptorReadHooks;
+}
+
+export interface DescriptorHashOptions {
+  maximumBytes: number;
+  expectedBytes?: number;
+  expectedSha256?: string;
+  descriptorAnchorRoot?: string;
 }
 
 interface OpenedEntry {
@@ -212,6 +220,137 @@ export function readDescriptorAnchoredUtf8(
         closeSync(descriptor);
       } catch {
         // Preserve the redacted read failure while still attempting every close.
+      }
+    }
+  }
+}
+
+/**
+ * Hash one fixed relative file while it is held open.  This is intentionally
+ * separate from the bounded UTF-8 reader: backup members can be multi-gigabyte
+ * binary streams and must never be concatenated in memory.  The descriptor,
+ * its parent chain and the directory entry are checked before and after the
+ * read so a replacement/rename cannot make a previously trusted digest refer
+ * to different bytes.
+ */
+export function hashDescriptorAnchoredFile(
+  rootDir: string,
+  components: readonly string[],
+  options: DescriptorHashOptions,
+): { sizeBytes: number; sha256: string } {
+  const descriptors: number[] = [];
+  const opened: Array<{
+    descriptor: number;
+    identity: BigIntStats;
+    pathname: string;
+    kind: "directory" | "file";
+  }> = [];
+  try {
+    if (
+      !isAbsolute(rootDir) ||
+      components.length < 1 ||
+      components.length > MAX_PATH_COMPONENTS ||
+      components.some(
+        (component) =>
+          !SAFE_COMPONENT.test(component) ||
+          Buffer.byteLength(component, "utf8") > MAX_COMPONENT_BYTES,
+      ) ||
+      !Number.isSafeInteger(options.maximumBytes) ||
+      options.maximumBytes < 0 ||
+      (options.expectedBytes !== undefined &&
+        (!Number.isSafeInteger(options.expectedBytes) || options.expectedBytes < 0)) ||
+      (options.expectedSha256 !== undefined && !/^[a-f0-9]{64}$/.test(options.expectedSha256))
+    ) {
+      throw new Error("invalid descriptor hash request");
+    }
+    const anchor = options.descriptorAnchorRoot ?? "/proc/self/fd";
+    if (!statSync(anchor).isDirectory()) throw new Error("descriptor anchor unavailable");
+    const rootDescriptor = openSync(
+      rootDir,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
+    descriptors.push(rootDescriptor);
+    const rootIdentity = fstatSync(rootDescriptor, { bigint: true });
+    if (!safeDirectory(rootIdentity, rootIdentity.uid)) throw new Error("unsafe root");
+    opened.push({
+      descriptor: rootDescriptor,
+      identity: rootIdentity,
+      pathname: rootDir,
+      kind: "directory",
+    });
+    let parentDescriptor = rootDescriptor;
+    for (let index = 0; index < components.length - 1; index += 1) {
+      const name = components[index] as string;
+      const descriptor = openSync(
+        anchoredPath(anchor, parentDescriptor, name),
+        constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+      );
+      descriptors.push(descriptor);
+      const identity = fstatSync(descriptor, { bigint: true });
+      if (!safeDirectory(identity, rootIdentity.uid)) throw new Error("unsafe directory");
+      opened.push({
+        descriptor,
+        identity,
+        pathname: anchoredPath(anchor, parentDescriptor, name),
+        kind: "directory",
+      });
+      parentDescriptor = descriptor;
+    }
+    const filename = components.at(-1) as string;
+    const pathname = anchoredPath(anchor, parentDescriptor, filename);
+    const descriptor = openSync(
+      pathname,
+      constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK,
+    );
+    descriptors.push(descriptor);
+    const identity = fstatSync(descriptor, { bigint: true });
+    if (!safeFile(identity, rootIdentity.uid, 0, options.maximumBytes))
+      throw new Error("unsafe file");
+    const sizeBytes = Number(identity.size);
+    if (options.expectedBytes !== undefined && options.expectedBytes !== sizeBytes)
+      throw new Error("file size changed");
+    opened.push({ descriptor, identity, pathname, kind: "file" });
+    const hash = createHash("sha256");
+    const chunk = Buffer.allocUnsafe(1024 * 1024);
+    let offset = 0;
+    while (offset < sizeBytes) {
+      const count = readSync(
+        descriptor,
+        chunk,
+        0,
+        Math.min(chunk.byteLength, sizeBytes - offset),
+        offset,
+      );
+      if (count < 1) throw new Error("short read");
+      hash.update(chunk.subarray(0, count));
+      offset += count;
+    }
+    const digest = hash.digest("hex");
+    const extra = Buffer.alloc(1);
+    if (readSync(descriptor, extra, 0, 1, sizeBytes) !== 0) throw new Error("file grew");
+    for (const entry of opened) {
+      const descriptorIdentity = fstatSync(entry.descriptor, { bigint: true });
+      const pathIdentity = lstatSync(entry.pathname, { bigint: true });
+      if (
+        !sameIdentity(entry.identity, descriptorIdentity) ||
+        !sameIdentity(entry.identity, pathIdentity) ||
+        (entry.kind === "directory"
+          ? !safeDirectory(descriptorIdentity, rootIdentity.uid)
+          : !safeFile(descriptorIdentity, rootIdentity.uid, 0, options.maximumBytes))
+      )
+        throw new Error("unstable file identity");
+    }
+    if (options.expectedSha256 !== undefined && digest !== options.expectedSha256)
+      throw new Error("file digest changed");
+    return { sizeBytes, sha256: digest };
+  } catch {
+    throw new Error("Trusted file hash rejected");
+  } finally {
+    for (const descriptor of descriptors.reverse()) {
+      try {
+        closeSync(descriptor);
+      } catch {
+        /* continue closing */
       }
     }
   }

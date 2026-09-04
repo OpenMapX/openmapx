@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openmapx.example/privacy/category-manifest-v1",
+  "type": "object",
+  "required": ["id", "version", "outcome"],
+  "properties": {
+    "id": { "type": "string" },
+    "version": { "type": "string" },
+    "outcome": {
+      "enum": [
+        "included",
+        "not_applicable",
+        "unavailable",
+        "reviewed_no_match",
+        "omitted_with_reason"
+      ]
+    }
+  },
+  "additionalProperties": true
+}

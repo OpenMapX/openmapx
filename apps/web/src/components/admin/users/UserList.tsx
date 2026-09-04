@@ -32,7 +32,7 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
-import { authClient, getInitials, proxyImageUrl } from "@openmapx/core";
+import { authClient, getInitials, proxyImageUrl, setPrivacyAdminRole } from "@openmapx/core";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -77,10 +77,16 @@ function UserRoleSelect({
   isSelf: boolean;
 }) {
   const qc = useQueryClient();
+  const showToast = useAdminToast();
   const mutation = useMutation({
-    mutationFn: (newRole: string) =>
-      authClient.admin.setRole({ userId, role: newRole as "admin" | "user" }),
+    mutationFn: async (newRole: string) => {
+      if (newRole === "privacy_admin" || (role === "privacy_admin" && newRole === "user")) {
+        return setPrivacyAdminRole(userId, newRole as "privacy_admin" | "user");
+      }
+      return authClient.admin.setRole({ userId, role: newRole as "admin" | "user" });
+    },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["admin", "users"] }),
+    onError: () => showToast("Failed to change user role", "error"),
   });
 
   return (
@@ -95,6 +101,7 @@ function UserRoleSelect({
       >
         <MenuItem value="user">User</MenuItem>
         <MenuItem value="admin">Admin</MenuItem>
+        {role !== "admin" && <MenuItem value="privacy_admin">Privacy admin</MenuItem>}
       </Select>
     </FormControl>
   );

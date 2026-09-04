@@ -5,6 +5,23 @@
   "description": "Fastify BFF gateway. Proxies external services and registers integrations.",
   "license": "MIT",
   "quality": "built-in",
+  "subjectData": {
+    "storesPersonalData": true,
+    "strategy": "collector",
+    "registrationIds": [
+      "account-profile",
+      "auth-accounts",
+      "auth-sessions",
+      "saved-lists",
+      "saved-places",
+      "labeled-places",
+      "personal-vehicles",
+      "parked-locations",
+      "share-links",
+      "timeline-connections"
+    ],
+    "operatorInstructions": null
+  },
   "container": {
     "image": "ghcr.io/openmapx/api",
     "tag": "latest",
@@ -24,6 +41,10 @@
       "OFFLINE_PACKAGE_PRINCIPAL_KEY_UID": "${UID:-1000}",
       "ERASURE_JOURNAL_PATH": "/var/lib/openmapx/erasure/journal.jsonl",
       "ERASURE_JOURNAL_KEY_FILE": "/run/secrets/erasure-journal-key",
+      "OPENMAPX_EXPORTS_KEY_FILE": "/run/secrets/subject-exports-master-key",
+      "OPENMAPX_EXPORTS_KEY_UID": "${UID:-1000}",
+      "OPENMAPX_EXPORT_STORAGE_DIR": "/var/lib/openmapx/subject-exports",
+      "OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE": "/run/secrets/privacy-backup-capability-key",
       "BACKUP_RETENTION_DAYS": "${BACKUP_RETENTION_DAYS:-30}",
       "LEGAL_SERVER_LOG_RETENTION_DAYS": "${LEGAL_SERVER_LOG_RETENTION_DAYS:-30}",
       "OPS_AGENT_URL": "${OPS_AGENT_URL:-http://ops-agent:4300}",
@@ -150,8 +171,26 @@
       "readOnly": true
     },
     {
+      "source": "@infra:secrets/subject-exports-master-key",
+      "target": "/run/secrets/subject-exports-master-key",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:secrets/privacy-backup-capability-key",
+      "target": "/run/secrets/privacy-backup-capability-key",
+      "readOnly": true
+    },
+    {
       "source": "${OPENMAPX_HOST_DIR:?OPENMAPX_HOST_DIR must be set — community integrations are stored under the host checkout}/custom_integrations",
       "target": "${OPENMAPX_CUSTOM_INTEGRATIONS_DIR:-/app/custom_integrations}",
+      "readOnly": false
+    }
+  ],
+  "volumes": [
+    {
+      "name": "openmapx-subject-exports",
+      "mountAt": "/var/lib/openmapx/subject-exports",
+      "backup": false,
       "readOnly": false
     }
   ],

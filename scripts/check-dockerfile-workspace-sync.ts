@@ -42,7 +42,11 @@ const readJson = (rel: string): { name?: string; dependencies?: Record<string, s
 // Packages app-api's runner bakes that data-manager legitimately does not
 // need to (e.g. an app-api-only leaf package no integration depends on).
 // Keep this empty unless a real, documented divergence exists.
-const APP_API_ONLY_ALLOWLIST = new Set<string>([]);
+const APP_API_ONLY_ALLOWLIST = new Set<string>([
+  // API privacy archives and notifications use the shared headless translator.
+  // Data ingestion and its baked integration providers do not import i18n.
+  "i18n",
+]);
 
 /**
  * Extracts the set of `packages/<name>` source directories a Dockerfile's

@@ -8,6 +8,7 @@
 
 import { envString } from "@openmapx/core/server-env";
 import { auth } from "../../auth.js";
+import { recordDataDisclosureBestEffort } from "../../privacy/disclosures.js";
 import { redis } from "../../redis.js";
 import { getOsmConfig } from "../../utils/osm-config.js";
 import { recordOsmContributionOperation } from "../metrics/index.js";
@@ -61,6 +62,7 @@ export function createOsmContributionsService(): OsmContributionService {
     // Two closed enums and a duration. Nothing about the person, the element
     // or the contribution's content reaches the exposition.
     recordOperation: recordOsmContributionOperation,
+    recordDisclosure: (input) => recordDataDisclosureBestEffort(input),
   });
   return singleton;
 }
