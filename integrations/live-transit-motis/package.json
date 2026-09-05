@@ -13,7 +13,7 @@
     }
   },
   "dependencies": {
-    "@motis-project/motis-client": "^2.11.0",
+    "@motis-project/motis-client": "^2.11.2",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^"

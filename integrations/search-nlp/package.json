@@ -21,19 +21,19 @@
     "eval:semantic-residency": "tsx --tsconfig ../../tsconfig.base.json eval/measure-residency.ts"
   },
   "dependencies": {
-    "@ai-sdk/anthropic": "^4.0.42",
-    "@ai-sdk/google": "^4.0.51",
-    "@ai-sdk/openai": "^4.0.47",
-    "@ai-sdk/openai-compatible": "^3.0.37",
+    "@ai-sdk/anthropic": "^4.0.49",
+    "@ai-sdk/google": "^4.0.63",
+    "@ai-sdk/openai": "^4.0.58",
+    "@ai-sdk/openai-compatible": "^3.0.43",
     "@openmapx/brands": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/presets": "workspace:^",
     "@openrouter/ai-sdk-provider": "^3.0.0",
-    "ai": "^7.0.79",
-    "zod": "^4.4.3"
+    "ai": "^7.0.92",
+    "zod": "4.4.3"
   },
   "devDependencies": {
-    "tsx": "4.23.12"
+    "tsx": "4.23.13"
   }
 }

@@ -21,7 +21,7 @@
     "@openstreetmap/id-tagging-schema": "^7.1.1"
   },
   "devDependencies": {
-    "@types/node": "^26.3.0",
+    "@types/node": "^26.4.1",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   }

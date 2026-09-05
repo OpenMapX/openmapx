@@ -100,3 +100,7 @@ overrides:
   # runtime drives a Jest 29 module mocker. The preset only subclasses the
   # environment's exported `TestEnvironment`, which is unchanged in 30.
   "@react-native/jest-preset>jest-environment-node": "^30.4.1"
+  # Expo SDK 57 is coupled to React Native 0.86.3. Without this workspace-wide
+  # constraint, drizzle-orm's optional expo-sqlite peer in server workspaces
+  # auto-installs the newer 0.87.x line and leaves duplicate native modules.
+  "react-native": "0.86.3"

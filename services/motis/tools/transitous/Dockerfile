@@ -14,11 +14,11 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Keep this aligned with the `ghcr.io/motis-project/motis` image tag the
 # `motis`/`motis-staging` services run and the `@motis-project/motis-client`
 # version in package.json.
-ARG MOTIS_VERSION=v2.11.0
+ARG MOTIS_VERSION=v2.11.2
 # Reviewed per-architecture SHA256 values for the corresponding release assets.
 # A MOTIS bump must update both values; an unchecked build is never permitted.
-ARG MOTIS_SHA256_AMD64=508505d3f9cd2e872c763743c459cae4e0539fad14bf490e23251e013d3a6dfa
-ARG MOTIS_SHA256_ARM64=23aa8fd6568741e2bf35f92fb88b3c5c64baa1e05b3cb31f28ccdbe73ba6a110
+ARG MOTIS_SHA256_AMD64=653213464b224034a995fed6303f0c0a336a81c8d9398816b26c4db1eb940a31
+ARG MOTIS_SHA256_ARM64=236175665bda3714481aa26879b5ebd9078e29950b8bc35bdd07d9d49cfcb3da
 # `TARGETARCH` is auto-populated by BuildKit when building with buildx
 # (including for multi-platform manifests). Declaring it here makes it
 # available inside the RUN below.
