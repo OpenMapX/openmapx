@@ -95,7 +95,11 @@ beforeAll(async () => {
 });
 
 afterAll(() => app.close());
-afterEach(() => vi.clearAllMocks());
+afterEach(() => {
+  selectResolveWith = [];
+  vi.unstubAllEnvs();
+  vi.clearAllMocks();
+});
 
 describe("GET /admin/settings", () => {
   it("returns groups with resolved settings (all defaults, no DB rows)", async () => {
@@ -181,6 +185,52 @@ describe("GET /admin/settings", () => {
     expect(apiKey.showWhen).toBeUndefined();
   });
 
+  it("exposes editable operator, contact, governance and retention facts in stable subgroups", async () => {
+    selectResolveWith = [
+      { key: "legalControllerName", value: "Persisted Controller" },
+      { key: "legalControllerEmail", value: "legal@example.test" },
+    ];
+
+    const res = await app.inject({ method: "GET", url: "/admin/settings" });
+    const legal = res.json().groups.find((group: { id: string }) => group.id === "legal");
+    const byKey = Object.fromEntries(
+      legal.settings.map((setting: { key: string }) => [setting.key, setting]),
+    );
+
+    expect(byKey.legalControllerName).toMatchObject({
+      subgroup: "operator",
+      value: "Persisted Controller",
+      source: "database",
+      envVar: "LEGAL_NAME",
+    });
+    expect(byKey.legalControllerStreet.subgroup).toBe("operator");
+    expect(byKey.legalControllerPostalCode.subgroup).toBe("operator");
+    expect(byKey.legalControllerCity.subgroup).toBe("operator");
+    expect(byKey.legalControllerCountry.subgroup).toBe("operator");
+    expect(byKey.legalControllerEmail).toMatchObject({
+      subgroup: "contact",
+      value: "legal@example.test",
+    });
+    expect(byKey.legalControllerPhone.subgroup).toBe("contact");
+    expect(byKey.legalDataRequestEmail.subgroup).toBe("contact");
+    expect(byKey.legalSupervisoryAuthority.subgroup).toBe("governance");
+    expect(byKey.legalDeploymentJurisdiction.subgroup).toBe("governance");
+    expect(byKey.legalDsarCaseRetentionDays.subgroup).toBe("retention");
+  });
+
+  it("keeps the request-contact field editable when only the controller email is env-managed", async () => {
+    vi.stubEnv("LEGAL_EMAIL", "legal@example.test");
+    vi.stubEnv("LEGAL_DATA_REQUEST_EMAIL", "");
+
+    const res = await app.inject({ method: "GET", url: "/admin/settings" });
+    const legal = res.json().groups.find((group: { id: string }) => group.id === "legal");
+    const requestEmail = legal.settings.find(
+      (setting: { key: string }) => setting.key === "legalDataRequestEmail",
+    );
+
+    expect(requestEmail).toMatchObject({ value: "", source: "default", envOverride: false });
+  });
+
   it("rejects unauthenticated requests with 401", async () => {
     mockRequireAdmin.mockRejectedValueOnce(
       Object.assign(new Error("Authentication required"), { statusCode: 401 }),
@@ -227,6 +277,23 @@ describe("PATCH /admin/settings", () => {
       method: "PATCH",
       url: "/admin/settings",
       payload: { sessionDurationHours: "abc" },
+    });
+
+    expect(res.statusCode).toBe(400);
+    expect(mockDbInsert).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["legalControllerName", "   "],
+    ["legalControllerStreet", "Street 1\nUnexpected line"],
+    ["legalControllerEmail", "not-an-email"],
+    ["legalDataRequestEmail", "privacy at example.test"],
+    ["legalSupervisoryAuthorityUrl", "javascript:alert(1)"],
+  ])("rejects unsafe legal setting %s", async (key, value) => {
+    const res = await app.inject({
+      method: "PATCH",
+      url: "/admin/settings",
+      payload: { [key]: value },
     });
 
     expect(res.statusCode).toBe(400);

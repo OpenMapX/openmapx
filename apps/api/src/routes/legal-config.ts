@@ -47,12 +47,20 @@ export const legalConfigRoute: FastifyPluginAsync = async (fastify) => {
 
     reply.header("Cache-Control", "public, max-age=60");
     return reply.send({
+      name: asString(values.legalControllerName),
+      street: asString(values.legalControllerStreet),
+      postalCode: asString(values.legalControllerPostalCode),
+      city: asString(values.legalControllerCity),
+      country: asString(values.legalControllerCountry),
+      email: asString(values.legalControllerEmail),
+      phone: asString(values.legalControllerPhone),
       hostingProvider: asString(values.legalHostingProvider),
       hostingLocations: asString(values.legalHostingLocations),
       supervisoryAuthority: asString(values.legalSupervisoryAuthority),
       supervisoryAuthorityUrl: asString(values.legalSupervisoryAuthorityUrl),
       serverLogRetentionDays: retentionDays(values.legalServerLogRetentionDays),
-      dataRequestEmail: asString(values.legalDataRequestEmail),
+      dataRequestEmail:
+        asString(values.legalDataRequestEmail) || asString(values.legalControllerEmail),
       dsarCaseRetentionDays: boundedNumber(values.legalDsarCaseRetentionDays, 1095, 30, 3650),
       identityEvidenceRetentionDays: boundedNumber(
         values.legalIdentityEvidenceRetentionDays,

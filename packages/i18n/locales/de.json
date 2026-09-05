@@ -3306,6 +3306,330 @@
       "footer": "Sie erhalten diese E-Mail aufgrund einer Aktivität zu einer OpenMapX-Datenschutzanfrage."
     }
   },
+  "privacySetup": {
+    "navigationLabel": "Datenschutz einrichten",
+    "title": "Datenschutz einrichten",
+    "subtitle": "Verantwortliche Stelle, Benachrichtigungen, Aufbewahrung und Freigabestatus",
+    "intro": "Erfassen Sie zuerst die Angaben zur Bereitstellung, prüfen Sie dann den Benachrichtigungsversand und anschließend Aufbewahrung und Freigabeprüfungen. Das Speichern von Einstellungen erteilt keine Freigabe und versendet keine Nachricht.",
+    "stepNavigation": "Schritte der Datenschutzeinrichtung",
+    "stepLink": "{number}. {title}",
+    "steps": {
+      "operator": {
+        "title": "1. Angaben zur verantwortlichen Stelle",
+        "description": "Erfassen Sie die verantwortliche Stelle und das Hosting, die in den Datenschutzhinweisen veröffentlicht werden."
+      },
+      "notifications": {
+        "title": "2. Benachrichtigungen",
+        "description": "Konfigurieren Sie einen Versanddienst. Eine Testnachricht wird nur über die Testaktion gesendet."
+      },
+      "retention": {
+        "title": "3. Aufbewahrung und Datenquellen",
+        "description": "Legen Sie begrenzte Aufbewahrungsfristen fest und deklarieren Sie die von Exporten erfassten personenbezogenen Datenquellen."
+      },
+      "reviews": {
+        "title": "4. Unabhängige Prüfungen und Freigabestatus",
+        "description": "Beheben Sie die übrigen Bereitstellungsprobleme und erfassen Sie jede erforderliche Prüfung für die aktuelle Nachweisversion. Prüfende müssen von allen in PRIVACY_EXPORT_IMPLEMENTATION_ACTOR_IDS konfigurierten Umsetzungsverantwortlichen unabhängig sein."
+      }
+    },
+    "editor": {
+      "envOverrides": "durch Umgebung vorgegeben",
+      "envOverrideHelp": "Dieser Wert wird durch {envVar} gesteuert. Ändern Sie die Bereitstellungsumgebung, um ihn zu aktualisieren.",
+      "envSecretValue": "Durch die Bereitstellungsumgebung gesetzt",
+      "showSecret": "Anzeigen",
+      "hideSecret": "Ausblenden",
+      "databaseSource": "In der Datenbank gespeichert",
+      "save": "{label} speichern",
+      "saved": "{label} gespeichert",
+      "saveFailed": "Die Einstellungen konnten nicht gespeichert werden. Prüfen Sie die Werte und versuchen Sie es erneut.",
+      "invalidJson": "Geben Sie gültiges JSON ein.",
+      "sendTestEmail": "Test-E-Mail senden",
+      "testEmailSent": "Die Test-E-Mail wurde an Ihr Administratorkonto gesendet.",
+      "testEmailFailed": "Die Test-E-Mail konnte nicht gesendet werden. Prüfen Sie den aktiven Anbieter und die Absenderadresse.",
+      "loadFailed": "Die Datenschutzeinstellungen konnten nicht geladen werden."
+    },
+    "subgroups": {
+      "operator": {
+        "label": "Verantwortliche Stelle",
+        "description": "Die für diese OpenMapX-Instanz verantwortliche Person oder Organisation."
+      },
+      "contact": {
+        "label": "Kontakt",
+        "description": "Veröffentlichte Kontaktwege für Datenschutz- und Betroffenenanfragen."
+      },
+      "hosting": {
+        "label": "Hosting",
+        "description": "Auftragsverarbeiter und Standorte dieser Instanz."
+      },
+      "governance": {
+        "label": "Zuständigkeit",
+        "description": "Rechtsraum und zuständige Datenschutzaufsicht."
+      },
+      "retention": {
+        "label": "Aufbewahrung",
+        "description": "Höchstfristen, die durch Datenschutzprozesse durchgesetzt werden."
+      },
+      "sources": {
+        "label": "Datenquellen",
+        "description": "Strikte JSON-Deklarationen der in Auskunftsberichten enthaltenen personenbezogenen Datenquellen."
+      },
+      "common": {
+        "label": "Absender",
+        "description": "Gemeinsame Absenderadresse für alle E-Mail-Anbieter."
+      },
+      "emaillabs": {
+        "label": "EmailLabs (Priorität 1)",
+        "description": "Wird verwendet, wenn alle EmailLabs-Felder konfiguriert sind."
+      },
+      "lettermint": {
+        "label": "Lettermint (Priorität 2)",
+        "description": "Wird verwendet, wenn EmailLabs nicht verfügbar und dieses Token konfiguriert ist."
+      },
+      "smtp": {
+        "label": "SMTP (Fallback)",
+        "description": "Wird verwendet, wenn kein API-Anbieter konfiguriert ist."
+      }
+    },
+    "settings": {
+      "legalControllerName": {
+        "label": "Name der verantwortlichen Stelle",
+        "description": "Vollständiger rechtlicher Name der für diese Instanz verantwortlichen Organisation oder Person."
+      },
+      "legalControllerStreet": {
+        "label": "Straße und Hausnummer",
+        "description": "Straße und Hausnummer der Postanschrift der verantwortlichen Stelle."
+      },
+      "legalControllerPostalCode": {
+        "label": "Postleitzahl",
+        "description": "Postleitzahl der verantwortlichen Stelle."
+      },
+      "legalControllerCity": { "label": "Ort", "description": "Ort der verantwortlichen Stelle." },
+      "legalControllerCountry": {
+        "label": "Land",
+        "description": "Land der verantwortlichen Stelle."
+      },
+      "legalControllerEmail": {
+        "label": "E-Mail der verantwortlichen Stelle",
+        "description": "Veröffentlichte E-Mail-Adresse für Datenschutzanfragen."
+      },
+      "legalControllerPhone": {
+        "label": "Telefon der verantwortlichen Stelle",
+        "description": "Optionale veröffentlichte Telefonnummer für Datenschutzanfragen."
+      },
+      "legalDataRequestEmail": {
+        "label": "E-Mail für Betroffenenanfragen",
+        "description": "Maßgebliches Postfach für Anfragen betroffener Personen."
+      },
+      "legalHostingProvider": {
+        "label": "Hosting-Anbieter",
+        "description": "Unternehmen, das Daten durch das Hosting dieser Instanz verarbeitet."
+      },
+      "legalHostingLocations": {
+        "label": "Hosting-Standorte",
+        "description": "Länder oder Regionen, in denen der Anbieter Instanzdaten speichert."
+      },
+      "legalDeploymentJurisdiction": {
+        "label": "Rechtsraum der Bereitstellung",
+        "description": "ISO-3166-1-Ländercode, optional mit Untereinheit."
+      },
+      "legalSupervisoryAuthority": {
+        "label": "Aufsichtsbehörde",
+        "description": "Name der zuständigen Datenschutzaufsichtsbehörde."
+      },
+      "legalSupervisoryAuthorityUrl": {
+        "label": "URL der Aufsichtsbehörde",
+        "description": "Offizielle Website der genannten Behörde."
+      },
+      "legalServerLogRetentionDays": {
+        "label": "Aufbewahrung von Serverprotokollen (Tage)",
+        "description": "Dauer der Speicherung persistierter API-Warnungen und -Fehler."
+      },
+      "legalDsarCaseRetentionDays": {
+        "label": "Aufbewahrung von Anfragefällen (Tage)",
+        "description": "Dauer der Speicherung abgeschlossener Betroffenenanfragen."
+      },
+      "legalIdentityEvidenceRetentionDays": {
+        "label": "Aufbewahrung von Identitätsnachweisen (Tage)",
+        "description": "Dauer der Speicherung von Nachweisen zur Identitätsprüfung."
+      },
+      "legalExportArtifactRetentionHours": {
+        "label": "Aufbewahrung von Exportdateien (Stunden)",
+        "description": "Dauer der Verfügbarkeit erzeugter Exportarchive."
+      },
+      "legalPrivacySources": {
+        "label": "Datenschutz-Datenquellen",
+        "description": "JSON-Liste strikter Datenquellendeklarationen für Auskunftsberichte."
+      },
+      "smtpFromAddress": {
+        "label": "Absenderadresse",
+        "description": "Von allen Benachrichtigungsanbietern verwendete Absenderadresse."
+      },
+      "emailLabsAppKey": {
+        "label": "App-Schlüssel",
+        "description": "Anwendungsschlüssel für EmailLabs."
+      },
+      "emailLabsSecretKey": {
+        "label": "Geheimer Schlüssel",
+        "description": "Geheimer EmailLabs-Schlüssel; gespeicherte Werte werden nie zurückgegeben."
+      },
+      "emailLabsSmtpAccount": {
+        "label": "SMTP-Konto",
+        "description": "SMTP-Kontokennung bei EmailLabs."
+      },
+      "lettermintApiToken": {
+        "label": "API-Token",
+        "description": "Lettermint-API-Token; gespeicherte Werte werden nie zurückgegeben."
+      },
+      "smtpHost": { "label": "SMTP-Host", "description": "Hostname des Fallback-SMTP-Servers." },
+      "smtpPort": { "label": "SMTP-Port", "description": "Port des Fallback-SMTP-Servers." },
+      "smtpUser": {
+        "label": "SMTP-Benutzername",
+        "description": "Benutzername für den Fallback-SMTP-Server."
+      },
+      "smtpPassword": {
+        "label": "SMTP-Passwort",
+        "description": "Passwort für den Fallback-SMTP-Server; gespeicherte Werte werden nie zurückgegeben."
+      },
+      "smtpTls": {
+        "label": "TLS oder STARTTLS verwenden",
+        "description": "Verschlüsselte Übertragung für die SMTP-Verbindung verlangen."
+      }
+    },
+    "readiness": {
+      "ready": "Alle Freigabeprüfungen bestehen für diese Nachweisversion.",
+      "notReady": "Die Freigabe ist gesperrt, bis alle Prüfungen bestehen.",
+      "refresh": "Prüfungen aktualisieren",
+      "retry": "Erneut versuchen",
+      "loadFailed": "Der Freigabestatus konnte nicht geladen werden.",
+      "contactFullAdmin": "Eine Volladministration muss Plattformeinstellungen ändern oder die erforderliche Bereitstellungsprüfung koordinieren.",
+      "technicalDetails": "Technische Details",
+      "status": { "pass": "Bestanden", "warning": "Warnung", "fail": "Aktion erforderlich" },
+      "unknown": {
+        "title": "Zusätzliche Bereitstellungsprüfung",
+        "description": "Der Server meldet eine dieser Oberfläche unbekannte Prüfung. Teilen Sie die technischen Details einer Volladministration mit."
+      },
+      "checks": {
+        "preservation-enforcement": {
+          "title": "Erhaltung der Quelldaten",
+          "description": "Quelldatensätze müssen während der Bearbeitung einer Anfrage erhalten bleiben.",
+          "action": "Bereitstellungsnachweise prüfen"
+        },
+        "source-streaming": {
+          "title": "Begrenztes Streaming der Datenquellen",
+          "description": "Kollektoren müssen Daten ohne unbegrenzte Pufferung streamen.",
+          "action": "Bereitstellungsnachweise prüfen"
+        },
+        "assisted-workflow": {
+          "title": "Unterstützter Anfrageprozess",
+          "description": "Der unterstützte Prozess für Anfragen außerhalb eines zugänglichen Kontos muss vollständig sein.",
+          "action": "Bereitstellungsnachweise prüfen"
+        },
+        "registry-completeness": {
+          "title": "Abdeckung personenbezogener Datenquellen",
+          "description": "Jede deklarierte Quelle benötigt einen verfügbaren Kollektor oder eine Aufgabe für die Administration.",
+          "action": "Deklarierte Datenquellen prüfen"
+        },
+        "encryption-key": {
+          "title": "Verschlüsselungsschlüssel für Exporte",
+          "description": "Ein nutzbarer Schlüsselring muss Exportdateien schützen.",
+          "action": "Systemwartung öffnen"
+        },
+        "artifact-storage": {
+          "title": "Speicher für Exportdateien",
+          "description": "Der private Speicher für Exportdateien muss funktionsfähig sein.",
+          "action": "Systemwartung öffnen"
+        },
+        "artifact-storage-backup": {
+          "title": "Ausschluss von Exportdateien aus Sicherungen",
+          "description": "Kurzlebige Exportdateien müssen von regulären Sicherungen ausgeschlossen sein.",
+          "action": "Sicherungsverwaltung öffnen"
+        },
+        "cleanup-retention": {
+          "title": "Löschung nach Aufbewahrungsfrist",
+          "description": "Die geplante Bereinigung muss die konfigurierten Fristen durchsetzen.",
+          "action": "Aufbewahrungseinstellungen prüfen"
+        },
+        "backup-review-capability": {
+          "title": "Prüfung von Sicherungen",
+          "description": "Die Administration muss relevante Auslassungen in Sicherungen prüfen können.",
+          "action": "Sicherungsverwaltung öffnen"
+        },
+        "request-sla-monitor": {
+          "title": "Überwachung der Anfragefristen",
+          "description": "Die Fristenüberwachung muss funktionieren, damit Antworten nicht verspätet erfolgen.",
+          "action": "Systemwartung öffnen"
+        },
+        "notification-health": {
+          "title": "Versand von Benachrichtigungen",
+          "description": "Ein konfigurierter Anbieter muss Datenschutzbenachrichtigungen zustellen können.",
+          "action": "Benachrichtigungen konfigurieren"
+        },
+        "controller-contact": {
+          "title": "Kontakt der verantwortlichen Stelle",
+          "description": "Vervollständigen Sie Identität, Anschrift und maßgebliche Kontaktdaten der verantwortlichen Stelle.",
+          "action": "Angaben vervollständigen"
+        },
+        "translations": {
+          "title": "Konsistenz der Übersetzungen",
+          "description": "Freigabeübersetzungen müssen dem geprüften Ausgangsmaterial entsprechen.",
+          "action": "Freigabenachweise prüfen"
+        },
+        "openapi": {
+          "title": "Konsistenz des API-Vertrags",
+          "description": "Der veröffentlichte API-Vertrag muss der Freigabeimplementierung entsprechen.",
+          "action": "Freigabenachweise prüfen"
+        },
+        "policy": {
+          "title": "Konsistenz der Richtlinien",
+          "description": "Datenschutzhinweise und Datenflussdeklarationen müssen der Freigabe entsprechen.",
+          "action": "Freigabenachweise prüfen"
+        },
+        "approval-legal-content": {
+          "title": "Unabhängige Prüfung der Rechtstexte",
+          "description": "Eine aktuelle unabhängige Prüfung der Rechtstexte ist erforderlich.",
+          "action": "Rechtstextprüfung erfassen"
+        },
+        "approval-dsar-process": {
+          "title": "Unabhängige Prüfung des Anfrageprozesses",
+          "description": "Eine aktuelle unabhängige Prüfung des Betroffenenanfrageprozesses ist erforderlich.",
+          "action": "Prozessprüfung erfassen"
+        },
+        "approval-security-review": {
+          "title": "Unabhängige Sicherheitsprüfung",
+          "description": "Eine aktuelle unabhängige Sicherheitsprüfung ist erforderlich.",
+          "action": "Sicherheitsprüfung erfassen"
+        }
+      }
+    },
+    "approval": {
+      "title": "Unabhängige Prüfung erfassen",
+      "description": "Verwenden Sie dies erst nach der Prüfung des ausgewählten Bereichs und der externen Nachweise. Der Server erfasst Ihre authentifizierte Administrationsidentität.",
+      "independenceNotice": "Die Freigabe wird abgelehnt, wenn Ihr Administratorkonto als umsetzungsverantwortlich geführt wird. Konfigurieren Sie vor der Freigabe die tatsächlichen Umsetzungsverantwortlichen in PRIVACY_EXPORT_IMPLEMENTATION_ACTOR_IDS.",
+      "evidenceVersion": "Aktuelle Nachweisversion: {version}",
+      "scope": "Prüfbereich",
+      "scopes": {
+        "legal-content": "Rechtstexte",
+        "dsar-process": "Prozess für Betroffenenanfragen",
+        "security-review": "Sicherheit"
+      },
+      "decision": "Entscheidung",
+      "approve": "Freigeben",
+      "reject": "Ablehnen",
+      "reviewedAt": "Geprüft am",
+      "expiresAt": "Prüfung gültig bis",
+      "reviewRecord": "Verweis auf den Prüfbericht",
+      "reviewRecordHelp": "Geben Sie einen Verweis auf den externen Prüfbericht ein. Er wird in diesem Browser als Fingerabdruck verarbeitet; nur der Fingerabdruck wird übermittelt. Bei Ablehnung erforderlich.",
+      "record": "Prüfung erfassen",
+      "recorded": "Die Prüfung wurde erfasst. Der Freigabestatus wurde aktualisiert.",
+      "errors": {
+        "implementationOwners": "Konfigurieren Sie vor der Freigabe die tatsächlichen Umsetzungsverantwortlichen.",
+        "evidenceChanged": "Die Nachweisversion hat sich geändert. Aktualisieren Sie den Freigabestatus und prüfen Sie die aktuellen Nachweise erneut.",
+        "fullAdmin": "Nur eine Volladministration kann eine Freigabeprüfung erfassen.",
+        "idempotencyConflict": "Diese Vorgangskennung wurde bereits für andere Prüfdaten verwendet. Ändern Sie das Formular und senden Sie es erneut.",
+        "invalid": "Die Prüfdaten sind ungültig. Prüfen Sie Bereich, Daten, Entscheidung und Prüfsumme.",
+        "generic": "Die Prüfung konnte nicht erfasst werden. Das unveränderte Formular kann sicher erneut gesendet werden."
+      }
+    }
+  },
   "privacyAdmin": {
     "newAssistedRequest": "Unterstützte Anfrage erfassen",
     "assistedIntake": "Eingang einer unterstützten Anfrage",

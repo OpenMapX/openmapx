@@ -24,23 +24,61 @@ function clean(raw: unknown): string {
   return typeof raw === "string" ? raw.trim() : "";
 }
 
-function boundedInteger(raw: unknown, fallback: number, min: number, max: number): number {
-  const parsed = typeof raw === "number" ? raw : Number(raw);
-  return Number.isSafeInteger(parsed) && parsed >= min && parsed <= max ? parsed : fallback;
-}
-
 function setting(
   envName: string,
   key: string,
   values: Record<string, unknown>,
   fallback: unknown,
+  parseEnv: (raw: string) => unknown = (raw) => raw,
 ): unknown {
-  const env = process.env[envName];
-  return env !== undefined && env !== "" ? env : (values[key] ?? fallback);
+  const envValue = process.env[envName];
+  if (envValue !== undefined && envValue !== "") return parseEnv(envValue);
+  const databaseValue = values[key];
+  if (databaseValue !== undefined) return databaseValue;
+  return fallback;
+}
+
+function stringSetting(envName: string, key: string, values: Record<string, unknown>): string {
+  return clean(setting(envName, key, values, ""));
+}
+
+function numberSetting(
+  envName: string,
+  key: string,
+  values: Record<string, unknown>,
+  fallback: number,
+  min: number,
+  max: number,
+): number {
+  const value = setting(envName, key, values, fallback, Number);
+  return Number.isSafeInteger(value) && Number(value) >= min && Number(value) <= max
+    ? Number(value)
+    : fallback;
 }
 
 function required(name: string, value: string): string {
   if (!value) throw new Error(`Missing privacy report legal configuration: ${name}`);
+  return value;
+}
+
+function hasControlCharacter(value: string): boolean {
+  return Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
+}
+
+function requiredSingleLine(name: string, value: string, maxLength: number): string {
+  const result = required(name, value);
+  if (result.length > maxLength || hasControlCharacter(result))
+    throw new Error(`Invalid privacy report legal configuration: ${name}`);
+  return result;
+}
+
+function optionalPhone(value: string): string | null {
+  if (!value) return null;
+  if (value.length > 64 || !/^[+()0-9 .\-/]+$/.test(value))
+    throw new Error("Invalid privacy report legal configuration: controllerPhone");
   return value;
 }
 
@@ -50,28 +88,53 @@ export async function resolvePrivacyReportLegalFacts(
 ): Promise<PrivacyReportLegalFacts> {
   const rows = await database.select().from(systemSettings);
   const values = Object.fromEntries(rows.map((row) => [row.key, row.value]));
-  const name = required("controllerName", clean(process.env.LEGAL_NAME));
-  const street = required("controllerStreet", clean(process.env.LEGAL_STREET));
-  const postalCode = required("controllerPostalCode", clean(process.env.LEGAL_POSTAL_CODE));
-  const city = required("controllerCity", clean(process.env.LEGAL_CITY));
-  const country = required("controllerCountry", clean(process.env.LEGAL_COUNTRY));
-  const contact = clean(
-    setting("LEGAL_DATA_REQUEST_EMAIL", "legalDataRequestEmail", values, process.env.LEGAL_EMAIL),
+  const name = requiredSingleLine(
+    "controllerName",
+    stringSetting("LEGAL_NAME", "legalControllerName", values),
+    200,
   );
+  const street = requiredSingleLine(
+    "controllerStreet",
+    stringSetting("LEGAL_STREET", "legalControllerStreet", values),
+    200,
+  );
+  const postalCode = requiredSingleLine(
+    "controllerPostalCode",
+    stringSetting("LEGAL_POSTAL_CODE", "legalControllerPostalCode", values),
+    32,
+  );
+  const city = requiredSingleLine(
+    "controllerCity",
+    stringSetting("LEGAL_CITY", "legalControllerCity", values),
+    120,
+  );
+  const country = requiredSingleLine(
+    "controllerCountry",
+    stringSetting("LEGAL_COUNTRY", "legalControllerCountry", values),
+    120,
+  );
+  const controllerEmail = stringSetting("LEGAL_EMAIL", "legalControllerEmail", values);
+  if (controllerEmail && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(controllerEmail))
+    throw new Error("Invalid privacy report legal configuration: controllerEmail");
+  const contact =
+    stringSetting("LEGAL_DATA_REQUEST_EMAIL", "legalDataRequestEmail", values) || controllerEmail;
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(contact))
     throw new Error("Missing privacy report legal configuration: dataRequestEmail");
   const jurisdiction = required(
     "deploymentJurisdiction",
-    clean(setting("LEGAL_DEPLOYMENT_JURISDICTION", "legalDeploymentJurisdiction", values, "")),
+    stringSetting("LEGAL_DEPLOYMENT_JURISDICTION", "legalDeploymentJurisdiction", values),
   );
   if (!/^[A-Z]{2}(?:-[A-Z0-9]{1,8})?$/.test(jurisdiction))
     throw new Error("Invalid privacy report legal configuration: deploymentJurisdiction");
-  const supervisoryAuthority = required(
+  const supervisoryAuthority = requiredSingleLine(
     "supervisoryAuthority",
-    clean(setting("LEGAL_SUPERVISORY_AUTHORITY", "legalSupervisoryAuthority", values, "")),
+    stringSetting("LEGAL_SUPERVISORY_AUTHORITY", "legalSupervisoryAuthority", values),
+    300,
   );
-  const authorityUrl = clean(
-    setting("LEGAL_SUPERVISORY_AUTHORITY_URL", "legalSupervisoryAuthorityUrl", values, ""),
+  const authorityUrl = stringSetting(
+    "LEGAL_SUPERVISORY_AUTHORITY_URL",
+    "legalSupervisoryAuthorityUrl",
+    values,
   );
   if (authorityUrl) {
     let parsedAuthorityUrl: URL;
@@ -104,37 +167,33 @@ export async function resolvePrivacyReportLegalFacts(
       name,
       address: `${street}\n${postalCode} ${city}\n${country}`,
       email: contact,
-      phone: clean(process.env.LEGAL_PHONE) || null,
+      phone: optionalPhone(stringSetting("LEGAL_PHONE", "legalControllerPhone", values)),
     },
     deployment: {
       jurisdiction,
       supervisoryAuthority,
       supervisoryAuthorityUrl: authorityUrl || null,
       privacySources: sourceResult.data,
-      dsarCaseRetentionDays: boundedInteger(
-        setting("LEGAL_DSAR_CASE_RETENTION_DAYS", "legalDsarCaseRetentionDays", values, 1095),
+      dsarCaseRetentionDays: numberSetting(
+        "LEGAL_DSAR_CASE_RETENTION_DAYS",
+        "legalDsarCaseRetentionDays",
+        values,
         1095,
         30,
         3650,
       ),
-      identityEvidenceRetentionDays: boundedInteger(
-        setting(
-          "LEGAL_IDENTITY_EVIDENCE_RETENTION_DAYS",
-          "legalIdentityEvidenceRetentionDays",
-          values,
-          30,
-        ),
+      identityEvidenceRetentionDays: numberSetting(
+        "LEGAL_IDENTITY_EVIDENCE_RETENTION_DAYS",
+        "legalIdentityEvidenceRetentionDays",
+        values,
         30,
         1,
         365,
       ),
-      exportArtifactRetentionHours: boundedInteger(
-        setting(
-          "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
-          "legalExportArtifactRetentionHours",
-          values,
-          168,
-        ),
+      exportArtifactRetentionHours: numberSetting(
+        "LEGAL_EXPORT_ARTIFACT_RETENTION_HOURS",
+        "legalExportArtifactRetentionHours",
+        values,
         168,
         24,
         720,

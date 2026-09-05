@@ -3306,6 +3306,330 @@
       "footer": "You received this email because of activity on an OpenMapX privacy request."
     }
   },
+  "privacySetup": {
+    "navigationLabel": "Privacy setup",
+    "title": "Privacy setup",
+    "subtitle": "Controller facts, notifications, retention, and release readiness",
+    "intro": "Complete the deployment facts first, verify notification delivery, then review retention and release checks. Saving settings does not approve a release or send a message.",
+    "stepNavigation": "Privacy setup steps",
+    "stepLink": "{number}. {title}",
+    "steps": {
+      "operator": {
+        "title": "1. Operator details",
+        "description": "Identify the controller and hosting arrangement published in the privacy notice."
+      },
+      "notifications": {
+        "title": "2. Notifications",
+        "description": "Configure one delivery provider and send a test only when you choose the test action."
+      },
+      "retention": {
+        "title": "3. Retention and sources",
+        "description": "Set bounded retention periods and declare the personal-data sources covered by exports."
+      },
+      "reviews": {
+        "title": "4. Independent reviews and readiness",
+        "description": "Resolve the remaining deployment checks and record each required review against the current evidence version. A reviewer must be independent from every implementation owner configured in PRIVACY_EXPORT_IMPLEMENTATION_ACTOR_IDS."
+      }
+    },
+    "editor": {
+      "envOverrides": "environment override",
+      "envOverrideHelp": "This value is controlled by {envVar}. Change the deployment environment to update it.",
+      "envSecretValue": "Set by the deployment environment",
+      "showSecret": "Show",
+      "hideSecret": "Hide",
+      "databaseSource": "Saved in the database",
+      "save": "Save {label}",
+      "saved": "{label} saved",
+      "saveFailed": "The settings could not be saved. Check the values and try again.",
+      "invalidJson": "Enter valid JSON.",
+      "sendTestEmail": "Send test email",
+      "testEmailSent": "The test email was sent to your administrator account.",
+      "testEmailFailed": "The test email could not be sent. Check the active provider and from address.",
+      "loadFailed": "The privacy settings could not be loaded."
+    },
+    "subgroups": {
+      "operator": {
+        "label": "Controller",
+        "description": "The legal entity responsible for this OpenMapX instance."
+      },
+      "contact": {
+        "label": "Contact",
+        "description": "Published controller and data-request contact channels."
+      },
+      "hosting": {
+        "label": "Hosting",
+        "description": "The processor and locations used to host this instance."
+      },
+      "governance": {
+        "label": "Governance",
+        "description": "Jurisdiction and competent supervisory authority."
+      },
+      "retention": {
+        "label": "Retention",
+        "description": "Maximum storage periods enforced by privacy operations."
+      },
+      "sources": {
+        "label": "Sources",
+        "description": "Strict JSON declarations for personal-data sources included in access reports."
+      },
+      "common": {
+        "label": "Sender",
+        "description": "The from address shared by every email provider."
+      },
+      "emaillabs": {
+        "label": "EmailLabs (priority 1)",
+        "description": "Used when all EmailLabs fields are configured."
+      },
+      "lettermint": {
+        "label": "Lettermint (priority 2)",
+        "description": "Used when EmailLabs is unavailable and this token is configured."
+      },
+      "smtp": {
+        "label": "SMTP (fallback)",
+        "description": "Used when neither API provider is configured."
+      }
+    },
+    "settings": {
+      "legalControllerName": {
+        "label": "Controller name",
+        "description": "Full legal name of the organization or person responsible for this instance."
+      },
+      "legalControllerStreet": {
+        "label": "Street address",
+        "description": "Street and house number of the controller's postal address."
+      },
+      "legalControllerPostalCode": {
+        "label": "Postal code",
+        "description": "Postal code of the controller's address."
+      },
+      "legalControllerCity": {
+        "label": "City",
+        "description": "City of the controller's address."
+      },
+      "legalControllerCountry": {
+        "label": "Country",
+        "description": "Country of the controller's address."
+      },
+      "legalControllerEmail": {
+        "label": "Controller email",
+        "description": "Published email address for privacy enquiries."
+      },
+      "legalControllerPhone": {
+        "label": "Controller phone",
+        "description": "Optional published telephone number for privacy enquiries."
+      },
+      "legalDataRequestEmail": {
+        "label": "Data-request email",
+        "description": "Authoritative mailbox used for data-subject requests."
+      },
+      "legalHostingProvider": {
+        "label": "Hosting provider",
+        "description": "Company that processes data by hosting this instance."
+      },
+      "legalHostingLocations": {
+        "label": "Hosting locations",
+        "description": "Countries or regions where the provider stores instance data."
+      },
+      "legalDeploymentJurisdiction": {
+        "label": "Deployment jurisdiction",
+        "description": "ISO 3166-1 country code, optionally followed by a subdivision."
+      },
+      "legalSupervisoryAuthority": {
+        "label": "Supervisory authority",
+        "description": "Name of the competent data-protection authority."
+      },
+      "legalSupervisoryAuthorityUrl": {
+        "label": "Supervisory authority URL",
+        "description": "Official website of the named authority."
+      },
+      "legalServerLogRetentionDays": {
+        "label": "Server log retention (days)",
+        "description": "How long persisted API warning and error logs are kept."
+      },
+      "legalDsarCaseRetentionDays": {
+        "label": "Request case retention (days)",
+        "description": "How long completed data-subject request case records are kept."
+      },
+      "legalIdentityEvidenceRetentionDays": {
+        "label": "Identity evidence retention (days)",
+        "description": "How long identity-verification evidence is kept."
+      },
+      "legalExportArtifactRetentionHours": {
+        "label": "Export artifact retention (hours)",
+        "description": "How long generated export archives remain available."
+      },
+      "legalPrivacySources": {
+        "label": "Privacy sources",
+        "description": "JSON array of strict source declarations used by access reports."
+      },
+      "smtpFromAddress": {
+        "label": "From address",
+        "description": "Sender address used by every notification provider."
+      },
+      "emailLabsAppKey": { "label": "App key", "description": "EmailLabs application key." },
+      "emailLabsSecretKey": {
+        "label": "Secret key",
+        "description": "EmailLabs secret key; saved values are never returned."
+      },
+      "emailLabsSmtpAccount": {
+        "label": "SMTP account",
+        "description": "EmailLabs SMTP account identifier."
+      },
+      "lettermintApiToken": {
+        "label": "API token",
+        "description": "Lettermint API token; saved values are never returned."
+      },
+      "smtpHost": { "label": "SMTP host", "description": "Hostname of the fallback SMTP server." },
+      "smtpPort": { "label": "SMTP port", "description": "Port used by the fallback SMTP server." },
+      "smtpUser": {
+        "label": "SMTP username",
+        "description": "Username for the fallback SMTP server."
+      },
+      "smtpPassword": {
+        "label": "SMTP password",
+        "description": "Password for the fallback SMTP server; saved values are never returned."
+      },
+      "smtpTls": {
+        "label": "Use TLS or STARTTLS",
+        "description": "Require encrypted transport for the SMTP connection."
+      }
+    },
+    "readiness": {
+      "ready": "All release checks pass for this evidence version.",
+      "notReady": "Release is blocked until every check passes.",
+      "refresh": "Refresh checks",
+      "retry": "Try again",
+      "loadFailed": "Readiness could not be loaded.",
+      "contactFullAdmin": "A full administrator must change platform settings or coordinate the required deployment review.",
+      "technicalDetails": "Technical details",
+      "status": { "pass": "Pass", "warning": "Warning", "fail": "Action required" },
+      "unknown": {
+        "title": "Additional deployment check",
+        "description": "This server reported a check this interface does not recognize. Share the technical details with a full administrator."
+      },
+      "checks": {
+        "preservation-enforcement": {
+          "title": "Source preservation",
+          "description": "Source records must remain preserved while a request is processed.",
+          "action": "Review deployment evidence"
+        },
+        "source-streaming": {
+          "title": "Bounded source streaming",
+          "description": "Collectors must stream data without unbounded buffering.",
+          "action": "Review deployment evidence"
+        },
+        "assisted-workflow": {
+          "title": "Assisted request workflow",
+          "description": "The supported workflow for requests outside an accessible account must be complete.",
+          "action": "Review deployment evidence"
+        },
+        "registry-completeness": {
+          "title": "Personal-data source coverage",
+          "description": "Every declared source needs an available collector or operator task.",
+          "action": "Review declared sources"
+        },
+        "encryption-key": {
+          "title": "Export encryption key",
+          "description": "A usable encryption key ring must be available to protect export artifacts.",
+          "action": "Open system maintenance"
+        },
+        "artifact-storage": {
+          "title": "Export artifact storage",
+          "description": "Private artifact storage must be healthy.",
+          "action": "Open system maintenance"
+        },
+        "artifact-storage-backup": {
+          "title": "Artifact backup exclusion",
+          "description": "Short-lived export artifacts must be excluded from ordinary backups.",
+          "action": "Open backup controls"
+        },
+        "cleanup-retention": {
+          "title": "Retention cleanup",
+          "description": "Scheduled cleanup must enforce the configured retention periods.",
+          "action": "Review retention settings"
+        },
+        "backup-review-capability": {
+          "title": "Backup review capability",
+          "description": "Operators must be able to review relevant backup omissions.",
+          "action": "Open backup controls"
+        },
+        "request-sla-monitor": {
+          "title": "Request deadline monitor",
+          "description": "The service-level monitor must be healthy so requests do not miss deadlines.",
+          "action": "Open system maintenance"
+        },
+        "notification-health": {
+          "title": "Notification delivery",
+          "description": "A configured provider must be able to deliver privacy notifications.",
+          "action": "Configure notifications"
+        },
+        "controller-contact": {
+          "title": "Controller contact",
+          "description": "Complete controller identity, address, and authoritative contact details.",
+          "action": "Complete operator details"
+        },
+        "translations": {
+          "title": "Translation consistency",
+          "description": "Release translations must match the reviewed source material.",
+          "action": "Review release evidence"
+        },
+        "openapi": {
+          "title": "API contract consistency",
+          "description": "The published API contract must match the release implementation.",
+          "action": "Review release evidence"
+        },
+        "policy": {
+          "title": "Policy consistency",
+          "description": "The privacy policy and data-flow declarations must match the release.",
+          "action": "Review release evidence"
+        },
+        "approval-legal-content": {
+          "title": "Independent legal-content review",
+          "description": "A current independent review of legal content is required.",
+          "action": "Record legal review"
+        },
+        "approval-dsar-process": {
+          "title": "Independent request-process review",
+          "description": "A current independent review of the data-subject request process is required.",
+          "action": "Record process review"
+        },
+        "approval-security-review": {
+          "title": "Independent security review",
+          "description": "A current independent security review is required.",
+          "action": "Record security review"
+        }
+      }
+    },
+    "approval": {
+      "title": "Record an independent review",
+      "description": "Use this only after reviewing the named scope and its external evidence. The server records your authenticated administrator identity.",
+      "independenceNotice": "Approval is refused when your administrator account is listed as an implementation owner. Configure the real implementation owners in PRIVACY_EXPORT_IMPLEMENTATION_ACTOR_IDS before recording an approval.",
+      "evidenceVersion": "Current evidence version: {version}",
+      "scope": "Review scope",
+      "scopes": {
+        "legal-content": "Legal content",
+        "dsar-process": "Data-subject request process",
+        "security-review": "Security"
+      },
+      "decision": "Decision",
+      "approve": "Approve",
+      "reject": "Reject",
+      "reviewedAt": "Reviewed at",
+      "expiresAt": "Review expires at",
+      "reviewRecord": "Review record reference",
+      "reviewRecordHelp": "Enter a reference to the external review record. It is fingerprinted in this browser; only the fingerprint is submitted. Required for a rejection.",
+      "record": "Record review",
+      "recorded": "The review was recorded. Readiness has been refreshed.",
+      "errors": {
+        "implementationOwners": "Configure the real implementation owners before approving a release.",
+        "evidenceChanged": "The evidence version changed. Refresh readiness and review the current evidence before submitting again.",
+        "fullAdmin": "Only a full administrator can record a release review.",
+        "idempotencyConflict": "This submission identifier was already used for different review data. Change the form and submit again.",
+        "invalid": "The review data is invalid. Check the scope, dates, decision, and findings digest.",
+        "generic": "The review could not be recorded. The unchanged form can be retried safely."
+      }
+    }
+  },
   "privacyAdmin": {
     "newAssistedRequest": "Record assisted request",
     "assistedIntake": "Assisted request intake",

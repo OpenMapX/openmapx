@@ -65,7 +65,12 @@ export {
   validateReleaseServiceAuthority,
 } from "./release-authority-inventory";
 export {
+  canonicalReleaseManifest,
   DEFAULT_RELEASE_MANIFEST_IMAGE,
+  PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV,
+  PRIVACY_RELEASE_VALIDATION_EVIDENCE_ENV,
+  PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH,
+  type PrivacyReleaseValidationEvidence,
   parseReleaseManifest,
   RELEASE_MANIFEST_CONTAINER_PATH,
   RELEASE_MANIFEST_IMAGE_ENV,
@@ -78,6 +83,7 @@ export {
   renderReleaseCompose,
   TRANSITOUS_TOOLS_IMAGE_ENV,
   transitousToolsImageFromReleaseCompose,
+  writeReleaseComposeArtifacts,
 } from "./release-manifest";
 export {
   detectConsumesCycle,

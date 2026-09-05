@@ -194,9 +194,42 @@ jobs:
           if-no-files-found: error
           retention-days: 1
 
+  validate-privacy-release:
+    name: Validate privacy release evidence
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Validate the exact release checkout
+        run: pnpm validate:privacy-release "$RUNNER_TEMP/privacy-release-validation.json"
+
+      - name: Preserve exact-checkout privacy validation evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/privacy-release-validation.json
+          if-no-files-found: error
+          retention-days: 1
+
   promote:
     name: Publish coherent release
-    needs: [gate, build]
+    needs: [gate, build, validate-privacy-release]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -208,6 +241,12 @@ jobs:
         with:
           pattern: docker-digest-*-${{ github.run_id }}-${{ github.run_attempt }}
           path: digests
+
+      - name: Download exact-checkout privacy validation evidence
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: privacy-release-validation-${{ needs.gate.outputs.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: privacy-release-validation
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -228,6 +267,40 @@ jobs:
           RELEASE_SHA: ${{ needs.gate.outputs.sha }}
         run: |
           mkdir -p release-manifest
+          privacy_evidence=privacy-release-validation/privacy-release-validation.json
+          if [ ! -f "$privacy_evidence" ]; then
+            echo "Exact-checkout privacy validation evidence is missing" >&2
+            exit 1
+          fi
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+          const evidence = JSON.parse(
+            readFileSync("privacy-release-validation/privacy-release-validation.json", "utf8"),
+          );
+          const exactKeys = (value, keys) =>
+            value &&
+            typeof value === "object" &&
+            !Array.isArray(value) &&
+            JSON.stringify(Object.keys(value).sort()) === JSON.stringify([...keys].sort());
+          if (
+            !exactKeys(evidence, ["version", "sourceBuildFingerprint", "validatedAt", "checks"]) ||
+            evidence.version !== 1 ||
+            !/^[a-f0-9]{64}$/.test(evidence.sourceBuildFingerprint) ||
+            typeof evidence.validatedAt !== "string" ||
+            !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/.test(evidence.validatedAt) ||
+            new Date(evidence.validatedAt).toISOString() !== evidence.validatedAt ||
+            !exactKeys(evidence.checks, [
+              "translationsConsistent",
+              "openApiConsistent",
+              "policyConsistent",
+            ]) ||
+            evidence.checks.translationsConsistent !== true ||
+            evidence.checks.openApiConsistent !== true ||
+            evidence.checks.policyConsistent !== true
+          ) {
+            throw new Error("Exact-checkout privacy validation evidence is invalid");
+          }
+          NODE
           first=true
           image_lines=""
           for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools docs; do
@@ -264,7 +337,9 @@ jobs:
             printf '  "release": "%s",\n' "$RELEASE_SHA"
             printf '  "images": {\n'
             printf '%b\n' "$image_lines"
-            printf '  }\n'
+            printf '  },\n'
+            printf '  "privacyReleaseValidation": '
+            cat privacy-release-validation/privacy-release-validation.json
             printf '}\n'
           } > release-manifest/release-manifest.json
 

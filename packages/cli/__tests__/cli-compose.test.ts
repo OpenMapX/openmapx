@@ -91,6 +91,9 @@ describe("renderComposeForRepo", () => {
     const queue = lstatSync(join(tmp, "infra", "docker", "data", "ops-agent", "trusted-config"));
     expect(queue.isDirectory()).toBe(true);
     expect(queue.mode & 0o777).toBe(0o700);
+    const backups = lstatSync(join(tmp, "infra", "docker", "backups"));
+    expect(backups.isDirectory()).toBe(true);
+    expect(backups.mode & 0o777).toBe(0o700);
   });
 
   it("binds the initialized erasure journal to the generated journal key", async () => {

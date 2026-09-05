@@ -1,7 +1,5 @@
 "use client";
 
-import CheckCircleIcon from "@mui/icons-material/CheckCircle";
-import ErrorIcon from "@mui/icons-material/Error";
 import RefreshIcon from "@mui/icons-material/Refresh";
 import SearchIcon from "@mui/icons-material/Search";
 import Box from "@mui/material/Box";
@@ -21,6 +19,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useFormatter, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { PrivacyReadinessChecklist } from "@/components/admin/privacy/PrivacyReadinessChecklist";
 
 type QueueRequest = {
   id: string;
@@ -597,27 +596,7 @@ export default function PrivacyAdminPage() {
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>
           {t("readiness")}
         </Typography>
-        {readiness && (
-          <>
-            <Box sx={{ display: "flex", alignItems: "center", gap: 1, mb: 1 }}>
-              {readiness.ready ? <CheckCircleIcon color="success" /> : <ErrorIcon color="error" />}
-              <Typography>{readiness.ready ? t("ready") : t("notReady")}</Typography>
-              <Chip size="small" label={readiness.evidenceVersion} />
-            </Box>
-            <List dense disablePadding>
-              {readiness.checks.map((check) => (
-                <ListItem key={check.id} disableGutters>
-                  <ListItemText primary={check.id} secondary={check.detailCode} />
-                  <Chip
-                    size="small"
-                    color={check.status === "pass" ? "success" : "error"}
-                    label={check.status}
-                  />
-                </ListItem>
-              ))}
-            </List>
-          </>
-        )}
+        {readiness && <PrivacyReadinessChecklist readiness={readiness} canConfigure={false} />}
       </Paper>
       <Paper sx={{ p: 2 }}>
         <Typography variant="subtitle1" sx={{ fontWeight: 700, mb: 1 }}>

@@ -33,6 +33,9 @@ const ALLOWED: Record<string, string[]> = {
   "components/admin/shared/AdminPageHeader.tsx": ["backHref"],
   "components/admin/shared/CompactAlertList.tsx": ["item.href"],
   "components/admin/overview/AdminOverview.tsx": ["href"],
+  // `actionHref` is read only from the module-local CHECK_ACTIONS constant,
+  // whose values are fixed relative admin routes; no runtime URL enters it.
+  "components/admin/privacy/PrivacyReadinessChecklist.tsx": ["actionHref"],
   "components/auth/MangroveAccountSection.tsx": ["MANGROVE_HOME_URL"],
   "components/panels/place/reviews/WriteReviewDialog.tsx": [
     "MANGROVE_HOME_URL",

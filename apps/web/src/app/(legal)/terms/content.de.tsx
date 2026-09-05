@@ -8,7 +8,7 @@ import TableHead from "@mui/material/TableHead";
 import TableRow from "@mui/material/TableRow";
 import Typography from "@mui/material/Typography";
 import { legalConfig, sectionSlug } from "@openmapx/core/legal";
-import type { Disclosure } from "@openmapx/core/server-api";
+import type { Disclosure, PublicLegalConfig } from "@openmapx/core/server-api";
 import { TransitFeedAttribution } from "@/components/legal/TransitFeedAttribution";
 import { generateAttributionSectionsFromManifests } from "../generateLegalSections";
 import { termsIds, termsTitles } from "./sections";
@@ -22,12 +22,19 @@ export default function TermsContentDe({
   capabilities: _capabilities = {},
   integrations = [],
   disclosures = [],
+  legal,
 }: {
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
   disclosures?: Disclosure[];
+  legal?: PublicLegalConfig | null;
 }) {
-  const { name, street, postalCode, city, country, email } = legalConfig;
+  const name = legal ? legal.name : legalConfig.name;
+  const street = legal ? legal.street : legalConfig.street;
+  const postalCode = legal ? legal.postalCode : legalConfig.postalCode;
+  const city = legal ? legal.city : legalConfig.city;
+  const country = legal ? legal.country : legalConfig.country;
+  const email = legal ? legal.email : legalConfig.email;
 
   return (
     <Box>
@@ -41,7 +48,7 @@ export default function TermsContentDe({
           mb: 4,
         }}
       >
-        Zuletzt aktualisiert: 27. August 2026
+        Zuletzt aktualisiert: 5. September 2026
       </Typography>
       <Section title={T.scope}>
         <Typography>

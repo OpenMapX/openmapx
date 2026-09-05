@@ -10,6 +10,7 @@ import { loadEmailConfig, sendViaEmailLabs, sendViaLettermint, sendViaSmtp } fro
 import { emailTestLimit } from "../utils/rate-limit";
 import { getAdminSession, requireAdmin } from "../utils/require-admin";
 import { declareRouteAuth } from "../utils/route-auth";
+import { resolveSettingPrecedence, type SettingSource } from "../utils/settings-resolution";
 
 interface SettingDef {
   group: string;
@@ -47,6 +48,35 @@ const boundedInteger =
     typeof value === "number" && Number.isInteger(value) && value >= min && value <= max;
 const validJurisdiction = (value: unknown): boolean =>
   typeof value === "string" && (value === "" || /^[A-Z]{2}(?:-[A-Z0-9]{1,8})?$/.test(value));
+const hasControlCharacter = (value: string): boolean =>
+  Array.from(value).some((character) => {
+    const code = character.charCodeAt(0);
+    return code < 32 || code === 127;
+  });
+const optionalSingleLine =
+  (maxLength: number) =>
+  (value: unknown): boolean =>
+    typeof value === "string" &&
+    value.length <= maxLength &&
+    (value === "" || (value.trim().length > 0 && !hasControlCharacter(value)));
+const validPhone = (value: unknown): boolean =>
+  typeof value === "string" &&
+  (value === "" ||
+    (value.length <= 64 && value.trim().length > 0 && /^[+()0-9 .\-/]+$/.test(value)));
+const validHttpUrl = (value: unknown): boolean => {
+  if (value === "") return true;
+  if (typeof value !== "string" || value.length > 2048) return false;
+  try {
+    const parsed = new URL(value);
+    return (
+      (parsed.protocol === "http:" || parsed.protocol === "https:") &&
+      parsed.username === "" &&
+      parsed.password === ""
+    );
+  } catch {
+    return false;
+  }
+};
 const parsePrivacySources = (raw: string): PrivacySource[] => {
   const parsed: unknown = JSON.parse(raw);
   return privacySourceSchema.array().parse(parsed);
@@ -260,6 +290,80 @@ export const SETTING_DEFS: SettingDef[] = [
   // read by the public /legal-config endpoint that the privacy page fetches.
   {
     group: "legal",
+    subgroup: "operator",
+    key: "legalControllerName",
+    label: "Controller name",
+    description: "Legal name of the person or organization operating this instance.",
+    type: "string",
+    env: "LEGAL_NAME",
+    default: "",
+    validate: optionalSingleLine(200),
+  },
+  {
+    group: "legal",
+    subgroup: "operator",
+    key: "legalControllerStreet",
+    label: "Street and house number",
+    type: "string",
+    env: "LEGAL_STREET",
+    default: "",
+    validate: optionalSingleLine(200),
+  },
+  {
+    group: "legal",
+    subgroup: "operator",
+    key: "legalControllerPostalCode",
+    label: "Postal code",
+    type: "string",
+    env: "LEGAL_POSTAL_CODE",
+    default: "",
+    validate: optionalSingleLine(32),
+  },
+  {
+    group: "legal",
+    subgroup: "operator",
+    key: "legalControllerCity",
+    label: "City",
+    type: "string",
+    env: "LEGAL_CITY",
+    default: "",
+    validate: optionalSingleLine(120),
+  },
+  {
+    group: "legal",
+    subgroup: "operator",
+    key: "legalControllerCountry",
+    label: "Country",
+    type: "string",
+    env: "LEGAL_COUNTRY",
+    default: "",
+    validate: optionalSingleLine(120),
+  },
+  {
+    group: "legal",
+    subgroup: "contact",
+    key: "legalControllerEmail",
+    label: "Legal contact email",
+    description: "Published contact address for the operator on legal pages.",
+    type: "string",
+    env: "LEGAL_EMAIL",
+    default: "",
+    validate: validEmail,
+  },
+  {
+    group: "legal",
+    subgroup: "contact",
+    key: "legalControllerPhone",
+    label: "Legal contact phone",
+    description: "Optional phone number published on the legal notice.",
+    type: "string",
+    env: "LEGAL_PHONE",
+    default: "",
+    validate: validPhone,
+  },
+  {
+    group: "legal",
+    subgroup: "hosting",
     key: "legalHostingProvider",
     label: "Hosting Provider",
     description:
@@ -270,6 +374,7 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "legal",
+    subgroup: "hosting",
     key: "legalHostingLocations",
     label: "Hosting Data-Center Locations",
     description:
@@ -280,6 +385,7 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "legal",
+    subgroup: "governance",
     key: "legalSupervisoryAuthority",
     label: "Data-Protection Supervisory Authority",
     description:
@@ -287,9 +393,11 @@ export const SETTING_DEFS: SettingDef[] = [
     type: "string",
     env: "LEGAL_SUPERVISORY_AUTHORITY",
     default: "",
+    validate: optionalSingleLine(300),
   },
   {
     group: "legal",
+    subgroup: "governance",
     key: "legalSupervisoryAuthorityUrl",
     label: "Supervisory Authority URL",
     description:
@@ -297,9 +405,11 @@ export const SETTING_DEFS: SettingDef[] = [
     type: "string",
     env: "LEGAL_SUPERVISORY_AUTHORITY_URL",
     default: "",
+    validate: validHttpUrl,
   },
   {
     group: "legal",
+    subgroup: "retention",
     key: "legalServerLogRetentionDays",
     label: "Server-Log Retention (days)",
     description:
@@ -307,9 +417,11 @@ export const SETTING_DEFS: SettingDef[] = [
     type: "number",
     env: "LEGAL_SERVER_LOG_RETENTION_DAYS",
     default: 30,
+    validate: boundedInteger(1, 3650),
   },
   {
     group: "legal",
+    subgroup: "contact",
     key: "legalDataRequestEmail",
     label: "Data-subject request email",
     description: "Controller contact for access requests. Falls back to LEGAL_EMAIL when unset.",
@@ -320,6 +432,7 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "legal",
+    subgroup: "retention",
     key: "legalDsarCaseRetentionDays",
     label: "DSAR case retention (days)",
     type: "number",
@@ -329,6 +442,7 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "legal",
+    subgroup: "retention",
     key: "legalIdentityEvidenceRetentionDays",
     label: "Identity evidence retention (days)",
     type: "number",
@@ -338,6 +452,7 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "legal",
+    subgroup: "retention",
     key: "legalExportArtifactRetentionHours",
     label: "Export artifact retention (hours)",
     type: "number",
@@ -347,6 +462,7 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "legal",
+    subgroup: "governance",
     key: "legalDeploymentJurisdiction",
     label: "Deployment jurisdiction",
     description: "Informational ISO 3166-1 alpha-2 jurisdiction, optionally with a subdivision.",
@@ -357,6 +473,7 @@ export const SETTING_DEFS: SettingDef[] = [
   },
   {
     group: "legal",
+    subgroup: "sources",
     key: "legalPrivacySources",
     label: "Privacy sources",
     description: "Strict JSON source declarations used by the access report.",
@@ -368,8 +485,6 @@ export const SETTING_DEFS: SettingDef[] = [
       Array.isArray(value) && privacySourceSchema.array().safeParse(value).success,
   },
 ];
-
-type SettingSource = "default" | "database" | "env";
 
 interface ResolvedSetting {
   group: string;
@@ -430,8 +545,8 @@ function matchesDeclaredType(def: SettingDef, value: unknown): boolean {
   }
 }
 
-export async function resolveSettings(): Promise<SettingsGroup[]> {
-  const dbRows = await db.select().from(systemSettings);
+export async function resolveSettings(database: typeof db = db): Promise<SettingsGroup[]> {
+  const dbRows = await database.select().from(systemSettings);
   const dbMap = Object.fromEntries(dbRows.map((r) => [r.key, r.value]));
 
   const grouped: Record<string, ResolvedSetting[]> = {};
@@ -439,41 +554,24 @@ export async function resolveSettings(): Promise<SettingsGroup[]> {
   for (const def of SETTING_DEFS) {
     const envVal = def.env ? process.env[def.env] : undefined;
     const dbVal = dbMap[def.key];
+    const resolved = resolveSettingPrecedence({
+      envValue: envVal,
+      databaseValue: dbVal,
+      defaultValue: def.default,
+      parseEnv: (raw) => parseEnvValue(raw, def),
+      validate: (candidate): candidate is unknown => matchesDeclaredType(def, candidate),
+    });
+    let { value } = resolved;
+    const { source } = resolved;
 
-    let value: unknown;
-    let source: SettingSource;
-
-    if (envVal !== undefined && envVal !== "") {
-      try {
-        const parsed = parseEnvValue(envVal, def);
-        if (matchesDeclaredType(def, parsed)) {
-          value = parsed;
-          source = "env";
-        } else {
-          throw new Error("value outside declared bounds");
-        }
-      } catch {
-        appLogger.add({
-          level: "warn",
-          source: "privacy-settings",
-          msg: "Invalid legal setting ignored",
-          time: Date.now(),
-          metadata: { setting: def.key, reason: "invalid-value" },
-        });
-        value = dbVal;
-        source = dbVal === undefined ? "default" : "database";
-      }
-    } else if (dbVal !== undefined && matchesDeclaredType(def, dbVal)) {
-      value = dbVal;
-      source = "database";
-    } else {
-      value = def.default;
-      source = "default";
-    }
-
-    if (def.key === "legalDataRequestEmail" && value === "") {
-      const fallback = process.env.LEGAL_EMAIL?.trim() ?? "";
-      if (validEmail(fallback)) value = fallback;
+    if (resolved.invalidEnv) {
+      appLogger.add({
+        level: "warn",
+        source: "privacy-settings",
+        msg: "Invalid legal setting ignored",
+        time: Date.now(),
+        metadata: { setting: def.key, reason: "invalid-value" },
+      });
     }
 
     // Never send a raw secret to the client, whatever its source. "***" is a

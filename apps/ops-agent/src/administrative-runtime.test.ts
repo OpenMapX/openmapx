@@ -23,6 +23,16 @@ import {
 import { createUnavailableRuntime, dispatchOpsOperation } from "./runtime";
 
 const temporaryRoots: string[] = [];
+const privacyReleaseValidation = {
+  version: 1 as const,
+  sourceBuildFingerprint: "a".repeat(64),
+  validatedAt: "2026-09-05T12:00:00.000Z",
+  checks: {
+    translationsConsistent: true as const,
+    openApiConsistent: true as const,
+    policyConsistent: true as const,
+  },
+};
 
 function temporaryRoot(): string {
   const root = mkdtempSync(join(tmpdir(), "openmapx-admin-runtime-"));
@@ -547,14 +557,18 @@ describe("administrative release runtime", () => {
           "web",
           "data-manager",
           "ops-agent",
+          "privacy-backup",
           "transitous-runner",
           "transitous-tools",
           "docs",
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
       ),
+      privacyReleaseValidation,
     });
     let manifestText = JSON.stringify(makeManifest("4"));
+    const dockerCalls: string[][] = [];
     const docker = async (args: readonly string[]) => {
+      dockerCalls.push([...args]);
       if (args[0] === "create") return "a".repeat(64);
       if (args[0] === "cp") {
         writeFileSync(args.at(-1) as string, manifestText, { mode: 0o600 });
@@ -566,6 +580,11 @@ describe("administrative release runtime", () => {
       runDocker: docker,
     });
     await expect(first.resolve(context)).resolves.toBe(release);
+    await expect(first.pull(release, context)).resolves.toBeUndefined();
+    expect(dockerCalls).toContainEqual([
+      "pull",
+      `ghcr.io/openmapx/privacy-backup@sha256:${"4".repeat(64)}`,
+    ]);
     await expect(first.resolve(context)).resolves.toBe(release);
     manifestText = JSON.stringify(makeManifest("5"));
     await expect(first.resolve(context)).rejects.toThrow("Release authority rejected");
@@ -575,6 +594,17 @@ describe("administrative release runtime", () => {
         "utf8",
       ),
     ).toContain("4".repeat(64));
+    expect(
+      JSON.parse(
+        readFileSync(
+          join(rootDir, "infra", "docker", ".ops-agent-releases", `${release}.json`),
+          "utf8",
+        ),
+      ),
+    ).toMatchObject({
+      images: { "privacy-backup": `ghcr.io/openmapx/privacy-backup@sha256:${"4".repeat(64)}` },
+      privacyReleaseValidation,
+    });
 
     manifestText = "x".repeat(32 * 1024 + 1);
     await expect(first.resolve(context)).rejects.toThrow();
@@ -593,11 +623,13 @@ describe("administrative release runtime", () => {
           "web",
           "data-manager",
           "ops-agent",
+          "privacy-backup",
           "transitous-runner",
           "transitous-tools",
           "docs",
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
       ),
+      privacyReleaseValidation,
     });
     const latest = makeManifest("a-new", "1");
     writeFileSync(join(directory, "z-old.json"), JSON.stringify(makeManifest("z-old", "2")), {
@@ -642,11 +674,13 @@ describe("administrative release runtime", () => {
             "web",
             "data-manager",
             "ops-agent",
+            "privacy-backup",
             "transitous-runner",
             "transitous-tools",
             "docs",
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
         ),
+        privacyReleaseValidation,
       });
     for (let index = 0; index < 63; index += 1) {
       writeFileSync(join(directory, `release-${index}.json`), stored(`release-${index}`), {
@@ -711,11 +745,13 @@ describe("administrative release runtime", () => {
             "web",
             "data-manager",
             "ops-agent",
+            "privacy-backup",
             "transitous-runner",
             "transitous-tools",
             "docs",
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
         ),
+        privacyReleaseValidation,
       };
       writeFileSync(join(directory, `${releaseId}.json`), JSON.stringify(manifest), {
         mode: 0o600,
@@ -784,11 +820,13 @@ describe("administrative release runtime", () => {
               "web",
               "data-manager",
               "ops-agent",
+              "privacy-backup",
               "transitous-runner",
               "transitous-tools",
               "docs",
             ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
           ),
+          privacyReleaseValidation,
         }),
         { mode: 0o600 },
       );
@@ -835,11 +873,13 @@ describe("administrative release runtime", () => {
             "web",
             "data-manager",
             "ops-agent",
+            "privacy-backup",
             "transitous-runner",
             "transitous-tools",
             "docs",
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${tag.repeat(64)}`]),
         ),
+        privacyReleaseValidation,
       });
     writeFileSync(join(directory, `${releaseId}.json`), manifestFor("3"), { mode: 0o600 });
 
@@ -886,11 +926,13 @@ describe("administrative release runtime", () => {
               "web",
               "data-manager",
               "ops-agent",
+              "privacy-backup",
               "transitous-runner",
               "transitous-tools",
               "docs",
             ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"5".repeat(64)}`]),
           ),
+          privacyReleaseValidation,
         }),
         { mode: 0o600 },
       );
@@ -949,6 +991,7 @@ describe("administrative release runtime", () => {
           "web",
           "data-manager",
           "ops-agent",
+          "privacy-backup",
           "transitous-runner",
           "transitous-tools",
           "docs",
@@ -957,6 +1000,7 @@ describe("administrative release runtime", () => {
           `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
         ]),
       ),
+      privacyReleaseValidation,
     };
     writeFileSync(join(releaseDirectory, `${releaseId}.json`), JSON.stringify(manifest), {
       mode: 0o600,
@@ -1024,6 +1068,7 @@ describe("administrative release runtime", () => {
               "web",
               "data-manager",
               "ops-agent",
+              "privacy-backup",
               "transitous-runner",
               "transitous-tools",
               "docs",
@@ -1032,6 +1077,7 @@ describe("administrative release runtime", () => {
               `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
             ]),
           ),
+          privacyReleaseValidation,
         }),
         { mode: 0o600 },
       );
@@ -1102,6 +1148,7 @@ describe("administrative release runtime", () => {
             "web",
             "data-manager",
             "ops-agent",
+            "privacy-backup",
             "transitous-runner",
             "transitous-tools",
             "docs",
@@ -1110,6 +1157,7 @@ describe("administrative release runtime", () => {
             `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
           ]),
         ),
+        privacyReleaseValidation,
       }),
       { mode: 0o600 },
     );
@@ -1260,5 +1308,37 @@ describe("administrative release runtime", () => {
       "pull:release-123",
       "apply:release-123:data-manager,app-web,app-api",
     ]);
+  });
+
+  it("does not apply a system update when release pulling fails", async () => {
+    const apply = vi.fn(async () => undefined);
+    const runtime = createUnavailableRuntime();
+    createAdministrativeRuntime(runtime, {
+      rootDir: temporaryRoot(),
+      runFixedCli: async () => undefined,
+      releaseEffects: {
+        resolve: async () => "release-123",
+        pull: async () => {
+          throw new Error("collector pull failed");
+        },
+        inspect: async () => ({}),
+        inspectSystem: async () => ({
+          dockerReachable: true,
+          composeReady: true,
+          maintenanceReady: true,
+          release: {},
+          services: [],
+        }),
+        apply,
+      },
+    });
+    await expect(
+      dispatchOpsOperation(
+        runtime,
+        { kind: "system.update", releaseId: "release-123", createBackup: false },
+        context("system.update"),
+      ),
+    ).rejects.toThrow("collector pull failed");
+    expect(apply).not.toHaveBeenCalled();
   });
 });

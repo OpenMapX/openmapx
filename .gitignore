@@ -89,6 +89,7 @@ plans/
 infra/docker/docker-compose.generated.yml
 infra/docker/docker-compose.generated.hardlinks.json
 infra/docker/docker-compose.release.yml
+infra/docker/.release-evidence/
 infra/docker/service-selection.json
 # Decrypted per-service secret files (rendered from the vault; never commit)
 infra/docker/.generated-secrets/

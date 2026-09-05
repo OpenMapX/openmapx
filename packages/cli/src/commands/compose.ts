@@ -204,6 +204,7 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);
   ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "privacy-extraction"));
+  ensurePlatformPrivateDirectory(join(paths.infraDir, "backups"));
   const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
   const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");
   const opsAgentApiTokenPath = join(paths.infraDir, "secrets", "ops-agent-api-token");

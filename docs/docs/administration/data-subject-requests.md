@@ -71,16 +71,56 @@ changed backup or warning set requires a new review. Unknown off-host copies,
 processor responses and generic text logs remain operator tasks. Do not use
 free-text scans to match a person.
 
+## Initial setup
+
+Sign in as a full administrator and open **Privacy setup** at
+`/admin/privacy-setup`. The setup groups controller and contact details,
+notification delivery, retention and source declarations, and independent
+reviews. Privacy administrators can inspect readiness and handle requests;
+changing deployment settings requires a full administrator.
+
+Enter the controller's name and postal address, request contact, jurisdiction
+and supervisory authority. Configure the existing email provider and use its
+explicit test action to check delivery. Review the prefilled retention periods:
+7 days for export artifacts, 30 days for identity evidence and 3 years for case
+records. Set these to the deployment's actual policy and declare its additional
+sources. Environment values override saved settings and appear locked in the
+editor; remove the environment override to manage that value in the UI. Public
+legal pages refresh their cached facts within about a minute.
+
+Official release manifests pin the backup collector image and provide matching
+machine-validation evidence through the release Compose overlay. The CLI also
+provisions the managed encryption key and private export volume. These technical
+steps do not require copying image digests or validation files by hand.
+
+The remaining deployment assertions stay explicit: set
+`PRIVACY_EXPORT_IMPLEMENTATION_ACTOR_IDS` to the actual implementation owners'
+user IDs, and set `PRIVACY_ARTIFACT_BACKUP_DISABLED=true` only after checking that
+all backup policies, including operator-managed copies, exclude the export
+storage. Follow the setup checklist to resolve missing settings and operational
+checks, then record the independent reviews. Installing a release does not
+approve it for a deployment or automatically enable generation.
+
 ## Release and operational gate
 
 The source release must pass repository tests, real database and configured
-Docker collector fixtures. From that exact checkout, run:
+Docker collector fixtures. Official releases generate validation evidence on
+the exact gated checkout and include it in the same atomic release manifest as
+the immutable image pins. Activation downloads the collector and writes
+content-addressed evidence under `infra/docker/.release-evidence` before
+atomically replacing the release overlay. The API receives that file read-only,
+including when its root filesystem is read-only. Existing evidence files remain
+available for rollback. Missing evidence, a failed collector download or an
+unpinned collector prevents release activation.
+
+For a custom/local deployment without the managed release overlay, run from the
+exact checkout used to build the API:
 
 ```bash
 pnpm validate:privacy-release /absolute/path/privacy-release-validation.json
 ```
 
-Mount the generated file read-only and set
+For that custom deployment, mount the generated file read-only and set
 `PRIVACY_EXPORT_VALIDATION_EVIDENCE_FILE` to its absolute container path. It
 contains no personal data or keys. It binds successful translation, OpenAPI
 and policy checks to the source fingerprint embedded in the API image; a stale

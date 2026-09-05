@@ -671,24 +671,6 @@ function strictReadFile(path: string, maximum: number): string {
   }
 }
 
-function canonicalReleaseManifest(
-  manifest: ReturnType<typeof coreServices.parseReleaseManifest>,
-): string {
-  return JSON.stringify({
-    schemaVersion: 1,
-    release: manifest.release,
-    images: {
-      api: manifest.images.api,
-      web: manifest.images.web,
-      "data-manager": manifest.images["data-manager"],
-      "ops-agent": manifest.images["ops-agent"],
-      "transitous-runner": manifest.images["transitous-runner"],
-      "transitous-tools": manifest.images["transitous-tools"],
-      docs: manifest.images.docs,
-    },
-  });
-}
-
 function releaseDigest(contents: string): string {
   return createHash("sha256").update(contents).digest("hex");
 }
@@ -998,7 +980,7 @@ export function createDefaultReleaseEffects(
     manifestNames();
     const raw = strictReadFile(releaseManifestPath(rootDir, releaseId), MAX_RELEASE_MANIFEST_BYTES);
     const manifest = coreServices.parseReleaseManifest(raw);
-    if (manifest.release !== releaseId || raw !== canonicalReleaseManifest(manifest)) {
+    if (manifest.release !== releaseId || raw !== coreServices.canonicalReleaseManifest(manifest)) {
       throw new Error("Release authority rejected");
     }
     return manifest;
@@ -1046,7 +1028,7 @@ export function createDefaultReleaseEffects(
       throw new Error("Release authority rejected");
     }
     const manifest = loadManifest(value.releaseId);
-    const digest = releaseDigest(canonicalReleaseManifest(manifest));
+    const digest = releaseDigest(coreServices.canonicalReleaseManifest(manifest));
     if (value.digest !== undefined && digest !== value.digest) {
       throw new Error("Release authority rejected");
     }
@@ -1144,7 +1126,7 @@ export function createDefaultReleaseEffects(
     }
     const transaction = value as unknown as ReleaseTransaction;
     const manifest = loadManifest(transaction.releaseId);
-    if (releaseDigest(canonicalReleaseManifest(manifest)) !== transaction.digest) {
+    if (releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== transaction.digest) {
       throw new Error("Release transaction rejected");
     }
     return transaction;
@@ -1222,16 +1204,16 @@ export function createDefaultReleaseEffects(
     // the apply was admitted. Reopening by release ID would otherwise let a
     // manifest replaced after admission drive the compose render, the service
     // update, and the published state under the same caller-visible ID.
-    if (releaseDigest(canonicalReleaseManifest(manifest)) !== transaction.digest) {
+    if (releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== transaction.digest) {
       throw new Error("Release authority rejected");
     }
     if (transaction.phase === "prepared") {
-      atomicWrite(paths.overlay, coreServices.renderReleaseCompose(manifest));
+      coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
       transaction = { ...transaction, phase: "overlay_written" };
       await writeTransaction(transaction);
     }
     if (transaction.phase === "overlay_written") {
-      atomicWrite(paths.overlay, coreServices.renderReleaseCompose(manifest));
+      coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
       await runFixedCli(["services", "update", ...transaction.serviceIds], context);
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
@@ -1314,7 +1296,7 @@ export function createDefaultReleaseEffects(
         );
         const raw = strictReadFile(temporaryManifest, MAX_RELEASE_MANIFEST_BYTES);
         const manifest = coreServices.parseReleaseManifest(raw);
-        const canonical = canonicalReleaseManifest(manifest);
+        const canonical = coreServices.canonicalReleaseManifest(manifest);
         const destination = releaseManifestPath(rootDir, manifest.release);
         // Re-read the store under the lock. A snapshot taken before the Docker
         // pull/create/cp awaits is stale, so two concurrent resolutions could
@@ -1350,6 +1332,7 @@ export function createDefaultReleaseEffects(
         manifest.images.web,
         manifest.images["data-manager"],
         manifest.images["ops-agent"],
+        manifest.images["privacy-backup"],
         manifest.images["transitous-runner"],
         manifest.images["transitous-tools"],
       ]) {
@@ -1479,7 +1462,7 @@ export function createDefaultReleaseEffects(
           version: 1,
           phase: "prepared",
           releaseId,
-          digest: releaseDigest(canonicalReleaseManifest(manifest)),
+          digest: releaseDigest(coreServices.canonicalReleaseManifest(manifest)),
           serviceIds: [...serviceIds],
           ...(updateJobId ? { updateJobId } : {}),
           previousOverlay,
@@ -1489,7 +1472,7 @@ export function createDefaultReleaseEffects(
       } finally {
         claimLock.release();
       }
-      atomicWrite(paths.overlay, coreServices.renderReleaseCompose(manifest));
+      coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
       transaction = { ...transaction, phase: "overlay_written" };
       await writeTransaction(transaction);
       try {

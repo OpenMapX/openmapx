@@ -32,6 +32,7 @@ apps/mobile/.gradle/
 infra/docker/data
 infra/docker/docker-compose.generated.yml
 infra/docker/docker-compose.generated.hardlinks.json
+infra/docker/.release-evidence/
 infra/docker/service-selection.json
 infra/docker/services/transitous/api-keys.json
 services/motis/tools/transitous/api-keys.json

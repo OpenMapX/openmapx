@@ -2,9 +2,16 @@ import Box from "@mui/material/Box";
 import Link from "@mui/material/Link";
 import Typography from "@mui/material/Typography";
 import { legalConfig, sectionSlug } from "@openmapx/core/legal";
+import type { PublicLegalConfig } from "@openmapx/core/server-api";
 
-export default function ImprintContentDe() {
-  const { name, street, postalCode, city, country, email, phone } = legalConfig;
+export default function ImprintContentDe({ legal }: { legal?: PublicLegalConfig | null }) {
+  const name = legal ? legal.name : legalConfig.name;
+  const street = legal ? legal.street : legalConfig.street;
+  const postalCode = legal ? legal.postalCode : legalConfig.postalCode;
+  const city = legal ? legal.city : legalConfig.city;
+  const country = legal ? legal.country : legalConfig.country;
+  const email = legal ? legal.email : legalConfig.email;
+  const phone = legal ? legal.phone : legalConfig.phone;
 
   return (
     <Box>

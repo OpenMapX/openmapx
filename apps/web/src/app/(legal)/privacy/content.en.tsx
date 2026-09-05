@@ -22,15 +22,15 @@ export default function PrivacyContent({
   capabilities?: Record<string, boolean>;
   integrations?: import("@openmapx/integration-framework").LoadedIntegrationMeta[];
   disclosures?: Disclosure[];
-  legal?: PublicLegalConfig;
+  legal?: PublicLegalConfig | null;
 }) {
   const {
-    name,
-    street,
-    postalCode,
-    city,
-    country,
-    email,
+    name: nameEnv,
+    street: streetEnv,
+    postalCode: postalCodeEnv,
+    city: cityEnv,
+    country: countryEnv,
+    email: emailEnv,
     supervisoryAuthority: supervisoryAuthorityEnv,
     supervisoryAuthorityUrl: supervisoryAuthorityUrlEnv,
     hostingProvider: hostingProviderEnv,
@@ -41,11 +41,19 @@ export default function PrivacyContent({
   // database > default in app-api and arrive via `legal`. Fall back to the
   // web-process env (legalConfig) only when the API is unreachable during SSR,
   // so a configured value still renders.
-  const hostingProvider = legal?.hostingProvider || hostingProviderEnv;
-  const hostingLocations = legal?.hostingLocations || hostingLocationsEnv;
-  const supervisoryAuthority = legal?.supervisoryAuthority || supervisoryAuthorityEnv;
-  const supervisoryAuthorityUrl = legal?.supervisoryAuthorityUrl || supervisoryAuthorityUrlEnv;
-  const serverLogRetentionDays = legal?.serverLogRetentionDays ?? serverLogRetentionDaysEnv;
+  const name = legal ? legal.name : nameEnv;
+  const street = legal ? legal.street : streetEnv;
+  const postalCode = legal ? legal.postalCode : postalCodeEnv;
+  const city = legal ? legal.city : cityEnv;
+  const country = legal ? legal.country : countryEnv;
+  const email = legal ? legal.dataRequestEmail : emailEnv;
+  const hostingProvider = legal ? legal.hostingProvider : hostingProviderEnv;
+  const hostingLocations = legal ? legal.hostingLocations : hostingLocationsEnv;
+  const supervisoryAuthority = legal ? legal.supervisoryAuthority : supervisoryAuthorityEnv;
+  const supervisoryAuthorityUrl = legal
+    ? legal.supervisoryAuthorityUrl
+    : supervisoryAuthorityUrlEnv;
+  const serverLogRetentionDays = legal ? legal.serverLogRetentionDays : serverLogRetentionDaysEnv;
   const T = privacyTitles("en");
 
   return (
@@ -60,7 +68,7 @@ export default function PrivacyContent({
           mb: 4,
         }}
       >
-        Last updated: September 4, 2026 (subject access and portability sections revised)
+        Last updated: September 5, 2026 (subject access and portability sections revised)
       </Typography>
       <Section title={T.controller}>
         <Typography>

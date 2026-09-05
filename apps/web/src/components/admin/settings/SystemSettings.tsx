@@ -30,12 +30,12 @@ import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { invalidateIntegrationRuntime } from "@/lib/integrationRuntimeQuery";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 
-interface ResolvedSetting {
+export interface ResolvedSetting {
   group: string;
   subgroup?: string;
   key: string;
@@ -68,6 +68,52 @@ interface SettingsSection {
   subgroup?: string;
   settings: ResolvedSetting[];
 }
+
+export interface SettingsEditorSection {
+  id: string;
+  groupId: string;
+  settingKeys?: readonly string[];
+  subgroupIds?: readonly string[];
+  label: string;
+  description?: string;
+  defaultExpanded?: boolean;
+  includeTestEmail?: boolean;
+}
+
+export interface SettingsEditorText {
+  envOverrides: string;
+  envOverrideHelp: (envVar: string) => string;
+  envSecretValue: string;
+  showSecret: string;
+  hideSecret: string;
+  databaseSource: string;
+  save: (label: string) => string;
+  saved: (label: string) => string;
+  saveFailed: string;
+  invalidJson: string;
+  sendTestEmail: string;
+  testEmailSent: string;
+  testEmailFailed: string;
+  loadFailed: string;
+}
+
+const DEFAULT_TEXT: SettingsEditorText = {
+  envOverrides: "env overrides",
+  envOverrideHelp: (envVar) =>
+    `Overridden by environment variable ${envVar}. Change the env var to update this value.`,
+  envSecretValue: "(set by environment variable)",
+  showSecret: "Show",
+  hideSecret: "Hide",
+  databaseSource: "Source: database",
+  save: (label) => `Save ${label}`,
+  saved: (label) => `${label} settings saved`,
+  saveFailed: "Failed to save",
+  invalidJson: "Enter valid JSON.",
+  sendTestEmail: "Send Test Email",
+  testEmailSent: "Test email sent",
+  testEmailFailed: "Failed to send test email",
+  loadFailed: "Failed to load settings",
+};
 
 // Subgroup display metadata. Keys must match the `subgroup` field on the
 // matching SettingDef in apps/api/src/routes/admin-settings.ts.
@@ -104,11 +150,9 @@ function groupBySubgroup(settings: ResolvedSetting[]): SettingsSection[] {
   return sections;
 }
 
-function EnvOverrideBadge({ envVar }: { envVar: string }) {
+function EnvOverrideBadge({ envVar, text }: { envVar: string; text: SettingsEditorText }) {
   return (
-    <Tooltip
-      title={`Overridden by environment variable ${envVar}. Change the env var to update this value.`}
-    >
+    <Tooltip title={text.envOverrideHelp(envVar)}>
       <Chip
         icon={<WarningAmberIcon sx={{ fontSize: "12px !important" }} />}
         label={envVar}
@@ -125,10 +169,14 @@ function SettingField({
   setting,
   value,
   onChange,
+  onValidityChange,
+  text,
 }: {
   setting: ResolvedSetting;
   value: unknown;
   onChange: (v: unknown) => void;
+  onValidityChange: (valid: boolean) => void;
+  text: SettingsEditorText;
 }) {
   const [showSecret, setShowSecret] = useState(false);
   const disabled = setting.envOverride;
@@ -169,7 +217,13 @@ function SettingField({
     );
   }
 
-  if (setting.type === "object") {
+  if (
+    setting.type === "object" &&
+    !Array.isArray(value) &&
+    value !== null &&
+    typeof value === "object" &&
+    Object.values(value).every((entry) => typeof entry === "number")
+  ) {
     const obj = (value && typeof value === "object" ? value : setting.value) as Record<
       string,
       unknown
@@ -219,12 +273,25 @@ function SettingField({
     );
   }
 
+  if (setting.type === "object") {
+    return (
+      <JsonSettingField
+        setting={setting}
+        value={value}
+        disabled={disabled}
+        onChange={onChange}
+        onValidityChange={onValidityChange}
+        invalidJson={text.invalidJson}
+      />
+    );
+  }
+
   // Secrets resolved from an env var are redacted server-side ("***") and must
   // never be displayed — show a readable note instead of masked dots. Every
   // other field (including non-secret env overrides) shows its real value so
   // the operator can see what's actually in effect.
   const isEnvSecret = setting.envOverride && setting.secret;
-  const displayValue = isEnvSecret ? "(set by environment variable)" : String(value ?? "");
+  const displayValue = isEnvSecret ? text.envSecretValue : String(value ?? "");
   const inputType = isEnvSecret
     ? "text"
     : setting.secret && !showSecret
@@ -254,7 +321,7 @@ function SettingField({
                     sx={{ fontSize: 11, minWidth: "auto", px: 1 }}
                     onClick={() => setShowSecret((v) => !v)}
                   >
-                    {showSecret ? "Hide" : "Show"}
+                    {showSecret ? text.hideSecret : text.showSecret}
                   </Button>
                 ),
               }
@@ -265,27 +332,112 @@ function SettingField({
   );
 }
 
+function JsonSettingField({
+  setting,
+  value,
+  disabled,
+  onChange,
+  onValidityChange,
+  invalidJson,
+}: {
+  setting: ResolvedSetting;
+  value: unknown;
+  disabled: boolean;
+  onChange: (value: unknown) => void;
+  onValidityChange: (valid: boolean) => void;
+  invalidJson: string;
+}) {
+  const [draft, setDraft] = useState(() => JSON.stringify(value ?? null, null, 2));
+  const [invalid, setInvalid] = useState(false);
+
+  return (
+    <TextField
+      label={setting.label}
+      value={draft}
+      disabled={disabled}
+      multiline
+      minRows={5}
+      error={invalid}
+      helperText={invalid ? invalidJson : setting.description}
+      onChange={(event) => {
+        const next = event.target.value;
+        setDraft(next);
+        try {
+          const parsed = JSON.parse(next) as unknown;
+          setInvalid(false);
+          onValidityChange(true);
+          onChange(parsed);
+        } catch {
+          setInvalid(true);
+          onValidityChange(false);
+        }
+      }}
+      slotProps={{ htmlInput: { spellCheck: false } }}
+      sx={{ width: "100%", maxWidth: 640, "& textarea": { fontFamily: "monospace" } }}
+    />
+  );
+}
+
 function SettingsGroupPanel({
   group,
   onSaved,
   extra,
+  description,
+  anchorId,
+  defaultExpanded,
+  subgroupMeta = SUBGROUP_META,
+  text,
 }: {
   group: SettingsGroup;
   onSaved: (msg: string) => void;
   extra?: ReactNode;
+  description?: string;
+  anchorId?: string;
+  defaultExpanded?: boolean;
+  subgroupMeta?: Record<string, { label: string; description?: string }>;
+  text: SettingsEditorText;
 }) {
   const env = useEnv();
   const qc = useQueryClient();
-  const computeLocalValues = useCallback(
-    () => Object.fromEntries(group.settings.map((s) => [s.key, s.value])),
+  const serverSnapshot = useMemo(
+    () => ({
+      signature: JSON.stringify(
+        group.settings.map((setting) => ({
+          key: setting.key,
+          value: setting.value,
+          source: setting.source,
+          envOverride: setting.envOverride,
+          envVar: setting.envVar,
+          type: setting.type,
+          options: setting.options,
+          showWhen: setting.showWhen,
+        })),
+      ),
+      values: Object.fromEntries(group.settings.map((setting) => [setting.key, setting.value])),
+    }),
     [group.settings],
   );
-  const [localValues, setLocalValues] = useState<Record<string, unknown>>(computeLocalValues);
+  const [localValues, setLocalValues] = useState<Record<string, unknown>>(serverSnapshot.values);
+  const [invalidKeys, setInvalidKeys] = useState<Set<string>>(() => new Set());
+  const appliedServerSignature = useRef(serverSnapshot.signature);
+  const serverRevision = useRef({ signature: serverSnapshot.signature, count: 0 });
+  const serverChanged = serverRevision.current.signature !== serverSnapshot.signature;
+  if (serverChanged) {
+    serverRevision.current = {
+      signature: serverSnapshot.signature,
+      count: serverRevision.current.count + 1,
+    };
+  }
+  const renderedValues = serverChanged ? serverSnapshot.values : localValues;
 
-  // Re-sync local state when settings are refetched (e.g. after save)
+  // A parent rerender must not discard unsaved edits. Re-sync only when the
+  // effective values or server-enforced editing rules actually changed.
   useEffect(() => {
-    setLocalValues(computeLocalValues());
-  }, [computeLocalValues]);
+    if (appliedServerSignature.current === serverSnapshot.signature) return;
+    appliedServerSignature.current = serverSnapshot.signature;
+    setLocalValues(serverSnapshot.values);
+    setInvalidKeys(new Set());
+  }, [serverSnapshot]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -309,11 +461,11 @@ function SettingsGroupPanel({
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["admin", "settings"] });
-      onSaved(`${group.label} settings saved`);
+      onSaved(text.saved(group.label));
     },
   });
 
-  const visibleSettings = group.settings.filter((s) => isVisible(s, localValues));
+  const visibleSettings = group.settings.filter((s) => isVisible(s, renderedValues));
   // Reflect only the settings the operator can actually see: a setting hidden
   // by its showWhen predicate (e.g. the MapTiler key while the provider is
   // self-hosted) must not flag the whole panel as env-overridden, or the badge
@@ -322,7 +474,8 @@ function SettingsGroupPanel({
 
   return (
     <Accordion
-      defaultExpanded={group.id === "general"}
+      id={anchorId}
+      defaultExpanded={defaultExpanded ?? group.id === "general"}
       variant="outlined"
       disableGutters
       sx={{
@@ -341,16 +494,17 @@ function SettingsGroupPanel({
             gap: 1,
           }}
         >
-          <Typography
-            sx={{
-              fontWeight: 600,
-            }}
-          >
-            {group.label}
-          </Typography>
+          <Stack sx={{ gap: 0.25 }}>
+            <Typography sx={{ fontWeight: 600 }}>{group.label}</Typography>
+            {description && (
+              <Typography variant="caption" color="text.secondary">
+                {description}
+              </Typography>
+            )}
+          </Stack>
           {hasEnvOverrides && (
             <Chip
-              label="env overrides"
+              label={text.envOverrides}
               size="small"
               color="warning"
               variant="outlined"
@@ -372,7 +526,7 @@ function SettingsGroupPanel({
                 gap: 1.25,
               }}
             >
-              {section.subgroup && SUBGROUP_META[section.subgroup] && (
+              {section.subgroup && subgroupMeta[section.subgroup] && (
                 <Stack
                   sx={{
                     gap: 0.25,
@@ -385,16 +539,16 @@ function SettingsGroupPanel({
                       lineHeight: 1.2,
                     }}
                   >
-                    {SUBGROUP_META[section.subgroup].label}
+                    {subgroupMeta[section.subgroup].label}
                   </Typography>
-                  {SUBGROUP_META[section.subgroup].description && (
+                  {subgroupMeta[section.subgroup].description && (
                     <Typography
                       variant="caption"
                       sx={{
                         color: "text.secondary",
                       }}
                     >
-                      {SUBGROUP_META[section.subgroup].description}
+                      {subgroupMeta[section.subgroup].description}
                     </Typography>
                   )}
                 </Stack>
@@ -418,11 +572,23 @@ function SettingsGroupPanel({
                       }}
                     >
                       <SettingField
+                        key={`${s.key}:${serverRevision.current.count}`}
                         setting={s}
-                        value={localValues[s.key]}
+                        value={renderedValues[s.key]}
                         onChange={(v) => setLocalValues((prev) => ({ ...prev, [s.key]: v }))}
+                        onValidityChange={(valid) =>
+                          setInvalidKeys((current) => {
+                            const next = new Set(current);
+                            if (valid) next.delete(s.key);
+                            else next.add(s.key);
+                            return next;
+                          })
+                        }
+                        text={text}
                       />
-                      {s.envOverride && s.envVar && <EnvOverrideBadge envVar={s.envVar} />}
+                      {s.envOverride && s.envVar && (
+                        <EnvOverrideBadge envVar={s.envVar} text={text} />
+                      )}
                     </Stack>
                     {s.source === "database" && !s.envOverride && (
                       <Typography
@@ -432,7 +598,7 @@ function SettingsGroupPanel({
                           pl: 0.5,
                         }}
                       >
-                        Source: database
+                        {text.databaseSource}
                       </Typography>
                     )}
                   </Stack>
@@ -456,14 +622,18 @@ function SettingsGroupPanel({
                 save.isPending ? <CircularProgress size={14} color="inherit" /> : <SaveIcon />
               }
               onClick={() => save.mutate()}
-              disabled={save.isPending || visibleSettings.every((s) => s.envOverride)}
+              disabled={
+                save.isPending ||
+                invalidKeys.size > 0 ||
+                visibleSettings.every((s) => s.envOverride)
+              }
             >
-              Save {group.label}
+              {text.save(group.label)}
             </Button>
             {extra}
             {save.isError && (
               <Typography variant="caption" color="error">
-                Failed to save
+                {text.saveFailed}
               </Typography>
             )}
           </Stack>
@@ -657,7 +827,13 @@ function ExportImportSection({
   );
 }
 
-function TestEmailSection({ onMsg }: { onMsg: (msg: string, sev?: "success" | "error") => void }) {
+function TestEmailSection({
+  onMsg,
+  text,
+}: {
+  onMsg: (msg: string, sev?: "success" | "error") => void;
+  text: SettingsEditorText;
+}) {
   const env = useEnv();
   const send = useMutation({
     mutationFn: async () => {
@@ -671,8 +847,8 @@ function TestEmailSection({ onMsg }: { onMsg: (msg: string, sev?: "success" | "e
       }
       return res.json();
     },
-    onSuccess: (data: { message: string }) => onMsg(data.message ?? "Test email sent"),
-    onError: (err: Error) => onMsg(err.message, "error"),
+    onSuccess: () => onMsg(text.testEmailSent),
+    onError: () => onMsg(text.testEmailFailed, "error"),
   });
 
   return (
@@ -683,12 +859,28 @@ function TestEmailSection({ onMsg }: { onMsg: (msg: string, sev?: "success" | "e
       onClick={() => send.mutate()}
       disabled={send.isPending}
     >
-      Send Test Email
+      {text.sendTestEmail}
     </Button>
   );
 }
 
-export function SystemSettings() {
+export function SystemSettings({
+  sections,
+  showHeader = true,
+  showTransfer = true,
+  settingText,
+  subgroupMeta,
+  text = DEFAULT_TEXT,
+  onSettingsSaved,
+}: {
+  sections?: readonly SettingsEditorSection[];
+  showHeader?: boolean;
+  showTransfer?: boolean;
+  settingText?: (setting: ResolvedSetting) => Pick<ResolvedSetting, "label" | "description">;
+  subgroupMeta?: Record<string, { label: string; description?: string }>;
+  text?: SettingsEditorText;
+  onSettingsSaved?: () => void | Promise<void>;
+} = {}) {
   const env = useEnv();
   const [toast, setToast] = useState<{ msg: string; sev: "success" | "error" } | null>(null);
 
@@ -702,6 +894,33 @@ export function SystemSettings() {
   });
 
   const showToast = (msg: string, sev: "success" | "error" = "success") => setToast({ msg, sev });
+  const handleSaved = (msg: string) => {
+    showToast(msg);
+    void onSettingsSaved?.();
+  };
+
+  const panels = useMemo(() => {
+    if (!data) return [];
+    return sections
+      ? sections.flatMap((section) => {
+          const source = data.groups.find((group) => group.id === section.groupId);
+          if (!source) return [];
+          const settings = source.settings
+            .filter(
+              (setting) =>
+                (!section.settingKeys || section.settingKeys.includes(setting.key)) &&
+                (!section.subgroupIds ||
+                  (setting.subgroup !== undefined &&
+                    section.subgroupIds.includes(setting.subgroup))),
+            )
+            .map((setting) => ({ ...setting, ...(settingText?.(setting) ?? {}) }));
+          if (settings.length === 0) return [];
+          return [
+            { section, group: { ...source, id: section.id, label: section.label, settings } },
+          ];
+        })
+      : data.groups.map((group) => ({ section: undefined, group }));
+  }, [data, sections, settingText]);
 
   if (isLoading) {
     return (
@@ -718,7 +937,7 @@ export function SystemSettings() {
   }
 
   if (!data) {
-    return <Alert severity="error">Failed to load settings</Alert>;
+    return <Alert severity="error">{text.loadFailed}</Alert>;
   }
 
   return (
@@ -727,16 +946,25 @@ export function SystemSettings() {
         gap: 1.5,
       }}
     >
-      <AdminPageHeader title="Settings" subtitle="Operator configuration" />
-      {data.groups.map((group) => (
+      {showHeader && <AdminPageHeader title="Settings" subtitle="Operator configuration" />}
+      {panels.map(({ group, section }) => (
         <SettingsGroupPanel
-          key={group.id}
+          key={section?.id ?? group.id}
           group={group}
-          onSaved={showToast}
-          extra={group.id === "email" ? <TestEmailSection onMsg={showToast} /> : undefined}
+          onSaved={handleSaved}
+          anchorId={section?.id}
+          description={section?.description}
+          defaultExpanded={section?.defaultExpanded}
+          subgroupMeta={subgroupMeta}
+          text={text}
+          extra={
+            section?.includeTestEmail || (!section && group.id === "email") ? (
+              <TestEmailSection onMsg={showToast} text={text} />
+            ) : undefined
+          }
         />
       ))}
-      <ExportImportSection onMsg={showToast} />
+      {showTransfer && <ExportImportSection onMsg={showToast} />}
       <Snackbar
         open={!!toast}
         autoHideDuration={4000}

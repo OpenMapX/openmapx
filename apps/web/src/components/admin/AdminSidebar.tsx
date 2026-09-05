@@ -11,6 +11,7 @@ import PoiIcon from "@mui/icons-material/LocationOn";
 import UsersIcon from "@mui/icons-material/People";
 import PrivacyIcon from "@mui/icons-material/PrivacyTip";
 import BackupIcon from "@mui/icons-material/Restore";
+import PrivacySetupIcon from "@mui/icons-material/Rule";
 import SettingsIcon from "@mui/icons-material/Settings";
 import DataIcon from "@mui/icons-material/Storage";
 import StoreIcon from "@mui/icons-material/Store";
@@ -29,6 +30,7 @@ import Toolbar from "@mui/material/Toolbar";
 import Typography from "@mui/material/Typography";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useTranslations } from "next-intl";
 import { SIDEBAR_WIDTH, TOPBAR_HEIGHT } from "./layoutConstants";
 
 const SERVICES_SUB_ITEMS = [
@@ -68,8 +70,16 @@ const BASE_NAV_ITEMS = [
     label: "Privacy requests",
     href: "/admin/privacy",
     icon: <PrivacyIcon fontSize="small" />,
+    exact: true,
     selfHostedOnly: false,
     privacyOnly: true,
+  },
+  {
+    label: "Privacy setup",
+    href: "/admin/privacy-setup",
+    icon: <PrivacySetupIcon fontSize="small" />,
+    selfHostedOnly: false,
+    privacyOnly: false,
   },
   {
     label: "Users",
@@ -147,7 +157,7 @@ type NavItem = (typeof BASE_NAV_ITEMS)[number];
 
 const NAV_GROUPS = [
   { label: "Manage", hrefs: ["/admin", "/admin/users"] },
-  { label: "Privacy", hrefs: ["/admin/privacy"] },
+  { label: "Privacy", hrefs: ["/admin/privacy", "/admin/privacy-setup"] },
   { label: "Platform", hrefs: ["/admin/integrations", "/admin/extensions"] },
   {
     label: "Operations",
@@ -173,6 +183,7 @@ function NavLink({
   item,
   active,
   sectionActive = false,
+  label = item.label,
 }: {
   item: NavItem;
   active: boolean;
@@ -183,6 +194,7 @@ function NavLink({
    * of stacking two identical pills.
    */
   sectionActive?: boolean;
+  label?: string;
 }) {
   // The leaf (Mui-selected) styling and the section-active styling are
   // mutually exclusive — `selected` flips MUI's filled background, which is
@@ -215,7 +227,7 @@ function NavLink({
       >
         <ListItemIcon sx={{ minWidth: 34, color: "inherit" }}>{item.icon}</ListItemIcon>
         <ListItemText
-          primary={item.label}
+          primary={label}
           slotProps={{
             primary: {
               sx: { fontSize: 14, fontWeight: active || sectionActive ? 600 : 400 },
@@ -268,6 +280,7 @@ export function AdminSidebar({
   role = "admin",
 }: AdminSidebarProps) {
   const pathname = usePathname();
+  const privacySetup = useTranslations("privacySetup");
 
   const navItems = BASE_NAV_ITEMS.filter(
     (item) =>
@@ -344,7 +357,16 @@ export function AdminSidebar({
                   SERVICES_SUB_ITEMS.some(isSubActive);
                 return (
                   <Box key={item.href}>
-                    <NavLink item={item} active={isActive(item)} sectionActive={hasActiveChild} />
+                    <NavLink
+                      item={item}
+                      active={isActive(item)}
+                      sectionActive={hasActiveChild}
+                      label={
+                        item.href === "/admin/privacy-setup"
+                          ? privacySetup("navigationLabel")
+                          : item.label
+                      }
+                    />
                     {item.href === "/admin/services" && selfHosted && (
                       <Collapse in={servicesExpanded} timeout="auto" unmountOnExit>
                         <List dense disablePadding>

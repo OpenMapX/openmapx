@@ -50,6 +50,13 @@ describe("requireAdmin — session enforcement", () => {
     );
   });
 
+  it("rejects a privacy administrator from general admin settings", async () => {
+    getSession.mockResolvedValue({ user: { role: "privacy_admin" } } as never);
+    await expect(requireAdmin(fakeRequest({ remoteAddress: "203.0.113.9" }))).rejects.toMatchObject(
+      { statusCode: 403 },
+    );
+  });
+
   it("resolves with the session for an admin role", async () => {
     const session = { user: { role: "admin", id: "admin-1" } };
     getSession.mockResolvedValue(session as never);

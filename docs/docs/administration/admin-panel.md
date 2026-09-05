@@ -160,6 +160,18 @@ Settings can be exported and re-imported as JSON (secrets excluded). For how the
 cascade and `infra/docker/.env` fit together, see
 [Configuration](../install/configuration.md).
 
+### Privacy setup
+
+Full administrators can open **Privacy setup** (`/admin/privacy-setup`) to
+configure controller details, email, retention and privacy sources using the
+same settings editor. The readiness checklist links failed checks to their
+settings or operational tools. Independent reviewers record their decisions
+against the current evidence version; a changed version requires a fresh
+review. Privacy administrators can handle cases and inspect readiness, while
+deployment settings remain restricted to full administrators. See
+[Data-subject requests](./data-subject-requests.md) for the setup and release
+requirements.
+
 ## CLI coverage and deliberate exclusions
 
 The panel covers the routine operator workflows while keeping development-only

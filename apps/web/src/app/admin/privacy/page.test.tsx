@@ -96,7 +96,13 @@ function installFetch() {
           ready: false,
           checkedAt: "2026-09-05T00:00:00.000Z",
           evidenceVersion: "v1",
-          checks: [],
+          checks: [
+            {
+              id: "controller-contact",
+              status: "fail",
+              detailCode: "controller-contact-missing",
+            },
+          ],
         }),
       );
     if (url.endsWith("/privacy/admin/backups")) return Promise.resolve(json({ backups: [] }));
@@ -187,5 +193,17 @@ describe("privacy admin case selection", () => {
     expect(
       screen.getByRole("button", { name: "privacyAdmin.sendIdentityChallenge" }),
     ).toBeInTheDocument();
+  });
+
+  it("gives privacy operators translated readiness guidance without a settings redirect", async () => {
+    installFetch();
+    render(<PrivacyAdminPage />);
+
+    expect(
+      await screen.findByText("privacySetup.readiness.checks.controller-contact.title"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("privacySetup.readiness.contactFullAdmin")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: /controller-contact/ })).not.toBeInTheDocument();
+    expect(screen.queryByText("controller-contact")).not.toBeInTheDocument();
   });
 });

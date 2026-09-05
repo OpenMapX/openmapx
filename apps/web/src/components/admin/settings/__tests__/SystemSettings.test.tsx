@@ -1,7 +1,15 @@
 // @vitest-environment jsdom
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { createQueryWrapper, render, screen } from "@/test";
+import {
+  act,
+  createQueryWrapper,
+  createTestQueryClient,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@/test";
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
   useEnv: () => ({ apiUrl: "http://test.local" }),
@@ -105,5 +113,227 @@ describe("SystemSettings env-override handling", () => {
     const input = (await screen.findByLabelText("Password")) as HTMLInputElement;
     expect(input.disabled).toBe(true);
     expect(input.value).not.toBe("***");
+  });
+});
+
+describe("SystemSettings focused sections", () => {
+  it("renders only the settings selected for a setup section", async () => {
+    mockGroup("Legal", [
+      {
+        group: "legal",
+        key: "legalControllerName",
+        label: "Controller name",
+        type: "string",
+        secret: false,
+        value: "Example GmbH",
+        source: "database",
+        envOverride: false,
+      },
+      {
+        group: "legal",
+        key: "legalExportArtifactRetentionHours",
+        label: "Artifact retention",
+        type: "number",
+        secret: false,
+        value: 168,
+        source: "default",
+        envOverride: false,
+      },
+    ]);
+
+    render(
+      <SystemSettings
+        sections={[
+          {
+            id: "operator",
+            groupId: "general",
+            settingKeys: ["legalControllerName"],
+            label: "Operator details",
+            description: "Published controller facts",
+            defaultExpanded: true,
+          },
+        ]}
+        showHeader={false}
+        showTransfer={false}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+
+    await screen.findByRole("heading", { name: /Operator details/ });
+    expect(screen.getByLabelText("Controller name")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Artifact retention")).not.toBeInTheDocument();
+  });
+
+  it("blocks saving malformed JSON source declarations", async () => {
+    mockGroup("Legal", [
+      {
+        group: "legal",
+        key: "legalPrivacySources",
+        label: "Privacy sources",
+        type: "object",
+        secret: false,
+        value: [],
+        source: "default",
+        envOverride: false,
+      },
+    ]);
+
+    render(<SystemSettings />, { wrapper: createQueryWrapper() });
+
+    const input = await screen.findByLabelText("Privacy sources");
+    fireEvent.change(input, { target: { value: "[{" } });
+
+    expect(screen.getByText("Enter valid JSON.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save Legal" })).toBeDisabled();
+  });
+
+  it("keeps the editor visible and reports a failed save", async () => {
+    mockGroup("Legal", [
+      {
+        group: "legal",
+        key: "legalControllerName",
+        label: "Controller name",
+        type: "string",
+        secret: false,
+        value: "",
+        source: "default",
+        envOverride: false,
+      },
+    ]);
+    let requestCount = 0;
+    fetchMock.mockImplementation(() => {
+      requestCount += 1;
+      return Promise.resolve(
+        requestCount === 1
+          ? {
+              ok: true,
+              json: async () => ({
+                groups: [
+                  {
+                    id: "general",
+                    label: "Legal",
+                    settings: [
+                      {
+                        group: "legal",
+                        key: "legalControllerName",
+                        label: "Controller name",
+                        type: "string",
+                        secret: false,
+                        value: "",
+                        source: "default",
+                        envOverride: false,
+                      },
+                    ],
+                  },
+                ],
+              }),
+            }
+          : { ok: false, json: async () => ({ error: "invalid" }) },
+      );
+    });
+
+    render(<SystemSettings />, { wrapper: createQueryWrapper() });
+    const input = await screen.findByLabelText("Controller name");
+    fireEvent.change(input, { target: { value: "Example GmbH" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save Legal" }));
+
+    await waitFor(() => expect(screen.getByText("Failed to save")).toBeInTheDocument());
+    expect(screen.getByDisplayValue("Example GmbH")).toBeInTheDocument();
+  });
+
+  it("keeps a JSON draft and its parsed value together across unrelated rerenders", async () => {
+    mockGroup("Legal", [
+      {
+        group: "legal",
+        key: "legalPrivacySources",
+        label: "Privacy sources",
+        type: "object",
+        secret: false,
+        value: [],
+        source: "default",
+        envOverride: false,
+      },
+    ]);
+    const view = render(
+      <SystemSettings
+        sections={[
+          { id: "operator", groupId: "general", label: "Operator", defaultExpanded: true },
+        ]}
+        settingText={(setting) => ({ label: setting.label })}
+      />,
+      { wrapper: createQueryWrapper() },
+    );
+    const source = '[{"title":"Regulator","url":"https://example.test/privacy"}]';
+
+    fireEvent.change(await screen.findByLabelText("Privacy sources"), {
+      target: { value: source },
+    });
+    view.rerender(
+      <SystemSettings
+        sections={[
+          { id: "operator", groupId: "general", label: "Operator", defaultExpanded: true },
+        ]}
+        settingText={(setting) => ({ label: setting.label })}
+      />,
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Operator" }));
+
+    await waitFor(() =>
+      expect(
+        fetchMock.mock.calls.some(([, init]) => {
+          if ((init as RequestInit | undefined)?.method !== "PATCH") return false;
+          const body = JSON.parse(String((init as RequestInit).body)) as Record<string, unknown>;
+          return JSON.stringify(body.legalPrivacySources) === source;
+        }),
+      ).toBe(true),
+    );
+    expect(screen.getByLabelText("Privacy sources")).toHaveValue(source);
+  });
+
+  it("updates a JSON draft when refreshed server data actually changes", async () => {
+    mockGroup("Legal", [
+      {
+        group: "legal",
+        key: "legalPrivacySources",
+        label: "Privacy sources",
+        type: "object",
+        secret: false,
+        value: [],
+        source: "default",
+        envOverride: false,
+      },
+    ]);
+    const client = createTestQueryClient();
+    render(<SystemSettings />, { wrapper: createQueryWrapper(client) });
+    await screen.findByLabelText("Privacy sources");
+
+    act(() => {
+      client.setQueryData(["admin", "settings"], {
+        groups: [
+          {
+            id: "general",
+            label: "Legal",
+            settings: [
+              {
+                group: "legal",
+                key: "legalPrivacySources",
+                label: "Privacy sources",
+                type: "object",
+                secret: false,
+                value: [{ title: "Updated source" }],
+                source: "database",
+                envOverride: false,
+              },
+            ],
+          },
+        ],
+      });
+    });
+
+    await waitFor(() =>
+      expect(screen.getByLabelText("Privacy sources")).toHaveValue(
+        JSON.stringify([{ title: "Updated source" }], null, 2),
+      ),
+    );
   });
 });

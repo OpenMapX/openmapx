@@ -392,3 +392,76 @@ Matching validation evidence was regenerated. Earlier fingerprints in this
 report describe previous review checkpoints and must not be used for this
 source. These changes remain uncommitted on `main`; no deployed data was
 converted or removed and nothing was pushed.
+
+## Deployment setup — 2026-09-05
+
+The setup follow-up is based on `0c315c63` on `main`. The earlier uncommitted
+checkpoint descriptions above refer to their original review dates; the export
+and erasure work was subsequently committed. This section records the new
+setup changes separately.
+
+Official release publication now carries validator-produced evidence from the
+same gated checkout as the image builds, together with the immutable backup
+collector reference. Release activation provisions the collector and publishes
+content-addressed evidence before switching the Compose overlay. Retained
+files preserve rollback references, and file-backed read-only mounts also work
+with a read-only API root filesystem. CLI provisioning creates an empty private
+backup inventory directory on a fresh host.
+
+Full administrators use `/admin/privacy-setup` to configure operator details,
+email delivery, retention and declared sources, inspect translated readiness
+checks, and record attributable reviews through the existing approval endpoint.
+Privacy administrators retain their casework permissions and receive guidance
+to contact a full administrator for deployment settings. Operator facts saved
+in the database feed public legal pages and export reports; environment
+settings retain precedence.
+
+The setup does not supply implementation-owner identities, assert that
+operator-managed backups exclude artifacts, send test email automatically or
+approve a release. Current independent reviews and runtime readiness remain
+required before generation. No legacy format or migration path was added.
+
+The independent review identified and resolved two UI issues: readiness refreshes
+could reset unsaved settings, and entered review decisions could follow a new
+evidence version. Drafts now reset only when effective server settings change;
+review fields and submission intent clear when evidence changes. The reviewer
+reran the focused regressions and found no remaining blocker in that recheck.
+
+Verification for this setup checkpoint:
+
+| Check | Result |
+| --- | --- |
+| Final full Vitest run | 1,424 files and 14,975 tests passed; 24 files and 106 tests skipped |
+| Documentation build and final whitespace check | Passed |
+| Combined backend/settings/release integration checks | 142 tests passed; 4 platform-specific tests skipped |
+| Final release publication, rollback and provisioning checks | 85 tests passed; 4 platform-specific tests skipped |
+| Privacy API regressions | 179 tests passed; 37 database/fixture-dependent tests skipped |
+| Final UI slice and static URL guard | 26 tests passed |
+| Independent UI finding recheck | 14 tests passed |
+| Repository type checking | All 29 tasks passed |
+| Changed-file Biome | Passed; one existing informational template-style diagnostic |
+| Release validation | Passed: 0 translation errors, policy checks and 368-operation OpenAPI document |
+| Production API image | Built successfully; embedded fingerprint matches current source and generated evidence |
+| Runtime smoke checks | Non-root, read-only evidence mount and root filesystem; shared German translator resolves without fallback |
+
+The source fingerprint is
+`ae0a17675ab6af4f04f5a6acb2551662011e3e8dee1e2a02852e831a9db2a7ae`.
+It supersedes earlier fingerprints in this report for the current source.
+The first broad test run found only the static URL guard's missing entry for
+the new fixed internal readiness links. That narrowly documented guard entry
+was added and the guard plus the UI slice passed; no production source was
+changed to satisfy the guard.
+
+The disposable runtime probe containers and API build tag were removed.
+Existing user containers were untouched. These changes are uncommitted on
+`main`; no release was published, approval recorded, email sent or Git change
+pushed.
+
+### Commit-time legal date update
+
+The staged legal-copy guard required advancing the privacy and terms dates in
+both languages to September 5, 2026. This date-only follow-up supersedes the
+setup checkpoint source fingerprint above with `26b888904ef78962d8ab1e8fe5b4c5270ee395d456c749ca7fe0bd9f4f142965`.
+Machine-validation evidence was regenerated for these final bytes. The full
+suite and production-image checks above describe the preceding setup checkpoint;
+the commit hooks additionally validate the final legal dates and source.

@@ -89,7 +89,12 @@ COPY apps/api/ apps/api/
 # input is removed.
 COPY apps/ops-agent/src/ apps/ops-agent/src/
 COPY apps/ops-agent/Dockerfile apps/ops-agent/package.json apps/ops-agent/tsconfig.json apps/ops-agent/tsconfig.build.json apps/ops-agent/
-COPY apps/web/src/app/(legal)/privacy/ apps/web/src/app/(legal)/privacy/
+COPY .github/workflows/docker.yml .github/workflows/docker.yml
+COPY apps/web/src/app/(legal)/ apps/web/src/app/(legal)/
+COPY apps/web/src/app/admin/(full-admin)/privacy-setup/ apps/web/src/app/admin/(full-admin)/privacy-setup/
+COPY apps/web/src/components/admin/settings/ apps/web/src/components/admin/settings/
+COPY apps/web/src/components/admin/privacy/ apps/web/src/components/admin/privacy/
+COPY apps/web/src/components/admin/AdminSidebar.tsx apps/web/src/components/admin/AdminSidebar.tsx
 COPY apps/web/src/app/admin/privacy/ apps/web/src/app/admin/privacy/
 COPY apps/web/src/app/auth/privacy/ apps/web/src/app/auth/privacy/
 COPY apps/web/src/app/settings/privacy/ apps/web/src/app/settings/privacy/

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
@@ -11,7 +11,7 @@ const {
   RELEASE_PINNED_SERVICE_IDS,
   parseReleaseManifest,
   releaseChannel,
-  renderReleaseCompose,
+  writeReleaseComposeArtifacts,
 } = coreServices;
 
 export type ReleaseManifest = coreServices.ReleaseManifest;
@@ -58,7 +58,12 @@ export async function resolveReleaseManifest(
       await docker(["cp", `${containerId}:${RELEASE_MANIFEST_CONTAINER_PATH}`, manifestPath]),
       "docker cp release-manifest.json",
     );
-    return parseReleaseManifest(readFileSync(manifestPath, "utf8"));
+    const manifest = parseReleaseManifest(readFileSync(manifestPath, "utf8"));
+    expectOk(
+      await docker(["pull", manifest.images["privacy-backup"]]),
+      `docker pull ${manifest.images["privacy-backup"]}`,
+    );
+    return manifest;
   } finally {
     await docker(["rm", "-f", containerId]).catch(() => undefined);
     rmSync(temp, { recursive: true, force: true });
@@ -70,10 +75,7 @@ export function writeReleaseOverlay(
   manifest: ReleaseManifest,
   path = repoPaths().composeReleasePath,
 ) {
-  const temporary = `${path}.tmp-${process.pid}`;
-  writeFileSync(temporary, renderReleaseCompose(manifest), { encoding: "utf8", mode: 0o600 });
-  renameSync(temporary, path);
-  return path;
+  return writeReleaseComposeArtifacts(manifest, path).overlayPath;
 }
 
 export function touchesReleasePinnedServices(serviceIds: readonly string[]): boolean {

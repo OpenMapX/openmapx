@@ -56,7 +56,7 @@ describe("Docker release trust gate", () => {
 
   it("publishes immutable image tags before advancing the complete release pointer", () => {
     expect(release).toMatch(/^ {2}promote:\n/m);
-    expect(release).toContain("needs: [gate, build]");
+    expect(release).toContain("needs: [gate, build, validate-privacy-release]");
     expect(release).toContain("RELEASE_MANIFEST_IMAGE");
     expect(release).toContain("release-manifest.json");
     expect(release).toContain("docker buildx imagetools create");
@@ -111,6 +111,21 @@ describe("Docker release trust gate", () => {
         mkdirSync(digestDir, { recursive: true });
         writeFileSync(join(digestDir, "a".repeat(64)), "");
       }
+      const privacyEvidence = {
+        version: 1,
+        sourceBuildFingerprint: "b".repeat(64),
+        validatedAt: "2026-09-05T12:00:00.000Z",
+        checks: {
+          translationsConsistent: true,
+          openApiConsistent: true,
+          policyConsistent: true,
+        },
+      };
+      mkdirSync(join(temp, "privacy-release-validation"));
+      writeFileSync(
+        join(temp, "privacy-release-validation", "privacy-release-validation.json"),
+        `${JSON.stringify(privacyEvidence, null, 2)}\n`,
+      );
       const docker = join(bin, "docker");
       writeFileSync(
         docker,
@@ -148,6 +163,7 @@ describe("Docker release trust gate", () => {
           "transitous-tools": `example.invalid/openmapx/transitous-tools@sha256:${"a".repeat(64)}`,
           docs: `example.invalid/openmapx/docs@sha256:${"a".repeat(64)}`,
         },
+        privacyReleaseValidation: privacyEvidence,
       });
     } finally {
       rmSync(temp, { recursive: true, force: true });
@@ -215,5 +231,24 @@ describe("Docker release trust gate", () => {
     expect(ci).toContain(
       'privacy-backup) echo "context=." >> "$GITHUB_OUTPUT"; echo "dockerfile=services/ops-agent/privacy-backup/Dockerfile"',
     );
+  });
+
+  it("gates promotion on exact-checkout privacy validation evidence from the same run", () => {
+    expect(release).toMatch(/^ {2}validate-privacy-release:\n/m);
+    expect(release).toContain("ref: $" + "{{ needs.gate.outputs.sha }}");
+    expect(release).toContain(
+      'pnpm validate:privacy-release "$RUNNER_TEMP/privacy-release-validation.json"',
+    );
+    expect(release).toContain(
+      "privacy-release-validation-$" +
+        "{{ needs.gate.outputs.sha }}-$" +
+        "{{ github.run_id }}-$" +
+        "{{ github.run_attempt }}",
+    );
+    const validation = release.indexOf("pnpm validate:privacy-release");
+    const releasePointer = release.indexOf('"$' + '{RELEASE_MANIFEST_IMAGE}:latest"');
+    expect(validation).toBeGreaterThan(-1);
+    expect(validation).toBeLessThan(releasePointer);
+    expect(release).toContain("cat privacy-release-validation/privacy-release-validation.json");
   });
 });

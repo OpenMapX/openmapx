@@ -8,6 +8,17 @@ describe("privacy source fingerprint", () => {
   it("covers deployed API, workspace, collectors, permissions, schemas and legal copy", async () => {
     const root = await mkdtemp(join(tmpdir(), "openmapx-privacy-fingerprint-"));
     const paths = [
+      ".github/workflows/docker.yml",
+      "apps/api/src/routes/admin-settings.ts",
+      "apps/api/src/utils/settings-resolution.ts",
+      "packages/cli/src/lib/release.ts",
+      "packages/core/src/api/server.ts",
+      "packages/core/src/api/legal-config.ts",
+      "apps/web/src/app/admin/(full-admin)/privacy-setup/page.tsx",
+      "apps/web/src/components/admin/settings/SystemSettings.tsx",
+      "apps/web/src/components/admin/privacy/PrivacyReadinessChecklist.tsx",
+      "apps/web/src/components/admin/AdminSidebar.tsx",
+      "apps/web/src/app/(legal)/imprint/page.tsx",
       "apps/api/esbuild.config.mjs",
       "apps/api/Dockerfile",
       "apps/api/package.json",

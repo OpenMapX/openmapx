@@ -1,4 +1,5 @@
 import { sectionSlug } from "@openmapx/core/legal";
+import { fetchLegalConfig } from "@openmapx/core/server-api";
 import type { Metadata } from "next";
 import { getLocale, getTranslations } from "next-intl/server";
 import { LegalPageShell, type LegalSection } from "@/components/legal/LegalPageShell";
@@ -40,10 +41,11 @@ export default async function ImprintPage() {
     locale === "de"
       ? (await import("./content.de")).default
       : (await import("./content.en")).default;
+  const legal = await fetchLegalConfig();
 
   return (
     <LegalPageShell sections={sections}>
-      <Content />
+      <Content legal={legal} />
     </LegalPageShell>
   );
 }
