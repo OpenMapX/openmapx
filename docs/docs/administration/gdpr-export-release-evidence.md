@@ -30,8 +30,8 @@ revision and generated evidence version before recording an approval:
 
 An image, application commit, schema relation, collector contract, catalogue
 copy, legal setting or archive schema change invalidates the previous evidence
-and requires a new review. A legacy size-only backup manifest is disaster-
-recovery input only; it is never evidence for privacy extraction.
+and requires a new review. Only current format-2 backup manifests are accepted for restore and privacy
+extraction; size-only manifests are unsupported.
 
 ## Automated evidence
 
@@ -219,8 +219,7 @@ The production image includes the shared i18n package and its production
 dependencies. A runtime smoke check verifies German translation resolution
 inside the non-root, read-only image with networking disabled.
 
-The dedicated key file now supports a bounded versioned ring and the legacy
-single-key format. It requires exact `0400` permissions and the configured UID;
+The dedicated key file uses a bounded versioned JSON ring. It requires exact `0400` permissions and the configured UID;
 group/world-readable files are rejected. New writes use the active key version,
 while retained versions can decrypt authorized old material. Readiness compares
 the on-disk ring with the running ring and reports only version numbers.
@@ -283,3 +282,113 @@ All review changes remain uncommitted on `main`. No worktree, staging, commit,
 push, production notification or deployment approval was performed. The
 disposable verification database/container volume and the root-owned API build
 tag were removed after verification.
+
+
+## Restore-erasure alignment — 2026-09-05
+
+A subsequent review of the preceding erasure implementation found that a valid
+but incorrect journal key silently matched no erased accounts. It also found
+that restore used older verification cleanup rules and did not reconcile the
+new privacy artifacts. This follow-up supersedes the earlier restore-safety
+assessment for those paths.
+
+The v2 erasure journal binds its coverage timestamp to the key with a
+domain-separated HMAC. Initialization, reads, appends, completion and compaction
+validate the binding. Restore checks it before changing data and again after
+isolating the API, including when no users exist. Only the current bound journal format is accepted. There is no legacy
+migration or operator-recovery path. Compaction advances the authenticated coverage floor when
+old requests are discarded, preventing a later retention increase from
+re-enabling unsafe older backups.
+
+Restore and live erasure share terminal-case and exact verification-identity
+rules. Restored terminal artifacts are revoked and their attachments and
+snapshots expired; wrapped keys remain pending monitored physical deletion.
+Active cases retain their workflow state and minimized encrypted material,
+while account-state metadata and request versions reflect account deletion.
+The private export volume cannot be restored through backup archives.
+
+Replay sends escaped COPY data through PostgreSQL standard input, excludes
+subject identifiers from process arguments and suppresses potentially personal
+replay diagnostics. It runs after all selected archives are restored and before
+the API resumes. For a service with both database and filesystem backups, the
+database is restarted and checked with bounded probes before replay. A replay
+failure leaves the API stopped. The independent reviewer identified this
+mixed-volume ordering issue; it was fixed and rechecked with no remaining
+important finding in the bounded review.
+
+The real restore fixture uses an isolated pinned PostGIS Compose project, all
+production API migrations, actual pg_dump/restore, real encrypted storage and
+an API sentinel. Six scenarios passed: erasure and cleanup parity; wrong-key
+rejection with no users; identifiers containing COPY/SQL metacharacters; mixed
+database/filesystem restore; rejection of an unsupported schema; and replay
+failure preserving API isolation. Failed/missing/unsafe physical storage is
+also exercised before successful cleanup. CI now runs this fixture in the
+database job.
+
+Verification for the follow-up:
+
+| Check | Result |
+| --- | --- |
+| Migrated PostgreSQL suite | 19 files, 85 tests passed |
+| Actual Docker/Compose restore fixture | 6 tests passed |
+| Final affected unit/contract suites | 7 files, 121 tests passed |
+| Changed-file formatting/lint and documentation build | Passed |
+| Final CLI backup unit suite | 70 tests passed |
+| Journal, Compose and API key-validation tests | 44 focused tests passed |
+| Repository type checking | All 29 tasks passed; final CLI fixture types also passed |
+| CI database wiring contract | 2 tests passed |
+| Release validation | Translation, policy and OpenAPI validators passed |
+
+The broad unit run passed 14,916 tests and reported one mixed-volume test
+assertion from before the final readiness arguments were updated. The corrected
+CLI suite passed all 70 tests, followed by the final seven-file run above.
+An earlier resource-contention timeout in the unrelated trusted-configuration
+suite passed on isolation (18 tests) and did not recur in the broader run with
+four workers. No test implementation was weakened to bypass a runtime failure.
+
+The new source fingerprint is
+`6d1227dec7d071325a0e706c06b66007869fa64b15eb8a7b66355ba4910d3ea9`.
+Matching machine evidence was regenerated. Earlier implementation approvals
+and evidence must not be reused for these changed source bytes. Human review
+and deployment prerequisites remain as documented above.
+
+These follow-up changes are uncommitted on top of `2f4078d5` on `main`.
+No production data, production journal, deployment approval or remote Git
+reference was changed.
+
+The disposable verification database and every fixture Compose container and
+volume were removed after testing. Existing user containers were untouched.
+
+
+## Current formats only — 2026-09-05
+
+The operator confirmed that no OpenMapX instances have been deployed. The
+feature therefore has no backward-compatibility or migration workflow for
+pre-release data. Journal versions other than the current bound format use
+ordinary validation errors; the special recovery branch and runbook were
+removed. Managed export-key files always contain the bounded JSON ring,
+including initial provisioning. The explicit development environment-variable
+key option remains a supported configuration mode.
+
+Only format-2 backup manifests with digests and mode-specific metadata are
+accepted by the CLI, operations agent and privacy review contracts. The
+current-schema replay SQL no longer has optional-table compatibility branches.
+An incomplete schema causes rollback and leaves the API stopped. Corrupt
+inventory entries can still be reported as diagnostics; they cannot be used
+for extraction or restore.
+
+Final verification after removal:
+
+| Check | Result |
+| --- | --- |
+| Affected journal, key, backup and contract unit suites | 8 files, 191 tests passed; 4 Linux-only tests skipped on macOS |
+| Real Docker/PostgreSQL restore suite | 6 tests passed, including unsupported-schema rejection |
+| Repository type checking | All 29 tasks passed |
+| Release validation | Translation, policy and OpenAPI checks passed; 368 operations |
+
+The current source fingerprint is
+`cd0a7c4e850008885b2fe290e77eda54d125a480544bc136891f51caacae24ea`.
+Matching validation evidence was regenerated. Earlier fingerprints in this
+report describe previous review checkpoints and must not be used for this
+source. These changes remain uncommitted on `main`; no deployed data was
+converted or removed and nothing was pushed.

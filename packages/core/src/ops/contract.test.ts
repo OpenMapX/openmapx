@@ -250,8 +250,20 @@ describe("ops contract", () => {
           backupId: "nightly-20260823",
           createdAt: "2026-08-23T18:00:00.000Z",
           platformVersion: "1.0.0",
-          serviceCount: 3,
-          volumeCount: 4,
+          manifestDigest: "f".repeat(64),
+          formatVersion: 2,
+          verified: true,
+          volumes: [
+            {
+              serviceId: "postgis",
+              volumeId: "db",
+              mode: "pg_dump",
+              sizeBytes: 42,
+              sha256: "a".repeat(64),
+            },
+          ],
+          serviceCount: 1,
+          volumeCount: 1,
           totalBytes: 42,
         },
         {
@@ -273,6 +285,20 @@ describe("ops contract", () => {
         root: "/host/secret/path",
       }),
     ).toThrow();
+    for (const invalidEntry of [
+      { ...inventory.backups[0], formatVersion: 1 },
+      { ...inventory.backups[0], formatVersion: undefined },
+      { ...inventory.backups[0], verified: undefined },
+      { ...inventory.backups[0], manifestDigest: undefined },
+      {
+        ...inventory.backups[0],
+        volumes: [{ ...inventory.backups[0]?.volumes?.[0], sha256: null }],
+      },
+    ]) {
+      expect(() =>
+        parseOpsResult("backup.list", { backups: [invalidEntry], warningCount: 0 }),
+      ).toThrow();
+    }
   });
 
   it("binds the system-update backup option without accepting an implicit path", () => {

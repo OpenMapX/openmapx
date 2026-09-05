@@ -13,6 +13,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { readErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { renderComposeForRepo, rotateRedisPasswordForRepo } from "../src/commands/compose";
@@ -90,6 +91,21 @@ describe("renderComposeForRepo", () => {
     const queue = lstatSync(join(tmp, "infra", "docker", "data", "ops-agent", "trusted-config"));
     expect(queue.isDirectory()).toBe(true);
     expect(queue.mode & 0o777).toBe(0o700);
+  });
+
+  it("binds the initialized erasure journal to the generated journal key", async () => {
+    writeManifest("alpha", { ...baseManifest, id: "alpha" });
+
+    await renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] });
+
+    const dockerDir = join(tmp, "infra", "docker");
+    const key = Buffer.from(
+      readFileSync(join(dockerDir, "secrets", "erasure-journal-key"), "utf8"),
+      "base64url",
+    );
+    expect(() =>
+      readErasureJournal(join(dockerDir, "data", "erasure", "journal.jsonl"), key),
+    ).not.toThrow();
   });
 
   it("defaults to the small core service selection", async () => {

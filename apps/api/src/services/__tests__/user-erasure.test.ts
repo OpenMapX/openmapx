@@ -1,5 +1,10 @@
+import { mkdtempSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
-import { createUserErasureHooks } from "../user-erasure";
+import { createUserErasureHooks, readJournalKey } from "../user-erasure";
+
+const CURRENT_UID = process.geteuid?.() ?? process.getuid?.() ?? 0;
 
 describe("user erasure hooks", () => {
   it("durably records the request before cleaning residual records and records completion", async () => {
@@ -68,5 +73,37 @@ describe("user erasure hooks", () => {
     const user = { id: "user-1", email: "person@example.test" };
     await hooks.before(user);
     await expect(hooks.after(user)).resolves.toBeUndefined();
+  });
+});
+
+describe("erasure journal key loading", () => {
+  it("requires the configured 0444 key to have the deployment owner", () => {
+    const directory = mkdtempSync(join(tmpdir(), "openmapx-api-erasure-key-"));
+    const path = join(directory, "key");
+    const key = Buffer.alloc(32, 17);
+    writeFileSync(path, key.toString("base64url"), { mode: 0o444 });
+
+    expect(
+      readJournalKey({
+        ERASURE_JOURNAL_KEY_FILE: path,
+        ERASURE_JOURNAL_KEY_UID: String(CURRENT_UID),
+      }),
+    ).toEqual(key);
+    expect(() =>
+      readJournalKey({
+        ERASURE_JOURNAL_KEY_FILE: path,
+        ERASURE_JOURNAL_KEY_UID: String(CURRENT_UID + 1),
+      }),
+    ).toThrow(/unexpected owner/i);
+  });
+
+  it("rejects a missing or invalid journal key owner setting", () => {
+    expect(() => readJournalKey({})).toThrow(/KEY_FILE is required/);
+    expect(() =>
+      readJournalKey({
+        ERASURE_JOURNAL_KEY_FILE: "/unused",
+        ERASURE_JOURNAL_KEY_UID: "not-a-uid",
+      }),
+    ).toThrow(/owner UID is invalid/i);
   });
 });

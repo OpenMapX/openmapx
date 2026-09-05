@@ -1,7 +1,14 @@
-import { readFileSync } from "node:fs";
 import { lstat, rm } from "node:fs/promises";
 import { isAbsolute, relative, resolve } from "node:path";
-import { appendErasureCompleted, appendErasureRequest } from "@openmapx/core/erasure-journal";
+import {
+  erasureVerificationIdentifiers,
+  isTerminalPrivacyRequestState,
+} from "@openmapx/core/erasure-cleanup";
+import {
+  appendErasureCompleted,
+  appendErasureRequest,
+  readErasureJournalKeyFile,
+} from "@openmapx/core/erasure-journal";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db } from "../db";
 import {
@@ -65,18 +72,18 @@ export function createUserErasureHooks(dependencies: UserErasureDependencies): {
   };
 }
 
-function readJournalKey(): Buffer {
-  const path = process.env.ERASURE_JOURNAL_KEY_FILE?.trim();
+export function readJournalKey(env: NodeJS.ProcessEnv = process.env): Buffer {
+  const path = env.ERASURE_JOURNAL_KEY_FILE?.trim();
   if (!path) throw new Error("ERASURE_JOURNAL_KEY_FILE is required for account deletion");
-  const encoded = readFileSync(path, "utf8");
-  if (!/^[A-Za-z0-9_-]{43}$/.test(encoded)) {
-    throw new Error("Erasure journal key is not canonical base64url");
+  const configuredUid = env.ERASURE_JOURNAL_KEY_UID?.trim();
+  if (!configuredUid || !/^\d+$/.test(configuredUid)) {
+    throw new Error("Erasure journal key owner UID is invalid");
   }
-  const key = Buffer.from(encoded, "base64url");
-  if (key.byteLength !== 32 || key.toString("base64url") !== encoded) {
-    throw new Error("Erasure journal key must contain exactly 32 bytes");
+  const expectedUid = Number(configuredUid);
+  if (!Number.isSafeInteger(expectedUid) || expectedUid < 0) {
+    throw new Error("Erasure journal key owner UID is invalid");
   }
-  return key;
+  return readErasureJournalKeyFile(path, expectedUid);
 }
 
 function journalPath(): string {
@@ -99,12 +106,7 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
   const requestIds = requests.map((row) => row.id);
   const retainedActiveRequestIds = new Set(
     requests
-      .filter(
-        (request) =>
-          !["delivered", "artifact_expired", "withdrawn", "refused", "closed"].includes(
-            request.state,
-          ),
-      )
+      .filter((request) => !isTerminalPrivacyRequestState(request.state))
       .map((request) => request.id),
   );
   const deletionRequestIds = requestIds.filter((id) => !retainedActiveRequestIds.has(id));
@@ -190,12 +192,27 @@ export async function cleanupResidualUserData(user: ErasureUser): Promise<void> 
       }
     });
   }
+  const [emailIdentifier, changeEmailIdentifier] = erasureVerificationIdentifiers(user);
+  const accountErasedAt = new Date();
   await db.transaction(async (tx) => {
+    await tx
+      .update(dataSubjectRequest)
+      .set({
+        accountState: "deleted",
+        version: sql`${dataSubjectRequest.version} + 1`,
+        updatedAt: accountErasedAt,
+      })
+      .where(
+        and(
+          eq(dataSubjectRequest.userId, user.id),
+          sql`${dataSubjectRequest.accountState} <> 'deleted'`,
+        ),
+      );
     await tx.execute(sql`
       DELETE FROM verification
       WHERE value = ${user.id}
-         OR lower(identifier) = lower(${user.email})
-         OR lower(identifier) = lower(${`change-email:${user.id}:${user.email}`})
+         OR lower(identifier) = lower(${emailIdentifier})
+         OR lower(identifier) = lower(${changeEmailIdentifier})
     `);
     await tx.execute(sql`
       UPDATE system_settings SET updated_by = NULL WHERE updated_by = ${user.id}
@@ -287,5 +304,5 @@ async function deletePrivacyCiphertext(storageKey: string): Promise<void> {
 export const userErasureHooks = createUserErasureHooks({
   request: async (userId) => appendErasureRequest(journalPath(), readJournalKey(), userId),
   cleanup: cleanupResidualUserData,
-  complete: async (receiptId) => appendErasureCompleted(journalPath(), receiptId),
+  complete: async (receiptId) => appendErasureCompleted(journalPath(), readJournalKey(), receiptId),
 });

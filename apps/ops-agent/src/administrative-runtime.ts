@@ -126,7 +126,7 @@ export interface ParsedBackupManifest {
   name: string;
   createdAt: string;
   openmapxVersion: string;
-  formatVersion: 1 | 2;
+  formatVersion: 2;
   manifestDigest: string;
   services: Array<{
     id: string;
@@ -136,7 +136,7 @@ export interface ParsedBackupManifest {
       file: string;
       mode: "tar" | "pg_dump";
       sizeBytes: number;
-      sha256: string | null;
+      sha256: string;
     }>;
   }>;
   privacySourceProvenance?: {
@@ -308,8 +308,7 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
   ) {
     throw new Error("Backup authority rejected");
   }
-  const formatVersion = raw.formatVersion === undefined ? 1 : raw.formatVersion;
-  if (formatVersion !== 1 && formatVersion !== 2) throw new Error("Backup authority rejected");
+  if (raw.formatVersion !== 2) throw new Error("Backup authority rejected");
   const seenServices = new Set<string>();
   let volumeCount = 0;
   const services = raw.services.map((value) => {
@@ -344,26 +343,39 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
       const file = rawVolume.file;
       const mode = rawVolume.mode;
       const sha256 = rawVolume.sha256;
+      const resolvedName = rawVolume.resolvedName;
+      const postgresUser = rawVolume.postgresUser;
+      const postgresDb = rawVolume.postgresDb;
       if (typeof name !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,254}$/.test(name)) {
         throw new Error("Backup authority rejected");
       }
       if (mode !== "tar" && mode !== "pg_dump") throw new Error("Backup authority rejected");
-      const expectedFile = `${service.id}__${name}.${mode === "tar" ? "tar.gz" : "sql.gz"}`;
-      if (
-        file !== undefined &&
-        (typeof file !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(file))
-      )
+      if (typeof file !== "string" || !/^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$/.test(file))
         throw new Error("Backup authority rejected");
-      if (formatVersion === 2 && file === undefined) throw new Error("Backup authority rejected");
-      if (sha256 !== undefined && (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256))) {
+      if (typeof sha256 !== "string" || !/^[a-f0-9]{64}$/.test(sha256)) {
+        throw new Error("Backup authority rejected");
+      }
+      if (
+        mode === "tar" &&
+        (typeof resolvedName !== "string" || !/^[A-Za-z0-9][A-Za-z0-9_.-]*$/.test(resolvedName))
+      ) {
+        throw new Error("Backup authority rejected");
+      }
+      if (
+        mode === "pg_dump" &&
+        (typeof postgresUser !== "string" ||
+          !coreServices.isSafePostgresIdentifier(postgresUser) ||
+          typeof postgresDb !== "string" ||
+          !coreServices.isSafePostgresIdentifier(postgresDb))
+      ) {
         throw new Error("Backup authority rejected");
       }
       return {
         name,
-        file: typeof file === "string" ? file : expectedFile,
+        file,
         mode: mode as "tar" | "pg_dump",
         sizeBytes,
-        sha256: typeof sha256 === "string" ? sha256 : null,
+        sha256,
       };
     });
     return { id: service.id, version: service.version, volumes };
@@ -386,7 +398,7 @@ function parseManifest(rootDir: string, backupId: string): ParsedBackupManifest 
     name: backupId,
     createdAt: new Date(raw.createdAt).toISOString(),
     openmapxVersion: raw.openmapxVersion,
-    formatVersion,
+    formatVersion: 2,
     manifestDigest: createHash("sha256").update(contents).digest("hex"),
     services,
     ...(managed ? { privacySourceProvenance: { managedDawarich: managed } } : {}),
@@ -452,8 +464,7 @@ export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.li
         sha256: volume.sha256,
       })),
     );
-    let verified =
-      manifest.formatVersion === 2 && volumeDetails.every((volume) => volume.sha256 !== null);
+    let verified = true;
     if (verified) {
       for (const service of manifest.services) {
         for (const volume of service.volumes) {
@@ -464,7 +475,7 @@ export function inspectBackupInventory(rootDir: string): OpsResultFor<"backup.li
               {
                 maximumBytes: Number.MAX_SAFE_INTEGER,
                 expectedBytes: volume.sizeBytes,
-                expectedSha256: volume.sha256 ?? undefined,
+                expectedSha256: volume.sha256,
               },
             );
             if (measured.sizeBytes !== volume.sizeBytes || measured.sha256 !== volume.sha256)
@@ -511,13 +522,12 @@ export function readVerifiedPrivacyBackupInputs(
   assertBackupId(backupId);
   if (!/^[a-f0-9]{64}$/.test(expectedManifestDigest)) throw new Error("Backup authority rejected");
   const manifest = parseManifest(rootDir, backupId);
-  if (manifest.formatVersion !== 2 || manifest.manifestDigest !== expectedManifestDigest) {
+  if (manifest.manifestDigest !== expectedManifestDigest) {
     throw new Error("Backup authority rejected");
   }
   const inputs: VerifiedPrivacyBackupInput[] = [];
   for (const service of manifest.services) {
     for (const volume of service.volumes) {
-      if (!volume.sha256) throw new Error("Backup authority rejected");
       const measured = hashDescriptorAnchoredFile(
         rootDir,
         ["infra", "docker", "backups", backupId, volume.file],

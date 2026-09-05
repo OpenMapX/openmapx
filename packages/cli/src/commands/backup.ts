@@ -21,7 +21,16 @@ import {
 import { dirname, join, resolve } from "node:path";
 import { pipeline } from "node:stream/promises";
 import { createGzip } from "node:zlib";
-import { isErasedSubject, readErasureJournal } from "@openmapx/core/erasure-journal";
+import {
+  erasureVerificationIdentifiers,
+  TERMINAL_PRIVACY_REQUEST_STATES,
+} from "@openmapx/core/erasure-cleanup";
+import {
+  assertErasureJournalKey,
+  isErasedSubject,
+  readErasureJournal,
+  readErasureJournalKeyFile,
+} from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { PLATFORM_VERSION } from "@openmapx/integration-framework";
 import type { Command } from "commander";
@@ -29,7 +38,6 @@ import { execa } from "execa";
 import kleur from "kleur";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
-import { readPlatformSecretFile } from "../lib/platform-secret-files";
 import { applyServiceSelection } from "../lib/service-selection";
 
 const { ServiceRegistry, isSafePostgresIdentifier } = coreServices;
@@ -51,8 +59,7 @@ export interface BackupVolumeEntry {
   mode: BackupVolumeMode;
   file: string;
   sizeBytes: number;
-  /** Required for privacy extraction in manifest format 2. */
-  sha256?: string;
+  sha256: string;
   /**
    * Postgres credentials captured from the producer service's manifest at
    * backup time (`pg_dump`-mode entries only). Persisted so restore targets
@@ -70,8 +77,7 @@ export interface BackupServiceEntry {
 }
 
 export interface BackupManifest {
-  /** Format 1 is legacy size-only; new backups are format 2. */
-  formatVersion?: 1 | 2;
+  formatVersion: 2;
   name: string;
   createdAt: string;
   openmapxVersion: string;
@@ -219,7 +225,7 @@ export function readBackupManifest(filePath: string): BackupManifest {
   ) {
     throw new Error(`Malformed backup manifest at ${filePath}`);
   }
-  if (raw.formatVersion !== undefined && raw.formatVersion !== 1 && raw.formatVersion !== 2) {
+  if (raw.formatVersion !== 2) {
     throw new Error(`Malformed backup format version in ${filePath}`);
   }
   const managed = raw.privacySourceProvenance?.managedDawarich;
@@ -232,10 +238,6 @@ export function readBackupManifest(filePath: string): BackupManifest {
       managed.schemaContract !== "dawarich-1.10.3")
   )
     throw new Error(`Malformed Dawarich privacy provenance in ${filePath}`);
-  // Legacy manifests may contain a non-ISO creation marker; disaster-recovery
-  // callers retain their existing directory-age fallback. New manifests use
-  // an RFC3339 value, but strict timestamp validation belongs to the restore
-  // protection gate rather than this compatibility parser.
   if (!isValidBackupName(raw.name)) {
     throw new Error(`Malformed backup identity in ${filePath}`);
   }
@@ -254,8 +256,13 @@ export function readBackupManifest(filePath: string): BackupManifest {
       assertValidVolumeEntry(volume, filePath);
       if (files.has(volume.file)) throw new Error(`Duplicate backup file in ${filePath}`);
       files.add(volume.file);
-      if (raw.formatVersion === 2 && !volume.sha256)
-        throw new Error(`Missing backup digest in ${filePath}`);
+      if (!volume.sha256) throw new Error(`Missing backup digest in ${filePath}`);
+      if (volume.mode === "pg_dump" && (!volume.postgresUser || !volume.postgresDb)) {
+        throw new Error(`Missing postgres credentials in ${filePath}`);
+      }
+      if (volume.mode === "tar" && !volume.resolvedName) {
+        throw new Error(`Missing resolved docker volume name in ${filePath}`);
+      }
     }
   }
   return raw as BackupManifest;
@@ -268,10 +275,8 @@ export async function sha256File(filePath: string): Promise<string> {
   return hash.digest("hex");
 }
 
-/** Verify a v2 file's size and digest immediately before any restore or
- * privacy extraction reads it. Legacy manifests remain disaster-recovery-only. */
+/** Verify a file's size and digest immediately before any restore or privacy extraction reads it. */
 export async function verifyBackupVolumeFile(
-  manifest: BackupManifest,
   volume: BackupVolumeEntry,
   backupDir: string,
 ): Promise<string> {
@@ -281,8 +286,6 @@ export async function verifyBackupVolumeFile(
   const stat = lstatSync(file);
   if (!stat.isFile() || stat.isSymbolicLink() || stat.nlink !== 1)
     throw new Error("Backup file is not a regular file");
-  if (manifest.formatVersion !== 2 || !volume.sha256)
-    throw new Error("Backup manifest is an unverified legacy format");
   if (stat.size !== volume.sizeBytes || (await sha256File(file)) !== volume.sha256)
     throw new Error("Backup file digest changed");
   return file;
@@ -460,6 +463,38 @@ export async function listRunningServices(ctx: ComposeContext): Promise<Set<stri
     }
   }
   return running;
+}
+
+async function waitForPostgres(
+  ctx: ComposeContext,
+  serviceId: string,
+  user: string,
+  database: string,
+): Promise<void> {
+  for (let attempt = 1; attempt <= 30; attempt += 1) {
+    const result = await execa(
+      "docker",
+      [
+        "compose",
+        "-f",
+        ctx.composeFile,
+        "exec",
+        "-T",
+        serviceId,
+        "pg_isready",
+        "-U",
+        user,
+        "-d",
+        database,
+        "-t",
+        "1",
+      ],
+      { cwd: ctx.cwd, reject: false, timeout: 5_000 },
+    );
+    if (result.exitCode === 0) return;
+    if (attempt < 30) await new Promise((resolve) => setTimeout(resolve, 1_000));
+  }
+  throw new Error(`PostgreSQL did not become ready for erasure replay (${serviceId})`);
 }
 
 // ─── File-size helper ──────────────────────────────────────────────────────
@@ -959,6 +994,25 @@ function containsOpenMapXDatabase(manifest: BackupManifest): boolean {
   );
 }
 
+const PRIVATE_SUBJECT_EXPORT_VOLUME = "openmapx-subject-exports";
+
+function assertNoPrivateSubjectExportRestore(manifest: BackupManifest): void {
+  const privateVolume = manifest.services
+    .flatMap((service) => service.volumes)
+    .find(
+      (volume) =>
+        volume.mode === "tar" &&
+        (volume.name === PRIVATE_SUBJECT_EXPORT_VOLUME ||
+          volume.resolvedName === PRIVATE_SUBJECT_EXPORT_VOLUME ||
+          volume.resolvedName?.endsWith(`_${PRIVATE_SUBJECT_EXPORT_VOLUME}`)),
+    );
+  if (privateVolume) {
+    throw new Error(
+      "The private subject-export ciphertext volume must not be restored from a backup",
+    );
+  }
+}
+
 /**
  * Services outside the restore manifest that must be isolated while the
  * account database is restored. Keeping the API stopped prevents a deleted
@@ -980,15 +1034,12 @@ function erasureJournalPaths(rootDir?: string): { journalPath: string; keyPath: 
 }
 
 function readErasureJournalKey(rootDir?: string): Buffer {
-  const encoded = readPlatformSecretFile(erasureJournalPaths(rootDir).keyPath);
-  if (!/^[A-Za-z0-9_-]{43}$/.test(encoded)) {
-    throw new Error("Erasure journal key is not canonical base64url");
+  const { journalPath, keyPath } = erasureJournalPaths(rootDir);
+  const parent = lstatSync(dirname(journalPath));
+  if (!parent.isDirectory() || parent.isSymbolicLink() || (parent.mode & 0o7777) !== 0o700) {
+    throw new Error("Erasure journal parent must be a protected 0700 directory");
   }
-  const key = Buffer.from(encoded, "base64url");
-  if (key.byteLength !== 32 || key.toString("base64url") !== encoded) {
-    throw new Error("Erasure journal key must contain exactly 32 bytes");
-  }
-  return key;
+  return readErasureJournalKeyFile(keyPath, parent.uid);
 }
 
 export function validateRestoreDataProtection(
@@ -1009,8 +1060,9 @@ export function validateRestoreDataProtection(
     );
   }
   const { journalPath } = erasureJournalPaths(opts.rootDir);
-  const journal = readErasureJournal(journalPath);
-  readErasureJournalKey(opts.rootDir);
+  const key = readErasureJournalKey(opts.rootDir);
+  const journal = readErasureJournal(journalPath, key);
+  assertErasureJournalKey(journal, key);
   if (createdAt < journal.coverageStartedAt.getTime()) {
     throw new Error("Backup predates erasure journal coverage and cannot be restored safely");
   }
@@ -1027,7 +1079,8 @@ export async function replayErasureRequests(opts: {
   listUsers(): Promise<RestoredUser[]>;
   eraseUser(user: RestoredUser): Promise<void>;
 }): Promise<number> {
-  const journal = readErasureJournal(opts.journalPath);
+  const journal = readErasureJournal(opts.journalPath, opts.key);
+  assertErasureJournalKey(journal, opts.key);
   const users = await opts.listUsers();
   let erased = 0;
   for (const user of users) {
@@ -1085,15 +1138,89 @@ async function eraseRestoredUser(
   database: string,
   restoredUser: RestoredUser,
 ): Promise<void> {
+  const [emailIdentifier, changeEmailIdentifier] = erasureVerificationIdentifiers(restoredUser);
+  const copyRow = [restoredUser.id, restoredUser.email, emailIdentifier, changeEmailIdentifier]
+    .map(postgresCopyTextField)
+    .join("\t");
+  const terminalStates = TERMINAL_PRIVACY_REQUEST_STATES.map(postgresSqlLiteral).join(", ");
   const statement = `BEGIN;
-DELETE FROM verification WHERE value = :'user_id' OR lower(identifier) = lower(:'user_email') OR right(lower(identifier), length(:'user_email')) = lower(:'user_email');
-UPDATE system_settings SET updated_by = NULL WHERE updated_by = :'user_id';
-UPDATE admin_audit_log SET actor_id = NULL, ip_address = NULL, user_agent = NULL WHERE actor_id = :'user_id';
-UPDATE admin_audit_log SET target_id = NULL WHERE target_id = :'user_id';
-UPDATE admin_audit_log SET details = NULL WHERE position(:'user_id' in details::text) > 0 OR position(lower(:'user_email') in lower(details::text)) > 0;
-DELETE FROM app_logs WHERE position(:'user_id' in msg) > 0 OR position(lower(:'user_email') in lower(msg)) > 0 OR position(:'user_id' in metadata::text) > 0 OR position(lower(:'user_email') in lower(metadata::text)) > 0;
-DELETE FROM "user" WHERE id = :'user_id';
-COMMIT;`;
+CREATE TEMP TABLE _openmapx_erasure_subject (
+  user_id text NOT NULL,
+  user_email text NOT NULL,
+  verification_email text NOT NULL,
+  verification_change_email text NOT NULL
+) ON COMMIT DROP;
+COPY _openmapx_erasure_subject (
+  user_id, user_email, verification_email, verification_change_email
+) FROM STDIN;
+${copyRow}
+\\.
+UPDATE data_subject_request request
+SET account_state = 'deleted',
+    version = request.version + 1,
+    updated_at = CURRENT_TIMESTAMP
+FROM _openmapx_erasure_subject subject
+WHERE request.user_id = subject.user_id
+  AND request.account_state <> 'deleted';
+UPDATE data_export_artifact artifact
+SET state = 'revoked',
+    revoked_at = COALESCE(artifact.revoked_at, CURRENT_TIMESTAMP),
+    deleted_at = NULL
+FROM data_subject_request request, _openmapx_erasure_subject subject
+WHERE artifact.request_id = request.id
+  AND request.user_id = subject.user_id
+  AND request.state IN (${terminalStates})
+  AND (artifact.state <> 'deleted' OR artifact.wrapped_dek IS NOT NULL);
+UPDATE data_subject_request_attachment attachment
+SET expires_at = LEAST(attachment.expires_at, CURRENT_TIMESTAMP),
+    deleted_at = NULL
+FROM data_subject_request request, _openmapx_erasure_subject subject
+WHERE attachment.request_id = request.id
+  AND request.user_id = subject.user_id
+  AND request.state IN (${terminalStates})
+  AND (attachment.deleted_at IS NULL OR attachment.wrapped_dek IS NOT NULL);
+UPDATE data_subject_request_source_snapshot snapshot
+SET state = 'captured',
+    expires_at = LEAST(snapshot.expires_at, CURRENT_TIMESTAMP),
+    deleted_at = NULL
+FROM data_subject_request request, _openmapx_erasure_subject subject
+WHERE snapshot.request_id = request.id
+  AND request.user_id = subject.user_id
+  AND request.state IN (${terminalStates})
+  AND (snapshot.state <> 'deleted' OR snapshot.wrapped_dek IS NOT NULL);
+DELETE FROM verification verification
+USING _openmapx_erasure_subject subject
+WHERE verification.value = subject.user_id
+   OR lower(verification.identifier) = lower(subject.verification_email)
+   OR lower(verification.identifier) = lower(subject.verification_change_email);
+UPDATE system_settings settings
+SET updated_by = NULL
+FROM _openmapx_erasure_subject subject
+WHERE settings.updated_by = subject.user_id;
+UPDATE admin_audit_log audit
+SET actor_id = NULL, ip_address = NULL, user_agent = NULL
+FROM _openmapx_erasure_subject subject
+WHERE audit.actor_id = subject.user_id;
+UPDATE admin_audit_log audit
+SET target_id = NULL
+FROM _openmapx_erasure_subject subject
+WHERE audit.target_id = subject.user_id;
+UPDATE admin_audit_log audit
+SET details = NULL
+FROM _openmapx_erasure_subject subject
+WHERE position(subject.user_id in audit.details::text) > 0
+   OR position(lower(subject.user_email) in lower(audit.details::text)) > 0;
+DELETE FROM app_logs logs
+USING _openmapx_erasure_subject subject
+WHERE position(subject.user_id in logs.msg) > 0
+   OR position(lower(subject.user_email) in lower(logs.msg)) > 0
+   OR position(subject.user_id in logs.metadata::text) > 0
+   OR position(lower(subject.user_email) in lower(logs.metadata::text)) > 0;
+DELETE FROM "user" restored_user
+USING _openmapx_erasure_subject subject
+WHERE restored_user.id = subject.user_id;
+COMMIT;
+`;
   const result = await execa(
     "docker",
     [
@@ -1110,16 +1237,30 @@ COMMIT;`;
       database,
       "-v",
       "ON_ERROR_STOP=1",
-      "--set",
-      `user_id=${restoredUser.id}`,
-      "--set",
-      `user_email=${restoredUser.email}`,
-      "-c",
-      statement,
     ],
-    { cwd: ctx.cwd, reject: false },
+    { cwd: ctx.cwd, reject: false, input: statement },
   );
-  if (result.exitCode !== 0) throw new Error(`Unable to replay user erasure: ${result.stderr}`);
+  if (result.exitCode !== 0) {
+    throw new Error(`Unable to replay user erasure (psql exit ${result.exitCode})`);
+  }
+}
+
+function postgresCopyTextField(value: string): string {
+  if (value.includes("\0")) throw new Error("Restored user query returned invalid data");
+  return value
+    .replace(/\\/g, "\\\\")
+    .replace(/\t/g, "\\t")
+    .replace(/\n/g, "\\n")
+    .replace(/\r/g, "\\r")
+    .split("\u0008")
+    .join("\\b")
+    .replace(/\f/g, "\\f")
+    .split("\u000b")
+    .join("\\v");
+}
+
+function postgresSqlLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`;
 }
 
 async function replayOpenMapXErasures(
@@ -1171,6 +1312,7 @@ export function preflightRestore(opts: RestoreOptions): RestorePreflight {
   if (opts.serviceIds && opts.serviceIds.length > 0) {
     manifest = filterManifestServices(manifest, opts.serviceIds);
   }
+  assertNoPrivateSubjectExportRestore(manifest);
 
   let versionError: string | undefined;
   let versionWarning: string | undefined;
@@ -1218,6 +1360,12 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
 
   const stopped: string[] = [];
   const active = new Set(running);
+  const startedForRestore = new Set<string>();
+  const protectedDatabases: Array<{
+    serviceId: string;
+    postgresUser: string;
+    database: string;
+  }> = [];
   let protectedDatabaseSafe = true;
   try {
     for (const id of dependentStops) {
@@ -1226,6 +1374,11 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
       active.delete(id);
       stopped.push(id);
     }
+
+    // The API is now isolated. Re-read the key-bound journal immediately
+    // before restoring the account database so a swapped key/journal cannot
+    // pass the earlier no-Docker preflight and then disable replay.
+    validateRestoreDataProtection(pre.manifest, { rootDir: opts.rootDir });
 
     for (const svc of pre.targets) {
       log.info(kleur.bold(`◆ ${svc.id}`));
@@ -1239,8 +1392,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
           throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
         }
         if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
-        if (pre.manifest.formatVersion === 2)
-          await verifyBackupVolumeFile(pre.manifest, vol, pre.backupDir);
+        await verifyBackupVolumeFile(vol, pre.backupDir);
 
         // pg_dump restores require a live server. A service can use this mode
         // regardless of its id, so never infer the behavior from `postgis`.
@@ -1248,6 +1400,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
           log.dim(`  starting ${svc.id} for restore…`);
           await dockerCompose(ctx, ["start", svc.id]);
           active.add(svc.id);
+          if (!running.has(svc.id)) startedForRestore.add(svc.id);
         }
         if (!vol.postgresUser || !vol.postgresDb) {
           throw new Error(
@@ -1260,9 +1413,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
         if (db === "openmapx") protectedDatabaseSafe = false;
         await pgRestoreFromFile(ctx, svc.id, file, user, db);
         if (db === "openmapx") {
-          const erased = await replayOpenMapXErasures(ctx, opts.rootDir, svc.id, user, db);
-          protectedDatabaseSafe = true;
-          log.dim(`  replayed ${erased} retained user-erasure request(s)`);
+          protectedDatabases.push({ serviceId: svc.id, postgresUser: user, database: db });
         }
       }
 
@@ -1279,8 +1430,7 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
           throw new Error(`Refusing to read a backup file outside ${pre.backupDir}: ${file}`);
         }
         if (!existsSync(file)) throw new Error(`Backup file missing: ${file}`);
-        if (pre.manifest.formatVersion === 2)
-          await verifyBackupVolumeFile(pre.manifest, vol, pre.backupDir);
+        await verifyBackupVolumeFile(vol, pre.backupDir);
         if (!vol.resolvedName) {
           throw new Error(
             `Backup entry ${vol.name} is missing its resolved docker volume name — re-create the backup.`,
@@ -1291,10 +1441,37 @@ export async function restoreBackup(opts: RestoreOptions): Promise<void> {
       }
     }
 
+    // Replay only after every archive has been restored. This prevents a tar
+    // target later in the manifest from reintroducing state after quarantine.
+    for (const target of protectedDatabases) {
+      if (!active.has(target.serviceId)) {
+        log.dim(`  starting ${target.serviceId} for erasure replay…`);
+        await dockerCompose(ctx, ["start", target.serviceId]);
+        active.add(target.serviceId);
+        await waitForPostgres(ctx, target.serviceId, target.postgresUser, target.database);
+      }
+      const erased = await replayOpenMapXErasures(
+        ctx,
+        opts.rootDir,
+        target.serviceId,
+        target.postgresUser,
+        target.database,
+      );
+      log.dim(`  replayed ${erased} retained user-erasure request(s)`);
+      if (startedForRestore.has(target.serviceId)) {
+        log.dim(`  stopping ${target.serviceId} after erasure replay…`);
+        await dockerCompose(ctx, ["stop", target.serviceId]);
+        active.delete(target.serviceId);
+      }
+    }
+    protectedDatabaseSafe = true;
+
     // Restart everything we stopped.
     for (const id of [...stopped].reverse()) {
+      if (active.has(id)) continue;
       log.dim(`  starting ${id}…`);
       await dockerCompose(ctx, ["start", id]);
+      active.add(id);
     }
 
     const volCount = pre.targets.reduce((n, s) => n + s.volumes.length, 0);

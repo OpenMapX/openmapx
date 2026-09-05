@@ -14,9 +14,27 @@ re-delete users without storing a raw identifier in the journal.
 
 Treat the key and journal as one disaster-recovery set and copy both alongside
 off-host database backups. They are deliberately not inside the database dump.
-Do not rotate, edit, or delete this key while a retained backup exists: old
-journal digests cannot be matched with a new key, and restore therefore fails
-closed. The key is not a substitute for encrypting the backup itself.
+Do not rotate, edit, or delete this key while a retained backup exists. New
+journals bind their coverage header to the key, and restore verifies that
+binding before touching data. A different valid key is rejected rather than
+being interpreted as an empty list of erased users. The key is not a
+substitute for encrypting the backup itself.
+
+Only the current bound journal format is accepted. Unsupported or invalid
+journals are rejected; there is no conversion or migration path.
+
+### `subject-exports-master-key` (generated, API only)
+
+Compose rendering creates this as a compact versioned JSON key ring with one
+active version and mode `0400`. The file must remain owned by the configured
+`OPENMAPX_EXPORTS_KEY_UID`, be a regular file with exactly one link, and contain
+no trailing newline. A bare base64url key is not a managed-file format.
+
+The ring retains older numbered keys during overlapping rotation so existing
+encrypted privacy material remains readable while new material uses the active
+version. Production loads only this managed file. `OPENMAPX_EXPORTS_KEY` remains
+available solely as an explicit development configuration and does not change
+the managed-file format.
 
 ### `offline-package-principal-key` (generated, API only)
 

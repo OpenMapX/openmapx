@@ -42,7 +42,7 @@ describe("privacy crypto", () => {
     expect(() => unwrapDataKey(wrapped, ring, "attachment", "request-id")).toThrow();
   });
 
-  it("only accepts a canonical 32-byte key from a file or development env", () => {
+  it("accepts a canonical 32-byte key from the development-only environment setting", () => {
     const encoded = Buffer.alloc(32, 0x19).toString("base64url");
     expect(
       loadMasterKeyRing({
@@ -145,6 +145,7 @@ describe("privacy crypto", () => {
         readFile: async () => contents,
       });
     const invalid = [
+      secret,
       "{}",
       JSON.stringify({ formatVersion: 2, activeVersion: 1, keys: [{ version: 1, key: secret }] }),
       JSON.stringify({
@@ -190,7 +191,12 @@ describe("privacy crypto", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-key-"));
     const path = join(root, "subject-exports-master-key");
     const encoded = Buffer.alloc(32, 0x27).toString("base64url");
-    writeFileSync(path, encoded, { mode: 0o400 });
+    const persisted = JSON.stringify({
+      formatVersion: 1,
+      activeVersion: 1,
+      keys: [{ version: 1, key: encoded }],
+    });
+    writeFileSync(path, persisted, { mode: 0o400 });
     const uid = process.getuid?.();
     const ring = await loadMasterKeyRingAsync({
       env: {
@@ -233,7 +239,15 @@ describe("privacy crypto", () => {
     const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-key-change-"));
     const path = join(root, "subject-exports-master-key");
     const encoded = Buffer.alloc(32, 0x29).toString("base64url");
-    writeFileSync(path, encoded, { mode: 0o400 });
+    writeFileSync(
+      path,
+      JSON.stringify({
+        formatVersion: 1,
+        activeVersion: 1,
+        keys: [{ version: 1, key: encoded }],
+      }),
+      { mode: 0o400 },
+    );
 
     await expect(
       loadMasterKeyRingAsync({
@@ -241,7 +255,14 @@ describe("privacy crypto", () => {
         fileReadHooks: {
           afterRead: () => {
             chmodSync(path, 0o600);
-            writeFileSync(path, Buffer.alloc(32, 0x2a).toString("base64url"));
+            writeFileSync(
+              path,
+              JSON.stringify({
+                formatVersion: 1,
+                activeVersion: 1,
+                keys: [{ version: 1, key: Buffer.alloc(32, 0x2a).toString("base64url") }],
+              }),
+            );
             chmodSync(path, 0o400);
           },
         },
@@ -254,7 +275,15 @@ describe("privacy crypto", () => {
     const path = join(root, "subject-exports-master-key");
     const oldKey = Buffer.alloc(32, 0x35).toString("base64url");
     const newKey = Buffer.alloc(32, 0x36).toString("base64url");
-    writeFileSync(path, oldKey, { mode: 0o400 });
+    writeFileSync(
+      path,
+      JSON.stringify({
+        formatVersion: 1,
+        activeVersion: 1,
+        keys: [{ version: 1, key: oldKey }],
+      }),
+      { mode: 0o400 },
+    );
     const env = { NODE_ENV: "production", OPENMAPX_EXPORTS_KEY_FILE: path };
     const startupRing = await loadMasterKeyRingAsync({ env });
     expect(await masterKeyRingConfigurationMatches(startupRing, { env })).toBe(true);

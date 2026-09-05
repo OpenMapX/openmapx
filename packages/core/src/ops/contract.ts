@@ -612,39 +612,55 @@ const dawarichService = <T extends string>(serviceId: T) =>
   z.strictObject({ serviceId: z.literal(serviceId), state: serviceRuntimeState });
 const release = z.strictObject({ releaseId: stableIdSchema });
 const backup = z.strictObject({ backupId: backupIdSchema });
-const backupInventoryEntry = z.strictObject({
-  backupId: backupIdSchema,
-  createdAt: timestampSchema,
-  platformVersion: z.string().min(1).max(64).optional(),
-  /** Present when the agent could authenticate the exact manifest bytes. */
-  manifestDigest: z
-    .string()
-    .regex(/^[a-f0-9]{64}$/)
-    .optional(),
-  formatVersion: z.union([z.literal(1), z.literal(2)]).optional(),
-  /** A v2 manifest is only trusted for extraction when every listed file has a digest. */
-  verified: z.boolean().optional(),
-  volumes: z
-    .array(
-      z.strictObject({
-        serviceId: serviceIdSchema,
-        volumeId: z.string().min(1).max(255),
-        mode: z.enum(["tar", "pg_dump"]),
-        sizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-        sha256: z
-          .string()
-          .regex(/^[a-f0-9]{64}$/)
-          .nullable(),
-      }),
-    )
-    .max(4_096)
-    .optional(),
-  serviceCount: z.number().int().min(0).max(256),
-  volumeCount: z.number().int().min(0).max(4_096),
-  totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
-  corrupt: z.boolean().optional(),
-  corruptReason: z.enum(["missing_manifest", "invalid_manifest", "unsafe_entry"]).optional(),
-});
+const backupInventoryEntry = z
+  .strictObject({
+    backupId: backupIdSchema,
+    createdAt: timestampSchema,
+    platformVersion: z.string().min(1).max(64).optional(),
+    /** Present when the agent could authenticate the exact manifest bytes. */
+    manifestDigest: z
+      .string()
+      .regex(/^[a-f0-9]{64}$/)
+      .optional(),
+    formatVersion: z.literal(2).optional(),
+    /** True only when every file declared by the current manifest was re-hashed. */
+    verified: z.boolean().optional(),
+    volumes: z
+      .array(
+        z.strictObject({
+          serviceId: serviceIdSchema,
+          volumeId: z.string().min(1).max(255),
+          mode: z.enum(["tar", "pg_dump"]),
+          sizeBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+          sha256: z
+            .string()
+            .regex(/^[a-f0-9]{64}$/)
+            .nullable(),
+        }),
+      )
+      .max(4_096)
+      .optional(),
+    serviceCount: z.number().int().min(0).max(256),
+    volumeCount: z.number().int().min(0).max(4_096),
+    totalBytes: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+    corrupt: z.boolean().optional(),
+    corruptReason: z.enum(["missing_manifest", "invalid_manifest", "unsafe_entry"]).optional(),
+  })
+  .superRefine((entry, context) => {
+    if (entry.corrupt === true) return;
+    if (
+      entry.formatVersion !== 2 ||
+      entry.verified === undefined ||
+      entry.manifestDigest === undefined ||
+      entry.volumes === undefined ||
+      entry.volumes.some((volume) => volume.sha256 === null)
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Usable backup inventory entries require a verified format-2 manifest",
+      });
+    }
+  });
 const extension = z.strictObject({ extensionId: serviceIdSchema, revisionId: stableIdSchema });
 const revision = z.strictObject({ revisionId: stableIdSchema });
 const data = z.strictObject({

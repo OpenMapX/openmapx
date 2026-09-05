@@ -1,9 +1,21 @@
 import { randomUUID } from "node:crypto";
 import { eq, sql } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
-import { cleanupResidualUserData } from "../../services/user-erasure";
+import {
+  cleanupResidualUserData,
+  configurePrivacyArtifactDeleter,
+} from "../../services/user-erasure";
 import { db } from "../index";
-import { adminAuditLog, appLog, user, verification } from "../schema";
+import {
+  adminAuditLog,
+  appLog,
+  dataExportArtifact,
+  dataSubjectRequest,
+  dataSubjectRequestAttachment,
+  dataSubjectRequestSourceSnapshot,
+  user,
+  verification,
+} from "../schema";
 
 const skipDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
@@ -76,6 +88,7 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
     const userId = `erasure-user-${suffix}`;
     const email = `erasure-${suffix}@example.test`;
     const auditId = randomUUID();
+    const suffixVerificationId = randomUUID();
     let userInserted = false;
     let auditInserted = false;
     let appLogId: number | undefined;
@@ -86,6 +99,12 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
         id: randomUUID(),
         identifier: `change-email:${userId}:${email}`,
         value: userId,
+        expiresAt: new Date(Date.now() + 60_000),
+      });
+      await db.insert(verification).values({
+        id: suffixVerificationId,
+        identifier: `unrelated-prefix:${email}`,
+        value: "unrelated-verification-value",
         expiresAt: new Date(Date.now() + 60_000),
       });
       await db.insert(adminAuditLog).values({
@@ -117,6 +136,9 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
         [],
       );
       expect(
+        await db.select().from(verification).where(eq(verification.id, suffixVerificationId)),
+      ).toHaveLength(1);
+      expect(
         await db
           .select()
           .from(appLog)
@@ -134,6 +156,158 @@ describe.skipIf(skipDatabase)("user erasure constraints with PostgreSQL", () => 
       if (userInserted) await db.delete(user).where(eq(user.id, userId));
       if (auditInserted) await db.delete(adminAuditLog).where(eq(adminAuditLog.id, auditId));
       if (appLogId !== undefined) await db.delete(appLog).where(eq(appLog.id, appLogId));
+      await db.delete(verification).where(eq(verification.id, suffixVerificationId));
+    }
+  });
+
+  it("physically deletes terminal-case ciphertext while retaining active case objects", async () => {
+    const userId = `erasure-privacy-${randomUUID()}`;
+    const terminalRequestId = randomUUID();
+    const activeRequestId = randomUUID();
+    const deletedStorageKeys: string[] = [];
+    configurePrivacyArtifactDeleter(async (storageKey) => {
+      deletedStorageKeys.push(storageKey);
+    });
+    try {
+      await db.insert(user).values({
+        id: userId,
+        name: "Privacy erasure test",
+        email: `${userId}@example.test`,
+      });
+      const requestBase = {
+        kind: "access" as const,
+        channel: "internal" as const,
+        userId,
+        encryptedLocator: "encrypted",
+        locatorDigest: randomUUID().replaceAll("-", ""),
+        receivedAt: new Date(),
+        dueAt: new Date(Date.now() + 86_400_000),
+      };
+      await db.insert(dataSubjectRequest).values([
+        { ...requestBase, id: terminalRequestId, state: "closed" },
+        {
+          ...requestBase,
+          id: activeRequestId,
+          state: "ready",
+          locatorDigest: randomUUID().replaceAll("-", ""),
+        },
+      ]);
+      await db.insert(dataExportArtifact).values([
+        {
+          requestId: terminalRequestId,
+          state: "ready",
+          storageKey: `objects/${terminalRequestId}.bin`,
+          filename: "terminal.zip",
+          iv: "iv",
+          wrappedDek: "terminal-key",
+        },
+        {
+          requestId: activeRequestId,
+          state: "ready",
+          storageKey: `objects/${activeRequestId}.bin`,
+          filename: "active.zip",
+          iv: "iv",
+          wrappedDek: "active-key",
+        },
+      ]);
+      await db.insert(dataSubjectRequestAttachment).values([
+        {
+          requestId: terminalRequestId,
+          purpose: "identity_evidence",
+          storageKey: `attachments/${terminalRequestId}.bin`,
+          filename: "terminal.txt",
+          mediaType: "text/plain",
+          encryptedBytes: 1,
+          plaintextBytes: 1,
+          plaintextSha256: "0".repeat(64),
+          ciphertextSha256: "1".repeat(64),
+          iv: "iv",
+          wrappedDek: "terminal-key",
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+        {
+          requestId: activeRequestId,
+          purpose: "identity_evidence",
+          storageKey: `attachments/${activeRequestId}.bin`,
+          filename: "active.txt",
+          mediaType: "text/plain",
+          encryptedBytes: 1,
+          plaintextBytes: 1,
+          plaintextSha256: "0".repeat(64),
+          ciphertextSha256: "1".repeat(64),
+          iv: "iv",
+          wrappedDek: "active-key",
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      ]);
+      await db.insert(dataSubjectRequestSourceSnapshot).values([
+        {
+          requestId: terminalRequestId,
+          registrationId: "terminal-source",
+          storageKey: `snapshots/${terminalRequestId}.bin`,
+          recordCount: 1,
+          plaintextBytes: 1,
+          encryptedBytes: 1,
+          plaintextSha256: "0".repeat(64),
+          ciphertextSha256: "1".repeat(64),
+          iv: "iv",
+          wrappedDek: "terminal-key",
+          capturedAt: new Date(),
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+        {
+          requestId: activeRequestId,
+          registrationId: "active-source",
+          storageKey: `snapshots/${activeRequestId}.bin`,
+          recordCount: 1,
+          plaintextBytes: 1,
+          encryptedBytes: 1,
+          plaintextSha256: "0".repeat(64),
+          ciphertextSha256: "1".repeat(64),
+          iv: "iv",
+          wrappedDek: "active-key",
+          capturedAt: new Date(),
+          expiresAt: new Date(Date.now() + 86_400_000),
+        },
+      ]);
+
+      await cleanupResidualUserData({ id: userId, email: `${userId}@example.test` });
+
+      expect(deletedStorageKeys.sort()).toEqual(
+        [
+          `attachments/${terminalRequestId}.bin`,
+          `objects/${terminalRequestId}.bin`,
+          `snapshots/${terminalRequestId}.bin`,
+        ].sort(),
+      );
+      const artifacts = await db
+        .select()
+        .from(dataExportArtifact)
+        .where(sql`${dataExportArtifact.requestId} in (${terminalRequestId}, ${activeRequestId})`);
+      expect(artifacts.find((row) => row.requestId === terminalRequestId)).toMatchObject({
+        state: "deleted",
+        wrappedDek: null,
+      });
+      expect(artifacts.find((row) => row.requestId === activeRequestId)).toMatchObject({
+        state: "ready",
+        wrappedDek: "active-key",
+      });
+      const requests = await db
+        .select({ id: dataSubjectRequest.id, accountState: dataSubjectRequest.accountState })
+        .from(dataSubjectRequest)
+        .where(sql`${dataSubjectRequest.id} in (${terminalRequestId}, ${activeRequestId})`);
+      expect(requests).toEqual(
+        expect.arrayContaining([
+          { id: terminalRequestId, accountState: "deleted" },
+          { id: activeRequestId, accountState: "deleted" },
+        ]),
+      );
+    } finally {
+      configurePrivacyArtifactDeleter(undefined);
+      await db
+        .delete(dataSubjectRequest)
+        .where(sql`${dataSubjectRequest.id} in (${terminalRequestId}, ${activeRequestId})`);
+      await db.delete(user).where(eq(user.id, userId));
     }
   });
 });

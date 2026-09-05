@@ -197,7 +197,6 @@ function exactObjectKeys(value: Record<string, unknown>, expected: readonly stri
 }
 
 function isCanonicalExportsKeyRing(value: string): boolean {
-  if (isCanonicalPlatformSecret(value)) return true;
   if (Buffer.byteLength(value, "utf8") > MAX_EXPORTS_KEY_RING_BYTES) return false;
   let parsed: unknown;
   try {
@@ -245,6 +244,7 @@ interface PlatformSecretFormat {
   finalMode: number;
   invalidMessage: string;
   validate: (value: string) => boolean;
+  encodeGenerated?: (key: string) => string;
 }
 
 const ordinarySecretFormat: PlatformSecretFormat = {
@@ -257,6 +257,12 @@ const exportsKeyRingFormat: PlatformSecretFormat = {
   finalMode: 0o400,
   invalidMessage: "Platform exports key ring is invalid",
   validate: isCanonicalExportsKeyRing,
+  encodeGenerated: (key) =>
+    JSON.stringify({
+      formatVersion: 1,
+      activeVersion: 1,
+      keys: [{ version: 1, key }],
+    }),
 };
 
 function readExistingSecret(
@@ -524,7 +530,8 @@ function ensurePlatformSecretFileWithFormat(
   const existing = readExistingSecret(path, parentStats, format);
   if (existing !== null) return existing;
 
-  const value = generatePlatformSecret(options);
+  const generated = generatePlatformSecret(options);
+  const value = format.encodeGenerated?.(generated) ?? generated;
   const temporary = createTemporaryFile(path, value, options.temporaryFileOps, format.finalMode);
   try {
     // A hard link is an atomic create-without-replace operation. If another
@@ -547,8 +554,7 @@ function ensurePlatformSecretFileWithFormat(
   }
 }
 
-/** Provision or preserve the dedicated exports key file. Existing files may
- * use either the legacy one-key encoding or the strict bounded ring encoding. */
+/** Provision or preserve the dedicated exports key file as a strict bounded key ring. */
 export function ensurePlatformExportsKeyRingFile(
   path: string,
   options: EnsurePlatformSecretOptions = {},

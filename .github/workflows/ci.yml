@@ -238,6 +238,7 @@ jobs:
       # Once set, every selected suite fails instead of skipping if PostGIS or
       # the Docker daemon is unavailable.
       OPENMAPX_RUN_DATABASE_TESTS: "1"
+      OPENMAPX_RUN_RESTORE_DATABASE_TESTS: "1"
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

@@ -338,12 +338,18 @@ describe("ensurePlatformSecretFile", () => {
 });
 
 describe("ensurePlatformExportsKeyRingFile", () => {
-  it("creates a private legacy-compatible key and reuses a strict versioned overlap ring", () => {
+  it("creates a private versioned key ring and reuses a strict overlap ring", () => {
     const path = join(tempDir(), "secrets", "subject-exports-master-key");
     const first = ensurePlatformExportsKeyRingFile(path, {
       randomBytes: () => Buffer.alloc(32, 21),
     });
-    expect(first).toBe(canonicalPassword(21));
+    expect(first).toBe(
+      JSON.stringify({
+        formatVersion: 1,
+        activeVersion: 1,
+        keys: [{ version: 1, key: canonicalPassword(21) }],
+      }),
+    );
     expect(statSync(path).mode & 0o777).toBe(0o400);
 
     const versioned = JSON.stringify({
@@ -361,6 +367,14 @@ describe("ensurePlatformExportsKeyRingFile", () => {
     expect(ensurePlatformExportsKeyRingFile(path)).toBe(versioned);
     expect(readFileSync(path, "utf8")).toBe(versioned);
     expect(statSync(path).mode & 0o777).toBe(0o400);
+  });
+
+  it("rejects an unversioned single-key exports file", () => {
+    const path = join(tempDir(), "secrets", "subject-exports-master-key");
+    mkdirSync(join(path, ".."), { recursive: true });
+    writeFileSync(path, canonicalPassword(21), { mode: 0o400 });
+
+    expect(() => ensurePlatformExportsKeyRingFile(path)).toThrow(/key ring is invalid/);
   });
 
   it("rejects malformed versioned rings without changing them or weakening other secret formats", () => {

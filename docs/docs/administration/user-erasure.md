@@ -45,13 +45,24 @@ confirmed. Case accounting retention does not extend full source-data retention.
 After a receipt snapshot expires, regeneration requires explicit review of the
 missing source rather than silently collecting a later state.
 
+Restore applies the same distinction between active and terminal cases. It
+revokes restored terminal export artifacts and expires their attachments and
+source snapshots before the API resumes. Physical cleanup then uses the
+normal monitored retry path; restored keys and deletion records are retained
+until that cleanup confirms removal. A restore must not mark still-present
+ciphertext as deleted. The private export volume is excluded from backups and
+cannot be restored from an archive through this workflow.
+
 ## Backups
 
 Keep `BACKUP_RETENTION_DAYS` aligned with the period disclosed in your privacy
 notice (default 30). The operations agent prunes at startup and daily, every
 successful backup also prunes, and restore refuses expired archives. Restore
-also refuses a backup older than journal coverage and replays every retained
-erasure request immediately after loading the OpenMapX database. When `app-api`
+also verifies the journal/key binding, refuses a backup older than journal
+coverage, and replays every retained erasure request after loading the OpenMapX
+database. Journal compaction advances the coverage floor when old requests
+are discarded; increasing backup retention later cannot make those older
+backups safe to restore again. When `app-api`
 is running, restore requires `--stop-running`; it keeps the API offline until
 that replay succeeds and leaves it stopped if replay fails.
 
@@ -64,6 +75,12 @@ as strongly as the database:
 
 Off-host storage needs its own lifecycle rule. OpenMapX cannot prune a copy it
 does not control.
+
+The journal must be a regular, single-link `0600` file in its protected `0700`
+directory. The key must be a regular, single-link `0444` file owned by the
+configured `ERASURE_JOURNAL_KEY_UID`; generated Compose supplies that UID.
+For local development, set it to the actual key-file owner. Reads reject
+symlinks, oversized files and metadata changes during the read.
 
 Journal writes and compaction use `journal.jsonl.lock` to prevent a deletion
 request from being lost during atomic compaction. If a process is forcibly

@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import z from "zod/v4";
 
 export const backupReviewDecisionSchema = z.enum([
@@ -13,7 +12,6 @@ export const backupReviewReasonSchema = z.enum([
   "live_snapshot_covers_period",
   "possible_historical_difference",
   "corrupt_or_unverified",
-  "unverified_legacy_manifest",
   "unsupported_schema",
   "operator_controlled_elsewhere",
 ]);
@@ -45,21 +43,17 @@ export interface BackupInventoryVolume {
   volumeId: string;
   mode: "tar" | "pg_dump";
   sizeBytes: number;
-  sha256: string | null;
+  sha256: string;
 }
 export interface BackupInventoryEntry {
   backupId: string;
   manifestDigest: string;
   createdAt: string;
   platformVersion: string;
-  formatVersion: 1 | 2;
+  formatVersion: 2;
   volumes: BackupInventoryVolume[];
   expired: boolean;
   verified: boolean;
-}
-
-function digestManifest(value: unknown): string {
-  return createHash("sha256").update(JSON.stringify(value)).digest("hex");
 }
 
 /** Convert trusted descriptor metadata into a privacy-safe inventory. Paths,
@@ -67,20 +61,29 @@ function digestManifest(value: unknown): string {
 export function buildBackupInventory(input: {
   backupId: string;
   manifest: {
-    formatVersion?: 1 | 2;
+    formatVersion: 2;
     createdAt: string;
     openmapxVersion: string;
     services: Array<{
       id: string;
-      volumes: Array<{ name: string; mode: "tar" | "pg_dump"; sizeBytes: number; sha256?: string }>;
+      volumes: Array<{
+        name: string;
+        mode: "tar" | "pg_dump";
+        sizeBytes: number;
+        sha256?: string | null;
+      }>;
     }>;
   };
-  manifestDigest?: string;
+  manifestDigest: string;
   now?: Date;
   retentionDays: number;
 }): BackupInventoryEntry {
   if (!/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/.test(input.backupId))
     throw new Error("Invalid backup identifier");
+  if (input.manifest.formatVersion !== 2) throw new Error("Unsupported backup format");
+  if (!/^[a-f0-9]{64}$/.test(input.manifestDigest)) {
+    throw new Error("Invalid backup manifest digest");
+  }
   const created = Date.parse(input.manifest.createdAt);
   if (!Number.isFinite(created)) throw new Error("Invalid backup creation time");
   if (
@@ -89,27 +92,36 @@ export function buildBackupInventory(input: {
     input.retentionDays > 3650
   )
     throw new Error("Invalid backup retention");
-  const formatVersion = input.manifest.formatVersion ?? 1;
-  const volumes = input.manifest.services.flatMap((service) =>
+  const declaredVolumes = input.manifest.services.flatMap((service) =>
     service.volumes.map((volume) => ({
       serviceId: service.id,
       volumeId: volume.name,
       mode: volume.mode,
       sizeBytes: volume.sizeBytes,
-      sha256: volume.sha256 ?? null,
+      sha256: volume.sha256,
     })),
   );
-  const verified = formatVersion === 2 && volumes.every((volume) => !!volume.sha256);
+  if (
+    declaredVolumes.some(
+      (volume) => typeof volume.sha256 !== "string" || !/^[a-f0-9]{64}$/.test(volume.sha256),
+    )
+  ) {
+    throw new Error("Invalid backup volume digest");
+  }
+  const volumes: BackupInventoryVolume[] = declaredVolumes.map((volume) => ({
+    ...volume,
+    sha256: volume.sha256 as string,
+  }));
   const expired = created + input.retentionDays * 86_400_000 <= (input.now ?? new Date()).getTime();
   return {
     backupId: input.backupId,
-    manifestDigest: input.manifestDigest ?? digestManifest(input.manifest),
+    manifestDigest: input.manifestDigest,
     createdAt: new Date(created).toISOString(),
     platformVersion: input.manifest.openmapxVersion,
-    formatVersion,
+    formatVersion: 2,
     volumes,
     expired,
-    verified,
+    verified: true,
   };
 }
 
@@ -121,8 +133,7 @@ export function deriveBackupReviewDecision(
   if (!inventory.verified)
     return {
       decision: "unavailable",
-      reasonCode:
-        inventory.formatVersion === 1 ? "unverified_legacy_manifest" : "corrupt_or_unverified",
+      reasonCode: "corrupt_or_unverified",
     };
   const createdAt = Date.parse(inventory.createdAt);
   if (createdAt > input.cutoffAt.getTime())

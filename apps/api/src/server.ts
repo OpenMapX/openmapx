@@ -116,7 +116,7 @@ import { reconcileRepoBackups } from "./services/service-repositories";
 import { reconcileDurableServiceRuntime } from "./services/service-runtime-recovery";
 import { handleSystemDiagnosticsJob, handleSystemUpdateJob } from "./services/system-maintenance";
 import { applyTrustedConfiguration } from "./services/trusted-config-operations";
-import { configurePrivacyArtifactDeleter } from "./services/user-erasure.js";
+import { configurePrivacyArtifactDeleter, readJournalKey } from "./services/user-erasure.js";
 import { applyRequiredMigrations } from "./startup-migrations";
 import { configuredTrustedWebOrigins, makeCsrfGuardHook } from "./utils/csrf";
 import { dockerComposeAction } from "./utils/docker-compose";
@@ -680,6 +680,7 @@ const runRetention = () => {
     try {
       compactErasureJournal(
         erasureJournalPath,
+        readJournalKey(),
         new Date(Date.now() - (BACKUP_RETENTION_DAYS + 7) * ONE_DAY_MS),
       );
     } catch (err) {

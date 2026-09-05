@@ -68,6 +68,7 @@ describe("administrative backup runtime", () => {
     writeFileSync(
       join(backup, "manifest.json"),
       JSON.stringify({
+        formatVersion: 2,
         name: "nightly-20260823",
         createdAt: "2026-08-23T18:00:00.000Z",
         openmapxVersion: "1.0.0",
@@ -142,6 +143,7 @@ describe("administrative backup runtime", () => {
       writeFileSync(
         join(valid, "manifest.json"),
         JSON.stringify({
+          formatVersion: 2,
           name: "nightly-20260823",
           createdAt: "2026-08-23T18:00:00.000Z",
           openmapxVersion: "1.0.0",
@@ -149,7 +151,17 @@ describe("administrative backup runtime", () => {
             {
               id: "postgis",
               version: "1.0.0",
-              volumes: [{ name: "db", file: "postgis__db.sql.gz", mode: "pg_dump", sizeBytes: 42 }],
+              volumes: [
+                {
+                  name: "db",
+                  file: "postgis__db.sql.gz",
+                  mode: "pg_dump",
+                  sizeBytes: 42,
+                  sha256: "a".repeat(64),
+                  postgresUser: "postgres",
+                  postgresDb: "openmapx",
+                },
+              ],
             },
           ],
         }),
@@ -160,6 +172,7 @@ describe("administrative backup runtime", () => {
       writeFileSync(
         join(older, "manifest.json"),
         JSON.stringify({
+          formatVersion: 2,
           name: "nightly-20260822",
           createdAt: "2026-08-22T18:00:00.000Z",
           openmapxVersion: "1.0.0",
@@ -215,6 +228,7 @@ describe("administrative backup runtime", () => {
       writeFileSync(
         join(backup, "manifest.json"),
         JSON.stringify({
+          formatVersion: 2,
           name: "present",
           createdAt: "2026-08-23T18:00:00.000Z",
           openmapxVersion: "1.0.0",
@@ -232,6 +246,52 @@ describe("administrative backup runtime", () => {
       );
       await expect(inspectBackupAuthority(rootDir, "backup.delete", "present")).resolves.toBe(true);
       await expect(inspectBackupAuthority(rootDir, "backup.restore", "fresh")).resolves.toBe(false);
+    },
+  );
+
+  it.runIf(process.platform === "linux")(
+    "flags omitted, legacy, and unknown backup formats as invalid inventory",
+    async () => {
+      const rootDir = temporaryRoot();
+      for (const [backupId, formatVersion] of [
+        ["omitted", undefined],
+        ["legacy", 1],
+        ["unknown", 3],
+      ] as const) {
+        const backup = join(rootDir, "infra", "docker", "backups", backupId);
+        mkdirSync(backup, { mode: 0o700 });
+        writeFileSync(
+          join(backup, "manifest.json"),
+          JSON.stringify({
+            ...(formatVersion === undefined ? {} : { formatVersion }),
+            name: backupId,
+            createdAt: "2026-08-23T18:00:00.000Z",
+            openmapxVersion: "1.0.0",
+            services: [],
+          }),
+          { mode: 0o600 },
+        );
+      }
+      const runtime = createUnavailableRuntime();
+      createAdministrativeRuntime(runtime, {
+        rootDir,
+        runFixedCli: async () => undefined,
+      });
+
+      const result = await dispatchOpsOperation(
+        runtime,
+        { kind: "backup.list" },
+        context("backup.list"),
+      );
+
+      expect(result.warningCount).toBe(3);
+      expect(result.backups).toEqual(
+        expect.arrayContaining(
+          ["omitted", "legacy", "unknown"].map((backupId) =>
+            expect.objectContaining({ backupId, corrupt: true, corruptReason: "invalid_manifest" }),
+          ),
+        ),
+      );
     },
   );
 });

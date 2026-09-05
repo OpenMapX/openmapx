@@ -110,7 +110,7 @@ Backups are not automatically searched for every Article 15 request. The
 privacy queue exposes a trusted, path-free inventory and records a review for
 each snapshot family. A reviewer compares its creation time with the request
 cutoff and live snapshot, then records `no_material_difference`, `extract`, or
-an honest unavailable reason. Legacy size-only manifests and changed files
+an honest unavailable reason. Unsupported manifests and changed files
 are never extracted.
 
 An approved extraction runs in a new, egress-free scratch environment with
@@ -172,7 +172,8 @@ pnpm openmapx backup restore weekly             # restore everything in it
 
 For an OpenMapX database, four checks happen before any data is touched: the
 backup must be within `BACKUP_RETENTION_DAYS`; the erasure journal and its key
-must be readable; the backup must not predate the journal's coverage marker; and
+must be readable and the journal must be cryptographically bound to that key;
+the backup must not predate the journal's current coverage floor; and
 the platform version in the snapshot's manifest must be compatible. A **major-version**
 mismatch is refused outright, while a minor mismatch prints a warning and
 proceeds. If a targeted volume service is running, or if `app-api` is serving
@@ -189,13 +190,18 @@ stops `app-api` before the database is replaced and restarts it only after the
 erasure journal has been replayed. If restore or replay fails, the API remains
 stopped so it cannot expose resurrected account data.
 
-Immediately after the database dump is loaded, the CLI HMAC-matches restored
+After the selected data has been restored and before restarting the API, the
+CLI revalidates the journal/key pair and HMAC-matches restored
 user IDs against `infra/docker/data/erasure/journal.jsonl` and removes every
 match. The journal contains neither raw user IDs nor email addresses. The journal
 and `infra/docker/secrets/erasure-journal-key` are deliberately outside the
 PostgreSQL backup. Disaster-recovery copies must include both. Do not rotate or
 discard the key while a backup that could contain an erased account exists;
-without it, OpenMapX refuses the restore rather than risk resurrecting data.
+without the matching key, OpenMapX refuses the restore rather than risk
+resurrecting data. Only the current bound journal and verified backup formats
+are accepted; there is no legacy conversion or recovery workflow.
+Compaction advances the coverage floor when old erasure requests are removed,
+so later increases in backup retention do not re-enable unsafe older backups.
 
 To restore only part of a snapshot, name the services:
 

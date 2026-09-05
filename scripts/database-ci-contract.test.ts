@@ -18,6 +18,7 @@ describe("required database test gate", () => {
     expect(workflow).toMatch(/^ {2}database:\n/m);
     expect(workflow).toContain("ghcr.io/baosystems/postgis:18-3.6@sha256:");
     expect(workflow).toContain('OPENMAPX_RUN_DATABASE_TESTS: "1"');
+    expect(workflow).toContain('OPENMAPX_RUN_RESTORE_DATABASE_TESTS: "1"');
     expect(workflow).toContain("pnpm --filter @openmapx/api exec drizzle-kit migrate");
     expect(workflow).toContain("pnpm test:database");
     expect(workflow).toContain(
@@ -35,6 +36,9 @@ describe("required database test gate", () => {
     );
     expect(packageJson.scripts["test:database"]).toContain(
       "apps/api/src/privacy/*-postgres.test.ts",
+    );
+    expect(packageJson.scripts["test:database"]).toContain(
+      "packages/cli/__tests__/backup-restore-postgres.integration.test.ts",
     );
     expect(packageJson.scripts["test:database"]).toContain("--maxWorkers=1");
   });

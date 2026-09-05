@@ -110,13 +110,13 @@ without copying keys into a request or its evidence.
 Managed compose rendering creates a dedicated key at
 `infra/docker/secrets/subject-exports-master-key` and mounts it read-only into
 `app-api`. Keep it owner-readable only (`0400`), with the configured app UID,
-without symlinks or extra hard links. The original 43-byte canonical base64url
-key remains supported as key version 1. Production requires
+without symlinks or extra hard links. The file always contains a bounded JSON
+key ring, including when it holds only the initial version-1 key. Unversioned
+key files are rejected. Production requires
 `OPENMAPX_EXPORTS_KEY_FILE`; the raw `OPENMAPX_EXPORTS_KEY` fallback is for
 explicit development environments only.
 
-For overlapping rotation, the same file can contain this versioned JSON
-structure. The file must be compact JSON without a trailing newline; replace
+For overlapping rotation, add the new key to the JSON ring, for example: The file must be compact JSON without a trailing newline; replace
 the descriptions with securely generated key material:
 
 ```json

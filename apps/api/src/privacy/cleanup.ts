@@ -1,3 +1,4 @@
+import { TERMINAL_PRIVACY_REQUEST_STATES } from "@openmapx/core/erasure-cleanup";
 import { and, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import {
@@ -188,7 +189,10 @@ export async function runPrivacyDatabaseCleanup(input: {
           sql`exists (
             select 1 from data_subject_request source_request
             where source_request.id = ${dataSubjectRequestSourceSnapshot.requestId}
-              and source_request.state in ('delivered', 'artifact_expired', 'withdrawn', 'refused', 'closed')
+              and source_request.state in (${sql.join(
+                TERMINAL_PRIVACY_REQUEST_STATES.map((state) => sql`${state}`),
+                sql`, `,
+              )})
           )`,
         ),
       ),
@@ -250,7 +254,10 @@ export async function runPrivacyDatabaseCleanup(input: {
           sql`exists (
             select 1 from data_subject_request source_request
             where source_request.id = ${dataSubjectRequestSourceSnapshot.requestId}
-              and source_request.state in ('delivered', 'artifact_expired', 'withdrawn', 'refused', 'closed')
+              and source_request.state in (${sql.join(
+                TERMINAL_PRIVACY_REQUEST_STATES.map((state) => sql`${state}`),
+                sql`, `,
+              )})
           )`,
         ),
       ),

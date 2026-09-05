@@ -20,6 +20,7 @@ describe("privacy source fingerprint", () => {
       "apps/api/src/db/privacy-auth-schema.ts",
       "apps/api/src/services/user-erasure.ts",
       "packages/core/src/privacy/contracts.ts",
+      "packages/core/src/erasure-cleanup.ts",
       "packages/core/src/services/manifest-schema.ts",
       "packages/core/src/utils/legalConfig.ts",
       "packages/cli/src/commands/backup.ts",

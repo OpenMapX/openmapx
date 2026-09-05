@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import {
   existsSync,
   linkSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
+  readFileSync,
   rmSync,
   statSync,
   symlinkSync,
@@ -42,6 +44,7 @@ import {
 vi.mock("execa", () => ({ execa: vi.fn() }));
 
 let tmp: string;
+const ERASURE_KEY = Buffer.from("0123456789abcdef0123456789abcdef");
 
 function setupRepo(): void {
   // Workspace marker so findRepoRoot accepts this dir.
@@ -62,19 +65,49 @@ function writeBackup(name: string, manifest: unknown): string {
   mkdirSync(dir, { recursive: true });
   const raw = manifest as Record<string, unknown>;
   const services = Array.isArray(raw.services)
-    ? raw.services.map((service) =>
-        service && typeof service === "object"
-          ? { version: "1.0.0", ...(service as Record<string, unknown>) }
-          : service,
-      )
+    ? raw.services.map((service) => {
+        if (!service || typeof service !== "object") return service;
+        const entry = service as Record<string, unknown>;
+        const volumes = Array.isArray(entry.volumes)
+          ? entry.volumes.map((volume) => {
+              if (!volume || typeof volume !== "object") return volume;
+              const value = volume as Record<string, unknown>;
+              return {
+                sha256: "0".repeat(64),
+                ...(value.mode === "tar" ? { resolvedName: "openmapx_test-volume" } : {}),
+                ...(value.mode === "pg_dump"
+                  ? { postgresUser: "postgres", postgresDb: "openmapx" }
+                  : {}),
+                ...value,
+              };
+            })
+          : entry.volumes;
+        return { version: "1.0.0", ...entry, ...(Array.isArray(entry.volumes) ? { volumes } : {}) };
+      })
     : raw.services;
   const normalized = {
+    formatVersion: 2,
     openmapxVersion: "1.0.0",
     ...raw,
     ...(Array.isArray(raw.services) ? { services } : {}),
   };
   writeFileSync(join(dir, "manifest.json"), JSON.stringify(normalized, null, 2), "utf-8");
   return dir;
+}
+
+function writeBackupFiles(dir: string, files: Record<string, string>): void {
+  const manifestPath = join(dir, "manifest.json");
+  const manifest = JSON.parse(readFileSync(manifestPath, "utf-8")) as BackupManifest;
+  for (const [name, contents] of Object.entries(files)) {
+    writeFileSync(join(dir, name), contents);
+    const volume = manifest.services
+      .flatMap((service) => service.volumes)
+      .find((v) => v.file === name);
+    if (!volume) throw new Error(`Missing test manifest volume for ${name}`);
+    volume.sizeBytes = Buffer.byteLength(contents);
+    volume.sha256 = createHash("sha256").update(contents).digest("hex");
+  }
+  writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf-8");
 }
 
 const baseService = {
@@ -90,12 +123,16 @@ beforeEach(() => {
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-backup-"));
   setupRepo();
   const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
-  mkdirSync(join(tmp, "infra", "docker", "data", "erasure"), { recursive: true });
-  initializeErasureJournal(journalPath, new Date("2000-01-01T00:00:00.000Z"));
+  mkdirSync(join(tmp, "infra", "docker", "data", "erasure"), {
+    recursive: true,
+    mode: 0o700,
+  });
+  initializeErasureJournal(journalPath, ERASURE_KEY, new Date("2000-01-01T00:00:00.000Z"));
   mkdirSync(join(tmp, "infra", "docker", "secrets"), { recursive: true });
   writeFileSync(
     join(tmp, "infra", "docker", "secrets", "erasure-journal-key"),
-    Buffer.from("0123456789abcdef0123456789abcdef").toString("base64url"),
+    ERASURE_KEY.toString("base64url"),
+    { mode: 0o444 },
   );
 });
 
@@ -260,6 +297,90 @@ describe("readBackupManifest", () => {
     expect(m.services).toHaveLength(1);
   });
 
+  it("rejects missing and obsolete manifest format versions", () => {
+    const missing = writeBackup("missing-format", {
+      formatVersion: undefined,
+      name: "missing-format",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [],
+    });
+    const obsolete = writeBackup("obsolete-format", {
+      formatVersion: 1,
+      name: "obsolete-format",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [],
+    });
+
+    expect(() => readBackupManifest(join(missing, "manifest.json"))).toThrow(/format version/i);
+    expect(() => readBackupManifest(join(obsolete, "manifest.json"))).toThrow(/format version/i);
+  });
+
+  it("requires a digest and mode-specific restore metadata for every volume", () => {
+    const missingDigest = writeBackup("missing-digest", {
+      name: "missing-digest",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "postgis",
+          volumes: [
+            {
+              name: "db",
+              mode: "pg_dump",
+              file: "db.sql.gz",
+              sizeBytes: 1,
+              sha256: undefined,
+            },
+          ],
+        },
+      ],
+    });
+    const missingPostgresMetadata = writeBackup("missing-postgres-metadata", {
+      name: "missing-postgres-metadata",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "postgis",
+          volumes: [
+            {
+              name: "db",
+              mode: "pg_dump",
+              file: "db.sql.gz",
+              sizeBytes: 1,
+              postgresUser: undefined,
+              postgresDb: undefined,
+            },
+          ],
+        },
+      ],
+    });
+    const missingVolumeName = writeBackup("missing-volume-name", {
+      name: "missing-volume-name",
+      createdAt: "2026-04-19T00:00:00Z",
+      services: [
+        {
+          id: "tileserver",
+          volumes: [
+            {
+              name: "tiles",
+              mode: "tar",
+              file: "tiles.tar.gz",
+              sizeBytes: 1,
+              resolvedName: undefined,
+            },
+          ],
+        },
+      ],
+    });
+
+    expect(() => readBackupManifest(join(missingDigest, "manifest.json"))).toThrow(/digest/i);
+    expect(() => readBackupManifest(join(missingPostgresMetadata, "manifest.json"))).toThrow(
+      /postgres credentials/i,
+    );
+    expect(() => readBackupManifest(join(missingVolumeName, "manifest.json"))).toThrow(
+      /resolved docker volume name/i,
+    );
+  });
+
   it("rejects replaced, symlinked and hard-linked manifests", () => {
     const dir = writeBackup("trusted", {
       name: "trusted",
@@ -358,6 +479,7 @@ describe("readBackupManifest", () => {
               mode: "tar",
               file: "postgis__v.tar.gz",
               sizeBytes: 1,
+              sha256: "1".repeat(64),
             },
           ],
         },
@@ -514,6 +636,7 @@ describe("readBackupManifest", () => {
 
   it("accepts a complete portable manifest unchanged", () => {
     const manifest: BackupManifest = {
+      formatVersion: 2,
       name: "complete",
       createdAt: "2026-04-19T00:00:00Z",
       openmapxVersion: "1.0.0",
@@ -528,12 +651,14 @@ describe("readBackupManifest", () => {
               mode: "tar",
               file: "tileserver__tiles.tar.gz",
               sizeBytes: 1,
+              sha256: "1".repeat(64),
             },
             {
               name: "database",
               mode: "pg_dump",
               file: "tileserver__database.sql.gz",
               sizeBytes: 2,
+              sha256: "2".repeat(64),
               postgresUser: "postgres",
               postgresDb: "openmapx",
             },
@@ -560,6 +685,7 @@ describe("readBackupManifest", () => {
     writeFileSync(
       path,
       JSON.stringify({
+        formatVersion: 2,
         name: "x",
         createdAt: "now",
         openmapxVersion: "1.0.0",
@@ -573,6 +699,7 @@ describe("readBackupManifest", () => {
 
 describe("filterManifestServices", () => {
   const m: BackupManifest = {
+    formatVersion: 2,
     name: "t",
     createdAt: "now",
     openmapxVersion: "1.0.0",
@@ -907,8 +1034,10 @@ describe("backup volume modes", () => {
         },
       ],
     });
-    writeFileSync(join(dir, "timeline__openmapx-db.sql.gz"), "dump");
-    writeFileSync(join(dir, "timeline__openmapx-files.tar.gz"), "tar");
+    writeBackupFiles(dir, {
+      "timeline__openmapx-db.sql.gz": "dump",
+      "timeline__openmapx-files.tar.gz": "tar",
+    });
     mockSuccessfulDocker();
 
     await restoreBackup({ rootDir: tmp, name: "mixed-restore", stopRunning: true });
@@ -945,9 +1074,88 @@ describe("backup volume modes", () => {
             },
           ],
         },
+        {
+          id: "timeline",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-files",
+              mode: "tar",
+              resolvedName: "openmapx_openmapx-files",
+              file: "timeline__openmapx-files.tar.gz",
+              sizeBytes: 0,
+            },
+          ],
+        },
       ],
     });
-    writeFileSync(join(dir, "postgis__openmapx-pgdata.sql.gz"), "dump");
+    writeBackupFiles(dir, {
+      "postgis__openmapx-pgdata.sql.gz": "dump",
+      "timeline__openmapx-files.tar.gz": "tar",
+    });
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "gunzip") {
+        return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
+          stdout: Readable.from(["dump"]),
+        });
+      }
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n{"Service":"timeline"}\n',
+          stderr: "",
+        });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+
+    await restoreBackup({ rootDir: tmp, name: "protected-restore", stopRunning: true });
+
+    const calls = mockedCommandCalls();
+    const stopApi = calls.findIndex(([, args]) => args.includes(" stop app-api"));
+    const restore = calls.findIndex(
+      ([, args]) => args.includes(" psql ") && !args.includes(" -At "),
+    );
+    const replay = calls.findIndex(([, args]) => args.includes(" psql ") && args.includes(" -At "));
+    const tar = calls.findIndex(([, args]) => args.includes("openmapx_openmapx-files:/target"));
+    const startApi = calls.findIndex(([, args]) => args.includes(" start app-api"));
+
+    expect(stopApi).toBeGreaterThanOrEqual(0);
+    expect(restore).toBeGreaterThan(stopApi);
+    expect(tar).toBeGreaterThan(restore);
+    expect(replay).toBeGreaterThan(tar);
+    expect(startApi).toBeGreaterThan(replay);
+  });
+
+  it("restarts and probes a mixed-mode database service before delayed erasure replay", async () => {
+    const dir = writeBackup("mixed-protected-restore", {
+      name: "mixed-protected-restore",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-pgdata",
+              mode: "pg_dump",
+              file: "postgis.sql.gz",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+            {
+              name: "postgis-files",
+              mode: "tar",
+              resolvedName: "openmapx_postgis-files",
+              file: "postgis-files.tar.gz",
+              sizeBytes: 0,
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "postgis.sql.gz": "dump", "postgis-files.tar.gz": "tar" });
     vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
       if (command === "gunzip") {
         return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
@@ -964,20 +1172,181 @@ describe("backup volume modes", () => {
       return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
     }) as never);
 
-    await restoreBackup({ rootDir: tmp, name: "protected-restore", stopRunning: true });
+    await restoreBackup({ rootDir: tmp, name: "mixed-protected-restore", stopRunning: true });
 
     const calls = mockedCommandCalls();
-    const stopApi = calls.findIndex(([, args]) => args.includes(" stop app-api"));
-    const restore = calls.findIndex(
-      ([, args]) => args.includes(" psql ") && !args.includes(" -At "),
+    const tar = calls.findIndex(([, args]) => args.includes("openmapx_postgis-files:/target"));
+    const restartDatabase = calls.findIndex(
+      ([, args], index) => index > tar && args.includes(" start postgis"),
     );
-    const replay = calls.findIndex(([, args]) => args.includes(" psql ") && args.includes(" -At "));
-    const startApi = calls.findIndex(([, args]) => args.includes(" start app-api"));
+    const ready = calls.findIndex(
+      ([, args], index) => index > restartDatabase && args.includes(" pg_isready "),
+    );
+    const replay = calls.findIndex(
+      ([, args], index) => index > ready && args.includes(" psql ") && args.includes(" -At "),
+    );
+    expect(tar).toBeGreaterThanOrEqual(0);
+    expect(restartDatabase).toBeGreaterThan(tar);
+    expect(ready).toBeGreaterThan(restartDatabase);
+    expect(replay).toBeGreaterThan(ready);
+    const readyCall = (
+      vi.mocked(execa).mock.calls as unknown as Array<[string, string[], { timeout?: number }]>
+    ).find((call) => call[0] === "docker" && call[1].includes("pg_isready"));
+    expect(readyCall?.[1]).toEqual(expect.arrayContaining(["-t", "1"]));
+    expect(readyCall?.[2]?.timeout).toBe(5_000);
+  });
 
-    expect(stopApi).toBeGreaterThanOrEqual(0);
-    expect(restore).toBeGreaterThan(stopApi);
-    expect(replay).toBeGreaterThan(restore);
-    expect(startApi).toBeGreaterThan(replay);
+  it("sends erased identities through psql stdin and quarantines terminal privacy rows", async () => {
+    const dir = writeBackup("stdin-erasure-replay", {
+      name: "stdin-erasure-replay",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-pgdata",
+              mode: "pg_dump",
+              file: "postgis.sql.gz",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
+    await appendErasureRequest(
+      join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl"),
+      ERASURE_KEY,
+      "deleted-user",
+    );
+    vi.mocked(execa).mockImplementation(((
+      command: string,
+      args: string[],
+      options?: { input?: unknown },
+    ) => {
+      if (command === "gunzip") {
+        return Object.assign(Promise.resolve({ exitCode: 0, stdout: "", stderr: "" }), {
+          stdout: Readable.from(["dump"]),
+        });
+      }
+      if (command === "docker" && args.includes("ps")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stderr: "",
+        });
+      }
+      if (command === "docker" && args.includes("-At")) {
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"id":"deleted-user","email":"Person@example.test"}\n',
+          stderr: "",
+        });
+      }
+      if (
+        command === "docker" &&
+        args.includes("psql") &&
+        typeof options?.input === "string" &&
+        options.input.includes("_openmapx_erasure_subject")
+      ) {
+        return Promise.resolve({
+          exitCode: 23,
+          stdout: "",
+          stderr: "database rejected deleted-user Person@example.test",
+        });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+
+    const loggedErrors: string[] = [];
+    const errorSpy = vi.spyOn(console, "error").mockImplementation((value) => {
+      loggedErrors.push(String(value));
+    });
+    await expect(
+      restoreBackup({ rootDir: tmp, name: "stdin-erasure-replay", stopRunning: true }),
+    ).rejects.toThrow("Unable to replay user erasure (psql exit 23)");
+    errorSpy.mockRestore();
+
+    const replayCalls = vi.mocked(execa).mock.calls as unknown as Array<
+      [string, string[], { input?: unknown }]
+    >;
+    const replayCall = replayCalls.find(
+      (call) =>
+        call[0] === "docker" &&
+        Array.isArray(call[1]) &&
+        call[1].includes("psql") &&
+        !call[1].includes("-At") &&
+        typeof call[2]?.input === "string",
+    );
+    expect(replayCall).toBeDefined();
+    expect(replayCall?.[1]).not.toContain("deleted-user");
+    expect(replayCall?.[1]).not.toContain("Person@example.test");
+    const stdin = String(replayCall?.[2]?.input);
+    expect(stdin).toContain("deleted-user\tPerson@example.test");
+    expect(stdin).toContain("\n\\.\nUPDATE data_subject_request");
+    expect(stdin).not.toContain("to_regclass");
+    expect(stdin).not.toContain("information_schema");
+    expect(stdin).toContain("change-email:");
+    expect(stdin).not.toContain("right(lower(identifier)");
+    expect(stdin).toContain("account_state = 'deleted'");
+    expect(stdin).toContain("state = 'revoked'");
+    expect(stdin).toContain("expires_at");
+    expect(stdin).not.toContain("wrapped_dek = NULL");
+    expect(stdin).toContain("deleted_at = NULL");
+    expect(loggedErrors.join("\n")).not.toContain("deleted-user");
+    expect(loggedErrors.join("\n")).not.toContain("Person@example.test");
+  });
+
+  it("revalidates the journal binding after stopping the API and before replacing the database", async () => {
+    const dir = writeBackup("swapped-journal-key", {
+      name: "swapped-journal-key",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "postgis",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-pgdata",
+              mode: "pg_dump",
+              file: "postgis.sql.gz",
+              sizeBytes: 0,
+              postgresUser: "postgres",
+              postgresDb: "openmapx",
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "postgis.sql.gz": "dump" });
+    vi.mocked(execa).mockImplementation(((command: string, args: string[]) => {
+      if (command === "docker" && args.includes("ps")) {
+        const keyPath = join(tmp, "infra", "docker", "secrets", "erasure-journal-key");
+        rmSync(keyPath);
+        writeFileSync(
+          keyPath,
+          Buffer.from("abcdef0123456789abcdef0123456789").toString("base64url"),
+          { mode: 0o444 },
+        );
+        return Promise.resolve({
+          exitCode: 0,
+          stdout: '{"Service":"app-api"}\n{"Service":"postgis"}\n',
+          stderr: "",
+        });
+      }
+      return Promise.resolve({ exitCode: 0, stdout: "", stderr: "" });
+    }) as never);
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    await expect(
+      restoreBackup({ rootDir: tmp, name: "swapped-journal-key", stopRunning: true }),
+    ).rejects.toThrow(/key.*does not match/i);
+    errorSpy.mockRestore();
+    expect(mockedCommandCalls().some(([, args]) => args.includes(" dropdb "))).toBe(false);
   });
 });
 
@@ -1115,6 +1484,7 @@ describe("preflightRestore", () => {
 describe("restore data-protection preflight", () => {
   function protectedManifest(createdAt: string): BackupManifest {
     return {
+      formatVersion: 2,
       name: "protected",
       createdAt,
       openmapxVersion: "1.0.0",
@@ -1128,6 +1498,7 @@ describe("restore data-protection preflight", () => {
               mode: "pg_dump",
               file: "db.sql.gz",
               sizeBytes: 1,
+              sha256: "1".repeat(64),
               postgresUser: "postgres",
               postgresDb: "openmapx",
             },
@@ -1141,7 +1512,7 @@ describe("restore data-protection preflight", () => {
     const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
     mkdirSync(join(journalPath, ".."), { recursive: true });
     rmSync(journalPath);
-    initializeErasureJournal(journalPath, new Date("2026-08-01T00:00:00.000Z"));
+    initializeErasureJournal(journalPath, ERASURE_KEY, new Date("2026-08-01T00:00:00.000Z"));
     expect(() =>
       validateRestoreDataProtection(protectedManifest("2026-08-02T00:00:00.000Z"), {
         rootDir: tmp,
@@ -1155,7 +1526,7 @@ describe("restore data-protection preflight", () => {
     const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
     mkdirSync(join(journalPath, ".."), { recursive: true });
     rmSync(journalPath);
-    initializeErasureJournal(journalPath, new Date("2026-08-01T00:00:00.000Z"));
+    initializeErasureJournal(journalPath, ERASURE_KEY, new Date("2026-08-01T00:00:00.000Z"));
     expect(() =>
       validateRestoreDataProtection(protectedManifest("2026-07-01T00:00:00.000Z"), {
         rootDir: tmp,
@@ -1186,6 +1557,33 @@ describe("restore data-protection preflight", () => {
       ),
     ).toEqual([]);
   });
+
+  it("rejects backups that contain the private subject-export ciphertext volume", () => {
+    const dir = writeBackup("private-export-volume", {
+      name: "private-export-volume",
+      createdAt: new Date().toISOString(),
+      services: [
+        {
+          id: "app-api",
+          version: "1.0.0",
+          volumes: [
+            {
+              name: "openmapx-subject-exports",
+              resolvedName: "openmapx_openmapx-subject-exports",
+              mode: "tar",
+              file: "private.tar.gz",
+              sizeBytes: 0,
+            },
+          ],
+        },
+      ],
+    });
+    writeBackupFiles(dir, { "private.tar.gz": "tar" });
+
+    expect(() => preflightRestore({ rootDir: tmp, name: "private-export-volume" })).toThrow(
+      /subject-export.*must not be restored/i,
+    );
+  });
 });
 
 describe("restore erasure replay", () => {
@@ -1209,6 +1607,21 @@ describe("restore erasure replay", () => {
 
     expect(count).toBe(1);
     expect(erased).toEqual(["deleted-user"]);
+  });
+
+  it("rejects a mismatched key before enumerating even an empty restored database", async () => {
+    const journalPath = join(tmp, "infra", "docker", "data", "erasure", "journal.jsonl");
+    const listUsers = vi.fn(async () => []);
+
+    await expect(
+      replayErasureRequests({
+        journalPath,
+        key: Buffer.from("abcdef0123456789abcdef0123456789"),
+        listUsers,
+        eraseUser: async () => {},
+      }),
+    ).rejects.toThrow(/key.*does not match/i);
+    expect(listUsers).not.toHaveBeenCalled();
   });
 });
 

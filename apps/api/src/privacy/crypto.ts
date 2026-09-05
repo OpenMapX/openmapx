@@ -124,8 +124,6 @@ function parsePersistedMasterKeyRing(contents: string): MasterKeyRing {
   if (Buffer.byteLength(contents, "utf8") > MAX_MASTER_KEY_RING_FILE_BYTES) {
     throw new Error("Privacy export key file exceeds the size limit");
   }
-  if (/^[A-Za-z0-9_-]{43}$/.test(contents)) return ringFromKey(decodeKey(contents));
-
   let parsed: unknown;
   try {
     parsed = JSON.parse(contents);
@@ -221,7 +219,7 @@ async function readDedicatedKeyFile(
   }
 }
 
-/** Load the dedicated export key. Managed deployments must use a file. */
+/** Load the dedicated export key. Managed deployments must use a versioned key-ring file. */
 export function loadMasterKeyRing(options: LoadMasterKeyOptions = {}): MasterKeyRing {
   const env = options.env ?? process.env;
   const keyFile = env.OPENMAPX_EXPORTS_KEY_FILE?.trim();

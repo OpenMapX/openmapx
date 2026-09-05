@@ -204,7 +204,6 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);
   ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "privacy-extraction"));
-  initializeErasureJournal(join(erasureDirectory, "journal.jsonl"));
   const redisPasswordPath = join(paths.infraDir, "secrets", "redis-password");
   const redisAclPath = join(paths.infraDir, "secrets", "redis-acl.conf");
   const opsAgentApiTokenPath = join(paths.infraDir, "secrets", "ops-agent-api-token");
@@ -234,7 +233,11 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   );
   ensurePlatformSecretFile(redisPasswordPath);
   ensurePlatformSecretFile(offlinePackagePrincipalKeyPath);
-  ensurePlatformSecretFile(erasureJournalKeyPath);
+  const erasureJournalKey = Buffer.from(
+    ensurePlatformSecretFile(erasureJournalKeyPath),
+    "base64url",
+  );
+  initializeErasureJournal(join(erasureDirectory, "journal.jsonl"), erasureJournalKey);
   ensurePlatformExportsKeyRingFile(subjectExportsMasterKeyPath);
   ensurePlatformSecretFile(privacyBackupCapabilityKeyPath);
   ensurePlatformSecretFile(transitousRunnerCapabilityPath);

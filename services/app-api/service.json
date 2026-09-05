@@ -41,6 +41,7 @@
       "OFFLINE_PACKAGE_PRINCIPAL_KEY_UID": "${UID:-1000}",
       "ERASURE_JOURNAL_PATH": "/var/lib/openmapx/erasure/journal.jsonl",
       "ERASURE_JOURNAL_KEY_FILE": "/run/secrets/erasure-journal-key",
+      "ERASURE_JOURNAL_KEY_UID": "${UID:-1000}",
       "OPENMAPX_EXPORTS_KEY_FILE": "/run/secrets/subject-exports-master-key",
       "OPENMAPX_EXPORTS_KEY_UID": "${UID:-1000}",
       "OPENMAPX_EXPORT_STORAGE_DIR": "/var/lib/openmapx/subject-exports",

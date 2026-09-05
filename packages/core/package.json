@@ -22,6 +22,10 @@
       "types": "./src/erasure-journal.ts",
       "default": "./src/erasure-journal.ts"
     },
+    "./erasure-cleanup": {
+      "types": "./src/erasure-cleanup.ts",
+      "default": "./src/erasure-cleanup.ts"
+    },
     "./server-api": {
       "types": "./src/api/server.ts",
       "default": "./src/api/server.ts"

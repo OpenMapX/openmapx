@@ -47,6 +47,7 @@ const TARGETS = [
   "packages/core/tsconfig.json",
   "packages/core/src/privacy",
   "packages/core/src/erasure-journal.ts",
+  "packages/core/src/erasure-cleanup.ts",
   "packages/core/src/services",
   "packages/core/src/utils/legalConfig.ts",
   "packages/cli/src/commands/backup.ts",
