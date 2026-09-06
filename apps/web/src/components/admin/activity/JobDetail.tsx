@@ -3,6 +3,7 @@
 import CancelIcon from "@mui/icons-material/Cancel";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
 import LinearProgress from "@mui/material/LinearProgress";
 import Stack from "@mui/material/Stack";
@@ -12,44 +13,22 @@ import { useEffect, useRef } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { DataManagerJobStages } from "../shared/DataManagerJobStages";
 import { JobStatusChip } from "../shared/JobStatusChip";
+import {
+  type JobDetailData,
+  type JobStreamConnection,
+  useJobEventStream,
+} from "./useJobEventStream";
 
-interface JobLog {
-  id: string;
-  seq: number;
-  stream: string;
-  line: string;
-  createdAt: string;
-}
+const CONNECTION_LABEL: Record<JobStreamConnection, string | null> = {
+  connecting: "Connecting",
+  live: "Live",
+  reconnecting: "Reconnecting",
+  polling: "Polling",
+  closed: null,
+};
 
-interface JobDetailData {
-  source: "application" | "data-manager";
-  id: string;
-  type: string;
-  status: string;
-  payload: Record<string, unknown> | null;
-  result: Record<string, unknown> | null;
-  error: string | null;
-  progress: number | null;
-  createdBy: string | null;
-  createdAt: string;
-  startedAt: string | null;
-  finishedAt: string | null;
-  cancelable: boolean;
-  logs: JobLog[];
-  stages: JobStage[];
-}
-
-interface JobStage {
-  id: string;
-  stage: string;
-  status: string;
-  startedAt: string;
-  finishedAt: string;
-  durationMs: number;
-  message: string | null;
-  error: unknown;
-  artifacts: unknown;
-}
+/** Poll cadence used only when the event stream is unavailable. */
+const POLL_INTERVAL_MS = 5_000;
 
 function formatDuration(startedAt: string | null, finishedAt: string | null): string {
   if (!startedAt) return "—";
@@ -76,7 +55,16 @@ export function JobDetail({
   const queryClient = useQueryClient();
   const logEndRef = useRef<HTMLDivElement>(null);
 
-  const { data, isLoading, isError } = useQuery<JobDetailData>({
+  // Application jobs stream their state; data-manager jobs are written by
+  // another process and keep the query below as their only source.
+  const streamUrl =
+    source === "application"
+      ? `${env.apiUrl}/api/admin/jobs/${encodeURIComponent(jobId)}/events?source=application`
+      : null;
+  const stream = useJobEventStream(streamUrl);
+  const polling = stream.connection === "polling";
+
+  const query = useQuery<JobDetailData>({
     queryKey: ["admin", "jobs", source, jobId],
     queryFn: async () => {
       const params = new URLSearchParams({ source });
@@ -86,17 +74,32 @@ export function JobDetail({
       if (!res.ok) throw new Error("Failed to load job");
       return res.json();
     },
+    // While the stream is healthy the initial fetch still seeds the view
+    // quickly; only the polling fallback keeps refetching afterwards.
     refetchInterval: (query) => {
+      if (!polling) return false;
       const status = query.state.data?.status;
-      return status && isActive(status) ? 2000 : false;
+      return status && isActive(status) ? POLL_INTERVAL_MS : false;
     },
   });
+  const data = stream.data ?? query.data;
+  const isLoading = !data && query.isLoading;
+  const isError = !data && query.isError;
+  const connectionLabel = CONNECTION_LABEL[stream.connection];
 
   useEffect(() => {
     if (data && isActive(data.status)) {
       logEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }
   }, [data?.logs.length, data?.status, data]);
+
+  useEffect(() => {
+    // The list view still polls; refresh it once the stream reports an end
+    // state so both surfaces agree without waiting for the next poll.
+    if (stream.connection === "closed") {
+      void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+    }
+  }, [stream.connection, queryClient]);
 
   const cancel = useMutation({
     mutationFn: async () => {
@@ -149,6 +152,14 @@ export function JobDetail({
         }}
       >
         <JobStatusChip status={data.status} />
+        {connectionLabel && data.source === "application" && isActive(data.status) && (
+          <Chip
+            size="small"
+            variant="outlined"
+            color={stream.connection === "live" ? "success" : "default"}
+            label={connectionLabel}
+          />
+        )}
         {data.status === "running" && (
           <Box sx={{ flexGrow: 1, maxWidth: 200 }}>
             <LinearProgress

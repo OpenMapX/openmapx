@@ -98,7 +98,11 @@ The backend control plane, with sub-pages for the day-to-day work:
   the renderer will do before bringing the stack up.
 - **Data workflows** — the inventory of downloaded data (OSM extracts, GTFS
   feeds, glyph fonts), GTFS import controls, and Overture Places release and
-  durable OSM↔GERS link operations.
+  durable OSM↔GERS link operations. The operation cards are rendered from a
+  server-side catalog: the API declares each operation's fields, defaults,
+  validation, and risk level, and the form only mirrors that contract. Queueing
+  an operation first asks the API for a preview of what it will do; destructive
+  operations add an explicit warning to that confirmation step.
 - **Backups** — the on-disk snapshot manager. See [Backup and
   restore](./backup-and-restore.md).
 
@@ -139,8 +143,10 @@ stale responses don't linger.
 
 The audit and jobs view: the running and recently finished background jobs
 (installs, reloads, restarts, imports) with their logs, and the audit log of
-every state-changing admin action — who did what, to what, and when. See
-[Monitoring](./monitoring.md).
+every state-changing admin action — who did what, to what, and when. Opening a
+running application job streams its status, progress, and log lines live; a
+small chip next to the status shows whether the view is live, reconnecting, or
+has fallen back to polling. See [Monitoring](./monitoring.md).
 
 ### Settings
 

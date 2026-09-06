@@ -80,6 +80,7 @@ import {
   handleDataOperationJob,
   handleServiceBulkJob,
 } from "./services/admin-job-handlers";
+import { validateAdminOperationCatalog } from "./services/admin-operation-catalog";
 import {
   renderAndPersistCompose,
   serviceApply,
@@ -695,6 +696,7 @@ setInterval(runRetention, ONE_DAY_MS);
 setInterval(runPrivacyRetention, 60 * 60_000).unref();
 
 // Register job handlers
+validateAdminOperationCatalog();
 jobRunner.register("service.start", async (ctx) => {
   const service = ctx.payload.service as string;
   await serviceStart(service, ctx);

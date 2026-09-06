@@ -286,6 +286,16 @@ their streamed logs. Job rows are pruned after `ADMIN_JOB_RETENTION_DAYS` (defau
 30). Between them, the audit log tells you the *intent* of every admin action and
 the jobs view shows the *execution*.
 
+Application job details are pushed to the browser over Server-Sent Events
+(`GET /api/admin/jobs/<id>/events`). Every event carries a per-job cursor; when
+the browser reconnects it resends the last cursor it saw and the API replays
+what it missed from a bounded in-memory window, or sends a fresh snapshot when
+that window has expired (for example after an API restart). If the stream keeps
+failing the view falls back to polling. `GET /api/admin/jobs/stream-metrics`
+reports active streams, reconnects, backfilled events, snapshot fallbacks,
+slow-consumer disconnects, and job handler durations. Data-manager jobs are
+written by a separate process and keep polling.
+
 ## Where to go next
 
 - **[Admin panel](./admin-panel.md)** — the Overview dashboard and how access is

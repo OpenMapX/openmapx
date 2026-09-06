@@ -39,10 +39,11 @@ vi.mock("../service-registry", () => ({
   }),
 }));
 
-const { _argvGuards, handleBackupOperationJob, handleDataOperationJob, handleServiceBulkJob } =
-  await import("../admin-job-handlers");
+const { handleBackupOperationJob, handleDataOperationJob, handleServiceBulkJob } = await import(
+  "../admin-job-handlers"
+);
 
-describe("argv guards", () => {
+describe("admin job handlers", () => {
   describe("backup operations", () => {
     it("submits only typed backup IDs and options to the operations agent", async () => {
       runAdminOperationMock.mockClear();
@@ -101,97 +102,29 @@ describe("argv guards", () => {
     });
   });
 
-  describe("rejectFlagLike", () => {
-    it("rejects strings starting with '-'", () => {
-      expect(() => _argvGuards.rejectFlagLike("--preset=app", "x")).toThrow(/must not begin/);
-      expect(() => _argvGuards.rejectFlagLike("-h", "x")).toThrow();
-    });
-    it("accepts plain values", () => {
-      expect(() => _argvGuards.rejectFlagLike("germany", "x")).not.toThrow();
-    });
-  });
-
-  describe("assertSlug", () => {
-    it("accepts typical service ids", () => {
-      expect(() => _argvGuards.assertSlug("valhalla", "id")).not.toThrow();
-      expect(() => _argvGuards.assertSlug("app-api", "id")).not.toThrow();
-      expect(() => _argvGuards.assertSlug("foo_bar.baz", "id")).not.toThrow();
-    });
-    it("rejects flag-like, empty, or odd-shape input", () => {
-      expect(() => _argvGuards.assertSlug("--preset", "id")).toThrow();
-      expect(() => _argvGuards.assertSlug("foo bar", "id")).toThrow();
-      expect(() => _argvGuards.assertSlug("/etc/passwd", "id")).toThrow();
-    });
-  });
-
-  describe("assertRegion", () => {
-    it("accepts typical region selectors", () => {
-      expect(() => _argvGuards.assertRegion("germany")).not.toThrow();
-      expect(() => _argvGuards.assertRegion("europe/germany")).not.toThrow();
-    });
-    it("rejects path traversal and flags", () => {
-      expect(() => _argvGuards.assertRegion("../etc")).toThrow();
-      expect(() => _argvGuards.assertRegion("--region")).toThrow();
-    });
-  });
-
-  describe("assertCountries", () => {
-    it("accepts ISO codes", () => {
-      expect(() => _argvGuards.assertCountries("DE")).not.toThrow();
-      expect(() => _argvGuards.assertCountries("DE,CH,AT")).not.toThrow();
-    });
-    it("rejects malformed input", () => {
-      expect(() => _argvGuards.assertCountries("germany")).toThrow();
-      expect(() => _argvGuards.assertCountries("--countries=DE")).toThrow();
-    });
-  });
-
-  describe("assertInsideRepo", () => {
-    it("accepts paths that resolve inside the repo", () => {
-      expect(_argvGuards.assertInsideRepo("infra/docker/feeds.json", "feedsFile")).toBe(
-        "/repo/infra/docker/feeds.json",
-      );
-      expect(_argvGuards.assertInsideRepo("/repo/data/feeds.json", "feedsFile")).toBe(
-        "/repo/data/feeds.json",
-      );
-    });
-    it("rejects path traversal escapes", () => {
-      expect(() => _argvGuards.assertInsideRepo("../../etc/passwd", "feedsFile")).toThrow(
-        /inside the repo root/,
-      );
-      expect(() => _argvGuards.assertInsideRepo("/etc/passwd", "feedsFile")).toThrow(
-        /inside the repo root/,
-      );
-    });
-    it("rejects flag-like input", () => {
-      expect(() => _argvGuards.assertInsideRepo("--output=foo", "output")).toThrow();
-    });
-  });
-
-  describe("assertKnownServiceIds", () => {
-    it("admits ids in the registry", () => {
-      expect(() => _argvGuards.assertKnownServiceIds(["valhalla", "osrm"])).not.toThrow();
-    });
-    it("rejects unknown ids", () => {
-      expect(() => _argvGuards.assertKnownServiceIds(["nope"])).toThrow(/Unknown serviceId/);
-    });
-    it("rejects flag-shaped ids before checking the registry", () => {
-      expect(() => _argvGuards.assertKnownServiceIds(["--preset=app"])).toThrow();
-    });
-  });
-
-  describe("Overture operations", () => {
-    it("maps a validated sync region to a typed agent operation", async () => {
-      runAdminOperationMock.mockClear();
-      const ctx = {
+  describe("data operations", () => {
+    function dataCtx(payload: Record<string, unknown>) {
+      return {
         jobId: "job",
-        payload: { operation: "overture-sync", region: "europe/germany" },
+        payload,
         signal: new AbortController().signal,
         log: vi.fn(),
         setProgress: vi.fn(),
         checkpoint: vi.fn(),
       };
-      await handleDataOperationJob(ctx);
+    }
+
+    it("maps a validated catalog input to a typed agent operation", async () => {
+      runAdminOperationMock.mockClear();
+      const ctx = dataCtx({
+        operation: "overture-sync",
+        version: 1,
+        input: { region: "europe/germany" },
+      });
+      await expect(handleDataOperationJob(ctx)).resolves.toEqual({
+        operation: "overture-sync",
+        resourceId: "europe/germany",
+      });
       expect(runAdminOperationMock).toHaveBeenCalledWith(
         ctx,
         { kind: "data.overtureSync", regionId: "europe/germany" },
@@ -200,97 +133,55 @@ describe("argv guards", () => {
       expect(runCliMock).not.toHaveBeenCalled();
     });
 
-    it("rejects an invalid region before invoking the CLI", async () => {
+    it("re-validates the stored input before submitting", async () => {
       runAdminOperationMock.mockClear();
       await expect(
-        handleDataOperationJob({
-          jobId: "job",
-          payload: { operation: "overture-conflate", region: "../etc", restart: true },
-          signal: new AbortController().signal,
-          log: vi.fn(),
-          setProgress: vi.fn(),
-          checkpoint: vi.fn(),
-        }),
+        handleDataOperationJob(
+          dataCtx({ operation: "overture-conflate", version: 1, input: { region: "../etc" } }),
+        ),
+      ).rejects.toThrow(/region/);
+      await expect(
+        handleDataOperationJob(dataCtx({ operation: "search-index-build", version: 1, input: {} })),
       ).rejects.toThrow(/region/);
       expect(runAdminOperationMock).not.toHaveBeenCalled();
     });
-  });
 
-  describe("search index operations", () => {
-    it("maps search-index-build to a typed region ID", async () => {
-      runAdminOperationMock.mockClear();
-      const ctx = {
-        jobId: "job",
-        payload: { operation: "search-index-build", region: "europe/germany" },
-        signal: new AbortController().signal,
-        log: vi.fn(),
-        setProgress: vi.fn(),
-        checkpoint: vi.fn(),
-      };
-      await handleDataOperationJob(ctx);
-
-      expect(runAdminOperationMock).toHaveBeenCalledWith(
-        ctx,
-        { kind: "data.searchIndexBuild", regionId: "europe/germany" },
-        "admin-job.data.search-index-build",
-      );
-    });
-
-    it("requires a search index region", async () => {
+    it("rejects unknown operations and stale catalog versions", async () => {
       runAdminOperationMock.mockClear();
       await expect(
-        handleDataOperationJob({
-          jobId: "job",
-          payload: { operation: "search-index-build" },
-          signal: new AbortController().signal,
-          log: vi.fn(),
-          setProgress: vi.fn(),
-          checkpoint: vi.fn(),
-        }),
-      ).rejects.toThrow("search-index-build requires region");
+        handleDataOperationJob(dataCtx({ operation: "rm-rf", version: 1, input: {} })),
+      ).rejects.toThrow("Unsupported data operation: rm-rf");
+      await expect(
+        handleDataOperationJob(dataCtx({ operation: "link", version: 99, input: {} })),
+      ).rejects.toThrow(/catalog version 99; current is 1/);
       expect(runAdminOperationMock).not.toHaveBeenCalled();
     });
 
-    it("rejects traversal in search index region", async () => {
-      runAdminOperationMock.mockClear();
-      await expect(
-        handleDataOperationJob({
-          jobId: "job",
-          payload: { operation: "search-index-build", region: "../etc" },
-          signal: new AbortController().signal,
-          log: vi.fn(),
-          setProgress: vi.fn(),
-          checkpoint: vi.fn(),
-        }),
-      ).rejects.toThrow("region must match");
-      expect(runAdminOperationMock).not.toHaveBeenCalled();
-    });
-  });
-
-  describe("fixed data authority", () => {
     it("does not forward caller URL, output path, argv, or environment for API-key generation", async () => {
       runAdminOperationMock.mockClear();
-      const ctx = {
-        jobId: "job",
-        payload: {
-          operation: "generate-api-keys",
-          repoUrl: "https://attacker.example/catalog.git",
-          output: "/tmp/attacker",
-          argv: ["--output", "/etc/passwd"],
-          environment: { NODE_OPTIONS: "--require=/tmp/payload" },
-        },
-        signal: new AbortController().signal,
-        log: vi.fn(),
-        setProgress: vi.fn(),
-        checkpoint: vi.fn(),
-      };
+      await expect(
+        handleDataOperationJob(
+          dataCtx({
+            operation: "generate-api-keys",
+            version: 1,
+            input: {
+              repoUrl: "https://attacker.example/catalog.git",
+              output: "/tmp/attacker",
+              argv: ["--output", "/etc/passwd"],
+              environment: { NODE_OPTIONS: "--require=/tmp/payload" },
+            },
+          }),
+        ),
+      ).rejects.toThrow(/Invalid input/);
+      expect(runAdminOperationMock).not.toHaveBeenCalled();
+
+      const ctx = dataCtx({ operation: "generate-api-keys", version: 1, input: {} });
       await handleDataOperationJob(ctx);
       expect(runAdminOperationMock).toHaveBeenCalledWith(
         ctx,
         { kind: "data.generateApiKeys", catalogRevisionId: "transitous-fixed-v1" },
         "admin-job.data.generate-api-keys",
       );
-      expect(JSON.stringify(runAdminOperationMock.mock.calls[0]?.[1])).not.toContain("attacker");
     });
   });
 

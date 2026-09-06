@@ -5,6 +5,8 @@ import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./admin-compose";
 import { adminDawarichRoute } from "./admin-dawarich";
 import { adminExtensionsRoute } from "./admin-extensions";
+import { adminJobEventsRoute } from "./admin-job-events";
+import { adminOperationsRoute } from "./admin-operations";
 import { adminServicesRoute } from "./admin-services";
 import { adminSettingsRoute } from "./admin-settings";
 import { adminSystemRoute } from "./admin-system";
@@ -103,6 +105,8 @@ export async function registerCoreRoutes(
   await server.register(statusRoute, { prefix: "/api" });
   await server.register(adminRoute, { prefix: "/api" });
   await server.register(adminServicesRoute, { prefix: "/api" });
+  await server.register(adminOperationsRoute, { prefix: "/api" });
+  await server.register(adminJobEventsRoute, { prefix: "/api" });
   await server.register(adminDawarichRoute, { prefix: "/api" });
   await server.register(dataManagerRoute, { prefix: "/api" });
   await server.register(adminSettingsRoute, { prefix: "/api" });

@@ -245,61 +245,6 @@ describe("GET /admin/services", () => {
   });
 });
 
-describe("POST /admin/services/data/action", () => {
-  it("enqueues and audits a search-index build", async () => {
-    const res = await app.inject({
-      method: "POST",
-      url: "/admin/services/data/action",
-      payload: { operation: "search-index-build", region: "europe/germany" },
-    });
-
-    expect(res.statusCode).toBe(200);
-    expect(res.json()).toEqual({ ok: true, jobId: "job-123" });
-    expect(mockJobRunnerEnqueue).toHaveBeenCalledWith(
-      "data.operation",
-      expect.objectContaining({
-        operation: "search-index-build",
-        region: "europe/germany",
-      }),
-      fakeSession.user.id,
-    );
-    expect(mockWriteAuditLog).toHaveBeenCalledWith(
-      expect.objectContaining({
-        targetType: "data",
-        targetId: "search-index-build",
-        action: "data.search-index-build",
-      }),
-    );
-  });
-
-  it("rejects caller URL/output/argv/environment before fixed API-key generation", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: "/admin/services/data/action",
-      payload: {
-        operation: "generate-api-keys",
-        repoUrl: "https://attacker.example/catalog.git",
-        output: "/etc/passwd",
-        argv: ["--output", "/etc/passwd"],
-        environment: { NODE_OPTIONS: "--require=/tmp/payload" },
-      },
-    });
-    expect(response.statusCode).toBe(400);
-    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
-    expect(mockWriteAuditLog).not.toHaveBeenCalled();
-  });
-
-  it("rejects operation-inapplicable fields before enqueue", async () => {
-    const response = await app.inject({
-      method: "POST",
-      url: "/admin/services/data/action",
-      payload: { operation: "download-fonts", region: "europe/germany" },
-    });
-    expect(response.statusCode).toBe(400);
-    expect(mockJobRunnerEnqueue).not.toHaveBeenCalled();
-  });
-});
-
 describe("strict administrative effect bodies", () => {
   it.each([
     ["/admin/services/bulk-action", { action: "build", all: true, argv: ["--privileged"] }],

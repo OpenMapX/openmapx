@@ -4,6 +4,7 @@ import { db } from "../db";
 import { adminJob, adminJobLog } from "../db/schema";
 import { dbActorId } from "../utils/actor";
 import { cancelAdminJobOperations } from "./admin-job-ops";
+import { type JobStatusEvent, jobEventBus, TERMINAL_JOB_STATUSES } from "./job-events";
 import { appApiRestartCheckpoint } from "./system-update-state";
 
 type AppApiReplacementOutcome = "applied" | "rolled-back" | "failed";
@@ -68,13 +69,27 @@ class AdminJobRunner {
     return id;
   }
 
+  /** Publish a status transition so live viewers see it without polling. */
+  private announce(
+    jobId: string,
+    status: string,
+    patch: Omit<JobStatusEvent, "type" | "status"> = {},
+  ): void {
+    jobEventBus.publish(jobId, { type: "status", status, ...patch });
+    if (TERMINAL_JOB_STATUSES.has(status)) jobEventBus.markTerminal(jobId);
+  }
+
   async cancel(jobId: string): Promise<boolean> {
+    const canceledAt = new Date();
     const queued = await db
       .update(adminJob)
-      .set({ status: "canceled", finishedAt: new Date() })
+      .set({ status: "canceled", finishedAt: canceledAt })
       .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "queued")))
       .returning({ id: adminJob.id });
-    if (queued.length > 0) return true;
+    if (queued.length > 0) {
+      this.announce(jobId, "canceled", { finishedAt: canceledAt.toISOString() });
+      return true;
+    }
 
     const [job] = await db
       .select({ status: adminJob.status, result: adminJob.result })
@@ -86,6 +101,7 @@ class AdminJobRunner {
       .update(adminJob)
       .set({ status: "cancel_pending" })
       .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "running")));
+    this.announce(jobId, "cancel_pending");
     let outcome: Awaited<ReturnType<typeof cancelAdminJobOperations>>;
     try {
       outcome = await cancelAdminJobOperations(job.result);
@@ -102,13 +118,16 @@ class AdminJobRunner {
         .update(adminJob)
         .set({ status: "running" })
         .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "cancel_pending")));
+      this.announce(jobId, "running");
       return false;
     }
     this.active.get(jobId)?.abort();
+    const finishedAt = new Date();
     await db
       .update(adminJob)
-      .set({ status: "canceled", finishedAt: new Date() })
+      .set({ status: "canceled", finishedAt })
       .where(and(eq(adminJob.id, jobId), eq(adminJob.status, "cancel_pending")));
+    this.announce(jobId, "canceled", { finishedAt: finishedAt.toISOString() });
     return true;
   }
 
@@ -399,14 +418,25 @@ class AdminJobRunner {
         const localSeq = this.logSeq.get(jobId) ?? 0;
         const seq = sourceSeq ?? localSeq;
         this.logSeq.set(jobId, Math.max(localSeq + 1, seq + 1));
+        const id = sourceEventId ?? randomUUID();
+        const createdAt = new Date();
         const insertion = db
           .insert(adminJobLog)
-          .values({ id: sourceEventId ?? randomUUID(), jobId, seq, stream, line });
+          .values({ id, jobId, seq, stream, line, createdAt });
         if (sourceEventId) await insertion.onConflictDoNothing();
         else await insertion;
+        jobEventBus.publish(jobId, {
+          type: "log",
+          id,
+          seq,
+          stream,
+          line,
+          createdAt: createdAt.toISOString(),
+        });
       },
       setProgress: async (progress) => {
         await db.update(adminJob).set({ progress }).where(eq(adminJob.id, jobId));
+        jobEventBus.publish(jobId, { type: "progress", progress });
       },
       checkpoint: async (result, progress) => {
         await db
@@ -414,45 +444,54 @@ class AdminJobRunner {
           .set({ result, ...(progress === undefined ? {} : { progress }) })
           .where(eq(adminJob.id, jobId));
         ctx.checkpointResult = result;
+        if (progress !== undefined) jobEventBus.publish(jobId, { type: "progress", progress });
       },
     };
 
+    this.announce(jobId, "running", { startedAt: new Date().toISOString() });
+    const startedAtMs = Date.now();
     try {
       if (signal.aborted) throw new DOMException("Aborted", "AbortError");
       const result = await handler(ctx);
+      jobEventBus.recordHandlerDuration(Date.now() - startedAtMs);
+      const finishedAt = new Date();
       if (signal.aborted) {
         await db
           .update(adminJob)
-          .set({ status: "canceled", finishedAt: new Date() })
+          .set({ status: "canceled", finishedAt })
           .where(eq(adminJob.id, jobId));
+        this.announce(jobId, "canceled", { finishedAt: finishedAt.toISOString() });
       } else {
+        const mergedResult =
+          result === undefined
+            ? (ctx.checkpointResult ?? null)
+            : { ...(ctx.checkpointResult ?? {}), ...result };
         await db
           .update(adminJob)
-          .set({
-            status: "success",
-            result:
-              result === undefined
-                ? (ctx.checkpointResult ?? null)
-                : { ...(ctx.checkpointResult ?? {}), ...result },
-            finishedAt: new Date(),
-            progress: 100,
-          })
+          .set({ status: "success", result: mergedResult, finishedAt, progress: 100 })
           .where(eq(adminJob.id, jobId));
+        this.announce(jobId, "success", {
+          result: mergedResult,
+          progress: 100,
+          finishedAt: finishedAt.toISOString(),
+        });
       }
     } catch (err) {
+      jobEventBus.recordHandlerDuration(Date.now() - startedAtMs);
       const isAbort = signal.aborted || (err instanceof DOMException && err.name === "AbortError");
+      const finishedAt = new Date();
+      const error = err instanceof Error ? err.message : String(err);
       await db
         .update(adminJob)
-        .set(
-          isAbort
-            ? { status: "canceled", finishedAt: new Date() }
-            : {
-                status: "failed",
-                error: err instanceof Error ? err.message : String(err),
-                finishedAt: new Date(),
-              },
-        )
+        .set(isAbort ? { status: "canceled", finishedAt } : { status: "failed", error, finishedAt })
         .where(eq(adminJob.id, jobId));
+      this.announce(
+        jobId,
+        isAbort ? "canceled" : "failed",
+        isAbort
+          ? { finishedAt: finishedAt.toISOString() }
+          : { error, finishedAt: finishedAt.toISOString() },
+      );
     }
   }
 }

@@ -12,24 +12,24 @@ import Card from "@mui/material/Card";
 import CardContent from "@mui/material/CardContent";
 import Chip from "@mui/material/Chip";
 import CircularProgress from "@mui/material/CircularProgress";
-import Dialog from "@mui/material/Dialog";
-import DialogActions from "@mui/material/DialogActions";
-import DialogContent from "@mui/material/DialogContent";
-import DialogTitle from "@mui/material/DialogTitle";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Grid from "@mui/material/Grid";
 import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
-import TextField from "@mui/material/TextField";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { formatBytes } from "@/lib/storageFormat";
+import { AdminOperationCard } from "../operations/AdminOperationCard";
+import {
+  type AdminOperationContract,
+  fetchAdminOperations,
+} from "../operations/adminOperationsApi";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
 import { OvertureMaintenance } from "./OvertureMaintenance";
@@ -108,10 +108,12 @@ interface DataResponse {
   fetchedAt: string;
 }
 
-interface DataActionResponse {
-  ok: boolean;
-  jobId: string;
-}
+/** Overture and search operations have their own maintenance sections below. */
+const DATA_OPERATION_GROUPS: ReadonlySet<AdminOperationContract["group"]> = new Set([
+  "osm",
+  "build",
+  "transit",
+]);
 
 interface SharedMobilityOperationsState {
   rollbackCategories: Array<"bike" | "scooter" | "car">;
@@ -151,82 +153,23 @@ const BUILD_LABELS: Record<string, string> = {
   overpass: "Overpass",
 };
 
-function OperationCard({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description: string;
-  children: ReactNode;
-}) {
-  return (
-    <Card variant="outlined">
-      <CardContent>
-        <Stack spacing={1.5}>
-          <Box>
-            <Typography
-              variant="subtitle2"
-              sx={{
-                fontWeight: 700,
-              }}
-            >
-              {title}
-            </Typography>
-            <Typography
-              variant="caption"
-              sx={{
-                color: "text.secondary",
-              }}
-            >
-              {description}
-            </Typography>
-          </Box>
-          {children}
-        </Stack>
-      </CardContent>
-    </Card>
-  );
-}
-
 function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
   const showToast = useAdminToast();
   const queryClient = useQueryClient();
-
-  const [osmRegion, setOsmRegion] = useState("");
-  const [updateRegion, setUpdateRegion] = useState("");
-  const [updateCountries, setUpdateCountries] = useState("");
-  const [updateFailFast, setUpdateFailFast] = useState(false);
-  const [overpassRegion, setOverpassRegion] = useState("");
-  const [cleanTarget, setCleanTarget] = useState("all");
-  const [cleanDialogOpen, setCleanDialogOpen] = useState(false);
-  const [apiKeysRepoUrl, setApiKeysRepoUrl] = useState("");
-  const [apiKeysOutput, setApiKeysOutput] = useState("");
   const [lastJobId, setLastJobId] = useState<string | null>(null);
 
-  const runOperation = useMutation({
-    mutationFn: async (body: Record<string, unknown>) => {
-      const res = await fetch(`${apiUrl}/api/admin/services/data/action`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = await res.json().catch(() => ({}));
-        throw new Error((err as { error?: string }).error ?? "Failed to queue operation");
-      }
-      return res.json() as Promise<DataActionResponse>;
-    },
-    onSuccess: (result, body) => {
-      const op = String(body.operation ?? "operation");
-      setLastJobId(result.jobId);
-      showToast(`Queued ${op} (${result.jobId})`);
-      queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
-    },
-    onError: (err) => showToast(err instanceof Error ? err.message : "Operation failed", "error"),
+  const catalog = useQuery<AdminOperationContract[]>({
+    queryKey: ["admin", "operations"],
+    queryFn: () => fetchAdminOperations(apiUrl),
+    staleTime: 5 * 60_000,
   });
+
+  const handleQueued = (jobId: string, operation: AdminOperationContract) => {
+    setLastJobId(jobId);
+    showToast(`Queued ${operation.title} (${jobId})`);
+    queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+    queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
+  };
 
   return (
     <Paper variant="outlined" sx={{ p: 2.5 }}>
@@ -259,7 +202,8 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
           mb: 2,
         }}
       >
-        Queue CLI-backed data jobs from the GUI. All operations stream logs via Admin jobs.
+        Queue data jobs from the GUI. Each operation previews its effect before it is queued and
+        streams its progress to Activity.
       </Typography>
       {lastJobId && (
         <Alert
@@ -274,225 +218,30 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
           Last queued job: <code>{lastJobId}</code>
         </Alert>
       )}
+      {catalog.isError && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {catalog.error instanceof Error ? catalog.error.message : "Failed to load operations"}
+        </Alert>
+      )}
+      {catalog.isLoading && (
+        <Box sx={{ display: "flex", justifyContent: "center", py: 3 }}>
+          <CircularProgress size={24} />
+        </Box>
+      )}
       <Grid container spacing={2}>
-        <Grid size={{ xs: 12, md: 6 }}>
-          <OperationCard
-            title="Download OSM"
-            description="Runs: openmapx data download osm [region]"
-          >
-            <TextField
-              size="small"
-              label="Region"
-              placeholder="e.g. germany"
-              value={osmRegion}
-              onChange={(e) => setOsmRegion(e.target.value)}
-            />
-            <Button
-              variant="contained"
-              onClick={() => runOperation.mutate({ operation: "download-osm", region: osmRegion })}
-              disabled={runOperation.isPending}
-            >
-              Queue OSM Download
-            </Button>
-          </OperationCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <OperationCard
-            title="Download Map Glyphs"
-            description="Runs: openmapx data download fonts"
-          >
-            <Button
-              variant="contained"
-              onClick={() => runOperation.mutate({ operation: "download-fonts" })}
-              disabled={runOperation.isPending}
-            >
-              Queue Glyph Download
-            </Button>
-          </OperationCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <OperationCard
-            title="Full Update Pipeline"
-            description="Runs: openmapx data update [region] and dependent build/link steps"
-          >
-            <TextField
-              size="small"
-              label="Region"
-              placeholder="e.g. germany"
-              value={updateRegion}
-              onChange={(e) => setUpdateRegion(e.target.value)}
-            />
-            <TextField
-              size="small"
-              label="Countries"
-              placeholder="de,at,ch"
-              value={updateCountries}
-              onChange={(e) => setUpdateCountries(e.target.value)}
-            />
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={updateFailFast}
-                  onChange={(e) => setUpdateFailFast(e.target.checked)}
-                />
-              }
-              label="Fail fast"
-            />
-            <Button
-              variant="contained"
-              onClick={() =>
-                runOperation.mutate({
-                  operation: "update",
-                  region: updateRegion,
-                  countries: updateCountries,
-                  failFast: updateFailFast,
-                })
-              }
-              disabled={runOperation.isPending}
-            >
-              Queue Update Pipeline
-            </Button>
-          </OperationCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <OperationCard
-            title="Convert for Overpass"
-            description="Runs: openmapx data convert overpass [region]"
-          >
-            <TextField
-              size="small"
-              label="Region"
-              placeholder="e.g. germany"
-              value={overpassRegion}
-              onChange={(e) => setOverpassRegion(e.target.value)}
-            />
-            <Button
-              variant="contained"
-              onClick={() =>
-                runOperation.mutate({ operation: "convert-overpass", region: overpassRegion })
-              }
-              disabled={runOperation.isPending}
-            >
-              Queue Overpass Convert
-            </Button>
-          </OperationCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <OperationCard
-            title="Hardlink Sync"
-            description="Runs: openmapx data link (apply/prune hardlink plan)"
-          >
-            <Button
-              variant="contained"
-              onClick={() => runOperation.mutate({ operation: "link" })}
-              disabled={runOperation.isPending}
-            >
-              Queue Hardlink Sync
-            </Button>
-          </OperationCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <OperationCard
-            title="Cleanup Data"
-            description="Runs: openmapx data clean <target> (destructive)"
-          >
-            <TextField
-              size="small"
-              label="Target"
-              placeholder="all | osm | gtfs | overpass ..."
-              value={cleanTarget}
-              onChange={(e) => setCleanTarget(e.target.value)}
-            />
-            <Button
-              variant="contained"
-              color="warning"
-              onClick={() => setCleanDialogOpen(true)}
-              disabled={runOperation.isPending || !cleanTarget.trim()}
-            >
-              Queue Cleanup
-            </Button>
-          </OperationCard>
-        </Grid>
-
-        <Grid size={{ xs: 12, md: 6 }}>
-          <OperationCard
-            title="Generate Transitous API-Key Template"
-            description="Runs: openmapx data generate-api-keys"
-          >
-            <TextField
-              size="small"
-              label="Transitous repo URL"
-              placeholder="https://github.com/public-transport/transitous"
-              value={apiKeysRepoUrl}
-              onChange={(e) => setApiKeysRepoUrl(e.target.value)}
-            />
-            <TextField
-              size="small"
-              label="Output path"
-              placeholder="services/motis/tools/transitous/api-keys.json"
-              value={apiKeysOutput}
-              onChange={(e) => setApiKeysOutput(e.target.value)}
-            />
-            <Button
-              variant="contained"
-              onClick={() =>
-                runOperation.mutate({
-                  operation: "generate-api-keys",
-                  repoUrl: apiKeysRepoUrl,
-                  output: apiKeysOutput,
-                })
-              }
-              disabled={runOperation.isPending}
-            >
-              Queue API-Key Template
-            </Button>
-          </OperationCard>
-        </Grid>
+        {(catalog.data ?? [])
+          .filter((operation) => DATA_OPERATION_GROUPS.has(operation.group))
+          .map((operation) => (
+            <Grid key={operation.id} size={{ xs: 12, md: 6 }}>
+              <AdminOperationCard
+                apiUrl={apiUrl}
+                operation={operation}
+                onQueued={handleQueued}
+                onError={(message) => showToast(message, "error")}
+              />
+            </Grid>
+          ))}
       </Grid>
-      <Dialog
-        open={cleanDialogOpen}
-        onClose={() => setCleanDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>Confirm Data Cleanup</DialogTitle>
-        <DialogContent>
-          <Stack
-            sx={{
-              gap: 1.5,
-              pt: 0.5,
-            }}
-          >
-            <Alert severity="warning">
-              This operation removes local data files and may require full rebuilds.
-            </Alert>
-            <Typography variant="body2">
-              Target: <strong>{cleanTarget || "(empty)"}</strong>
-            </Typography>
-          </Stack>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={() => setCleanDialogOpen(false)} disabled={runOperation.isPending}>
-            Cancel
-          </Button>
-          <Button
-            color="warning"
-            variant="contained"
-            disabled={runOperation.isPending || !cleanTarget.trim()}
-            onClick={() => {
-              runOperation.mutate({ operation: "clean", target: cleanTarget.trim() });
-              setCleanDialogOpen(false);
-            }}
-          >
-            {runOperation.isPending ? "Queueing..." : "Confirm Cleanup"}
-          </Button>
-        </DialogActions>
-      </Dialog>
     </Paper>
   );
 }

@@ -51,18 +51,6 @@ import { declareRouteAuth } from "../utils/route-auth.js";
 import { getSecretFields, validateConfigBody } from "../utils/validate-config-body";
 
 const { getProvidedCapabilityNames, serviceConfigEnvPrefix } = coreServices;
-const DATA_JOB_OPERATIONS = new Set([
-  "download-osm",
-  "download-fonts",
-  "update",
-  "convert-overpass",
-  "link",
-  "clean",
-  "generate-api-keys",
-  "overture-sync",
-  "overture-conflate",
-  "search-index-build",
-] as const);
 const BULK_SERVICE_ACTIONS = new Set(["start", "stop", "restart", "update", "build"] as const);
 
 function hasOnlyBodyKeys(body: unknown, allowed: ReadonlySet<string>): boolean {
@@ -74,19 +62,6 @@ function hasOnlyBodyKeys(body: unknown, allowed: ReadonlySet<string>): boolean {
       Object.keys(body).every((key) => allowed.has(key)))
   );
 }
-
-const DATA_ACTION_BODY_KEYS: Readonly<Record<string, ReadonlySet<string>>> = {
-  "download-osm": new Set(["operation", "region"]),
-  "download-fonts": new Set(["operation"]),
-  update: new Set(["operation", "region", "countries", "failFast"]),
-  "convert-overpass": new Set(["operation", "region"]),
-  link: new Set(["operation"]),
-  clean: new Set(["operation", "target"]),
-  "generate-api-keys": new Set(["operation"]),
-  "overture-sync": new Set(["operation", "region"]),
-  "overture-conflate": new Set(["operation", "region", "restart"]),
-  "search-index-build": new Set(["operation", "region"]),
-};
 
 function toIdList(input: unknown): string[] {
   if (!Array.isArray(input)) return [];
@@ -715,72 +690,6 @@ export async function adminServicesRoute(app: FastifyInstance): Promise<void> {
       ...inventory,
       fetchedAt: new Date().toISOString(),
     };
-  });
-
-  // POST /admin/services/data/action — enqueue CLI-backed data operations
-  app.post<{
-    Body: {
-      operation?:
-        | "download-osm"
-        | "download-fonts"
-        | "update"
-        | "convert-overpass"
-        | "link"
-        | "clean"
-        | "generate-api-keys"
-        | "overture-sync"
-        | "overture-conflate"
-        | "search-index-build";
-      region?: string;
-      countries?: string;
-      failFast?: boolean;
-      target?: string;
-      restart?: boolean;
-    };
-  }>("/admin/services/data/action", async (req, reply) => {
-    const operation = req.body?.operation;
-    if (!operation || !DATA_JOB_OPERATIONS.has(operation)) {
-      reply.status(400);
-      return { error: "Invalid operation" };
-    }
-    if (!hasOnlyBodyKeys(req.body, DATA_ACTION_BODY_KEYS[operation])) {
-      reply.status(400);
-      return { error: "Request contains unsupported fields" };
-    }
-    if (operation === "clean" && (!req.body.target || req.body.target.trim() === "")) {
-      reply.status(400);
-      return { error: "clean operation requires target" };
-    }
-    if (operation === "search-index-build") {
-      const region = req.body.region?.trim() ?? "";
-      if (!region || region.includes("..") || !/^[A-Za-z0-9][A-Za-z0-9_/.-]*$/.test(region)) {
-        reply.status(400);
-        return { error: "search-index-build requires a valid region" };
-      }
-    }
-
-    const adminSession = getAdminSession(req);
-    const jobId = await jobRunner.enqueue(
-      "data.operation",
-      {
-        operation,
-        region: req.body?.region,
-        countries: req.body?.countries,
-        failFast: req.body?.failFast === true,
-        target: req.body?.target,
-        restart: req.body?.restart === true,
-      },
-      adminSession.user.id,
-    );
-    await writeAuditLog({
-      actorId: adminSession.user.id,
-      targetType: "data",
-      targetId: operation,
-      action: `data.${operation}`,
-      details: { region: req.body?.region, restart: req.body?.restart === true },
-      request: req,
-    });
-    return { ok: true, jobId };
   });
 
   // GET /admin/services/backups — list on-disk backup manifests

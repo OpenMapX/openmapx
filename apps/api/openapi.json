@@ -951,6 +951,20 @@
         "x-openmapx-auth": "admin"
       }
     },
+    "/api/admin/jobs/stream-metrics": {
+      "get": {
+        "operationId": "getApiAdminJobsStreamMetrics",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/admin/jobs/{id}": {
       "get": {
         "operationId": "getApiAdminJobsId",
@@ -999,9 +1013,95 @@
         "x-openmapx-auth": "admin"
       }
     },
+    "/api/admin/jobs/{id}/events": {
+      "get": {
+        "operationId": "getApiAdminJobsIdEvents",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/admin/logs": {
       "get": {
         "operationId": "getApiAdminLogs",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/operations": {
+      "get": {
+        "operationId": "getApiAdminOperations",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/operations/{id}/preview": {
+      "post": {
+        "operationId": "postApiAdminOperationsIdPreview",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/operations/{id}/run": {
+      "post": {
+        "operationId": "postApiAdminOperationsIdRun",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response"
@@ -1146,20 +1246,6 @@
     "/api/admin/services/data": {
       "get": {
         "operationId": "getApiAdminServicesData",
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "admin"
-        ],
-        "x-openmapx-auth": "admin"
-      }
-    },
-    "/api/admin/services/data/action": {
-      "post": {
-        "operationId": "postApiAdminServicesDataAction",
         "responses": {
           "200": {
             "description": "Default Response"

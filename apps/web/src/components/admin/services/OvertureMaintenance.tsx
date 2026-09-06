@@ -15,6 +15,7 @@ import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { useState } from "react";
+import { runAdminOperation } from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
 import { ConfirmDialog } from "../shared/ConfirmDialog";
 
@@ -109,22 +110,8 @@ export function OvertureMaintenance({ apiUrl }: { apiUrl: string }) {
   });
 
   const operation = useMutation({
-    mutationFn: async (operationName: Operation) => {
-      const response = await fetch(`${apiUrl}/api/admin/services/data/action`, {
-        method: "POST",
-        credentials: "include",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ operation: operationName, region: region.trim() }),
-      });
-      const body = (await response.json().catch(() => ({}))) as {
-        jobId?: string;
-        error?: string;
-      };
-      if (!response.ok || !body.jobId) {
-        throw new Error(body.error ?? "Failed to queue Overture operation");
-      }
-      return body.jobId;
-    },
+    mutationFn: (operationName: Operation) =>
+      runAdminOperation(apiUrl, operationName, { region: region.trim() }),
     onSuccess: (jobId, operationName) => {
       showToast(`Queued ${operationName} (${jobId})`);
       setConfirmOperation(null);
