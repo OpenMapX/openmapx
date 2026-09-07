@@ -296,7 +296,7 @@ importers:
         version: 0.28.2
       expo-doctor:
         specifier: ^1.20.3
-        version: 1.20.3
+        version: 1.20.4
       jest:
         specifier: ^30.4.2
         version: 30.4.2(@types/node@26.3.0)(babel-plugin-macros@3.1.0)(supports-color@8.1.1)
@@ -7766,8 +7766,8 @@ packages:
       expo: '*'
       react-native: '*'
 
-  expo-doctor@1.20.3:
-    resolution: {integrity: sha512-lUEJCHbmni/R7mu/aNfpy6UZsD01BbvPRpaHfdbvUo65TtWzUZbZjTiDnfX9/eJWMvNsK5boD5Z17uONKv0dJw==}
+  expo-doctor@1.20.4:
+    resolution: {integrity: sha512-Jm1lIqVdO8br9wiqTg5QhJ1u4zLWAhoue4bXsEuzW543vC3XY+U0cpEOmiLkvJhTTgZgIK+24l4i8VzyZ2VLMg==}
     engines: {node: ^20.19.4 || ^22.13.0 || ^24.3.0 || >= 25.0.0}
     hasBin: true
 
@@ -16596,7 +16596,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  expo-doctor@1.20.3: {}
+  expo-doctor@1.20.4: {}
 
   expo-file-system@57.0.5(expo@57.0.16)(react-native@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(@react-native/jest-preset@0.86.2(@babel/core@7.29.7(supports-color@8.1.1))(react@19.2.8)(supports-color@8.1.1))(@types/react@19.2.18)(react@19.2.8)(supports-color@8.1.1)):
     dependencies:
