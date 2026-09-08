@@ -12,6 +12,12 @@ function makeRoadConditionsCtx(
   providers: RoadConditionsProvider[],
   domain = "road-conditions",
   disallowedSourceIds?: Set<string>,
+  /**
+   * Stands in for `GET /traffic/conditions/applied`. Defaults to a rejected
+   * call — the applied set is unavailable, so every closure keeps its point
+   * exclusion, which is what all the pre-existing cases below assume.
+   */
+  appliedGet: ReturnType<typeof vi.fn> = vi.fn().mockRejectedValue(new Error("unavailable")),
 ): IntegrationContext {
   return {
     getIntegrationsByDomain: (d: string) => {
@@ -21,6 +27,12 @@ function makeRoadConditionsCtx(
         providers: new Map<string, unknown[]>([["road-conditions", [p]]]),
       }));
     },
+    http: { get: appliedGet },
+    getRequiredService: () => ({
+      serviceId: "data-manager",
+      url: "http://data-manager:4000",
+      enabled: true,
+    }),
     log: {
       info: vi.fn(),
       warn: vi.fn(),
@@ -622,7 +634,7 @@ describe("activeClosuresForBbox", () => {
     });
   });
 
-  describe("recurring schedule (nightly windows supersede the outer span)", () => {
+  describe("recurring schedule (nightly windows intersected with the outer span)", () => {
     // Nightly 20:00–05:00 Europe/Berlin (CEST +02:00 in summer) over 29 Jun–1 Jul.
     // Each occurrence = 20:00 local (18:00Z) for 9h → ends 03:00Z next day.
     const nightly = {
@@ -669,6 +681,190 @@ describe("activeClosuresForBbox", () => {
 
     it("does NOT avoid it on a night outside the window's date range", async () => {
       expect((await run("2026-07-15T23:00:00Z")).points).toHaveLength(0);
+    });
+
+    it("does NOT avoid it once the outer span has expired, even on a matching night", async () => {
+      // The recurrence rule itself has no end date, so only the expired
+      // validTo can rule this out — a schedule must never outlive its span.
+      const openEnded = {
+        ...nightly,
+        id: "nightly:expired",
+        validFrom: "2026-06-29T18:00:00.000Z",
+        validTo: "2026-07-02T03:00:00.000Z",
+        schedule: [
+          {
+            repeatFrequency: "P1D",
+            startTime: "20:00",
+            duration: "PT9H",
+            scheduleTimezone: "Europe/Berlin",
+          },
+        ],
+      };
+      const getEvents = vi.fn().mockResolvedValue([openEnded]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      // 23:00Z = 01:00 Berlin — a matching night window, but weeks after validTo.
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX, new Date("2026-08-20T23:00:00Z"));
+      expect(result.points).toHaveLength(0);
+    });
+
+    it("does NOT avoid it before validFrom, even on a matching night", async () => {
+      const openEnded = {
+        ...nightly,
+        id: "nightly:future",
+        validFrom: "2026-08-01T18:00:00.000Z",
+        validTo: null,
+        schedule: [
+          {
+            repeatFrequency: "P1D",
+            startTime: "20:00",
+            duration: "PT9H",
+            scheduleTimezone: "Europe/Berlin",
+          },
+        ],
+      };
+      const getEvents = vi.fn().mockResolvedValue([openEnded]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX, new Date("2026-07-10T23:00:00Z"));
+      expect(result.points).toHaveLength(0);
+    });
+
+    it("avoids it when both the outer span and a schedule window contain the travel time", async () => {
+      const openEnded = {
+        ...nightly,
+        id: "nightly:both",
+        validFrom: "2026-08-01T18:00:00.000Z",
+        validTo: null,
+        schedule: [
+          {
+            repeatFrequency: "P1D",
+            startTime: "20:00",
+            duration: "PT9H",
+            scheduleTimezone: "Europe/Berlin",
+          },
+        ],
+      };
+      const getEvents = vi.fn().mockResolvedValue([openEnded]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX, new Date("2026-08-20T23:00:00Z"));
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
+  });
+
+  describe("applied edge closures (skip point exclusions the router already has)", () => {
+    const boundClosure = {
+      id: "test:bound",
+      source: "test",
+      provider: "road-conditions-test",
+      type: "road_closure",
+      severity: "high",
+      geometry: { type: "Point", coordinates: [0.5, 51.5] },
+      headline: "Bound closure",
+      binding: { status: "exact" },
+    };
+    const unboundClosure = {
+      id: "test:unbound",
+      source: "test",
+      provider: "road-conditions-test",
+      type: "road_closure",
+      severity: "high",
+      geometry: { type: "Point", coordinates: [0.7, 51.7] },
+      headline: "Unbound closure",
+    };
+
+    it("keeps point exclusions for every closure when the applied set is unavailable", async () => {
+      const getEvents = vi.fn().mockResolvedValue([boundClosure, unboundClosure]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toEqual([
+        [0.5, 51.5],
+        [0.7, 51.7],
+      ]);
+    });
+
+    it("skips an applied bound closure and keeps an unbound one", async () => {
+      const getEvents = vi.fn().mockResolvedValue([boundClosure, unboundClosure]);
+      const appliedGet = vi.fn().mockResolvedValue({
+        writtenAt: new Date().toISOString(),
+        observationIds: ["test:bound"],
+        resolverVersion: "1.0.0",
+      });
+      const ctx = makeRoadConditionsCtx(
+        [{ id: "road-conditions-test", getEvents }],
+        "road-conditions",
+        undefined,
+        appliedGet,
+      );
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toEqual([[0.7, 51.7]]);
+    });
+
+    it("keeps an applied closure whose binding is only ambiguous", async () => {
+      const getEvents = vi
+        .fn()
+        .mockResolvedValue([{ ...boundClosure, binding: { status: "ambiguous" } }]);
+      const appliedGet = vi.fn().mockResolvedValue({
+        writtenAt: new Date().toISOString(),
+        observationIds: ["test:bound"],
+      });
+      const ctx = makeRoadConditionsCtx(
+        [{ id: "road-conditions-test", getEvents }],
+        "road-conditions",
+        undefined,
+        appliedGet,
+      );
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
+
+    it("keeps an applied lane_closure — a lane closure is never an edge closure", async () => {
+      const getEvents = vi
+        .fn()
+        .mockResolvedValue([{ ...boundClosure, type: "lane_closure", severity: "medium" }]);
+      const appliedGet = vi.fn().mockResolvedValue({
+        writtenAt: new Date().toISOString(),
+        observationIds: ["test:bound"],
+      });
+      const ctx = makeRoadConditionsCtx(
+        [{ id: "road-conditions-test", getEvents }],
+        "road-conditions",
+        undefined,
+        appliedGet,
+      );
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+      expect(result.points).toEqual([[0.5, 51.5]]);
+    });
+  });
+
+  describe("closure predicate shared with the edge-closure writer", () => {
+    const run = async (over: Record<string, unknown>) => {
+      const getEvents = vi.fn().mockResolvedValue([
+        {
+          id: "pred:1",
+          source: "test",
+          provider: "road-conditions-test",
+          type: "road_closure",
+          severity: "high",
+          geometry: { type: "Point", coordinates: [0.5, 51.5] },
+          headline: "Closure",
+          ...over,
+        },
+      ]);
+      const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+      return activeClosuresForBbox(ctx, TEST_BBOX);
+    };
+
+    it("does not exclude a road_closure scoped to lorries only", async () => {
+      expect((await run({ vehiclesAffected: ["truck"] })).points).toHaveLength(0);
+    });
+
+    it("excludes a road_closure scoped to a passenger-car class", async () => {
+      expect((await run({ vehiclesAffected: ["car"] })).points).toEqual([[0.5, 51.5]]);
+    });
+
+    it("excludes any event reported with roadState closed", async () => {
+      expect(
+        (await run({ type: "flooding", severity: "medium", roadState: "closed" })).points,
+      ).toEqual([[0.5, 51.5]]);
     });
   });
 });

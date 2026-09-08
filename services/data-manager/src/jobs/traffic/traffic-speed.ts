@@ -64,3 +64,17 @@ export function encodeTrafficSpeed(kph: number | null): Buffer {
   buf.writeBigUInt64LE(value, 0);
   return buf;
 }
+
+/**
+ * A CLOSED edge: valid record (`breakpoint1 = 255`) with overall speed 0.
+ * Valhalla's `TrafficSpeed::closed()` is exactly `breakpoint1 != 0 &&
+ * overall_encoded_speed == 0`; costings then refuse the edge unless the
+ * request sets `ignore_closures`. Distinct from `encodeTrafficSpeed(null)`,
+ * which is the "no data" sentinel.
+ */
+export function encodeClosedTrafficSpeed(): Buffer {
+  const buf = Buffer.alloc(8);
+  const value = (BigInt(WHOLE_EDGE_BREAKPOINT) << 28n) | (BigInt(WHOLE_EDGE_BREAKPOINT) << 36n);
+  buf.writeBigUInt64LE(value, 0);
+  return buf;
+}

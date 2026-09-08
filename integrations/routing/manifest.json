@@ -13,5 +13,8 @@
   "backend": { "routes": true },
   "quality": "built-in",
   "category": "Routing",
-  "requires": [{ "capability": "routing-engine", "optional": true }]
+  "requires": [
+    { "capability": "routing-engine", "optional": true },
+    { "service": "data-manager", "optional": true }
+  ]
 }

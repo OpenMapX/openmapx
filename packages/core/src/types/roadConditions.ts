@@ -59,6 +59,32 @@ export interface RoadConditionSchedule {
   scheduleTimezone: string;
 }
 
+/**
+ * How well the source bound an event to the road graph. `exact` and `likely`
+ * are trustworthy enough to influence routing; `ambiguous` is published for
+ * display only, and the remaining statuses mean nothing was bound at all. Use
+ * `isRoutingRelevantBinding` rather than comparing statuses by hand.
+ */
+export type RoadConditionBindingStatus =
+  | "exact"
+  | "likely"
+  | "ambiguous"
+  | "unresolved"
+  | "no_coverage"
+  | "not_applicable";
+
+/**
+ * One directed OSM way span an event was bound to: `wayId` in direction `dir`
+ * (`f` = along the way's node order, `b` = against it), covering
+ * `startFraction`..`endFraction` of the way's length (0..1, start < end).
+ */
+export interface RoadConditionSegmentSpan {
+  wayId: number;
+  dir: "f" | "b";
+  startFraction: number;
+  endFraction: number;
+}
+
 export interface RoadConditionEvent {
   /** Globally unique, provider-prefixed (e.g. "ndw:NL123", "tomtom:abc"). */
   id: string;
@@ -81,6 +107,25 @@ export interface RoadConditionEvent {
    * where the source reports it. Undefined when the feed carries no delay. */
   delaySeconds?: number;
   roadState?: RoadState;
+  /**
+   * Vehicle classes the condition applies to, as the source names them (e.g.
+   * `["truck"]` for a lorry-only ban). Empty or undefined means all traffic.
+   * A closure only closes an edge when it covers passenger cars — see
+   * `isEdgeClosure`.
+   */
+  vehiclesAffected?: string[];
+  /**
+   * How the source bound this event to directed OSM segments. `confidence` is
+   * 0..1; `directionMode` says whether the binding covers one direction of the
+   * road (`single`), both (`both`), or the source did not say (`unknown`).
+   */
+  binding?: {
+    status: RoadConditionBindingStatus;
+    confidence?: number;
+    directionMode?: "single" | "both" | "unknown";
+  };
+  /** The directed way spans this event was bound to; empty when unbound. */
+  segments?: RoadConditionSegmentSpan[];
   roads?: RoadConditionRoadRef[];
   validFrom?: string | null;
   validTo?: string | null;

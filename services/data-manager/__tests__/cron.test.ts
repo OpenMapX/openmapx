@@ -543,9 +543,16 @@ describe("setupCron", () => {
         .mockResolvedValue("way_id,dir,current_kph,free_flow_kph,los\n123,f,50,60,moderate");
       const waysToEdges = new Map([[123, [{ forward: true, level: 0, tile: 1, index: 0 }]]]);
       const loadWaysToEdges = vi.fn().mockResolvedValue(waysToEdges);
-      const writeLiveTraffic = vi
-        .fn()
-        .mockResolvedValue({ written: 1, matched: 1, total: 1, outOfBounds: 0 });
+      const writeLiveTraffic = vi.fn().mockResolvedValue({
+        written: 1,
+        matched: 1,
+        total: 1,
+        outOfBounds: 0,
+        closedEdges: 0,
+        cappedEdges: 0,
+        overridesUnresolved: 0,
+        appliedObservationIds: [],
+      });
       const infoLog = vi.fn();
 
       const handles = setupCron(
@@ -554,6 +561,7 @@ describe("setupCron", () => {
           openConditionsUrl: "http://openconditions-ingest:8080",
           trafficTarPath: "/data/osm/traffic.tar",
           fetchLiveTrafficCsv,
+          fetchConditionsJson: async () => '{"conditions":[]}',
           loadWaysToEdges,
           writeLiveTraffic,
           logger: { info: infoLog, warn: () => {}, error: () => {} },

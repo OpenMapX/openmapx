@@ -10,6 +10,8 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { type EdgeOverride, edgeKey } from "../jobs/traffic/conditions-to-edges.js";
+import { encodeClosedTrafficSpeed, encodeTrafficSpeed } from "../jobs/traffic/traffic-speed.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
 import { writeLiveTraffic } from "../jobs/traffic/write-live.js";
 
@@ -205,7 +207,16 @@ describe("writeLiveTraffic", () => {
       csv: `way_id,dir,current_kph,free_flow_kph,los\n${wayId},f,100,120,heavy`,
     });
 
-    expect(result).toEqual({ written: 1, matched: 1, total: 1, outOfBounds: 0 });
+    expect(result).toEqual({
+      written: 1,
+      matched: 1,
+      total: 1,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
 
     const { overall, breakpoint1 } = decodeOverallAndBreakpoint1(
       readRecordBytes(tarPath, forwardRecordOffset()),
@@ -267,7 +278,16 @@ describe("writeLiveTraffic", () => {
       waysToEdges,
       csv: "way_id,dir,current_kph,free_flow_kph,los",
     });
-    expect(second).toEqual({ written: 0, matched: 0, total: 0, outOfBounds: 0 });
+    expect(second).toEqual({
+      written: 0,
+      matched: 0,
+      total: 0,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
 
     const cleared = decodeOverallAndBreakpoint1(readRecordBytes(tarPath, forwardRecordOffset()));
     // encodeTrafficSpeed(null): overall = 127 (UNKNOWN_TRAFFIC_SPEED_RAW), breakpoint1 = 0 (invalid/no-data).
@@ -288,7 +308,16 @@ describe("writeLiveTraffic", () => {
       ]),
       csv,
     });
-    expect(first).toEqual({ written: 1, matched: 1, total: 1, outOfBounds: 0 });
+    expect(first).toEqual({
+      written: 1,
+      matched: 1,
+      total: 1,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
     expect(
       decodeOverallAndBreakpoint1(readRecordBytes(tarPath, forwardRecordOffset())).overall,
     ).toBe(50);
@@ -303,7 +332,16 @@ describe("writeLiveTraffic", () => {
       waysToEdges: new Map<number, WayEdge[]>(),
       csv,
     });
-    expect(second).toEqual({ written: 0, matched: 0, total: 1, outOfBounds: 0 });
+    expect(second).toEqual({
+      written: 0,
+      matched: 0,
+      total: 1,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
 
     const cleared = decodeOverallAndBreakpoint1(readRecordBytes(tarPath, forwardRecordOffset()));
     expect(cleared.overall).toBe(127);
@@ -329,7 +367,16 @@ describe("writeLiveTraffic", () => {
       waysToEdges: new Map<number, WayEdge[]>(),
       csv: "way_id,dir,current_kph,free_flow_kph,los",
     });
-    expect(result).toEqual({ written: 0, matched: 0, total: 0, outOfBounds: 0 });
+    expect(result).toEqual({
+      written: 0,
+      matched: 0,
+      total: 0,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
 
     // No byte anywhere changed — the out-of-range would-be offset (and the
     // tile-header bytes it would have corrupted) are untouched.
@@ -351,7 +398,16 @@ describe("writeLiveTraffic", () => {
       waysToEdges: new Map<number, WayEdge[]>(),
       csv: "way_id,dir,current_kph,free_flow_kph,los",
     });
-    expect(result).toEqual({ written: 0, matched: 0, total: 0, outOfBounds: 0 });
+    expect(result).toEqual({
+      written: 0,
+      matched: 0,
+      total: 0,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
 
     expect(readFileSync(tarPath)).toEqual(before);
   });
@@ -374,7 +430,16 @@ describe("writeLiveTraffic", () => {
       waysToEdges,
       csv: `way_id,dir,current_kph,free_flow_kph,los\n${wayId},f,100,120,heavy`,
     });
-    expect(result).toEqual({ written: 1, matched: 1, total: 1, outOfBounds: 0 });
+    expect(result).toEqual({
+      written: 1,
+      matched: 1,
+      total: 1,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
 
     const forward = decodeOverallAndBreakpoint1(readRecordBytes(tarPath, forwardRecordOffset()));
     expect(forward.overall).toBe(50);
@@ -394,7 +459,16 @@ describe("writeLiveTraffic", () => {
       csv: `way_id,dir,current_kph,free_flow_kph,los\n${wayId},f,80,100,moderate`,
     });
 
-    expect(result).toEqual({ written: 0, matched: 0, total: 1, outOfBounds: 0 });
+    expect(result).toEqual({
+      written: 0,
+      matched: 0,
+      total: 1,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
 
     // Nothing in the tile's record region was touched.
     const forward = readRecordBytes(tarPath, forwardRecordOffset());
@@ -423,7 +497,16 @@ describe("writeLiveTraffic", () => {
       logger: { warn },
     });
 
-    expect(result).toEqual({ written: 0, matched: 1, total: 1, outOfBounds: 1 });
+    expect(result).toEqual({
+      written: 0,
+      matched: 1,
+      total: 1,
+      outOfBounds: 1,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
     expect(warn).toHaveBeenCalledWith(
       "traffic-live: edge index out of range, skipping write",
       expect.objectContaining({ index: outOfRangeIndex, directedEdgeCount: EDGE_COUNT }),
@@ -452,6 +535,335 @@ describe("writeLiveTraffic", () => {
 
     const result = await writeLiveTraffic({ tarPath, statePath, waysToEdges, csv });
 
-    expect(result).toEqual({ written: 1, matched: 1, total: 3, outOfBounds: 0 });
+    expect(result).toEqual({
+      written: 1,
+      matched: 1,
+      total: 3,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: [],
+    });
+  });
+});
+
+const EMPTY_CSV = "way_id,dir,current_kph,free_flow_kph,los\n";
+const FORWARD_EDGE: WayEdge = { forward: true, level: LEVEL, tile: TILE, index: FORWARD_INDEX };
+const BACKWARD_EDGE: WayEdge = { forward: false, level: LEVEL, tile: TILE, index: BACKWARD_INDEX };
+
+function overrideMap(
+  ...entries: (EdgeOverride & { edge: WayEdge })[]
+): Map<string, EdgeOverride & { edge: WayEdge }> {
+  return new Map(entries.map((entry) => [edgeKey(entry.edge), entry]));
+}
+
+describe("writeLiveTraffic overrides", () => {
+  let dir: string;
+  let tarPath: string;
+  let statePath: string;
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), "openmapx-traffic-live-ovr-"));
+    tarPath = join(dir, "traffic.tar");
+    statePath = join(dir, "live-state.json");
+    writeFileSync(tarPath, buildFixtureTar({ level: LEVEL, tile: TILE, edgeCount: EDGE_COUNT }));
+  });
+
+  afterEach(() => {
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("keys an edge exactly as the writer keys the identity it persists", () => {
+    expect(edgeKey(FORWARD_EDGE)).toBe(`${LEVEL}:${TILE}:${FORWARD_INDEX}`);
+  });
+
+  it("writes a closed record for an override edge that has no CSV row", async () => {
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: overrideMap({ closed: true, observationId: "a:1", edge: FORWARD_EDGE }),
+    });
+
+    expect(res).toEqual({
+      written: 1,
+      matched: 0,
+      total: 0,
+      outOfBounds: 0,
+      closedEdges: 1,
+      cappedEdges: 0,
+      overridesUnresolved: 0,
+      appliedObservationIds: ["a:1"],
+    });
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeClosedTrafficSpeed());
+  });
+
+  it("caps a live speed and writes the cap alone when there is no live speed", async () => {
+    const wayId = 6001;
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: `way_id,dir,current_kph,free_flow_kph,los\n${wayId},f,100,120,free_flow\n`,
+      waysToEdges: new Map<number, WayEdge[]>([[wayId, [FORWARD_EDGE, BACKWARD_EDGE]]]),
+      overrides: overrideMap(
+        { closed: false, capKph: 60, observationId: "rw", edge: FORWARD_EDGE },
+        { closed: false, capKph: 60, observationId: "rw", edge: BACKWARD_EDGE },
+      ),
+    });
+
+    // `written` is 2, not 3: the forward edge's CSV row and its cap merge into
+    // ONE planned record because both key on `level:tile:index`.
+    expect(res).toEqual({
+      written: 2,
+      matched: 1,
+      total: 1,
+      outOfBounds: 0,
+      closedEdges: 0,
+      cappedEdges: 2,
+      overridesUnresolved: 0,
+      appliedObservationIds: ["rw"],
+    });
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(60));
+    expect(readRecordBytes(tarPath, backwardRecordOffset())).toEqual(encodeTrafficSpeed(60));
+  });
+
+  it("keeps the live speed when it is already below the cap", async () => {
+    const wayId = 6002;
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: `way_id,dir,current_kph,free_flow_kph,los\n${wayId},f,40,120,heavy\n`,
+      waysToEdges: new Map<number, WayEdge[]>([[wayId, [FORWARD_EDGE]]]),
+      overrides: overrideMap({
+        closed: false,
+        capKph: 80,
+        observationId: "rw",
+        edge: FORWARD_EDGE,
+      }),
+    });
+
+    expect(res.cappedEdges).toBe(1);
+    // The cap was in force even though the live speed already satisfied it.
+    expect(res.appliedObservationIds).toEqual(["rw"]);
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(40));
+  });
+
+  it("closes an edge that also has a live speed (a closure outranks any speed)", async () => {
+    const wayId = 6003;
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: `way_id,dir,current_kph,free_flow_kph,los\n${wayId},f,100,120,free_flow\n`,
+      waysToEdges: new Map<number, WayEdge[]>([[wayId, [FORWARD_EDGE]]]),
+      overrides: overrideMap({ closed: true, observationId: "a:2", edge: FORWARD_EDGE }),
+    });
+
+    expect(res.closedEdges).toBe(1);
+    expect(res.written).toBe(1);
+    expect(res.appliedObservationIds).toEqual(["a:2"]);
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeClosedTrafficSpeed());
+  });
+
+  it("a lifted closure is cleared to unknown on the next cycle", async () => {
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: overrideMap({ closed: true, observationId: "a:1", edge: FORWARD_EDGE }),
+    });
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeClosedTrafficSpeed());
+
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: new Map(),
+    });
+
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(null));
+  });
+
+  it("skips (never writes) an override edge whose index is past the tile's edge count", async () => {
+    const outOfRangeIndex = EDGE_COUNT;
+    const outOfRangeOffset =
+      TILE_DATA_OFFSET + TRAFFIC_TILE_HEADER_SIZE + TRAFFIC_SPEED_RECORD_SIZE * outOfRangeIndex;
+    const warn = vi.fn();
+
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: overrideMap({
+        closed: true,
+        observationId: "a:3",
+        edge: { forward: true, level: LEVEL, tile: TILE, index: outOfRangeIndex },
+      }),
+      logger: { warn },
+    });
+
+    // Both counters fire: `outOfBounds` is the tar/way-map version-mismatch
+    // signal regardless of source, `overridesUnresolved` is "overrides that
+    // could not be applied at all".
+    expect(res).toEqual({
+      written: 0,
+      matched: 0,
+      total: 0,
+      outOfBounds: 1,
+      closedEdges: 0,
+      cappedEdges: 0,
+      overridesUnresolved: 1,
+      // The closure never reached the tar, so its observation must NOT be
+      // credited: a caller that trusted this would skip its own exclusion.
+      appliedObservationIds: [],
+    });
+    expect(readRecordBytes(tarPath, outOfRangeOffset)).toEqual(
+      Buffer.alloc(TRAFFIC_SPEED_RECORD_SIZE, 0),
+    );
+  });
+
+  it("counts (without warning) an override edge whose tile is absent from index.bin", async () => {
+    const warn = vi.fn();
+    const before = readFileSync(tarPath);
+
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: overrideMap({
+        closed: true,
+        observationId: "a:4",
+        edge: { forward: true, level: LEVEL, tile: TILE + 4242, index: 0 },
+      }),
+      logger: { warn },
+    });
+
+    // A missing tile is NOT a tar/way-map mismatch (it's a way this Valhalla
+    // graph doesn't have), so it must not inflate `outOfBounds` — but a dropped
+    // closure can't vanish without a trace either.
+    expect(res.written).toBe(0);
+    expect(res.outOfBounds).toBe(0);
+    expect(res.overridesUnresolved).toBe(1);
+    // Nothing was written, so nothing may be claimed as applied.
+    expect(res.appliedObservationIds).toEqual([]);
+    expect(warn).not.toHaveBeenCalled();
+    expect(readFileSync(tarPath)).toEqual(before);
+  });
+
+  it("withdraws an observation whose edges were only PARTLY written", async () => {
+    // One closure spanning two edges: the forward edge resolves, the second is
+    // past the tile's edge count. Crediting it would make the router drop the
+    // event's point exclusions entirely, leaving the unwritten edge both open
+    // in the graph and unexcluded on the request.
+    const warn = vi.fn();
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: overrideMap(
+        { closed: true, observationId: "a:7", edge: FORWARD_EDGE },
+        {
+          closed: true,
+          observationId: "a:7",
+          edge: { forward: true, level: LEVEL, tile: TILE, index: EDGE_COUNT },
+        },
+      ),
+      logger: { warn },
+    });
+
+    expect(res.written).toBe(1);
+    expect(res.closedEdges).toBe(1);
+    expect(res.overridesUnresolved).toBe(1);
+    expect(res.appliedObservationIds).toEqual([]);
+    // The edge that DID resolve is still closed in the tar — the withdrawal is
+    // about what we claim, not about writing less.
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeClosedTrafficSpeed());
+  });
+
+  it("still credits an observation whose every edge was written", async () => {
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: overrideMap(
+        { closed: true, observationId: "a:8", edge: FORWARD_EDGE },
+        { closed: true, observationId: "a:8", edge: BACKWARD_EDGE },
+      ),
+    });
+
+    expect(res.written).toBe(2);
+    expect(res.overridesUnresolved).toBe(0);
+    expect(res.appliedObservationIds).toEqual(["a:8"]);
+  });
+
+  it("withdrawing one observation leaves another fully-written one credited", async () => {
+    const warn = vi.fn();
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: overrideMap(
+        { closed: true, observationId: "partial", edge: FORWARD_EDGE },
+        {
+          closed: true,
+          observationId: "partial",
+          edge: { forward: true, level: LEVEL, tile: TILE, index: EDGE_COUNT },
+        },
+        { closed: true, observationId: "complete", edge: BACKWARD_EDGE },
+      ),
+      logger: { warn },
+    });
+
+    expect(res.appliedObservationIds).toEqual(["complete"]);
+  });
+
+  it("keeps an edge closed when a cap override also lands on it", async () => {
+    // Two overrides on ONE edge can only happen when the caller's map keys
+    // disagree with `edgeKey`; the writer must still not let a cap revive a
+    // closed edge, rather than trusting the upstream map's invariant.
+    const overrides = new Map<string, EdgeOverride & { edge: WayEdge }>([
+      ["closure", { closed: true, observationId: "a:6", edge: FORWARD_EDGE }],
+      ["cap", { closed: false, capKph: 30, observationId: "rw", edge: FORWARD_EDGE }],
+    ]);
+
+    const res = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides,
+    });
+
+    expect(res.written).toBe(1);
+    expect(res.closedEdges).toBe(1);
+    expect(res.cappedEdges).toBe(0);
+    // The cap changed nothing on this edge, so only the closure is credited.
+    expect(res.appliedObservationIds).toEqual(["a:6"]);
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeClosedTrafficSpeed());
+  });
+
+  it("stamps the tile's last_update when only an override was written", async () => {
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map<number, WayEdge[]>(),
+      overrides: overrideMap({ closed: true, observationId: "a:5", edge: FORWARD_EDGE }),
+    });
+
+    expectTileValhallaValid(tarPath, TILE_DATA_OFFSET, {
+      baseGraphId: (BigInt(TILE) << 3n) | BigInt(LEVEL),
+      edgeCount: EDGE_COUNT,
+      version: 3,
+    });
+    expect(readTileHeader(tarPath, TILE_DATA_OFFSET).lastUpdate).toBeGreaterThan(1_700_000_000n);
   });
 });

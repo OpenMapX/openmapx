@@ -305,6 +305,10 @@ deployments.
 | `MOTIS_TILES`                   | MOTIS internal vector tile rendering toggle.                               | Optional. Default unset   |
 | `MOTIS_INCREMENTAL_RT_UPDATE`   | Toggle incremental real-time transit schedule updates.                     | Optional. Default unset   |
 | `VALHALLA_CONTAINER`            | Docker container name for data-manager traffic extraction.                 | Default `docker-valhalla-1` |
+| `TRAFFIC_VALHALLA_URL`          | Valhalla endpoint data-manager traces road-condition spans against, to narrow a closure to the exact graph edges it covers. Must be the co-deployed Valhalla holding this deployment's traffic graph — deliberately separate from `VALHALLA_URL`, which may point at a hosted endpoint. | Default `http://valhalla:8002` |
+| `OPENCONDITIONS_URL`            | Base URL of the OpenConditions instance the data-manager reads live road conditions from (`/segments/speed.csv` and `/segments/conditions.json`). Leave unset to run without live traffic — the live and predicted traffic crons then do not start at all. | Optional. Default unset   |
+| `TRAFFIC_LIVE_CRON`             | Cron schedule for the live-traffic cycle that writes speeds, speed caps and closures into `traffic.tar`. Set to `disabled`, `off` or `false` to turn the cycle off. | Default `*/2 * * * *`     |
+| `TRAFFIC_CONDITIONS_STALE_MS`   | How long the last good conditions set is reused while `/segments/conditions.json` keeps failing. Past this age the closures are dropped and the router falls back to point-based exclusions. | Default `600000` (10 min) |
 | `TRUST_PROXY_RANGES`            | IP ranges trusted by Fastify for reverse-proxy headers.                    | Default `uniquelocal`     |
 | `OPENMAPX_API_NODE_OPTIONS`     | Node.js memory options for the `app-api` container.                        | Default `--max-old-space-size=1536` |
 
@@ -325,7 +329,7 @@ Keys and overrides for the `app-api` traffic and tile proxies.
 | `CYCLOSM_TILE_URL`             | Override URL for the CyclOSM tile proxy.                                                     | Optional. Commented       |
 | `WAYMARKED_CYCLING_TILE_URL`   | Override URL for the Waymarked Trails cycling layer.                                         | Optional. Commented       |
 | `OPENTOPOMAP_TILE_URL`         | Override URL for the OpenTopoMap layer.                                                      | Optional. Commented       |
-| `TRAFFIC_EXTRACT_CRON`         | Cron schedule for extracting Valhalla traffic CSVs.                                          | Default `0 */6 * * *`     |
+| `TRAFFIC_EXTRACT_CRON`         | Cron schedule for extracting Valhalla traffic CSVs.                                          | Default `0 5 * * *` (daily, 05:00 UTC) |
 | `NEXT_PUBLIC_TRAFFIC_MIN_ZOOM` | Minimum zoom level where traffic overlays render in the frontend.                            | Default `6`               |
 | `INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER` | Preferred order for street-level imagery providers (`panoramax,mapillary`).    | Optional. Default unset   |
 | `OPENMAPTILES_FONTS_URL`       | Custom source archive URL for downloading glyph font stacks.                                 | Optional. Default upstream |

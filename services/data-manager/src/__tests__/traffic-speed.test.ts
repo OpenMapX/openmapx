@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { encodeTrafficSpeed } from "../jobs/traffic/traffic-speed.js";
+import { encodeClosedTrafficSpeed, encodeTrafficSpeed } from "../jobs/traffic/traffic-speed.js";
 
 describe("encodeTrafficSpeed", () => {
   it("encodes 100 kph as overall/speed1 = 50, breakpoint1 = 255", () => {
@@ -46,5 +46,31 @@ describe("encodeTrafficSpeed", () => {
   it("returns exactly 8 bytes", () => {
     expect(encodeTrafficSpeed(100).length).toBe(8);
     expect(encodeTrafficSpeed(null).length).toBe(8);
+  });
+});
+
+describe("encodeClosedTrafficSpeed", () => {
+  it("encodes a closed edge as speed 0 with a valid breakpoint (never the unknown sentinel)", () => {
+    const v = encodeClosedTrafficSpeed().readBigUInt64LE(0);
+    expect(Number(v & 0x7fn)).toBe(0); // overall_encoded_speed
+    expect(Number((v >> 7n) & 0x7fn)).toBe(0); // encoded_speed1
+    expect(Number((v >> 28n) & 0xffn)).toBe(255); // breakpoint1
+    expect(Number((v >> 36n) & 0xffn)).toBe(255); // breakpoint2
+  });
+
+  it("leaves every other field zero and returns exactly 8 bytes", () => {
+    const buf = encodeClosedTrafficSpeed();
+    expect(buf.length).toBe(8);
+    const v = buf.readBigUInt64LE(0);
+    expect(Number((v >> 14n) & 0x7fn)).toBe(0); // encoded_speed2
+    expect(Number((v >> 21n) & 0x7fn)).toBe(0); // encoded_speed3
+    expect(Number((v >> 44n) & 0x3fn)).toBe(0); // congestion1
+    expect(Number((v >> 50n) & 0x3fn)).toBe(0); // congestion2
+    expect(Number((v >> 56n) & 0x3fn)).toBe(0); // congestion3
+    expect(Number((v >> 62n) & 0x1n)).toBe(0); // has_incidents
+  });
+
+  it("differs from the no-data record so a closure is never mistaken for missing data", () => {
+    expect(encodeClosedTrafficSpeed()).not.toEqual(encodeTrafficSpeed(null));
   });
 });

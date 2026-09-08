@@ -14,6 +14,10 @@ own application log — and an **audit log** that records every admin action.
 Underneath the UI sits an OpenTelemetry metrics pipeline you can scrape with
 Prometheus.
 
+One background writer gets its own section: the live road-conditions cycle has
+no UI at all, and the closures it bakes into the routing graph are visible only
+through the data-manager's log and a single endpoint.
+
 This page walks each of them and points at the code or env var behind the
 behavior, so you can verify and tune rather than guess.
 
@@ -250,6 +254,180 @@ that restores raw request or URL logging.
 
 The viewer is read-only — it's for triage, not configuration.
 
+## Live road conditions in the routing graph
+
+When `OPENCONDITIONS_URL` is set, the data-manager runs a live-traffic cycle
+(`TRAFFIC_LIVE_CRON`, default every two minutes) that folds road conditions —
+closures and temporary speed limits — straight into the Valhalla traffic file
+the router reads. This is a background writer with no UI of its own, so its two
+observation surfaces are the data-manager's container log and one small
+endpoint. Both are described below.
+
+### What the writer puts into the graph
+
+For every condition that survives its filters, the cycle rewrites the affected
+directed edges in `traffic.tar`:
+
+- A **closure** becomes a genuine Valhalla *closed* record — a valid record
+  (both breakpoints `255`) whose overall speed is `0`. Costings refuse a closed
+  edge, so the router detours around it natively; only a request that opts into
+  `ignore_closures` drives through.
+- A **temporary speed limit** becomes a cap: the edge is written at
+  `min(live speed, the condition's limit)`. A cap on an edge with no live speed
+  is written on its own.
+- On one edge a closure always outranks a cap, and between two caps the lower
+  one wins.
+
+Three filters decide whether a condition reaches an edge at all:
+
+- **Binding confidence.** Only bindings OpenConditions marked `exact` or
+  `likely` may move an edge. The feed also publishes `ambiguous` bindings; those
+  are fine to display but are never written.
+- **Origin.** Feed-sourced conditions are written as they arrive. A
+  crowd-sourced report additionally has to be marked routing-eligible by
+  OpenConditions' own trust model.
+- **Vehicle class.** A closure scoped to classes that exclude ordinary cars — a
+  lorry-only ban, say — is not written as an edge closure, because it does not
+  close the road for the traffic being routed. Such an event stays on the
+  point-exclusion path instead.
+
+The writer owns expiry: Valhalla never ages out live values by itself. Every
+edge written last cycle and not written again this cycle is cleared back to "no
+live data", so a lifted closure or an expired cap disappears within one cycle.
+
+### How a closure is narrowed to the edges it really covers
+
+A bound condition arrives as one or more *spans* — a directed OSM way plus the
+occupied fraction of it, with the cut geometry. Closing the whole way would shut
+kilometres of motorway for a two-hundred-metre incident, so the cycle traces
+each span's geometry against `TRAFFIC_VALHALLA_URL`'s `/trace_attributes` and
+keeps only the returned edges that also appear in this deployment's way→edge
+map, on the same way and in the bound direction.
+
+- Cross-checked edges accepted → the span is applied **edge-exactly**.
+- Nothing acceptable came back, or the span had no usable geometry → the cycle
+  falls back to **every edge of the way in the bound direction**. That
+  over-closes, but it never under-closes.
+
+Trace verdicts are cached in `traffic/span-edges-cache.json` under the
+data-manager's data directory, and pruned each cycle down to the spans still
+being reported, so lifted closures fall out of the file. Two things are
+deliberately *not* cached, so a bad minute cannot pin a span to the whole-way
+fallback for the rest of its life: a transport failure (the routing container
+unreachable, slow, or answering with an error), and a span left untraced because
+the pass hit its 30-second tracing budget. Both are retried on the next cycle.
+
+### The applied set
+
+The router still has its own, coarser mechanism for closures: point-based
+exclusions handed to Valhalla per request. Applying both to the same event would
+be redundant and would needlessly narrow the alternatives the router can offer,
+so the writer publishes what it has already baked into the graph:
+
+```bash
+curl -s http://localhost:4000/traffic/conditions/applied | jq
+```
+
+```json
+{
+  "writtenAt": "2026-09-07T09:14:02.511Z",
+  "observationIds": ["…"],
+  "resolverVersion": "…"
+}
+```
+
+The route needs no bearer token — it is derived from public road-conditions
+feeds and is polled on the routing hot path. Until the first successful live
+cycle it truthfully answers `writtenAt: null` with an empty list, and on a
+deployment where `OPENCONDITIONS_URL` is unset — live traffic not configured —
+it answers `501`. An observation is listed only when
+**every** one of its override edges was actually written; if a single edge could
+not be resolved, the whole observation is withheld.
+
+Two limits are worth knowing. An applied closure is a fact about the graph, not
+about a departure time: a route planned for after the closure has ended still
+detours around it, whereas the point exclusions it replaces did honour the
+event's schedule. And the set asserts only that the *writer* wrote the record,
+not that the router has reloaded the tar — a Valhalla restart that fails after a
+`traffic.tar` rebuild is the one case the freshness window does not catch.
+
+The routing integration polls this endpoint (through `DATA_MANAGER_URL`, default
+`http://localhost:4000`; compose sets the service DNS name) and caches the
+answer for 60 seconds. It drops its own point exclusions only for ids in a set
+whose `writtenAt` is less than ten minutes old. If the endpoint is unreachable,
+errors, or the set is stale, nothing is skipped and point exclusions keep
+working — the writer's liveness is the only switch, there is no flag to set.
+
+### Log lines to watch
+
+All of these come from the data-manager container
+(`pnpm openmapx services logs data-manager`, or its **Logs** tab in the admin
+panel).
+
+| Line                                                                      | Means                                                                                                                                              |
+| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `traffic-live: conditions applied`                                        | The healthy per-cycle summary: `closedEdges`, `cappedEdges`, `overridesUnresolved`, `requestedClosures`, `appliedConditions`, `edgeExactSpans`, `wholeWaySpans`, `missingWays`, `skipped`. |
+| `traffic-live: span tracing`                                              | Tracing counters for the cycle: `traced`, `unanswered`, `negative`, `skippedBudget`, `cacheHits`, `edgeExactSpans`, `wholeWaySpans`.                |
+| `traffic-live: bound ways missing from way→edge map, scheduling refresh`  | Conditions referenced ways this deployment's map does not know; a way→edge rebuild was kicked off (at most hourly). Persistent counts mean the graph and the feed's road spine are on different OSM vintages. |
+| `traffic-live: conditions fetch failed, reusing last good set`            | OpenConditions was unreachable; the previous set is still within `TRAFFIC_CONDITIONS_STALE_MS` and stays applied.                                   |
+| `traffic-live: conditions fetch failed and last set is stale, dropping closures` | The outage outlasted `TRAFFIC_CONDITIONS_STALE_MS`. Closures are dropped from the graph; the router falls back to point exclusions.           |
+| `traffic-live: span tracing failed, falling back to whole-way binding`    | The tracing pass itself failed. Closures still apply, whole-way instead of edge-exactly.                                                            |
+| `traffic-live: conditions classification failed, writing no overrides`    | Turning conditions into edge overrides threw. Live speeds are still written, but this cycle applies no closures or caps; the next cycle retries.    |
+| `traffic-live: span cache save failed`                                    | The trace cache could not be persisted. Harmless for correctness: the in-memory cache still serves the rest of this process, so only a restart loses the verdicts and re-traces them. |
+| `traffic-live: skipped out-of-range edges (traffic.tar/waysToEdges mismatch)` | The way→edge map references edges the current `traffic.tar` does not have. The daily traffic-extract cron resolves this by rebuilding both.     |
+
+A healthy instance shows `unanswered` at zero and `edgeExactSpans` dominating
+`wholeWaySpans`. A rising `unanswered` points at the routing container, not at
+the conditions feed; a `wholeWaySpans` that never falls usually means
+`TRAFFIC_VALHALLA_URL` points somewhere other than the Valhalla holding this
+deployment's traffic graph.
+
+### Verifying edge closures end-to-end
+
+Once the cycle reports closures, three requests confirm the graph really carries
+them. First, check that conditions are arriving and that the writer credited
+some of them:
+
+```bash
+curl -s "$OPENCONDITIONS_URL/segments/conditions.json" | jq '.conditions | length'
+curl -s http://localhost:4000/traffic/conditions/applied | jq
+```
+
+Then pick one applied closure, take a pair of coordinates on the closed
+carriageway either side of it, and route across it:
+
+```bash
+curl -s http://127.0.0.1:8002/route -d '{
+  "locations":[{"lat":51.40,"lon":6.80},{"lat":51.45,"lon":6.95}],
+  "costing":"auto","date_time":{"type":0}}' | jq '.trip.summary'
+
+curl -s http://127.0.0.1:8002/route -d '{
+  "locations":[{"lat":51.40,"lon":6.80},{"lat":51.45,"lon":6.95}],
+  "costing":"auto","date_time":{"type":0},
+  "costing_options":{"auto":{"ignore_closures":true}}}' | jq '.trip.summary'
+```
+
+The first must detour — a longer distance or time than the second, which ignores
+closures and drives straight through. If the two summaries are identical, the
+closure is not in the graph: check `closedEdges` in `traffic-live: conditions
+applied` and whether the router is reading the same `traffic.tar` the writer
+writes.
+
+Finally, route between two points on the **same way but outside** the closed
+span, for example from just past the closure to the next exit:
+
+```bash
+curl -s http://127.0.0.1:8002/route -d '{
+  "locations":[{"lat":51.46,"lon":6.97},{"lat":51.48,"lon":7.02}],
+  "costing":"auto","date_time":{"type":0}}' | jq '.trip.summary'
+```
+
+This one must succeed and stay on that way. That is the difference between an
+edge-exact closure and the whole-way fallback: if it fails or detours, the span
+was applied whole-way, and the `traffic-live: span tracing` counters will show
+it as `negative`, `unanswered` or `skippedBudget` — unless the span was already
+traced in an earlier cycle, in which case it only shows in `cacheHits`.
+
 ## Audit log
 
 Every state-changing admin action is written to a durable audit trail. It's the
@@ -308,3 +486,6 @@ written by a separate process and keep polling.
   log attributes actions to.
 - **[Backup and restore](./backup-and-restore.md)** — protecting the database the
   audit log and persisted logs live in.
+- **[Configuration](../install/configuration.md)** — `OPENCONDITIONS_URL`,
+  `TRAFFIC_LIVE_CRON`, `TRAFFIC_CONDITIONS_STALE_MS` and `TRAFFIC_VALHALLA_URL`,
+  the knobs behind the live road-conditions cycle.

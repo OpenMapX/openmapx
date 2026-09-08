@@ -94,6 +94,17 @@ export interface ApiOptions {
    * pretending to work on a deployment without OpenConditions.
    */
   bakePredicted?: () => Promise<BakePredictedResult>;
+  /**
+   * Observation ids whose closure/cap override the last live-traffic cycle
+   * actually wrote into `traffic.tar`, with the write time. Wired in
+   * `index.ts` only when OpenConditions is configured; the routing
+   * integration uses it to skip point exclusions for exactly these events.
+   */
+  getTrafficConditionsApplied?: () => {
+    writtenAt: string | null;
+    observationIds: string[];
+    resolverVersion: string | null;
+  };
   /** Offline package generator initialized by the process entrypoint. */
   offlinePackages?: OfflinePackageGenerator;
   /** Search-index database/test seam. */
@@ -831,6 +842,21 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       });
     reply.code(202);
     return { accepted: true };
+  });
+
+  // Read-only, public-data, loopback-bound: bypasses bearer auth (see the
+  // HEALTH_PATHS list in auth.ts) so the routing integration can poll it
+  // without a token. The set is served exactly as the last live cycle wrote
+  // it — `writtenAt` lets the consumer apply its own freshness window.
+  app.get("/traffic/conditions/applied", async (_req, reply) => {
+    if (!opts.getTrafficConditionsApplied) {
+      reply.code(501);
+      return { error: "live traffic not configured" };
+    }
+    // The live writer runs on a cron of minutes, so a few seconds of caching
+    // collapses a polling fleet into one read without hiding a fresh cycle.
+    reply.header("Cache-Control", "public, max-age=10");
+    return opts.getTrafficConditionsApplied();
   });
 
   app.post<{ Body: { region: string } }>("/download/osm", async (req, reply) => {

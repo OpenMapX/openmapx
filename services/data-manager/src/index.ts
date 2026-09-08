@@ -88,6 +88,15 @@ registerApi(app, {
           warn: (msg, extra) => (extra ? app.log.warn(extra, msg) : app.log.warn(msg)),
         },
       }),
+    // Routes are registered before the cron handles exist, so read them
+    // lazily. Until the first successful live cycle the handles are absent
+    // and the empty set is the truthful answer: nothing is baked in yet.
+    getTrafficConditionsApplied: () =>
+      cronHandles?.getTrafficConditionsApplied() ?? {
+        writtenAt: null,
+        observationIds: [],
+        resolverVersion: null,
+      },
   }),
 });
 

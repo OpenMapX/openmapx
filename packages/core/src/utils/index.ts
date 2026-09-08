@@ -57,6 +57,12 @@ export {
   deliveryProviderIdForHost,
 } from "./deliveryProviderHosts";
 export {
+  type EdgeClosureInput,
+  isEdgeClosure,
+  isRoutingRelevantBinding,
+  PASSENGER_CAR_CLASSES,
+} from "./edgeClosure";
+export {
   buildElevationProfile,
   buildElevationProfileFromApi,
   computeElevationStats,

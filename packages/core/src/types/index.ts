@@ -185,9 +185,11 @@ export type {
 export { isQuoteExpired } from "./ride";
 export type {
   RoadConditionAttribution,
+  RoadConditionBindingStatus,
   RoadConditionEvent,
   RoadConditionRoadRef,
   RoadConditionSchedule,
+  RoadConditionSegmentSpan,
   RoadConditionSeverity,
   RoadConditionsQuery,
   RoadConditionType,

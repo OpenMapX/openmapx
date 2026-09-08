@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import { join } from "node:path";
-import { envString } from "@openmapx/core/server-env";
+import { envInt, envString } from "@openmapx/core/server-env";
 import { feedState } from "@openmapx/db-schema";
 import {
   FEED_PROXY_CONFIG_FILENAME,
@@ -26,10 +26,26 @@ import {
   bakePredicted as bakePredictedDefault,
 } from "./jobs/traffic/bake-predicted.js";
 import {
+  type BoundCondition,
+  type ConditionsToEdgesResult,
+  conditionsToEdges,
+  parseConditionsJson,
+  spanKey,
+} from "./jobs/traffic/conditions-to-edges.js";
+import {
   type EnsureTrafficExtractResult,
   ensureTrafficExtract,
   isTrafficExtractStale,
 } from "./jobs/traffic/ensure-extract.js";
+import {
+  loadSpanEdgeCache,
+  type ResolveSpanEdgesResult,
+  resolveSpanEdges,
+  type SpanEdgeCache,
+  type SpanEdgesDeps,
+  saveSpanEdgeCache,
+  traceSpanEdges as traceSpanEdgesDefault,
+} from "./jobs/traffic/span-edges.js";
 import {
   loadWaysToEdges as loadWaysToEdgesDefault,
   type RefreshWaysToEdgesResult,
@@ -38,6 +54,7 @@ import {
   defaultOutputPath as waysToEdgesMapPath,
 } from "./jobs/traffic/ways-to-edges.js";
 import {
+  type WriteLiveTrafficDeps,
   type WriteLiveTrafficResult,
   writeLiveTraffic as writeLiveTrafficDefault,
 } from "./jobs/traffic/write-live.js";
@@ -243,6 +260,30 @@ export interface CronSetupOptions {
    */
   fetchLiveTrafficCsv?: () => Promise<string>;
   /**
+   * Test seam: invoked instead of a real `fetch()` against
+   * `${openConditionsUrl}/segments/conditions.json`.
+   */
+  fetchConditionsJson?: () => Promise<string>;
+  /**
+   * How long the last successfully-fetched condition set stays usable after a
+   * failed fetch. Defaults to `TRAFFIC_CONDITIONS_STALE_MS`.
+   */
+  trafficConditionsStaleMs?: number;
+  /**
+   * Base URL of the Valhalla container span tracing snaps against. Defaults to
+   * `TRAFFIC_VALHALLA_URL`, deliberately its own variable: the app-side Valhalla
+   * endpoint may point at a hosted routing service, which knows nothing about
+   * this deployment's graph ids and would fail every trace.
+   */
+  valhallaUrl?: string;
+  /**
+   * Test seam: invoked instead of the real `traceSpanEdges` (which posts to
+   * Valhalla's `/trace_attributes`).
+   */
+  traceSpanEdges?: typeof traceSpanEdgesDefault;
+  /** Where the traced span→edge results persist. Defaults to `<dataDir>/traffic/span-edges-cache.json`. */
+  spanEdgeCachePath?: string;
+  /**
    * Test seam: invoked instead of the real `loadWaysToEdges` (which reads
    * the JSON map `refreshWaysToEdges` last wrote to disk).
    */
@@ -251,13 +292,7 @@ export interface CronSetupOptions {
    * Test seam: invoked instead of the real `writeLiveTraffic` (which opens
    * `trafficTarPath` for in-place writes).
    */
-  writeLiveTraffic?: (deps: {
-    tarPath: string;
-    csv: string;
-    waysToEdges: Map<number, WayEdge[]>;
-    statePath?: string;
-    logger?: { warn: (msg: string, extra?: Record<string, unknown>) => void };
-  }) => Promise<WriteLiveTrafficResult>;
+  writeLiveTraffic?: (deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>;
   /** Override the predicted-traffic bake cron schedule (e.g. for tests). */
   trafficPredictedCronExpression?: string;
   /**
@@ -325,6 +360,22 @@ export interface CronHandles {
   runWaysToEdgesRefreshNow: () => Promise<void>;
   /** Test seam: directly invoke the live-traffic writer as if the cron fired. */
   runTrafficLiveNow: () => Promise<void>;
+  /**
+   * `observationIds`: the observations whose EVERY override edge was ACTUALLY
+   * written into `traffic.tar` during the last successful live-speed cycle,
+   * sorted; `writtenAt`: when that cycle wrote them (null until the first
+   * successful write). An observation with even one edge that failed to
+   * resolve is absent, because a router treats presence here as "the graph
+   * already reflects this event" and drops ALL of its point exclusions — a
+   * partially-written event would leave its unwritten edges open and
+   * unexcluded. Cap-only observations are included too — harmless, since
+   * point exclusions exist only for closures.
+   */
+  getTrafficConditionsApplied: () => {
+    writtenAt: string | null;
+    observationIds: string[];
+    resolverVersion: string | null;
+  };
   /** Test seam: directly invoke the predicted-traffic bake as if the cron fired. */
   runTrafficPredictedNow: () => Promise<void>;
   /** Test seam: directly invoke the auto-bump handler as if the cron fired. */
@@ -1055,6 +1106,68 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   const loadCoveredWaysToEdges = options.loadWaysToEdges ?? (() => loadWaysToEdgesDefault());
   const writeLive = options.writeLiveTraffic ?? writeLiveTrafficDefault;
 
+  const conditionsStaleMs =
+    options.trafficConditionsStaleMs ?? envInt("TRAFFIC_CONDITIONS_STALE_MS", 600_000);
+  const fetchConditionsJson =
+    options.fetchConditionsJson ??
+    (async (): Promise<string> => {
+      const res = await fetchWithTimeout(
+        `${openConditionsUrl}/segments/conditions.json`,
+        TRAFFIC_LIVE_FETCH_TIMEOUT_MS,
+      );
+      if (!res.ok) {
+        throw new Error(`traffic-live: OpenConditions conditions feed responded ${res.status}`);
+      }
+      return res.text();
+    });
+
+  // Last good conditions set, reused across a failing fetch for at most
+  // `conditionsStaleMs` so one OpenConditions hiccup does not reopen every
+  // closed road for a cycle; after that the closures are dropped (and the
+  // router falls back to point exclusions via the applied set below).
+  let lastConditions: {
+    conditions: BoundCondition[];
+    resolverVersion: string | null;
+    fetchedAt: number;
+  } | null = null;
+  let trafficConditionsApplied: {
+    writtenAt: string | null;
+    observationIds: string[];
+    resolverVersion: string | null;
+  } = { writtenAt: null, observationIds: [], resolverVersion: null };
+  let lastMissingWaysRefreshAt = 0;
+  const MISSING_WAYS_REFRESH_MIN_INTERVAL_MS = 3_600_000;
+
+  const valhallaUrl =
+    options.valhallaUrl ?? envString("TRAFFIC_VALHALLA_URL", "http://valhalla:8002");
+  const spanEdgeCachePath =
+    options.spanEdgeCachePath ?? join(options.dataDir, "traffic", "span-edges-cache.json");
+  const traceSpan = options.traceSpanEdges ?? traceSpanEdgesDefault;
+  // Read from disk once, on the first cycle after boot; every later cycle
+  // works on this in-memory map and rewrites the file from it.
+  let spanEdgeCache: SpanEdgeCache | null = null;
+
+  // Never rejects: a conditions failure must degrade the closures, not the
+  // live-speed write that shares this cycle.
+  const currentConditions = async (): Promise<BoundCondition[]> => {
+    try {
+      const parsed = parseConditionsJson(await fetchConditionsJson());
+      lastConditions = { ...parsed, fetchedAt: Date.now() };
+    } catch (err) {
+      if (lastConditions && Date.now() - lastConditions.fetchedAt <= conditionsStaleMs) {
+        log.warn("traffic-live: conditions fetch failed, reusing last good set", {
+          err: (err as Error).message,
+        });
+      } else {
+        lastConditions = null;
+        log.warn("traffic-live: conditions fetch failed and last set is stale, dropping closures", {
+          err: (err as Error).message,
+        });
+      }
+    }
+    return lastConditions?.conditions ?? [];
+  };
+
   // The writer's own module owns the covered-way-id staleness state; this
   // cron just wires fetch → load → write together and logs the match rate.
   // A falling matched/total ratio over time signals OSM-vintage drift
@@ -1079,13 +1192,110 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         }
         throw err;
       }
+      const conditions = await currentConditions();
+      // Tracing is an optimisation on top of a correct answer: any failure here
+      // leaves `resolved` empty and every span falls back to whole-way binding,
+      // which over-closes but never under-closes.
+      let spans: ResolveSpanEdgesResult | null = null;
+      try {
+        spanEdgeCache ??= await loadSpanEdgeCache(spanEdgeCachePath);
+        const spanDeps: SpanEdgesDeps = { valhallaUrl, waysToEdges, logger: log };
+        spans = await resolveSpanEdges(conditions, spanEdgeCache, spanDeps, traceSpan);
+      } catch (err) {
+        log.warn("traffic-live: span tracing failed, falling back to whole-way binding", {
+          err: (err as Error).message,
+        });
+      }
+      // Guarded separately from tracing: classification must never abort the
+      // cycle, because skipping `writeLive` would leave the previous cycle's
+      // overrides alive in `traffic.tar` with no live speeds refreshed.
+      let mapped: ConditionsToEdgesResult = {
+        overrides: new Map(),
+        appliedObservationIds: new Set(),
+        missingWayIds: new Set(),
+        edgeExactSpans: 0,
+        wholeWaySpans: 0,
+        skipped: { notRelevant: 0, crowdNotEligible: 0, noEffect: 0 },
+      };
+      try {
+        mapped = conditionsToEdges(conditions, waysToEdges, spans?.resolved);
+      } catch (err) {
+        log.warn("traffic-live: conditions classification failed, writing no overrides", {
+          err: (err as Error).message,
+        });
+      }
+      if (
+        mapped.missingWayIds.size > 0 &&
+        Date.now() - lastMissingWaysRefreshAt > MISSING_WAYS_REFRESH_MIN_INTERVAL_MS
+      ) {
+        lastMissingWaysRefreshAt = Date.now();
+        log.info("traffic-live: bound ways missing from way→edge map, scheduling refresh", {
+          missing: mapped.missingWayIds.size,
+        });
+        // Fire-and-forget: a `valhalla_ways_to_edges` run is far slower than a
+        // 2-minute cycle, and this cycle's write must not wait on it.
+        void runWaysToEdgesRefresh().catch((err) => {
+          log.warn("traffic-live: way→edge refresh failed", { err: (err as Error).message });
+        });
+      }
       const result = await writeLive({
         tarPath: trafficTarPath,
         csv,
         waysToEdges,
+        overrides: mapped.overrides,
         statePath: options.trafficLiveStatePath,
         logger: log,
       });
+      // Sourced from the WRITER, not from `mapped`: an observation whose every
+      // edge failed to resolve was requested but never written, and claiming it
+      // here would make a router skip an exclusion for a road that is still open.
+      trafficConditionsApplied = {
+        writtenAt: new Date().toISOString(),
+        observationIds: result.appliedObservationIds,
+        resolverVersion: lastConditions?.resolverVersion ?? null,
+      };
+      log.info("traffic-live: conditions applied", {
+        closedEdges: result.closedEdges,
+        cappedEdges: result.cappedEdges,
+        overridesUnresolved: result.overridesUnresolved,
+        requestedClosures: mapped.appliedObservationIds.size,
+        appliedConditions: trafficConditionsApplied.observationIds.length,
+        edgeExactSpans: mapped.edgeExactSpans,
+        wholeWaySpans: mapped.wholeWaySpans,
+        missingWays: mapped.missingWayIds.size,
+        skipped: mapped.skipped,
+      });
+      if (spans && spanEdgeCache) {
+        // An empty set because the FEED is down is not the same as a set with
+        // no conditions left: pruning on an outage would throw away every trace
+        // and re-trace the lot once OpenConditions returns.
+        if (lastConditions) {
+          // Keyed on the CURRENT conditions, so a lifted closure's traces leave
+          // both the file and this process instead of growing forever — a span
+          // key binds the observation id and geometry, so a dropped entry could
+          // never be hit again anyway.
+          const referenced = new Set(
+            conditions.flatMap((c) => c.segments.map((s) => spanKey(c.id, s))),
+          );
+          try {
+            await saveSpanEdgeCache(spanEdgeCachePath, spanEdgeCache, referenced);
+          } catch (err) {
+            log.warn("traffic-live: span cache save failed", { err: (err as Error).message });
+          }
+          for (const key of spanEdgeCache.keys()) {
+            if (!referenced.has(key)) spanEdgeCache.delete(key);
+          }
+        }
+        log.info("traffic-live: span tracing", {
+          traced: spans.traced,
+          unanswered: spans.unanswered,
+          negative: spans.negative,
+          skippedBudget: spans.skippedBudget,
+          cacheHits: spans.cacheHits,
+          edgeExactSpans: mapped.edgeExactSpans,
+          wholeWaySpans: mapped.wholeWaySpans,
+        });
+      }
       const matchRatePct =
         result.total > 0 ? Number(((result.matched / result.total) * 100).toFixed(1)) : null;
       log.info("traffic-live: cycle complete", {
@@ -1223,6 +1433,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     runTrafficExtractGuardNow: runTrafficExtractGuard,
     runWaysToEdgesRefreshNow: runWaysToEdgesRefresh,
     runTrafficLiveNow: runTrafficLive,
+    getTrafficConditionsApplied: () => trafficConditionsApplied,
     runTrafficPredictedNow: runTrafficPredicted,
     runAutoBumpNow: runAutoBump,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()

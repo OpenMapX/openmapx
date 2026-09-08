@@ -2,7 +2,8 @@ import { closeSync, openSync, readSync, writeSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { envString } from "@openmapx/core/server-env";
-import { encodeTrafficSpeed } from "./traffic-speed.js";
+import { type EdgeOverride, edgeKey } from "./conditions-to-edges.js";
+import { encodeClosedTrafficSpeed, encodeTrafficSpeed } from "./traffic-speed.js";
 import type { WayEdge } from "./ways-to-edges.js";
 
 /**
@@ -47,25 +48,61 @@ export interface WriteLiveTrafficDeps {
   /** Raw `way_id,dir,current_kph,free_flow_kph,los` CSV body (header + rows). */
   csv: string;
   waysToEdges: Map<number, WayEdge[]>;
+  /**
+   * Per-directed-edge closures and speed caps from bound road conditions,
+   * keyed by `edgeKey` (`level:tile:index`). Merged ON TOP of the live speeds:
+   * a closure outranks any speed, a cap yields `min(live, cap)`. An override
+   * edge is written even when the CSV has no row for it, and its identity
+   * joins the staleness set — so a lifted closure reverts next cycle.
+   */
+  overrides?: Map<string, EdgeOverride & { edge: WayEdge }>;
   /** Where the write-state (successfully-written edge identities) is persisted. Defaults under `DATA_DIR`. */
   statePath?: string;
   logger?: TrafficLogger;
 }
 
 export interface WriteLiveTrafficResult {
-  /** Number of `TrafficSpeed` records actually written this cycle. */
+  /**
+   * Number of `TrafficSpeed` records actually written this cycle — one per
+   * edge, so an edge carrying both a CSV speed and an override counts once.
+   */
   written: number;
   /** Number of CSV rows whose way_id was found in `waysToEdges`. */
   matched: number;
   /** Total CSV data rows (every non-blank line after the header, malformed included). */
   total: number;
   /**
-   * Edges skipped because `edge.index` fell outside the tile's
-   * `directed_edge_count` — a stale `waysToEdges` relative to a freshly
-   * rebuilt `traffic.tar`. Never written; surfaced so the extract-guard cron
-   * knows to rebuild.
+   * Edges (from the CSV or from `overrides`) skipped because `edge.index` fell
+   * outside the tile's `directed_edge_count` — a stale `waysToEdges` relative
+   * to a freshly rebuilt `traffic.tar`. Never written; surfaced so the
+   * extract-guard cron knows to rebuild.
    */
   outOfBounds: number;
+  /** Records written as CLOSED because an override closed that edge. */
+  closedEdges: number;
+  /**
+   * Records written with a speed cap override in force. Counts the cap being
+   * applied to the edge, including when the live speed was already below it.
+   */
+  cappedEdges: number;
+  /**
+   * Override edges that could NOT be applied because their tile is absent from
+   * this tar or their index is out of range — a closure that silently does
+   * nothing is exactly what an operator needs to see. Kept separate from
+   * `outOfBounds` (the tar/way-map version-mismatch signal): a missing tile is
+   * an expected way-vintage gap, not a mismatch. An out-of-range override edge
+   * therefore increments BOTH counters.
+   */
+  overridesUnresolved: number;
+  /**
+   * Sorted observation ids whose EVERY override edge was written this cycle.
+   * One unresolved edge (see `overridesUnresolved`) removes the observation
+   * from this list, even when its other edges were written: the consumer drops
+   * ALL of an event's per-request exclusions once it sees the id here, so a
+   * partially-applied event must not appear — the graph would be closed on
+   * some of its edges and wide open on the rest, with nothing excluding them.
+   */
+  appliedObservationIds: string[];
 }
 
 interface CsvRow {
@@ -102,23 +139,53 @@ interface ResolvedOffset {
   identity: EdgeIdentity;
 }
 
-function identityKey(id: EdgeIdentity): string {
-  return `${id.level}:${id.tile}:${id.index}`;
+/** One edge's merged outcome for this cycle: the live speed after overrides. */
+interface PlannedWrite {
+  offset: ResolvedOffset;
+  /** Speed to encode; `null` writes the "unknown" sentinel. Ignored when `closed`. */
+  kph: number | null;
+  closed: boolean;
+  /** A speed cap override applied to this edge (for reporting only). */
+  capped: boolean;
+  /**
+   * The observation whose override determined this record, or `null` for a
+   * plain CSV speed. Only set once the edge resolved in-bounds, so it reports
+   * what actually reached the tar.
+   */
+  observationId: string | null;
 }
 
 /**
- * Re-resolves one edge identity to its record byte offset through the CURRENT
- * index map, with the SAME bounds check as the write path. Returns `null` when
- * the tile is absent from this tar or the index is out of range — in either
- * case the edge no longer exists here (a rebuilt/shrunk tar), so its record is
- * already fresh-zero and clearing it would be both unnecessary and unsafe.
+ * Resolves one edge identity to its write target through the CURRENT index
+ * map. Returns `null` when the tile is absent from this tar (a way in our
+ * spine that isn't in this Valhalla graph) or the index is out of range (a
+ * stale way→edge map vs a freshly rebuilt tar) — in either case the edge does
+ * not exist here, so a write at that offset could land in an adjacent tile's
+ * header or past EOF.
+ *
+ * `onOutOfBounds` fires ONLY for the in-tar-but-out-of-range case, which is
+ * the version mismatch worth surfacing; a missing tile is expected in small
+ * numbers and stays silent. The clear path passes no callback: for it, both
+ * cases mean "already fresh-zero, nothing to clear".
  */
-function resolveIdentityOffset(idxMap: Map<bigint, TileEntry>, id: EdgeIdentity): number | null {
+function resolveIdentityOffset(
+  idxMap: Map<bigint, TileEntry>,
+  id: EdgeIdentity,
+  onOutOfBounds?: (id: EdgeIdentity, directedEdgeCount: number) => void,
+): ResolvedOffset | null {
   const baseGraphId = (BigInt(id.tile) << 3n) | BigInt(id.level);
   const entry = idxMap.get(baseGraphId);
   if (entry === undefined) return null;
-  if (id.index < 0 || id.index >= entry.directedEdgeCount) return null;
-  return entry.dataOffset + TRAFFIC_TILE_HEADER_SIZE + TRAFFIC_SPEED_RECORD_SIZE * id.index;
+  if (id.index < 0 || id.index >= entry.directedEdgeCount) {
+    onOutOfBounds?.(id, entry.directedEdgeCount);
+    return null;
+  }
+  return {
+    recordOffset:
+      entry.dataOffset + TRAFFIC_TILE_HEADER_SIZE + TRAFFIC_SPEED_RECORD_SIZE * id.index,
+    dataOffset: entry.dataOffset,
+    identity: { level: id.level, tile: id.tile, index: id.index },
+  };
 }
 
 function defaultStatePath(): string {
@@ -202,7 +269,7 @@ function resolveOffsets(
   idxMap: Map<bigint, TileEntry>,
   wayId: number,
   dir: "f" | "b",
-  onOutOfBounds?: (edge: WayEdge, directedEdgeCount: number) => void,
+  onOutOfBounds?: (id: EdgeIdentity, directedEdgeCount: number) => void,
 ): ResolvedOffset[] {
   const edges = waysToEdges.get(wayId);
   if (!edges) return [];
@@ -210,20 +277,8 @@ function resolveOffsets(
   const result: ResolvedOffset[] = [];
   for (const edge of edges) {
     if (edge.forward !== forward) continue;
-    const baseGraphId = (BigInt(edge.tile) << 3n) | BigInt(edge.level);
-    const entry = idxMap.get(baseGraphId);
-    if (entry === undefined) continue;
-    if (edge.index < 0 || edge.index >= entry.directedEdgeCount) {
-      onOutOfBounds?.(edge, entry.directedEdgeCount);
-      continue;
-    }
-    const recordOffset =
-      entry.dataOffset + TRAFFIC_TILE_HEADER_SIZE + TRAFFIC_SPEED_RECORD_SIZE * edge.index;
-    result.push({
-      recordOffset,
-      dataOffset: entry.dataOffset,
-      identity: { level: edge.level, tile: edge.tile, index: edge.index },
-    });
+    const resolved = resolveIdentityOffset(idxMap, edge, onOutOfBounds);
+    if (resolved !== null) result.push(resolved);
   }
   return result;
 }
@@ -273,6 +328,18 @@ async function saveIdentities(
  * self-heals on the next cycle; a guaranteed-untorn single-store write would
  * need an mmap (e.g. `mmap-io`) — deferred to keep v1 free of a native dep.
  *
+ * Bound road conditions arrive as `overrides` and are merged on top of the CSV
+ * speeds per edge: a closure wins over any speed (written as a CLOSED record,
+ * NOT as speed 0-via-`encodeTrafficSpeed`, and never as the no-data sentinel),
+ * a cap yields `min(live, cap)`, and a cap on an edge with no live speed is
+ * written on its own. Override edges are ordinary writes in every other
+ * respect — same bounds check, same identity set — so a lifted closure or an
+ * expired cap is cleared by the staleness pass on the very next cycle. An
+ * observation is credited in `appliedObservationIds` only when EVERY one of its
+ * override edges survived that bounds check — a single unresolved edge
+ * withdraws the whole observation, because the consumer treats the id as
+ * "the graph has all of this event" and stops excluding any of it.
+ *
  * The writer owns staleness: Valhalla never expires live speeds on its own.
  * Staleness is tracked by the set of tar-stable edge IDENTITIES (`{level,
  * tile, index}`) successfully written each cycle, persisted in the state file.
@@ -310,20 +377,34 @@ export async function writeLiveTraffic(
     let matched = 0;
     let written = 0;
     let outOfBounds = 0;
+    let closedEdges = 0;
+    let cappedEdges = 0;
+    let overridesUnresolved = 0;
+    const writtenObservationIds = new Set<string>();
+    // Observations with at least one override edge that did NOT resolve. They
+    // are subtracted from the written set at the end, so a partially-applied
+    // event never claims the graph covers it.
+    const unresolvedObservationIds = new Set<string>();
     // Keyed by identity so the reconciliation below can compare "written this
     // cycle" vs "previous" on tar-stable coordinates, never on byte offsets.
     const writtenIdentities = new Map<string, EdgeIdentity>();
     const touchedTileDataOffsets = new Set<number>();
 
-    const noteOutOfBounds = (edge: WayEdge, directedEdgeCount: number): void => {
+    const noteOutOfBounds = (id: EdgeIdentity, directedEdgeCount: number): void => {
       outOfBounds++;
       deps.logger?.warn("traffic-live: edge index out of range, skipping write", {
-        level: edge.level,
-        tile: edge.tile,
-        index: edge.index,
+        level: id.level,
+        tile: id.tile,
+        index: id.index,
         directedEdgeCount,
       });
     };
+
+    // Everything to write is PLANNED per edge before a single byte moves, so an
+    // edge that has both a live speed and an override resolves to exactly one
+    // record — `planned`'s key is the same `level:tile:index` the state file
+    // persists, which is what lets the two sources merge instead of racing.
+    const planned = new Map<string, PlannedWrite>();
 
     for (const row of rows) {
       const edges = deps.waysToEdges.get(row.wayId);
@@ -331,15 +412,63 @@ export async function writeLiveTraffic(
       matched++;
 
       const offsets = resolveOffsets(deps.waysToEdges, idxMap, row.wayId, row.dir, noteOutOfBounds);
-      if (offsets.length === 0) continue;
-
-      const record = encodeTrafficSpeed(row.currentKph);
-      for (const { recordOffset, dataOffset, identity } of offsets) {
-        writeSync(fd, record, 0, TRAFFIC_SPEED_RECORD_SIZE, recordOffset);
-        written++;
-        writtenIdentities.set(identityKey(identity), identity);
-        touchedTileDataOffsets.add(dataOffset);
+      for (const offset of offsets) {
+        planned.set(edgeKey(offset.identity), {
+          offset,
+          kph: row.currentKph,
+          closed: false,
+          capped: false,
+          observationId: null,
+        });
       }
+    }
+
+    for (const override of deps.overrides?.values() ?? []) {
+      const offset = resolveIdentityOffset(idxMap, override.edge, noteOutOfBounds);
+      if (offset === null) {
+        overridesUnresolved++;
+        unresolvedObservationIds.add(override.observationId);
+        continue;
+      }
+      const key = edgeKey(override.edge);
+      const previous = planned.get(key);
+      if (override.closed) {
+        // A closure outranks any live speed: the record becomes CLOSED, never
+        // a (possibly very low) speed the costing would still route over.
+        planned.set(key, {
+          offset,
+          kph: null,
+          closed: true,
+          capped: false,
+          observationId: override.observationId,
+        });
+        continue;
+      }
+      // `closed` survives the merge so a cap can never revive an edge a closure
+      // already took, without the writer having to trust the caller's map.
+      const closed = previous?.closed ?? false;
+      planned.set(key, {
+        offset,
+        kph: previous?.kph != null ? Math.min(previous.kph, override.capKph) : override.capKph,
+        closed,
+        capped: !closed,
+        // A cap that lost to an existing closure changed nothing on this edge,
+        // so the closure's observation stays the one credited with the record.
+        observationId: closed ? (previous?.observationId ?? null) : override.observationId,
+      });
+    }
+
+    for (const { offset, kph, closed, capped, observationId } of planned.values()) {
+      const record = closed ? encodeClosedTrafficSpeed() : encodeTrafficSpeed(kph);
+      writeSync(fd, record, 0, TRAFFIC_SPEED_RECORD_SIZE, offset.recordOffset);
+      written++;
+      if (closed) closedEdges++;
+      if (capped) cappedEdges++;
+      // Recorded only here, after the record is on disk; the unresolved set is
+      // subtracted below so a partly-written observation drops out entirely.
+      if (observationId !== null) writtenObservationIds.add(observationId);
+      writtenIdentities.set(edgeKey(offset.identity), offset.identity);
+      touchedTileDataOffsets.add(offset.dataOffset);
     }
 
     // Staleness reconciliation: clear every edge we wrote LAST cycle that we
@@ -351,10 +480,10 @@ export async function writeLiveTraffic(
     // identity re-resolves via idxMap directly, bypassing `waysToEdges`.
     if (previousIdentities !== null) {
       for (const identity of previousIdentities) {
-        if (writtenIdentities.has(identityKey(identity))) continue;
-        const clearOffset = resolveIdentityOffset(idxMap, identity);
-        if (clearOffset === null) continue;
-        writeSync(fd, clearedRecord, 0, TRAFFIC_SPEED_RECORD_SIZE, clearOffset);
+        if (writtenIdentities.has(edgeKey(identity))) continue;
+        const stale = resolveIdentityOffset(idxMap, identity);
+        if (stale === null) continue;
+        writeSync(fd, clearedRecord, 0, TRAFFIC_SPEED_RECORD_SIZE, stale.recordOffset);
       }
     }
 
@@ -372,7 +501,18 @@ export async function writeLiveTraffic(
 
     await saveIdentities(statePath, writtenIdentities.values());
 
-    return { written, matched, total, outOfBounds };
+    return {
+      written,
+      matched,
+      total,
+      outOfBounds,
+      closedEdges,
+      cappedEdges,
+      overridesUnresolved,
+      appliedObservationIds: [...writtenObservationIds]
+        .filter((id) => !unresolvedObservationIds.has(id))
+        .sort(),
+    };
   } finally {
     closeSync(fd);
   }
