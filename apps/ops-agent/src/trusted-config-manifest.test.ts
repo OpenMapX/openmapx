@@ -20,7 +20,7 @@ describe("trusted configuration deployment handoff", () => {
     const api = manifest("app-api");
     const agent = manifest("ops-agent");
     expect(api.manifest.container.user).toBeUndefined();
-    expect(agent.manifest.container.user).toBe("${UID:-1000}:${GID:-1000}");
+    expect(agent.manifest.container.user).toBe(`\${UID:-1000}:\${GID:-1000}`);
     for (const service of [api, agent]) {
       expect(service.manifest.container.environment?.OPS_TRUSTED_CONFIG_DIR).toBe(
         "/var/lib/openmapx/trusted-config",
@@ -31,8 +31,8 @@ describe("trusted configuration deployment handoff", () => {
         readOnly: false,
       });
     }
-    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_UID).toBe("${UID:-1000}");
-    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_GID).toBe("${GID:-1000}");
+    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_UID).toBe(`\${UID:-1000}`);
+    expect(api.manifest.container.environment?.OPS_TRUSTED_CONFIG_GID).toBe(`\${GID:-1000}`);
   });
 
   it("renders the queue against the real infra root through the generation pointer", () => {

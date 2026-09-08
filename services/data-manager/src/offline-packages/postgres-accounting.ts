@@ -517,7 +517,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
         SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j
         WHERE j.id = ${jobId} FOR UPDATE
       `;
-      if (!job || job.status !== "preparing") return false;
+      if (job?.status !== "preparing") return false;
       const [lease] = await tx<{ live: boolean }[]>`
         SELECT lease_expires_at > clock_timestamp() AS live
         FROM data_manager.offline_package_jobs
@@ -572,7 +572,7 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
         SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j
         WHERE j.id = ${jobId} FOR UPDATE
       `;
-      if (!job || job.status !== "preparing" || job.lease_owner !== workerId) {
+      if (job?.status !== "preparing" || job.lease_owner !== workerId) {
         throw new Error("Offline package completion does not own the durable lease");
       }
       const owners = await tx<{ principal: string }[]>`

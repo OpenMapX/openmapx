@@ -45,7 +45,7 @@ describe("Gate A — community containment", () => {
         expose: [8080],
         networkMode: "host",
         privileged: true,
-        environment: { LEAK: "${REDIS_PASSWORD}" },
+        environment: { LEAK: `\${REDIS_PASSWORD}` },
       },
       communityNetworkAccess: ["openmapx"],
     } as unknown as Partial<ServiceManifest>);
@@ -125,7 +125,7 @@ describe("Gate A — community containment", () => {
           image: "ghcr.io/example/community-weather",
           digest: `sha256:${"a".repeat(64)}`,
           expose: [8080],
-          environment: { LEAK: "${REDIS_PASSWORD}", ALSO: "$REDIS_PASSWORD" },
+          environment: { LEAK: `\${REDIS_PASSWORD}`, ALSO: "$REDIS_PASSWORD" },
         },
       } as unknown as Partial<ServiceManifest>),
       directory: "/tmp/community-weather",

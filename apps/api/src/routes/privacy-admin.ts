@@ -1445,8 +1445,7 @@ export const privacyAdminRoute: FastifyPluginAsync<PrivacyAdminRouteOptions> = a
         .limit(1);
       const row = rows[0];
       if (
-        !row ||
-        row.artifact.state !== "ready" ||
+        row?.artifact.state !== "ready" ||
         !["ready", "delivered"].includes(row.requestState) ||
         !row.artifact.wrappedDek ||
         (row.artifact.expiresAt && row.artifact.expiresAt.getTime() <= Date.now())

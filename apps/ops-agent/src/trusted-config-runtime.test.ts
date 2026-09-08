@@ -259,11 +259,11 @@ describe("ops-agent trusted configuration runtime", () => {
     });
     const compose = readFileSync(paths.compose, "utf8");
     expect(compose).toContain("OPENMAPX_ENABLED_SERVICES: app-api,alpha");
-    expect(compose).toContain("SERVICE_ALPHA_PUBLIC_SETTING: ${SERVICE_ALPHA_PUBLIC_SETTING:-}");
+    expect(compose).toContain(`SERVICE_ALPHA_PUBLIC_SETTING: \${SERVICE_ALPHA_PUBLIC_SETTING:-}`);
     expect(compose).toContain(
-      "INTEGRATION_ROUTING_DEMO_REGION: ${INTEGRATION_ROUTING_DEMO_REGION:-}",
+      `INTEGRATION_ROUTING_DEMO_REGION: \${INTEGRATION_ROUTING_DEMO_REGION:-}`,
     );
-    expect(compose).not.toContain("DOCKER_CONFIG: ${DOCKER_CONFIG:-}");
+    expect(compose).not.toContain(`DOCKER_CONFIG: \${DOCKER_CONFIG:-}`);
   });
 
   it.each([

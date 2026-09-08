@@ -311,11 +311,11 @@ describe("privacy backup extraction runtime", () => {
     mkdirSync(oldCase, { mode: 0o700 });
     writeFileSync(
       join(oldCase, "marker.json"),
-      JSON.stringify({
+      `${JSON.stringify({
         marker: "openmapx-privacy-backup-extraction-v1",
         requestId: randomUUID(),
         backupId: backup.backupId,
-      }) + "\n",
+      })}\n`,
       { mode: 0o600 },
     );
     const old = new Date(Date.now() - 3 * 60 * 60 * 1_000);

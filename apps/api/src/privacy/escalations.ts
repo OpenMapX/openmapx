@@ -1,5 +1,5 @@
 import { defaultLocale } from "@openmapx/i18n";
-import { and, eq, isNull, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { db as defaultDb } from "../db/index.js";
 import type { PrivacyNotificationTemplate } from "../db/privacy-schema.js";
 import { dataSubjectRequest, dataSubjectRequestNotification, user } from "../db/schema.js";
@@ -94,9 +94,7 @@ export async function schedulePrivacyEscalations(
       extension: dataSubjectRequest.extension,
     })
     .from(dataSubjectRequest)
-    .where(
-      sql`${dataSubjectRequest.state} in ('received', 'identity_pending', 'preserving', 'collecting', 'pending_processor', 'operator_review', 'assembling', 'clarification_needed')`,
-    )
+    .where(inArray(dataSubjectRequest.state, [...ACTIVE_STATES]))
     .limit(50_000);
   const byTemplate = emptyCounts();
   let scheduled = 0;

@@ -67,6 +67,15 @@ export class PrivacyReauthenticationService {
       throw new Error("ARTIFACT_NOT_AVAILABLE");
     if (input.initiatingAdminUserId !== undefined && !input.initiatingAdminSessionId)
       throw new Error("ARTIFACT_NOT_AVAILABLE");
+    // Exactly one principal is set (checked above); this is the filter that
+    // scopes the challenges it may supersede.
+    const principalFilter =
+      input.userId !== undefined
+        ? eq(dataExportReauthentication.userId, input.userId)
+        : input.initiatingAdminUserId !== undefined
+          ? eq(dataExportReauthentication.initiatingAdminUserId, input.initiatingAdminUserId)
+          : undefined;
+    if (!principalFilter) throw new Error("ARTIFACT_NOT_AVAILABLE");
     const now = this.now();
     const deliveryChannel: ReauthenticationChannel =
       input.deliveryChannel ?? (input.initiatingAdminUserId ? "assisted" : "self_service");
@@ -92,8 +101,7 @@ export class PrivacyReauthenticationService {
       )
       .limit(1);
     if (
-      !artifact[0] ||
-      artifact[0].state !== "ready" ||
+      artifact[0]?.state !== "ready" ||
       !artifact[0].expiresAt ||
       artifact[0].expiresAt <= now ||
       !["ready", "delivered"].includes(artifact[0].requestState) ||
@@ -110,9 +118,7 @@ export class PrivacyReauthenticationService {
           and(
             eq(dataExportReauthentication.requestId, input.requestId),
             eq(dataExportReauthentication.artifactId, input.artifactId),
-            input.userId
-              ? eq(dataExportReauthentication.userId, input.userId)
-              : eq(dataExportReauthentication.initiatingAdminUserId, input.initiatingAdminUserId!),
+            principalFilter,
             inArray(dataExportReauthentication.state, ["pending", "completed"]),
           ),
         );

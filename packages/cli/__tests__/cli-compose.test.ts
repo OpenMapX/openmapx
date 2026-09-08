@@ -23,7 +23,7 @@ const REPO_ROOT = join(import.meta.dirname, "..", "..", "..");
 
 /** The `NAME: <dollar>{NAME:-fallback}` line Compose rendering produces. */
 function composeDefault(name: string, fallback: string): string {
-  return `${name}: ` + "$" + `{${name}:-${fallback}}`;
+  return `${name}: \${${name}:-${fallback}}`;
 }
 
 const { readServiceSecretKeysFromCompose } = coreServices;

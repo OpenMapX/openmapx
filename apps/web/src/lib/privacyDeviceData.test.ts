@@ -30,7 +30,7 @@ describe("privacy browser supplement", () => {
   it("exports offline metadata but never archive bytes or error text", async () => {
     list.mockResolvedValue([
       {
-        id: "omp2-" + "a".repeat(64),
+        id: `omp2-${"a".repeat(64)}`,
         name: "Germany",
         status: "ready",
         bytesReceived: 100,
@@ -39,7 +39,7 @@ describe("privacy browser supplement", () => {
         createdAt: Date.parse("2026-09-01T00:00:00.000Z"),
         updatedAt: Date.parse("2026-09-02T00:00:00.000Z"),
         manifest: {
-          packageId: "omp2-" + "a".repeat(64),
+          packageId: `omp2-${"a".repeat(64)}`,
           coverage: { bbox: [1, 2, 3, 4], minZoom: 1, maxZoom: 12 },
         },
         lastError: { code: "secret", message: "secret" },
@@ -47,7 +47,7 @@ describe("privacy browser supplement", () => {
     ]);
     const result = await collectPrivacyDeviceData();
     expect(result.offlinePackages[0]).toMatchObject({
-      id: "omp2-" + "a".repeat(64),
+      id: `omp2-${"a".repeat(64)}`,
       name: "Germany",
       bytesTotal: 100,
     });

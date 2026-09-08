@@ -379,7 +379,7 @@ export class MemoryOfflinePackageAccountingStore implements OfflinePackageAccoun
     return await this.atomic(() => {
       const now = this.clock();
       const stored = this.jobs.get(jobId);
-      if (!stored || stored.record.status !== "preparing") return false;
+      if (stored?.record.status !== "preparing") return false;
       if (stored.leaseOwner === workerId && (stored.leaseExpiresAtMs ?? 0) > now) return true;
       const liveLeases = [...this.jobs.values()].filter(
         (item) => item.record.status === "preparing" && (item.leaseExpiresAtMs ?? 0) > now,
@@ -403,7 +403,7 @@ export class MemoryOfflinePackageAccountingStore implements OfflinePackageAccoun
   async renew(jobId: string, workerId: string, leaseMs: number): Promise<boolean> {
     return await this.atomic(() => {
       const stored = this.jobs.get(jobId);
-      if (!stored || stored.record.status !== "preparing" || stored.leaseOwner !== workerId) {
+      if (stored?.record.status !== "preparing" || stored.leaseOwner !== workerId) {
         return false;
       }
       stored.leaseExpiresAtMs = this.clock() + leaseMs;
@@ -418,7 +418,7 @@ export class MemoryOfflinePackageAccountingStore implements OfflinePackageAccoun
   ): Promise<OfflinePackageCompletion> {
     return await this.atomic(() => {
       const stored = this.jobs.get(jobId);
-      if (!stored || stored.record.status !== "preparing" || stored.leaseOwner !== workerId) {
+      if (stored?.record.status !== "preparing" || stored.leaseOwner !== workerId) {
         throw new Error("Offline package completion does not own the durable lease");
       }
       if (manifest.archive.byteLength > this.maxLogicalBytes) {
@@ -468,7 +468,7 @@ export class MemoryOfflinePackageAccountingStore implements OfflinePackageAccoun
   ): Promise<void> {
     await this.atomic(() => {
       const stored = this.jobs.get(jobId);
-      if (!stored || stored.record.status !== "preparing") return;
+      if (stored?.record.status !== "preparing") return;
       if (workerId && stored.leaseOwner !== workerId) return;
       stored.record = {
         ...stored.record,

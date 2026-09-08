@@ -11,8 +11,7 @@ export async function loadPrivacyBackupCapabilityKey(
   env: NodeJS.ProcessEnv = process.env,
 ): Promise<Buffer> {
   const path = env.OPS_PRIVACY_BACKUP_CAPABILITY_KEY_FILE?.trim();
-  if (!path || !path.startsWith("/"))
-    throw new Error("privacy backup capability key is unavailable");
+  if (!path?.startsWith("/")) throw new Error("privacy backup capability key is unavailable");
   let handle: Awaited<ReturnType<typeof open>> | undefined;
   try {
     handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW | constants.O_NONBLOCK);

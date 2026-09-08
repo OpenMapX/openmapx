@@ -475,8 +475,7 @@ export class EncryptedBlobStore {
         if (!entry.name.endsWith(".partial")) continue;
         const info = await lstat(path).catch(() => undefined);
         if (
-          !info ||
-          !info.isFile() ||
+          !info?.isFile() ||
           info.nlink !== 1 ||
           (info.mode & 0o7000) !== 0 ||
           (typeof process.getuid === "function" && info.uid !== process.getuid())

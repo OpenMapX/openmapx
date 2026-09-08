@@ -85,10 +85,10 @@ describe("service manifest", () => {
   });
 
   it("pins the production origins and the created_by version", () => {
-    expect(environment.OSM_API_URL).toBe("${OSM_API_URL:-https://api.openstreetmap.org}");
-    expect(environment.OSM_WEB_URL).toBe("${OSM_WEB_URL:-https://www.openstreetmap.org}");
+    expect(environment.OSM_API_URL).toBe(`\${OSM_API_URL:-https://api.openstreetmap.org}`);
+    expect(environment.OSM_WEB_URL).toBe(`\${OSM_WEB_URL:-https://www.openstreetmap.org}`);
     expect(environment.OSM_DISCOVERY_URL).toContain("https://www.openstreetmap.org/.well-known/");
-    expect(environment.OPENMAPX_VERSION).toBe("${OPENMAPX_VERSION:-1.0}");
+    expect(environment.OPENMAPX_VERSION).toBe(`\${OPENMAPX_VERSION:-1.0}`);
   });
 
   it("carries every documented rate limit", () => {

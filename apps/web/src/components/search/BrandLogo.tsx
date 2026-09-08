@@ -28,6 +28,7 @@ export function BrandLogo({ brand, size = 20 }: BrandLogoProps) {
   }
 
   return (
+    // biome-ignore lint/performance/noImgElement: the logo is a Commons file fetched through the API image proxy at runtime, not an app image the Next.js loader can optimize
     <img
       src={url}
       alt={brand.name}

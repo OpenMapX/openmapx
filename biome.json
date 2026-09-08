@@ -20,7 +20,8 @@
       "!infra/docker/data",
       "!docs",
       "!apps/api/openapi.json",
-      "!packages/brands/src/data/brands-index.json"
+      "!packages/brands/src/data/brands-index.json",
+      "!integrations/overlay-sun-time/data/timezones.simplified.json"
     ]
   },
   "formatter": {

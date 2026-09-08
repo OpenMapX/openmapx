@@ -57,7 +57,7 @@ describe("ops-agent deployment manifest", () => {
     expect(ops.bindMounts?.filter((mount) => mount.source.includes("ops-agent-"))).toHaveLength(2);
     expect(ops.exposure).toBeUndefined();
     expect(ops.container.environment?.OPENMAPX_ENABLED_SERVICES).toBe(
-      "${OPENMAPX_ENABLED_SERVICES:-traefik,well-known,app-api,app-web,postgis,redis,data-manager}",
+      `\${OPENMAPX_ENABLED_SERVICES:-traefik,well-known,app-api,app-web,postgis,redis,data-manager}`,
     );
   });
 
