@@ -116,7 +116,7 @@
     "data.generateApiKeys"
   ],
   "sourceUnions": {
-    "apps/api/src/services/admin-job-handlers.ts#DataOperation": [
+    "apps/api/src/services/admin-operation-catalog.ts#AdminOperationId": [
       "download-osm",
       "download-fonts",
       "update",
@@ -141,7 +141,7 @@
     {
       "id": "api.admin-cli.data",
       "callSiteIds": [],
-      "semanticSources": ["apps/api/src/services/admin-job-handlers.ts#DataOperation"],
+      "semanticSources": ["apps/api/src/services/admin-operation-catalog.ts#AdminOperationId"],
       "typedKinds": [
         "data.downloadOsm",
         "data.downloadFonts",
