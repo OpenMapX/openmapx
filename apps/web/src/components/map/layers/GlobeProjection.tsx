@@ -4,7 +4,9 @@ import { useColorScheme } from "@mui/material/styles";
 import { useLayerStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
+import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { GlobeSpaceLayer } from "./GlobeSpaceLayer";
 
 type SkySpecification = Parameters<maplibregl.Map["setSky"]>[0];
 
@@ -45,128 +47,9 @@ const ZOOM_OUT_THRESHOLD = 11;
 const ZOOM_OUT_TARGET = 3;
 const ZOOM_OUT_DURATION = 1500;
 
-const TILE = 512;
-// Reverse parallax: stars move opposite to the globe drag so it feels like
-// a camera orbiting a ball in space. Large coprime multipliers ensure the
-// two layers never re-align, so every viewing angle has a unique starfield.
-const PARALLAX_NEAR = 5;
-const PARALLAX_FAR = 8;
-
 function getSky(activeLayer: string, isDark: boolean): SkySpecification {
   if (activeLayer === "satellite") return SATELLITE_SKY;
   return isDark ? DARK_SKY : LIGHT_SKY;
-}
-
-function makeRng(initialSeed: number) {
-  let s = initialSeed;
-  return () => {
-    s = (s * 16807) % 2147483647;
-    return (s - 1) / 2147483646;
-  };
-}
-
-function renderStarTile(
-  seed: number,
-  dimCount: number,
-  medCount: number,
-  brightCount: number,
-): string {
-  const canvas = document.createElement("canvas");
-  canvas.width = TILE;
-  canvas.height = TILE;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return "";
-  const rand = makeRng(seed);
-
-  for (let i = 0; i < dimCount; i++) {
-    const x = rand() * TILE;
-    const y = rand() * TILE;
-    ctx.beginPath();
-    ctx.arc(x, y, 0.3 + rand() * 0.5, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(255,255,255,${0.12 + rand() * 0.3})`;
-    ctx.fill();
-  }
-
-  for (let i = 0; i < medCount; i++) {
-    const x = rand() * TILE;
-    const y = rand() * TILE;
-    const hue = rand() < 0.3 ? 220 : rand() < 0.5 ? 40 : 0;
-    const sat = hue === 0 ? 0 : 20 + rand() * 30;
-    ctx.beginPath();
-    ctx.arc(x, y, 0.5 + rand() * 0.8, 0, Math.PI * 2);
-    ctx.fillStyle = `hsla(${hue},${sat}%,${70 + rand() * 30}%,${0.5 + rand() * 0.4})`;
-    ctx.fill();
-  }
-
-  for (let i = 0; i < brightCount; i++) {
-    const x = rand() * TILE;
-    const y = rand() * TILE;
-    const r = 1 + rand() * 1.2;
-    const glow = ctx.createRadialGradient(x, y, 0, x, y, r * 3);
-    glow.addColorStop(0, "rgba(255,255,255,0.9)");
-    glow.addColorStop(0.3, "rgba(200,220,255,0.3)");
-    glow.addColorStop(1, "rgba(200,220,255,0)");
-    ctx.beginPath();
-    ctx.arc(x, y, r * 3, 0, Math.PI * 2);
-    ctx.fillStyle = glow;
-    ctx.fill();
-    ctx.beginPath();
-    ctx.arc(x, y, r * 0.6, 0, Math.PI * 2);
-    ctx.fillStyle = "rgba(255,255,255,0.95)";
-    ctx.fill();
-  }
-
-  return canvas.toDataURL("image/png");
-}
-
-let tileUrls: [string, string] | null = null;
-function getTileUrls(): [string, string] {
-  if (tileUrls) return tileUrls;
-  tileUrls = [renderStarTile(42, 500, 100, 12), renderStarTile(137, 400, 80, 8)];
-  return tileUrls;
-}
-
-function applySpaceBackground(container: HTMLElement, lng: number, lat: number) {
-  const [near, far] = getTileUrls();
-  const lngNorm = (lng + 180) / 360;
-  const latNorm = (90 - lat) / 180;
-
-  // Reverse direction: when globe rotates right (lng increases) stars
-  // drift slightly left, like a ball spinning inside a fixed universe.
-  const nearX = lngNorm * TILE * PARALLAX_NEAR;
-  const nearY = latNorm * TILE * PARALLAX_NEAR;
-  const farX = lngNorm * TILE * PARALLAX_FAR;
-  const farY = latNorm * TILE * PARALLAX_FAR;
-
-  // Nebula clouds traverse the full viewport — opposite side of the
-  // earth shows completely different nebulae (reversed direction).
-  const nLng = (1 - lngNorm) * 100;
-  const nLat = (1 - latNorm) * 100;
-
-  container.style.backgroundImage = [
-    `radial-gradient(ellipse 700px 500px at ${nLng}% ${nLat}%, rgba(40,15,90,0.55) 0%, transparent 70%)`,
-    `radial-gradient(ellipse 600px 400px at ${100 - nLng}% ${100 - nLat}%, rgba(15,40,100,0.45) 0%, transparent 70%)`,
-    `radial-gradient(ellipse 500px 350px at ${(nLng + 30) % 100}% ${(nLat + 25) % 100}%, rgba(80,15,50,0.35) 0%, transparent 70%)`,
-    `url("${near}")`,
-    `url("${far}")`,
-  ].join(",");
-  container.style.backgroundColor = "#050510";
-  container.style.backgroundRepeat = "no-repeat,no-repeat,no-repeat,repeat,repeat";
-  container.style.backgroundPosition = [
-    "0 0",
-    "0 0",
-    "0 0",
-    `${nearX}px ${nearY}px`,
-    `${farX}px ${farY}px`,
-  ].join(",");
-}
-
-function clearBackground(container: HTMLElement) {
-  container.style.backgroundImage = "";
-  container.style.backgroundColor = "";
-  container.style.backgroundRepeat = "";
-  container.style.backgroundPosition = "";
-  container.style.background = "";
 }
 
 export function GlobeProjection() {
@@ -189,19 +72,15 @@ export function GlobeProjection() {
     const container = map.getContainer();
     const isSatelliteGlobe = globeView && activeLayer === "satellite";
 
-    const applyBg = () => {
-      if (!globeView) {
-        clearBackground(container);
-        return;
-      }
-      if (isSatelliteGlobe) {
-        const c = map.getCenter();
-        applySpaceBackground(container, c.lng, c.lat);
-      } else {
-        clearBackground(container);
-        container.style.background = isDark ? DARK_BG : LIGHT_BG;
-      }
-    };
+    const previousBackground = container.style.backgroundColor;
+    const space = new GlobeSpaceLayer();
+    container.style.backgroundColor = globeView
+      ? isSatelliteGlobe
+        ? "#020306"
+        : isDark
+          ? DARK_BG
+          : LIGHT_BG
+      : previousBackground;
 
     const apply = () => {
       if (globeView) {
@@ -211,7 +90,11 @@ export function GlobeProjection() {
         map.setProjection({ type: "mercator" });
         map.setSky({ "atmosphere-blend": 0 });
       }
-      applyBg();
+      // Style reloads (including WebGL context restoration) drop custom layers.
+      // Re-add with fresh GPU resources, in the same stack as the base imagery.
+      if (isSatelliteGlobe && !map.getLayer(space.id)) {
+        addLayerInSlot(map, space, "base-raster", -100);
+      }
     };
 
     // Apply immediately only when the style is fully loaded. Otherwise wait
@@ -224,19 +107,14 @@ export function GlobeProjection() {
     const onStyleLoad = () => apply();
     map.on("style.load", onStyleLoad);
 
-    // Parallax: shift the starfield as the user rotates the globe
-    const onMove = isSatelliteGlobe
-      ? () => {
-          const c = map.getCenter();
-          applySpaceBackground(container, c.lng, c.lat);
-        }
-      : null;
-    if (onMove) map.on("move", onMove);
-
     return () => {
       map.off("style.load", onStyleLoad);
-      if (onMove) map.off("move", onMove);
-      clearBackground(container);
+      if (map.getLayer(space.id)) map.removeLayer(space.id);
+      // A replacement style may already have dropped the layer without its
+      // onRemove callback. Disposal is idempotent and also covers that path.
+      space.dispose();
+      unregisterLayerSlot(space.id);
+      container.style.backgroundColor = previousBackground;
     };
   }, [globeView, activeLayer, isDark, mapReady, styleVersion, mapRef]);
 
