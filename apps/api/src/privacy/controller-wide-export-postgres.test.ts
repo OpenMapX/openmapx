@@ -486,6 +486,8 @@ async function runFixture() {
 }
 
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(FIXTURE_NOW);
   for (const [key, value] of Object.entries({
     OPENMAPX_DEPLOYMENT_ID: "controller-acceptance",
     LEGAL_NAME: "Controller Acceptance Test",
@@ -509,6 +511,7 @@ afterEach(async () => {
   await db.delete(user).where(eq(user.id, FOREIGN_ID));
   for (const root of roots.splice(0)) await rm(root, { recursive: true, force: true });
   vi.unstubAllEnvs();
+  vi.useRealTimers();
 });
 
 describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
