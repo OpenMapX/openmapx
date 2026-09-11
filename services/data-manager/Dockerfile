@@ -151,9 +151,9 @@ RUN set -eux; \
 # with `docker compose up -d --force-recreate` (a plain `docker restart` keeps
 # the pre-swap bind-mount target), so the plugin — not just the base CLI — must
 # be present, else promote fails with "unknown shorthand flag: 'f'".
-ARG DOCKER_COMPOSE_VERSION=5.5.0
-ARG DOCKER_COMPOSE_SHA256_AMD64=c57ab918abd5b05ca7e7d0f275875dd1330a695074f309dc9eab1b49efafcd4b
-ARG DOCKER_COMPOSE_SHA256_ARM64=ff42489f5a9b879d5d117c5ffea6defc27390b3286da8ad52cbc9c6ab5df590e
+ARG DOCKER_COMPOSE_VERSION=5.5.1
+ARG DOCKER_COMPOSE_SHA256_AMD64=db1889184726840f75c4f9c001048430d4f25b3be3cb084d3ddd762bc0aed576
+ARG DOCKER_COMPOSE_SHA256_ARM64=732e3a84c1a0f67256ce80bc2598a24546b10ca05f9faa97efceb1171ece2ef7
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \
