@@ -6,7 +6,8 @@ import type { PoiIngestKind } from "./types.js";
  * The lock granularity is deliberately `(sourceId, kind)` — not `sourceId` —
  * because static and live pipelines for the same source touch disjoint
  * resources (Postgres staging table vs Redis hash) and there is no reason to
- * serialise them. Table-level safety against torn writes is provided by the
+ * serialise them. A bundled run reserves both resources and conflicts with
+ * either kind. Table-level safety against torn writes is provided by the
  * DROP+RENAME swap inside a transaction in `stages/swap.ts`; this lock just
  * stops two concurrent runs of the same (id, kind) from racing in this
  * process.
@@ -47,7 +48,11 @@ export function createPoiSingleFlight(opts: CreatePoiSingleFlightOptions = {}): 
 
   function tryAcquire(sourceId: string, kind: PoiIngestKind): PoiTryAcquireResult {
     const key = lockKey(sourceId, kind);
-    const existing = locks.get(key);
+    const existing = [...locks.values()].find(
+      (entry) =>
+        entry.sourceId === sourceId &&
+        (entry.kind === kind || entry.kind === "bundled" || kind === "bundled"),
+    );
     if (existing) {
       return { ok: false, reason: "in-flight", existing: { ...existing } };
     }

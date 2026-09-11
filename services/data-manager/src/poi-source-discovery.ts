@@ -134,16 +134,20 @@ export async function discoverPoiSources(opts: DiscoveryOptions): Promise<Discov
       }
       // The registry warn-and-drops cross-integration id collisions; we add
       // an integration prefix so log lines are attributable.
-      registerPoiSourcesInStore(declared, {
-        warn: (msg: string, ...args: unknown[]) => {
-          const extra = args[0];
-          if (extra && typeof extra === "object" && !Array.isArray(extra)) {
-            opts.logger.warn(`[${integrationName}] ${msg}`, extra as Record<string, unknown>);
-          } else {
-            opts.logger.warn(`[${integrationName}] ${msg}`);
-          }
+      registerPoiSourcesInStore(
+        declared,
+        {
+          warn: (msg: string, ...args: unknown[]) => {
+            const extra = args[0];
+            if (extra && typeof extra === "object" && !Array.isArray(extra)) {
+              opts.logger.warn(`[${integrationName}] ${msg}`, extra as Record<string, unknown>);
+            } else {
+              opts.logger.warn(`[${integrationName}] ${msg}`);
+            }
+          },
         },
-      });
+        { ownerIntegrationId: integrationName },
+      );
       result.withSources += 1;
       result.registered += declared.length;
     } catch (err) {

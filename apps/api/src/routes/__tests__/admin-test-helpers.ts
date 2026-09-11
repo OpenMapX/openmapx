@@ -21,9 +21,12 @@ export function installAdminRouteMocks() {
   return { session, requireAdmin, getAdminSession, tryAdminSession, writeAuditLog };
 }
 
-export async function createAdminTestApp(route: FastifyPluginAsync): Promise<FastifyInstance> {
+export async function createAdminTestApp(
+  route: FastifyPluginAsync,
+  options: Record<string, unknown> = {},
+): Promise<FastifyInstance> {
   const app = Fastify({ logger: false });
-  await app.register(route);
+  await app.register(route, options);
   await app.ready();
   return app;
 }

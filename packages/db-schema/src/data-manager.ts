@@ -97,6 +97,8 @@ export const poiFeedState = dataManager.table("poi_feed_state", {
   status: text("status").notNull().default("unknown"),
   consecutiveFailures: integer("consecutive_failures").notNull().default(0),
   lastError: jsonb("last_error"),
+  /** Versioned, stream-specific publication/attempt evidence for the dashboard. */
+  refreshEvidence: jsonb("refresh_evidence"),
 });
 
 /** Durable physical offline-package work. Opaque principals live only in the owner table. */

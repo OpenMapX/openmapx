@@ -577,7 +577,8 @@ describe("setupCron", () => {
           tarPath: "/data/osm/traffic.tar",
           csv: "way_id,dir,current_kph,free_flow_kph,los\n123,f,50,60,moderate",
           waysToEdges,
-          statePath: undefined,
+          statePath: join(dataDir, "traffic", "live-state.json"),
+          evidencePath: join(dataDir, "traffic", "publication-evidence.json"),
         }),
       );
       expect(infoLog).toHaveBeenCalledWith(

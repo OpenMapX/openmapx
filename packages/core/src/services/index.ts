@@ -31,6 +31,7 @@ export {
   DATA_MANAGER_PLAINTEXT_HOSTS_ENV,
   DataManagerClient,
   type DataManagerClientOptions,
+  type DataManagerCoverageEvidencePage,
   DataManagerHttpError,
   type SearchIndexBuildResult,
   type SearchIndexStatus,

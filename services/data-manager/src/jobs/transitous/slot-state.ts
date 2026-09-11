@@ -7,6 +7,7 @@ import {
   readlinkSync,
   renameSync,
   rmSync,
+  statSync,
   symlinkSync,
 } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
@@ -42,6 +43,29 @@ function readRecord(path: string): MotisSlotRecord | null {
     throw new Error(`malformed MOTIS slot state at ${path}`);
   }
   return parsed;
+}
+
+/**
+ * Read activation authority without repairing aliases, creating directories,
+ * or writing state. Dashboard collectors must use this reader instead of
+ * `ensureMotisSlotLayout`, which is intentionally mutating.
+ */
+export function readMotisSlotState(dataDir: string): MotisSlotRecord | null {
+  const path = join(dataDir, "motis", "slot-state.json");
+  if (existsSync(path) && statSync(path).size > 64 * 1024)
+    throw new Error("MOTIS slot state exceeds size limit");
+  const record = readRecord(path);
+  if (
+    record &&
+    ((record.datasetEpoch !== undefined &&
+      (typeof record.datasetEpoch !== "string" || record.datasetEpoch.length > 512)) ||
+      (record.activatedAt !== undefined &&
+        (typeof record.activatedAt !== "string" ||
+          !Number.isFinite(Date.parse(record.activatedAt)))))
+  ) {
+    throw new Error("Malformed MOTIS activation evidence");
+  }
+  return record;
 }
 
 function replaceAlias(alias: string, target: string): void {

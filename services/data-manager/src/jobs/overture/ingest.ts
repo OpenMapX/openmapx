@@ -83,6 +83,7 @@ export async function validateOvertureContributors(schema: string): Promise<stri
 export async function activateOvertureStagingSchema(
   schema: string,
   stagingSchema: string,
+  placesPublishedAt: string,
 ): Promise<void> {
   assertValidOvertureSchema(schema);
   assertValidOvertureSchema(stagingSchema);
@@ -111,6 +112,12 @@ export async function activateOvertureStagingSchema(
     }
     await tx.unsafe(`DROP SCHEMA IF EXISTS "${schema}" CASCADE`);
     await tx.unsafe(`ALTER SCHEMA "${stagingSchema}" RENAME TO "${schema}"`);
+    await tx.unsafe(
+      `UPDATE "${schema}".conflation_state
+       SET places_published_at = $1
+       WHERE singleton = 1`,
+      [placesPublishedAt],
+    );
   });
 }
 
@@ -222,7 +229,7 @@ export async function ingestOverture(opts: IngestOvertureOptions): Promise<void>
   );
 
   opts.onProgress?.("Atomic swap staging → live...");
-  await activateOvertureStagingSchema(schema, stagingSchema);
+  await activateOvertureStagingSchema(schema, stagingSchema, new Date().toISOString());
 
   opts.onProgress?.("Ingest complete.");
 }

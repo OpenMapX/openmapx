@@ -57,6 +57,7 @@ export {
 export { findRepoRoot, type RepoPaths, repoPaths } from "./repo-paths";
 // Service plugin system (manifest loader, compose renderer — all uses node:fs)
 export * as services from "./services";
+export type { DataManagerCoverageEvidencePage } from "./services/data-manager-client";
 // Subprocess helper used by git-clone and the community-integration build step
 export {
   redactProcessOutput,

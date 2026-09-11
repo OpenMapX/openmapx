@@ -195,6 +195,10 @@ async function runKind(
     liveRowCount: ctx.state.liveState?.size,
     staticHash: ctx.state.staticHash,
     skippedStaticSwap: ctx.state.skippedStaticSwap,
+    staticPublicationVersion: ctx.state.staticPublicationVersion,
+    staticPublishedAt: ctx.state.staticPublishedAt,
+    livePublicationVersion: ctx.state.livePublicationVersion,
+    livePublishedAt: ctx.state.livePublishedAt,
     error: topError,
   };
 }

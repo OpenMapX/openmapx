@@ -158,4 +158,9 @@ export type PoiSource =
  * present). Registry accessors return this so consumers never see an optional
  * `id`.
  */
-export type RegisteredPoiSource = PoiSource & { id: string; stationIdPrefix: string };
+export type RegisteredPoiSource = PoiSource & {
+  id: string;
+  stationIdPrefix: string;
+  /** Trusted host provenance added by built-in source discovery. */
+  ownerIntegrationId?: string;
+};

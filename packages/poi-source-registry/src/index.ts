@@ -152,9 +152,23 @@ export interface PoiRegistryLogger {
  * shouldn't crash, and a third-party integration colliding on id should fail
  * detectably but not crash the host.
  */
-export function registerPoiSource(source: PoiSource, log?: PoiRegistryLogger): void {
+export interface PoiSourceRegistrationOptions {
+  /** Integration directory/manifest id supplied by trusted discovery. */
+  ownerIntegrationId?: string;
+}
+
+export function registerPoiSource(
+  source: PoiSource,
+  log?: PoiRegistryLogger,
+  options: PoiSourceRegistrationOptions = {},
+): void {
   const { id, stationIdPrefix } = resolvePoiSourceId(source);
-  const normalized = { ...source, id, stationIdPrefix } as RegisteredPoiSource;
+  const normalized = {
+    ...source,
+    id,
+    stationIdPrefix,
+    ...(options.ownerIntegrationId ? { ownerIntegrationId: options.ownerIntegrationId } : {}),
+  } as RegisteredPoiSource;
 
   const errors = collectErrorsForSource(normalized);
   if (errors.length > 0) {
@@ -175,8 +189,12 @@ export function registerPoiSource(source: PoiSource, log?: PoiRegistryLogger): v
 }
 
 /** Bulk variant. Each source validated independently; first error halts. */
-export function registerPoiSources(sources: readonly PoiSource[], log?: PoiRegistryLogger): void {
-  for (const src of sources) registerPoiSource(src, log);
+export function registerPoiSources(
+  sources: readonly PoiSource[],
+  log?: PoiRegistryLogger,
+  options: PoiSourceRegistrationOptions = {},
+): void {
+  for (const src of sources) registerPoiSource(src, log, options);
 }
 
 /** Begin a detached registry generation for an atomic integration reload. */

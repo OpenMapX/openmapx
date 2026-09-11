@@ -3,6 +3,7 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { envString } from "@openmapx/core/server-env";
 import { type EdgeOverride, edgeKey } from "./conditions-to-edges.js";
+import { recordTrafficGraphSuccess, trafficEvidencePath } from "./evidence.js";
 import { encodeClosedTrafficSpeed, encodeTrafficSpeed } from "./traffic-speed.js";
 import type { WayEdge } from "./ways-to-edges.js";
 
@@ -58,6 +59,8 @@ export interface WriteLiveTrafficDeps {
   overrides?: Map<string, EdgeOverride & { edge: WayEdge }>;
   /** Where the write-state (successfully-written edge identities) is persisted. Defaults under `DATA_DIR`. */
   statePath?: string;
+  /** Versioned dashboard evidence path. Defaults beside `statePath`. */
+  evidencePath?: string;
   logger?: TrafficLogger;
 }
 
@@ -501,7 +504,7 @@ export async function writeLiveTraffic(
 
     await saveIdentities(statePath, writtenIdentities.values());
 
-    return {
+    const result = {
       written,
       matched,
       total,
@@ -513,6 +516,18 @@ export async function writeLiveTraffic(
         .filter((id) => !unresolvedObservationIds.has(id))
         .sort(),
     };
+    try {
+      await recordTrafficGraphSuccess(deps.evidencePath ?? trafficEvidencePath(statePath), result);
+    } catch (evidenceErr) {
+      // The binary publication and runtime state are already durable. Evidence
+      // is an observation sidecar; a filesystem failure must not make callers
+      // fall back to an older applied-condition set or report the write as
+      // failed after traffic.tar was changed.
+      deps.logger?.warn("traffic-live: publication evidence write failed", {
+        err: (evidenceErr as Error).message,
+      });
+    }
+    return result;
   } finally {
     closeSync(fd);
   }

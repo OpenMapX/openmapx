@@ -132,6 +132,16 @@ sources like EV charging and parking. It shows per-source schedule, last-run and
 row counts, in-flight jobs, recent failures, and a manual **Sync** action for
 triaging a stale or broken source.
 
+### Coverage & freshness
+
+The evidence-backed `/admin/coverage` view answers which registered operations
+have usable data in a selected region. Its six domain columns cover Addresses,
+POIs, Transit, EV, Parking, and Traffic. It keeps publication, freshness,
+runtime, geographic relation, and usage-rights evidence separate; **Unknown**
+means an observation is missing or cannot be verified, not that the capability
+is absent. See [Coverage & freshness](./coverage-freshness.md) for the clocks,
+limitations, and repair links behind the table.
+
 ### Cache
 
 The Redis/Valkey cache inspector — list the cache namespaces (geocoding

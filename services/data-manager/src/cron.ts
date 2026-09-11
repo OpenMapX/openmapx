@@ -38,6 +38,15 @@ import {
   isTrafficExtractStale,
 } from "./jobs/traffic/ensure-extract.js";
 import {
+  recordTrafficConditionsFailure,
+  recordTrafficConditionsSuccess,
+  recordTrafficFlowFailure,
+  recordTrafficFlowSuccess,
+  recordTrafficGraphFailure,
+  recordTrafficGraphSuccess,
+  trafficEvidencePath as resolveTrafficEvidencePath,
+} from "./jobs/traffic/evidence.js";
+import {
   loadSpanEdgeCache,
   type ResolveSpanEdgesResult,
   resolveSpanEdges,
@@ -254,6 +263,8 @@ export interface CronSetupOptions {
   trafficTarPath?: string;
   /** Where `writeLiveTraffic` persists its staleness state. Test seam; production uses the function's own default. */
   trafficLiveStatePath?: string;
+  /** Versioned traffic freshness evidence path. Defaults beside the live-state file. */
+  trafficEvidencePath?: string;
   /**
    * Test seam: invoked instead of a real `fetch()` against
    * `${openConditionsUrl}/segments/speed.csv`.
@@ -1105,6 +1116,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
 
   const loadCoveredWaysToEdges = options.loadWaysToEdges ?? (() => loadWaysToEdgesDefault());
   const writeLive = options.writeLiveTraffic ?? writeLiveTrafficDefault;
+  const trafficLiveStatePath =
+    options.trafficLiveStatePath ?? join(options.dataDir, "traffic", "live-state.json");
+  const trafficEvidenceFile =
+    options.trafficEvidencePath ?? resolveTrafficEvidencePath(trafficLiveStatePath);
 
   const conditionsStaleMs =
     options.trafficConditionsStaleMs ?? envInt("TRAFFIC_CONDITIONS_STALE_MS", 600_000);
@@ -1153,7 +1168,21 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     try {
       const parsed = parseConditionsJson(await fetchConditionsJson());
       lastConditions = { ...parsed, fetchedAt: Date.now() };
+      try {
+        await recordTrafficConditionsSuccess(trafficEvidenceFile);
+      } catch (evidenceErr) {
+        log.warn("traffic-live: conditions evidence write failed", {
+          err: (evidenceErr as Error).message,
+        });
+      }
     } catch (err) {
+      try {
+        await recordTrafficConditionsFailure(trafficEvidenceFile, err);
+      } catch (evidenceErr) {
+        log.warn("traffic-live: conditions failure evidence write failed", {
+          err: (evidenceErr as Error).message,
+        });
+      }
       if (lastConditions && Date.now() - lastConditions.fetchedAt <= conditionsStaleMs) {
         log.warn("traffic-live: conditions fetch failed, reusing last good set", {
           err: (err as Error).message,
@@ -1178,7 +1207,26 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       return;
     }
     try {
-      const csv = await fetchLiveTrafficCsv();
+      let csv: string;
+      try {
+        csv = await fetchLiveTrafficCsv();
+      } catch (err) {
+        try {
+          await recordTrafficFlowFailure(trafficEvidenceFile, err);
+        } catch (evidenceErr) {
+          log.warn("traffic-live: flow failure evidence write failed", {
+            err: (evidenceErr as Error).message,
+          });
+        }
+        throw err;
+      }
+      try {
+        await recordTrafficFlowSuccess(trafficEvidenceFile);
+      } catch (evidenceErr) {
+        log.warn("traffic-live: flow evidence write failed", {
+          err: (evidenceErr as Error).message,
+        });
+      }
       let waysToEdges: Map<number, WayEdge[]>;
       try {
         waysToEdges = await loadCoveredWaysToEdges();
@@ -1243,9 +1291,21 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         csv,
         waysToEdges,
         overrides: mapped.overrides,
-        statePath: options.trafficLiveStatePath,
+        statePath: trafficLiveStatePath,
+        evidencePath: trafficEvidenceFile,
         logger: log,
       });
+      // The default writer records this itself so direct writer invocations
+      // also leave evidence. Custom writers use the same bounded result here.
+      if (options.writeLiveTraffic) {
+        try {
+          await recordTrafficGraphSuccess(trafficEvidenceFile, result);
+        } catch (evidenceErr) {
+          log.warn("traffic-live: graph evidence write failed", {
+            err: (evidenceErr as Error).message,
+          });
+        }
+      }
       // Sourced from the WRITER, not from `mapped`: an observation whose every
       // edge failed to resolve was requested but never written, and claiming it
       // here would make a router skip an exclusion for a road that is still open.
@@ -1315,6 +1375,13 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       }
     } catch (err) {
       log.error("traffic-live: cycle failed", { err: (err as Error).message });
+      try {
+        await recordTrafficGraphFailure(trafficEvidenceFile, err);
+      } catch (evidenceErr) {
+        log.warn("traffic-live: evidence failure could not be recorded", {
+          err: (evidenceErr as Error).message,
+        });
+      }
     }
   };
 

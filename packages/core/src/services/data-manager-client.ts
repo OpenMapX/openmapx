@@ -1,3 +1,11 @@
+import { dataManagerCoverageEvidencePageSchema } from "../coverage/schemas";
+import type {
+  AuthorityObservation,
+  CoverageReasonCode,
+  CoverageRegion,
+  RightsEvidence,
+  StreamEvidence,
+} from "../coverage/types";
 import { readBoundedJsonResponse } from "../utils/fetchJson";
 import {
   DEFAULT_NDJSON_STREAM_LIMITS,
@@ -85,6 +93,31 @@ export interface SearchIndexBuildResult {
   placeCount?: number;
   termCount?: number;
   message?: string;
+}
+
+export interface DataManagerCoverageEvidencePage {
+  schemaVersion: 1;
+  snapshotId: string;
+  generatedAt: string;
+  evaluatedAt: string;
+  collectionStatus: "complete" | "partial" | "unavailable";
+  authorities: AuthorityObservation[];
+  warnings: CoverageReasonCode[];
+  regions: CoverageRegion[];
+  evidence: StreamEvidence[];
+  /** Native rights assertions for active service-owned feeds, when available. */
+  rights?: RightsEvidence[];
+  total: number;
+  retainedTotal: number;
+  truncated: boolean;
+  unassignedSourceCount: number;
+  pagination: {
+    offset: number;
+    limit: number;
+    total: number;
+    hasMore: boolean;
+    snapshotId: string;
+  };
 }
 
 export class DataManagerHttpError extends Error {
@@ -244,6 +277,29 @@ export class DataManagerClient {
     if (!res.ok) throw new Error(`datasets failed: HTTP ${res.status}`);
     const body = await this.readJson<{ datasets: DatasetMetadata[] }>(res, "datasets response");
     return body.datasets;
+  }
+
+  async coverageEvidence(
+    query: { snapshotId?: string; offset?: number; limit?: number } = {},
+  ): Promise<DataManagerCoverageEvidencePage> {
+    const params = new URLSearchParams();
+    if (query.snapshotId) params.set("snapshotId", query.snapshotId);
+    if (query.offset !== undefined) params.set("offset", String(query.offset));
+    if (query.limit !== undefined) params.set("limit", String(query.limit));
+    const suffix = params.size > 0 ? `?${params}` : "";
+    const res = await this.request(`${this.baseUrl}/coverage/evidence${suffix}`, this.authed());
+    if (!res.ok) {
+      let message = `coverage/evidence failed: HTTP ${res.status}`;
+      try {
+        const body = await this.readJson<{ error?: string }>(res, "coverage evidence error");
+        if (body.error) message = body.error;
+      } catch {
+        // Preserve the status error when the server did not return JSON.
+      }
+      throw new DataManagerHttpError(message, res.status);
+    }
+    const body = await this.readJson<unknown>(res, "coverage evidence response");
+    return dataManagerCoverageEvidencePageSchema.parse(body) as DataManagerCoverageEvidencePage;
   }
 
   async reloadDatasets(): Promise<{ ok: boolean; datasets: number }> {

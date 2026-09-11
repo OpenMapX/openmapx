@@ -1,7 +1,7 @@
 import type { PoiLiveState, RegisteredPoiSource } from "@openmapx/poi-source-registry";
 import type { Redis } from "ioredis";
 import type { Sql } from "postgres";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { buildPoiJobContext } from "../../src/jobs/poi-ingest/pipeline.js";
 import { run as runWriteLive } from "../../src/jobs/poi-ingest/stages/write-live.js";
 
@@ -34,7 +34,7 @@ function makeFakeRedis(): FakeRedis {
     },
     async exec() {
       flushes++;
-      return [];
+      return calls.map(() => [null, 1]);
     },
   };
   const redis = {
@@ -43,7 +43,9 @@ function makeFakeRedis(): FakeRedis {
   return { redis, calls, flushCount: () => flushes };
 }
 
-const sqlStub = {} as unknown as Sql;
+const sqlStub = {
+  unsafe: async () => [],
+} as unknown as Sql;
 
 function liveSource(ttl?: number): RegisteredPoiSource {
   return {
@@ -66,6 +68,76 @@ function liveSource(ttl?: number): RegisteredPoiSource {
 }
 
 describe("write-live stage", () => {
+  it.each([
+    null,
+    [],
+    [[new Error("Redis failed"), null]],
+    [
+      [null, 1],
+      [null, 1],
+      [null, 0],
+    ],
+  ])("keeps the active association unknown for an invalid Redis result: %j", async (execution) => {
+    const fake = makeFakeRedis();
+    const pipeline = fake.redis.multi();
+    vi.spyOn(pipeline, "exec").mockResolvedValue(execution as never);
+    const unsafe = vi.fn(async (..._args: unknown[]) => []);
+    const ctx = buildPoiJobContext({
+      source: liveSource(),
+      kind: "live",
+      sql: { unsafe } as unknown as Sql,
+      redis: { multi: () => pipeline } as unknown as Redis,
+    });
+    ctx.state.liveState = new Map([["station", { asOf: "2026-05-01T00:00:00Z", free: 1 }]]);
+    expect((await runWriteLive(ctx)).status).toBe("error");
+    expect(unsafe).toHaveBeenCalledTimes(2);
+    const params = unsafe.mock.calls[1]?.[1] as unknown as unknown[];
+    expect(JSON.parse(String(params[3]))).toMatchObject({
+      activeAssociation: "unknown",
+      lastAttempt: { outcome: "failed" },
+    });
+    expect(ctx.state.livePublicationVersion).toBeUndefined();
+  });
+
+  it("returns partial when Redis changed but its durable association could not be finalized", async () => {
+    const fake = makeFakeRedis();
+    const unsafe = vi
+      .fn()
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error("Postgres lost"));
+    const ctx = buildPoiJobContext({
+      source: liveSource(),
+      kind: "live",
+      sql: { unsafe } as unknown as Sql,
+      redis: fake.redis,
+    });
+    ctx.state.liveState = new Map();
+    expect((await runWriteLive(ctx)).status).toBe("partial");
+    expect(ctx.state.livePublicationVersion).toBeUndefined();
+    expect(fake.flushCount()).toBe(1);
+  });
+
+  it("bounds freshness by the upstream clock and expires valid empty observations", async () => {
+    for (const entries of [[], [["station", { asOf: "2026-05-01T00:00:00Z", free: 1 }]]] as Array<
+      Array<[string, PoiLiveState]>
+    >) {
+      const fake = makeFakeRedis();
+      const unsafe = vi.fn(async (..._args: unknown[]) => []);
+      const ctx = buildPoiJobContext({
+        source: liveSource(120),
+        kind: "live",
+        sql: { unsafe } as unknown as Sql,
+        redis: fake.redis,
+        now: () => "2026-05-01T00:01:00.000Z",
+      });
+      ctx.state.liveState = new Map(entries);
+      expect((await runWriteLive(ctx)).status).toBe("ok");
+      const params = unsafe.mock.calls[1]?.[1] as unknown[];
+      expect(JSON.parse(String(params[3])).expiresAt).toBe(
+        entries.length ? "2026-05-01T00:02:00.000Z" : "2026-05-01T00:03:00.000Z",
+      );
+    }
+  });
   it("issues DEL + HSET + EXPIRE for non-empty live snapshots", async () => {
     const fake = makeFakeRedis();
     const ctx = buildPoiJobContext({

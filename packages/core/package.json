@@ -125,6 +125,10 @@
     "./test/query": {
       "types": "./src/test/queryWrapper.tsx",
       "default": "./src/test/queryWrapper.tsx"
+    },
+    "./coverage": {
+      "types": "./src/coverage/index.ts",
+      "default": "./src/coverage/index.ts"
     }
   },
   "scripts": {

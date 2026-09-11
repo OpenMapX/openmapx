@@ -149,6 +149,7 @@ export async function runOneAndPersist(opts: RunOneOptions): Promise<PoiIngestRe
         domain: source.domain,
         // biome-ignore lint/style/noNonNullAssertion: control-flow invariant
         result: result!,
+        jobId,
         previousStaticHash,
         previousStaticRowCount,
       });

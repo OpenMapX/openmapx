@@ -8,6 +8,7 @@ import IntegrationsIcon from "@mui/icons-material/Extension";
 import CatalogIcon from "@mui/icons-material/GridView";
 import CacheIcon from "@mui/icons-material/LayersClear";
 import PoiIcon from "@mui/icons-material/LocationOn";
+import CoverageIcon from "@mui/icons-material/MapOutlined";
 import UsersIcon from "@mui/icons-material/People";
 import PrivacyIcon from "@mui/icons-material/PrivacyTip";
 import BackupIcon from "@mui/icons-material/Restore";
@@ -124,6 +125,13 @@ const BASE_NAV_ITEMS = [
     privacyOnly: false,
   },
   {
+    label: "Coverage & freshness",
+    href: "/admin/coverage",
+    icon: <CoverageIcon fontSize="small" />,
+    selfHostedOnly: false,
+    privacyOnly: false,
+  },
+  {
     label: "Activity",
     href: "/admin/activity",
     icon: <ActivityIcon fontSize="small" />,
@@ -165,6 +173,7 @@ const NAV_GROUPS = [
       "/admin/services",
       "/admin/transit",
       "/admin/poi-ingest",
+      "/admin/coverage",
       "/admin/activity",
       "/admin/cache",
     ],

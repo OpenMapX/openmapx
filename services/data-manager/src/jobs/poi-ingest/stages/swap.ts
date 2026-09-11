@@ -1,4 +1,6 @@
+import { randomUUID } from "node:crypto";
 import { feedIdSchema } from "@openmapx/core/feed-id";
+import { mergePoiRefreshEvidence } from "../evidence.js";
 import type { PoiIngestStageResult, PoiJobContext } from "../types.js";
 
 /**
@@ -46,12 +48,38 @@ export async function runSwap(ctx: PoiJobContext): Promise<PoiIngestStageResult>
     const staging = stagingTableName(id);
     const stagingIdx = stagingIndexName(id);
     const liveIdx = liveIndexName(id);
+    const publicationVersion = ctx.state.staticHash ?? `static:${randomUUID()}`;
+    const publishedAt = nowIso(ctx);
 
     await ctx.sql.begin(async (tx) => {
       await tx.unsafe(`DROP TABLE IF EXISTS poi_ingest."${live}" CASCADE`);
       await tx.unsafe(`ALTER TABLE poi_ingest."${staging}" RENAME TO "${live}"`);
       await tx.unsafe(`ALTER INDEX poi_ingest."${stagingIdx}" RENAME TO "${liveIdx}"`);
+      await mergePoiRefreshEvidence(tx, {
+        sourceId: id,
+        domain: ctx.source.domain,
+        stream: "static",
+        insertStatus: "active",
+        patch: {
+          activeVersion: publicationVersion,
+          lastSuccessfullyCheckedVersion: publicationVersion,
+          lastSuccessfulCheckAt: publishedAt,
+          lastPublishedVersion: publicationVersion,
+          lastPublishedAt: publishedAt,
+          rowCount: ctx.state.staticRows?.length ?? null,
+          activeAssociation: "known",
+          pendingWriteIntentId: null,
+          lastAttempt: {
+            at: publishedAt,
+            outcome: "succeeded",
+            jobId: ctx.jobId,
+          },
+        },
+      });
     });
+
+    ctx.state.staticPublicationVersion = publicationVersion;
+    ctx.state.staticPublishedAt = publishedAt;
 
     const finishedAt = nowIso(ctx);
     return {

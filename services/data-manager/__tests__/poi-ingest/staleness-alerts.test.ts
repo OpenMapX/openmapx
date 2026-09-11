@@ -18,9 +18,10 @@ import {
 type PoiFeedStateRow = {
   sourceId: string;
   domain: string;
-  lastStaticIngestAt: Date | null;
+  lastStaticIngestAt?: Date | null;
   consecutiveFailures: number;
   lastError: { message?: string } | null;
+  refreshEvidence?: unknown;
 };
 
 function buildFakeDb(rows: PoiFeedStateRow[]): { handle: PoiFeedStateReader } {
@@ -62,6 +63,16 @@ function buildLogger(): PoiAlertLogger & {
 
 describe("detectStalePoiSources", () => {
   const NOW = new Date("2026-05-24T12:00:00Z");
+  const staticEvidence = (at: Date) => ({
+    version: 1,
+    static: {
+      activeAssociation: "known",
+      activeVersion: "hash-v1",
+      lastSuccessfullyCheckedVersion: "hash-v1",
+      lastSuccessfulCheckAt: at.toISOString(),
+    },
+    live: null,
+  });
 
   it("returns no alerts when every source is fresh and healthy", async () => {
     const fresh = new Date(NOW.getTime() - 2 * 3600 * 1000);
@@ -72,21 +83,22 @@ describe("detectStalePoiSources", () => {
         lastStaticIngestAt: fresh,
         consecutiveFailures: 0,
         lastError: null,
+        refreshEvidence: staticEvidence(fresh),
       },
     ]);
     const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
     expect(alerts).toEqual([]);
   });
 
-  it("emits a stale alert when last_static_ingest_at exceeds the threshold", async () => {
+  it("emits a stale alert when verified publication evidence exceeds the threshold", async () => {
     const tooOld = new Date(NOW.getTime() - 72 * 3600 * 1000);
     const { handle } = buildFakeDb([
       {
         sourceId: "bnetza-ev",
         domain: "ev-charging",
-        lastStaticIngestAt: tooOld,
         consecutiveFailures: 0,
         lastError: null,
+        refreshEvidence: staticEvidence(tooOld),
       },
     ]);
     const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
@@ -98,12 +110,27 @@ describe("detectStalePoiSources", () => {
     expect(alert.detail.hoursStale).toBeGreaterThan(48);
   });
 
+  it("does not treat timestamp-only state as stale on a new deployment", async () => {
+    const oldTimestamp = new Date(NOW.getTime() - 72 * 3600 * 1000);
+    const { handle } = buildFakeDb([
+      {
+        sourceId: "timestamp-only",
+        domain: "parking",
+        lastStaticIngestAt: oldTimestamp,
+        consecutiveFailures: 0,
+        lastError: null,
+      },
+    ]);
+
+    const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
+    expect(alerts).toEqual([]);
+  });
+
   it("ignores rows that have never been ingested (unknown, not stale)", async () => {
     const { handle } = buildFakeDb([
       {
         sourceId: "switzerland-ev",
         domain: "ev-charging",
-        lastStaticIngestAt: null,
         consecutiveFailures: 0,
         lastError: null,
       },
@@ -118,9 +145,9 @@ describe("detectStalePoiSources", () => {
       {
         sourceId: "utmc-newcastle",
         domain: "parking",
-        lastStaticIngestAt: fresh,
         consecutiveFailures: 3,
         lastError: { message: "401 Unauthorized" },
+        refreshEvidence: staticEvidence(fresh),
       },
     ]);
     const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
@@ -137,9 +164,9 @@ describe("detectStalePoiSources", () => {
       {
         sourceId: "apag",
         domain: "parking",
-        lastStaticIngestAt: tooOld,
         consecutiveFailures: 5,
         lastError: { message: "DNS lookup failed" },
+        refreshEvidence: staticEvidence(tooOld),
       },
     ]);
     const alerts = await detectStalePoiSources({ db: handle, now: () => NOW });
@@ -152,9 +179,9 @@ describe("detectStalePoiSources", () => {
       {
         sourceId: "bnetza-ev",
         domain: "ev-charging",
-        lastStaticIngestAt: eightHoursAgo,
         consecutiveFailures: 1,
         lastError: null,
+        refreshEvidence: staticEvidence(eightHoursAgo),
       },
     ]);
     const alerts = await detectStalePoiSources({
@@ -173,7 +200,7 @@ describe("emitPoiAlerts", () => {
     domain: "ev-charging",
     kind: "stale",
     threshold: { hoursStale: 48 },
-    detail: { lastStaticIngestAt: "2026-05-20T00:00:00.000Z", hoursStale: 96 },
+    detail: { lastSuccessfulCheckAt: "2026-05-20T00:00:00.000Z", hoursStale: 96 },
   };
 
   it("always emits a structured warn log line", async () => {

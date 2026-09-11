@@ -3,6 +3,7 @@ import { adminRoute } from "./admin";
 import { adminCacheRoute } from "./admin-cache";
 import { registerCapabilityBindingRoutes } from "./admin-capability-bindings";
 import { registerAdminComposeRoutes } from "./admin-compose";
+import { adminCoverageRoute } from "./admin-coverage";
 import { adminDawarichRoute } from "./admin-dawarich";
 import { adminExtensionsRoute } from "./admin-extensions";
 import { adminJobEventsRoute } from "./admin-job-events";
@@ -106,6 +107,7 @@ export async function registerCoreRoutes(
   await server.register(adminRoute, { prefix: "/api" });
   await server.register(adminServicesRoute, { prefix: "/api" });
   await server.register(adminOperationsRoute, { prefix: "/api" });
+  await server.register(adminCoverageRoute, { prefix: "/api" });
   await server.register(adminJobEventsRoute, { prefix: "/api" });
   await server.register(adminDawarichRoute, { prefix: "/api" });
   await server.register(dataManagerRoute, { prefix: "/api" });

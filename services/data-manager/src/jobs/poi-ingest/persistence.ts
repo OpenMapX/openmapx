@@ -1,8 +1,9 @@
 import { poiFeedState } from "@openmapx/db-schema";
 import { sql as drizzleSql, eq } from "drizzle-orm";
-import { db } from "../../db/index.js";
+import { db, sql as postgresSql } from "../../db/index.js";
 import { scrubSecrets } from "../../utils/scrub-secrets.js";
 import { createJobRow, finalizeJobRow, makePersistingOnStageComplete } from "../persistence.js";
+import { mergePoiRefreshEvidence } from "./evidence.js";
 import type {
   PoiIngestKind,
   PoiIngestResult,
@@ -51,6 +52,7 @@ export interface UpsertPoiFeedStateOptions {
   sourceId: string;
   domain: string;
   result: PoiIngestResult;
+  jobId?: string;
   /** Previous static hash, used to preserve fields on a bundled-skip run. */
   previousStaticHash?: string;
   /** Previous static row count paired with previousStaticHash. */
@@ -61,32 +63,22 @@ export interface UpsertPoiFeedStateOptions {
  * Upsert `data_manager.poi_feed_state` for the source after an ingest run
  * completes.
  *
- * Field semantics:
- * - `last_static_ingest_at` / `last_static_row_count` / `last_static_hash`
- *   are updated when the static table was actually rewritten — i.e. when
- *   `kind === "static"` OR (`kind === "bundled"` AND
- *   `skippedStaticSwap !== true`). On a bundled-skip run the staging area is
- *   discarded without a swap and the static columns are left untouched —
- *   `last_static_ingest_at` is meant to surface "when the data on disk was
- *   last refreshed", so re-confirming an unchanged hash is intentionally not
- *   a refresh.
- * - `last_live_ingest_at` / `last_live_row_count` are updated when the live
- *   cache was touched — i.e. `kind === "live"` OR `kind === "bundled"`.
- * - `status` flips to `failed` when the run errored, otherwise `active`.
- *   `stale` is reserved for the staleness checker (not used here).
- * - `consecutive_failures` increments server-side on failure (CASE expression
- *   to avoid the SELECT round-trip) and resets to 0 on success.
- * - `last_error` carries `{ message, stack? }` on failure, otherwise NULL.
+ * Only terminal publication stages advance the existing success columns:
+ * `swap` for static data and `write-live` for the Redis snapshot. A fetch,
+ * parse or import failure therefore preserves the previous known-good
+ * publication while refresh evidence records the failed attempt.
  */
 export async function upsertPoiFeedState(opts: UpsertPoiFeedStateOptions): Promise<void> {
   const { sourceId, domain, result } = opts;
-  const touchedStatic =
-    result.kind === "static" || (result.kind === "bundled" && result.skippedStaticSwap !== true);
-  const touchedLive = result.kind === "live" || result.kind === "bundled";
-  const errored = result.status === "error";
-  const newStatus = errored ? "failed" : "active";
-  const lastError = errored ? buildLastError(result) : null;
-  const now = new Date();
+  const staticStage = result.stages.find((stage) => stage.stage === "swap");
+  const liveStage = result.stages.find((stage) => stage.stage === "write-live");
+  const staticPublished = staticStage?.status === "ok";
+  const livePublished = liveStage?.status === "ok";
+  const staticRequested = result.kind === "static" || result.kind === "bundled";
+  const liveRequested = result.kind === "live" || result.kind === "bundled";
+  const failed = result.status === "error" || result.status === "partial";
+  const newStatus = failed ? "failed" : "active";
+  const lastError = failed ? buildLastError(result) : null;
 
   const insertValues: {
     sourceId: string;
@@ -103,7 +95,7 @@ export async function upsertPoiFeedState(opts: UpsertPoiFeedStateOptions): Promi
     sourceId,
     domain,
     status: newStatus,
-    consecutiveFailures: errored ? 1 : 0,
+    consecutiveFailures: failed ? 1 : 0,
     lastError,
   };
 
@@ -111,16 +103,17 @@ export async function upsertPoiFeedState(opts: UpsertPoiFeedStateOptions): Promi
     domain,
     status: newStatus,
     lastError,
-    consecutiveFailures: errored
+    consecutiveFailures: failed
       ? drizzleSql`${poiFeedState.consecutiveFailures} + 1`
       : drizzleSql`0`,
   };
 
-  if (touchedStatic) {
+  if (staticPublished) {
     const rowCount = result.staticRowCount ?? 0;
-    insertValues.lastStaticIngestAt = now;
+    const publishedAt = dateFromIso(staticStage?.finishedAt) ?? new Date();
+    insertValues.lastStaticIngestAt = publishedAt;
     insertValues.lastStaticRowCount = rowCount;
-    updatePatch.lastStaticIngestAt = now;
+    updatePatch.lastStaticIngestAt = publishedAt;
     updatePatch.lastStaticRowCount = rowCount;
     if (result.staticHash) {
       insertValues.lastStaticHash = result.staticHash;
@@ -139,11 +132,12 @@ export async function upsertPoiFeedState(opts: UpsertPoiFeedStateOptions): Promi
     }
   }
 
-  if (touchedLive) {
+  if (livePublished) {
     const rowCount = result.liveRowCount ?? 0;
-    insertValues.lastLiveIngestAt = now;
+    const publishedAt = dateFromIso(liveStage?.finishedAt) ?? new Date();
+    insertValues.lastLiveIngestAt = publishedAt;
     insertValues.lastLiveRowCount = rowCount;
-    updatePatch.lastLiveIngestAt = now;
+    updatePatch.lastLiveIngestAt = publishedAt;
     updatePatch.lastLiveRowCount = rowCount;
   }
 
@@ -151,6 +145,91 @@ export async function upsertPoiFeedState(opts: UpsertPoiFeedStateOptions): Promi
     target: poiFeedState.sourceId,
     set: updatePatch,
   });
+
+  if (staticRequested) {
+    const evidence = buildAttemptPatch(result, staticStage, "static", opts);
+    await mergePoiRefreshEvidence(postgresSql, {
+      sourceId,
+      domain,
+      stream: "static",
+      patch: evidence.patch,
+    });
+  }
+  if (liveRequested) {
+    const evidence = buildAttemptPatch(result, liveStage, "live", opts);
+    await mergePoiRefreshEvidence(postgresSql, {
+      sourceId,
+      domain,
+      stream: "live",
+      patch: evidence.patch,
+      ...(evidence.pendingWriteIntentGuard
+        ? { pendingWriteIntentGuard: evidence.pendingWriteIntentGuard }
+        : {}),
+    });
+  }
+}
+
+function buildAttemptPatch(
+  result: PoiIngestResult,
+  stage: PoiIngestStageResult | undefined,
+  stream: "static" | "live",
+  opts: UpsertPoiFeedStateOptions,
+): {
+  patch: import("./evidence.js").PoiRefreshStreamPatch;
+  pendingWriteIntentGuard?: string;
+} {
+  const outcome = stage
+    ? stage.status === "ok"
+      ? "succeeded"
+      : stage.status === "skipped"
+        ? stream === "static"
+          ? "unchanged"
+          : "skipped"
+        : stage.status === "partial"
+          ? "partial"
+          : "failed"
+    : result.status === "partial"
+      ? "partial"
+      : result.status === "skipped"
+        ? "skipped"
+        : "failed";
+  const at = stage?.finishedAt ?? result.finishedAt;
+  const message = stage?.error?.message ?? stage?.message ?? result.error?.message ?? null;
+  const patch: import("./evidence.js").PoiRefreshStreamPatch = {
+    lastAttempt: {
+      at,
+      outcome,
+      jobId: opts.jobId ?? null,
+      message,
+    },
+  };
+
+  const intentId = stage?.artifacts?.intentId;
+
+  // A validated unchanged static response is a successful check only when
+  // the active version is the same change key we just validated.
+  if (
+    stream === "static" &&
+    stage?.status === "skipped" &&
+    result.staticHash &&
+    opts.previousStaticHash === result.staticHash
+  ) {
+    patch.lastSuccessfullyCheckedVersion = result.staticHash;
+    patch.lastSuccessfulCheckAt = at;
+  }
+
+  return {
+    patch,
+    ...(stream === "live" && typeof intentId === "string" && intentId.length > 0
+      ? { pendingWriteIntentGuard: intentId }
+      : {}),
+  };
+}
+
+function dateFromIso(value: string | undefined): Date | undefined {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) ? date : undefined;
 }
 
 function buildLastError(result: PoiIngestResult): { message: string; stack?: string } | null {
@@ -162,7 +241,7 @@ function buildLastError(result: PoiIngestResult): { message: string; stack?: str
   // Fall back to the last failing stage's error payload.
   for (let i = result.stages.length - 1; i >= 0; i--) {
     const stage = result.stages[i];
-    if (stage?.status === "error" && stage.error) {
+    if ((stage?.status === "error" || stage?.status === "partial") && stage.error) {
       return stage.error.stack
         ? { message: scrubSecrets(stage.error.message), stack: scrubSecrets(stage.error.stack) }
         : { message: scrubSecrets(stage.error.message) };

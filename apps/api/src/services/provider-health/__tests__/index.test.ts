@@ -218,4 +218,45 @@ describe("ProviderHealth", () => {
     });
     await expect(health.isHealthy("acme")).resolves.toBe(true);
   });
+
+  it("peeks in batches without leasing a half-open probe", async () => {
+    let now = 1_700_000_000_000;
+    const redis = new FakeRedis();
+    const health = await ProviderHealth.init({
+      redis: asRedis(redis),
+      now: () => now,
+      cooldownsMs: [1],
+    });
+    for (let index = 0; index < 5; index++) await health.recordFailure("open", 10, "timeout");
+    now += 2;
+
+    const before = new Map(redis.store);
+    const peeked = await health.peekMany(["open", "missing"]);
+    expect(peeked.get("open")).toMatchObject({
+      providerId: "open",
+      status: "observed",
+      snapshot: { state: "open", ownsHalfOpenProbe: false },
+    });
+    expect(peeked.get("missing")).toEqual({ providerId: "missing", status: "unobserved" });
+    expect(redis.store).toEqual(before);
+  });
+
+  it("distinguishes invalid and unavailable provider-health records", async () => {
+    const redis = new FakeRedis();
+    redis.store.set("provider:health:bad", "not-json");
+    const health = await ProviderHealth.init({ redis: asRedis(redis) });
+    await expect(health.peekMany(["bad"])).resolves.toEqual(
+      new Map([["bad", { providerId: "bad", status: "invalid-record" }]]),
+    );
+
+    redis.mget = async () => {
+      throw new Error("redis unavailable");
+    };
+    await expect(health.peekMany(["bad", "missing"])).resolves.toEqual(
+      new Map([
+        ["bad", { providerId: "bad", status: "store-unavailable" }],
+        ["missing", { providerId: "missing", status: "store-unavailable" }],
+      ]),
+    );
+  });
 });

@@ -218,7 +218,13 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
        VALUES ('2026-08-19.0', 'europe/germany/berlin', 3, 'pending')`,
     );
 
-    await ingestModule.activateOvertureStagingSchema(live, staging);
+    await ingestModule.activateOvertureStagingSchema(live, staging, "2026-09-10T12:00:00.000Z");
+
+    // Conflation is a later, independent phase. A failed attempt must not
+    // rewrite the timestamp that identifies the active Places release.
+    await pg.sql.unsafe(
+      `UPDATE "${live}".conflation_state SET status = 'failed' WHERE singleton = 1`,
+    );
 
     const rows = await pg.sql.unsafe<{ osm_id: string }[]>(
       `SELECT osm_id::TEXT FROM "${live}".osm_pois`,
@@ -229,9 +235,11 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
         phase: string;
         source_fingerprint: string;
         extracted_count: string;
+        places_published_at: Date;
       }[]
     >(
-      `SELECT release, phase, source_fingerprint, extracted_count::TEXT
+      `SELECT release, phase, source_fingerprint, extracted_count::TEXT,
+              places_published_at
        FROM "${live}".conflation_state`,
     );
     expect(rows).toEqual([{ osm_id: "42" }]);
@@ -241,6 +249,7 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
         phase: "score",
         source_fingerprint: "same-pbf",
         extracted_count: "1",
+        places_published_at: new Date("2026-09-10T12:00:00.000Z"),
       },
     ]);
   });

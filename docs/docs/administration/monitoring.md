@@ -67,6 +67,25 @@ forces a sweep.
 The same snapshot also rolls up into the admin **Overview** dashboard's
 attention list; see [Admin panel](./admin-panel.md) for that landing view.
 
+## Coverage and freshness evidence
+
+Full administrators can open [Coverage & freshness](./coverage-freshness.md)
+at `/admin/coverage`. This is a read-only operator report, not a health probe
+or a legal/geographic completeness claim. It combines the data-manager's
+bounded publication observations with passive integration and provider-health
+observations. Opening or refreshing it does not acquire a provider probe lease,
+run a job, change a policy, or mutate a cache.
+
+The report deliberately keeps these questions separate: what is configured,
+what was actually published, which region the publication is known to relate
+to, when the active version was successfully checked, whether the freshness
+deadline has passed, whether the runtime has a recent observation, and whether
+the selected usage assessment has the required rights. A stale or expired
+publication can remain visible as historical evidence, while an unknown state
+means the required fact is unavailable or unverified. See the coverage guide
+for the timestamp meanings, sidecar diagnostics, and existing corrective
+workflows.
+
 :::note[Status vs. service catalog]
 The status dashboard reports *reachability* — can the API talk to each
 dependency right now. It is not the Docker control plane. To start, stop, or

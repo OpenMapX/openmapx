@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import type { PoiIngestResult } from "../../src/jobs/poi-ingest/types.js";
+import type {
+  PoiIngestResult,
+  PoiIngestStageResult,
+  PoiIngestStageStatus,
+} from "../../src/jobs/poi-ingest/types.js";
 
 interface InsertCall {
   table: unknown;
@@ -106,22 +110,64 @@ vi.mock("../../src/db/index.js", () => {
         };
       },
     },
-    sql: {},
+    sql: { unsafe: async () => [] },
   };
 });
 
 function baseResult(overrides: Partial<PoiIngestResult> = {}): PoiIngestResult {
+  const kind = overrides.kind ?? "static";
+  const status = overrides.status ?? "ok";
+  const terminalStatus = status === "ok" ? "ok" : status === "partial" ? "partial" : "error";
+  const defaultStages: PoiIngestStageResult[] =
+    kind === "static"
+      ? [
+          {
+            stage: "swap" as const,
+            status: terminalStatus as "ok" | "partial" | "error",
+            startedAt: "2026-05-24T00:00:00.000Z",
+            finishedAt: "2026-05-24T00:00:01.000Z",
+            durationMs: 1000,
+          },
+        ]
+      : kind === "live"
+        ? [
+            {
+              stage: "write-live" as const,
+              status: terminalStatus as "ok" | "partial" | "error",
+              startedAt: "2026-05-24T00:00:00.000Z",
+              finishedAt: "2026-05-24T00:00:01.000Z",
+              durationMs: 1000,
+            },
+          ]
+        : [
+            {
+              stage: "swap" as const,
+              status: (overrides.skippedStaticSwap
+                ? "skipped"
+                : terminalStatus) as PoiIngestStageStatus,
+              startedAt: "2026-05-24T00:00:00.000Z",
+              finishedAt: "2026-05-24T00:00:01.000Z",
+              durationMs: 1000,
+            },
+            {
+              stage: "write-live" as const,
+              status: terminalStatus as "ok" | "partial" | "error",
+              startedAt: "2026-05-24T00:00:00.000Z",
+              finishedAt: "2026-05-24T00:00:01.000Z",
+              durationMs: 1000,
+            },
+          ];
   return {
     sourceId: "bnetza-ev",
     kind: "static",
     startedAt: "2026-05-24T00:00:00.000Z",
     finishedAt: "2026-05-24T00:00:01.000Z",
     durationMs: 1000,
-    status: "ok",
-    stages: [],
+    status,
     staticRowCount: 42,
     staticHash: "deadbeef",
     ...overrides,
+    stages: overrides.stages ?? defaultStages,
   };
 }
 

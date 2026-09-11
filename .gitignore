@@ -25,6 +25,20 @@ node_modules
 coverage
 .jscpd-report/
 
+# Source directories whose names are part of the coverage feature namespace.
+!apps/api/src/services/coverage/
+!apps/api/src/services/coverage/**
+!apps/web/src/app/admin/(full-admin)/coverage/
+!apps/web/src/app/admin/(full-admin)/coverage/**
+!apps/web/src/components/admin/coverage/
+!apps/web/src/components/admin/coverage/**
+!packages/core/src/coverage/
+!packages/core/src/coverage/**
+!services/data-manager/src/coverage/
+!services/data-manager/src/coverage/**
+!services/data-manager/__tests__/coverage/
+!services/data-manager/__tests__/coverage/**
+
 # Turbo
 .turbo
 

@@ -11,9 +11,9 @@ import type { GithubIssueSink } from "../github-issue-sink.js";
  * Issue per (sourceId, kind).
  *
  * Two triggers:
- *   - `stale`: `last_static_ingest_at` is older than `staleAfterHours`
- *     (default 48h — most POI feeds refresh at least daily; 48h gives two
- *     missed runs of grace before alerting).
+ *   - `stale`: verified static publication evidence is older than
+ *     `staleAfterHours` (default 48h — most POI feeds refresh at least daily;
+ *     48h gives two missed runs of grace before alerting).
  *   - `consecutive-failures`: `consecutive_failures >= failuresThreshold`
  *     (default 3).
  *
@@ -31,7 +31,7 @@ export interface PoiAlert {
   kind: PoiAlertKind;
   threshold: { hoursStale?: number; consecutiveFailures?: number };
   detail: {
-    lastStaticIngestAt?: string;
+    lastSuccessfulCheckAt?: string;
     hoursStale?: number;
     consecutiveFailures?: number;
     lastErrorMessage?: string;
@@ -52,17 +52,17 @@ export type PoiFeedStateReader = {
   select: (columns: {
     sourceId: typeof poiFeedState.sourceId;
     domain: typeof poiFeedState.domain;
-    lastStaticIngestAt: typeof poiFeedState.lastStaticIngestAt;
     consecutiveFailures: typeof poiFeedState.consecutiveFailures;
     lastError: typeof poiFeedState.lastError;
+    refreshEvidence: typeof poiFeedState.refreshEvidence;
   }) => {
     from: (table: typeof poiFeedState) => PromiseLike<
       Array<{
         sourceId: string;
         domain: string;
-        lastStaticIngestAt: Date | null;
         consecutiveFailures: number;
         lastError: { message?: string } | null;
+        refreshEvidence?: unknown;
       }>
     >;
   };
@@ -84,6 +84,25 @@ export interface EmitPoiAlertsOptions {
 const DEFAULT_STALE_AFTER_HOURS = 48;
 const DEFAULT_FAILURES_THRESHOLD = 3;
 
+function verifiedStaticCheckAt(refreshEvidence: unknown, now: Date): Date | null {
+  if (!refreshEvidence || typeof refreshEvidence !== "object") return null;
+  const staticEvidence = (refreshEvidence as Record<string, unknown>).static;
+  if (!staticEvidence || typeof staticEvidence !== "object") return null;
+  const value = staticEvidence as Record<string, unknown>;
+  if (value.activeAssociation !== "known") return null;
+  if (
+    typeof value.activeVersion !== "string" ||
+    typeof value.lastSuccessfullyCheckedVersion !== "string" ||
+    value.activeVersion !== value.lastSuccessfullyCheckedVersion
+  ) {
+    return null;
+  }
+  if (typeof value.lastSuccessfulCheckAt !== "string") return null;
+  const timestamp = Date.parse(value.lastSuccessfulCheckAt);
+  if (!Number.isFinite(timestamp) || timestamp > now.getTime()) return null;
+  return new Date(timestamp);
+}
+
 /**
  * Scan `data_manager.poi_feed_state` and surface every row that crossed
  * either threshold. A single source can produce both kinds (very stale AND
@@ -102,9 +121,9 @@ export async function detectStalePoiSources(
     .select({
       sourceId: poiFeedState.sourceId,
       domain: poiFeedState.domain,
-      lastStaticIngestAt: poiFeedState.lastStaticIngestAt,
       consecutiveFailures: poiFeedState.consecutiveFailures,
       lastError: poiFeedState.lastError,
+      refreshEvidence: poiFeedState.refreshEvidence,
     })
     .from(poiFeedState);
 
@@ -114,17 +133,19 @@ export async function detectStalePoiSources(
   for (const row of rows) {
     // Trigger 1: stale. A row that has never recorded an ingest yet is
     // `unknown` rather than stale — bootstrap covers the first-deploy case.
-    if (row.lastStaticIngestAt) {
-      const ingestedMs = new Date(row.lastStaticIngestAt).getTime();
-      if (ingestedMs < staleCutoffMs) {
-        const hoursStale = (now.getTime() - ingestedMs) / 3600 / 1000;
+    const evidenceCheckAt = verifiedStaticCheckAt(row.refreshEvidence, now);
+    if (evidenceCheckAt) {
+      const checkedMs = evidenceCheckAt.getTime();
+      if (checkedMs < staleCutoffMs) {
+        const hoursStale = (now.getTime() - checkedMs) / 3600 / 1000;
+        const iso = evidenceCheckAt.toISOString();
         alerts.push({
           sourceId: row.sourceId,
           domain: row.domain,
           kind: "stale",
           threshold: { hoursStale: staleAfterHours },
           detail: {
-            lastStaticIngestAt: new Date(row.lastStaticIngestAt).toISOString(),
+            lastSuccessfulCheckAt: iso,
             hoursStale: Math.round(hoursStale * 10) / 10,
           },
         });
@@ -192,7 +213,7 @@ export async function emitPoiAlerts(opts: EmitPoiAlertsOptions): Promise<void> {
 
 /**
  * Stable issue title — the dedup path searches for an open issue with this
- * exact string. Do not change the format without a migration plan.
+ * exact string. Do not change the format without updating its deduplication contract.
  */
 export function poiGithubIssueTitle(alert: PoiAlert): string {
   const prefix = alert.kind === "stale" ? "Stale POI source" : "Failing POI source";
@@ -212,8 +233,8 @@ function poiGithubIssueBody(alert: PoiAlert): string {
   if (alert.threshold.consecutiveFailures !== undefined) {
     lines.push(`- threshold (failures): \`${alert.threshold.consecutiveFailures}\``);
   }
-  if (alert.detail.lastStaticIngestAt) {
-    lines.push(`- lastStaticIngestAt: \`${alert.detail.lastStaticIngestAt}\``);
+  if (alert.detail.lastSuccessfulCheckAt) {
+    lines.push(`- lastSuccessfulCheckAt: \`${alert.detail.lastSuccessfulCheckAt}\``);
   }
   if (alert.detail.hoursStale !== undefined) {
     lines.push(`- hoursStale: \`${alert.detail.hoursStale}\``);

@@ -15,4 +15,5 @@ export function getProviderHealth(): ProviderHealth | null {
   return _instance;
 }
 
+export type { ProviderHealthPeek } from "./index.js";
 export { ProviderHealth } from "./index.js";

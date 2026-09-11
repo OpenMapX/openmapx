@@ -41,6 +41,15 @@ export const dataSourceSchema = z.object({
   /** Free-form per-source notes (e.g. "via Transitous feed proxy"). */
   notes: z.string().optional(),
   commercialUse: z.enum(["yes", "no", "conditional", "unknown"]).optional(),
+  /** Explicit dataset redistribution assertions; omitted means unknown. */
+  redistribution: z
+    .object({
+      sourceData: z.enum(["yes", "no", "conditional", "unknown"]),
+      derivedData: z.enum(["yes", "no", "conditional", "unknown"]),
+    })
+    .optional(),
+  /** Human-readable obligations attached to a conditional permission. */
+  usageConditions: z.array(z.string().min(1).max(1_000)).max(32).optional(),
 
   // Privacy
   providerCountry: z.string(),

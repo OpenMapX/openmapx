@@ -1,0 +1,1 @@
+ALTER TABLE "data_manager"."poi_feed_state" ADD COLUMN "refresh_evidence" jsonb;

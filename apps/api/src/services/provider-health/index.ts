@@ -50,6 +50,18 @@ export interface ProviderHealthOptions {
   now?: () => number;
 }
 
+export type ProviderHealthPeekStatus =
+  | "observed"
+  | "unobserved"
+  | "invalid-record"
+  | "store-unavailable";
+
+export interface ProviderHealthPeek {
+  providerId: string;
+  status: ProviderHealthPeekStatus;
+  snapshot?: ProviderHealthSnapshot;
+}
+
 const REDIS_PREFIX = "provider:health:";
 const PROBE_PREFIX = "provider:health-probe:";
 const DEFAULT_COOLDOWNS_MS = [5, 10, 20, 40, 60].map((minutes) => minutes * 60_000);
@@ -201,6 +213,25 @@ function parseState(raw: string): ProviderHealthState | null {
   }
 }
 
+function snapshotFromStored(stored: ProviderHealthState): ProviderHealthSnapshot {
+  return {
+    state: stored.state,
+    successCount: stored.successCount,
+    failureCount: stored.failureCount,
+    countedFailureCount: stored.countedFailureCount,
+    consecutiveSuccesses: stored.consecutiveSuccesses,
+    consecutiveFailures: stored.consecutiveFailures,
+    windowFailureRate: failureRate(stored),
+    emaLatencyMs: stored.emaLatencyMs,
+    lastSuccessAt: stored.lastSuccessAt ?? null,
+    lastFailureAt: stored.lastFailureAt ?? null,
+    lastFailureOutcome: stored.lastFailureOutcome ?? null,
+    lastOperatorMessage: stored.lastOperatorMessage ?? null,
+    retryAt: stored.retryAt ?? null,
+    ownsHalfOpenProbe: false,
+  };
+}
+
 export class ProviderHealth implements ProviderHealthHandle {
   private readonly redis: RedisWithCommand;
   private readonly log?: Logger;
@@ -323,6 +354,67 @@ export class ProviderHealth implements ProviderHealthHandle {
       retryAt: stored.retryAt ?? null,
       ownsHalfOpenProbe,
     };
+  }
+
+  /**
+   * Read a bounded batch of provider records without changing circuit state.
+   * In particular this never calls `getSnapshot`, which may acquire a
+   * half-open probe lease after a cooldown. Dashboard reads are observations,
+   * not health checks.
+   */
+  async peekMany(providerIds: readonly string[]): Promise<Map<string, ProviderHealthPeek>> {
+    const ids = [...new Set(providerIds)]
+      .filter((id) => /^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(id))
+      .slice(0, 500);
+    const result = new Map<string, ProviderHealthPeek>();
+    if (ids.length === 0) return result;
+    const keys = ids.map(keyFor);
+    let values: Array<string | null>;
+    try {
+      values = await this.redis.mget(...keys);
+    } catch {
+      for (const providerId of ids) {
+        result.set(providerId, { providerId, status: "store-unavailable" });
+      }
+      return result;
+    }
+    for (let index = 0; index < ids.length; index++) {
+      const providerId = ids[index] as string;
+      const raw = values[index];
+      if (!raw) {
+        result.set(providerId, { providerId, status: "unobserved" });
+        continue;
+      }
+      const stored = parseState(raw);
+      if (
+        !stored ||
+        !["healthy", "degraded", "open"].includes(stored.state) ||
+        [
+          stored.successCount,
+          stored.failureCount,
+          stored.countedFailureCount,
+          stored.consecutiveSuccesses,
+          stored.consecutiveFailures,
+          stored.emaLatencyMs,
+        ].some((value) => !Number.isFinite(value) || value < 0) ||
+        !stored.window.every(
+          (call) => call && (call.outcome === "ok" || call.outcome === "error"),
+        ) ||
+        [stored.lastSuccessAt, stored.lastFailureAt, stored.retryAt].some(
+          (at) => at !== null && (typeof at !== "string" || !Number.isFinite(Date.parse(at))),
+        ) ||
+        (stored.lastOperatorMessage !== null && typeof stored.lastOperatorMessage !== "string")
+      ) {
+        result.set(providerId, { providerId, status: "invalid-record" });
+        continue;
+      }
+      result.set(providerId, {
+        providerId,
+        status: "observed",
+        snapshot: snapshotFromStored(stored),
+      });
+    }
+    return result;
   }
 
   async isHealthy(providerId: string): Promise<boolean> {

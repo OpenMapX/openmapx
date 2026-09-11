@@ -20,6 +20,16 @@ describe("createPoiSingleFlight", () => {
     expect(sf.tryAcquire("bnetza-ev", "live").ok).toBe(true);
   });
 
+  it("excludes bundled runs from either resource in both directions", () => {
+    const sf = createPoiSingleFlight();
+    expect(sf.tryAcquire("a", "static").ok).toBe(true);
+    expect(sf.tryAcquire("a", "bundled").ok).toBe(false);
+    sf.release("a", "static");
+    expect(sf.tryAcquire("a", "bundled").ok).toBe(true);
+    expect(sf.tryAcquire("a", "static").ok).toBe(false);
+    expect(sf.tryAcquire("a", "live").ok).toBe(false);
+  });
+
   it("treats different sources as independent locks", () => {
     const sf = createPoiSingleFlight();
     expect(sf.tryAcquire("a", "static").ok).toBe(true);

@@ -5,6 +5,8 @@ import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type postgres from "postgres";
+import { type CoverageApiOptions, registerCoverageEvidenceRoute } from "./coverage/api.js";
+import type { CoverageSnapshotStore } from "./coverage/snapshot-store.js";
 import { db, sql } from "./db/index.js";
 import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpass.js";
 import { downloadFonts } from "./jobs/download-fonts.js";
@@ -115,6 +117,8 @@ export interface ApiOptions {
   readiness?: () => DataManagerReadinessSnapshot;
   /** Process-wide one-run relay shared with the Transitous pipeline. */
   operatorFeedRelay?: OperatorFeedRelayStore;
+  /** Optional coverage evidence seam; production constructs the bounded store. */
+  coverageSnapshotStore?: CoverageSnapshotStore;
 }
 
 const startedAt = Date.now();
@@ -480,6 +484,13 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
       app.log.info(event, "transitous-operator-feed: safe remote acquisition");
     });
   }
+
+  registerCoverageEvidenceRoute(app, {
+    dataDir,
+    sql: searchIndexSql,
+    stateStore: store,
+    ...(opts.coverageSnapshotStore ? { snapshotStore: opts.coverageSnapshotStore } : {}),
+  } satisfies CoverageApiOptions);
 
   if (opts.offlinePackages) registerOfflinePackageRoutes(app, opts.offlinePackages);
 

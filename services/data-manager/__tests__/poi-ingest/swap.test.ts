@@ -70,11 +70,13 @@ describe("swap stage", () => {
     const result = await runSwap(ctx);
     expect(result.status).toBe("ok");
     expect(result.artifacts).toEqual({ tableName: "bnetza_ev_static" });
-    expect(unsafeCalls).toEqual([
+    expect(unsafeCalls.slice(0, 3)).toEqual([
       `DROP TABLE IF EXISTS poi_ingest."bnetza_ev_static" CASCADE`,
       `ALTER TABLE poi_ingest."bnetza_ev_static__staging" RENAME TO "bnetza_ev_static"`,
       `ALTER INDEX poi_ingest."idx_bnetza_ev_static__staging_geom" RENAME TO "idx_bnetza_ev_static_geom"`,
     ]);
+    expect(unsafeCalls).toHaveLength(4);
+    expect(unsafeCalls[3]).toContain('"refresh_evidence"');
   });
 
   it("returns status=error when the transaction throws", async () => {

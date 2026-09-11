@@ -234,6 +234,236 @@
         "x-openmapx-auth": "admin"
       }
     },
+    "/api/admin/coverage": {
+      "get": {
+        "operationId": "getApiAdminCoverage",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "in": "query",
+            "name": "snapshotId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 8
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 3
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "regionId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "addresses",
+                "pois",
+                "transit",
+                "ev",
+                "parking",
+                "traffic"
+              ]
+            },
+            "in": "query",
+            "name": "domain",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "attention",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "all",
+                "true",
+                "false"
+              ]
+            },
+            "in": "query",
+            "name": "enabled",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "operational",
+                "commercial",
+                "redistribute-source-data",
+                "redistribute-derived-data"
+              ]
+            },
+            "in": "query",
+            "name": "assessment",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/coverage/regions": {
+      "get": {
+        "operationId": "getApiAdminCoverageRegions",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "in": "query",
+            "name": "snapshotId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 8
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^[0-9]+$",
+              "maxLength": 3
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "search",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
+    "/api/admin/coverage/source": {
+      "get": {
+        "operationId": "getApiAdminCoverageSource",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 512
+            },
+            "in": "query",
+            "name": "key",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 256
+            },
+            "in": "query",
+            "name": "regionId",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+            },
+            "in": "query",
+            "name": "snapshotId",
+            "required": false
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "operational",
+                "commercial",
+                "redistribute-source-data",
+                "redistribute-derived-data"
+              ]
+            },
+            "in": "query",
+            "name": "assessment",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/admin/credentials": {
       "get": {
         "operationId": "getApiAdminCredentials",

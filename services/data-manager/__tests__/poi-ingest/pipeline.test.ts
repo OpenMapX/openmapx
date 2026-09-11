@@ -68,7 +68,7 @@ function makeFakeRedis(): FakeRedisRecorder {
     },
     exec: async () => {
       ops.push("exec");
-      return [];
+      return ops.filter((op) => op !== "exec").map(() => [null, 1]);
     },
   };
   const redis = { multi: () => pipeline } as unknown as Redis;
@@ -522,9 +522,10 @@ describe("pipeline (bundled)", () => {
     expect(byStage["upsert-static"]?.status).toBe("skipped");
     expect(byStage.swap?.status).toBe("skipped");
     expect(byStage["write-live"]?.status).toBe("ok");
-    // No INSERT INTO + no transaction (swap was skipped).
+    // No staging INSERT or transaction (swap was skipped). The live evidence
+    // intent/publication markers are expected INSERTs on the shared state row.
     expect(sqlRec.beginCount).toBe(0);
-    expect(sqlRec.unsafeCalls.some((q) => q.startsWith("INSERT INTO"))).toBe(false);
+    expect(sqlRec.unsafeCalls.some((q) => q.includes('"refresh_evidence"'))).toBe(true);
   });
 });
 

@@ -13,6 +13,8 @@ import type {
 import { createStaticPoiReader } from "@openmapx/integration-framework";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import type { RegisteredPoiSource } from "@openmapx/poi-source-registry";
+import { drizzle } from "drizzle-orm/postgres-js";
+import { migrate } from "drizzle-orm/postgres-js/migrator";
 import type { Redis } from "ioredis";
 import { describe, expect, it } from "vitest";
 import { buildPoiJobContext, runStaticIngest } from "../../src/jobs/poi-ingest/pipeline.js";
@@ -104,6 +106,9 @@ describe.skipIf(skipE2e)("e2e: bnetza ingest → SQL → reader → mapper round
   it("ingests fixture CSV via the pipeline and reads it back via the production reader chain", async () => {
     const pg = await startPostgis();
     try {
+      await migrate(drizzle(pg.sql), {
+        migrationsFolder: join(__dirname, "../../../../apps/api/src/db/migrations"),
+      });
       const fixture = readFileSync(FIXTURE_PATH);
       const source: RegisteredPoiSource = {
         id: "de-bnetza",
@@ -174,6 +179,39 @@ describe.skipIf(skipE2e)("e2e: bnetza ingest → SQL → reader → mapper round
       );
       expect(berlin).toBeDefined();
       expect(berlin?.name).toBeTruthy();
+
+      const [published] = await pg.sql`
+        SELECT refresh_evidence FROM data_manager.poi_feed_state WHERE source_id = 'de-bnetza'
+      `;
+      expect(published?.refresh_evidence).toMatchObject({
+        static: {
+          activeAssociation: "known",
+          rowCount: 2,
+          lastAttempt: { outcome: "succeeded" },
+        },
+      });
+      const before = await pg.sql`SELECT 'poi_ingest.de_bnetza_static'::regclass::oid AS oid`;
+      // Reject the marker after table renames have run. The entire swap must
+      // roll back, preserving both the active table and publication evidence.
+      await pg.sql`ALTER TABLE data_manager.poi_feed_state ADD CONSTRAINT reject_marker
+        CHECK (source_id <> 'de-bnetza') NOT VALID`;
+      const failed = await runStaticIngest(
+        buildPoiJobContext({
+          source,
+          kind: "static",
+          sql: pg.sql,
+          redis: makeFakeRedis(),
+          download: makeFixtureDownload(fixture),
+          jobId: "failed-marker",
+        }),
+      );
+      expect(failed.status).toBe("error");
+      expect(await pg.sql`SELECT 'poi_ingest.de_bnetza_static'::regclass::oid AS oid`).toEqual(
+        before,
+      );
+      expect(
+        await pg.sql`SELECT refresh_evidence FROM data_manager.poi_feed_state WHERE source_id = 'de-bnetza'`,
+      ).toEqual([published]);
     } finally {
       await pg.stop();
     }

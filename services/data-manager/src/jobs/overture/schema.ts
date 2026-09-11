@@ -165,6 +165,7 @@ export function buildSchemaDDL(schema: string, options: BuildOvertureSchemaOptio
       release           TEXT NOT NULL,
       region            TEXT NOT NULL,
       place_count       BIGINT NOT NULL CHECK (place_count > 0),
+      places_published_at TIMESTAMPTZ,
       status            TEXT NOT NULL CHECK (
         status IN ('pending', 'running', 'completed', 'failed', 'waiting_for_osm')
       ),

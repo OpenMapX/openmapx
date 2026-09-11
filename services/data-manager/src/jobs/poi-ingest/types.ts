@@ -13,6 +13,57 @@ export type PoiIngestStageName =
   | "swap"
   | "write-live";
 
+export type PoiRefreshAttemptOutcome =
+  | "running"
+  | "succeeded"
+  | "unchanged"
+  | "partial"
+  | "failed"
+  | "skipped"
+  | "unknown";
+
+/**
+ * Durable, stream-specific publication evidence for a POI source.
+ *
+ * This is intentionally kept separate from the existing timestamp columns on
+ * `poi_feed_state`: a static publication and a live cache publication can
+ * succeed or fail independently, and a failed attempt must not erase the
+ * last known-good publication.
+ */
+export interface PoiRefreshAttempt {
+  at: string | null;
+  outcome: PoiRefreshAttemptOutcome;
+  jobId: string | null;
+  message?: string | null;
+}
+
+export interface PoiRefreshStreamEvidence {
+  activeVersion: string | null;
+  lastSuccessfullyCheckedVersion: string | null;
+  lastSuccessfulCheckAt: string | null;
+  lastPublishedVersion: string | null;
+  lastPublishedAt: string | null;
+  rowCount: number | null;
+  /** Upstream content timestamp when the source supplies one. */
+  upstreamAsOf: string | null;
+  /** Earliest/latest upstream timestamp when a snapshot spans a range. */
+  upstreamAsOfMin: string | null;
+  upstreamAsOfMax: string | null;
+  /** Authoritative expiry for live content, when one is known. */
+  expiresAt: string | null;
+  /** Whether the current stored artifact/cache association is known. */
+  activeAssociation: "known" | "unknown" | null;
+  /** Non-null only between the durable intent and the verified Redis write. */
+  pendingWriteIntentId: string | null;
+  lastAttempt: PoiRefreshAttempt;
+}
+
+export interface PoiRefreshEvidence {
+  version: 1;
+  static: PoiRefreshStreamEvidence | null;
+  live: PoiRefreshStreamEvidence | null;
+}
+
 export interface PoiIngestStageResult {
   stage: PoiIngestStageName;
   status: PoiIngestStageStatus;
@@ -44,6 +95,10 @@ export interface PoiJobState {
   liveState?: Map<string, PoiLiveState>;
   staticHash?: string;
   skippedStaticSwap?: boolean;
+  staticPublicationVersion?: string;
+  staticPublishedAt?: string;
+  livePublicationVersion?: string;
+  livePublishedAt?: string;
 }
 
 /** Test/runner seam for the same canonical downloader used in production. */
@@ -65,6 +120,10 @@ export interface PoiIngestResult {
   liveRowCount?: number;
   staticHash?: string;
   skippedStaticSwap?: boolean;
+  staticPublicationVersion?: string;
+  staticPublishedAt?: string;
+  livePublicationVersion?: string;
+  livePublishedAt?: string;
   /** Top-level error if the pipeline aborted before completing. */
   error?: { message: string; stack?: string };
 }
