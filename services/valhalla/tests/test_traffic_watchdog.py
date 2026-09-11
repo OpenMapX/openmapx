@@ -564,9 +564,9 @@ class TrafficWatchdogTest(unittest.TestCase):
             finally:
                 fixture.close()
 
-    def test_proxy_bounds_requests_concurrency_timeouts_and_backend_failure(self):
+    def test_proxy_rejects_oversized_requests(self):
         with tempfile.TemporaryDirectory() as root:
-            fixture = HttpFixture(root, max_concurrency=1, timeout=0.05)
+            fixture = HttpFixture(root)
             try:
                 status, _, _ = fixture.request(
                     "POST",
@@ -575,28 +575,46 @@ class TrafficWatchdogTest(unittest.TestCase):
                     {"content-length": str(watchdog.MAX_REQUEST_BYTES + 1)},
                 )
                 self.assertEqual(status, 413)
+            finally:
+                fixture.close()
 
-                entered = threading.Event()
-                release = threading.Event()
-                fixture.backend.delay = 0
-                fixture.backend.on_request = lambda: (entered.set(), release.wait(1))
-                first = threading.Thread(
-                    target=lambda: fixture.request("GET", "/status"), daemon=True
-                )
+    def test_proxy_rejects_requests_while_capacity_is_occupied(self):
+        with tempfile.TemporaryDirectory() as root:
+            fixture = HttpFixture(root, max_concurrency=1, timeout=3)
+            entered = threading.Event()
+            release = threading.Event()
+            responses = []
+            fixture.backend.on_request = lambda: (entered.set(), release.wait(3))
+            first = threading.Thread(
+                target=lambda: responses.append(fixture.request("GET", "/status")),
+                daemon=True,
+            )
+            try:
                 first.start()
                 self.assertTrue(entered.wait(1))
                 status, _, _ = fixture.request("GET", "/status")
                 self.assertEqual(status, 503)
                 release.set()
                 first.join(timeout=2)
+                self.assertFalse(first.is_alive())
+                self.assertEqual(responses[0][0], 200)
+            finally:
+                release.set()
+                first.join(timeout=2)
+                fixture.close()
 
-                fixture.backend.on_request = None
+    def test_proxy_bounds_backend_response_time(self):
+        with tempfile.TemporaryDirectory() as root:
+            fixture = HttpFixture(root, timeout=0.05)
+            try:
                 fixture.backend.delay = 0.2
                 status, _, _ = fixture.request("GET", "/status")
                 self.assertEqual(status, 504)
             finally:
                 fixture.close()
 
+    def test_proxy_reports_backend_failure(self):
+        with tempfile.TemporaryDirectory() as root:
             fixture = HttpFixture(root)
             fixture.backend.shutdown()
             fixture.backend.server_close()
