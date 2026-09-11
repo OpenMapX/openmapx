@@ -44,9 +44,11 @@ describe("Docker release trust gate", () => {
     expect(release).toContain("trivyignores: .trivyignore.yaml");
     expect(release).toContain('exit-code: "1"');
     const ignorePolicy = read(".trivyignore.yaml");
-    expect(ignorePolicy).toContain('paths: ["usr/local/bin/docker"]');
-    expect(ignorePolicy).toContain('paths: ["usr/local/lib/docker/cli-plugins/docker-compose"]');
-    expect(ignorePolicy).toContain("expired_at:");
+    for (const exception of ignorePolicy.split(/^  - id: /m).slice(1)) {
+      expect(exception).toMatch(/paths: \["[^"*]+"\]/);
+      expect(exception).toMatch(/expired_at: \d{4}-\d{2}-\d{2}/);
+      expect(exception).toMatch(/statement: \S/);
+    }
 
     const gateStart = release.indexOf("- name: Gate exact candidate digest with Trivy");
     const gateEnd = release.indexOf("- name:", gateStart + 10);
