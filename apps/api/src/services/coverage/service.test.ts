@@ -98,6 +98,37 @@ describe("CoverageService", () => {
     shutdownHandlers: [],
   });
 
+  it("reads persisted road evidence without invoking event queries or polling jobs", async () => {
+    const getEvents = vi.fn(async () => []);
+    const getOperationalEvidence = vi.fn(async () => ({
+      schemaVersion: 1 as const,
+      instanceId: "oc-instance",
+      collectedAt: "2026-09-11T12:00:00Z",
+      feeds: [],
+    }));
+    const road = integration();
+    road.manifest.domains = ["road-conditions"];
+    road.providers = new Map([
+      ["road-conditions", [{ id: "oc", getEvents, getOperationalEvidence }]],
+    ]);
+    const result = await collectCoverageData({
+      now: () => new Date("2026-09-11T12:00:00Z"),
+      integrations: [road],
+      dataManager: {
+        read: async () => {
+          throw new Error("Unavailable");
+        },
+      },
+      loadBindings: async () => new Map(),
+      loadPolicy: async () => ({ allowGreyArea: true, allowNonCommercial: true }),
+      providerHealth: null,
+      integrationHealth: () => ({ updatedAt: null, results: [] }),
+    });
+    expect(result.collectionStatus).toBe("partial");
+    expect(getOperationalEvidence).toHaveBeenCalledTimes(1);
+    expect(getEvents).not.toHaveBeenCalled();
+  });
+
   it("retains API evidence when data-manager is unavailable", async () => {
     const collected = await collectCoverageData({
       now: () => new Date("2026-09-10T12:00:00.000Z"),

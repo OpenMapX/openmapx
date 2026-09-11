@@ -489,7 +489,29 @@
       "sourceRecordCount": "{count, plural, one {# Quelleneintrag} other {# Quelleneinträge}}",
       "sourceDetails": "Quelldetails ({count, plural, one {# Eintrag} other {# Einträge}})",
       "relatedRecords": "{headline} ({count} zugehörige Einträge)",
-      "conditionsHere": "{count, plural, one {# Meldung hier} other {# Meldungen hier}}"
+      "conditionsHere": "{count, plural, one {# Meldung hier} other {# Meldungen hier}}",
+      "source": "Quelle",
+      "license": "Lizenz",
+      "updatedAt": "Quelle aktualisiert (UTC)",
+      "checkedAt": "Zuletzt geprüft (UTC)",
+      "binding": "Straßenzuordnung",
+      "bindingConfidence": "Zuordnungswert (0–1)",
+      "vehicles": "Betroffene Fahrzeuge",
+      "routing": "Routenwirkung",
+      "allVehicles": "Alle Fahrzeuge",
+      "routingCandidate": "Geeignet; Anwendung hängt von der Route ab",
+      "routingDisplayOnly": "Auf der Karte sichtbar; nicht für Routing angewendet"
+    },
+    "binding": {
+      "exact": "Exakt",
+      "likely": "Wahrscheinlich",
+      "ambiguous": "Mehrdeutig",
+      "unresolved": "Nicht aufgelöst",
+      "no_coverage": "Keine Graphabdeckung",
+      "not_applicable": "Nicht zutreffend",
+      "unattempted": "Noch nicht versucht",
+      "obsolete": "Veraltet",
+      "invalid": "Ungültig"
     }
   },
   "trafficFlow": {
@@ -686,6 +708,13 @@
     "bikeHillsStronglyAvoid": "Steile Strecken stark vermeiden",
     "fastestRoute": "Schnellste Route",
     "co2Estimate": "≈ {co2} (geschätzt)",
+    "roadConditionImpact": {
+      "current": "Aktuelle Straßenbedingungen berücksichtigt",
+      "limited": "Straßenbedingungen nur eingeschränkt berücksichtigt",
+      "unsupported": "Straßenbedingungen werden nicht unterstützt",
+      "unavailable": "Straßenbedingungen nicht verfügbar",
+      "expired": "Bewertung der Straßenbedingungen abgelaufen"
+    },
     "trafficDelay": "+{delay} Verkehr",
     "trafficDelayNormally": "normalerweise {baseline}",
     "from": "von",
@@ -3574,6 +3603,31 @@
       "traffic_flow": "Verkehrsfluss",
       "traffic_road-conditions": "Straßenbedingungen",
       "traffic_traffic-aware-routing": "Verkehrsabhängige Routenplanung"
+    },
+    "roadConditions": {
+      "title": "Betrieb der Straßenmeldungen",
+      "status": "Abrufstatus",
+      "changed": "Geänderte Einträge",
+      "rejected": "Abgelehnte Einträge",
+      "failures": "Fehler in Folge",
+      "graph": "Graphverfügbarkeit",
+      "generation": "Importierte Graphgeneration",
+      "graphStatus": {
+        "ready": "Bereit",
+        "partial": "Teilweise",
+        "missing": "Fehlt",
+        "unknown": "Unbekannt"
+      },
+      "binding": {
+        "exact": "Exakt",
+        "likely": "Wahrscheinlich",
+        "ambiguous": "Mehrdeutig",
+        "unresolved": "Nicht aufgelöst",
+        "noCoverage": "Keine Graphabdeckung",
+        "unattempted": "Noch nicht versucht",
+        "obsolete": "Veraltet",
+        "notApplicable": "Nicht zutreffend"
+      }
     }
   },
   "privacySetup": {
@@ -3672,7 +3726,10 @@
         "label": "Postleitzahl",
         "description": "Postleitzahl der verantwortlichen Stelle."
       },
-      "legalControllerCity": { "label": "Ort", "description": "Ort der verantwortlichen Stelle." },
+      "legalControllerCity": {
+        "label": "Ort",
+        "description": "Ort der verantwortlichen Stelle."
+      },
       "legalControllerCountry": {
         "label": "Land",
         "description": "Land der verantwortlichen Stelle."
@@ -3749,8 +3806,14 @@
         "label": "API-Token",
         "description": "Lettermint-API-Token; gespeicherte Werte werden nie zurückgegeben."
       },
-      "smtpHost": { "label": "SMTP-Host", "description": "Hostname des Fallback-SMTP-Servers." },
-      "smtpPort": { "label": "SMTP-Port", "description": "Port des Fallback-SMTP-Servers." },
+      "smtpHost": {
+        "label": "SMTP-Host",
+        "description": "Hostname des Fallback-SMTP-Servers."
+      },
+      "smtpPort": {
+        "label": "SMTP-Port",
+        "description": "Port des Fallback-SMTP-Servers."
+      },
       "smtpUser": {
         "label": "SMTP-Benutzername",
         "description": "Benutzername für den Fallback-SMTP-Server."
@@ -3772,7 +3835,11 @@
       "loadFailed": "Der Freigabestatus konnte nicht geladen werden.",
       "contactFullAdmin": "Eine Volladministration muss Plattformeinstellungen ändern oder die erforderliche Bereitstellungsprüfung koordinieren.",
       "technicalDetails": "Technische Details",
-      "status": { "pass": "Bestanden", "warning": "Warnung", "fail": "Aktion erforderlich" },
+      "status": {
+        "pass": "Bestanden",
+        "warning": "Warnung",
+        "fail": "Aktion erforderlich"
+      },
       "unknown": {
         "title": "Zusätzliche Bereitstellungsprüfung",
         "description": "Der Server meldet eine dieser Oberfläche unbekannte Prüfung. Teilen Sie die technischen Details einer Volladministration mit."
@@ -3940,7 +4007,10 @@
     "challengeIssueFailed": "Der Bestätigungscode konnte nicht gesendet werden. Prüfen Sie, ob für diese Partei eine maßgebliche E-Mail-Adresse hinterlegt ist, und versuchen Sie es später erneut.",
     "challengeCompleteFailed": "Der Code konnte nicht bestätigt werden. Er ist möglicherweise falsch, abgelaufen oder bereits verwendet.",
     "accountLoginProofHelp": "Für den Nachweis per Kontoanmeldung muss sich die betroffene Person erneut anmelden und den unterstützten Nachweis in ihrer eigenen authentifizierten Sitzung abschließen.",
-    "parties": { "subject": "Betroffene Person", "representative": "Vertretung" },
+    "parties": {
+      "subject": "Betroffene Person",
+      "representative": "Vertretung"
+    },
     "loadFailed": "Die Datenschutzwarteschlange konnte nicht geladen werden.",
     "caseFailed": "Der Fall konnte nicht geladen werden.",
     "actionFailed": "Die Datenschutzaktion konnte nicht abgeschlossen werden.",

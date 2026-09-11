@@ -704,3 +704,30 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     expect(sourceFeatures("Point")[0]?.properties?._id).toBe("last-good");
   });
 });
+
+it("preserves source binding and vehicle evidence through the GeoJSON display boundary", async () => {
+  const { buildSources } = await import("../map-layer");
+  const result = buildSources([
+    {
+      geometry: { type: "Point", coordinates: [13, 52] },
+      properties: {
+        id: "source:record",
+        source: "source",
+        provider: "oc",
+        headline: "Truck closure",
+        type: "road_closure",
+        binding: { status: "ambiguous", confidence: 0.4 },
+        vehiclesAffected: ["truck"],
+        dataUpdatedAt: "2026-09-11T12:00:00Z",
+        isStale: true,
+      },
+    },
+  ]);
+  const events = [...result.eventsByDisplayId.values()].flat();
+  expect(events[0]).toMatchObject({
+    binding: { status: "ambiguous", confidence: 0.4 },
+    vehiclesAffected: ["truck"],
+    dataUpdatedAt: "2026-09-11T12:00:00Z",
+    isStale: true,
+  });
+});

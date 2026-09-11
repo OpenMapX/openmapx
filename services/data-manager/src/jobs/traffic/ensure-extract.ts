@@ -88,7 +88,10 @@ export async function ensureTrafficExtract(
     return { built: false };
   }
   deps.logger?.info("traffic-extract: building");
-  const result = await runOpsOperation({ kind: "valhalla.traffic.rebuild" });
+  const result = await runOpsOperation({
+    kind: "valhalla.traffic.maintain",
+    plan: "rebuild-extract",
+  });
   return { built: result.changed };
 }
 

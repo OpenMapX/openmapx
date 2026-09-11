@@ -4,6 +4,20 @@ import { join } from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 
+const policySnapshot = vi.hoisted(() =>
+  vi.fn(async () => ({
+    schemaVersion: 1,
+    authoritative: true,
+    revision: "p1",
+    evaluatedAt: "2026-09-11T12:00:00Z",
+    validUntil: "2026-09-11T12:02:30Z",
+    disallowedSourceIds: ["denied"],
+  })),
+);
+vi.mock("../../services/data-use-policy.js", () => ({
+  getRoadConditionsPolicySnapshot: policySnapshot,
+}));
+
 const fakeDb = vi.hoisted(() => ({
   state: {
     lastJob: null as unknown,
@@ -218,5 +232,32 @@ describe("GET /data-manager/transit/state", () => {
       startedAt: "2026-05-21T03:00:00.000Z",
     });
     expect(body.lastSyncStatus).toBeNull();
+  });
+});
+
+describe("GET /data-manager/road-conditions/policy", () => {
+  it("requires service authentication before reading the authority", async () => {
+    policySnapshot.mockClear();
+    const response = await app.inject({
+      method: "GET",
+      url: "/data-manager/road-conditions/policy",
+    });
+    expect(response.statusCode).toBe(401);
+    expect(policySnapshot).not.toHaveBeenCalled();
+  });
+  it("returns a bounded authority lease without invoking jobs", async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/data-manager/road-conditions/policy",
+      headers: { authorization: "Bearer test-token" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.headers["cache-control"]).toBe("no-store");
+    expect(response.json()).toMatchObject({
+      authoritative: true,
+      revision: "p1",
+      disallowedSourceIds: ["denied"],
+    });
+    expect(fakeDb.callIndex).toBe(0);
   });
 });

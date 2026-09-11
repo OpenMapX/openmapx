@@ -1,5 +1,5 @@
 import type { TripItinerary } from "@openmapx/mobility-core/transit";
-import { beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { TransitProgress } from "../navigation/transitProgress";
 import type { NavProgress } from "../navigation/types";
 import { configureStorage, type StorageAdapter } from "../platform/storage";
@@ -40,6 +40,7 @@ const route = {
 
 describe("navigationStore", () => {
   beforeEach(() => useNavigationStore.getState().stopNavigation());
+  afterEach(() => vi.useRealTimers());
 
   it("starts ground navigation", () => {
     useNavigationStore.getState().startGroundNavigation(route, "driving", [
@@ -51,6 +52,69 @@ describe("navigationStore", () => {
     expect(s.mode).toBe("driving");
     expect(s.route).toBe(route);
     expect(s.cameraMode).toBe("follow");
+  });
+
+  it("expires the held route's current road-condition assessment at its lease boundary", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-12T12:00:00Z"));
+    useNavigationStore.getState().startGroundNavigation(
+      route,
+      "driving",
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      [],
+      "routing-valhalla",
+      {
+        roadConditionImpact: {
+          availability: "current",
+          evaluatedAt: "2026-09-12T12:00:00Z",
+          validUntil: "2026-09-12T12:00:01Z",
+          reasons: [],
+        },
+      },
+    );
+
+    expect(useNavigationStore.getState().roadConditionImpact?.availability).toBe("current");
+    vi.advanceTimersByTime(1_000);
+
+    expect(useNavigationStore.getState().roadConditionImpact).toMatchObject({
+      availability: "expired",
+      reasons: ["evidence_expired"],
+    });
+    expect(useNavigationStore.getState().liveDataUnavailable).toBe(true);
+  });
+
+  it("drops the previous route assessment when accepting a faster route without one", () => {
+    useNavigationStore.getState().startGroundNavigation(
+      route,
+      "driving",
+      [
+        [0, 0],
+        [1, 1],
+      ],
+      [],
+      "routing-valhalla",
+      {
+        roadConditionImpact: {
+          availability: "limited",
+          evaluatedAt: "2026-09-12T12:00:00Z",
+          validUntil: null,
+          reasons: ["legacy_geometry_unverified"],
+        },
+      },
+    );
+    useNavigationStore.getState().proposeFasterRoute({
+      route: { ...route, duration: 5 },
+      alternatives: [],
+      savedSeconds: 5,
+      proposedAtMs: Date.now(),
+    });
+
+    useNavigationStore.getState().acceptFasterRoute();
+
+    expect(useNavigationStore.getState().roadConditionImpact).toBeNull();
   });
 
   it("carries alternatives and switches the active route", () => {
@@ -620,6 +684,27 @@ describe("navigationStore native read model", () => {
     expect(state.permissionMode).toBe("background");
     expect(state.nativeRevision).toBe(4);
     expect(state.nativeRouteFingerprint).toBe("route-a");
+  });
+
+  it("never hydrates an already-expired current road-condition assessment", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-12T12:00:01Z"));
+
+    useNavigationStore.getState().applyNativeFullSnapshot(
+      projection({
+        roadConditionImpact: {
+          availability: "current",
+          evaluatedAt: "2026-09-12T12:00:00Z",
+          validUntil: "2026-09-12T12:00:00Z",
+          reasons: [],
+        },
+      }),
+    );
+
+    expect(useNavigationStore.getState().roadConditionImpact).toMatchObject({
+      availability: "expired",
+      reasons: ["evidence_expired"],
+    });
   });
 
   it("replaces a stale browser read model rather than merging into it", () => {

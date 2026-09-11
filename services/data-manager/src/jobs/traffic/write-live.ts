@@ -1,9 +1,20 @@
-import { closeSync, openSync, readSync, writeSync } from "node:fs";
-import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createHash, randomUUID } from "node:crypto";
+import {
+  closeSync,
+  existsSync,
+  fstatSync,
+  fsyncSync,
+  openSync,
+  readSync,
+  writeSync,
+} from "node:fs";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { envString } from "@openmapx/core/server-env";
+import { atomicWriteFile } from "../../utils/atomic-write.js";
 import { type EdgeOverride, edgeKey } from "./conditions-to-edges.js";
 import { recordTrafficGraphSuccess, trafficEvidencePath } from "./evidence.js";
+import { readTrafficGraphGeneration } from "./graph-generation.js";
 import { encodeClosedTrafficSpeed, encodeTrafficSpeed } from "./traffic-speed.js";
 import type { WayEdge } from "./ways-to-edges.js";
 
@@ -46,6 +57,14 @@ interface TrafficLogger {
 export interface WriteLiveTrafficDeps {
   /** Path to the Valhalla `traffic.tar` extract, as seen by this process. */
   tarPath: string;
+  /** Earliest source, policy or observation deadline; also capped to two minutes. */
+  validUntil?: string;
+  graphGeneration?: string;
+  /** Identifies this publication to the engine-owned response attestation. */
+  writeId?: string;
+  engineBootId?: string;
+  /** Epoch captured before trace resolution; rechecked under the writer lock. */
+  expectedGraphGeneration?: string;
   /** Raw `way_id,dir,current_kph,free_flow_kph,los` CSV body (header + rows). */
   csv: string;
   waysToEdges: Map<number, WayEdge[]>;
@@ -156,6 +175,7 @@ interface PlannedWrite {
    * what actually reached the tar.
    */
   observationId: string | null;
+  contributorIds: string[];
 }
 
 /**
@@ -210,25 +230,58 @@ function readOctalField(buf: Buffer, offset: number, length: number): number {
  * writes can be bounds-checked against the live tile before touching the file.
  */
 function parseIndexBin(fd: number): Map<bigint, TileEntry> {
+  const fileSize = fstatSync(fd).size;
   const header = Buffer.alloc(USTAR_HEADER_SIZE);
-  readSync(fd, header, 0, USTAR_HEADER_SIZE, 0);
+  if (
+    readSync(fd, header, 0, header.length, 0) !== header.length ||
+    header.toString("ascii", 0, 100).replace(/\0.*$/s, "") !== "index.bin"
+  )
+    throw new Error("Invalid traffic tar index header");
   const size = readOctalField(header, USTAR_SIZE_FIELD_OFFSET, USTAR_SIZE_FIELD_LENGTH);
-
+  if (
+    !Number.isSafeInteger(size) ||
+    size <= 0 ||
+    size % INDEX_BIN_ENTRY_SIZE !== 0 ||
+    size > 64 * 1024 * 1024 ||
+    size + USTAR_HEADER_SIZE > fileSize
+  )
+    throw new Error("Invalid traffic tar index size");
   const data = Buffer.alloc(size);
-  readSync(fd, data, 0, size, USTAR_HEADER_SIZE);
-
+  if (readSync(fd, data, 0, size, USTAR_HEADER_SIZE) !== size)
+    throw new Error("Truncated traffic tar index");
   const map = new Map<bigint, TileEntry>();
-  const entryCount = Math.floor(size / INDEX_BIN_ENTRY_SIZE);
-  for (let i = 0; i < entryCount; i++) {
-    const base = i * INDEX_BIN_ENTRY_SIZE;
-    const offset = data.readBigUInt64LE(base);
+  const ranges: Array<[number, number]> = [];
+  const minimumOffset =
+    USTAR_HEADER_SIZE + Math.ceil(size / USTAR_HEADER_SIZE) * USTAR_HEADER_SIZE + USTAR_HEADER_SIZE;
+  for (let base = 0; base < size; base += INDEX_BIN_ENTRY_SIZE) {
+    const offset = Number(data.readBigUInt64LE(base));
     const tileId = data.readUInt32LE(base + 8);
     const memberSize = data.readUInt32LE(base + 12);
-    const directedEdgeCount = Math.floor(
-      (memberSize - TRAFFIC_TILE_HEADER_SIZE) / TRAFFIC_SPEED_RECORD_SIZE,
-    );
-    map.set(BigInt(tileId), { dataOffset: Number(offset), directedEdgeCount });
+    if (
+      !Number.isSafeInteger(offset) ||
+      offset < minimumOffset ||
+      offset % USTAR_HEADER_SIZE !== 0 ||
+      memberSize < TRAFFIC_TILE_HEADER_SIZE ||
+      (memberSize - TRAFFIC_TILE_HEADER_SIZE) % TRAFFIC_SPEED_RECORD_SIZE !== 0 ||
+      offset + memberSize > fileSize ||
+      map.has(BigInt(tileId))
+    )
+      throw new Error("Invalid traffic tile bounds");
+    const directedEdgeCount = (memberSize - TRAFFIC_TILE_HEADER_SIZE) / TRAFFIC_SPEED_RECORD_SIZE;
+    const tileHeader = Buffer.alloc(TRAFFIC_TILE_HEADER_SIZE);
+    if (
+      readSync(fd, tileHeader, 0, tileHeader.length, offset) !== tileHeader.length ||
+      tileHeader.readBigUInt64LE(0) !== BigInt(tileId) ||
+      tileHeader.readUInt32LE(16) !== directedEdgeCount ||
+      tileHeader.readUInt32LE(20) !== 3
+    )
+      throw new Error("Invalid traffic tile header");
+    ranges.push([offset, offset + memberSize]);
+    map.set(BigInt(tileId), { dataOffset: offset, directedEdgeCount });
   }
+  ranges.sort((a, b) => a[0] - b[0]);
+  for (let i = 1; i < ranges.length; i++)
+    if (ranges[i][0] < ranges[i - 1][1]) throw new Error("Overlapping traffic tiles");
   return map;
 }
 
@@ -319,7 +372,10 @@ async function saveIdentities(
   identities: Iterable<EdgeIdentity>,
 ): Promise<void> {
   await mkdir(dirname(statePath), { recursive: true });
-  await writeFile(statePath, JSON.stringify([...identities]), "utf8");
+  await atomicWriteFile(statePath, JSON.stringify([...identities]), {
+    durability: "full",
+    mode: 0o600,
+  });
 }
 
 /**
@@ -365,16 +421,55 @@ async function saveIdentities(
  * tar) is skipped — on the write path it's surfaced via `outOfBounds`, on the
  * clear path it's silently skipped as already-fresh.
  */
-export async function writeLiveTraffic(
-  deps: WriteLiveTrafficDeps,
-): Promise<WriteLiveTrafficResult> {
+async function writeLiveTrafficLocked(deps: WriteLiveTrafficDeps): Promise<WriteLiveTrafficResult> {
+  if (existsSync(join(dirname(deps.tarPath), ".traffic-maintenance.json")))
+    throw new Error("Traffic graph maintenance is in progress");
   const statePath = deps.statePath || defaultStatePath();
   const { rows, total } = parseCsv(deps.csv);
 
   const fd = openSync(deps.tarPath, "r+");
   try {
     const idxMap = parseIndexBin(fd);
-    const previousIdentities = await loadPreviousIdentities(statePath);
+    const file = fstatSync(fd);
+    const graphGeneration = createHash("sha256")
+      .update(
+        JSON.stringify([
+          file.dev,
+          file.ino,
+          file.birthtimeMs,
+          file.size,
+          deps.graphGeneration ?? null,
+          [...idxMap].map(([key, value]) => [String(key), value]),
+        ]),
+      )
+      .digest("hex");
+    let previousIdentities = await loadPreviousIdentities(statePath);
+    let clearAll = false;
+    try {
+      const journal = await readJournal(statePath);
+      if (journal === null) {
+        // A legacy identity list, including a valid empty list, cannot prove
+        // that the current tar contains no records written before journaling
+        // was introduced. Absence of the journal therefore means the whole
+        // extract is uncertain and must be reconciled.
+        clearAll = true;
+      } else {
+        if (journal.graphGeneration !== graphGeneration || journal.uncertain === true)
+          clearAll = true;
+        else previousIdentities = journal.identities;
+      }
+    } catch {
+      clearAll = true;
+    }
+    if (previousIdentities === null) {
+      try {
+        await readFile(statePath);
+        clearAll = true;
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+        clearAll = true;
+      }
+    }
     const clearedRecord = encodeTrafficSpeed(null);
 
     let matched = 0;
@@ -422,6 +517,7 @@ export async function writeLiveTraffic(
           closed: false,
           capped: false,
           observationId: null,
+          contributorIds: [],
         });
       }
     }
@@ -430,7 +526,8 @@ export async function writeLiveTraffic(
       const offset = resolveIdentityOffset(idxMap, override.edge, noteOutOfBounds);
       if (offset === null) {
         overridesUnresolved++;
-        unresolvedObservationIds.add(override.observationId);
+        for (const id of override.contributorIds ?? [override.observationId])
+          unresolvedObservationIds.add(id);
         continue;
       }
       const key = edgeKey(override.edge);
@@ -444,7 +541,25 @@ export async function writeLiveTraffic(
           closed: true,
           capped: false,
           observationId: override.observationId,
+          contributorIds: [
+            ...new Set([
+              ...(previous?.contributorIds ?? []),
+              ...(override.contributorIds ?? [override.observationId]),
+            ]),
+          ],
         });
+        continue;
+      }
+      if (
+        !previous?.closed &&
+        (previous?.kph == null ||
+          previous.kph < 2 ||
+          !Number.isFinite(override.capKph) ||
+          override.capKph < 2)
+      ) {
+        overridesUnresolved++;
+        for (const id of override.contributorIds ?? [override.observationId])
+          unresolvedObservationIds.add(id);
         continue;
       }
       // `closed` survives the merge so a cap can never revive an edge a closure
@@ -458,10 +573,62 @@ export async function writeLiveTraffic(
         // A cap that lost to an existing closure changed nothing on this edge,
         // so the closure's observation stays the one credited with the record.
         observationId: closed ? (previous?.observationId ?? null) : override.observationId,
+        contributorIds: [
+          ...new Set([
+            ...(previous?.contributorIds ?? []),
+            ...(override.contributorIds ?? [override.observationId]),
+          ]),
+        ],
       });
     }
 
-    for (const { offset, kph, closed, capped, observationId } of planned.values()) {
+    const identities = new Map((previousIdentities ?? []).map((id) => [edgeKey(id), id]));
+    for (const { offset } of planned.values())
+      identities.set(edgeKey(offset.identity), offset.identity);
+    const requestedDeadline =
+      deps.validUntil === undefined ? Date.now() + 120_000 : Date.parse(deps.validUntil);
+    if (!Number.isFinite(requestedDeadline)) throw new Error("Invalid traffic write deadline");
+    const validUntil = Math.min(requestedDeadline, Date.now() + 120_000);
+    const journal: TrafficJournal = {
+      schemaVersion: 1,
+      graphGeneration,
+      phase: "pending",
+      writeId: deps.writeId ?? randomUUID(),
+      routingGraphGeneration: deps.graphGeneration ?? null,
+      engineBootId: deps.engineBootId ?? null,
+      validUntil,
+      identities: [...identities.values()],
+      ...(clearAll ? { uncertain: true } : {}),
+    };
+    if (
+      deps.expectedGraphGeneration &&
+      (await readTrafficGraphGeneration(dirname(deps.tarPath))) !== deps.expectedGraphGeneration
+    )
+      throw new Error("Traffic graph changed during planning");
+    await saveJournal(statePath, journal);
+    if (clearAll) {
+      // Unknown journal state: clear every current record in place, never guess
+      // whether an old edge identity still names the same road after a rebuild.
+      for (const entry of idxMap.values()) {
+        const start = entry.dataOffset + TRAFFIC_TILE_HEADER_SIZE;
+        const end = start + entry.directedEdgeCount * TRAFFIC_SPEED_RECORD_SIZE;
+        for (let offset = start; offset < end; offset += 1024 * 1024) {
+          const block = Buffer.alloc(Math.min(1024 * 1024, end - offset));
+          if (readSync(fd, block, 0, block.length, offset) !== block.length)
+            throw new Error("Truncated traffic records during recovery");
+          let changed = false;
+          for (let i = 0; i < block.length; i += TRAFFIC_SPEED_RECORD_SIZE) {
+            if (((block.readBigUInt64LE(i) >> 28n) & 0xffn) !== 0n) {
+              clearedRecord.copy(block, i);
+              changed = true;
+            }
+          }
+          if (changed) writeSync(fd, block, 0, block.length, offset);
+        }
+      }
+    }
+    if (validUntil <= Date.now()) planned.clear();
+    for (const { offset, kph, closed, capped, contributorIds } of planned.values()) {
       const record = closed ? encodeClosedTrafficSpeed() : encodeTrafficSpeed(kph);
       writeSync(fd, record, 0, TRAFFIC_SPEED_RECORD_SIZE, offset.recordOffset);
       written++;
@@ -469,7 +636,7 @@ export async function writeLiveTraffic(
       if (capped) cappedEdges++;
       // Recorded only here, after the record is on disk; the unresolved set is
       // subtracted below so a partly-written observation drops out entirely.
-      if (observationId !== null) writtenObservationIds.add(observationId);
+      for (const id of contributorIds) writtenObservationIds.add(id);
       writtenIdentities.set(edgeKey(offset.identity), offset.identity);
       touchedTileDataOffsets.add(offset.dataOffset);
     }
@@ -502,7 +669,14 @@ export async function writeLiveTraffic(
       }
     }
 
+    fsyncSync(fd);
     await saveIdentities(statePath, writtenIdentities.values());
+    await saveJournal(statePath, {
+      ...journal,
+      phase: "committed",
+      identities: [...writtenIdentities.values()],
+      uncertain: false,
+    });
 
     const result = {
       written,
@@ -517,7 +691,11 @@ export async function writeLiveTraffic(
         .sort(),
     };
     try {
-      await recordTrafficGraphSuccess(deps.evidencePath ?? trafficEvidencePath(statePath), result);
+      await recordTrafficGraphSuccess(deps.evidencePath ?? trafficEvidencePath(statePath), {
+        ...result,
+        graphIdentity: deps.expectedGraphGeneration ?? null,
+        validUntil: new Date(validUntil).toISOString(),
+      });
     } catch (evidenceErr) {
       // The binary publication and runtime state are already durable. Evidence
       // is an observation sidecar; a filesystem failure must not make callers
@@ -531,4 +709,94 @@ export async function writeLiveTraffic(
   } finally {
     closeSync(fd);
   }
+}
+
+interface TrafficJournal {
+  schemaVersion: 1;
+  graphGeneration: string;
+  writeId?: string;
+  routingGraphGeneration?: string | null;
+  engineBootId?: string | null;
+  phase: "pending" | "committed";
+  validUntil: number;
+  identities: EdgeIdentity[];
+  uncertain?: boolean;
+}
+
+async function readJournal(statePath: string): Promise<TrafficJournal | null> {
+  let raw: string;
+  try {
+    raw = await readFile(`${statePath}.journal.json`, "utf8");
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw err;
+  }
+  const value = JSON.parse(raw) as TrafficJournal;
+  if (
+    value.schemaVersion !== 1 ||
+    !value.graphGeneration ||
+    !["pending", "committed"].includes(value.phase) ||
+    !Number.isFinite(value.validUntil) ||
+    value.validUntil > Date.now() + 120_000 ||
+    (value.uncertain !== undefined && typeof value.uncertain !== "boolean") ||
+    !Array.isArray(value.identities) ||
+    value.identities.some(
+      (id) => !id || ![id.level, id.tile, id.index].every((n) => Number.isSafeInteger(n) && n >= 0),
+    )
+  )
+    throw new Error("Corrupt traffic journal");
+  return value;
+}
+async function saveJournal(statePath: string, journal: TrafficJournal): Promise<void> {
+  await atomicWriteFile(`${statePath}.journal.json`, JSON.stringify(journal), {
+    durability: "full",
+    mode: 0o600,
+    createParentDirectory: true,
+  });
+}
+
+/** Bounded acquisition: the independent supervisor fences a hung owner. */
+async function withTrafficLock<T>(statePath: string, work: () => Promise<T>): Promise<T> {
+  const lock = `${statePath}.lock`;
+  await mkdir(dirname(statePath), { recursive: true });
+  await mkdir(lock, { mode: 0o700 });
+  try {
+    await writeFile(
+      join(lock, "owner.json"),
+      JSON.stringify({ pid: process.pid, acquiredAt: Date.now() }),
+      { mode: 0o600 },
+    );
+    return await work();
+  } finally {
+    await rm(lock, { recursive: true, force: true });
+  }
+}
+
+export async function writeLiveTraffic(
+  deps: WriteLiveTrafficDeps,
+): Promise<WriteLiveTrafficResult> {
+  return withTrafficLock(deps.statePath || defaultStatePath(), () => writeLiveTrafficLocked(deps));
+}
+
+/** No network, source parsing or way-map loading: safe to run in a separate process. */
+export async function expireLiveTraffic(deps: {
+  tarPath: string;
+  statePath: string;
+  now?: number;
+}): Promise<boolean> {
+  return withTrafficLock(deps.statePath, async () => {
+    try {
+      const journal = await readJournal(deps.statePath);
+      if (journal?.phase === "committed" && journal.validUntil > (deps.now ?? Date.now()))
+        return false;
+    } catch {
+      /* Corrupt journal forces a complete, bounds-checked clear. */
+    }
+    await writeLiveTrafficLocked({
+      ...deps,
+      csv: "way_id,dir,current_kph,free_flow_kph,los\n",
+      waysToEdges: new Map(),
+    });
+    return true;
+  });
 }

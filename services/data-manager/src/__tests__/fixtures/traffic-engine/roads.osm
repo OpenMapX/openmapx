@@ -1,0 +1,8 @@
+<osm version="0.6" generator="openmapx-plan043">
+<node id="1" lat="52.0" lon="13.0" version="1"/><node id="2" lat="52.0" lon="13.01" version="1"/><node id="3" lat="52.0" lon="13.02" version="1"/><node id="4" lat="52.01" lon="13.01" version="1"/>
+<node id="5" lat="52.0" lon="12.995" version="1"/><node id="6" lat="52.0" lon="13.025" version="1"/>
+<way id="10" version="1"><nd ref="1"/><nd ref="2"/><nd ref="3"/><tag k="highway" v="primary"/><tag k="name" v="Direct road"/><tag k="maxspeed" v="30"/></way>
+<way id="20" version="1"><nd ref="1"/><nd ref="4"/><nd ref="3"/><tag k="highway" v="primary"/><tag k="name" v="Detour road"/><tag k="maxspeed" v="30"/></way>
+<way id="30" version="1"><nd ref="5"/><nd ref="1"/><tag k="highway" v="primary"/><tag k="name" v="Approach"/><tag k="maxspeed" v="30"/></way>
+<way id="40" version="1"><nd ref="3"/><nd ref="6"/><tag k="highway" v="primary"/><tag k="name" v="Exit"/><tag k="maxspeed" v="30"/></way>
+</osm>

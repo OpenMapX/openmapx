@@ -60,20 +60,39 @@ export async function aggregateRoadConditions(
   opts?: RoadConditionsQuery,
 ): Promise<RoadConditionEvent[]> {
   const providers = collectProviders(ctx).filter((p) => coversBbox(p.coverage, bbox));
-  const settled = await Promise.allSettled(providers.map((p) => p.getEvents(bbox, opts)));
+  const disallowed = new Set([
+    ...((await ctx.getDisallowedSourceIds?.()) ?? []),
+    ...(opts?.excludedSourceIds ?? []),
+  ]);
+  const providerOptions = disallowed.size ? { ...opts, excludedSourceIds: [...disallowed] } : opts;
+  const settled = await Promise.allSettled(
+    providers.map((p) => p.getEvents(bbox, providerOptions)),
+  );
 
   const merged: RoadConditionEvent[] = [];
   settled.forEach((res, i) => {
     const providerId = providers[i].id;
     if (res.status === "fulfilled") {
-      for (const e of res.value) merged.push(e.provider ? e : { ...e, provider: providerId });
+      for (const grouped of res.value) {
+        for (const e of grouped.sourceRecords ?? [grouped]) {
+          const { sourceRecords: _records, ...original } = e;
+          merged.push({ ...original, provider: e.provider || providerId });
+        }
+      }
     } else {
       ctx.log.warn(`[road-conditions] provider ${providerId} failed`, res.reason);
     }
   });
 
-  const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
-  const allowed = disallowed.size > 0 ? merged.filter((e) => !disallowed.has(e.source)) : merged;
+  const allowed =
+    disallowed.size > 0
+      ? merged.filter(
+          (e) =>
+            !disallowed.has(e.source) &&
+            !disallowed.has(e.routingEvidence?.source_id ?? "") &&
+            !disallowed.has(e.routingEvidence?.child_source_id ?? ""),
+        )
+      : merged;
 
   const deduped = dedupeRoadConditionEvents(allowed);
 

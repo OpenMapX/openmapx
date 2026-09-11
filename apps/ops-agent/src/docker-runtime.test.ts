@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
@@ -138,89 +138,188 @@ describe("fixed Docker runtime adapters", () => {
         execFile: execFile as never,
       });
 
-    it("builds, validates, hands over ownership, and only then restarts", async () => {
+    it("runs graph maintenance behind a durable fence while Valhalla is stopped", async () => {
+      const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-maintenance-"));
+      const calls: string[][] = [];
+      const generation = "a".repeat(64);
+      try {
+        const runtime = createDockerRuntime({
+          composeFile: "/trusted/compose.yml",
+          releaseComposeFile: "/trusted/release.yml",
+          releaseComposeExists: () => false,
+          trafficDataRoot: dataRoot,
+          execFile: async (_file, args) => {
+            calls.push([...args]);
+            if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
+              return { stdout: "false\n", stderr: "" };
+            }
+            if (args[0] === "inspect" && args.includes("{{.Image}}")) {
+              return { stdout: `sha256:${"c".repeat(64)}\n`, stderr: "" };
+            }
+            if (args[0] === "inspect" && args.includes("{{.State.Health.Status}}")) {
+              return { stdout: "healthy\n", stderr: "" };
+            }
+            if (args[0] === "run") {
+              return { stdout: `OPENMAPX_GRAPH_GENERATION=${generation}\n`, stderr: "" };
+            }
+            return { stdout: "", stderr: "" };
+          },
+        });
+
+        await expect(
+          dispatchOpsOperation(
+            runtime,
+            {
+              kind: "valhalla.traffic.maintain",
+              plan: "apply-predicted-and-rebuild",
+              preparedGeneration: "11111111-1111-4111-8111-111111111111",
+            },
+            context(),
+          ),
+        ).resolves.toEqual({
+          changed: true,
+          graphGeneration: generation,
+          extractGeneration: generation,
+          waysToEdgesGeneration: generation,
+        });
+
+        expect(calls.map((call) => call[0])).toEqual([
+          "stop",
+          "inspect",
+          "inspect",
+          "run",
+          "start",
+          "inspect",
+        ]);
+        expect(calls[3]).toEqual(
+          expect.arrayContaining([
+            "--volumes-from",
+            "docker-valhalla-1",
+            `sha256:${"c".repeat(64)}`,
+          ]),
+        );
+        expect(calls[3]?.join(" ")).toContain(
+          "valhalla_add_predicted_traffic -c /custom_files/valhalla.json /custom_files/predicted-csv/11111111-1111-4111-8111-111111111111",
+        );
+        expect(calls[3]?.join(" ")).toContain("valhalla_build_extract");
+        expect(calls[3]?.join(" ")).toContain("valhalla_ways_to_edges");
+        expect(existsSync(join(dataRoot, "valhalla", "osm-pbf", ".traffic-maintenance.json"))).toBe(
+          false,
+        );
+        expect(
+          JSON.parse(
+            readFileSync(join(dataRoot, "valhalla", "osm-pbf", "traffic-generations.json"), "utf8"),
+          ),
+        ).toMatchObject({
+          schemaVersion: 1,
+          graphGeneration: generation,
+          extractGeneration: generation,
+          waysToEdgesGeneration: generation,
+        });
+      } finally {
+        rmSync(dataRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("leaves serving stopped and the durable fence present when maintenance fails", async () => {
+      const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-maintenance-fail-"));
+      const calls: string[][] = [];
+      try {
+        const runtime = createDockerRuntime({
+          composeFile: "/trusted/compose.yml",
+          releaseComposeFile: "/trusted/release.yml",
+          releaseComposeExists: () => false,
+          trafficDataRoot: dataRoot,
+          execFile: async (_file, args) => {
+            calls.push([...args]);
+            if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
+              return { stdout: "false\n", stderr: "" };
+            }
+            if (args[0] === "inspect" && args.includes("{{.Image}}")) {
+              return { stdout: `sha256:${"d".repeat(64)}\n`, stderr: "" };
+            }
+            if (args[0] === "run") throw new Error("build failed");
+            return { stdout: "", stderr: "" };
+          },
+        });
+
+        await expect(
+          dispatchOpsOperation(
+            runtime,
+            { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" },
+            context(),
+          ),
+        ).rejects.toThrow();
+
+        expect(calls.some((call) => call[0] === "start")).toBe(false);
+        expect(calls.some((call) => call[0] === "rm" && call[1] === "-f")).toBe(true);
+        expect(calls.at(-1)).toEqual([
+          "inspect",
+          "--format",
+          "{{.State.Running}}",
+          "docker-valhalla-1",
+        ]);
+        expect(existsSync(join(dataRoot, "valhalla", "osm-pbf", ".traffic-maintenance.json"))).toBe(
+          true,
+        );
+      } finally {
+        rmSync(dataRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("fails closed when compensation cannot prove the maintenance worker stopped", async () => {
+      const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-maintenance-worker-fail-"));
+      const maintenanceContainer = `openmapx-valhalla-maint-${"f".repeat(16)}`;
+      try {
+        const runtime = createDockerRuntime({
+          composeFile: "/trusted/compose.yml",
+          releaseComposeFile: "/trusted/release.yml",
+          releaseComposeExists: () => false,
+          trafficDataRoot: dataRoot,
+          execFile: async (_file, args) => {
+            if (args[0] === "inspect" && args.includes("{{.State.Running}}")) {
+              return { stdout: "false\n", stderr: "" };
+            }
+            if (args[0] === "inspect" && args.includes("{{.Image}}")) {
+              return { stdout: `sha256:${"d".repeat(64)}\n`, stderr: "" };
+            }
+            if (args[0] === "run") throw new Error("build failed");
+            if (args[0] === "rm") throw new Error("docker daemon unavailable");
+            if (args[0] === "ps") {
+              return { stdout: `${maintenanceContainer}\n`, stderr: "" };
+            }
+            return { stdout: "", stderr: "" };
+          },
+        });
+
+        await expect(
+          dispatchOpsOperation(
+            runtime,
+            { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" },
+            context(),
+          ),
+        ).rejects.toThrow("maintenance worker could not be terminated");
+        expect(existsSync(join(dataRoot, "valhalla", "osm-pbf", ".traffic-maintenance.json"))).toBe(
+          true,
+        );
+      } finally {
+        rmSync(dataRoot, { recursive: true, force: true });
+      }
+    });
+
+    it("fences Valhalla serving when traffic cannot be cleared", async () => {
       const calls: string[][] = [];
       const runtime = runtimeWith(async (_file, args) => {
         calls.push([...args]);
-        // A non-empty index.bin proves the extract has tiles.
-        return { stdout: args.some((arg) => arg.includes("wc -c")) ? "1600\n" : "", stderr: "" };
+        return { stdout: args[0] === "inspect" ? "false\n" : "", stderr: "" };
       });
-
       await expect(
-        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.rebuild" }, context()),
+        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.disable" }, context()),
       ).resolves.toEqual({ changed: true });
-
       expect(calls).toEqual([
-        [
-          "exec",
-          "docker-valhalla-1",
-          "valhalla_build_extract",
-          "-c",
-          "/custom_files/valhalla.json",
-          "-t",
-          "-O",
-        ],
-        [
-          "exec",
-          "docker-valhalla-1",
-          "sh",
-          "-c",
-          "tar xOf /custom_files/traffic.tar index.bin 2>/dev/null | wc -c",
-        ],
-        ["exec", "docker-valhalla-1", "chown", CHOWN_ID, "/custom_files/traffic.tar"],
-        ["restart", "docker-valhalla-1"],
+        ["stop", "--time", "1", "docker-valhalla-1"],
+        ["inspect", "--format", "{{.State.Running}}", "docker-valhalla-1"],
       ]);
-    });
-
-    it("refuses to chown or restart when the built extract has an empty index", async () => {
-      const calls: string[][] = [];
-      const runtime = runtimeWith(async (_file, args) => {
-        calls.push([...args]);
-        return { stdout: args.some((arg) => arg.includes("wc -c")) ? "0\n" : "", stderr: "" };
-      });
-
-      await expect(
-        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.rebuild" }, context()),
-      ).rejects.toThrow(/empty index/);
-      expect(calls.some((call) => call.includes("chown") || call[0] === "restart")).toBe(false);
-    });
-
-    it("does not restart or report success when the build itself fails", async () => {
-      const calls: string[][] = [];
-      const runtime = runtimeWith(async (_file, args) => {
-        calls.push([...args]);
-        if (args.includes("valhalla_build_extract")) throw new Error("build failed");
-        return { stdout: "", stderr: "" };
-      });
-
-      await expect(
-        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.rebuild" }, context()),
-      ).rejects.toThrow(/valhalla_build_extract failed/);
-      expect(calls).toEqual([
-        [
-          "exec",
-          "docker-valhalla-1",
-          "valhalla_build_extract",
-          "-c",
-          "/custom_files/valhalla.json",
-          "-t",
-          "-O",
-        ],
-      ]);
-    });
-
-    it("does not restart when the ownership handover fails", async () => {
-      const calls: string[][] = [];
-      const runtime = runtimeWith(async (_file, args) => {
-        calls.push([...args]);
-        if (args.includes("chown")) throw new Error("chown failed");
-        return { stdout: args.some((arg) => arg.includes("wc -c")) ? "1600\n" : "", stderr: "" };
-      });
-
-      await expect(
-        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.rebuild" }, context()),
-      ).rejects.toThrow(/chown failed/);
-      expect(calls.some((call) => call[0] === "restart")).toBe(false);
     });
 
     it("reports readiness from the tile and extract timestamps", async () => {
@@ -243,6 +342,48 @@ describe("fixed Docker runtime adapters", () => {
       // Unreadable tile directory with an extract present is inconclusive, not
       // a rebuild trigger.
       await expect(inspect(null, "200")).resolves.toEqual({ state: "unknown" });
+    });
+
+    it("requires a coherent maintenance generation manifest before reporting ready", async () => {
+      const dataRoot = mkdtempSync(join(tmpdir(), "valhalla-generation-inspect-"));
+      const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
+      mkdirSync(sharedDir, { recursive: true });
+      const runtime = createDockerRuntime({
+        composeFile: "/trusted/compose.yml",
+        releaseComposeFile: "/trusted/release.yml",
+        releaseComposeExists: () => false,
+        trafficDataRoot: dataRoot,
+        execFile: async (_file, args) => ({
+          stdout:
+            args[0] === "exec"
+              ? args.at(-1) === "/custom_files/traffic.tar"
+                ? "200\n"
+                : "100\n"
+              : "",
+          stderr: "",
+        }),
+      });
+
+      await expect(
+        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.inspect" }, context()),
+      ).resolves.toEqual({ state: "not_ready" });
+
+      const generation = "b".repeat(64);
+      writeFileSync(
+        join(sharedDir, "traffic-generations.json"),
+        JSON.stringify({
+          schemaVersion: 1,
+          graphGeneration: generation,
+          extractGeneration: generation,
+          waysToEdgesGeneration: generation,
+          completedAt: new Date().toISOString(),
+        }),
+      );
+      await expect(
+        dispatchOpsOperation(runtime, { kind: "valhalla.traffic.inspect" }, context()),
+      ).resolves.toEqual({ state: "ready" });
+
+      rmSync(dataRoot, { recursive: true, force: true });
     });
 
     it("produces way_edges.txt on the shared mount and hands it to the data owner", async () => {

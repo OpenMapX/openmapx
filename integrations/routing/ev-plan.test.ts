@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { type ResolvedRoutingProvider, runEvPlan } from "./ev-plan.js";
 
 function fakeCtx(overrides: Record<string, unknown> = {}) {
+  const cache = { withCache: vi.fn((_k: string, _t: number, fn: () => unknown) => fn()) };
   const baseRoute = {
     distance: 300_000,
     duration: 12_000,
@@ -39,7 +40,7 @@ function fakeCtx(overrides: Record<string, unknown> = {}) {
   };
   return {
     log: { warn: vi.fn(), error: vi.fn() },
-    cache: { withCache: (_k: string, _t: number, fn: () => unknown) => fn() },
+    cache,
     // LoadedIntegration shape: { id, providers: Map<domain, unknown[]> }
     getIntegrationsByDomain: (d: string) =>
       d === "data-source"
@@ -49,10 +50,36 @@ function fakeCtx(overrides: Record<string, unknown> = {}) {
     ...overrides,
     _valhalla: valhalla,
     _evProvider: evProvider,
+    _cache: cache,
   };
 }
 
 describe("runEvPlan", () => {
+  it("does not cache or claim current road-condition protection without engine proof", async () => {
+    const ctx = fakeCtx();
+    const getProviders = (): ResolvedRoutingProvider[] => [
+      { integrationId: "valhalla", provider: ctx._valhalla },
+    ];
+
+    const result = await runEvPlan(ctx as unknown as IntegrationContext, getProviders, {
+      waypoints: [
+        [0, 50],
+        [2.7, 50],
+      ],
+      vehicleId: "tesla:model_3:2024:model_3_long_range",
+      socStartPct: 80,
+      avoidClosures: false,
+    });
+
+    expect(ctx._cache.withCache).not.toHaveBeenCalled();
+    expect(result.roadConditionImpact).toMatchObject({
+      availability: "unsupported",
+      evaluatedAt: expect.any(String),
+      validUntil: null,
+      reasons: expect.arrayContaining(["unverified_engine_application", "ev_matrix_unprotected"]),
+    });
+  });
+
   it("produces a route with a charging stop and threads closures into both routing calls", async () => {
     const ctx = fakeCtx();
     const getProviders = (): ResolvedRoutingProvider[] => [

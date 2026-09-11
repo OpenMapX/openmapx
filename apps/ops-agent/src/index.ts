@@ -124,6 +124,7 @@ async function main(): Promise<void> {
       composeFile: join(paths.infraDir, ".trusted-config-current", "docker-compose.generated.yml"),
       releaseComposeFile: paths.composeReleasePath,
       releaseComposeExists: existsSync,
+      trafficDataRoot: join(paths.infraDir, "data"),
     });
     installTrustedConfigurationRuntime(runtime, {
       services: initialAuthority.services,

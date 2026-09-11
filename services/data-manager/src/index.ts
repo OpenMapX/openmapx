@@ -93,6 +93,15 @@ registerApi(app, {
     // and the empty set is the truthful answer: nothing is baked in yet.
     getTrafficConditionsApplied: () =>
       cronHandles?.getTrafficConditionsApplied() ?? {
+        schemaVersion: 1,
+        mode: "shadow",
+        providerId: "routing-valhalla",
+        writeId: null,
+        engineBootId: null,
+        graphGeneration: null,
+        policyRevision: null,
+        validUntil: null,
+        receipts: [],
         writtenAt: null,
         observationIds: [],
         resolverVersion: null,

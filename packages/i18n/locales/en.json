@@ -489,7 +489,29 @@
       "sourceRecordCount": "{count, plural, one {# source record} other {# source records}}",
       "sourceDetails": "Source details ({count, plural, one {# record} other {# records}})",
       "relatedRecords": "{headline} ({count} related records)",
-      "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}"
+      "conditionsHere": "{count, plural, one {# condition here} other {# conditions here}}",
+      "source": "Source",
+      "license": "Licence",
+      "updatedAt": "Source updated (UTC)",
+      "checkedAt": "Last validated (UTC)",
+      "binding": "Road binding",
+      "bindingConfidence": "Matching score (0–1)",
+      "vehicles": "Affected vehicles",
+      "routing": "Route effect",
+      "allVehicles": "All vehicles",
+      "routingCandidate": "Eligible; application depends on the route",
+      "routingDisplayOnly": "Shown on map; not applied to routing"
+    },
+    "binding": {
+      "exact": "Exact",
+      "likely": "Likely",
+      "ambiguous": "Ambiguous",
+      "unresolved": "Unresolved",
+      "no_coverage": "No graph coverage",
+      "not_applicable": "Not applicable",
+      "unattempted": "Not attempted",
+      "obsolete": "Outdated",
+      "invalid": "Invalid"
     }
   },
   "trafficFlow": {
@@ -686,6 +708,13 @@
     "bikeHillsStronglyAvoid": "Strongly avoid steep routes",
     "fastestRoute": "Fastest route",
     "co2Estimate": "≈ {co2} (est.)",
+    "roadConditionImpact": {
+      "current": "Current road conditions applied",
+      "limited": "Limited road-condition protection",
+      "unsupported": "Road-condition protection unsupported",
+      "unavailable": "Road-condition protection unavailable",
+      "expired": "Road-condition assessment expired"
+    },
     "trafficDelay": "+{delay} traffic",
     "trafficDelayNormally": "normally {baseline}",
     "from": "from",
@@ -3574,6 +3603,31 @@
       "traffic_flow": "Traffic flow",
       "traffic_road-conditions": "Road conditions",
       "traffic_traffic-aware-routing": "Traffic-aware routing"
+    },
+    "roadConditions": {
+      "title": "Road-condition operations",
+      "status": "Poll status",
+      "changed": "Changed records",
+      "rejected": "Rejected records",
+      "failures": "Consecutive failures",
+      "graph": "Graph readiness",
+      "generation": "Imported graph generation",
+      "graphStatus": {
+        "ready": "Ready",
+        "partial": "Partial",
+        "missing": "Missing",
+        "unknown": "Unknown"
+      },
+      "binding": {
+        "exact": "Exact",
+        "likely": "Likely",
+        "ambiguous": "Ambiguous",
+        "unresolved": "Unresolved",
+        "noCoverage": "No graph coverage",
+        "unattempted": "Not attempted",
+        "obsolete": "Outdated",
+        "notApplicable": "Not applicable"
+      }
     }
   },
   "privacySetup": {
@@ -3736,7 +3790,10 @@
         "label": "From address",
         "description": "Sender address used by every notification provider."
       },
-      "emailLabsAppKey": { "label": "App key", "description": "EmailLabs application key." },
+      "emailLabsAppKey": {
+        "label": "App key",
+        "description": "EmailLabs application key."
+      },
       "emailLabsSecretKey": {
         "label": "Secret key",
         "description": "EmailLabs secret key; saved values are never returned."
@@ -3749,8 +3806,14 @@
         "label": "API token",
         "description": "Lettermint API token; saved values are never returned."
       },
-      "smtpHost": { "label": "SMTP host", "description": "Hostname of the fallback SMTP server." },
-      "smtpPort": { "label": "SMTP port", "description": "Port used by the fallback SMTP server." },
+      "smtpHost": {
+        "label": "SMTP host",
+        "description": "Hostname of the fallback SMTP server."
+      },
+      "smtpPort": {
+        "label": "SMTP port",
+        "description": "Port used by the fallback SMTP server."
+      },
       "smtpUser": {
         "label": "SMTP username",
         "description": "Username for the fallback SMTP server."
@@ -3772,7 +3835,11 @@
       "loadFailed": "Readiness could not be loaded.",
       "contactFullAdmin": "A full administrator must change platform settings or coordinate the required deployment review.",
       "technicalDetails": "Technical details",
-      "status": { "pass": "Pass", "warning": "Warning", "fail": "Action required" },
+      "status": {
+        "pass": "Pass",
+        "warning": "Warning",
+        "fail": "Action required"
+      },
       "unknown": {
         "title": "Additional deployment check",
         "description": "This server reported a check this interface does not recognize. Share the technical details with a full administrator."
@@ -3940,7 +4007,10 @@
     "challengeIssueFailed": "The verification code could not be sent. Check that this party has an authoritative email address and try again later.",
     "challengeCompleteFailed": "The code could not be verified. It may be incorrect, expired, or already used.",
     "accountLoginProofHelp": "For account-login proof, the subject must sign in again and complete the assisted proof from their own authenticated session.",
-    "parties": { "subject": "Subject", "representative": "Representative" },
+    "parties": {
+      "subject": "Subject",
+      "representative": "Representative"
+    },
     "loadFailed": "The privacy queue could not be loaded.",
     "caseFailed": "The case could not be loaded.",
     "actionFailed": "The privacy action could not be completed.",

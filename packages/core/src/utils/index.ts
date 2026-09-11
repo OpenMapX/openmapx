@@ -228,6 +228,10 @@ export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults, rankPoiResults } from "
 export { decodePolyline, encodePolyline } from "./polyline";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export {
+  getRoadConditionRoutingDecision,
+  isRoadConditionRoutingEvidence,
+} from "./roadConditionRouting";
+export {
   compareSearchSuggestions,
   isUppercaseAcronymIntent,
   mergeAutocompleteSuggestions,

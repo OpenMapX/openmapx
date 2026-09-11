@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+import { readTrafficProof } from "./traffic-proof.js";
 /**
  * Valhalla multi-modal routing service client (walking, cycling).
  * Default: Stadia Maps' hosted Valhalla (needs a key). Override via the
@@ -142,6 +144,7 @@ interface ValhallaTrip {
 }
 
 interface ValhallaResponse {
+  openmapx_traffic_proof?: unknown;
   trip: ValhallaTrip;
   alternates?: Array<{ trip: ValhallaTrip }>;
 }
@@ -493,6 +496,28 @@ export function buildCostingOptions(
   return costingOptions;
 }
 
+function buildClosureSafeCostingOptions(
+  options: RoutingOptions,
+  mode: TravelMode,
+): { costingOptions: Record<string, unknown>; usesCurrentClosures: boolean } {
+  const usesCurrentClosures =
+    options.useLiveTraffic === true &&
+    (mode === "driving" || mode === "motorcycle") &&
+    !options.departAt &&
+    !options.arriveBy;
+  const costingOptions = buildCostingOptions(
+    { ...options, useLiveTraffic: usesCurrentClosures },
+    COSTING_MAP[mode],
+  );
+
+  // A current live tile contains closure bits as well as speeds. Valhalla
+  // otherwise applies those bits to explicit future requests, while bike and
+  // pedestrian costings do not reliably apply them at all. Make every request
+  // outside the verified depart-now motorised envelope ignore binary closures.
+  costingOptions.ignore_closures = !usesCurrentClosures;
+  return { costingOptions, usesCurrentClosures };
+}
+
 /** Speed sources for the comparison recosting: everything except live traffic. */
 const BASELINE_SPEED_TYPES = ["freeflow", "constrained", "predicted"];
 
@@ -631,7 +656,8 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
-    const costingOptions = buildCostingOptions(options, COSTING_MAP[mode]);
+    const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
+    const effectiveTrafficOptions = { ...options, useLiveTraffic: usesCurrentClosures };
 
     const locations = buildLocations(waypoints, options);
 
@@ -648,7 +674,7 @@ export const valhallaService: RoutingProvider = {
       elevation_interval: ELEVATION_INTERVAL,
       ...buildExclusions(options),
       ...buildTrafficRequestExtras(
-        options,
+        effectiveTrafficOptions,
         COSTING_MAP[mode],
         costingOptions,
         waypoints.length,
@@ -661,6 +687,9 @@ export const valhallaService: RoutingProvider = {
       body.alternates = REQUESTED_ALTERNATES;
     }
 
+    const requestId = randomUUID();
+    const startedAt = Date.now();
+    if (usesCurrentClosures) body.openmapx_request_id = requestId;
     const data = await fetchJson<ValhallaResponse>(endpoint("/route"), {
       timeoutMs: 15_000,
       userAgent: null,
@@ -669,6 +698,16 @@ export const valhallaService: RoutingProvider = {
       init: { method: "POST", body: JSON.stringify(body) },
     });
     const travelMode = mode as TravelMode;
+    const trafficProof =
+      usesCurrentClosures && !/(^|\.)stadiamaps\.com$/.test(new URL(VALHALLA_URL).hostname)
+        ? readTrafficProof(
+            data.openmapx_traffic_proof,
+            requestId,
+            "route",
+            COSTING_MAP[mode],
+            startedAt,
+          )
+        : undefined;
 
     const routes: Route[] = [transformTrip(data.trip, travelMode)];
     if (data.alternates) {
@@ -676,6 +715,8 @@ export const valhallaService: RoutingProvider = {
         routes.push(transformTrip(alt.trip, travelMode));
       }
     }
+
+    if (trafficProof) for (const route of routes) route.trafficProof = trafficProof;
 
     return {
       waypoints,
@@ -689,7 +730,7 @@ export const valhallaService: RoutingProvider = {
     mode: TravelMode,
     options: RoutingOptions = {},
   ): Promise<DirectionsResult> {
-    const costingOptions = buildCostingOptions(options, COSTING_MAP[mode]);
+    const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
 
     const locations = waypoints.map((wp) => ({
       lon: wp[0],
@@ -711,6 +752,9 @@ export const valhallaService: RoutingProvider = {
       ...buildExclusions(options),
     };
 
+    const requestId = randomUUID();
+    const startedAt = Date.now();
+    if (usesCurrentClosures) body.openmapx_request_id = requestId;
     const data = await fetchJson<ValhallaResponse>(endpoint("/optimized_route"), {
       timeoutMs: 15_000,
       userAgent: null,
@@ -719,12 +763,24 @@ export const valhallaService: RoutingProvider = {
       init: { method: "POST", body: JSON.stringify(body) },
     });
     const travelMode = mode as TravelMode;
+    const trafficProof =
+      usesCurrentClosures && !/(^|\.)stadiamaps\.com$/.test(new URL(VALHALLA_URL).hostname)
+        ? readTrafficProof(
+            data.openmapx_traffic_proof,
+            requestId,
+            "optimized_route",
+            COSTING_MAP[mode],
+            startedAt,
+          )
+        : undefined;
 
     const routes: Route[] = [transformTrip(data.trip, travelMode)];
 
     // Extract optimized order from trip.locations[].original_index
     const optimizedOrder =
       data.trip.locations?.map((loc) => loc.original_index ?? 0) ?? waypoints.map((_, i) => i);
+
+    if (trafficProof) for (const route of routes) route.trafficProof = trafficProof;
 
     return {
       waypoints,

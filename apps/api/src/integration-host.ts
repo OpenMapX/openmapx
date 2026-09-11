@@ -379,6 +379,17 @@ export function setDisallowedSourceResolver(fn: () => Promise<Set<string>>): voi
   disallowedSourceResolver = fn;
 }
 
+/** Policy authority is injected alongside source filtering to avoid a host/service cycle. */
+let roadConditionsPolicyResolver: NonNullable<
+  IntegrationContext["getRoadConditionsPolicySnapshot"]
+> | null = null;
+
+export function setRoadConditionsPolicyResolver(
+  fn: NonNullable<IntegrationContext["getRoadConditionsPolicySnapshot"]>,
+): void {
+  roadConditionsPolicyResolver = fn;
+}
+
 /**
  * Resolver for the data-use policy's disallowed *integration* set (every data
  * source fully gated), injected by server.ts alongside the source resolver. The
@@ -583,6 +594,11 @@ function buildIntegrationContext(args: {
       return disallowedSourceResolver
         ? disallowedSourceResolver()
         : Promise.resolve(new Set<string>());
+    },
+    async getRoadConditionsPolicySnapshot() {
+      return roadConditionsPolicyResolver
+        ? roadConditionsPolicyResolver()
+        : { authoritative: false, revision: "", validUntil: null, disallowedSourceIds: [] };
     },
     getDisallowedIntegrationIds() {
       return disallowedIntegrationResolver

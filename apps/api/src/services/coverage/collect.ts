@@ -7,7 +7,11 @@ import {
   type StreamEvidence,
 } from "@openmapx/core/coverage";
 import { services } from "@openmapx/core/server";
-import type { LoadedIntegration, ProviderHealthSnapshot } from "@openmapx/integration-framework";
+import type {
+  LoadedIntegration,
+  ProviderHealthSnapshot,
+  RoadConditionsProvider,
+} from "@openmapx/integration-framework";
 import { getAllIntegrations } from "../../integration-host.js";
 import { loadAllBindingsByIntegration } from "../capability-bindings.js";
 import { type DataUsePolicy, getDataUsePolicy } from "../data-use-policy.js";
@@ -27,6 +31,7 @@ import {
   type CoverageCatalog,
   type CoverageProviderDescriptor,
 } from "./catalog.js";
+import { roadConditionStreams } from "./road-conditions.js";
 
 const RUNTIME_MAX_AGE_MS = 120_000;
 const PASSIVE_HEALTH_MAX_AGE_MS = 300_000;
@@ -316,6 +321,22 @@ export async function collectCoverageData(
         options.providerHealth === undefined ? getProviderHealth() : options.providerHealth;
       return health ? health.peekMany(safeProviderIds(catalog)) : null;
     }),
+    boundedRead(async () => {
+      const providers = catalog.providers
+        .filter(
+          (p) =>
+            p.kind === "road-conditions" &&
+            p.enabled &&
+            (p.provider as RoadConditionsProvider).getOperationalEvidence,
+        )
+        .slice(0, 32);
+      return Promise.allSettled(
+        providers.map(async (p) => ({
+          owner: p.integrationId,
+          snapshot: await (p.provider as RoadConditionsProvider).getOperationalEvidence!(),
+        })),
+      );
+    }),
   ]);
   let data: DataManagerEvidenceSnapshot;
   try {
@@ -423,6 +444,26 @@ export async function collectCoverageData(
   }
 
   const streams = addCatalogStreams(integrations, data.evidence, generatedAt);
+  const roadReads = reads[4];
+  if (roadReads.status === "fulfilled") {
+    for (const read of roadReads.value) {
+      try {
+        if (read.status === "rejected") throw read.reason;
+        streams.push(...roadConditionStreams(read.value.owner, read.value.snapshot));
+        if (read.value.snapshot.truncated) {
+          collectionStatus = "partial";
+          warnings.push("evidence_truncated");
+        }
+      } catch {
+        collectionStatus = "partial";
+        warnings.push("collector_unavailable");
+      }
+    }
+  } else {
+    collectionStatus = "partial";
+    warnings.push("collector_unavailable");
+  }
+
   const catalogWithServiceRights: CoverageCatalog = {
     ...catalog,
     rights: [...catalog.rights, ...(data.rights ?? [])].sort((a, b) => a.key.localeCompare(b.key)),

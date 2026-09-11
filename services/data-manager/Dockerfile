@@ -281,4 +281,4 @@ HEALTHCHECK --interval=30s --timeout=5s --retries=3 CMD ["curl", "-fs", "http://
 # `--import tsx/esm` lets the compiled dist entry reach back into
 # @openmapx/db-schema's, @openmapx/hardlinks's, and
 # @openmapx/motis-feed-proxy-config's .ts source without a separate build step.
-CMD ["node", "--import", "tsx/esm", "dist/index.js"]
+CMD ["node", "--import", "tsx/esm", "dist/supervisor.js"]

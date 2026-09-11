@@ -50,13 +50,9 @@ function fetchReturning(body: unknown, status = 200): typeof fetch {
 }
 
 describe("traceSpanEdges", () => {
-  it("returns only edges Valhalla matched that the way→edge map lists for this way and direction", async () => {
+  it("accepts a complete trace matching the bound way and direction", async () => {
     const f = fetchReturning({
-      edges: [
-        { id: gid(0, 1, 7), way_id: 10 },
-        { id: gid(0, 1, 6), way_id: 10 },
-        { id: gid(0, 1, 9), way_id: 99 },
-      ],
+      edges: [{ id: gid(0, 1, 7), way_id: 10 }],
       matched_points: [
         { type: "matched", edge_index: 0 },
         { type: "matched", edge_index: 0 },
@@ -87,7 +83,7 @@ describe("traceSpanEdges", () => {
         ...deps,
         fetch: fetchReturning({
           edges: [{ id: gid(0, 1, 6), way_id: 10 }],
-          matched_points: [{ type: "matched" }],
+          matched_points: [{ type: "matched" }, { type: "matched" }],
         }),
       }),
     ).toBeNull(); // wrong direction only
@@ -102,6 +98,37 @@ describe("traceSpanEdges", () => {
     ).toBeNull();
     expect(
       await traceSpanEdges({ ...span, geometry: null }, { ...deps, fetch: fetchReturning({}) }),
+    ).toBeNull();
+  });
+
+  it.each([
+    { id: gid(0, 1, 6), way_id: 10 },
+    { id: gid(0, 1, 9), way_id: 99 },
+    { id: gid(0, 1, 99), way_id: 10 },
+    { id: "invalid", way_id: 10 },
+  ])("rejects an incomplete trace instead of accepting its valid subset: %j", async (badEdge) => {
+    expect(
+      await traceSpanEdges(span, {
+        valhallaUrl: "http://v:8002",
+        waysToEdges: W2E,
+        fetch: fetchReturning({
+          edges: [{ id: gid(0, 1, 7), way_id: 10 }, badEdge],
+          matched_points: [{ type: "matched" }, { type: "matched" }],
+        }),
+      }),
+    ).toBeNull();
+  });
+
+  it("rejects even one unmatched point in a partial-span trace", async () => {
+    expect(
+      await traceSpanEdges(span, {
+        valhallaUrl: "http://v:8002",
+        waysToEdges: W2E,
+        fetch: fetchReturning({
+          edges: [{ id: gid(0, 1, 7), way_id: 10 }],
+          matched_points: [{ type: "matched" }, { type: "unmatched" }],
+        }),
+      }),
     ).toBeNull();
   });
 
@@ -135,7 +162,7 @@ describe("traceSpanEdges", () => {
     const deps = { valhallaUrl: "http://v:8002", waysToEdges: W2E };
     const unknownWay = fetchReturning({
       edges: [{ id: gid(0, 1, 7), way_id: 42 }],
-      matched_points: [{ type: "matched" }],
+      matched_points: [{ type: "matched" }, { type: "matched" }],
     });
     expect(await traceSpanEdges({ ...span, wayId: 42 }, { ...deps, fetch: unknownWay })).toBeNull();
     expect((unknownWay as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(0);
@@ -146,7 +173,6 @@ describe("traceSpanEdges", () => {
       edges: [
         { id: gid(0, 1, 6), way_id: 10 },
         { id: gid(0, 1, 6), way_id: 10 },
-        { id: gid(0, 1, 7), way_id: 10 },
       ],
       matched_points: [{ type: "matched" }, { type: "interpolated" }],
     });
@@ -171,10 +197,26 @@ describe("resolveSpanEdges", () => {
     segments: [span],
   };
 
+  it("does not reuse persisted verdicts from the permissive trace policy", async () => {
+    const oldKey = spanKey("a:1", span).replace(/^trace-v2\|/, "");
+    const cache: SpanEdgeCache = new Map([
+      [oldKey, [{ forward: true, level: 0, tile: 1, index: 7 }]],
+    ]);
+    const trace = vi.fn().mockResolvedValue(null);
+    const result = await resolveSpanEdges(
+      [cond],
+      cache,
+      { valhallaUrl: "http://v:8002", waysToEdges: W2E },
+      trace,
+    );
+    expect(result).toMatchObject({ cacheHits: 0, traced: 1, negative: 1 });
+    expect(spanKey("a:1", span)).toMatch(/^trace-v2\|/);
+  });
+
   it("traces uncached spans once, then serves from cache (including negative results)", async () => {
     const f = fetchReturning({
       edges: [{ id: gid(0, 1, 7), way_id: 10 }],
-      matched_points: [{ type: "matched" }],
+      matched_points: [{ type: "matched" }, { type: "matched" }],
     });
     const cache: SpanEdgeCache = new Map();
     const a = await resolveSpanEdges([cond], cache, {

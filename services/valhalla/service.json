@@ -34,14 +34,32 @@
       "interval": "30s",
       "timeout": "10s",
       "retries": 5
-    }
+    },
+    "entrypoint": ["python3", "/opt/openmapx/traffic-watchdog.py"],
+    "command": ["build_tiles"]
   },
   "provides": ["routing-engine"],
-  "consumes": [{ "type": "osm-pbf", "mountAt": "/custom_files", "required": true }],
+  "consumes": [
+    {
+      "type": "osm-pbf",
+      "mountAt": "/custom_files",
+      "required": true
+    }
+  ],
   "bindMounts": [
     {
       "source": "config/valhalla.json",
       "target": "/custom_files/valhalla.json",
+      "readOnly": false
+    },
+    {
+      "source": "scripts/traffic-watchdog.py",
+      "target": "/opt/openmapx/traffic-watchdog.py",
+      "readOnly": true
+    },
+    {
+      "source": "@infra:data/traffic",
+      "target": "/traffic-state",
       "readOnly": false
     }
   ],
@@ -61,7 +79,16 @@
     }
   },
   "exposure": {
-    "hostPorts": [{ "container": 8002, "host": 8002, "bindAddress": "127.0.0.1" }]
+    "hostPorts": [
+      {
+        "container": 8002,
+        "host": 8002,
+        "bindAddress": "127.0.0.1"
+      }
+    ]
   },
-  "ui": { "category": "routing", "icon": "icons/valhalla.svg" }
+  "ui": {
+    "category": "routing",
+    "icon": "icons/valhalla.svg"
+  }
 }

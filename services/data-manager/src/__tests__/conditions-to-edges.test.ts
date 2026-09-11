@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   type BoundCondition,
   type BoundSpan,
@@ -8,6 +8,13 @@ import {
   spanKey,
 } from "../jobs/traffic/conditions-to-edges.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
+import { event } from "./fixtures/road-condition.js";
+
+beforeEach(() => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-09-11T12:00:00Z"));
+});
+afterEach(() => vi.useRealTimers());
 
 const W2E = new Map<number, WayEdge[]>([
   [
@@ -26,10 +33,12 @@ const GEOM: [number, number][] = [
   [6.81, 51.2],
 ];
 
-const SPAN: BoundSpan = { wayId: 10, dir: "f", startFraction: 0.3, endFraction: 1, geometry: GEOM };
+const SPAN: BoundSpan = { wayId: 10, dir: "f", startFraction: 0, endFraction: 1, geometry: GEOM };
 
 function cond(over: Partial<BoundCondition> = {}): BoundCondition {
   return {
+    source: "fr",
+    routingEvidence: event().routingEvidence,
     id: "a:1",
     type: "road_closure",
     roadState: "closed",
@@ -44,7 +53,41 @@ function cond(over: Partial<BoundCondition> = {}): BoundCondition {
 }
 
 describe("parseConditionsJson", () => {
-  it("parses snake_case rows into BoundCondition and drops malformed ones", () => {
+  it("rejects malformed evidence and disagreement with projected spans atomically", () => {
+    const row = {
+      id: "a:1",
+      type: "road_closure",
+      binding: { status: "exact" },
+      routing_evidence: event().routingEvidence,
+      segments: [
+        {
+          way_id: 10,
+          dir: "f",
+          start_fraction: 0,
+          end_fraction: 1,
+          geometry: { type: "LineString", coordinates: GEOM },
+        },
+      ],
+    };
+    const parse = (routing_evidence: unknown) =>
+      parseConditionsJson(
+        JSON.stringify({
+          schema_version: 1,
+          complete: true,
+          conditions: [{ ...row, routing_evidence }],
+        }),
+      );
+    expect(() => parse({ ...row.routing_evidence, segments: [null] })).toThrow();
+    expect(() => parse({ ...row.routing_evidence, fresh_until: "yesterday" })).toThrow();
+    expect(() =>
+      parse({
+        ...row.routing_evidence,
+        segments: [{ segment_id: "10", direction: "reverse", from_fraction: 0, to_fraction: 1 }],
+      }),
+    ).toThrow();
+  });
+
+  it("parses valid snake_case rows into BoundCondition", () => {
     const body = JSON.stringify({
       resolver_version: "1.0.0",
       conditions: [
@@ -67,12 +110,6 @@ describe("parseConditionsJson", () => {
             },
             { way_id: 11, dir: "f", start_fraction: 0, end_fraction: 1, geometry: null },
           ],
-        },
-        {
-          id: "bad",
-          type: "road_closure",
-          binding: { status: "exact" },
-          segments: [{ way_id: "x", dir: "f" }],
         },
       ],
     });
@@ -148,14 +185,7 @@ describe("parseConditionsJson", () => {
         },
       ],
     });
-    const out = parseConditionsJson(body);
-    expect(out.conditions).toHaveLength(1);
-    expect(out.conditions[0]?.segments[0]?.geometry).toBeNull();
-
-    const r = conditionsToEdges(out.conditions, W2E);
-    expect([...r.overrides.keys()].sort()).toEqual(["0:1:5", "0:1:7"]);
-    expect(r.wholeWaySpans).toBe(1);
-    expect(r.appliedObservationIds).toEqual(new Set(["a:1"]));
+    expect(() => parseConditionsJson(body)).toThrow("Invalid condition spans");
   });
 
   it("treats a row without origin_kind as crowd, so it needs routing_eligible to apply", () => {
@@ -180,20 +210,17 @@ describe("parseConditionsJson", () => {
       JSON.stringify({ conditions: [row({ routing_eligible: true })] }),
     );
     const eligibleResult = conditionsToEdges(eligible.conditions, W2E);
-    expect(eligibleResult.appliedObservationIds).toEqual(new Set(["no-origin"]));
+    expect(eligibleResult.appliedObservationIds.size).toBe(0);
     expect(eligibleResult.skipped.crowdNotEligible).toBe(0);
   });
 
-  it("returns nothing for a payload without a conditions array", () => {
-    expect(parseConditionsJson(JSON.stringify({ resolver_version: 3 }))).toEqual({
-      conditions: [],
-      resolverVersion: null,
-    });
+  it("rejects a payload without a conditions array", () => {
+    expect(() => parseConditionsJson(JSON.stringify({ resolver_version: 3 }))).toThrow();
   });
 });
 
 describe("conditionsToEdges", () => {
-  it("without resolved edges, closes every forward edge of the way (whole-way fallback) and records the id as applied", () => {
+  it("uses a proven full-way mapping and records its complete effect", () => {
     const r = conditionsToEdges([cond()], W2E);
     expect([...r.overrides.keys()].sort()).toEqual(["0:1:5", "0:1:7"]);
     expect(r.overrides.get("0:1:5")).toMatchObject({ closed: true, observationId: "a:1" });
@@ -308,5 +335,45 @@ describe("conditionsToEdges", () => {
   });
   it("edgeKey is stable", () => {
     expect(edgeKey({ level: 0, tile: 1, index: 5 })).toBe("0:1:5");
+  });
+});
+
+describe("versioned road condition safety", () => {
+  it("does not widen a failed partial trace to a whole way", () => {
+    const result = conditionsToEdges(
+      [cond({ segments: [{ ...SPAN, startFraction: 0.3 }] })],
+      W2E,
+      undefined,
+      { evaluatedAt: Date.parse("2026-09-11T12:00:00Z") },
+    );
+    expect(result.overrides.size).toBe(0);
+  });
+  it("withholds the whole event if any intended span is absent", () => {
+    const c = cond({
+      segments: [
+        { ...SPAN, startFraction: 0 },
+        { ...SPAN, wayId: 999 },
+      ],
+    });
+    expect(
+      conditionsToEdges([c], W2E, undefined, { evaluatedAt: Date.parse("2026-09-11T12:00:00Z") })
+        .overrides.size,
+    ).toBe(0);
+  });
+  it("does not apply legacy or expired evidence", () => {
+    expect(conditionsToEdges([cond({ routingEvidence: undefined })], W2E).overrides.size).toBe(0);
+    expect(
+      conditionsToEdges([cond()], W2E, undefined, {
+        evaluatedAt: Date.parse("2026-09-11T12:10:00Z"),
+      }).overrides.size,
+    ).toBe(0);
+  });
+  it.each([
+    {},
+    { conditions: {} },
+    { conditions: [null] },
+    { schema_version: 1, complete: false, conditions: [] },
+  ])("rejects a malformed or partial snapshot %j", (payload) => {
+    expect(() => parseConditionsJson(JSON.stringify(payload))).toThrow();
   });
 });

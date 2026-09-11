@@ -32,14 +32,14 @@ const WHOLE_EDGE_BREAKPOINT = 255;
 
 /**
  * Encodes a live speed (km/h) as an 8-byte little-endian `TrafficSpeed`
- * record. `null` (and any negative or non-finite input, which is treated the
+ * record. `null` (and any unrepresentable sub-2 km/h or non-finite input, treated the
  * same as `null`) produces the "unknown" sentinel record — used to clear a
  * previously-written edge back to "no live data".
  */
 export function encodeTrafficSpeed(kph: number | null): Buffer {
   const buf = Buffer.alloc(8);
 
-  const isUnknown = kph === null || !Number.isFinite(kph) || kph < 0;
+  const isUnknown = kph === null || !Number.isFinite(kph) || kph < 2;
 
   const overallEncodedSpeed = isUnknown
     ? UNKNOWN_TRAFFIC_SPEED_RAW

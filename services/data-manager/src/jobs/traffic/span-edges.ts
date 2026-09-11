@@ -21,7 +21,7 @@ export interface SpanEdgesDeps {
   logger?: { warn: (m: string, extra?: Record<string, unknown>) => void };
 }
 
-/** `spanKey` → accepted edges; `null` = traced but nothing accepted (whole-way fallback). */
+/** `spanKey` → accepted edges; `null` = trace cannot prove the complete span. */
 export type SpanEdgeCache = Map<string, WayEdge[] | null>;
 
 const DEFAULT_TIMEOUT_MS = 5_000;
@@ -30,8 +30,7 @@ const DEFAULT_CONCURRENCY = 4;
  * Half the live-traffic cycle's 2-minute cadence, minus room for the fetch and
  * the write it shares that cycle with. Deliberately a constant and not an
  * operator knob: it protects an invariant (the live-speed write happens every
- * cycle), and lowering tracing throughput only costs precision — untraced
- * spans simply close their whole way.
+ * cycle), and untraced partial spans remain unapplied.
  */
 const SPAN_TRACE_BUDGET_MS = 30_000;
 
@@ -66,10 +65,9 @@ export interface ResolveSpanEdgesResult {
 }
 
 /**
- * Asks Valhalla which of its edges the span geometry covers and keeps only
- * those the way→edge map lists for this way in the bound direction. The caller
- * closes the whole way in that direction (conservative) for anything but a
- * non-empty result.
+ * Asks Valhalla which edges the complete span geometry covers. Every returned
+ * edge must match the bound way and direction; accepting a subset would hide
+ * incomplete coverage. Partial spans without a complete result remain unapplied.
  *
  * `null` is a verdict about the span — traced, nothing acceptable — and is
  * safe to cache. `undefined` means the question went unanswered (the routing
@@ -106,8 +104,7 @@ export async function traceSpanEdges(
     });
     // Every non-2xx is treated as "no answer": a 503 is plainly transient, and
     // even a 400 can come from a container that has not finished loading its
-    // tiles. Caching either as a verdict would freeze the span into the
-    // whole-way fallback for as long as the condition lives.
+    // tiles. Caching either as a verdict would leave the span unapplied for as long as the condition lives.
     if (!res.ok) return undefined;
     data = (await res.json()) as TraceResponse;
   } catch (err) {
@@ -119,20 +116,23 @@ export async function traceSpanEdges(
   }
 
   const points = data.matched_points ?? [];
-  const unmatched = points.filter((p) => p.type === "unmatched").length;
-  // A trace whose points mostly failed to snap describes some other road.
-  if (points.length > 0 && unmatched * 2 > points.length) return null;
+  // Every supplied geometry point must match; a partial trace is not proof.
+  if (
+    points.length !== span.geometry.length ||
+    points.some((p) => p.type !== "matched" && p.type !== "interpolated")
+  )
+    return null;
 
   const forward = span.dir === "f";
   const accepted: WayEdge[] = [];
   const seen = new Set<string>();
   for (const edge of data.edges ?? []) {
-    if (edge.id == null || Number(edge.way_id) !== span.wayId) continue;
+    if (edge.id == null || Number(edge.way_id) !== span.wayId) return null;
     let decoded: { level: number; tile: number; index: number };
     try {
       decoded = decodeGraphId(BigInt(edge.id));
     } catch {
-      continue;
+      return null;
     }
     const match = wayEdges.find(
       (candidate) =>
@@ -141,7 +141,7 @@ export async function traceSpanEdges(
         candidate.index === decoded.index &&
         candidate.forward === forward,
     );
-    if (!match) continue;
+    if (!match) return null;
     const key = `${decoded.level}:${decoded.tile}:${decoded.index}`;
     if (seen.has(key)) continue;
     seen.add(key);
@@ -157,9 +157,9 @@ export async function traceSpanEdges(
  * `saveSpanEdgeCache` drops the entry once the span stops being referenced. A
  * transport failure (`unanswered`) and a span dropped for want of budget
  * (`skippedBudget`) are NOT cached, so both are retried on the next cycle
- * instead of being pinned to the whole-way fallback by one bad minute. Never
- * throws — a span that cannot be resolved simply has no entry in `resolved`,
- * which the consumer reads as "close the whole way".
+ * instead of being pinned to a negative result by one bad minute. Never
+ * throws — unresolved partial spans have no entry in `resolved` and remain
+ * unapplied; only proven whole-way spans can use the caller’s whole-way map.
  */
 export async function resolveSpanEdges(
   conditions: BoundCondition[],
@@ -178,7 +178,10 @@ export async function resolveSpanEdges(
     if (!isRoutingRelevantBinding(condition.bindingStatus)) continue;
     if (condition.originKind !== "feed" && !condition.routingEligible) continue;
     for (const span of condition.segments) {
-      const key = spanKey(condition.id, span);
+      const key = spanKey(
+        condition.cacheGeneration ? `${condition.cacheGeneration}:${condition.id}` : condition.id,
+        span,
+      );
       if (cache.has(key)) {
         cacheHits++;
         const hit = cache.get(key);

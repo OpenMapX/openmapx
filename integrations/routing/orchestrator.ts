@@ -76,26 +76,30 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
     return orderByPreference(collectProviders().filter((e) => matches(e.provider, mode, filters)));
   }
 
-  function getOptimizeProvider(
+  function getOptimizeProviders(
     mode: TravelMode,
     filters: ProviderFilters = {},
-  ): ResolvedProvider | null {
+  ): ResolvedProvider[] {
     const providers = orderByPreference(collectProviders());
-
-    for (const entry of providers) {
-      if (entry.provider.optimizeRoute && matches(entry.provider, mode, filters)) return entry;
-    }
+    const matching = providers.filter(
+      (entry) => entry.provider.optimizeRoute && matches(entry.provider, mode, filters),
+    );
+    if (matching.length > 0) return matching;
 
     // Cross-mode fallback only kicks in when no time-awareness is required —
     // returning a non-matching-mode provider for a timed request would
     // re-introduce the silent-drop bug.
     if (!filters.requireTimeAware) {
-      for (const entry of providers) {
-        if (entry.provider.optimizeRoute) return entry;
-      }
+      return providers.filter((entry) => entry.provider.optimizeRoute);
     }
+    return [];
+  }
 
-    return null;
+  function getOptimizeProvider(
+    mode: TravelMode,
+    filters: ProviderFilters = {},
+  ): ResolvedProvider | null {
+    return getOptimizeProviders(mode, filters)[0] ?? null;
   }
 
   function getMatchProvider(mode: TravelMode): ResolvedProvider | null {
@@ -106,5 +110,11 @@ export function createRoutingOrchestrator(ctx: IntegrationContext) {
     return null;
   }
 
-  return { getRoutingProvider, getRoutingProviders, getOptimizeProvider, getMatchProvider };
+  return {
+    getRoutingProvider,
+    getRoutingProviders,
+    getOptimizeProvider,
+    getOptimizeProviders,
+    getMatchProvider,
+  };
 }

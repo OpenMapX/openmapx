@@ -14,6 +14,21 @@ vi.mock("../ops-client.js", () => ({
 import { type CronSetupOptions, setupCron } from "../cron.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
 import type { WriteLiveTrafficDeps, WriteLiveTrafficResult } from "../jobs/traffic/write-live.js";
+import { event } from "./fixtures/road-condition.js";
+
+function liveEvidence(startFraction = 0) {
+  const evidence = event().routingEvidence;
+  if (!evidence) throw new Error("Missing fixture routing evidence");
+  return {
+    ...evidence,
+    segments: evidence.segments.map((span) => ({
+      ...span,
+      from_fraction: startFraction,
+    })),
+    source_checked_at: new Date(Date.now() - 60_000).toISOString(),
+    fresh_until: new Date(Date.now() + 1_200_000).toISOString(),
+  };
+}
 
 const OPEN_CONDITIONS_URL = "http://openconditions-ingest:8080";
 const HEADER_ONLY_CSV = "way_id,dir,current_kph,free_flow_kph,los\n";
@@ -30,6 +45,8 @@ function closureFeed(): string {
         origin_kind: "feed",
         routing_eligible: true,
         binding: { status: "exact" },
+        source: "fr",
+        routing_evidence: liveEvidence(),
         segments: [{ way_id: 10, dir: "f", start_fraction: 0, end_fraction: 1, geometry: null }],
       },
     ],
@@ -46,6 +63,8 @@ function twoClosureFeed(): string {
     origin_kind: "feed",
     routing_eligible: true,
     binding: { status: "exact" },
+    source: "fr",
+    routing_evidence: liveEvidence(),
     segments: [{ way_id: 20, dir: "f", start_fraction: 0, end_fraction: 1, geometry: null }],
   });
   return JSON.stringify(first);
@@ -67,6 +86,8 @@ function closureFeedWithGeometry(): string {
         origin_kind: "feed",
         routing_eligible: true,
         binding: { status: "exact" },
+        source: "fr",
+        routing_evidence: liveEvidence(0.5),
         segments: [
           {
             way_id: 10,
@@ -125,6 +146,9 @@ function writeResult(deps: WriteLiveTrafficDeps): WriteLiveTrafficResult {
 }
 
 interface Seams {
+  readTrafficGraphState?: CronSetupOptions["readTrafficGraphState"];
+  roadConditionsMode?: "shadow" | "active";
+  fetchLiveTrafficCsv?: () => Promise<string>;
   fetchConditionsJson?: () => Promise<string>;
   loadWaysToEdges?: () => Promise<Map<number, WayEdge[]>>;
   writeLiveTraffic?: (deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>;
@@ -155,8 +179,20 @@ function setupCronWithSeams(seams: Seams) {
     trafficLiveCronExpression: "disabled",
     trafficPredictedCronExpression: "disabled",
     openConditionsUrl: OPEN_CONDITIONS_URL,
+    roadConditionsMode: seams.roadConditionsMode ?? "active",
+    readTrafficGraphState:
+      seams.readTrafficGraphState ??
+      (async () => ({
+        generation: "fixture-engine-epoch",
+        engineBootId: "e2630bd0-5a85-4c93-9b7d-cf174bd0dd45",
+      })),
+    fetchTrafficPolicy: async () => ({
+      revision: "p1",
+      validUntil: new Date(Date.now() + 150_000).toISOString(),
+      disallowedSourceIds: [],
+    }),
     trafficTarPath: "/data/osm/traffic.tar",
-    fetchLiveTrafficCsv: async () => HEADER_ONLY_CSV,
+    fetchLiveTrafficCsv: seams.fetchLiveTrafficCsv ?? (async () => HEADER_ONLY_CSV),
     fetchConditionsJson: seams.fetchConditionsJson ?? (async () => closureFeed()),
     loadWaysToEdges: seams.loadWaysToEdges ?? (async () => waysToEdgesWithWay10()),
     writeLiveTraffic: seams.writeLiveTraffic ?? (async (deps) => writeResult(deps)),
@@ -179,8 +215,38 @@ async function flush(): Promise<void> {
 }
 
 describe("traffic-live conditions merge", () => {
+  it("keeps shadow candidates out of the shared graph and applied receipts", async () => {
+    const write = vi.fn(async (deps: WriteLiveTrafficDeps) => writeResult(deps));
+    const cron = setupCronWithSeams({ roadConditionsMode: "shadow", writeLiveTraffic: write });
+    await cron.runTrafficLiveNow();
+    expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
+    expect(cron.getTrafficConditionsApplied().observationIds).toEqual([]);
+    cron.stop();
+  });
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  it("withholds the old edge map when maintenance completes while loading it", async () => {
+    let generation = "before";
+    const write = vi.fn(async (deps: WriteLiveTrafficDeps) => writeResult(deps));
+    const handles = setupCronWithSeams({
+      readTrafficGraphState: async () => ({
+        generation,
+        engineBootId: "e2630bd0-5a85-4c93-9b7d-cf174bd0dd45",
+      }),
+      loadWaysToEdges: async () => {
+        generation = "after";
+        return waysToEdgesWithWay10();
+      },
+      writeLiveTraffic: write,
+    });
+    await handles.runTrafficLiveNow();
+    expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
+    expect(write.mock.calls[0]?.[0].waysToEdges.size).toBe(0);
+    expect(handles.getTrafficConditionsApplied().receipts).toEqual([]);
+    expect(handles.getTrafficConditionsApplied().engineBootId).toBeNull();
+    handles.stop();
   });
 
   it("passes closure overrides to the writer and exposes the applied set", async () => {
@@ -198,7 +264,34 @@ describe("traffic-live conditions merge", () => {
     expect(applied.observationIds).toEqual(["a:1"]);
     expect(applied.writtenAt).not.toBeNull();
     expect(applied.resolverVersion).toBe("r1");
+    expect(applied).toMatchObject({
+      mode: "active",
+      writeId: call?.writeId,
+      engineBootId: call?.engineBootId,
+      graphGeneration: call?.graphGeneration,
+    });
+    expect(applied.writeId).toMatch(/^[0-9a-f-]{36}$/);
+    expect(applied.engineBootId).toBe("e2630bd0-5a85-4c93-9b7d-cf174bd0dd45");
 
+    handles.stop();
+  });
+
+  it("withholds effects when tracing crosses the last-good deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-06T00:00:00.000Z"));
+    const write = vi.fn(async (deps: WriteLiveTrafficDeps) => writeResult(deps));
+    const handles = setupCronWithSeams({
+      fetchConditionsJson: async () => closureFeedWithGeometry(),
+      writeLiveTraffic: write,
+      trafficConditionsStaleMs: 600_000,
+      traceSpanEdges: async () => {
+        vi.advanceTimersByTime(600_001);
+        return [{ forward: true, level: 0, tile: 1, index: 2 }];
+      },
+    });
+    await handles.runTrafficLiveNow();
+    expect(write.mock.calls[0]?.[0].overrides?.size).toBe(0);
+    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([]);
     handles.stop();
   });
 
@@ -229,6 +322,8 @@ describe("traffic-live conditions merge", () => {
     await handles.runTrafficLiveNow();
     expect(writeLive.mock.calls[1]?.[0].overrides?.get("0:1:2")).toMatchObject({ closed: true });
     expect(handles.getTrafficConditionsApplied().observationIds).toEqual(["a:1"]);
+    expect(writeLive.mock.calls[1]?.[0].validUntil).toBe("2026-09-06T00:10:00.000Z");
+    expect(handles.getTrafficConditionsApplied().validUntil).toBe("2026-09-06T00:10:00.000Z");
 
     // Past the window the closures are dropped rather than held open forever.
     vi.advanceTimersByTime(2);
@@ -333,7 +428,7 @@ describe("traffic-live conditions merge", () => {
     handles.stop();
   });
 
-  it("falls back to whole-way when the trace seam returns null", async () => {
+  it("withholds a partial span when tracing returns null", async () => {
     const infoLog = vi.fn();
     const writeLive = vi.fn<(deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>>(
       async (deps) => writeResult(deps),
@@ -348,19 +443,16 @@ describe("traffic-live conditions merge", () => {
 
     await handles.runTrafficLiveNow();
 
-    expect([...(writeLive.mock.calls[0]?.[0].overrides?.keys() ?? [])].sort()).toEqual([
-      "0:1:5",
-      "0:1:7",
-    ]);
+    expect([...(writeLive.mock.calls[0]?.[0].overrides?.keys() ?? [])].sort()).toEqual([]);
     expect(infoLog).toHaveBeenCalledWith(
       "traffic-live: conditions applied",
-      expect.objectContaining({ edgeExactSpans: 0, wholeWaySpans: 1 }),
+      expect.objectContaining({ edgeExactSpans: 0, wholeWaySpans: 0 }),
     );
 
     handles.stop();
   });
 
-  it("still closes whole-way when the trace seam throws on every span", async () => {
+  it("withholds a partial span when tracing throws", async () => {
     const infoLog = vi.fn();
     const writeLive = vi.fn<(deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>>(
       async (deps) => writeResult(deps),
@@ -378,18 +470,17 @@ describe("traffic-live conditions merge", () => {
     await handles.runTrafficLiveNow();
 
     const overrides = writeLive.mock.calls[0]?.[0].overrides;
-    expect([...(overrides?.keys() ?? [])].sort()).toEqual(["0:1:5", "0:1:7"]);
-    expect(overrides?.get("0:1:5")).toMatchObject({ closed: true, observationId: "a:1" });
+    expect([...(overrides?.keys() ?? [])].sort()).toEqual([]);
     expect(infoLog).toHaveBeenCalledWith(
       "traffic-live: conditions applied",
-      expect.objectContaining({ edgeExactSpans: 0, wholeWaySpans: 1 }),
+      expect.objectContaining({ edgeExactSpans: 0, wholeWaySpans: 0 }),
     );
     // Unanswered rather than negative, so the next cycle traces the span again.
     expect(infoLog).toHaveBeenCalledWith(
       "traffic-live: span tracing",
       expect.objectContaining({ unanswered: 1, negative: 0 }),
     );
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual(["a:1"]);
+    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([]);
 
     handles.stop();
   });
@@ -552,4 +643,26 @@ describe("traffic-live conditions merge", () => {
 
     handles.stop();
   });
+});
+
+it("reconciles conditions even when the flow request fails", async () => {
+  let checks = 0;
+  let writes = 0;
+  const cron = setupCronWithSeams({
+    fetchLiveTrafficCsv: async () => {
+      throw new Error("flow unavailable");
+    },
+    fetchConditionsJson: async () => {
+      checks++;
+      return JSON.stringify({ conditions: [] });
+    },
+    writeLiveTraffic: async (deps) => {
+      writes++;
+      return writeResult(deps);
+    },
+  });
+  await cron.runTrafficLiveNow();
+  expect(checks).toBe(1);
+  expect(writes).toBe(1);
+  cron.stop();
 });

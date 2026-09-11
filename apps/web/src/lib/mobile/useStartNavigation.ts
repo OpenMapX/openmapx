@@ -5,6 +5,7 @@ import {
   type GroundNavigationSettings,
   type LngLat,
   type NavigationRouteOptions,
+  type RoadConditionRouteImpact,
   type Route,
   type TransitReplanOptions,
   type TravelMode,
@@ -45,6 +46,7 @@ export interface StartGroundInput {
   routeProvider?: string;
   routeSelectionIntent: "automatic" | "userSelected";
   routeOptions: NavigationRouteOptions;
+  roadConditionImpact?: RoadConditionRouteImpact;
   locale: "en" | "de";
   units: "metric" | "imperial";
 }
@@ -82,7 +84,11 @@ export function useStartNavigation() {
           [...input.destinationWaypoints],
           [...(input.alternatives ?? [])],
           input.routeProvider,
-          { routeIntent: input.routeSelectionIntent, routeOptions: input.routeOptions },
+          {
+            routeIntent: input.routeSelectionIntent,
+            routeOptions: input.routeOptions,
+            roadConditionImpact: input.roadConditionImpact,
+          },
         );
         return { ok: true };
       }

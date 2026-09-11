@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { postScheduledDirections } from "../api/directions";
 import type { ScheduleDirectionsRequest } from "../types/routing";
+import { useRoadConditionLease } from "./useRoadConditionLease";
 
 /**
  * Stable identity for a request object. Sorting the keys makes it independent
@@ -28,12 +29,17 @@ export function scheduledDirectionsQueryKey(request: ScheduleDirectionsRequest):
 
 /** Pass `null` to disable the query (no constraints, or an incomplete trip). */
 export function useScheduledDirections(request: ScheduleDirectionsRequest | null) {
-  return useQuery({
+  const query = useQuery({
     queryKey: request ? scheduledDirectionsQueryKey(request) : ["directions-schedule", "disabled"],
     queryFn: () => postScheduledDirections(request as ScheduleDirectionsRequest),
     enabled: request !== null,
-    staleTime: 120_000,
+    staleTime:
+      request?.mode === "driving" || request?.mode === "motorcycle" || request?.avoidClosures
+        ? 0
+        : 120_000,
     gcTime: 600_000,
     retry: false,
   });
+  const data = useRoadConditionLease(query.data);
+  return { ...query, data };
 }

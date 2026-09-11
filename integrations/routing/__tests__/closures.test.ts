@@ -236,7 +236,7 @@ describe("activeClosuresForBbox", () => {
     expect(result.points).toEqual([[0.1, 51.1]]);
   });
 
-  it("calls getEvents with closure types and no severity floor", async () => {
+  it("loads all routing-relevant event types without a severity floor", async () => {
     // A medium-severity lane_closure (OC's derived default when no severity is
     // declared) must reach isClosure() rather than being pre-filtered by the
     // provider query — road/lane closures are route-blocking regardless of
@@ -244,9 +244,7 @@ describe("activeClosuresForBbox", () => {
     const getEvents = vi.fn().mockResolvedValue([]);
     const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
     await activeClosuresForBbox(ctx, TEST_BBOX);
-    expect(getEvents).toHaveBeenCalledWith(TEST_BBOX, {
-      types: ["road_closure", "lane_closure"],
-    });
+    expect(getEvents).toHaveBeenCalledWith(TEST_BBOX, {});
   });
 
   it("includes a medium-severity lane_closure as a routing exclusion", async () => {
@@ -771,14 +769,11 @@ describe("activeClosuresForBbox", () => {
       headline: "Unbound closure",
     };
 
-    it("keeps point exclusions for every closure when the applied set is unavailable", async () => {
+    it("does not point-fallback an explicitly bound closure when the applied set is unavailable", async () => {
       const getEvents = vi.fn().mockResolvedValue([boundClosure, unboundClosure]);
       const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
       const result = await activeClosuresForBbox(ctx, TEST_BBOX);
-      expect(result.points).toEqual([
-        [0.5, 51.5],
-        [0.7, 51.7],
-      ]);
+      expect(result.points).toEqual([[0.7, 51.7]]);
     });
 
     it("skips an applied bound closure and keeps an unbound one", async () => {
@@ -798,7 +793,7 @@ describe("activeClosuresForBbox", () => {
       expect(result.points).toEqual([[0.7, 51.7]]);
     });
 
-    it("keeps an applied closure whose binding is only ambiguous", async () => {
+    it("does not point-fallback an applied closure whose binding is only ambiguous", async () => {
       const getEvents = vi
         .fn()
         .mockResolvedValue([{ ...boundClosure, binding: { status: "ambiguous" } }]);
@@ -813,10 +808,28 @@ describe("activeClosuresForBbox", () => {
         appliedGet,
       );
       const result = await activeClosuresForBbox(ctx, TEST_BBOX);
-      expect(result.points).toEqual([[0.5, 51.5]]);
+      expect(result.points).toEqual([]);
     });
 
-    it("keeps an applied lane_closure — a lane closure is never an edge closure", async () => {
+    it.each(["unresolved", "no_coverage"])(
+      "does not point-fallback a graph-bound closure whose binding is %s",
+      async (status) => {
+        const getEvents = vi.fn().mockResolvedValue([
+          {
+            ...boundClosure,
+            binding: { status },
+          },
+        ]);
+        const ctx = makeRoadConditionsCtx([{ id: "road-conditions-test", getEvents }]);
+
+        const result = await activeClosuresForBbox(ctx, TEST_BBOX);
+
+        expect(result.points).toEqual([]);
+        expect(result.polygons).toEqual([]);
+      },
+    );
+
+    it("does not point-fallback a graph-bound lane closure", async () => {
       const getEvents = vi
         .fn()
         .mockResolvedValue([{ ...boundClosure, type: "lane_closure", severity: "medium" }]);
@@ -831,7 +844,76 @@ describe("activeClosuresForBbox", () => {
         appliedGet,
       );
       const result = await activeClosuresForBbox(ctx, TEST_BBOX);
-      expect(result.points).toEqual([[0.5, 51.5]]);
+      expect(result.points).toEqual([]);
+    });
+
+    it("does not project graph routing evidence back onto raw point geometry", async () => {
+      const now = Date.now();
+      const getEvents = vi.fn().mockResolvedValue([
+        {
+          ...boundClosure,
+          source: "child",
+          originKind: "feed",
+          routingEvidence: {
+            schema_version: 1,
+            observation_revision: "obs-1",
+            binding_revision: "obs-1",
+            graph_generation: "graph-1",
+            resolver_version: "resolver-1",
+            source_id: "parent",
+            child_source_id: "child",
+            source_license: "CC BY 4.0",
+            license_url: "https://example.test/license",
+            attribution: "Example authority",
+            record_url: null,
+            source_checked_at: new Date(now - 1_000).toISOString(),
+            fresh_until: new Date(now + 60_000).toISOString(),
+            expires_at: new Date(now + 120_000).toISOString(),
+            valid_from: new Date(now - 60_000).toISOString(),
+            valid_to: new Date(now + 120_000).toISOString(),
+            next_transition_at: null,
+            direction_mode: "both",
+            applicability: { kind: "all" },
+            rights: {
+              source_redistribution: "yes",
+              derived_redistribution: "yes",
+              commercial_use: "yes",
+              attribution_required: "yes",
+              retention: "yes",
+              evidence_origin: "catalogue",
+              evidence_version: "1",
+              reviewed_at: "2026-09-01T00:00:00Z",
+            },
+            segments: [
+              {
+                segment_id: "way:1:f",
+                direction: "forward",
+                from_fraction: 0,
+                to_fraction: 1,
+              },
+            ],
+            binding_status: "exact",
+            reason_codes: [],
+            evaluated_at: new Date(now - 1_000).toISOString(),
+          },
+        },
+      ]);
+      const appliedGet = vi.fn().mockResolvedValue({
+        writtenAt: new Date(now).toISOString(),
+        observationIds: [],
+      });
+      const ctx = makeRoadConditionsCtx(
+        [{ id: "road-conditions-openconditions", getEvents }],
+        "road-conditions",
+        undefined,
+        appliedGet,
+      );
+
+      const result = await activeClosuresForBbox(ctx, TEST_BBOX, new Date(now), "cycling");
+
+      expect(result.points).toEqual([]);
+      expect(result.polygons).toEqual([]);
+      expect(result.roadConditionImpact.reasons).toContain("unsupported_mode");
     });
   });
 

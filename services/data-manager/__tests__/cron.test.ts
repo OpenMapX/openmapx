@@ -505,6 +505,7 @@ describe("setupCron", () => {
         logger: { info: () => {}, warn: () => {}, error: () => {} },
         syncCronExpression: "disabled",
         feedProxyReloadCronExpression: "disabled",
+        readTrafficGraphGeneration: async () => "fixture-engine-epoch",
         ...extra,
       };
     }
@@ -591,6 +592,39 @@ describe("setupCron", () => {
           outOfBounds: 0,
         }),
       );
+
+      handles.stop();
+    });
+
+    it("schedules guarded maintenance in the same live cycle when the engine epoch is missing", async () => {
+      const ensureTrafficExtract = vi.fn().mockResolvedValue({ built: true });
+      const handles = setupCron(
+        baseOptions({
+          openConditionsUrl: "http://openconditions-ingest:8080",
+          trafficLiveCronExpression: "disabled",
+          fetchLiveTrafficCsv: async () => "way_id,dir,current_kph,free_flow_kph,los\n",
+          fetchConditionsJson: async () => '{"conditions":[]}',
+          loadWaysToEdges: async () => new Map(),
+          writeLiveTraffic: vi.fn().mockResolvedValue({
+            written: 0,
+            matched: 0,
+            total: 0,
+            outOfBounds: 0,
+            closedEdges: 0,
+            cappedEdges: 0,
+            overridesUnresolved: 0,
+            appliedObservationIds: [],
+          }),
+          readTrafficGraphGeneration: async () => {
+            throw new Error("engine epoch missing");
+          },
+          isTrafficExtractStale: vi.fn().mockResolvedValue(true),
+          ensureTrafficExtract,
+        }),
+      );
+
+      await handles.runTrafficLiveNow();
+      await vi.waitFor(() => expect(ensureTrafficExtract).toHaveBeenCalledOnce());
 
       handles.stop();
     });
@@ -689,6 +723,32 @@ describe("setupCron", () => {
         await handles.runTrafficExtractStartupNow();
 
         expect(refreshWaysToEdges).not.toHaveBeenCalled();
+        handles.stop();
+      } finally {
+        if (prev === undefined) delete process.env.DATA_DIR;
+        else process.env.DATA_DIR = prev;
+      }
+    });
+
+    it("refreshes an existing map after startup maintenance rebuilds the graph", async () => {
+      const prev = process.env.DATA_DIR;
+      process.env.DATA_DIR = dataDir;
+      try {
+        mkdirSync(join(dataDir, "traffic"), { recursive: true });
+        writeFileSync(join(dataDir, "traffic", "ways_to_edges.json"), "{}");
+        const refreshWaysToEdges = vi.fn().mockResolvedValue({ wayCount: 1, edgeCount: 2 });
+        const handles = setupCron(
+          baseOptions({
+            openConditionsUrl: "http://openconditions-ingest:8080",
+            ensureTrafficExtract: vi.fn().mockResolvedValue({ built: true }),
+            getCoveredWayIds: vi.fn().mockResolvedValue(new Set([123])),
+            refreshWaysToEdges,
+          }),
+        );
+
+        await handles.runTrafficExtractStartupNow();
+
+        expect(refreshWaysToEdges).toHaveBeenCalledWith(new Set([123]), expect.anything());
         handles.stop();
       } finally {
         if (prev === undefined) delete process.env.DATA_DIR;

@@ -12,8 +12,8 @@ vi.mock("../ops-client.js", () => ({
   runOpsOperation: vi.fn(async (operation: { kind: string }) => {
     opsCalls.push(operation);
     opsOrder.push(`ops:${operation.kind}`);
-    if (opsBehaviour.fail && operation.kind === "valhalla.traffic.applyPredicted") {
-      throw new Error("Operation valhalla.traffic.applyPredicted did not succeed (runtime)");
+    if (opsBehaviour.fail && operation.kind === "valhalla.traffic.maintain") {
+      throw new Error("Operation valhalla.traffic.maintain did not succeed (runtime)");
     }
     return { changed: true };
   }),
@@ -51,15 +51,12 @@ function expectedBase64(kph: number, freeFlow: number): string {
 
 describe("bakePredicted", () => {
   let csvDir: string;
-  let dockerCalls: string[][];
-  let ensureExtractCalls: Array<{ force?: boolean }>;
   let refreshWaysCalls: Array<Set<number>>;
   let callOrder: string[];
 
   beforeEach(() => {
     csvDir = mkdtempSync(join(tmpdir(), "bake-predicted-"));
-    dockerCalls = [];
-    ensureExtractCalls = [];
+    opsCalls.length = 0;
     refreshWaysCalls = [];
     callOrder = opsOrder;
     opsOrder.length = 0;
@@ -99,28 +96,14 @@ describe("bakePredicted", () => {
       ],
     ]);
 
-    const runDocker = async (args: string[]) => {
-      dockerCalls.push(args);
-      callOrder.push(`docker:${args[0]}`);
-      return { exitCode: 0, stdout: "" };
-    };
-
     return {
       openConditionsUrl: "http://openconditions.local",
       csvDir,
+      preparedGeneration: "22222222-2222-4222-8222-222222222222",
       container: "docker-valhalla-1",
       getCoveredWayIds: async () => new Set([3001]),
       fetchProfiles: async () => profiles,
       loadWaysToEdges: async () => waysToEdges,
-      ensureTrafficExtract: async (deps) => {
-        ensureExtractCalls.push(deps);
-        callOrder.push("ensureTrafficExtract");
-        // The real ensureTrafficExtract({ force: true }) restarts Valhalla
-        // itself after rebuilding the extract. Model that here so a second,
-        // redundant restart from bakePredicted would surface as two restarts.
-        await runDocker(["restart", "docker-valhalla-1"]);
-        return { built: true };
-      },
       refreshWaysToEdges: async (coveredWayIds) => {
         refreshWaysCalls.push(coveredWayIds);
         callOrder.push("refreshWaysToEdges");
@@ -188,24 +171,15 @@ describe("bakePredicted", () => {
   it("bakes through the typed agent operation, naming no container or csv path", async () => {
     opsCalls.length = 0;
     await bakePredicted(makeDeps());
-    expect(opsCalls).toContainEqual({ kind: "valhalla.traffic.applyPredicted" });
+    expect(opsCalls).toContainEqual({
+      kind: "valhalla.traffic.maintain",
+      plan: "apply-predicted-and-rebuild",
+      preparedGeneration: "22222222-2222-4222-8222-222222222222",
+    });
     const serialized = JSON.stringify(opsCalls);
     for (const forbidden of ["docker-valhalla-1", "/custom_files", "predicted-csv"]) {
       expect(serialized).not.toContain(forbidden);
     }
-  });
-
-  it.skip("runs the valhalla_add_predicted_traffic exec with the container-visible csvdir", async () => {
-    await bakePredicted(makeDeps());
-    const bakeCall = dockerCalls.find((args) => args.includes("valhalla_add_predicted_traffic"));
-    expect(bakeCall).toEqual([
-      "exec",
-      "docker-valhalla-1",
-      "valhalla_add_predicted_traffic",
-      "-c",
-      "/custom_files/valhalla.json",
-      "/custom_files/predicted-csv",
-    ]);
   });
 
   it("defaults the host CSV dir to the valhalla/osm-pbf mount both containers share (not /data/osm)", async () => {
@@ -223,7 +197,16 @@ describe("bakePredicted", () => {
       // Valhalla's /custom_files == host data/valhalla/osm-pbf; data-manager
       // reaches the SAME host dir at /data/valhalla/osm-pbf. Writing to
       // /data/osm (the produce/hardlink dir) would make the bake a no-op.
-      const expected = join(dataDir, "valhalla", "osm-pbf", "predicted-csv", "0", "003", "198.csv");
+      const expected = join(
+        dataDir,
+        "valhalla",
+        "osm-pbf",
+        "predicted-csv",
+        "22222222-2222-4222-8222-222222222222",
+        "0",
+        "003",
+        "198.csv",
+      );
       expect(readFileSync(expected, "utf8")).toContain("0/3198/5,50,30,");
     } finally {
       if (prev === undefined) delete process.env.DATA_DIR;
@@ -242,22 +225,12 @@ describe("bakePredicted", () => {
     // 2,787 rows.
     expect(refreshWaysCalls).toHaveLength(1);
     expect([...refreshWaysCalls[0]].sort()).toEqual([3001]);
-    expect(ensureExtractCalls).toEqual([{ force: true }]);
 
-    // Valhalla must restart exactly once — from ensureTrafficExtract's own
-    // internal restart. bakePredicted must NOT issue a second restart.
-    const restartCount = dockerCalls.filter((args) => args[0] === "restart").length;
-    expect(restartCount).toBe(1);
-
-    const bakeIndex = callOrder.indexOf("ops:valhalla.traffic.applyPredicted");
-    const ensureIndex = callOrder.indexOf("ensureTrafficExtract");
-    const restartIndex = callOrder.indexOf("docker:restart");
+    const maintenanceIndex = callOrder.indexOf("ops:valhalla.traffic.maintain");
 
     const refreshIndex = callOrder.indexOf("refreshWaysToEdges");
     expect(refreshIndex).toBe(0);
-    expect(refreshIndex).toBeLessThan(bakeIndex);
-    expect(bakeIndex).toBeLessThan(ensureIndex);
-    expect(ensureIndex).toBeLessThan(restartIndex);
+    expect(refreshIndex).toBeLessThan(maintenanceIndex);
   });
 
   it("aborts before any docker call when the pre-bake map refresh fails", async () => {
@@ -273,39 +246,16 @@ describe("bakePredicted", () => {
 
     // Never fall back to the map on disk: proceeding on a stale map is the
     // failure this whole change exists to prevent.
-    expect(dockerCalls).toHaveLength(0);
-    expect(ensureExtractCalls).toHaveLength(0);
+    expect(opsCalls).toHaveLength(0);
   });
 
-  it("propagates a failed bake operation and skips the rebuild chain", async () => {
+  it("propagates a failed atomic maintenance operation", async () => {
     opsBehaviour.fail = true;
     try {
-      const calls: unknown[] = [];
-      await expect(
-        bakePredicted(
-          makeDeps({
-            ensureTrafficExtract: async (d) => {
-              calls.push(d);
-              return { built: true };
-            },
-          }),
-        ),
-      ).rejects.toThrow(/did not succeed/);
-      // A failed bake must not trigger the extract rebuild + Valhalla restart.
-      expect(calls).toEqual([]);
+      await expect(bakePredicted(makeDeps())).rejects.toThrow(/did not succeed/);
     } finally {
       opsBehaviour.fail = false;
     }
-  });
-
-  it.skip("throws when valhalla_add_predicted_traffic exits non-zero and skips the rebuild chain", async () => {
-    await expect(bakePredicted(makeDeps({}))).rejects.toThrow(
-      /valhalla_add_predicted_traffic exited 1/,
-    );
-
-    expect(ensureExtractCalls).toHaveLength(0);
-    // The refresh moved to the front of the bake, so it has already run.
-    expect(refreshWaysCalls).toHaveLength(1);
   });
 
   it("reports matched and matchRatePct over map-resolvable profiles", async () => {
@@ -394,8 +344,7 @@ describe("bakePredicted", () => {
       }),
     );
 
-    expect(dockerCalls).toHaveLength(0);
-    expect(ensureExtractCalls).toHaveLength(0);
+    expect(opsCalls).toHaveLength(0);
     // The refresh must still have run — it is the only thing that can recover a
     // stale map, so skipping it would make a zero-row bake permanent.
     expect(refreshWaysCalls).toHaveLength(1);

@@ -106,6 +106,11 @@ function SourceRow({
             <Typography component="span" variant="body2" sx={{ display: "block", fontWeight: 650 }}>
               {source.name}
             </Typography>
+            {source.count && (
+              <Typography component="span" variant="caption" sx={{ display: "block" }}>
+                {source.count.value.toLocaleString()} {source.count.unit}
+              </Typography>
+            )}
             <Typography
               component="span"
               variant="caption"

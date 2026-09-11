@@ -221,3 +221,34 @@ describe("dedupeRoadConditionEvents", () => {
     });
   });
 });
+
+it("retains each original licence when compatible cross-source reports merge", () => {
+  const base = {
+    type: "road_closure" as const,
+    severity: "high" as const,
+    geometry: { type: "Point" as const, coordinates: [13, 52] },
+    headline: "Closed road A1",
+    provider: "oc",
+  };
+  const out = dedupeRoadConditionEvents([
+    { ...base, id: "a", source: "a", attribution: { provider: "A", license: "CC0" } },
+    { ...base, id: "b", source: "b", attribution: { provider: "B", license: "CC-BY-4.0" } },
+  ]);
+  expect(out).toHaveLength(1);
+  expect(out[0]!.sourceRecords?.map((e) => e.attribution?.license)).toEqual(["CC0", "CC-BY-4.0"]);
+});
+
+it("never merges opposite directions or different vehicle/validity restrictions", () => {
+  const base = {
+    type: "road_closure" as const,
+    severity: "high" as const,
+    geometry: { type: "Point" as const, coordinates: [13, 52] },
+    headline: "Closed road A1",
+    provider: "oc",
+  };
+  const out = dedupeRoadConditionEvents([
+    { ...base, id: "a", source: "a", vehiclesAffected: ["truck"] },
+    { ...base, id: "b", source: "b", vehiclesAffected: ["car"] },
+  ]);
+  expect(out).toHaveLength(2);
+});

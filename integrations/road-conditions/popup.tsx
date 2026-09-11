@@ -1,4 +1,9 @@
-import { formatDuration, type RoadConditionEvent, type RoadConditionType } from "@openmapx/core";
+import {
+  formatDuration,
+  getRoadConditionRoutingDecision,
+  type RoadConditionEvent,
+  type RoadConditionType,
+} from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { buildStackedPopupCardItems, type PopupCardSpec } from "@/integration-api/map/popupCard";
 import { isFutureRoadCondition } from "./visual-style";
@@ -21,6 +26,14 @@ const POPUP_SPEC: PopupCardSpec = {
     { field: "roadStateText", labelKey: "panel.roadState", variant: "chip" },
     { field: "roads", labelKey: "panel.roads", variant: "row" },
     { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
+    { field: "source", labelKey: "panel.source", variant: "row" },
+    { field: "license", labelKey: "panel.license", variant: "row" },
+    { field: "updatedAtText", labelKey: "panel.updatedAt", variant: "row" },
+    { field: "checkedAtText", labelKey: "panel.checkedAt", variant: "row" },
+    { field: "bindingText", labelKey: "panel.binding", variant: "row" },
+    { field: "bindingConfidence", labelKey: "panel.bindingConfidence", variant: "row" },
+    { field: "vehicles", labelKey: "panel.vehicles", variant: "row" },
+    { field: "applicationText", labelKey: "panel.routing", variant: "row" },
     { field: "validity", labelKey: "panel.validity", variant: "row" },
     { field: "startsAt", labelKey: "panel.startsAt", variant: "row" },
     { field: "delayText", labelKey: "panel.delay", variant: "row" },
@@ -37,6 +50,14 @@ const SOURCE_DETAIL_SPEC: PopupCardSpec = {
     { field: "roadStateText", labelKey: "panel.roadState", variant: "chip" },
     { field: "roads", labelKey: "panel.roads", variant: "row" },
     { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
+    { field: "source", labelKey: "panel.source", variant: "row" },
+    { field: "license", labelKey: "panel.license", variant: "row" },
+    { field: "updatedAtText", labelKey: "panel.updatedAt", variant: "row" },
+    { field: "checkedAtText", labelKey: "panel.checkedAt", variant: "row" },
+    { field: "bindingText", labelKey: "panel.binding", variant: "row" },
+    { field: "bindingConfidence", labelKey: "panel.bindingConfidence", variant: "row" },
+    { field: "vehicles", labelKey: "panel.vehicles", variant: "row" },
+    { field: "applicationText", labelKey: "panel.routing", variant: "row" },
     { field: "validity", labelKey: "panel.validity", variant: "row" },
   ],
 };
@@ -212,6 +233,18 @@ function popupProperties(
     _sev: ROAD_CONDITION_SEVERITY_RANK[event.severity] ?? 0,
     future: isFutureRoadCondition(event),
   };
+  properties.source = event.source;
+  properties.license = event.routingEvidence?.source_license ?? event.attribution?.license;
+  properties.updatedAt = event.dataUpdatedAt;
+  properties.checkedAt = event.routingEvidence?.source_checked_at;
+  properties.bindingStatus = event.routingEvidence?.binding_status ?? event.binding?.status;
+  properties.bindingConfidence = event.binding?.confidence;
+  properties.vehicles =
+    event.routingEvidence?.applicability.kind === "all"
+      ? "all"
+      : (event.routingEvidence?.applicability.classes ?? event.vehiclesAffected)?.join(", ");
+  const decision = getRoadConditionRoutingDecision(event);
+  properties.applicationReason = decision.eligible ? "candidate" : "display_only";
   if (includeRecordId) properties.recordId = event.id;
   if (event.roadState) properties.roadState = event.roadState;
   if (event.validFrom) properties.validFrom = event.validFrom;
@@ -241,6 +274,7 @@ export function buildRoadConditionPopupGroups(
   events: RoadConditionEvent[],
   relatedHeadline: (headline: string, count: number) => string = defaultRelatedHeadline,
 ): RoadConditionPopupGroup[] {
+  events = events.flatMap((event) => event.sourceRecords ?? [event]);
   if (events.length === 0) return [];
   const childEntries = events.map((event) => popupProperties(event, displayId, events.length > 1));
   const firstEntry = childEntries[0];
@@ -288,6 +322,28 @@ export function buildRoadConditionPopupGroups(
   }
   if (!same("schedule")) delete summary.schedule;
   if (!same("delaySeconds")) delete summary.delaySeconds;
+  if (!same("binding")) {
+    delete summary.bindingStatus;
+    delete summary.bindingConfidence;
+  }
+  if (!same("vehiclesAffected")) delete summary.vehicles;
+  if (!same("dataUpdatedAt")) delete summary.updatedAt;
+  if (!same("routingEvidence")) {
+    for (const key of [
+      "bindingStatus",
+      "bindingConfidence",
+      "vehicles",
+      "checkedAt",
+      "license",
+      "applicationReason",
+    ])
+      delete summary[key];
+  }
+  if (!same("attribution")) {
+    delete summary.attribution;
+    delete summary.license;
+  }
+  if (!same("source")) delete summary.source;
 
   return [{ summary, sourceRecords: childEntries }];
 }
@@ -331,8 +387,26 @@ function formatPopupEntry(
     Number.isFinite(delaySeconds) && delaySeconds >= 60
       ? `+${formatDuration(delaySeconds)}`
       : undefined;
+  const absoluteTime = (value: unknown) =>
+    typeof value === "string" && Number.isFinite(Date.parse(value))
+      ? new Date(value).toISOString()
+      : undefined;
   return {
     ...sourceEntry,
+    updatedAtText: absoluteTime(sourceEntry.updatedAt),
+    checkedAtText: absoluteTime(sourceEntry.checkedAt),
+    bindingText:
+      typeof sourceEntry.bindingStatus === "string"
+        ? input.translate(`binding.${sourceEntry.bindingStatus}`)
+        : undefined,
+    vehicles:
+      sourceEntry.vehicles === "all" ? input.translate("panel.allVehicles") : sourceEntry.vehicles,
+    applicationText:
+      sourceEntry.applicationReason === "candidate"
+        ? input.translate("panel.routingCandidate")
+        : sourceEntry.applicationReason === "display_only"
+          ? input.translate("panel.routingDisplayOnly")
+          : undefined,
     ...(typeText ? { typeText } : {}),
     ...(roadStateText ? { roadStateText } : {}),
     ...(severityText ? { severityText } : {}),

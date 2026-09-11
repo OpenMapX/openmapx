@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import type { RoadConditionRouteImpact, TravelMode } from "@openmapx/core";
 import { timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { activeClosuresForBbox } from "./closures.js";
@@ -41,6 +42,7 @@ export interface ClosureExclusionResult {
   exclusions: { points: [number, number][]; polygons: [number, number][][] };
   hasExclusions: boolean;
   exclusionsHash: string | null;
+  roadConditionImpact: RoadConditionRouteImpact | null;
 }
 
 /**
@@ -54,10 +56,16 @@ export async function applyClosureExclusions(
   waypoints: [number, number][],
   wantClosureAvoidance: boolean,
   at?: Date,
+  mode: TravelMode = "driving",
 ): Promise<ClosureExclusionResult> {
   const empty = { points: [] as [number, number][], polygons: [] as [number, number][][] };
   if (!wantClosureAvoidance) {
-    return { exclusions: empty, hasExclusions: false, exclusionsHash: null };
+    return {
+      exclusions: empty,
+      hasExclusions: false,
+      exclusionsHash: null,
+      roadConditionImpact: null,
+    };
   }
 
   const lons = waypoints.map((wp) => wp[0]);
@@ -70,8 +78,16 @@ export async function applyClosureExclusions(
   ];
 
   let exclusions = empty;
+  let roadConditionImpact: RoadConditionRouteImpact = {
+    availability: "unavailable",
+    evaluatedAt: new Date().toISOString(),
+    validUntil: null,
+    reasons: ["road_condition_provider_unavailable"],
+  };
   try {
-    exclusions = await activeClosuresForBbox(ctx, bbox, at);
+    const collected = await activeClosuresForBbox(ctx, bbox, at, mode);
+    exclusions = { points: collected.points, polygons: collected.polygons };
+    roadConditionImpact = collected.roadConditionImpact;
   } catch (err) {
     ctx.log.warn("[routing] failed to fetch closures; routing without exclusions", err as Error);
   }
@@ -81,5 +97,5 @@ export async function applyClosureExclusions(
     ? hashKey("excl", { points: exclusions.points, polygons: exclusions.polygons })
     : null;
 
-  return { exclusions, hasExclusions, exclusionsHash };
+  return { exclusions, hasExclusions, exclusionsHash, roadConditionImpact };
 }

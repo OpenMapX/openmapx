@@ -1,7 +1,8 @@
-import type { BBox, LngLat } from "@openmapx/core";
+import type { BBox, LngLat, RoadConditionRouteImpact, TravelMode } from "@openmapx/core";
 import {
   haversineDistance,
   isEdgeClosure,
+  isRoutingRelevantBinding,
   localDateInZone,
   zonedWallClockToInstant,
 } from "@openmapx/core";
@@ -10,15 +11,12 @@ import type {
   RoadConditionSchedule,
   RoadConditionsProvider,
 } from "@openmapx/integration-framework";
-import {
-  type AppliedEdgeClosures,
-  createAppliedEdgeClosuresReader,
-  shouldSkipPointExclusion,
-} from "./edge-closures";
+import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 
 export interface ClosureExclusions {
   points: LngLat[];
   polygons: LngLat[][];
+  roadConditionImpact: RoadConditionRouteImpact;
 }
 
 /** Severity at which an event of any type is treated as route-blocking. */
@@ -338,20 +336,6 @@ function geometryToExclusions(
 }
 
 /**
- * One reader per host context, so the 60 s cache actually holds: this module is
- * called once per route request with the same long-lived `IntegrationContext`.
- */
-const readers = new WeakMap<IntegrationContext, () => Promise<AppliedEdgeClosures>>();
-
-function readerFor(ctx: IntegrationContext): () => Promise<AppliedEdgeClosures> {
-  const existing = readers.get(ctx);
-  if (existing) return existing;
-  const reader = createAppliedEdgeClosuresReader(ctx);
-  readers.set(ctx, reader);
-  return reader;
-}
-
-/**
  * Collect active road closures from all registered road-conditions providers
  * and convert them into generic route-exclusion geometry. Provider adapters
  * own any engine-specific conversion, validation, and request-size limits.
@@ -364,43 +348,46 @@ export async function activeClosuresForBbox(
   ctx: IntegrationContext,
   bbox: BBox,
   at?: Date,
+  mode: TravelMode = "driving",
 ): Promise<ClosureExclusions> {
   const refTime = at ?? new Date();
+  const evaluatedAt = new Date();
+  const unavailable = (reason: string): ClosureExclusions => ({
+    points: [],
+    polygons: [],
+    roadConditionImpact: {
+      availability: "unavailable",
+      evaluatedAt: evaluatedAt.toISOString(),
+      validUntil: null,
+      reasons: [reason],
+    },
+  });
   const integrations = ctx.getIntegrationsByDomain("road-conditions");
-  if (integrations.length === 0) return { points: [], polygons: [] };
+  if (integrations.length === 0) return unavailable("no_road_condition_provider");
 
   const providers = integrations.flatMap(
     (i) => (i.providers.get("road-conditions") ?? []) as RoadConditionsProvider[],
   );
-  if (providers.length === 0) return { points: [], polygons: [] };
+  if (providers.length === 0) return unavailable("no_road_condition_provider");
 
-  // No `minSeverity` floor: road/lane closures are route-blocking regardless
-  // of severity (e.g. OC derives an undeclared-severity lane_closure as
-  // "medium"), so pre-filtering by severity here would drop real closures
-  // before isClosure() ever sees them. isClosure() remains the sole gate.
-  const settled = await Promise.allSettled(
-    providers.map((p) =>
-      p.getEvents(bbox, {
-        types: ["road_closure", "lane_closure"],
-      }),
-    ),
-  );
+  // Load every event type: graph-bound speed caps also need application
+  // assessment. Geometry exclusions below retain the closure-only gate.
+  const settled = await Promise.allSettled(providers.map((p) => p.getEvents(bbox, {})));
 
   const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
-  // Closures the live-traffic writer has already applied to the graph as edge
-  // closures need no point exclusion — the router routes around them natively,
-  // and a redundant exclusion only degrades the alternatives it can offer. An
-  // unavailable or stale set skips nothing, so exclusions keep working.
-  const applied = await readerFor(ctx)();
-
   const points: LngLat[] = [];
   const polygons: LngLat[][] = [];
-  let skippedAsEdgeClosures = 0;
+  let sawLegacyGeometry = false;
+  let sawRoutingEvidence = false;
+  let providerFailed = false;
+  const assessmentReasons = new Set<string>();
+  const deadlines: number[] = [];
 
   for (let i = 0; i < settled.length; i++) {
     const result = settled[i];
     if (!result) continue;
     if (result.status === "rejected") {
+      providerFailed = true;
       ctx.log.warn(
         `[routing/closures] road-conditions provider ${providers[i]?.id} failed`,
         result.reason,
@@ -409,13 +396,31 @@ export async function activeClosuresForBbox(
     }
     for (const event of result.value) {
       if (disallowed.has(event.source)) continue;
+      // A graph-bound event with an explicitly unusable binding must never
+      // fall back to its source geometry. Point/whole-geometry exclusions can
+      // broaden an ambiguous or unresolved match onto the wrong carriageway.
+      if (event.binding && !isRoutingRelevantBinding(event.binding.status)) continue;
+      const routeDecision = assessRoadConditionForRoute(event, {
+        evaluatedAt: evaluatedAt.getTime(),
+        travelAt: refTime.getTime(),
+        mode,
+        // This planning stage runs before any engine request. Request-bound
+        // application is assessed against the actual returned route later.
+        sharedTrafficApplied: false,
+        allowLegacyGeometry: true,
+        disallowedSources: disallowed,
+      });
+      if (event.routingEvidence) sawRoutingEvidence = true;
+      for (const reason of routeDecision.reasons) assessmentReasons.add(reason);
+      if (routeDecision.validUntil) {
+        const deadline = Date.parse(routeDecision.validUntil);
+        if (Number.isFinite(deadline)) deadlines.push(deadline);
+      }
+      if (routeDecision.disposition !== "legacy-geometry") continue;
+      sawLegacyGeometry = true;
       // Withhold an unconfirmed crowd report from routing (fail-open on unknown
       // origin — feed/undefined always route). See isCrowdNonRoutable.
       if (isCrowdNonRoutable(event)) continue;
-      if (shouldSkipPointExclusion(event, applied)) {
-        skippedAsEdgeClosures++;
-        continue;
-      }
       // isClosure() also rejects `roadState === "open"` and lorry-only
       // restrictions, via core's shared edge-closure rule.
       if (!isClosure(event)) continue;
@@ -425,11 +430,24 @@ export async function activeClosuresForBbox(
     }
   }
 
-  if (skippedAsEdgeClosures > 0) {
-    ctx.log.debug(
-      `[routing/closures] skippedAsEdgeClosures=${skippedAsEdgeClosures} (already applied to the graph)`,
+  const validUntil = deadlines.length ? new Date(Math.min(...deadlines)).toISOString() : null;
+  let availability: RoadConditionRouteImpact["availability"];
+  if (sawLegacyGeometry) availability = "limited";
+  else if (sawRoutingEvidence) availability = "unsupported";
+  else availability = "unavailable";
+  if (!sawLegacyGeometry && !sawRoutingEvidence) {
+    assessmentReasons.add(
+      providerFailed ? "road_condition_provider_unavailable" : "missing_current_evidence",
     );
   }
-
-  return { points, polygons };
+  return {
+    points,
+    polygons,
+    roadConditionImpact: {
+      availability,
+      evaluatedAt: evaluatedAt.toISOString(),
+      validUntil,
+      reasons: [...assessmentReasons],
+    },
+  };
 }

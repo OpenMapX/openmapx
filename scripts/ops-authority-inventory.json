@@ -22,7 +22,8 @@
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|1|git|transitous-runner|transitous.checkout-fetch",
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|2|git|transitous-runner|transitous.checkout-resolve",
     "services/data-manager/src/jobs/transitous/prepare.ts|runner|3|git|transitous-runner|transitous.checkout-materialize",
-    "services/data-manager/src/jobs/transitous/validate.ts|execa|1|unzip|transitous-runner|transitous.archive-validate"
+    "services/data-manager/src/jobs/transitous/validate.ts|execa|1|unzip|transitous-runner|transitous.archive-validate",
+    "services/data-manager/src/supervisor.ts|spawn|1|process.execPath|data-manager-worker|data-manager.supervise-traffic-worker"
   ],
   "typedEffectRoles": {
     "api": [
@@ -89,10 +90,10 @@
       "transitousLock.approve",
       "transitousLock.inspect",
       "transitousLock.propose",
-      "valhalla.traffic.applyPredicted",
       "valhalla.traffic.inspect",
-      "valhalla.traffic.rebuild",
-      "valhalla.traffic.refreshWaysToEdges"
+      "valhalla.traffic.maintain",
+      "valhalla.traffic.refreshWaysToEdges",
+      "valhalla.traffic.disable"
     ]
   },
   "trustedDataSourceKinds": [
@@ -254,10 +255,10 @@
         "motis.primary.promote",
         "feedProxy.validateAndReload",
         "valhalla.traffic.inspect",
-        "valhalla.traffic.rebuild",
+        "valhalla.traffic.maintain",
         "valhalla.traffic.refreshWaysToEdges",
-        "valhalla.traffic.applyPredicted",
-        "postgis.capacity.inspect"
+        "postgis.capacity.inspect",
+        "valhalla.traffic.disable"
       ]
     },
     {

@@ -21,6 +21,7 @@ vi.mock("../../integration-host.js", () => ({
 }));
 
 const {
+  getRoadConditionsPolicySnapshot,
   filterGatedSources,
   getGatedSourceIds,
   getGatedSourceIdsSync,
@@ -256,5 +257,26 @@ describe("filterGatedSources", () => {
     expect(out.items).toHaveLength(1);
     expect(wrapper.items).toHaveLength(2);
     expect(out).not.toBe(wrapper);
+  });
+});
+
+describe("road-condition writer policy authority", () => {
+  it("does not mint a lease from a permissive database-failure fallback", async () => {
+    dbRowsMock.mockImplementationOnce(() => {
+      throw new Error("database unavailable");
+    });
+    await refreshDataUsePolicy();
+    const snapshot = await getRoadConditionsPolicySnapshot();
+    expect(snapshot.authoritative).toBe(false);
+    expect(snapshot.validUntil).toBeNull();
+  });
+  it("returns a bounded lease and stable revision for an observed policy", async () => {
+    const first = await getRoadConditionsPolicySnapshot();
+    expect(first.authoritative).toBe(true);
+    expect(Date.parse(first.validUntil!) - Date.parse(first.evaluatedAt)).toBeLessThanOrEqual(
+      150_000,
+    );
+    await refreshDataUsePolicy();
+    expect((await getRoadConditionsPolicySnapshot()).revision).toBe(first.revision);
   });
 });

@@ -29,14 +29,18 @@ import {
 } from "./directions-request.js";
 import { runEvPlan } from "./ev-plan.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
+import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { NoScheduleProviderError, runSchedulePlan } from "./schedule-plan.js";
 import {
   createScheduleCacheIdentity,
   parseScheduleRequest,
   ScheduleRequestValidationError,
 } from "./schedule-request.js";
+import { verifyRouteTraffic } from "./traffic-application.js";
 import type { DirectionsResult } from "./types.js";
 import { parseTravelMode } from "./validation.js";
+
+export { evidenceBoundCacheTtlSeconds } from "./road-condition-routing.js";
 
 /** A raw (un-projected) approach alert from OSM, returned by /navigation/alerts. */
 interface RawRoadAlert {
@@ -117,19 +121,17 @@ async function planDirectionsRequest(ctx: IntegrationContext, request: ParsedDir
     baseRoutingOptions.departAt,
     baseRoutingOptions.arriveBy,
   );
-  const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
-    ctx,
-    waypoints,
-    avoidClosures,
-    closureRefTime,
-  );
+  const { exclusions, hasExclusions, exclusionsHash, roadConditionImpact } =
+    await applyClosureExclusions(ctx, waypoints, avoidClosures, closureRefTime, request.travelMode);
 
   return {
     closureRefTime,
     hasExclusions,
+    roadConditionImpact,
     keyParams: createDirectionsCacheIdentity(request, exclusionsHash),
     routingOptions: {
       ...baseRoutingOptions,
+      ...(closureRefTime ? { useLiveTraffic: false } : {}),
       ...(hasExclusions && {
         excludeLocations: exclusions.points,
         excludePolygons: exclusions.polygons,
@@ -293,7 +295,7 @@ function parseVehicleSpec(v: unknown): EvVehicleSpec | undefined {
  * `Cache-Control: no-cache`). This cache serves the planning/preview path and
  * dedupes popular identical requests.
  */
-const CACHE_TTL_LIVE_SECONDS = 60;
+const CACHE_TTL_LIVE_SECONDS = 30;
 const CACHE_TTL_PREDICTED_SECONDS = 3600;
 /**
  * A pinned departure/arrival within this window of "now" still rides current
@@ -320,6 +322,15 @@ export function cacheTtlSeconds(travelInstant: Date | undefined): number {
     : CACHE_TTL_PREDICTED_SECONDS;
 }
 
+async function withOptionalCache<T>(
+  ctx: IntegrationContext,
+  key: string,
+  ttl: number,
+  factory: () => Promise<T>,
+): Promise<T> {
+  return ttl > 0 ? ctx.cache.withCache(key, ttl, factory) : factory();
+}
+
 /**
  * Upper bound on `/match` trace size. A typical hour-long drive recorded at
  * 1Hz is ~3.6k points; 10k gives generous headroom while preventing a single
@@ -328,7 +339,7 @@ export function cacheTtlSeconds(travelInstant: Date | undefined): number {
 const MAX_MATCH_TRACE_POINTS = 10_000;
 
 export function setup(ctx: IntegrationContext): void {
-  const { getRoutingProviders, getOptimizeProvider, getMatchProvider } =
+  const { getRoutingProviders, getOptimizeProviders, getMatchProvider } =
     createRoutingOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/directions", async (req, reply) => {
@@ -349,7 +360,7 @@ export function setup(ctx: IntegrationContext): void {
       requireTimeAware,
       routingOptions: baseRoutingOptions,
     } = request;
-    const { closureRefTime, hasExclusions, keyParams, routingOptions } =
+    const { closureRefTime, hasExclusions, keyParams, routingOptions, roadConditionImpact } =
       await planDirectionsRequest(ctx, request);
 
     // When exclusions are present, only use providers that explicitly honour
@@ -377,10 +388,19 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const ttl = cacheTtlSeconds(closureRefTime);
+    const conditionResponse = wantClosureAvoidance || Boolean(baseRoutingOptions.useLiveTraffic);
+    const responseRoadConditionImpact = roadConditionImpactForRequest(
+      roadConditionImpact,
+      Boolean(baseRoutingOptions.useLiveTraffic) && !closureRefTime,
+      baseRoutingOptions.useLiveTraffic && closureRefTime
+        ? ["unsupported_future_shared_traffic"]
+        : [],
+    );
+    const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
 
     try {
-      const result = await ctx.cache.withCache(
+      const result = await withOptionalCache(
+        ctx,
         hashKey("cache:directions", keyParams),
         ttl,
         async () => {
@@ -414,9 +434,18 @@ export function setup(ctx: IntegrationContext): void {
           throw lastErr ?? new Error("All routing providers failed");
         },
       );
+      if (responseRoadConditionImpact)
+        result.roadConditionImpact = await verifyRouteTraffic(
+          ctx,
+          result.routes,
+          responseRoadConditionImpact,
+          result.provider,
+        );
       reply.header(
         "Cache-Control",
-        `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+        conditionResponse
+          ? "no-store"
+          : `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
       );
       recordRoutingRequest(ctx, {
         providerId: result.provider ?? "unknown",
@@ -466,17 +495,16 @@ export function setup(ctx: IntegrationContext): void {
       requireTimeAware,
       routingOptions: baseRoutingOptions,
     } = request;
-    const { closureRefTime, hasExclusions, keyParams, routingOptions } =
+    const { closureRefTime, hasExclusions, keyParams, routingOptions, roadConditionImpact } =
       await planDirectionsRequest(ctx, request);
 
-    const resolved = getOptimizeProvider(travelMode, { requireTimeAware });
-
-    // When exclusions are present, only use a provider that explicitly honours
+    let resolvedChain = getOptimizeProviders(travelMode, { requireTimeAware });
+    // When exclusions are present, only use providers that explicitly honour
     // the generic exclusion contract.
-    const effectiveResolved =
-      hasExclusions && resolved?.provider.supportsExclusions !== true ? null : resolved;
-    const optimizeFn = effectiveResolved?.provider.optimizeRoute;
-    if (!effectiveResolved || !optimizeFn) {
+    if (hasExclusions) {
+      resolvedChain = resolvedChain.filter((entry) => entry.provider.supportsExclusions === true);
+    }
+    if (resolvedChain.length === 0) {
       recordRoutingRequest(ctx, {
         providerId: "none",
         mode: travelMode,
@@ -493,43 +521,70 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const ttl = cacheTtlSeconds(closureRefTime);
+    const conditionResponse = wantClosureAvoidance || Boolean(baseRoutingOptions.useLiveTraffic);
+    const responseRoadConditionImpact = roadConditionImpactForRequest(
+      roadConditionImpact,
+      Boolean(baseRoutingOptions.useLiveTraffic) && !closureRefTime,
+      baseRoutingOptions.useLiveTraffic && closureRefTime
+        ? ["unsupported_future_shared_traffic"]
+        : [],
+    );
+    const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
 
     try {
-      const result = await ctx.cache.withCache(
+      const result = await withOptionalCache(
+        ctx,
         hashKey("cache:directions:optimize", keyParams),
         ttl,
         async () => {
-          const providerStartedAt = performance.now();
-          let r: DirectionsResult;
-          try {
-            r = await optimizeFn(waypoints, travelMode, routingOptions);
-            ctx.metricsRecorder?.recordProviderCall(
-              {
-                providerId: effectiveResolved.integrationId,
-                method: "optimizeRoute",
-                outcome: r.routes.length > 0 ? "ok" : "empty",
-              },
-              performance.now() - providerStartedAt,
-            );
-          } catch (err) {
-            ctx.metricsRecorder?.recordProviderCall(
-              {
-                providerId: effectiveResolved.integrationId,
-                method: "optimizeRoute",
-                outcome: "error",
-              },
-              performance.now() - providerStartedAt,
-            );
-            throw err;
+          let lastErr: unknown;
+          for (const resolved of resolvedChain) {
+            const optimizeFn = resolved.provider.optimizeRoute;
+            if (!optimizeFn) continue;
+            const providerStartedAt = performance.now();
+            try {
+              const r = await optimizeFn(waypoints, travelMode, routingOptions);
+              ctx.metricsRecorder?.recordProviderCall(
+                {
+                  providerId: resolved.integrationId,
+                  method: "optimizeRoute",
+                  outcome: r.routes.length > 0 ? "ok" : "empty",
+                },
+                performance.now() - providerStartedAt,
+              );
+              r.provider = resolved.integrationId;
+              return r;
+            } catch (err) {
+              ctx.metricsRecorder?.recordProviderCall(
+                {
+                  providerId: resolved.integrationId,
+                  method: "optimizeRoute",
+                  outcome: "error",
+                },
+                performance.now() - providerStartedAt,
+              );
+              lastErr = err;
+              ctx.log.warn(
+                `routing optimizer ${resolved.integrationId} failed; trying next`,
+                err as Error,
+              );
+            }
           }
-          r.provider = effectiveResolved.integrationId;
-          return r;
+          throw lastErr ?? new Error("All route optimizers failed");
         },
       );
+      if (responseRoadConditionImpact)
+        result.roadConditionImpact = await verifyRouteTraffic(
+          ctx,
+          result.routes,
+          responseRoadConditionImpact,
+          result.provider,
+        );
       reply.header(
         "Cache-Control",
-        `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+        conditionResponse
+          ? "no-store"
+          : `public, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
       );
       recordRoutingRequest(ctx, {
         providerId: result.provider ?? "unknown",
@@ -544,7 +599,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(result);
     } catch (err) {
       recordRoutingRequest(ctx, {
-        providerId: effectiveResolved.integrationId,
+        providerId: "none",
         mode: travelMode,
         operation: "optimize",
         outcome: "error",
@@ -737,16 +792,20 @@ export function setup(ctx: IntegrationContext): void {
       request.anchor.kind === "departAt" ? request.anchor.wallClock : undefined,
       request.anchor.kind === "arriveBy" ? request.anchor.wallClock : undefined,
     );
-    const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
-      ctx,
-      request.waypoints,
-      request.avoidClosures,
-      closureRefTime,
-    );
+    const requestedLiveTraffic = Boolean(request.routingOptions.useLiveTraffic);
+    const { exclusions, hasExclusions, exclusionsHash, roadConditionImpact } =
+      await applyClosureExclusions(
+        ctx,
+        request.waypoints,
+        request.avoidClosures,
+        closureRefTime,
+        request.travelMode,
+      );
     if (hasExclusions) {
       request.routingOptions.excludeLocations = exclusions.points;
       request.routingOptions.excludePolygons = exclusions.polygons;
     }
+    if (closureRefTime) request.routingOptions.useLiveTraffic = false;
 
     let chain = getRoutingProviders(request.travelMode);
     if (hasExclusions) {
@@ -759,9 +818,16 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
-    const ttl = cacheTtlSeconds(closureRefTime);
+    const conditionResponse = request.avoidClosures || requestedLiveTraffic;
+    const responseRoadConditionImpact = roadConditionImpactForRequest(
+      roadConditionImpact,
+      requestedLiveTraffic && !closureRefTime,
+      requestedLiveTraffic && closureRefTime ? ["unsupported_future_shared_traffic"] : [],
+    );
+    const ttl = conditionResponse ? 0 : cacheTtlSeconds(closureRefTime);
     try {
-      const result = await ctx.cache.withCache(
+      const result = await withOptionalCache(
+        ctx,
         hashKey("cache:directions:schedule", createScheduleCacheIdentity(request, exclusionsHash)),
         ttl,
         () =>
@@ -774,6 +840,13 @@ export function setup(ctx: IntegrationContext): void {
             },
           }),
       );
+      if (responseRoadConditionImpact)
+        result.roadConditionImpact = await verifyRouteTraffic(
+          ctx,
+          result.routes,
+          responseRoadConditionImpact,
+          result.provider,
+        );
 
       // A contradictory trip is a client error, but the planner still produced
       // the best-effort schedule that explains why — send both.
@@ -796,7 +869,9 @@ export function setup(ctx: IntegrationContext): void {
 
       reply.header(
         "Cache-Control",
-        `private, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
+        conditionResponse
+          ? "no-store"
+          : `private, max-age=${ttl}, stale-while-revalidate=${STALE_WHILE_REVALIDATE_SECONDS}`,
       );
       reply.send(result);
     } catch (error) {
@@ -871,7 +946,31 @@ export function setup(ctx: IntegrationContext): void {
     }
 
     try {
-      const result = await runEvPlan(ctx, getRoutingProviders, planArgs);
+      const chain = getRoutingProviders("driving", {
+        requireTimeAware: Boolean(planArgs.departAt),
+      });
+      let result: Awaited<ReturnType<typeof runEvPlan>> | undefined;
+      let lastError: unknown;
+      for (const resolved of chain) {
+        try {
+          // Re-run the entire plan for the next provider. This makes the base
+          // route, charger matrix, and final route use one provider and one
+          // freshly evaluated road-condition request contract.
+          result = await runEvPlan(ctx, () => [resolved], planArgs);
+          break;
+        } catch (error) {
+          if ((error as { status?: number }).status === 400) throw error;
+          lastError = error;
+          ctx.log.warn(
+            `[ev] routing provider ${resolved.integrationId} failed; trying next`,
+            error as Error,
+          );
+        }
+      }
+      if (!result) {
+        throw lastError ?? Object.assign(new Error("no routing provider"), { status: 503 });
+      }
+      reply.header("Cache-Control", "no-store");
       reply.send(result);
     } catch (e) {
       const status = (e as { status?: number }).status ?? 502;

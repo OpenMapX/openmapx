@@ -1,5 +1,7 @@
+import { createHash, randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { getRoadConditionRoutingDecision, readBoundedResponseText } from "@openmapx/core";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { feedState } from "@openmapx/db-schema";
 import {
@@ -46,6 +48,9 @@ import {
   recordTrafficGraphSuccess,
   trafficEvidencePath as resolveTrafficEvidencePath,
 } from "./jobs/traffic/evidence.js";
+import { readTrafficGraphState } from "./jobs/traffic/graph-generation.js";
+import { fetchTrafficPolicy, type TrafficPolicy } from "./jobs/traffic/policy.js";
+import { buildTrafficReceipts, type TrafficApplicationSnapshot } from "./jobs/traffic/receipts.js";
 import {
   loadSpanEdgeCache,
   type ResolveSpanEdgesResult,
@@ -275,6 +280,7 @@ export interface CronSetupOptions {
    * `${openConditionsUrl}/segments/conditions.json`.
    */
   fetchConditionsJson?: () => Promise<string>;
+  fetchTrafficPolicy?: () => Promise<TrafficPolicy>;
   /**
    * How long the last successfully-fetched condition set stays usable after a
    * failed fetch. Defaults to `TRAFFIC_CONDITIONS_STALE_MS`.
@@ -303,6 +309,9 @@ export interface CronSetupOptions {
    * Test seam: invoked instead of the real `writeLiveTraffic` (which opens
    * `trafficTarPath` for in-place writes).
    */
+  roadConditionsMode?: "shadow" | "active";
+  readTrafficGraphGeneration?: () => Promise<string>;
+  readTrafficGraphState?: () => Promise<{ generation: string; engineBootId: string }>;
   writeLiveTraffic?: (deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>;
   /** Override the predicted-traffic bake cron schedule (e.g. for tests). */
   trafficPredictedCronExpression?: string;
@@ -382,11 +391,7 @@ export interface CronHandles {
    * unexcluded. Cap-only observations are included too — harmless, since
    * point exclusions exist only for closures.
    */
-  getTrafficConditionsApplied: () => {
-    writtenAt: string | null;
-    observationIds: string[];
-    resolverVersion: string | null;
-  };
+  getTrafficConditionsApplied: () => TrafficApplicationSnapshot;
   /** Test seam: directly invoke the predicted-traffic bake as if the cron fired. */
   runTrafficPredictedNow: () => Promise<void>;
   /** Test seam: directly invoke the auto-bump handler as if the cron fired. */
@@ -1031,8 +1036,10 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   };
 
   const runTrafficExtractStartup = async (): Promise<void> => {
+    let graphRebuilt = false;
     try {
       const result = await ensureExtract({ logger: log });
+      graphRebuilt = result.built;
       log.info("traffic-extract: startup check complete", { built: result.built });
     } catch (err) {
       log.error("traffic-extract: startup ensure failed", { err: (err as Error).message });
@@ -1041,8 +1048,12 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     // traffic.tar that already exists from a prior boot leaves the map ungenerated
     // on first run — the live writer then can't load it. Bootstrap it here when
     // it's missing so the chain works without waiting for the next graph rebuild.
-    if (options.getCoveredWayIds && !existsSync(waysToEdgesMapPath())) {
-      log.info("ways-to-edges: map missing at startup, bootstrapping");
+    if (options.getCoveredWayIds && (graphRebuilt || !existsSync(waysToEdgesMapPath()))) {
+      log.info(
+        graphRebuilt
+          ? "ways-to-edges: graph rebuilt at startup, refreshing map"
+          : "ways-to-edges: map missing at startup, bootstrapping",
+      );
       await runWaysToEdgesRefresh();
     }
   };
@@ -1073,6 +1084,14 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     // shrinking share of the feed. runWaysToEdgesRefresh contains its own
     // error handling.
     await runWaysToEdgesRefresh();
+  };
+
+  let graphMaintenanceCheck: Promise<void> | null = null;
+  const scheduleGraphMaintenanceCheck = (): void => {
+    if (graphMaintenanceCheck) return;
+    graphMaintenanceCheck = runTrafficExtractGuard().finally(() => {
+      graphMaintenanceCheck = null;
+    });
   };
 
   const trafficExtractExpr = pickCronExpression(
@@ -1111,11 +1130,16 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       if (!res.ok) {
         throw new Error(`traffic-live: OpenConditions speed feed responded ${res.status}`);
       }
-      return res.text();
+      return readBoundedResponseText(res, 32 * 1024 * 1024, {
+        label: "OpenConditions traffic snapshot",
+      });
     });
 
   const loadCoveredWaysToEdges = options.loadWaysToEdges ?? (() => loadWaysToEdgesDefault());
   const writeLive = options.writeLiveTraffic ?? writeLiveTrafficDefault;
+  const roadConditionsMode =
+    options.roadConditionsMode ??
+    (envString("TRAFFIC_ROAD_CONDITIONS_MODE", "shadow") === "active" ? "active" : "shadow");
   const trafficLiveStatePath =
     options.trafficLiveStatePath ?? join(options.dataDir, "traffic", "live-state.json");
   const trafficEvidenceFile =
@@ -1133,7 +1157,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       if (!res.ok) {
         throw new Error(`traffic-live: OpenConditions conditions feed responded ${res.status}`);
       }
-      return res.text();
+      return readBoundedResponseText(res, 32 * 1024 * 1024, {
+        label: "OpenConditions traffic snapshot",
+      });
     });
 
   // Last good conditions set, reused across a failing fetch for at most
@@ -1145,11 +1171,20 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     resolverVersion: string | null;
     fetchedAt: number;
   } | null = null;
-  let trafficConditionsApplied: {
-    writtenAt: string | null;
-    observationIds: string[];
-    resolverVersion: string | null;
-  } = { writtenAt: null, observationIds: [], resolverVersion: null };
+  let trafficConditionsApplied: TrafficApplicationSnapshot = {
+    schemaVersion: 1,
+    mode: roadConditionsMode,
+    writeId: null,
+    engineBootId: null,
+    providerId: "routing-valhalla",
+    graphGeneration: null,
+    policyRevision: null,
+    validUntil: null,
+    receipts: [],
+    writtenAt: null,
+    observationIds: [],
+    resolverVersion: null,
+  };
   let lastMissingWaysRefreshAt = 0;
   const MISSING_WAYS_REFRESH_MIN_INTERVAL_MS = 3_600_000;
 
@@ -1207,9 +1242,12 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       return;
     }
     try {
-      let csv: string;
+      const conditionsPromise = currentConditions();
+      let csv = "way_id,dir,current_kph,free_flow_kph,los\n";
+      let flowValidated = false;
       try {
         csv = await fetchLiveTrafficCsv();
+        flowValidated = true;
       } catch (err) {
         try {
           await recordTrafficFlowFailure(trafficEvidenceFile, err);
@@ -1218,39 +1256,77 @@ export function setupCron(options: CronSetupOptions): CronHandles {
             err: (evidenceErr as Error).message,
           });
         }
-        throw err;
+        log.warn("traffic-live: flow unavailable; reconciling conditions independently");
       }
       try {
-        await recordTrafficFlowSuccess(trafficEvidenceFile);
+        if (flowValidated) await recordTrafficFlowSuccess(trafficEvidenceFile);
       } catch (evidenceErr) {
         log.warn("traffic-live: flow evidence write failed", {
           err: (evidenceErr as Error).message,
         });
       }
-      let waysToEdges: Map<number, WayEdge[]>;
+      const conditions = await conditionsPromise;
+      const conditionsDeadline = lastConditions
+        ? lastConditions.fetchedAt + conditionsStaleMs
+        : null;
+      let policy: TrafficPolicy | null = null;
       try {
-        waysToEdges = await loadCoveredWaysToEdges();
-      } catch (err) {
-        // Expected transient right after boot: the startup way→edge bootstrap
-        // runs fire-and-forget, so an early cron fire can precede the map write.
-        // Skip quietly (info, not error) — the next cycle picks it up.
-        if ((err as NodeJS.ErrnoException).code === "ENOENT") {
-          log.info("traffic-live: way-to-edge map not ready yet, skipping cycle");
-          return;
-        }
-        throw err;
+        policy = await (options.fetchTrafficPolicy ?? fetchTrafficPolicy)();
+      } catch {
+        log.warn("traffic-live: policy authority unavailable; withholding road-event effects");
       }
-      const conditions = await currentConditions();
-      // Tracing is an optimisation on top of a correct answer: any failure here
-      // leaves `resolved` empty and every span falls back to whole-way binding,
-      // which over-closes but never under-closes.
+      let waysToEdges = new Map<number, WayEdge[]>();
+      let engineGeneration: string | undefined;
+      let engineBootId: string | undefined;
+      const captureGraphState = async () => {
+        if (options.readTrafficGraphGeneration && !options.readTrafficGraphState) {
+          // Legacy test seam cannot attest a serving process.
+          return {
+            generation: await options.readTrafficGraphGeneration(),
+            engineBootId: undefined,
+          };
+        }
+        return (
+          options.readTrafficGraphState ?? (() => readTrafficGraphState(dirname(trafficTarPath)))
+        )();
+      };
+      try {
+        // Bracket the map read: a maintenance completion must never pair old
+        // graph IDs with a new engine epoch. The writer checks again under lock.
+        const before = await captureGraphState();
+        try {
+          waysToEdges = await loadCoveredWaysToEdges();
+        } catch (err) {
+          if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+          log.info("traffic-live: way-to-edge map unavailable; clearing prior effects");
+        }
+        const after = await captureGraphState();
+        if (before.generation !== after.generation || before.engineBootId !== after.engineBootId)
+          throw new Error("Traffic graph changed while loading edge map");
+        engineGeneration = after.generation;
+        engineBootId = after.engineBootId;
+      } catch {
+        log.warn(
+          "traffic-live: graph generations unavailable or changed; withholding live effects",
+        );
+        waysToEdges = new Map();
+        policy = null;
+        csv = "way_id,dir,current_kph,free_flow_kph,los\n";
+        scheduleGraphMaintenanceCheck();
+      }
+      const hostGraphGeneration = createHash("sha256")
+        .update(JSON.stringify([engineGeneration, [...waysToEdges]]))
+        .digest("hex");
+      for (const c of conditions)
+        c.cacheGeneration = `${hostGraphGeneration}:${c.routingEvidence?.graph_generation ?? "unknown"}:${c.routingEvidence?.observation_revision ?? "unknown"}`;
+      // Failed partial traces remain unapplied; only complete proven spans route.
       let spans: ResolveSpanEdgesResult | null = null;
       try {
         spanEdgeCache ??= await loadSpanEdgeCache(spanEdgeCachePath);
         const spanDeps: SpanEdgesDeps = { valhallaUrl, waysToEdges, logger: log };
         spans = await resolveSpanEdges(conditions, spanEdgeCache, spanDeps, traceSpan);
       } catch (err) {
-        log.warn("traffic-live: span tracing failed, falling back to whole-way binding", {
+        log.warn("traffic-live: span tracing failed; partial spans remain unapplied", {
           err: (err as Error).message,
         });
       }
@@ -1266,7 +1342,16 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         skipped: { notRelevant: 0, crowdNotEligible: 0, noEffect: 0 },
       };
       try {
-        mapped = conditionsToEdges(conditions, waysToEdges, spans?.resolved);
+        mapped = conditionsToEdges(
+          policy && conditionsDeadline !== null && Date.now() < conditionsDeadline
+            ? conditions
+            : [],
+          waysToEdges,
+          spans?.resolved,
+          {
+            disallowedSources: new Set(policy?.disallowedSourceIds ?? []),
+          },
+        );
       } catch (err) {
         log.warn("traffic-live: conditions classification failed, writing no overrides", {
           err: (err as Error).message,
@@ -1286,11 +1371,40 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           log.warn("traffic-live: way→edge refresh failed", { err: (err as Error).message });
         });
       }
+      const conditionDeadlines = conditions
+        .map((c) =>
+          getRoadConditionRoutingDecision({
+            source: c.source ?? "",
+            routingEvidence: c.routingEvidence,
+            originKind: c.originKind === "feed" ? "feed" : "crowd",
+            routingEligible: c.routingEligible,
+          }),
+        )
+        .flatMap((decision) =>
+          decision.eligible && decision.validUntil ? [Date.parse(decision.validUntil)] : [],
+        );
+      const validUntil = new Date(
+        Math.min(
+          Date.now() + 120_000,
+          ...(policy ? [Date.parse(policy.validUntil)] : []),
+          ...conditionDeadlines,
+          ...(conditions.length && conditionsDeadline !== null ? [conditionsDeadline] : []),
+        ),
+      ).toISOString();
+      const writeId = randomUUID();
       const result = await writeLive({
+        writeId,
+        engineBootId,
         tarPath: trafficTarPath,
+        validUntil,
+        graphGeneration: hostGraphGeneration,
+        expectedGraphGeneration:
+          options.readTrafficGraphGeneration || options.readTrafficGraphState
+            ? undefined
+            : engineGeneration,
         csv,
         waysToEdges,
-        overrides: mapped.overrides,
+        overrides: roadConditionsMode === "active" ? mapped.overrides : new Map(),
         statePath: trafficLiveStatePath,
         evidencePath: trafficEvidenceFile,
         logger: log,
@@ -1310,11 +1424,31 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       // edge failed to resolve was requested but never written, and claiming it
       // here would make a router skip an exclusion for a road that is still open.
       trafficConditionsApplied = {
+        schemaVersion: 1,
+        mode: roadConditionsMode,
+        writeId,
+        engineBootId: engineBootId ?? null,
+        providerId: "routing-valhalla",
+        graphGeneration: hostGraphGeneration,
+        policyRevision: policy?.revision ?? null,
+        validUntil,
+        receipts: policy
+          ? buildTrafficReceipts({
+              conditions,
+              overrides: mapped.overrides,
+              appliedObservationIds: result.appliedObservationIds,
+              graphGeneration: hostGraphGeneration,
+              policyRevision: policy.revision,
+              validUntil,
+            })
+          : [],
         writtenAt: new Date().toISOString(),
         observationIds: result.appliedObservationIds,
         resolverVersion: lastConditions?.resolverVersion ?? null,
       };
       log.info("traffic-live: conditions applied", {
+        mode: roadConditionsMode,
+        candidateEdges: mapped.overrides.size,
         closedEdges: result.closedEdges,
         cappedEdges: result.cappedEdges,
         overridesUnresolved: result.overridesUnresolved,
@@ -1335,7 +1469,11 @@ export function setupCron(options: CronSetupOptions): CronHandles {
           // key binds the observation id and geometry, so a dropped entry could
           // never be hit again anyway.
           const referenced = new Set(
-            conditions.flatMap((c) => c.segments.map((s) => spanKey(c.id, s))),
+            conditions.flatMap((c) =>
+              c.segments.map((s) =>
+                spanKey(c.cacheGeneration ? `${c.cacheGeneration}:${c.id}` : c.id, s),
+              ),
+            ),
           );
           try {
             await saveSpanEdgeCache(spanEdgeCachePath, spanEdgeCache, referenced);
@@ -1500,7 +1638,11 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     runTrafficExtractGuardNow: runTrafficExtractGuard,
     runWaysToEdgesRefreshNow: runWaysToEdgesRefresh,
     runTrafficLiveNow: runTrafficLive,
-    getTrafficConditionsApplied: () => trafficConditionsApplied,
+    getTrafficConditionsApplied: () =>
+      trafficConditionsApplied.validUntil &&
+      Date.parse(trafficConditionsApplied.validUntil) > Date.now()
+        ? trafficConditionsApplied
+        : { ...trafficConditionsApplied, observationIds: [], receipts: [] },
     runTrafficPredictedNow: runTrafficPredicted,
     runAutoBumpNow: runAutoBump,
     // `activeJobId` is exposed indirectly through singleFlight.getInflight()

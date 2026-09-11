@@ -234,3 +234,16 @@ describe("aggregateRoadFlow", () => {
     expect(out.map((s) => s.id)).toEqual(["1:f"]);
   });
 });
+
+it("filters at the provider before a denied representative can hide an allowed duplicate", async () => {
+  const upstream = provider("oc", async (_bbox, query) =>
+    query?.excludedSourceIds?.includes("denied")
+      ? [ev({ id: "allowed-copy", source: "allowed" })]
+      : [ev({ id: "denied-copy", source: "denied" })],
+  );
+  const result = await aggregateRoadConditions(
+    ctxWith([upstream], { disallowed: ["denied"] }),
+    BBOX,
+  );
+  expect(result.map((event) => event.id)).toEqual(["allowed-copy"]);
+});

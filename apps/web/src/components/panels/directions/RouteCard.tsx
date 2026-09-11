@@ -10,6 +10,7 @@ import Button from "@mui/material/Button";
 import Typography from "@mui/material/Typography";
 import type {
   PersonalVehicle,
+  RoadConditionRouteImpact,
   Route,
   RouteImpact,
   RouteImpactUnavailableReason,
@@ -53,6 +54,7 @@ export interface RouteCardProps {
   alternatives?: Route[];
   /** Integration id of the routing provider that served this route, for nav attribution. */
   provider?: string;
+  roadConditionImpact?: RoadConditionRouteImpact;
   impact?: RouteImpact;
   impactUnavailableReason?: RouteImpactUnavailableReason | null;
   vehicles?: PersonalVehicle[];
@@ -69,6 +71,7 @@ export function RouteCard({
   units,
   alternatives = [],
   provider,
+  roadConditionImpact,
   impact,
   impactUnavailableReason,
   vehicles,
@@ -113,6 +116,7 @@ export function RouteCard({
             avoidFerries,
             avoidClosures: avoidIncidents,
           },
+          roadConditionImpact,
           locale: locale === "de" ? "de" : "en",
           units,
         },
@@ -224,6 +228,15 @@ export function RouteCard({
         >
           {dist}
         </Typography>
+        {roadConditionImpact && (
+          <Typography
+            variant="caption"
+            data-testid="road-condition-route-status"
+            sx={{ color: "text.secondary", display: "block" }}
+          >
+            {t(`roadConditionImpact.${roadConditionImpact.availability}`)}
+          </Typography>
+        )}
         {impact ? (
           <Box
             sx={{ mt: 0.5 }}

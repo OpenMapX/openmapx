@@ -136,6 +136,13 @@ async function readLockSummary(): Promise<LockSummary> {
 
 export async function dataManagerRoute(app: FastifyInstance): Promise<void> {
   declareRouteAuth(app, "service");
+  app.get("/data-manager/road-conditions/policy", async (req, reply) => {
+    const auth = await authenticateDataManager(req);
+    if (auth.kind === "denied") return reply.code(401).send({ error: "Authentication required" });
+    reply.header("Cache-Control", "no-store");
+    const { getRoadConditionsPolicySnapshot } = await import("../services/data-use-policy.js");
+    return getRoadConditionsPolicySnapshot();
+  });
 
   // -------- READ endpoints (direct DB) --------
 

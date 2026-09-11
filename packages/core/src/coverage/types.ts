@@ -145,7 +145,22 @@ export interface StreamRegionEvidence {
   label?: string;
 }
 
+export interface RoadConditionOperationalMetrics {
+  status: string;
+  action: string | null;
+  changedCount: number | null;
+  rejectedCount: number | null;
+  consecutiveFailures: number | null;
+  bindingCounts: Record<string, number> | null;
+  graph: {
+    generation: string | null;
+    status: "ready" | "partial" | "missing" | "unknown";
+    regions: string[];
+  };
+}
+
 export interface StreamEvidence {
+  roadConditions?: RoadConditionOperationalMetrics;
   /** Opaque deterministic key derived from qualified upstream identity. */
   key: string;
   owner: EvidenceOwner;
@@ -290,6 +305,7 @@ export interface RegionMatrixRow {
 }
 
 export interface CoverageSourceRow {
+  count?: EvidenceCount;
   key: string;
   sourceId: string;
   name: string;

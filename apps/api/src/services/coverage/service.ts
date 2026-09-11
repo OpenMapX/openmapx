@@ -700,6 +700,7 @@ function sourceRow(
     key: stream.key,
     sourceId: stream.sourceId,
     name: sourceName(stream, catalog),
+    ...(stream.count ? { count: stream.count } : {}),
     owner: stream.owner,
     domain: stream.domain,
     stream: stream.stream,

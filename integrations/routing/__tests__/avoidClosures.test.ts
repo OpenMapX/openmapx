@@ -71,6 +71,95 @@ describe("/directions handler — avoidClosures=true with active closures", () =
     expect(reply.code).toBe(503);
     expect(reply.body).toEqual({ error: "Closure avoidance unavailable for this route" });
   });
+
+  it("returns an explicit limited assessment and disables HTTP caching", async () => {
+    const environment = createRoutingHandlerEnvironment({
+      routingProviders: [
+        {
+          integrationId: "routing-closure-aware",
+          providerId: "engine-b",
+          supportsExclusions: true,
+          getRoute: vi.fn(async () => createDirectionsResult()),
+        },
+      ],
+      closurePoints: [[0.15, 51.15]],
+    });
+    const reply = createRoutingTestReply();
+
+    await environment.getHandler("/directions")(
+      { query: { waypoints: WAYPOINTS_QUERY, avoidClosures: "true" } },
+      reply,
+    );
+
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.body).toMatchObject({
+      roadConditionImpact: {
+        availability: "limited",
+        evaluatedAt: expect.any(String),
+        validUntil: null,
+        reasons: ["legacy_geometry_unverified", "unverified_engine_application"],
+      },
+    });
+  });
+
+  it("does not claim current shared traffic without pinned-engine proof", async () => {
+    const environment = createRoutingHandlerEnvironment({
+      routingProviders: [
+        {
+          integrationId: "routing-valhalla",
+          providerId: "valhalla",
+          getRoute: vi.fn(async () => createDirectionsResult()),
+        },
+      ],
+    });
+    const reply = createRoutingTestReply();
+
+    await environment.getHandler("/directions")({ query: { waypoints: WAYPOINTS_QUERY } }, reply);
+
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.body).toMatchObject({
+      roadConditionImpact: {
+        availability: "unsupported",
+        evaluatedAt: expect.any(String),
+        validUntil: null,
+        reasons: ["unverified_engine_application"],
+      },
+    });
+  });
+
+  it("disables current traffic for a future route and reports that limitation", async () => {
+    const provider = vi.fn(async () => createDirectionsResult());
+    const environment = createRoutingHandlerEnvironment({
+      routingProviders: [
+        {
+          integrationId: "routing-time-aware",
+          providerId: "engine-b",
+          supportsTimeAware: true,
+          getRoute: provider,
+        },
+      ],
+    });
+    const reply = createRoutingTestReply();
+
+    await environment.getHandler("/directions")(
+      {
+        query: {
+          waypoints: WAYPOINTS_QUERY,
+          departAt: "2026-09-12T10:00",
+        },
+      },
+      reply,
+    );
+
+    expect(provider.mock.calls[0]?.[2]).toMatchObject({ useLiveTraffic: false });
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.body).toMatchObject({
+      roadConditionImpact: {
+        availability: "unsupported",
+        reasons: ["unsupported_future_shared_traffic"],
+      },
+    });
+  });
 });
 
 describe("/directions handler — routing metrics", () => {

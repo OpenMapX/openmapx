@@ -26,6 +26,7 @@ import {
   setDisallowedIntegrationResolver,
   setDisallowedSourceResolver,
   setIntegrationsReloadedHook,
+  setRoadConditionsPolicyResolver,
   shutdownIntegrations,
 } from "./integration-host";
 import { setIntegrationRouteRateLimits } from "./integration-routes";
@@ -94,6 +95,7 @@ import {
   getGatedIntegrationIds,
   getGatedSourceIds,
   getGatedSourceIdsSync,
+  getRoadConditionsPolicySnapshot,
   invalidateDataUsePolicy,
   refreshDataUsePolicy,
   startDataUsePolicyRefresh,
@@ -300,6 +302,7 @@ server.addHook("preSerialization", (request, _reply, payload, done) => {
 // data the response filter would only have to strip. The integration-keyed
 // variant serves transit / knowledge, whose items aren't tagged with a `source`.
 setDisallowedSourceResolver(getGatedSourceIds);
+setRoadConditionsPolicyResolver(getRoadConditionsPolicySnapshot);
 setDisallowedIntegrationResolver(getGatedIntegrationIds);
 // Reloading integrations changes the source set the gated sets are derived
 // from, so drop the policy's memoized gated sets when the registry is rebuilt

@@ -85,7 +85,55 @@ export interface RoadConditionSegmentSpan {
   endFraction: number;
 }
 
+/** Versioned original-source routing evidence; snake_case matches the OC wire contract. */
+export interface RoadConditionRoutingEvidence {
+  schema_version: 1;
+  observation_revision: string;
+  binding_revision: string;
+  graph_generation: string;
+  resolver_version: string;
+  source_id: string;
+  child_source_id: string | null;
+  source_license: string;
+  license_url: string | null;
+  attribution: string | null;
+  record_url: string | null;
+  source_checked_at: string;
+  fresh_until: string;
+  expires_at: string | null;
+  valid_from: string | null;
+  valid_to: string | null;
+  next_transition_at: string | null;
+  direction_mode: "forward" | "reverse" | "both" | "unknown";
+  applicability: { kind: "all" | "classes" | "unknown"; classes?: string[]; raw?: string[] };
+  rights: {
+    source_redistribution: "yes" | "no" | "unknown";
+    derived_redistribution: "yes" | "no" | "unknown";
+    commercial_use: "yes" | "no" | "unknown";
+    attribution_required: "yes" | "no" | "unknown";
+    retention: "yes" | "no" | "unknown";
+    evidence_origin: string | null;
+    evidence_version: string | null;
+    reviewed_at: string | null;
+  };
+  segments: Array<{
+    segment_id: string;
+    direction: "forward" | "reverse";
+    from_fraction: number;
+    to_fraction: number;
+  }>;
+  binding_status: RoadConditionBindingStatus | "unattempted" | "obsolete" | "invalid";
+  reason_codes: string[];
+  evaluated_at: string;
+}
+
 export interface RoadConditionEvent {
+  /** Original compatible records retained by display deduplication. */
+  sourceRecords?: RoadConditionEvent[];
+  routingEvidence?: RoadConditionRoutingEvidence;
+  speedLimitKph?: number;
+  expiresAt?: string | null;
+  isStale?: boolean;
   /** Globally unique, provider-prefixed (e.g. "ndw:NL123", "tomtom:abc"). */
   id: string;
   /** Upstream feed/source id (e.g. "ndw", "drivebc", "tomtom"). */
@@ -172,6 +220,8 @@ export interface RoadConditionEvent {
 }
 
 export interface RoadConditionsQuery {
+  /** Original sources excluded before provider-side representative selection. */
+  excludedSourceIds?: string[];
   types?: RoadConditionType[];
   minSeverity?: RoadConditionSeverity;
   /**

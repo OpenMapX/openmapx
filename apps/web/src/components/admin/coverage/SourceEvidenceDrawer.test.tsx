@@ -96,3 +96,44 @@ describe("SourceEvidenceDrawer", () => {
     expect(screen.getAllByText("poi:owner:source:static")).toHaveLength(2);
   });
 });
+
+it("shows binding buckets and an actionable missing-graph explanation in the existing drawer", () => {
+  useCoverageSource.mockReturnValue({
+    data: {
+      ...detail,
+      evidence: {
+        ...detail.evidence,
+        roadConditions: {
+          status: "validated",
+          action: "Import Germany motorway graph",
+          changedCount: 0,
+          rejectedCount: 2,
+          consecutiveFailures: 0,
+          bindingCounts: {
+            exact: 10,
+            likely: 3,
+            ambiguous: 2,
+            unresolved: 1,
+            noCoverage: 4,
+            unattempted: 0,
+          },
+          graph: { status: "missing", generation: null, regions: ["DE"] },
+        },
+      },
+    },
+    isLoading: false,
+    isError: false,
+  });
+  render(
+    <SourceEvidenceDrawer
+      source={null}
+      sourceKey="road-feed"
+      regionId="extract:first"
+      assessment="operational"
+      onClose={() => undefined}
+    />,
+  );
+  expect(screen.getByText("Import Germany motorway graph")).toBeInTheDocument();
+  expect(screen.getByText("adminCoverage.roadConditions.binding.ambiguous")).toBeInTheDocument();
+  expect(screen.getByText("adminCoverage.roadConditions.binding.noCoverage")).toBeInTheDocument();
+});

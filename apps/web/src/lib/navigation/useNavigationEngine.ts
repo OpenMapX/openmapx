@@ -190,7 +190,9 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
             rerouteTimesRef.current = [];
           }
           tickRef.current = freshTick();
-          useNavigationStore.getState().applyReroute(next, response.provider);
+          useNavigationStore
+            .getState()
+            .applyReroute(next, response.provider, undefined, response.roadConditionImpact);
         })
         .catch((error) => {
           if (!isCurrentAttempt()) return;

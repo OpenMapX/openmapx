@@ -568,6 +568,14 @@ export interface IntegrationContext {
    */
   getDisallowedSourceIds?(): Promise<Set<string>>;
 
+  /** Authoritative, leased policy identity for matching traffic application receipts. */
+  getRoadConditionsPolicySnapshot?(): Promise<{
+    authoritative: boolean;
+    revision: string;
+    validUntil: string | null;
+    disallowedSourceIds: string[];
+  }>;
+
   /**
    * Integration ids whose data sources are entirely disallowed by the operator's
    * data-use policy. Orchestrators that key on the integration/provider rather

@@ -1,6 +1,7 @@
 import type { DataSourceAttribution } from "./dataSource";
 import type { ConnectorStandard, EvVehicleSpec } from "./ev";
 import type { LngLat } from "./geometry";
+import type { RoadConditionRoutingEvidence } from "./roadConditions";
 
 // "transit", "flying" and "ride" are handled outside the ground-routing engines:
 // transit goes through the transit plan endpoint, "flying" deep-links to
@@ -122,6 +123,8 @@ export interface RouteLeg {
 }
 
 export interface Route {
+  /** Request-bound engine proof; route handlers verify receipts before claiming current. */
+  trafficProof?: RoutingTrafficProof;
   distance: number;
   duration: number;
   /**
@@ -167,6 +170,27 @@ export interface DirectionsResult {
   optimizedOrder?: number[];
   /** Integration ID of the routing provider that produced these results. */
   provider?: string;
+  /**
+   * What this response can honestly claim about road-condition effects.
+   * `current` is lease-bound; clients must stop presenting it as current after
+   * `validUntil`. `limited`, `unsupported`, and `unavailable` never imply that
+   * every applicable event affected the selected engine.
+   */
+  roadConditionImpact?: RoadConditionRouteImpact;
+}
+
+export type RoadConditionRouteImpactAvailability =
+  | "current"
+  | "limited"
+  | "unsupported"
+  | "unavailable"
+  | "expired";
+
+export interface RoadConditionRouteImpact {
+  availability: RoadConditionRouteImpactAvailability;
+  evaluatedAt: string;
+  validUntil: string | null;
+  reasons: string[];
 }
 
 export type IsochroneTravelMode = "driving" | "walking" | "cycling";
@@ -556,4 +580,47 @@ export interface ScheduledDirectionsResult extends DirectionsResult {
   /** Declared support of the provider that served the trip. */
   temporal: TemporalCapabilities;
   warnings: SchedulePlanWarning[];
+}
+
+/** Actuation evidence alone does not prove which graph served a route request. */
+export interface TrafficApplicationReceipt {
+  observationId: string;
+  observationRevision: string;
+  sourceId: string;
+  graphGeneration: string;
+  sourceGraphGeneration: string;
+  policyRevision: string;
+  validUntil: string;
+  complete: true;
+  effect: "closure" | "speed_cap";
+  intendedSpans: RoadConditionRoutingEvidence["segments"];
+  edgeKeys: string[];
+  sourceLicense: string;
+  attribution: string | null;
+}
+export interface TrafficApplicationSnapshot {
+  mode: "shadow" | "active";
+  schemaVersion: 1;
+  writeId: string | null;
+  engineBootId: string | null;
+  providerId: "routing-valhalla";
+  graphGeneration: string | null;
+  policyRevision: string | null;
+  validUntil: string | null;
+  receipts: TrafficApplicationReceipt[];
+  writtenAt: string | null;
+  observationIds: string[];
+  resolverVersion: string | null;
+}
+
+export interface RoutingTrafficProof {
+  schemaVersion: 1;
+  requestId: string;
+  writeId: string;
+  graphGeneration: string;
+  engineBootId: string;
+  validUntil: string;
+  evaluatedAt: string;
+  endpoint: "route" | "optimized_route";
+  costing: "auto" | "motorcycle";
 }

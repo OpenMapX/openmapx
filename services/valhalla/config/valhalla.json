@@ -9,7 +9,7 @@
   },
   "httpd": {
     "service": {
-      "listen": "tcp://*:8002",
+      "listen": "tcp://127.0.0.1:8004",
       "loopback": "ipc:///tmp/loopback",
       "interrupt": "ipc:///tmp/interrupt",
       "drain_seconds": 28,

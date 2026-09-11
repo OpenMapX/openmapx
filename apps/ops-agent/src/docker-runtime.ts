@@ -1,4 +1,7 @@
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
 import { StringDecoder } from "node:string_decoder";
 import {
   OPS_MAX_EVENT_MESSAGE_BYTES,
@@ -55,6 +58,8 @@ export interface DockerRuntimeOptions {
    * are handed to this owner so the data-owning writer is not locked out.
    */
   dataMountOwner?: { uid: number; gid: number };
+  /** Host-side data root shared with data-manager and Valhalla. */
+  trafficDataRoot?: string;
 }
 
 export interface ContainedProcessOptions {
@@ -469,7 +474,43 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     return Number.isFinite(seconds) ? seconds : null;
   };
 
+  runtime["valhalla.traffic.disable"] = async (_operation, context) => {
+    await run(["stop", "--time", "1", VALHALLA_CONTAINER], context.signal, 10_000);
+    const probe = await run(
+      ["inspect", "--format", "{{.State.Running}}", VALHALLA_CONTAINER],
+      context.signal,
+      5_000,
+    );
+    if (probe.stdout.trim() !== "false") throw new Error("Valhalla serving could not be fenced");
+    return { changed: true };
+  };
+
   runtime["valhalla.traffic.inspect"] = async (_operation, context) => {
+    if (options.trafficDataRoot) {
+      const sharedDir = join(options.trafficDataRoot, "valhalla", "osm-pbf");
+      if (existsSync(join(sharedDir, ".traffic-maintenance.json"))) {
+        return { state: "unknown" as const };
+      }
+      try {
+        const value = JSON.parse(
+          await readFile(join(sharedDir, "traffic-generations.json"), "utf8"),
+        ) as Record<string, unknown>;
+        const generation = value.graphGeneration;
+        if (
+          value.schemaVersion !== 1 ||
+          typeof generation !== "string" ||
+          !/^[0-9a-f]{64}$/.test(generation) ||
+          value.extractGeneration !== generation ||
+          value.waysToEdgesGeneration !== generation ||
+          typeof value.completedAt !== "string" ||
+          !Number.isFinite(Date.parse(value.completedAt))
+        ) {
+          return { state: "not_ready" as const };
+        }
+      } catch {
+        return { state: "not_ready" as const };
+      }
+    }
     const [tileMtime, tarMtime] = await Promise.all([
       valhallaMtimeSeconds(VALHALLA_TILE_DIR, context.signal),
       valhallaMtimeSeconds(VALHALLA_TRAFFIC_TAR, context.signal),
@@ -481,47 +522,177 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
     return { state: tileMtime > tarMtime ? ("not_ready" as const) : ("ready" as const) };
   };
 
-  runtime["valhalla.traffic.rebuild"] = async (_operation, context) => {
-    // `-t/--with-traffic` writes the traffic.tar skeleton the live writer mmaps;
-    // `-O/--overwrite` is required because a rebuild runs with the tar present.
-    const build = await valhallaExec(
-      ["valhalla_build_extract", "-c", VALHALLA_CONFIG_PATH, "-t", "-O"],
-      context.signal,
-    );
-    if (build.exitCode !== 0) {
-      // Never restart or claim success on a failed build: that would mask the
-      // failure and bounce Valhalla for nothing.
-      throw new Error("valhalla_build_extract failed");
+  runtime["valhalla.traffic.maintain"] = async (operation, context) => {
+    const dataRoot = options.trafficDataRoot;
+    if (!dataRoot) throw new Error("Valhalla traffic maintenance data root is not configured");
+    const sharedDir = join(dataRoot, "valhalla", "osm-pbf");
+    const fencePath = join(sharedDir, ".traffic-maintenance.json");
+    const generationsPath = join(sharedDir, "traffic-generations.json");
+    const writerLockPath = join(dataRoot, "traffic", "live-state.json.lock");
+    const operationId = context.claim.fingerprint;
+    const startedAt = new Date().toISOString();
+    if (operation.plan === "apply-predicted-and-rebuild" && !operation.preparedGeneration) {
+      throw new Error("Predicted traffic maintenance requires a prepared generation");
     }
-    // A successful-but-degenerate rebuild (empty tile_dir) exits 0 yet produces
-    // an extract with no tiles, which silently disables all live traffic.
-    // index.bin holds one 16-byte entry per tile, so an empty index.bin is fatal.
-    const probe = await valhallaExec(
-      ["sh", "-c", `tar xOf ${VALHALLA_TRAFFIC_TAR} index.bin 2>/dev/null | wc -c`],
+
+    // Serving is fenced before asking the writer to quiesce. Even if the
+    // authority process fails immediately afterwards, no request can observe
+    // a graph or traffic extract while either is being replaced.
+    await run(["stop", "--time", "1", VALHALLA_CONTAINER], context.signal, 10_000);
+    const stopped = await run(
+      ["inspect", "--format", "{{.State.Running}}", VALHALLA_CONTAINER],
       context.signal,
-      60_000,
+      5_000,
     );
-    const indexBytesRaw = probe.stdout.trim();
-    const indexBytes = Number(indexBytesRaw);
-    if (
-      probe.exitCode === 0 &&
-      indexBytesRaw !== "" &&
-      Number.isFinite(indexBytes) &&
-      indexBytes === 0
-    ) {
-      throw new Error("valhalla traffic extract has an empty index");
+    if (stopped.stdout.trim() !== "false") throw new Error("Valhalla serving could not be fenced");
+
+    await mkdir(sharedDir, { recursive: true });
+    await writeFile(
+      fencePath,
+      `${JSON.stringify({
+        schemaVersion: 1,
+        operationId,
+        plan: operation.plan,
+        ...(operation.preparedGeneration
+          ? { preparedGeneration: operation.preparedGeneration }
+          : {}),
+        startedAt,
+      })}\n`,
+      { encoding: "utf8", flag: "wx" },
+    );
+
+    try {
+      const writerDeadline = Date.now() + 15_000;
+      while (existsSync(writerLockPath)) {
+        if (context.signal.aborted) throw new Error("Valhalla traffic maintenance aborted");
+        if (Date.now() >= writerDeadline) {
+          throw new Error("Traffic writer did not quiesce before maintenance");
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+
+      const imageResult = await run(
+        ["inspect", "--format", "{{.Image}}", VALHALLA_CONTAINER],
+        context.signal,
+        5_000,
+      );
+      const image = imageResult.stdout.trim();
+      if (!/^sha256:[0-9a-f]{64}$/.test(image)) {
+        throw new Error("Could not resolve immutable Valhalla image identity");
+      }
+      const maintenanceContainer = `openmapx-valhalla-maint-${operationId.slice(0, 16)}`;
+
+      const owner = options.dataMountOwner ?? defaultDataMountOwner;
+      const applyPredicted =
+        operation.plan === "apply-predicted-and-rebuild"
+          ? `valhalla_add_predicted_traffic -c ${VALHALLA_CONFIG_PATH} ${VALHALLA_PREDICTED_CSV_DIR}/${operation.preparedGeneration}\n`
+          : "";
+      const script = [
+        "set -eu",
+        applyPredicted.trim(),
+        `valhalla_build_extract -c ${VALHALLA_CONFIG_PATH} -t -O`,
+        `index_bytes=$(tar xOf ${VALHALLA_TRAFFIC_TAR} index.bin 2>/dev/null | wc -c)`,
+        'test "$index_bytes" -gt 0',
+        `valhalla_ways_to_edges -c ${VALHALLA_CONFIG_PATH}`,
+        `generation=$(find ${VALHALLA_TILE_DIR} -type f ! -name way_edges.txt -print0 | sort -z | xargs -0 sha256sum | sha256sum | cut -d ' ' -f1)`,
+        'case "$generation" in (*[!0-9a-f]*|"") exit 41;; esac',
+        `chown ${owner.uid}:${owner.gid} ${VALHALLA_TRAFFIC_TAR} ${VALHALLA_TILE_DIR}/way_edges.txt`,
+        operation.preparedGeneration
+          ? `rm -rf ${VALHALLA_PREDICTED_CSV_DIR}/${operation.preparedGeneration}`
+          : "",
+        'printf "OPENMAPX_GRAPH_GENERATION=%s\\n" "$generation"',
+      ]
+        .filter(Boolean)
+        .join("\n");
+      const maintained = await run(
+        [
+          "run",
+          "--rm",
+          "--name",
+          maintenanceContainer,
+          "--volumes-from",
+          VALHALLA_CONTAINER,
+          "--entrypoint",
+          "sh",
+          image,
+          "-ceu",
+          script,
+        ],
+        context.signal,
+        30 * 60_000,
+      );
+      const generation = maintained.stdout.match(
+        /(?:^|\n)OPENMAPX_GRAPH_GENERATION=([0-9a-f]{64})(?:\n|$)/,
+      )?.[1];
+      if (!generation) throw new Error("Valhalla maintenance returned no graph generation");
+
+      const manifest = {
+        schemaVersion: 1,
+        graphGeneration: generation,
+        extractGeneration: generation,
+        waysToEdgesGeneration: generation,
+        completedAt: new Date().toISOString(),
+      };
+      const temporaryManifest = `${generationsPath}.${operationId}.tmp`;
+      await writeFile(temporaryManifest, `${JSON.stringify(manifest)}\n`, "utf8");
+      await rename(temporaryManifest, generationsPath);
+
+      await run(["start", VALHALLA_CONTAINER], context.signal, 30_000);
+      const healthDeadline = Date.now() + 60_000;
+      while (true) {
+        const health = await run(
+          ["inspect", "--format", "{{.State.Health.Status}}", VALHALLA_CONTAINER],
+          context.signal,
+          5_000,
+        );
+        if (health.stdout.trim() === "healthy") break;
+        if (Date.now() >= healthDeadline) throw new Error("Valhalla did not become healthy");
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      }
+
+      await rm(fencePath, { force: true });
+      return {
+        changed: true,
+        graphGeneration: generation,
+        extractGeneration: generation,
+        waysToEdgesGeneration: generation,
+      };
+    } catch (error) {
+      // Starting may have succeeded before a failed health probe. Re-assert the
+      // fence with a fresh signal, and kill the named offline tool container
+      // before returning. Reusing an aborted request signal here would skip the
+      // very compensation that makes a failed operation safe.
+      const compensationSignal = AbortSignal.timeout(20_000);
+      const maintenanceContainer = `openmapx-valhalla-maint-${operationId.slice(0, 16)}`;
+      let maintenanceWorkerStopped = true;
+      try {
+        await run(["rm", "-f", maintenanceContainer], compensationSignal, 10_000);
+      } catch {
+        const remainingWorker = await run(
+          ["ps", "-a", "--filter", `name=^/${maintenanceContainer}$`, "--format", "{{.Names}}"],
+          compensationSignal,
+          5_000,
+        ).catch(() => null);
+        maintenanceWorkerStopped = remainingWorker?.stdout.trim() === "";
+      }
+      await run(["stop", "--time", "1", VALHALLA_CONTAINER], compensationSignal, 10_000).catch(
+        () => undefined,
+      );
+      const stoppedAgain = await run(
+        ["inspect", "--format", "{{.State.Running}}", VALHALLA_CONTAINER],
+        compensationSignal,
+        5_000,
+      ).catch(() => null);
+      if (!maintenanceWorkerStopped || stoppedAgain?.stdout.trim() !== "false") {
+        throw new AggregateError(
+          [error],
+          !maintenanceWorkerStopped
+            ? "Valhalla maintenance failed and the maintenance worker could not be terminated"
+            : "Valhalla maintenance failed and serving could not be re-fenced",
+        );
+      }
+      throw error;
     }
-    // The build runs as the container's root user, but the live-speed writer
-    // opens the same file for in-place mmap writes as the data owner. Hand it
-    // to the owner of the shared data mount so the writer is not locked out.
-    const owner = options.dataMountOwner ?? defaultDataMountOwner;
-    const chown = await valhallaExec(
-      ["chown", `${owner.uid}:${owner.gid}`, VALHALLA_TRAFFIC_TAR],
-      context.signal,
-    );
-    if (chown.exitCode !== 0) throw new Error("valhalla traffic extract chown failed");
-    await run(["restart", VALHALLA_CONTAINER], context.signal);
-    return { changed: true };
   };
 
   runtime["valhalla.traffic.refreshWaysToEdges"] = async (_operation, context) => {
@@ -537,17 +708,6 @@ export function createDockerRuntime(options: DockerRuntimeOptions): OpsRuntime {
       ["chown", `${owner.uid}:${owner.gid}`, `${VALHALLA_TILE_DIR}/way_edges.txt`],
       context.signal,
     );
-    return { changed: true };
-  };
-
-  runtime["valhalla.traffic.applyPredicted"] = async (_operation, context) => {
-    // data-manager has already written the per-tile CSVs to the shared mount;
-    // running the baker against them is the only host-authority step.
-    const bake = await valhallaExec(
-      ["valhalla_add_predicted_traffic", "-c", VALHALLA_CONFIG_PATH, VALHALLA_PREDICTED_CSV_DIR],
-      context.signal,
-    );
-    if (bake.exitCode !== 0) throw new Error("valhalla_add_predicted_traffic failed");
     return { changed: true };
   };
 

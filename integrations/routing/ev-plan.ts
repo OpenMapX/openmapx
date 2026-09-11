@@ -10,6 +10,8 @@ import { getVehiclePreset, planCharges, routeEnergyKwh } from "@openmapx/ev-char
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import type { EvChargingStation } from "@openmapx/mobility-core/ev-charging";
 import { applyClosureExclusions, resolveTravelInstant } from "./closure-exclusions.js";
+import { roadConditionImpactForRequest } from "./road-condition-routing.js";
+import { verifyRouteTraffic } from "./traffic-application.js";
 
 /**
  * How close to the arrival reserve the trip may land before it counts as tight,
@@ -94,12 +96,14 @@ export async function runEvPlan(
 
   const requireTimeAware = Boolean(args.departAt);
   const closureAt = resolveTravelInstant(args.waypoints, args.departAt, undefined);
-  const { exclusions, hasExclusions, exclusionsHash } = await applyClosureExclusions(
-    ctx,
-    args.waypoints,
-    Boolean(args.avoidClosures),
-    closureAt,
-  );
+  const { exclusions, hasExclusions, exclusionsHash, roadConditionImpact } =
+    await applyClosureExclusions(
+      ctx,
+      args.waypoints,
+      Boolean(args.avoidClosures),
+      closureAt,
+      "driving",
+    );
   const resolved = getRoutingProviders("driving", { requireTimeAware }).find(
     (entry) => !hasExclusions || entry.provider.supportsExclusions === true,
   );
@@ -123,18 +127,22 @@ export async function runEvPlan(
     units: args.units ?? "metric",
     lang: args.lang,
     departAt: args.departAt,
+    useLiveTraffic: !closureAt,
     ...(hasExclusions && {
       excludeLocations: exclusions.points,
       excludePolygons: exclusions.polygons,
     }),
   };
 
-  // Cache the whole plan (spec §7): key on rounded waypoints + vehicle + bucketed
-  // SoC + temp + departAt + avoid flags + prefs + closure exclusionsHash.
-  // TTL is always SHORT: live availability (D8) can shift the plan and we can't
-  // know pre-run whether it influenced this one, so EV plans are never cached long.
-  const ttl = 300;
-  return ctx.cache.withCache(evPlanCacheKey(args, vehicle, exclusionsHash), ttl, async () => {
+  // Engine application proof belongs to the final route request, so plans
+  // requiring road-condition assessment cannot reuse an earlier response.
+  const responseRoadConditionImpact = roadConditionImpactForRequest(
+    roadConditionImpact,
+    !closureAt,
+    [...(closureAt ? ["unsupported_future_shared_traffic"] : []), "ev_matrix_unprotected"],
+  );
+  const ttl = 0;
+  const buildPlan = async () => {
     // getRoute returns a DirectionsResult; the planner needs the active Route.
     const baseDirections = await routingProvider.getRoute(args.waypoints, "driving", routingOpts);
     const baseRoute =
@@ -253,6 +261,12 @@ export async function runEvPlan(
       activeRouteIndex: 0,
       waypoints: args.waypoints,
       provider: resolved.integrationId,
+      roadConditionImpact: await verifyRouteTraffic(
+        ctx,
+        [finalRoute],
+        responseRoadConditionImpact,
+        resolved.integrationId,
+      ),
       stops: plan.stops.map((s) => ({
         station: { id: s.station.id, name: s.station.name, coordinates: s.station.coordinates },
         connector: s.connector,
@@ -279,7 +293,10 @@ export async function runEvPlan(
       },
       warnings: [...plan.warnings, ...revalidationWarnings],
     };
-  });
+  };
+  return ttl > 0
+    ? ctx.cache.withCache(evPlanCacheKey(args, vehicle, exclusionsHash), ttl, buildPlan)
+    : buildPlan();
 }
 
 /** Deterministic cache key: rounded waypoints + vehicle + bucketed inputs. */

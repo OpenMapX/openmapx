@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { db } from "../db";
 import { systemSettings } from "../db/schema";
 import { getAllIntegrations } from "../integration-host";
@@ -30,6 +31,7 @@ function envBool(name: string): boolean | undefined {
 
 interface PolicyCache {
   value: DataUsePolicy;
+  authoritative: boolean;
   at: number;
   // Gated sets derived from the policy + the integration registry, recomputed
   // together on every refresh so the synchronous getters (used by the hot
@@ -44,10 +46,11 @@ let refreshTimer: ReturnType<typeof setInterval> | null = null;
 const CACHE_TTL_MS = 30_000;
 const EMPTY: Set<string> = new Set();
 
-async function loadPolicy(): Promise<DataUsePolicy> {
+async function loadPolicy(): Promise<{ value: DataUsePolicy; authoritative: boolean }> {
   const envNC = envBool(ENV_NON_COMMERCIAL);
   const envGrey = envBool(ENV_GREY_AREA);
 
+  let authoritative = true;
   let dbNC: boolean | undefined;
   let dbGrey: boolean | undefined;
   // Only hit the DB for the keys not already pinned by an env var.
@@ -58,13 +61,17 @@ async function loadPolicy(): Promise<DataUsePolicy> {
       if (typeof map.allowNonCommercial === "boolean") dbNC = map.allowNonCommercial;
       if (typeof map.allowGreyArea === "boolean") dbGrey = map.allowGreyArea;
     } catch {
-      // DB unavailable — fall back to defaults.
+      // Display policy keeps historical defaults; writer authority does not.
+      authoritative = false;
     }
   }
 
   return {
-    allowNonCommercial: envNC ?? dbNC ?? true,
-    allowGreyArea: envGrey ?? dbGrey ?? true,
+    value: {
+      allowNonCommercial: envNC ?? dbNC ?? true,
+      allowGreyArea: envGrey ?? dbGrey ?? true,
+    },
+    authoritative,
   };
 }
 
@@ -117,10 +124,10 @@ function computeGatedIntegrations(gatedSources: Set<string>): Set<string> {
  * even when the DB is down.
  */
 export async function refreshDataUsePolicy(): Promise<void> {
-  const value = await loadPolicy();
+  const { value, authoritative } = await loadPolicy();
   const gatedSources = computeGatedSources(value);
   const gatedIntegrations = computeGatedIntegrations(gatedSources);
-  cache = { value, at: Date.now(), gatedSources, gatedIntegrations };
+  cache = { value, authoritative, at: Date.now(), gatedSources, gatedIntegrations };
 }
 
 async function ensureFresh(): Promise<PolicyCache> {
@@ -274,4 +281,21 @@ export function filterGatedSources<T>(value: T, gated: Set<string>): T {
     return (changed ? out : value) as T;
   }
   return value;
+}
+
+/** Existing policy authority, leased for a shared road-event writer. */
+export async function getRoadConditionsPolicySnapshot() {
+  const current = await ensureFresh();
+  const disallowedSourceIds = [...current.gatedSources].sort();
+  const revision = createHash("sha256")
+    .update(JSON.stringify({ policy: current.value, disallowedSourceIds }))
+    .digest("hex");
+  return {
+    schemaVersion: 1 as const,
+    authoritative: current.authoritative,
+    evaluatedAt: new Date().toISOString(),
+    validUntil: current.authoritative ? new Date(current.at + 150_000).toISOString() : null,
+    revision,
+    disallowedSourceIds,
+  };
 }

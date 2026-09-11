@@ -28,7 +28,14 @@ describe("traffic publication evidence", () => {
         ),
         recordTrafficGraphSuccess(
           path,
-          { total: 0, matched: 0, written: 0, outOfBounds: 0 },
+          {
+            total: 0,
+            matched: 0,
+            written: 0,
+            outOfBounds: 0,
+            graphIdentity: "g1",
+            validUntil: "2026-09-10T12:02:00.000Z",
+          },
           "2026-09-10T12:00:02.000Z",
         ),
       ]);
@@ -41,9 +48,11 @@ describe("traffic publication evidence", () => {
       expect(loaded.evidence.graph).toMatchObject({
         total: 0,
         written: 0,
-        graphApplied: true,
+        graphApplied: false,
         lastPublishedAt: "2026-09-10T12:00:02.000Z",
       });
+      expect(loaded.evidence.graphIdentity).toBe("g1");
+      expect(loaded.evidence.graph.expiresAt).toBe("2026-09-10T12:02:00.000Z");
       expect(statSync(path).mode & 0o777).toBe(0o600);
 
       await recordTrafficGraphFailure(path, new Error("writer failed"), "2026-09-10T12:01:00.000Z");

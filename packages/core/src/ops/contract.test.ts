@@ -145,10 +145,13 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "feedProxy.validateAndReload",
     candidateId: "candidate_20260823",
   },
+  "valhalla.traffic.disable": { kind: "valhalla.traffic.disable" },
   "valhalla.traffic.inspect": { kind: "valhalla.traffic.inspect" },
-  "valhalla.traffic.rebuild": { kind: "valhalla.traffic.rebuild" },
+  "valhalla.traffic.maintain": {
+    kind: "valhalla.traffic.maintain",
+    plan: "rebuild-extract",
+  },
   "valhalla.traffic.refreshWaysToEdges": { kind: "valhalla.traffic.refreshWaysToEdges" },
-  "valhalla.traffic.applyPredicted": { kind: "valhalla.traffic.applyPredicted" },
   "postgis.capacity.inspect": { kind: "postgis.capacity.inspect" },
   "transitousLock.inspect": { kind: "transitousLock.inspect" },
   "transitousLock.propose": {

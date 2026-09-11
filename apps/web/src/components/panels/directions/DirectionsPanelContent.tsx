@@ -1475,6 +1475,7 @@ export function DirectionsPanelContent() {
                   onDetails={() => setDetailsRouteIndex(i)}
                   units={units}
                   provider={scheduledData.provider}
+                  roadConditionImpact={scheduledData.roadConditionImpact}
                   impact={routeImpacts[i]}
                   impactUnavailableReason={routeImpactUnavailableReason}
                   vehicles={impactVehicles}
@@ -1513,6 +1514,7 @@ export function DirectionsPanelContent() {
                   units={units}
                   alternatives={data.routes.filter((_, idx) => idx !== i)}
                   provider={data.provider}
+                  roadConditionImpact={data.roadConditionImpact}
                   impact={routeImpacts[i]}
                   impactUnavailableReason={routeImpactUnavailableReason}
                   vehicles={impactVehicles}

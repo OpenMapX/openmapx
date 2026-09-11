@@ -76,5 +76,45 @@ describe("POST /directions/ev — input hardening", () => {
   it("does not 400 on a valid body", async () => {
     const reply = await invokeEvRoute(VALID_BODY);
     expect(reply.code).toBeLessThan(400);
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+    expect(reply.body).toMatchObject({
+      roadConditionImpact: {
+        availability: "unsupported",
+        evaluatedAt: expect.any(String),
+        validUntil: null,
+        reasons: expect.arrayContaining(["unverified_engine_application"]),
+      },
+    });
+  });
+
+  it("rebuilds the guarded plan with the next driving provider after failure", async () => {
+    const failing = vi.fn(async () => {
+      throw new Error("primary route provider unavailable");
+    });
+    const succeeding = vi.fn(async () => makeDirectionsResult());
+    const environment = createRoutingHandlerEnvironment({
+      routingProviders: [
+        {
+          integrationId: "routing-first",
+          providerId: "engine-a",
+          priority: 10,
+          getRoute: failing,
+        },
+        {
+          integrationId: "routing-second",
+          providerId: "engine-b",
+          priority: 20,
+          getRoute: succeeding,
+        },
+      ],
+    });
+    const reply = createRoutingTestReply();
+
+    await environment.getHandler("/directions/ev")({ body: VALID_BODY }, reply);
+
+    expect(reply.code).toBe(200);
+    expect(failing).toHaveBeenCalledOnce();
+    expect(succeeding).toHaveBeenCalledOnce();
+    expect(reply.body).toMatchObject({ provider: "routing-second" });
   });
 });

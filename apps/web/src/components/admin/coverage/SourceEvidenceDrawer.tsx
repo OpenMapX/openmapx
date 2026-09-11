@@ -168,6 +168,55 @@ function SourceEvidenceBody({
         )}
       </Section>
 
+      {data.evidence.roadConditions && (
+        <Section title={t("roadConditions.title")}>
+          <Detail label={t("roadConditions.status")} value={data.evidence.roadConditions.status} />
+          <Detail
+            label={t("roadConditions.changed")}
+            value={String(data.evidence.roadConditions.changedCount ?? t("common.unknown"))}
+          />
+          <Detail
+            label={t("roadConditions.rejected")}
+            value={String(data.evidence.roadConditions.rejectedCount ?? t("common.unknown"))}
+          />
+          <Detail
+            label={t("roadConditions.failures")}
+            value={String(data.evidence.roadConditions.consecutiveFailures ?? t("common.unknown"))}
+          />
+          <Detail
+            label={t("roadConditions.graph")}
+            value={t(`roadConditions.graphStatus.${data.evidence.roadConditions.graph.status}`)}
+          />
+          <Detail
+            label={t("roadConditions.generation")}
+            value={data.evidence.roadConditions.graph.generation ?? t("common.unknown")}
+          />
+          {(
+            [
+              "exact",
+              "likely",
+              "ambiguous",
+              "unresolved",
+              "noCoverage",
+              "unattempted",
+              "obsolete",
+              "notApplicable",
+            ] as const
+          ).map((bucket) => (
+            <Detail
+              key={bucket}
+              label={t(`roadConditions.binding.${bucket}`)}
+              value={String(
+                data.evidence.roadConditions?.bindingCounts?.[bucket] ?? t("common.unknown"),
+              )}
+            />
+          ))}
+          {data.evidence.roadConditions.action && (
+            <CompactAlert severity="info">{data.evidence.roadConditions.action}</CompactAlert>
+          )}
+        </Section>
+      )}
+
       <Section title={t("sourceDrawer.timeline")}>
         <Detail
           label={t("sourceDrawer.freshness")}

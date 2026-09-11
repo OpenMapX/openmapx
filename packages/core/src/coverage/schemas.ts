@@ -266,6 +266,23 @@ export const paginationSchema = z
   })
   .strict();
 
+const roadConditionOperationalMetricsSchema = z.object({
+  status: boundedString(128),
+  action: z.string().max(512).nullable(),
+  changedCount: z.number().int().nonnegative().nullable(),
+  rejectedCount: z.number().int().nonnegative().nullable(),
+  consecutiveFailures: z.number().int().nonnegative().nullable(),
+  bindingCounts: z
+    .record(z.string().max(64), z.number().int().nonnegative())
+    .refine((value) => Object.keys(value).length <= 16, "Too many binding buckets")
+    .nullable(),
+  graph: z.object({
+    generation: z.string().max(256).nullable(),
+    status: z.enum(["ready", "partial", "missing", "unknown"]),
+    regions: z.array(z.string().max(256)).max(64),
+  }),
+});
+
 export const streamEvidenceSchema = z
   .object({
     key: boundedString(512),
@@ -280,6 +297,7 @@ export const streamEvidenceSchema = z
     presence: evidencePresenceSchema,
     region: evidenceRegionSchema,
     count: evidenceCountSchema.optional(),
+    roadConditions: roadConditionOperationalMetricsSchema.optional(),
     publication: evidencePublicationSchema,
     attempt: evidenceAttemptSchema,
     lastSuccessfulCheckAt: nullableDate,

@@ -6,6 +6,7 @@ import {
   buildLocations,
   buildTrafficRequestExtras,
   setValhallaBidirectionalAlternates,
+  setValhallaUrl,
   TRACE_ATTRIBUTE_FILTER,
   transformTraceEdge,
   transformTrip,
@@ -343,6 +344,61 @@ describe("valhallaService.getRoute exclusion body params", () => {
     expect(capturedBody.turn_lanes).toBe(true);
   });
 
+  it.each(["driving", "motorcycle"] as const)(
+    "uses current closures only for depart-now %s routes",
+    async (mode) => {
+      await valhallaService.getRoute(WPS, mode, { useLiveTraffic: true });
+      const costing = mode === "driving" ? "auto" : mode;
+      expect(capturedBody.date_time).toEqual({ type: 0 });
+      expect(capturedBody.costing_options).toMatchObject({
+        [costing]: {
+          speed_types: ["freeflow", "constrained", "predicted", "current"],
+        },
+      });
+      expect(
+        (capturedBody.costing_options as Record<string, Record<string, unknown>>)[costing],
+      ).toHaveProperty("ignore_closures", false);
+    },
+  );
+
+  it.each(["walking", "cycling"] as const)(
+    "explicitly ignores binary closures for unsupported %s routes",
+    async (mode) => {
+      await valhallaService.getRoute(WPS, mode, { useLiveTraffic: true });
+      const costing = mode === "cycling" ? "bicycle" : "pedestrian";
+      expect(capturedBody.costing_options).toMatchObject({
+        [costing]: {
+          speed_types: ["freeflow", "constrained", "predicted"],
+          ignore_closures: true,
+        },
+      });
+    },
+  );
+
+  it("keeps today's binary closures out of future traffic-aware routes", async () => {
+    await valhallaService.getRoute(WPS, "driving", {
+      useLiveTraffic: true,
+      departAt: "2026-09-12T10:00",
+    });
+    expect(capturedBody.date_time).toEqual({ type: 1, value: "2026-09-12T10:00" });
+    expect(capturedBody.costing_options).toMatchObject({
+      auto: {
+        speed_types: ["freeflow", "constrained", "predicted"],
+        ignore_closures: true,
+      },
+    });
+  });
+
+  it("explicitly ignores binary closures when live traffic is disabled", async () => {
+    await valhallaService.optimizeRoute(WPS, "driving", { useLiveTraffic: false });
+    expect(capturedBody.costing_options).toMatchObject({
+      auto: {
+        speed_types: ["freeflow", "constrained", "predicted"],
+        ignore_closures: true,
+      },
+    });
+  });
+
   it("forwards sanitized closure exclusions to optimized routes", async () => {
     const ring: [number, number][] = [
       [5, 52],
@@ -633,5 +689,82 @@ describe("valhallaService.temporal", () => {
       waypointArriveBy: "emulated",
       timeDependentTravel: "native",
     });
+  });
+});
+
+describe("Valhalla proof propagation", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    setValhallaUrl("https://api.stadiamaps.com");
+  });
+  it.each(["getRoute", "optimizeRoute"] as const)(
+    "binds %s to its fresh engine proof",
+    async (method) => {
+      setValhallaUrl("http://localhost:8002");
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (_url: string, init?: RequestInit) => {
+          const request = JSON.parse(init?.body as string);
+          expect(request.openmapx_request_id).toMatch(/^[0-9a-f-]{36}$/);
+          return Response.json({
+            ...MINIMAL_VALHALLA_RESPONSE,
+            openmapx_traffic_proof: {
+              schemaVersion: 1,
+              requestId: request.openmapx_request_id,
+              writeId: "write",
+              graphGeneration: "graph",
+              engineBootId: "boot",
+              validUntil: new Date(Date.now() + 60000).toISOString(),
+              evaluatedAt: new Date().toISOString(),
+              endpoint: method === "getRoute" ? "route" : "optimized_route",
+              costing: "auto",
+            },
+          });
+        }),
+      );
+      const call = valhallaService[method];
+      if (!call) throw new Error("missing provider method");
+      const result = await call(
+        [
+          [7, 50],
+          [7.1, 50.1],
+        ],
+        "driving",
+        { useLiveTraffic: true },
+      );
+      expect(result.routes[0]?.trafficProof?.writeId).toBe("write");
+    },
+  );
+  it("does not accept Stadia proof even when its nonce matches", async () => {
+    setValhallaUrl("https://api.stadiamaps.com");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        const request = JSON.parse(init?.body as string);
+        return Response.json({
+          ...MINIMAL_VALHALLA_RESPONSE,
+          openmapx_traffic_proof: {
+            schemaVersion: 1,
+            requestId: request.openmapx_request_id,
+            writeId: "write",
+            graphGeneration: "graph",
+            engineBootId: "boot",
+            validUntil: new Date(Date.now() + 60000).toISOString(),
+            evaluatedAt: new Date().toISOString(),
+            endpoint: "route",
+            costing: "auto",
+          },
+        });
+      }),
+    );
+    const result = await valhallaService.getRoute(
+      [
+        [7, 50],
+        [7.1, 50.1],
+      ],
+      "driving",
+      { useLiveTraffic: true },
+    );
+    expect(result.routes[0]?.trafficProof).toBeUndefined();
   });
 });

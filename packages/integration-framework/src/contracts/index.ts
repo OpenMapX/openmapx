@@ -100,6 +100,7 @@ export type {
   RoadConditionRoadRef,
   RoadConditionSchedule,
   RoadConditionSeverity,
+  RoadConditionsOperationalEvidence,
   RoadConditionsProvider,
   RoadConditionsQuery,
   RoadConditionType,

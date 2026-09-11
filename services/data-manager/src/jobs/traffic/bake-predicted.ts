@@ -1,12 +1,9 @@
+import { randomUUID } from "node:crypto";
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { envString } from "@openmapx/core/server-env";
 import { runOpsOperation } from "../../ops-client.js";
 import { fetchCoveredWayIds } from "./covered-ways.js";
-import {
-  type EnsureTrafficExtractResult,
-  ensureTrafficExtract as ensureTrafficExtractDefault,
-} from "./ensure-extract.js";
 import { encodePredictedSpeeds, expandHourlyToBuckets } from "./predicted-encode.js";
 import {
   loadWaysToEdges as loadWaysToEdgesDefault,
@@ -82,6 +79,8 @@ export interface BakePredictedDeps {
   openConditionsUrl: string;
   /** Host-visible directory the per-tile CSVs are written to. Defaults under `DATA_DIR`. */
   csvDir?: string;
+  /** Test seam; production creates a unique directory for every prepared bake. */
+  preparedGeneration?: string;
   /** Same directory as seen INSIDE the Valhalla container. Defaults to the `osm-pbf` shared mount point. */
   containerCsvDir?: string;
   container?: string;
@@ -92,11 +91,6 @@ export interface BakePredictedDeps {
   getCoveredWayIds?: () => Promise<Set<number>>;
   /** Test seam: invoked instead of the real `loadWaysToEdges`. */
   loadWaysToEdges?: () => Promise<Map<number, WayEdge[]>>;
-  /** Test seam: invoked instead of the real `ensureTrafficExtract`. */
-  ensureTrafficExtract?: (deps: {
-    force?: boolean;
-    logger?: { info: (msg: string, extra?: Record<string, unknown>) => void };
-  }) => Promise<EnsureTrafficExtractResult>;
   /** Test seam: invoked instead of the real `refreshWaysToEdges`. */
   refreshWaysToEdges?: (
     coveredWayIds: Set<number>,
@@ -217,13 +211,13 @@ interface TileGroup {
  * separate restart is issued here.
  */
 export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredictedResult> {
-  const csvDir = deps.csvDir ?? defaultCsvDir();
+  const preparedGeneration = deps.preparedGeneration ?? randomUUID();
+  const csvDir = deps.csvDir ?? join(defaultCsvDir(), preparedGeneration);
 
   const fetchProfiles = deps.fetchProfiles ?? (() => defaultFetchProfiles(deps.openConditionsUrl));
   const resolveCoveredWayIds =
     deps.getCoveredWayIds ?? (() => fetchCoveredWayIds(deps.openConditionsUrl));
   const loadEdges = deps.loadWaysToEdges ?? (() => loadWaysToEdgesDefault());
-  const ensureExtract = deps.ensureTrafficExtract ?? ensureTrafficExtractDefault;
   const refreshWays = deps.refreshWaysToEdges ?? refreshWaysToEdgesDefault;
 
   // Re-derive the way->edge map BEFORE reading it. The copy on disk is written
@@ -330,24 +324,20 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
     await writeFile(filePath, `${group.lines.join("\n")}\n`, "utf8");
   }
 
-  // Baking is host authority and belongs to the agent, which owns the container,
-  // the config path, and the CSV directory it reads from the shared mount.
-  await runOpsOperation({ kind: "valhalla.traffic.applyPredicted" });
-
-  // Rebuild chain: the bake above rewrote the loose tiles in place, so the
-  // edge-count-sized traffic.tar is stale now. ensureTrafficExtract({ force:
-  // true }) rebuilds the extract AND restarts Valhalla itself — no separate
-  // restart is issued here, so Valhalla bounces exactly once. The way->edge map
-  // does not need re-deriving: valhalla_add_predicted_traffic writes predicted
-  // arrays into existing edges without renumbering GraphIds, and the map was
-  // already derived against this graph at the top of this function.
-  const extractResult = await ensureExtract({ force: true, logger: deps.logger });
+  // Tile mutation, extract rebuilding, final way-edge generation, validation,
+  // and restart are one fenced operations-authority transaction. Splitting
+  // these into calls lets the live writer mmap a replacement mid-sequence.
+  await runOpsOperation({
+    kind: "valhalla.traffic.maintain",
+    plan: "apply-predicted-and-rebuild",
+    preparedGeneration,
+  });
 
   const result: BakePredictedResult = {
     ...counts,
     rows,
     tiles: tiles.size,
-    built: extractResult.built,
+    built: true,
     wayCount: waysResult.wayCount,
     edgeCount: waysResult.edgeCount,
   };

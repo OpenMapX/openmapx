@@ -574,6 +574,55 @@ describe("writeLiveTraffic overrides", () => {
     rmSync(dir, { recursive: true, force: true });
   });
 
+  it("retains every overlapping contributor and rejects partial contributors", async () => {
+    const result = await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map(),
+      overrides: overrideMap(
+        {
+          closed: true,
+          observationId: "winner",
+          contributorIds: ["winner", "overlap", "partial"],
+          edge: FORWARD_EDGE,
+        },
+        {
+          closed: true,
+          observationId: "partial",
+          contributorIds: ["partial"],
+          edge: { ...BACKWARD_EDGE, index: EDGE_COUNT + 1 },
+        },
+      ),
+    });
+    expect(result.appliedObservationIds).toEqual(["overlap", "winner"]);
+  });
+
+  it("rejects a corrupt tile index before any byte write or file extension", async () => {
+    const bad = readFileSync(tarPath);
+    bad.writeBigUInt64LE(BigInt(bad.length + 4096), 512);
+    writeFileSync(tarPath, bad);
+    await expect(
+      writeLiveTraffic({
+        tarPath,
+        statePath,
+        csv: EMPTY_CSV,
+        waysToEdges: new Map(),
+        overrides: overrideMap({ closed: true, observationId: "a", edge: FORWARD_EDGE }),
+      }),
+    ).rejects.toThrow(/traffic/i);
+    expect(readFileSync(tarPath)).toEqual(bad);
+  });
+
+  it("refuses writes while the authority holds a graph-maintenance fence", async () => {
+    const before = readFileSync(tarPath);
+    writeFileSync(join(dir, ".traffic-maintenance.json"), "{}");
+    await expect(
+      writeLiveTraffic({ tarPath, statePath, csv: EMPTY_CSV, waysToEdges: new Map() }),
+    ).rejects.toThrow(/maintenance/);
+    expect(readFileSync(tarPath)).toEqual(before);
+  });
+
   it("keys an edge exactly as the writer keys the identity it persists", () => {
     expect(edgeKey(FORWARD_EDGE)).toBe(`${LEVEL}:${TILE}:${FORWARD_INDEX}`);
   });
@@ -616,17 +665,131 @@ describe("writeLiveTraffic overrides", () => {
     // `written` is 2, not 3: the forward edge's CSV row and its cap merge into
     // ONE planned record because both key on `level:tile:index`.
     expect(res).toEqual({
-      written: 2,
+      written: 1,
       matched: 1,
       total: 1,
       outOfBounds: 0,
       closedEdges: 0,
-      cappedEdges: 2,
-      overridesUnresolved: 0,
-      appliedObservationIds: ["rw"],
+      cappedEdges: 1,
+      overridesUnresolved: 1,
+      appliedObservationIds: [],
     });
     expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(60));
-    expect(readRecordBytes(tarPath, backwardRecordOffset())).toEqual(encodeTrafficSpeed(60));
+    expect(readRecordBytes(tarPath, backwardRecordOffset())).toEqual(Buffer.alloc(8));
+  });
+
+  it("persists a write-ahead journal and expires effects without any upstream fetch", async () => {
+    const { expireLiveTraffic } = await import("../jobs/traffic/write-live.js");
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map(),
+      validUntil: new Date(Date.now() + 1000).toISOString(),
+      overrides: overrideMap({ closed: true, observationId: "leased", edge: FORWARD_EDGE }),
+      writeId: "95a348cc-14ba-4823-9e32-c72935188acb",
+      engineBootId: "e2630bd0-5a85-4c93-9b7d-cf174bd0dd45",
+      graphGeneration: "routing-graph-epoch",
+    });
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeClosedTrafficSpeed());
+    const committed = JSON.parse(readFileSync(`${statePath}.journal.json`, "utf8"));
+    expect(committed).toMatchObject({
+      phase: "committed",
+      writeId: "95a348cc-14ba-4823-9e32-c72935188acb",
+      engineBootId: "e2630bd0-5a85-4c93-9b7d-cf174bd0dd45",
+      routingGraphGeneration: "routing-graph-epoch",
+    });
+    await expireLiveTraffic({ tarPath, statePath, now: Date.now() + 2000 });
+    const cleared = JSON.parse(readFileSync(`${statePath}.journal.json`, "utf8"));
+    expect(cleared.writeId).not.toBe(committed.writeId);
+    expect(cleared.engineBootId).toBeNull();
+    expect(cleared.routingGraphGeneration).toBeNull();
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(null));
+  });
+
+  it("recovers an orphaned traffic extract even when both state files are missing", async () => {
+    const { expireLiveTraffic } = await import("../jobs/traffic/write-live.js");
+    const { rm } = await import("node:fs/promises");
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map(),
+      overrides: overrideMap({ closed: true, observationId: "orphan", edge: FORWARD_EDGE }),
+    });
+    await rm(statePath);
+    await rm(`${statePath}.journal.json`);
+    await expireLiveTraffic({ tarPath, statePath });
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(null));
+  });
+
+  it("clears orphaned records when the journal is missing and legacy state is empty", async () => {
+    const { expireLiveTraffic } = await import("../jobs/traffic/write-live.js");
+    const { rm } = await import("node:fs/promises");
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map(),
+      overrides: overrideMap({ closed: true, observationId: "orphan", edge: FORWARD_EDGE }),
+    });
+    writeFileSync(statePath, "[]");
+    await rm(`${statePath}.journal.json`);
+
+    await expireLiveTraffic({ tarPath, statePath });
+
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(null));
+    expect(JSON.parse(readFileSync(`${statePath}.journal.json`, "utf8"))).toMatchObject({
+      phase: "committed",
+      uncertain: false,
+    });
+  });
+
+  it("retries a pending uncertain journal with a full clear", async () => {
+    const { expireLiveTraffic } = await import("../jobs/traffic/write-live.js");
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map(),
+      overrides: overrideMap({ closed: true, observationId: "orphan", edge: FORWARD_EDGE }),
+    });
+    const journal = JSON.parse(readFileSync(`${statePath}.journal.json`, "utf8"));
+    writeFileSync(statePath, "[]");
+    writeFileSync(
+      `${statePath}.journal.json`,
+      JSON.stringify({
+        ...journal,
+        phase: "pending",
+        identities: [],
+        uncertain: true,
+      }),
+    );
+
+    await expireLiveTraffic({ tarPath, statePath });
+
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(null));
+    expect(JSON.parse(readFileSync(`${statePath}.journal.json`, "utf8"))).toMatchObject({
+      phase: "committed",
+      uncertain: false,
+    });
+  });
+
+  it("clears all live records when journal contents are corrupt", async () => {
+    const { expireLiveTraffic } = await import("../jobs/traffic/write-live.js");
+    await writeLiveTraffic({
+      tarPath,
+      statePath,
+      csv: EMPTY_CSV,
+      waysToEdges: new Map(),
+      overrides: overrideMap({ closed: true, observationId: "leased", edge: FORWARD_EDGE }),
+      writeId: "95a348cc-14ba-4823-9e32-c72935188acb",
+      engineBootId: "e2630bd0-5a85-4c93-9b7d-cf174bd0dd45",
+      graphGeneration: "routing-graph-epoch",
+    });
+    writeFileSync(`${statePath}.journal.json`, "{broken");
+    await expireLiveTraffic({ tarPath, statePath });
+    expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeTrafficSpeed(null));
   });
 
   it("keeps the live speed when it is already below the cap", async () => {
@@ -845,8 +1008,8 @@ describe("writeLiveTraffic overrides", () => {
     expect(res.written).toBe(1);
     expect(res.closedEdges).toBe(1);
     expect(res.cappedEdges).toBe(0);
-    // The cap changed nothing on this edge, so only the closure is credited.
-    expect(res.appliedObservationIds).toEqual(["a:6"]);
+    // Both restrictions are satisfied; retain the cap contributor for future removal.
+    expect(res.appliedObservationIds).toEqual(["a:6", "rw"]);
     expect(readRecordBytes(tarPath, forwardRecordOffset())).toEqual(encodeClosedTrafficSpeed());
   });
 

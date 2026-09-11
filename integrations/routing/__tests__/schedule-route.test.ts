@@ -1,6 +1,7 @@
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { setup } from "../index.js";
+import type { DirectionsResult, RoutingProvider } from "../types.js";
 
 const COLOGNE = [6.96, 50.94];
 const BONN = [7.1, 50.73];
@@ -18,13 +19,18 @@ async function post(ctx: MockContext, body: unknown) {
     (entry) => entry.method === "POST" && entry.path === "/directions/schedule",
   );
   if (!route) throw new Error("POST /directions/schedule was not registered");
-  const sent: { status: number; payload: unknown } = { status: 200, payload: undefined };
+  const sent: { status: number; payload: unknown; headers: Record<string, string> } = {
+    status: 200,
+    payload: undefined,
+    headers: {},
+  };
   const reply = {
     status(code: number) {
       sent.status = code;
       return reply;
     },
-    header() {
+    header(name: string, value: string) {
+      sent.headers[name] = value;
       return reply;
     },
     send(payload: unknown) {
@@ -65,5 +71,53 @@ describe("POST /directions/schedule", () => {
   it("returns 503 when no routing provider is registered", async () => {
     const sent = await post(newContext(), { waypoints: [COLOGNE, BONN] });
     expect(sent.status).toBe(503);
+  });
+
+  it("returns an explicit unsupported assessment and disables HTTP caching", async () => {
+    const route = {
+      distance: 1_000,
+      duration: 60,
+      geometry: [COLOGNE, BONN],
+      legs: [{ distance: 1_000, duration: 60, geometry: [COLOGNE, BONN], steps: [] }],
+      steps: [],
+      mode: "driving" as const,
+    };
+    const provider: RoutingProvider = {
+      id: "valhalla",
+      supportedModes: ["driving"],
+      supportsTimeAware: true,
+      getRoute: vi.fn(
+        async (waypoints): Promise<DirectionsResult> => ({
+          waypoints,
+          routes: [route],
+          activeRouteIndex: 0,
+        }),
+      ),
+    };
+    const ctx = createMockIntegrationContext();
+    ctx.getIntegrationsByDomain = (domain) =>
+      domain === "routing"
+        ? [
+            {
+              id: "routing-valhalla",
+              providers: new Map([["routing", [provider]]]),
+              manifest: {} as never,
+            },
+          ]
+        : [];
+    setup(ctx);
+
+    const sent = await post(ctx, { waypoints: [COLOGNE, BONN] });
+
+    expect(sent.status).toBe(200);
+    expect(sent.headers["Cache-Control"]).toBe("no-store");
+    expect(sent.payload).toMatchObject({
+      roadConditionImpact: {
+        availability: "unsupported",
+        evaluatedAt: expect.any(String),
+        validUntil: null,
+        reasons: ["unverified_engine_application"],
+      },
+    });
   });
 });

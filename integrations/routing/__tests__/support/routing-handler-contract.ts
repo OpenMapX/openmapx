@@ -11,6 +11,7 @@ export interface RoutingProviderFixture {
   getMatrix?: RoutingProvider["getMatrix"];
   priority?: number;
   supportsExclusions?: boolean;
+  supportsTimeAware?: boolean;
 }
 
 export interface RoutingTestRequest {
@@ -52,6 +53,7 @@ export function createDirectionsResult(routes: DirectionsResult["routes"] = []):
 }
 
 interface RoutingHandlerEnvironmentOptions {
+  contextOverrides?: Partial<IntegrationContext>;
   routingProviders: RoutingProviderFixture[];
   closurePoints?: [number, number][];
   additionalIntegrations?: Record<string, unknown[]>;
@@ -86,6 +88,7 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
                   supportedModes: ["driving", "walking", "cycling"] as TravelMode[],
                   priority: fixture.priority,
                   supportsExclusions: fixture.supportsExclusions,
+                  supportsTimeAware: fixture.supportsTimeAware,
                   getRoute: fixture.getRoute,
                   ...(fixture.optimizeRoute ? { optimizeRoute: fixture.optimizeRoute } : {}),
                   ...(fixture.getMatrix ? { getMatrix: fixture.getMatrix } : {}),
@@ -131,6 +134,7 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
       debug: vi.fn(),
     },
     ...(options.metricsRecorder ? { metricsRecorder: options.metricsRecorder } : {}),
+    ...options.contextOverrides,
   } as unknown as IntegrationContext;
 
   setup(context);
@@ -188,6 +192,14 @@ export function closureRoutingContract(options: ClosureRoutingContractOptions): 
       expect(operationSpy.mock.calls[0]?.[2]).toMatchObject({
         excludeLocations: [CLOSURE_POINT],
         excludePolygons: [],
+      });
+      expect(reply.header).toHaveBeenCalledWith("Cache-Control", "no-store");
+      expect(reply.body).toMatchObject({
+        roadConditionImpact: {
+          availability: "limited",
+          evaluatedAt: expect.any(String),
+          validUntil: null,
+        },
       });
     });
 

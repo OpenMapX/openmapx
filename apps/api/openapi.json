@@ -2205,6 +2205,20 @@
         "x-openmapx-auth": "service"
       }
     },
+    "/api/data-manager/road-conditions/policy": {
+      "get": {
+        "operationId": "getApiDataManagerRoadConditionsPolicy",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "service"
+      }
+    },
     "/api/data-manager/search-index/status": {
       "get": {
         "operationId": "getApiDataManagerSearchIndexStatus",

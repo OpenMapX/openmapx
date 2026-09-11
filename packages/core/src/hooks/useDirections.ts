@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { fetchDirections } from "../api/directions";
 import type { LngLat } from "../types/geometry";
 import type { TravelMode } from "../types/routing";
+import { useRoadConditionLease } from "./useRoadConditionLease";
 
 interface UseDirectionsParams {
   waypoints: LngLat[];
@@ -80,7 +81,7 @@ export function useDirections(params: UseDirectionsParams) {
   } = params;
   const eff = effectiveAvoid(mode, avoidHighways, avoidTolls);
 
-  return useQuery({
+  const query = useQuery({
     queryKey: directionsQueryKey(params),
     queryFn: () =>
       fetchDirections({
@@ -96,7 +97,9 @@ export function useDirections(params: UseDirectionsParams) {
         arriveBy,
       }),
     enabled: waypoints.length >= 2,
-    staleTime: 120_000,
+    staleTime: mode === "driving" || mode === "motorcycle" || avoidClosures ? 0 : 120_000,
     gcTime: 600_000,
   });
+  const data = useRoadConditionLease(query.data);
+  return { ...query, data };
 }

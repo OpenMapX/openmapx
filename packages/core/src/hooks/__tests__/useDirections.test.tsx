@@ -1,5 +1,5 @@
-import { renderHook, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import type { LngLat } from "../../types/geometry";
 import { directionsQueryKey, useDirections } from "../useDirections";
@@ -18,6 +18,8 @@ describe("useDirections", () => {
   beforeEach(() => {
     fetchDirections.mockReset();
   });
+
+  afterEach(() => vi.useRealTimers());
 
   it("fetches directions and forwards normalized options to fetchDirections", async () => {
     const route = { routes: [{ distance: 100 }] };
@@ -80,6 +82,40 @@ describe("useDirections", () => {
 
     expect(result.current.fetchStatus).toBe("idle");
     expect(fetchDirections).not.toHaveBeenCalled();
+  });
+
+  it("stops presenting a held road-condition assessment as current at its deadline", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-12T12:00:00Z"));
+    fetchDirections.mockResolvedValue({
+      waypoints,
+      routes: [],
+      activeRouteIndex: 0,
+      roadConditionImpact: {
+        availability: "current",
+        evaluatedAt: "2026-09-12T12:00:00Z",
+        validUntil: "2026-09-12T12:00:01Z",
+        reasons: [],
+      },
+    });
+
+    const { result } = renderHook(() => useDirections({ waypoints, mode: "driving", lang: "en" }), {
+      wrapper: createQueryWrapper(),
+    });
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.data?.roadConditionImpact?.availability).toBe("current");
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1_000);
+    });
+
+    expect(result.current.data?.roadConditionImpact).toMatchObject({
+      availability: "expired",
+      validUntil: "2026-09-12T12:00:01Z",
+      reasons: ["evidence_expired"],
+    });
   });
 });
 

@@ -1,7 +1,7 @@
 import type { RoadConditionEvent } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
-import { buildRoadConditionPopupHtml } from "../popup";
+import { buildRoadConditionPopupGroups, buildRoadConditionPopupHtml } from "../popup";
 
 const events: RoadConditionEvent[] = [
   {
@@ -247,4 +247,30 @@ describe("buildRoadConditionPopupHtml", () => {
     expect(result.html).toContain("Lane closure (2 related records)");
     expect(result.html).toContain("Traffic congestion");
   });
+});
+
+it("keeps binding, vehicle and timestamp evidence on each original source record", () => {
+  const sourceEvents = events.map((event, i) => ({
+    ...event,
+    binding: {
+      status: i === 0 ? ("exact" as const) : ("ambiguous" as const),
+      confidence: i === 0 ? 0.95 : 0.5,
+    },
+    vehiclesAffected: i === 0 ? ["truck"] : ["car"],
+    dataUpdatedAt: i === 0 ? "2026-09-11T10:00:00Z" : "2026-09-11T11:00:00Z",
+  }));
+  const [group] = buildRoadConditionPopupGroups(displayId, sourceEvents);
+  expect(group!.sourceRecords[0]).toMatchObject({
+    bindingStatus: "exact",
+    vehicles: "truck",
+    updatedAt: "2026-09-11T10:00:00Z",
+  });
+  expect(group!.sourceRecords[1]).toMatchObject({
+    bindingStatus: "ambiguous",
+    vehicles: "car",
+    updatedAt: "2026-09-11T11:00:00Z",
+  });
+  expect(group!.summary.bindingStatus).toBeUndefined();
+  expect(group!.summary.vehicles).toBeUndefined();
+  expect(group!.summary.updatedAt).toBeUndefined();
 });

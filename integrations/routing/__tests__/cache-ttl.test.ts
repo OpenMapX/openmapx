@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { cacheTtlSeconds } from "../index";
+import { cacheTtlSeconds, evidenceBoundCacheTtlSeconds } from "../index";
 
 const MIN = 60_000;
 const H = 60 * MIN;
@@ -12,7 +12,7 @@ const H = 60 * MIN;
  * deterministic weekly predicted profiles — may be cached aggressively.
  */
 describe("cacheTtlSeconds", () => {
-  const LIVE = 60;
+  const LIVE = 30;
   const PREDICTED = 3600;
 
   it("uses the short live TTL for an immediate (now) trip", () => {
@@ -29,5 +29,22 @@ describe("cacheTtlSeconds", () => {
 
   it("treats a past pinned time as live (short TTL)", () => {
     expect(cacheTtlSeconds(new Date(Date.now() - 1 * H))).toBe(LIVE);
+  });
+});
+
+describe("evidenceBoundCacheTtlSeconds", () => {
+  const NOW = Date.parse("2026-09-12T12:00:00Z");
+
+  it("caps current road-condition cache reuse at the evidence deadline", () => {
+    expect(evidenceBoundCacheTtlSeconds("2026-09-12T12:00:12Z", NOW)).toBe(12);
+  });
+
+  it("caps current road-condition cache reuse at thirty seconds", () => {
+    expect(evidenceBoundCacheTtlSeconds("2026-09-12T12:05:00Z", NOW)).toBe(30);
+  });
+
+  it("disables reuse when there is no current evidence lease", () => {
+    expect(evidenceBoundCacheTtlSeconds(null, NOW)).toBe(0);
+    expect(evidenceBoundCacheTtlSeconds("2026-09-12T12:00:00Z", NOW)).toBe(0);
   });
 });

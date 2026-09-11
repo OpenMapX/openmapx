@@ -8,21 +8,11 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
  *     port is bound to 127.0.0.1 on the host (see service.json) so the
  *     surface is already firewalled off; matches the apps/api posture for
  *     its own `/internal/metrics` route.
- *   - `/traffic/conditions/applied` — read-only list of observation ids the
- *     live-traffic writer already baked into the routing graph. The payload is
- *     derived from public road-conditions feeds and reveals nothing about the
- *     deployment, and `apps/api` polls it on every route request, so it stays
- *     token-free like the probes above.
  *   - one exact GET relay-capability path — the 256-bit, run-bound handle is
  *     the only authority upstream Python receives; malformed paths/methods
  *     still require the ordinary bearer token.
  */
-const HEALTH_PATHS = new Set<string>([
-  "/live",
-  "/status",
-  "/internal/metrics",
-  "/traffic/conditions/applied",
-]);
+const HEALTH_PATHS = new Set<string>(["/live", "/status", "/internal/metrics"]);
 const OPERATOR_FEED_RELAY_PATH = /^\/internal\/transit\/operator-feed\/[a-f0-9]{64}$/i;
 
 function bypassesBearerAuth(req: FastifyRequest): boolean {

@@ -26,7 +26,7 @@ describe("ensureTrafficExtract", () => {
     await expect(ensureTrafficExtract()).resolves.toEqual({ built: true });
     expect(runOpsOperation.mock.calls.map(([operation]) => operation)).toEqual([
       { kind: "valhalla.traffic.inspect" },
-      { kind: "valhalla.traffic.rebuild" },
+      { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" },
     ]);
   });
 
@@ -42,14 +42,14 @@ describe("ensureTrafficExtract", () => {
 
     await expect(ensureTrafficExtract({ force: true })).resolves.toEqual({ built: true });
     expect(runOpsOperation.mock.calls.map(([operation]) => operation)).toEqual([
-      { kind: "valhalla.traffic.rebuild" },
+      { kind: "valhalla.traffic.maintain", plan: "rebuild-extract" },
     ]);
   });
 
   it("propagates a failed rebuild rather than reporting success", async () => {
     runOpsOperation
       .mockResolvedValueOnce({ state: "not_ready" })
-      .mockRejectedValueOnce(new Error("Operation valhalla.traffic.rebuild did not succeed"));
+      .mockRejectedValueOnce(new Error("Operation valhalla.traffic.maintain did not succeed"));
 
     await expect(ensureTrafficExtract()).rejects.toThrow(/did not succeed/);
   });

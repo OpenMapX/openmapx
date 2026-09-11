@@ -232,13 +232,24 @@ export async function recordTrafficConditionsSuccess(
 
 export async function recordTrafficGraphSuccess(
   path: string,
-  result: { total: number; matched: number; written: number; outOfBounds: number },
+  result: {
+    total: number;
+    matched: number;
+    written: number;
+    outOfBounds: number;
+    overridesUnresolved?: number;
+    graphIdentity?: string | null;
+    validUntil?: string;
+  },
   at = new Date().toISOString(),
 ): Promise<TrafficEvidence> {
   return updateTrafficEvidence(path, (current) => ({
     ...current,
+    graphIdentity:
+      result.graphIdentity === undefined ? current.graphIdentity : result.graphIdentity,
     graph: {
       ...current.graph,
+      expiresAt: result.validUntil ?? current.graph.expiresAt,
       lastAttemptAt: at,
       lastAttemptOutcome: "succeeded",
       lastAttemptMessage: null,
@@ -249,7 +260,8 @@ export async function recordTrafficGraphSuccess(
       matched: result.matched,
       written: result.written,
       outOfBounds: result.outOfBounds,
-      graphApplied: result.outOfBounds === 0,
+      graphApplied:
+        result.written > 0 && result.outOfBounds === 0 && (result.overridesUnresolved ?? 0) === 0,
     },
   }));
 }

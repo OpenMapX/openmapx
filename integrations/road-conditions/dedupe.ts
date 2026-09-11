@@ -175,6 +175,21 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
     const ep = positions(e.geometry);
     const dupIdx = survivors.findIndex((s, i) => {
       if (s.type !== e.type) return false;
+      const semantics = (event: RoadConditionEvent) =>
+        JSON.stringify([
+          event.roadState ?? null,
+          event.validFrom ?? null,
+          event.validTo ?? null,
+          event.schedule ?? null,
+          event.vehiclesAffected ?? null,
+          event.routingEvidence?.applicability ?? null,
+          event.binding?.directionMode ?? null,
+          event.routingEvidence?.direction_mode ?? null,
+          event.segments ?? null,
+          event.speedLimitKph ?? null,
+        ]);
+      if (semantics(s) !== semantics(e)) return false;
+      if ((s.sourceRecords?.length ?? 1) + (e.sourceRecords?.length ?? 1) > 16) return false;
       const sp = survivorPos[i];
       if (ep.length === 0 || sp.length === 0) return false;
       if (geometryDistanceMeters(ep, sp) > CLUSTER_METERS) return false;
@@ -188,7 +203,11 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
       const survivor = newer(survivors[dupIdx], e);
       // Keep the surviving event's own geometry as the cluster's representative.
       if (survivor === e) survivorPos[dupIdx] = ep;
-      survivors[dupIdx] = survivor;
+      const originals = [
+        ...(survivors[dupIdx].sourceRecords ?? [survivors[dupIdx]]),
+        ...(e.sourceRecords ?? [e]),
+      ];
+      survivors[dupIdx] = { ...survivor, sourceRecords: originals };
     }
   }
   return survivors;

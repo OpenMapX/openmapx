@@ -1,4 +1,4 @@
-import type { PersonalVehicle, Route, RouteImpact } from "@openmapx/core";
+import type { PersonalVehicle, RoadConditionRouteImpact, Route, RouteImpact } from "@openmapx/core";
 import { setNavigationAuthority, useDirectionsStore, useNavigationStore } from "@openmapx/core";
 import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
 import { en } from "@openmapx/i18n";
@@ -274,6 +274,37 @@ describe("RouteCard Start under browser authority", () => {
     fireEvent.click(view.getByRole("button", { name: "Start" }));
 
     await waitFor(() => expect(useNavigationStore.getState().status).toBe("navigating"));
+  });
+
+  it("carries the route assessment into navigation and shows its limited status", async () => {
+    const roadConditionImpact: RoadConditionRouteImpact = {
+      availability: "limited",
+      evaluatedAt: "2026-09-12T12:00:00Z",
+      validUntil: null,
+      reasons: ["legacy_geometry_unverified"],
+    };
+    const view = render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          roadConditionImpact={roadConditionImpact}
+        />
+      </NextIntlClientProvider>,
+    );
+
+    expect(screen.getByTestId("road-condition-route-status").textContent).toContain(
+      "Limited road-condition protection",
+    );
+    fireEvent.click(view.getByRole("button", { name: "Start" }));
+
+    await waitFor(() =>
+      expect(useNavigationStore.getState().roadConditionImpact).toEqual(roadConditionImpact),
+    );
   });
 });
 

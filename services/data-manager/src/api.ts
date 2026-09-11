@@ -1,6 +1,10 @@
 import { createReadStream } from "node:fs";
 import { join } from "node:path";
-import { type OfflinePackageRequest, parseOfflinePackageRequest } from "@openmapx/core";
+import {
+  type OfflinePackageRequest,
+  parseOfflinePackageRequest,
+  type TrafficApplicationSnapshot,
+} from "@openmapx/core";
 import { feedState } from "@openmapx/db-schema";
 import { parseTransitSource } from "@openmapx/transitous-core";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
@@ -96,17 +100,8 @@ export interface ApiOptions {
    * pretending to work on a deployment without OpenConditions.
    */
   bakePredicted?: () => Promise<BakePredictedResult>;
-  /**
-   * Observation ids whose closure/cap override the last live-traffic cycle
-   * actually wrote into `traffic.tar`, with the write time. Wired in
-   * `index.ts` only when OpenConditions is configured; the routing
-   * integration uses it to skip point exclusions for exactly these events.
-   */
-  getTrafficConditionsApplied?: () => {
-    writtenAt: string | null;
-    observationIds: string[];
-    resolverVersion: string | null;
-  };
+  /** Latest committed actuation evidence, matched to the actual serving route response. */
+  getTrafficConditionsApplied?: () => TrafficApplicationSnapshot;
   /** Offline package generator initialized by the process entrypoint. */
   offlinePackages?: OfflinePackageGenerator;
   /** Search-index database/test seam. */
@@ -855,18 +850,13 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
     return { accepted: true };
   });
 
-  // Read-only, public-data, loopback-bound: bypasses bearer auth (see the
-  // HEALTH_PATHS list in auth.ts) so the routing integration can poll it
-  // without a token. The set is served exactly as the last live cycle wrote
-  // it — `writtenAt` lets the consumer apply its own freshness window.
+  // Authenticated, uncached application snapshot for per-request engine proof.
   app.get("/traffic/conditions/applied", async (_req, reply) => {
     if (!opts.getTrafficConditionsApplied) {
       reply.code(501);
       return { error: "live traffic not configured" };
     }
-    // The live writer runs on a cron of minutes, so a few seconds of caching
-    // collapses a polling fleet into one read without hiding a fresh cycle.
-    reply.header("Cache-Control", "public, max-age=10");
+    reply.header("Cache-Control", "no-store");
     return opts.getTrafficConditionsApplied();
   });
 

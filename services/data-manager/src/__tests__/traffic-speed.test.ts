@@ -21,10 +21,10 @@ describe("encodeTrafficSpeed", () => {
     expect(Number((v >> 28n) & 0xffn)).toBe(0);
   });
 
-  it("encodes 0 kph as a valid CLOSED record (overall=0, breakpoint1=255)", () => {
-    const v = encodeTrafficSpeed(0).readBigUInt64LE(0);
-    expect(Number(v & 0x7fn)).toBe(0);
-    expect(Number((v >> 28n) & 0xffn)).toBe(255);
+  it.each([0, 0.1, 1, 1.99])("does not encode measured speed %s as a closure", (speed) => {
+    const v = encodeTrafficSpeed(speed).readBigUInt64LE(0);
+    expect(Number(v & 0x7fn)).toBe(127);
+    expect(Number((v >> 28n) & 0xffn)).toBe(0);
   });
 
   it("clamps overflow speeds to the max real value (126)", () => {

@@ -30,6 +30,7 @@ export function eventsToFeatureCollection(
       properties: {
         id: e.id,
         source: e.source,
+        sourceRecords: e.sourceRecords ?? null,
         provider: e.provider,
         ...(e.groupId ? { groupId: e.groupId } : {}),
         type: e.type,
@@ -43,6 +44,11 @@ export function eventsToFeatureCollection(
         validTo: e.validTo ?? null,
         schedule: e.schedule ?? null,
         dataUpdatedAt: e.dataUpdatedAt ?? null,
+        binding: e.binding ?? null,
+        vehiclesAffected: e.vehiclesAffected ?? null,
+        routingEvidence: e.routingEvidence ?? null,
+        expiresAt: e.expiresAt ?? null,
+        isStale: e.isStale ?? null,
         attribution: e.attribution ?? null,
         // Evidence provenance — carried to the overlay so a crowd/unconfirmed
         // report can be labeled distinctly (see `isUnconfirmedCrowd`). Absent

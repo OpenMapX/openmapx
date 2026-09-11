@@ -176,6 +176,19 @@ function rawFeatureToEvent(feature: RawFeature): RoadConditionEvent | null {
   if (typeof properties.confidenceScore === "number") {
     event.confidenceScore = properties.confidenceScore;
   }
+  if (Array.isArray(properties.sourceRecords))
+    event.sourceRecords = properties.sourceRecords as RoadConditionEvent[];
+  if (typeof properties.dataUpdatedAt === "string") event.dataUpdatedAt = properties.dataUpdatedAt;
+  if (typeof properties.expiresAt === "string") event.expiresAt = properties.expiresAt;
+  if (typeof properties.isStale === "boolean") event.isStale = properties.isStale;
+  if (Array.isArray(properties.vehiclesAffected))
+    event.vehiclesAffected = properties.vehiclesAffected.filter(
+      (value): value is string => typeof value === "string",
+    );
+  if (properties.binding && typeof properties.binding === "object")
+    event.binding = properties.binding as RoadConditionEvent["binding"];
+  if (properties.routingEvidence && typeof properties.routingEvidence === "object")
+    event.routingEvidence = properties.routingEvidence as RoadConditionEvent["routingEvidence"];
   if (typeof properties.isForecast === "boolean") event.isForecast = properties.isForecast;
   if (typeof properties.isPlanned === "boolean") event.isPlanned = properties.isPlanned;
 
