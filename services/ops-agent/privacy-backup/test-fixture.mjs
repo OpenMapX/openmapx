@@ -1,6 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import {
+  chmodSync,
   copyFileSync,
   mkdirSync,
   mkdtempSync,
@@ -14,6 +15,8 @@ import { join, resolve } from "node:path";
 import { gzipSync } from "node:zlib";
 
 const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-backup-fixture-"));
+// The container's postgres user must traverse the bind-mounted fixture directory.
+chmodSync(root, 0o755);
 const databaseContainer = `openmapx-privacy-backup-${randomBytes(8).toString("hex")}`;
 const databaseImage =
   "ghcr.io/baosystems/postgis:18-3.6@sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6";
