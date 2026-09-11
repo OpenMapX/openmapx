@@ -49,6 +49,28 @@ describe("OpenConditions → OpenMapX road-condition wire contract v1", () => {
     expect([...mapped.appliedObservationIds]).toEqual(["contract:closure-1"]);
   });
 
+  it("preserves and applies the shared speed-cap fixture", () => {
+    const speedWire = readFileSync(
+      new URL("./fixtures/contracts/road-speed-cap-v1.json", import.meta.url),
+      "utf8",
+    );
+    const parsed = parseConditionsJson(speedWire);
+    expect(parsed.conditions[0]?.speedLimitKph).toBe(40);
+    const mapped = conditionsToEdges(parsed.conditions, ways);
+    expect(mapped.overrides.get("2:1:0")).toMatchObject({
+      closed: false,
+      capKph: 40,
+      observationId: "contract:speed-cap-1",
+    });
+    expect(mapped.overrides.get("2:1:0")?.contributorIds).toEqual(["contract:speed-cap-1"]);
+  });
+
+  it("rejects evidence naming a different directed segment", () => {
+    const input = JSON.parse(wire);
+    input.conditions[0].routing_evidence.segments[0].segment_id = "999:f";
+    expect(() => parseConditionsJson(JSON.stringify(input))).toThrow(/disagrees/);
+  });
+
   it.each(["test-parent", "test-child"])("honours source exclusion for %s", (source) => {
     const parsed = parseConditionsJson(wire);
     expect(

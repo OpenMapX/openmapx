@@ -16,13 +16,14 @@ import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
 import type { WriteLiveTrafficDeps, WriteLiveTrafficResult } from "../jobs/traffic/write-live.js";
 import { event } from "./fixtures/road-condition.js";
 
-function liveEvidence(startFraction = 0) {
+function liveEvidence(startFraction = 0, wayId = 10) {
   const evidence = event().routingEvidence;
   if (!evidence) throw new Error("Missing fixture routing evidence");
   return {
     ...evidence,
     segments: evidence.segments.map((span) => ({
       ...span,
+      segment_id: `${wayId}:f`,
       from_fraction: startFraction,
     })),
     source_checked_at: new Date(Date.now() - 60_000).toISOString(),
@@ -64,7 +65,7 @@ function twoClosureFeed(): string {
     routing_eligible: true,
     binding: { status: "exact" },
     source: "fr",
-    routing_evidence: liveEvidence(),
+    routing_evidence: liveEvidence(0, 20),
     segments: [{ way_id: 20, dir: "f", start_fraction: 0, end_fraction: 1, geometry: null }],
   });
   return JSON.stringify(first);

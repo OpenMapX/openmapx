@@ -173,6 +173,7 @@ export function parseConditionsJson(body: string): {
           const projected = segments[i];
           return (
             !projected ||
+            span.segment_id !== `${projected.wayId}:${projected.dir}` ||
             (span.direction === "forward" ? "f" : "b") !== projected.dir ||
             span.from_fraction !== projected.startFraction ||
             span.to_fraction !== projected.endFraction
