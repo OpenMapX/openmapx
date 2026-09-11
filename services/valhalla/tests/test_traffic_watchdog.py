@@ -612,7 +612,7 @@ class TrafficWatchdogTest(unittest.TestCase):
                 fixture.proxy.server_close()
                 fixture.threads[1].join(timeout=2)
 
-    def test_slow_and_truncated_clients_are_bounded_before_worker_threads_spawn(self):
+    def test_slow_clients_are_bounded_and_capacity_recovers_after_timeout(self):
         with tempfile.TemporaryDirectory() as root:
             fixture = HttpFixture(root, max_concurrency=1, client_timeout=0.1)
             slow = socket.create_connection(fixture.proxy.server_address, timeout=2)
@@ -625,21 +625,31 @@ class TrafficWatchdogTest(unittest.TestCase):
                 response = slow.recv(4096)
                 self.assertIn(b" 408 ", response)
                 slow.close()
-                status, _, _ = fixture.request("GET", "/status")
+                deadline = time.monotonic() + 2
+                while True:
+                    status, _, _ = fixture.request("GET", "/status")
+                    if status != 503 or time.monotonic() >= deadline:
+                        break
+                    time.sleep(0.01)
                 self.assertEqual(status, 200)
-
-                truncated = socket.create_connection(
-                    fixture.proxy.server_address, timeout=2
-                )
-                truncated.sendall(
-                    b"POST /route HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\n{}"
-                )
-                truncated.shutdown(socket.SHUT_WR)
-                response = truncated.recv(4096)
-                self.assertIn(b" 400 ", response)
-                truncated.close()
             finally:
                 slow.close()
+                fixture.close()
+
+    def test_truncated_client_receives_bad_request(self):
+        with tempfile.TemporaryDirectory() as root:
+            fixture = HttpFixture(root, max_concurrency=1, client_timeout=0.1)
+            try:
+                with socket.create_connection(
+                    fixture.proxy.server_address, timeout=2
+                ) as truncated:
+                    truncated.sendall(
+                        b"POST /route HTTP/1.1\r\nHost: localhost\r\nContent-Length: 10\r\n\r\n{}"
+                    )
+                    truncated.shutdown(socket.SHUT_WR)
+                    response = truncated.recv(4096)
+                    self.assertIn(b" 400 ", response)
+            finally:
                 fixture.close()
 
     def test_only_exact_route_paths_can_receive_proof(self):
