@@ -50,6 +50,8 @@ overrides:
   "dompurify": "^3.4.13"
   "mermaid": "^11.16.1"
   "nanoid@3": "^3.3.18"
+  "colord": "^2.9.4"
+  "js-yaml@4": "^4.3.2"
 
 patchedDependencies:
   image-size@2.0.2: patches/image-size@2.0.2.patch
