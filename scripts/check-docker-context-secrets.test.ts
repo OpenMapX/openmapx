@@ -1,5 +1,5 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -29,6 +29,24 @@ const createReferenceMatcher = requireFromTest(
   ),
 ) as (options: { ignorecase: boolean }) => ReferenceMatcher;
 let root: string;
+
+it("retains coverage source modules while excluding generated coverage reports", () => {
+  const matcher = createReferenceMatcher({ ignorecase: false }).add(
+    readFileSync(join(WORKSPACE_ROOT, ".dockerignore"), "utf8").split("\n"),
+  );
+  for (const path of [
+    "packages/core/src/coverage/index.ts",
+    "apps/api/src/services/coverage/service.ts",
+    "services/data-manager/src/coverage/api.ts",
+  ])
+    expect(matcher.ignores(path), path).toBe(false);
+  for (const path of [
+    "coverage/lcov.info",
+    "apps/web/coverage/lcov.info",
+    "packages/core/coverage/lcov.info",
+  ])
+    expect(matcher.ignores(path), path).toBe(true);
+});
 
 function write(relativePath: string, contents = ""): void {
   const path = join(root, relativePath);

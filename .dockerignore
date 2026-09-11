@@ -40,7 +40,11 @@ services/.community
 custom_integrations
 integrations/*/config.json
 **/.DS_Store
-**/coverage
+/coverage
+apps/*/coverage
+packages/*/coverage
+services/*/coverage
+integrations/*/coverage
 apps/api/dist
 services/data-manager/dist
 packages/*/dist

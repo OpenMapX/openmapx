@@ -216,6 +216,9 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      - name: Install docs dependencies for policy validation
+        run: pnpm --dir docs install --frozen-lockfile
+
       - name: Validate the exact release checkout
         run: pnpm validate:privacy-release "$RUNNER_TEMP/privacy-release-validation.json"
 
