@@ -45,9 +45,10 @@ overrides:
   "@hey-api/client-fetch": "workspace:*"
   "protobufjs": ">=7.5.5"
   "uuid": ">=14.0.0"
-  # Next's optional sharp dependency currently resolves to vulnerable 0.34.x.
+  # Include the libheif security fixes shipped in sharp 0.35.4.
   # The workspace requires Node >=24, which is compatible with sharp 0.35+.
-  "sharp": ">=0.35.0"
+  "sharp": ">=0.35.4"
+  "@xmldom/xmldom@0.9": "^0.9.12"
   "esbuild": ">=0.28.1"
   "postcss": ">=8.5.10"
   # Keep ajv's fast-uri dependency off the vulnerable 4.1.1 release.
