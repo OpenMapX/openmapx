@@ -184,6 +184,7 @@ export type {
 } from "./ride";
 export { isQuoteExpired } from "./ride";
 export type {
+  PublishedRoadRestrictionDetailsV1,
   RoadConditionAttribution,
   RoadConditionBindingStatus,
   RoadConditionEvent,
@@ -196,6 +197,11 @@ export type {
   RoadConditionType,
   RoadFlowQuery,
   RoadFlowSegment,
+  RoadRestrictionFact,
+  RoadRestrictionIssue,
+  RoadRestrictionIssueCode,
+  RoadRestrictionSource,
+  RoadRestrictionState,
   RoadState,
   RouteFlowInput,
   RouteFlowResponse,

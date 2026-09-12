@@ -1,3 +1,4 @@
+import { hasRoadRestrictionEvidence } from "@openmapx/core";
 import type { RoadConditionEvent } from "./types.js";
 
 const CLUSTER_METERS = 60;
@@ -175,6 +176,11 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
     const ep = positions(e.geometry);
     const dupIdx = survivors.findIndex((s, i) => {
       if (s.type !== e.type) return false;
+      // A restriction-bearing record never merges into another record. Two
+      // distinct source ids carry two published sets of facts and two
+      // provenances; collapsing them would silently lose one, and the
+      // sourceRecords retention cap could then drop it entirely.
+      if (hasRoadRestrictionEvidence(s) || hasRoadRestrictionEvidence(e)) return false;
       const semantics = (event: RoadConditionEvent) =>
         JSON.stringify([
           event.roadState ?? null,

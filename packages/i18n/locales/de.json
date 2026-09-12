@@ -500,7 +500,9 @@
       "routing": "Routenwirkung",
       "allVehicles": "Alle Fahrzeuge",
       "routingCandidate": "Geeignet; Anwendung hängt von der Route ab",
-      "routingDisplayOnly": "Auf der Karte sichtbar; nicht für Routing angewendet"
+      "routingDisplayOnly": "Auf der Karte sichtbar; nicht für Routing angewendet",
+      "restrictionText": "Fahrzeugbeschränkungen",
+      "restrictionState": "Status der Beschränkung"
     },
     "binding": {
       "exact": "Exakt",
@@ -512,6 +514,75 @@
       "unattempted": "Noch nicht versucht",
       "obsolete": "Veraltet",
       "invalid": "Ungültig"
+    },
+    "restriction": {
+      "heading": "Fahrzeugbeschränkungen",
+      "unsupported": "Beschränkungsdetails konnten nicht ausgewertet werden",
+      "partial": "Teilweise Auswertung der Quelle",
+      "stale": "Quelldaten sind veraltet",
+      "needsRefresh": "Aktualisierung erforderlich",
+      "liftable": "Beschränkungen können für Großraum- und Schwertransporte aufgehoben werden; eine Genehmigung ist nicht bestätigt",
+      "extentNotVerified": "Genauer Geltungsbereich der Beschränkung ist nicht zugeordnet",
+      "workingHours": "Arbeitszeiten (nur Kontext)",
+      "reportedContext": "Gemeldeter Ereigniskontext",
+      "maxHeight": "Zulässige Höchsthöhe",
+      "maxWidth": "Zulässige Höchstbreite",
+      "maxLength": "Zulässige Höchstlänge",
+      "maxGrossWeight": "Zulässiges Gesamtgewicht",
+      "appliesHeight": "Ereignis gilt für Fahrzeuge mit einer Höhe",
+      "appliesWidth": "Ereignis gilt für Fahrzeuge mit einer Breite",
+      "appliesLength": "Ereignis gilt für Fahrzeuge mit einer Länge",
+      "appliesGrossWeight": "Ereignis gilt für Fahrzeuge mit einem Gesamtgewicht",
+      "appliesTo": "Ereignis gilt für",
+      "scopeLabel": "Gilt für",
+      "validityLabel": "Zeitraum der Beschränkung",
+      "directionLabel": "Richtung laut Quelle",
+      "complianceLabel": "Verbindlichkeit",
+      "contextLabel": "Kontext der Quelle",
+      "sourceComment": "Hinweis der Quelle",
+      "endedLabel": "Beendete Beschränkung",
+      "extentLabel": "Geltungsbereich",
+      "issuesLabel": "Auswertung",
+      "freshnessLabel": "Aktualität",
+      "sourceLabel": "Quelle der Beschränkung",
+      "noticeLabel": "Hinweis der Quelle",
+      "restrictionText": "Fahrzeugbeschränkungen",
+      "restrictionState": "Status der Beschränkung",
+      "operator": {
+        "gt": "größer als",
+        "gte": "mindestens",
+        "eq": "gleich",
+        "lte": "höchstens",
+        "lt": "kleiner als"
+      },
+      "scope": {
+        "eventRoad": "Betroffene Straße",
+        "roadworkPhase": "Bauphase",
+        "detour": "Umleitung"
+      },
+      "state": {
+        "active": "Aktiv",
+        "scheduled": "Geplant",
+        "ended": "Beendet",
+        "unknown": "Zeitraum unbekannt"
+      },
+      "direction": {
+        "positive": "Aufsteigende Straßenreferenz",
+        "negative": "Absteigende Straßenreferenz",
+        "both": "Beide Richtungen",
+        "unknown": "Richtung unbekannt"
+      },
+      "compliance": {
+        "mandatory": "Verbindlich",
+        "advisory": "Empfehlung",
+        "unknown": "Verbindlichkeit unbekannt"
+      },
+      "vehicle": {
+        "truck": "Lastkraftwagen"
+      },
+      "usage": {
+        "emergencyServices": "Einsatzfahrzeuge"
+      }
     }
   },
   "trafficFlow": {

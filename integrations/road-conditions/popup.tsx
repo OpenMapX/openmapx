@@ -6,6 +6,8 @@ import {
 } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { buildStackedPopupCardItems, type PopupCardSpec } from "@/integration-api/map/popupCard";
+import { isConditionalRoadState, restrictionPopupProperties } from "./restrictions";
+import type { RoadConditionTranslate } from "./types";
 import { isFutureRoadCondition } from "./visual-style";
 
 export const ROAD_CONDITION_SEVERITY_RANK: Record<string, number> = {
@@ -24,6 +26,8 @@ const POPUP_SPEC: PopupCardSpec = {
   rows: [
     { field: "typeText", labelKey: "panel.type", variant: "chip" },
     { field: "roadStateText", labelKey: "panel.roadState", variant: "chip" },
+    { field: "restrictionStateText", labelKey: "panel.restrictionState", variant: "chip" },
+    { field: "restrictionText", labelKey: "panel.restrictionText", variant: "block" },
     { field: "roads", labelKey: "panel.roads", variant: "row" },
     { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
     { field: "source", labelKey: "panel.source", variant: "row" },
@@ -48,6 +52,8 @@ const SOURCE_DETAIL_SPEC: PopupCardSpec = {
   rows: [
     { field: "typeText", labelKey: "panel.type", variant: "chip" },
     { field: "roadStateText", labelKey: "panel.roadState", variant: "chip" },
+    { field: "restrictionStateText", labelKey: "panel.restrictionState", variant: "chip" },
+    { field: "restrictionText", labelKey: "panel.restrictionText", variant: "block" },
     { field: "roads", labelKey: "panel.roads", variant: "row" },
     { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
     { field: "source", labelKey: "panel.source", variant: "row" },
@@ -70,10 +76,7 @@ interface ScheduleEntry {
   byDay?: string[];
 }
 
-export type RoadConditionTranslate = (
-  key: string,
-  values?: Record<string, string | number>,
-) => string;
+export type { RoadConditionTranslate } from "./types";
 
 export interface RoadConditionPopupInput {
   hits: MapGeoJSONFeature[];
@@ -232,6 +235,9 @@ function popupProperties(
     _displayId: displayId,
     _sev: ROAD_CONDITION_SEVERITY_RANK[event.severity] ?? 0,
     future: isFutureRoadCondition(event),
+    // Carried only so the formatter can read the normalized envelope; stripped
+    // again in formatPopupEntry so it never reaches the rendered card.
+    _event: event,
   };
   properties.source = event.source;
   properties.license = event.routingEvidence?.source_license ?? event.attribution?.license;
@@ -247,6 +253,10 @@ function popupProperties(
   properties.applicationReason = decision.eligible ? "candidate" : "display_only";
   if (includeRecordId) properties.recordId = event.id;
   if (event.roadState) properties.roadState = event.roadState;
+  // A vehicle-conditioned road state is reported event context, not an
+  // unconditional closure, so the parent state is labelled rather than shown
+  // as the headline effect.
+  if (isConditionalRoadState(event)) properties.conditionalRoadState = true;
   if (event.validFrom) properties.validFrom = event.validFrom;
   if (event.validTo) properties.validTo = event.validTo;
   if (event.schedule && event.schedule.length > 0) {
@@ -391,8 +401,19 @@ function formatPopupEntry(
     typeof value === "string" && Number.isFinite(Date.parse(value))
       ? new Date(value).toISOString()
       : undefined;
+  const restrictionFields = sourceEntry._event
+    ? restrictionPopupProperties(sourceEntry._event as RoadConditionEvent, input.translate, {
+        formatDateTime: (value) => input.formatDateTime(value),
+      })
+    : {};
   return {
     ...sourceEntry,
+    _event: undefined,
+    ...restrictionFields,
+    roadStateText:
+      roadStateText && sourceEntry.conditionalRoadState === true
+        ? `${roadStateText} (${input.translate("restriction.reportedContext")})`
+        : roadStateText,
     updatedAtText: absoluteTime(sourceEntry.updatedAt),
     checkedAtText: absoluteTime(sourceEntry.checkedAt),
     bindingText:
@@ -408,7 +429,6 @@ function formatPopupEntry(
           ? input.translate("panel.routingDisplayOnly")
           : undefined,
     ...(typeText ? { typeText } : {}),
-    ...(roadStateText ? { roadStateText } : {}),
     ...(severityText ? { severityText } : {}),
     ...(validity ? { validity } : {}),
     ...(startsAt ? { startsAt } : {}),

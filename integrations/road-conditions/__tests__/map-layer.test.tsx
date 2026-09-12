@@ -731,3 +731,100 @@ it("preserves source binding and vehicle evidence through the GeoJSON display bo
     isStale: true,
   });
 });
+
+describe("road-condition restriction display boundary", () => {
+  it("flags a conditional marker and carries the envelope through the display boundary", () => {
+    const details = {
+      schemaVersion: 1,
+      vehicleScope: "specific",
+      completeness: "complete",
+      issues: [],
+      source: {
+        sourceId: "fi-digitraffic",
+        recordId: "GUID50465935",
+        recordVersion: "31",
+        sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
+        feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
+        publisher: "Fintraffic / Digitraffic",
+        license: "CC-BY-4.0",
+        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        attribution: "Fintraffic / Digitraffic",
+        modificationNotice: "Normalized by OpenConditions",
+      },
+      facts: [
+        {
+          id: "GUID50465935:GUID50469933:roadwork_phase:restrictions[2]",
+          kind: "dimension",
+          dimension: "gross_weight",
+          meaning: "maximum_permitted",
+          value: 26000,
+          unit: "kg",
+          operator: "lte",
+          state: "active",
+          scope: {
+            kind: "roadwork_phase",
+            phaseId: "GUID50469933",
+            locationDescription: null,
+            sourceLocationRefs: { scheme: "digitraffic_road_address" },
+            restrictionBinding: "not_established",
+          },
+          direction: { basis: "road_reference", value: "both", description: null },
+          validFrom: "2026-07-19T21:00:00.000Z",
+          validTo: "2026-12-14T21:59:59.999Z",
+          sourceTokens: { type: "vehicle gross weight limit" },
+          context: {
+            restrictionsLiftable: false,
+            compliance: "unknown",
+            operatorActionStatus: null,
+            validityStatus: null,
+          },
+        },
+      ],
+      evaluatedAt: "2026-09-12T07:14:00.000Z",
+      sourceCheckedAt: "2026-09-12T07:13:00.000Z",
+      freshUntil: "2026-09-12T07:23:00.000Z",
+      nextTransitionAt: null,
+      isStale: false,
+    };
+    const sources = buildSources([
+      {
+        geometry: { type: "Point", coordinates: [23.5, 60.1] },
+        properties: {
+          id: "fi-digitraffic:GUID50465935",
+          source: "fi-digitraffic",
+          provider: "road-conditions-openconditions",
+          type: "restriction",
+          severity: "high",
+          headline: "Tie 104, Raasepori",
+          roadState: "closed",
+          restrictionDetails: details,
+        },
+      },
+    ] as never);
+    const collection = sources.data as { features: Array<{ properties: unknown }> };
+    const marker = collection.features[0]!.properties as Record<string, unknown>;
+    expect(marker._restricted).toBe(true);
+    expect(marker.restrictionDetails).toEqual(details);
+    const events = [...sources.eventsByDisplayId.values()].flat();
+    expect(events[0]!.restrictionDetails).toEqual(details);
+  });
+
+  it("marks an unreadable envelope unsupported instead of trusting it", () => {
+    const sources = buildSources([
+      {
+        geometry: { type: "Point", coordinates: [23.5, 60.1] },
+        properties: {
+          id: "fi:bad",
+          source: "fi-digitraffic",
+          type: "restriction",
+          severity: "high",
+          headline: "Bad",
+          restrictionDetails: { schemaVersion: 9 },
+        },
+      },
+    ] as never);
+    const events = [...sources.eventsByDisplayId.values()].flat();
+    expect(events[0]!.restrictionDetails).toBeUndefined();
+    expect(events[0]!.restrictionDetailsUnsupported).toBe(true);
+  });
+});

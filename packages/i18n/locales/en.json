@@ -500,7 +500,9 @@
       "routing": "Route effect",
       "allVehicles": "All vehicles",
       "routingCandidate": "Eligible; application depends on the route",
-      "routingDisplayOnly": "Shown on map; not applied to routing"
+      "routingDisplayOnly": "Shown on map; not applied to routing",
+      "restrictionText": "Vehicle restrictions",
+      "restrictionState": "Restriction status"
     },
     "binding": {
       "exact": "Exact",
@@ -512,6 +514,75 @@
       "unattempted": "Not attempted",
       "obsolete": "Outdated",
       "invalid": "Invalid"
+    },
+    "restriction": {
+      "heading": "Vehicle restrictions",
+      "unsupported": "Restriction details could not be interpreted",
+      "partial": "Partial source interpretation",
+      "stale": "Source data is stale",
+      "needsRefresh": "Needs refresh",
+      "liftable": "Restrictions may be lifted for abnormal transports; permission is not confirmed",
+      "extentNotVerified": "Restriction location has not been bound",
+      "workingHours": "Working hours (context only)",
+      "reportedContext": "Reported event context",
+      "maxHeight": "Maximum permitted height",
+      "maxWidth": "Maximum permitted width",
+      "maxLength": "Maximum permitted length",
+      "maxGrossWeight": "Maximum permitted gross weight",
+      "appliesHeight": "Event applies to vehicles with height",
+      "appliesWidth": "Event applies to vehicles with width",
+      "appliesLength": "Event applies to vehicles with length",
+      "appliesGrossWeight": "Event applies to vehicles with gross weight",
+      "appliesTo": "Event applies to",
+      "scopeLabel": "Applies to",
+      "validityLabel": "Restriction dates",
+      "directionLabel": "Source direction",
+      "complianceLabel": "Compliance",
+      "contextLabel": "Source context",
+      "sourceComment": "Source note",
+      "endedLabel": "Ended restriction",
+      "extentLabel": "Restriction extent",
+      "issuesLabel": "Interpretation",
+      "freshnessLabel": "Freshness",
+      "sourceLabel": "Restriction source",
+      "noticeLabel": "Source notice",
+      "restrictionText": "Vehicle restrictions",
+      "restrictionState": "Restriction status",
+      "operator": {
+        "gt": "greater than",
+        "gte": "at least",
+        "eq": "equal to",
+        "lte": "at most",
+        "lt": "less than"
+      },
+      "scope": {
+        "eventRoad": "Affected road",
+        "roadworkPhase": "Roadwork phase",
+        "detour": "Detour"
+      },
+      "state": {
+        "active": "Active",
+        "scheduled": "Scheduled",
+        "ended": "Ended",
+        "unknown": "Timing unknown"
+      },
+      "direction": {
+        "positive": "Increasing road reference",
+        "negative": "Decreasing road reference",
+        "both": "Both directions",
+        "unknown": "Direction unknown"
+      },
+      "compliance": {
+        "mandatory": "Mandatory",
+        "advisory": "Advisory",
+        "unknown": "Compliance unknown"
+      },
+      "vehicle": {
+        "truck": "Trucks"
+      },
+      "usage": {
+        "emergencyServices": "Emergency-service vehicles"
+      }
     }
   },
   "trafficFlow": {

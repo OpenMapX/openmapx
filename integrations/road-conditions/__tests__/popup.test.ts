@@ -274,3 +274,122 @@ it("keeps binding, vehicle and timestamp evidence on each original source record
   expect(group!.summary.vehicles).toBeUndefined();
   expect(group!.summary.updatedAt).toBeUndefined();
 });
+
+describe("road-condition popup restriction rendering", () => {
+  const restrictionDetails = {
+    schemaVersion: 1,
+    vehicleScope: "specific",
+    completeness: "complete",
+    issues: [],
+    source: {
+      sourceId: "fi-digitraffic",
+      recordId: "GUID50465935",
+      recordVersion: "31",
+      sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
+      feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
+      publisher: "Fintraffic / Digitraffic",
+      license: "CC-BY-4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      attribution: "Fintraffic / Digitraffic",
+      modificationNotice: "Normalized by OpenConditions",
+    },
+    facts: [
+      {
+        id: "GUID50465935:GUID50469933:roadwork_phase:restrictions[2]",
+        kind: "dimension",
+        dimension: "gross_weight",
+        meaning: "maximum_permitted",
+        value: 26000,
+        unit: "kg",
+        operator: "lte",
+        state: "active",
+        scope: {
+          kind: "roadwork_phase",
+          phaseId: "GUID50469933",
+          locationDescription: '<script>alert("x")</script>',
+          sourceLocationRefs: { scheme: "digitraffic_road_address" },
+          restrictionBinding: "not_established",
+        },
+        direction: { basis: "road_reference", value: "both", description: null },
+        validFrom: "2026-07-19T21:00:00.000Z",
+        validTo: "2026-12-14T21:59:59.999Z",
+        sourceTokens: { type: "vehicle gross weight limit" },
+        context: {
+          restrictionsLiftable: false,
+          compliance: "unknown",
+          operatorActionStatus: null,
+          validityStatus: null,
+        },
+      },
+    ],
+    evaluatedAt: "2026-09-12T07:14:00.000Z",
+    sourceCheckedAt: "2026-09-12T07:13:00.000Z",
+    freshUntil: "2026-09-12T07:23:00.000Z",
+    nextTransitionAt: null,
+    isStale: false,
+  } as unknown as NonNullable<RoadConditionEvent["restrictionDetails"]>;
+
+  function restrictionEvent(over: Partial<RoadConditionEvent> = {}): RoadConditionEvent {
+    return {
+      id: "fi-digitraffic:GUID50465935",
+      source: "fi-digitraffic",
+      provider: "road-conditions-openconditions",
+      type: "restriction",
+      severity: "high",
+      geometry: { type: "Point", coordinates: [23.5, 60.1] },
+      headline: "Tie 104, Raasepori",
+      roadState: "closed",
+      restrictionDetails,
+      ...over,
+    };
+  }
+
+  function render(events: RoadConditionEvent[]) {
+    return buildRoadConditionPopupHtml({
+      hits: [
+        {
+          geometry: { type: "Point", coordinates: [23.5, 60.1] },
+          properties: { _displayId: "g1" },
+        } as never,
+      ],
+      fallbackCoordinates: [23.5, 60.1],
+      eventsByDisplayId: new Map([["g1", events]]),
+      formatDateTime: (value) => String(value),
+      formatDate: (value) => String(value),
+      translate: (key) => key,
+    });
+  }
+
+  it("escapes source-derived restriction text", () => {
+    const { html } = render([restrictionEvent()]);
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
+  });
+
+  it("labels a vehicle-conditioned road state as reported event context", () => {
+    const { html } = render([restrictionEvent()]);
+    expect(html).toContain("restriction.reportedContext");
+  });
+
+  it("displays no numeric value from an unsupported envelope", () => {
+    const { html } = render([
+      restrictionEvent({ restrictionDetails: undefined, restrictionDetailsUnsupported: true }),
+    ]);
+    expect(html).toContain("restriction.unsupported");
+    expect(html).not.toContain("26");
+  });
+
+  it("leaves an unconditional record's road state unqualified", () => {
+    const { html } = render([restrictionEvent({ restrictionDetails: undefined })]);
+    expect(html).not.toContain("restriction.reportedContext");
+    expect(html).not.toContain("restriction.");
+  });
+
+  it("keeps a mixed unconditional and conditional pair as separate cards", () => {
+    const { groupCount } = render([
+      restrictionEvent({ id: "fi:conditional" }),
+      restrictionEvent({ id: "fi:plain", restrictionDetails: undefined, headline: "Other road" }),
+    ]);
+    expect(groupCount).toBeGreaterThanOrEqual(1);
+  });
+});

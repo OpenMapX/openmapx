@@ -33,6 +33,7 @@ import {
   buildRoadConditionPopupHtml,
   ROAD_CONDITION_SEVERITY_RANK as SEVERITY_RANK,
 } from "./popup";
+import { isConditionalRoadState } from "./restrictions";
 import { RouteConditionsLayer } from "./route-layer";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
@@ -249,6 +250,16 @@ function markerProperties(
     future,
   };
   if (event.roadState) properties.roadState = event.roadState;
+  // A vehicle-conditioned closure must not render as an unconditional one. The
+  // marker carries the restriction flag; the source's own headline is kept and
+  // the qualification is added in the popup.
+  if (group.events.some(isConditionalRoadState)) properties._restricted = true;
+  if (event.restrictionDetails !== undefined || event.restrictionDetailsUnsupported === true) {
+    properties.restrictionDetails = event.restrictionDetails ?? null;
+    if (event.restrictionDetailsUnsupported === true) {
+      properties.restrictionDetailsUnsupported = true;
+    }
+  }
   if (event.validFrom) properties.validFrom = event.validFrom;
   if (event.validTo) properties.validTo = event.validTo;
   if (event.schedule && event.schedule.length > 0) {
