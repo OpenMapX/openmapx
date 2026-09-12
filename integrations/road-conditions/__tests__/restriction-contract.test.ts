@@ -11,7 +11,7 @@ import { restrictionRows } from "../restrictions";
 
 /**
  * The consumer half of the cross-repository restriction contract. The fixture
- * is the byte-identical copy of OpenConditions' generated golden, so a producer
+ * holds the same payload as OpenConditions' generated golden, so a producer
  * change surfaces here rather than only in the producing repository.
  *
  * The display half and the routing half are asserted separately and must reach

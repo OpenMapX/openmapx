@@ -21,8 +21,7 @@
       "!docs",
       "!apps/api/openapi.json",
       "!packages/brands/src/data/brands-index.json",
-      "!integrations/overlay-sun-time/data/timezones.simplified.json",
-      "!services/data-manager/src/__tests__/fixtures/contracts"
+      "!integrations/overlay-sun-time/data/timezones.simplified.json"
     ]
   },
   "formatter": {

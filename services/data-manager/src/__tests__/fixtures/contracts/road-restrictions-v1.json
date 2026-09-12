@@ -10,16 +10,7 @@
       "severity": "high",
       "geometry": {
         "type": "LineString",
-        "coordinates": [
-          [
-            13.4,
-            52.5
-          ],
-          [
-            13.41,
-            52.5
-          ]
-        ]
+        "coordinates": [[13.4, 52.5], [13.41, 52.5]]
       },
       "headline": "Road closed",
       "isStale": false,
@@ -42,10 +33,7 @@
       "severity": "high",
       "geometry": {
         "type": "Point",
-        "coordinates": [
-          23.536928,
-          60.117282
-        ]
+        "coordinates": [23.536928, 60.117282]
       },
       "headline": "Tie 104, Raasepori. Tietyö.",
       "isStale": false,
@@ -136,15 +124,7 @@
                   "scheduleTimezone": "Europe/Helsinki",
                   "startDate": "2026-07-20",
                   "endDate": "2026-12-14",
-                  "byDay": [
-                    "MO",
-                    "TU",
-                    "WE",
-                    "TH",
-                    "FR",
-                    "SA",
-                    "SU"
-                  ],
+                  "byDay": ["MO", "TU", "WE", "TH", "FR", "SA", "SU"],
                   "startTime": "00:00",
                   "endTime": "23:59",
                   "duration": "PT23H59M",
@@ -239,23 +219,12 @@
             "end_fraction": 1,
             "geometry": {
               "type": "LineString",
-              "coordinates": [
-                [
-                  13.4,
-                  52.5
-                ],
-                [
-                  13.41,
-                  52.5
-                ]
-              ]
+              "coordinates": [[13.4, 52.5], [13.41, 52.5]]
             }
           }
         ]
       }
     ]
   },
-  "expectedConditionalIds": [
-    "fi-digitraffic:GUID50465935"
-  ]
+  "expectedConditionalIds": ["fi-digitraffic:GUID50465935"]
 }
