@@ -181,10 +181,21 @@ are skipped automatically because those packages are marked `private`.
 4. PR CI runs lint, types, tests, production builds, and non-publishing Docker
    builds for the deployable targets affected by the PR. After a merge to
    `main`, a separate release workflow accepts only the current commit after successful CI,
-   scans exact image digests, publishes all eight SHA tags and the immutable
-   release manifest, then advances and verifies all eight application `latest`
+   rebuilds images whose Docker build inputs changed since the last published
+   release and reuses unchanged digests. All eight digests pass the current
+   vulnerability scan before publication. It publishes run-qualified release
+   tags (`<commit>-<run-id>-<attempt>`) plus SHA convenience aliases and the
+   complete release manifest, then advances and verifies all eight application `latest`
    aliases. These compatibility aliases move independently. The final
    `release-manifest:latest` update is the atomic production deployment pointer.
+   Weekly scheduled CI forces a no-cache security refresh through the same gates.
+   Images at least seven days old also refresh on the next release. Set the
+   repository variable `OPENMAPX_FORCE_IMAGE_REBUILD=true` to force the next run
+   to rebuild all images; unset it afterwards to resume selective builds.
+   SHA aliases can move on a refresh of the same commit; pin a run-qualified tag
+   or digest for rollback. Each image retains its original source revision and
+   build time in the manifest's `buildMetadata` when reused. Initial migration
+   from a manifest without this metadata rebuilds all eight images.
    Manual dispatch cannot bypass the successful-CI requirement.
 5. A maintainer reviews. Squash-merge is the default; we keep the merged
    PR's title and summary as the squash commit message, so make both

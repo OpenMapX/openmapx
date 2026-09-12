@@ -47,6 +47,28 @@ const manifest: ReleaseManifest = {
 };
 
 describe("shared release manifest", () => {
+  it("accepts a run-qualified mixed release and renders its exact reused digests", () => {
+    const mixed = {
+      ...manifest,
+      release: `${"a".repeat(40)}-123-2`,
+      buildMetadata: {
+        version: 1,
+        images: {
+          api: {
+            sourceRevision: "b".repeat(40),
+            inputHash: "c".repeat(64),
+            builtAt: "2026-09-05T12:00:00.000Z",
+          },
+        },
+      },
+    };
+    const parsed = parseReleaseManifest(JSON.stringify(mixed));
+    expect(parsed).toEqual(mixed);
+    const overlay = renderReleaseCompose(parsed);
+    expect(overlay).toContain(`image: ${manifest.images.api}`);
+    expect(overlay).toContain(`image: ${manifest.images["ops-agent"]}`);
+  });
+
   it("parses an approved manifest and rejects tag references", () => {
     expect(parseReleaseManifest(JSON.stringify(manifest))).toEqual(manifest);
     expect(() =>

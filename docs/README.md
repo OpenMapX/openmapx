@@ -19,9 +19,13 @@ pnpm serve          # preview the production build
 ## Deploy
 
 Pull-request CI builds the docs image without publishing it. After a successful
-CI run for the current `main` commit, `.github/workflows/docker.yml` builds all
-deployable images as untagged candidates, scans their exact digests, and only
-then promotes each digest to an immutable SHA tag. After publishing the immutable
+CI run for the current `main` commit, `.github/workflows/docker.yml` builds changed
+images as untagged candidates and reuses unchanged digests from the previous
+complete release. A docs-only edit normally rebuilds only docs. All eight digests,
+including reused ones, pass the current vulnerability scan. Weekly security
+refreshes rebuild all images without Docker layer caching. Run-qualified tags
+(`<commit>-<run-id>-<attempt>`) preserve each release; SHA tags are convenience
+aliases that can move when the same commit is refreshed. After publishing the immutable
 release manifest, it also advances and verifies `latest` compatibility aliases
 for all eight images, including docs. These aliases move independently; they
 cannot select an atomic multi-service release. CI publishes the complete set

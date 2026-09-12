@@ -43,6 +43,18 @@ they already pulled. You get the new app version by resolving the complete
 release manifest, then pulling and replacing the exact image set. The steps
 below do both, in the right order.
 
+A complete release can reuse images from earlier releases: CI rebuilds only images
+whose inputs changed, then scans all eight selected digests before publishing.
+Shared dependency and privacy changes can require several images to rebuild.
+Unchanged images retain their digest and original build revision; the release
+identifier describes the complete selected set. Weekly security refreshes rebuild
+all images, and images at least seven days old refresh on the next release.
+
+For a reproducible rollback reference, use the run-qualified manifest tag
+`ghcr.io/openmapx/release-manifest:<commit>-<run-id>-<attempt>` (the identifier is
+also stored in its JSON `release` field), or a manifest digest. Bare commit-SHA
+aliases can move when a security refresh rebuilds the same source commit.
+
 ## 1. Optional: create a backup
 
 When selected, the CLI snapshots every backup-enabled service volume — the PostGIS database

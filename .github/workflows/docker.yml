@@ -2,7 +2,7 @@ name: Build, Scan & Publish Docker Images
 
 on:
   # CI calls this reusable workflow only after its aggregate gate succeeds.
-  # Keeping publication in the same trusted push run avoids workflow_run's
+  # Keeping publication in the same trusted main run avoids workflow_run's
   # privileged-trigger boundary while preserving the all-tests-first gate.
   workflow_call:
 
@@ -15,6 +15,8 @@ concurrency:
 env:
   REGISTRY: ghcr.io
   IMAGE_PREFIX: ghcr.io/openmapx
+  # Distinguish security refreshes and retries of the same source commit.
+  RELEASE_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
 
 permissions:
   contents: read
@@ -34,8 +36,8 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
-            if (context.eventName !== "push" || context.ref !== "refs/heads/main") {
-              core.setFailed("Refusing a release outside a trusted main push run");
+            if (!["push", "schedule"].includes(context.eventName) || context.ref !== "refs/heads/main") {
+              core.setFailed("Refusing a release outside a trusted main push or scheduled run");
               return;
             }
 
@@ -53,9 +55,44 @@ jobs:
 
             core.setOutput("sha", candidate);
 
-  build:
-    name: Build and scan ${{ matrix.app }}
+  plan:
+    name: Select changed images from the published release
     needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - name: Log in to read the previous complete release
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Compare build inputs with the last published release
+        env:
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+          FORCE_REBUILD: ${{ github.event_name == 'schedule' || vars.OPENMAPX_FORCE_IMAGE_REBUILD == 'true' }}
+        run: node scripts/docker-release-plan.mjs plan release-plan
+      - name: Preserve the complete build selection
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7
+        with:
+          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-plan/release-plan.json
+          if-no-files-found: error
+          retention-days: 1
+
+  build:
+    name: Build or reuse and scan ${{ matrix.app }}
+    needs: [gate, plan]
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -97,9 +134,26 @@ jobs:
           ref: ${{ needs.gate.outputs.sha }}
           persist-credentials: false
 
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+      - name: Download the complete build selection
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          # Keep CI artifacts outside Docker build contexts.
+          path: ${{ runner.temp }}/release-plan
+      - name: Select build or reuse for this image
+        id: selection
+        env:
+          APP: ${{ matrix.app }}
+          RELEASE_SHA: ${{ needs.gate.outputs.sha }}
+        run: node scripts/docker-release-plan.mjs select "$APP" "$RUNNER_TEMP/release-plan/release-plan.json"
+
       # Buildx startup pulls its BuildKit image from Docker Hub. Retry that
       # infrastructure fetch once, but never soften build or scan failures.
       - name: Set up Docker Buildx
+        if: steps.selection.outputs.rebuild == 'true'
         id: buildx
         continue-on-error: true
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
@@ -118,12 +172,15 @@ jobs:
       # Push content-addressed candidate blobs only. No SHA or latest tag is
       # visible until all matrix legs have passed the mandatory scan below.
       - name: Build untagged candidate by digest
+        if: steps.selection.outputs.rebuild == 'true'
         id: build
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
         with:
           context: ${{ matrix.context }}
           file: ${{ matrix.dockerfile }}
           platforms: linux/amd64
+          pull: true
+          no-cache: ${{ steps.selection.outputs.refresh == 'true' }}
           build-args: ${{ matrix.app == 'web' && format('SW_BUILD_ID={0}', needs.gate.outputs.sha) || '' }}
           outputs: type=image,name=${{ env.IMAGE_PREFIX }}/${{ matrix.app }},push-by-digest=true,name-canonical=true,push=true
           labels: |
@@ -134,12 +191,30 @@ jobs:
           provenance: mode=max
           sbom: true
 
+      - name: Select the exact digest to scan
+        id: candidate
+        env:
+          REBUILD: ${{ steps.selection.outputs.rebuild }}
+          BUILT_DIGEST: ${{ steps.build.outputs.digest }}
+          REUSED_DIGEST: ${{ steps.selection.outputs.digest }}
+        run: |
+          if [ "$REBUILD" = true ]; then
+            DIGEST="$BUILT_DIGEST"
+          else
+            DIGEST="$REUSED_DIGEST"
+          fi
+          if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "Invalid candidate image digest" >&2
+            exit 1
+          fi
+          echo "digest=$DIGEST" >> "$GITHUB_OUTPUT"
+
       # Keep the complete finding set for review, including vulnerabilities
       # for which the distro or upstream project has not published a fix.
       - name: Audit exact candidate digest with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.candidate.outputs.digest }}
           format: sarif
           output: trivy-${{ matrix.app }}.sarif
           scanners: vuln
@@ -156,7 +231,7 @@ jobs:
       - name: Gate exact candidate digest with Trivy
         uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
         with:
-          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.build.outputs.digest }}
+          image-ref: ${{ env.IMAGE_PREFIX }}/${{ matrix.app }}@${{ steps.candidate.outputs.digest }}
           format: table
           scanners: vuln
           vuln-type: os,library
@@ -177,7 +252,7 @@ jobs:
 
       - name: Export approved digest
         env:
-          DIGEST: ${{ steps.build.outputs.digest }}
+          DIGEST: ${{ steps.candidate.outputs.digest }}
         run: |
           if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
             echo "Invalid image digest: $DIGEST" >&2
@@ -232,13 +307,18 @@ jobs:
 
   promote:
     name: Publish coherent release
-    needs: [gate, build, validate-privacy-release]
+    needs: [gate, plan, build, validate-privacy-release]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
       contents: read
       packages: write
     steps:
+      - name: Download the complete build selection
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
+        with:
+          name: docker-release-plan-${{ github.run_id }}-${{ github.run_attempt }}
+          path: release-plan
       - name: Download every approved digest
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8
         with:
@@ -261,8 +341,8 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      # SHA tags make each approved image independently addressable. The one
-      # release-manifest pointer below is the atomic deployment contract.
+      # Run-qualified tags preserve each release; SHA tags remain convenience aliases.
+      # The release-manifest pointer below is the atomic deployment contract.
       - name: Promote every scanned digest to SHA and assemble the release manifest
         env:
           IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
@@ -324,6 +404,7 @@ jobs:
             docker buildx imagetools create \
               --prefer-index=false \
               --tag "${IMAGE}:${RELEASE_SHA}" \
+              --tag "${IMAGE}:${RELEASE_ID}" \
               "${IMAGE}@${DIGEST}"
             docker buildx imagetools inspect "${IMAGE}:${RELEASE_SHA}"
 
@@ -338,7 +419,7 @@ jobs:
           {
             printf '{\n'
             printf '  "schemaVersion": 1,\n'
-            printf '  "release": "%s",\n' "$RELEASE_SHA"
+            printf '  "release": "%s",\n' "$RELEASE_ID"
             printf '  "images": {\n'
             printf '%b\n' "$image_lines"
             printf '  },\n'
@@ -346,6 +427,28 @@ jobs:
             cat privacy-release-validation/privacy-release-validation.json
             printf '}\n'
           } > release-manifest/release-manifest.json
+
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from "node:fs";
+          const path = "release-manifest/release-manifest.json";
+          const manifest = JSON.parse(readFileSync(path, "utf8"));
+          const plan = JSON.parse(readFileSync("release-plan/release-plan.json", "utf8"));
+          if (plan.version !== 1 || plan.release !== manifest.release || plan.sourceRevision !== process.env.RELEASE_SHA ||
+              plan.privacyFingerprint !== manifest.privacyReleaseValidation.sourceBuildFingerprint ||
+              plan.buildMetadata?.version !== 1) {
+            throw new Error("Release plan does not match the validated release");
+          }
+          for (const app of Object.keys(manifest.images)) {
+            const selected = plan.images.find((image) => image.app === app);
+            const metadata = plan.buildMetadata.images[app];
+            if (!selected || !metadata ||
+                (!selected.rebuild && manifest.images[app] !== `${process.env.IMAGE_PREFIX}/${app}@${selected.digest}`)) {
+              throw new Error(`Approved digest does not match the release plan for ${app}`);
+            }
+          }
+          manifest.buildMetadata = plan.buildMetadata;
+          writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
+          NODE
 
           cat > release-manifest/Dockerfile <<'EOF'
           FROM scratch
@@ -360,9 +463,10 @@ jobs:
           docker buildx build \
             --file release-manifest/Dockerfile \
             --tag "${RELEASE_MANIFEST_IMAGE}:${RELEASE_SHA}" \
+            --tag "${RELEASE_MANIFEST_IMAGE}:${RELEASE_ID}" \
             --push \
             release-manifest
-          docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:${RELEASE_SHA}"
+          docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:${RELEASE_ID}"
 
       # Maintain the manifest-tag fallback only from a complete, scanned set.
       # These aliases move independently; production uses the release pointer.
@@ -407,5 +511,5 @@ jobs:
         run: |
           docker buildx imagetools create \
             --tag "${RELEASE_MANIFEST_IMAGE}:latest" \
-            "${RELEASE_MANIFEST_IMAGE}:${RELEASE_SHA}"
+            "${RELEASE_MANIFEST_IMAGE}:${RELEASE_ID}"
           docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:latest"

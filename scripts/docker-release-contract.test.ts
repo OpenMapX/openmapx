@@ -25,7 +25,7 @@ describe("Docker release trust gate", () => {
     expect(ci).toContain("github.event_name == 'push'");
     expect(ci).toContain("github.ref == 'refs/heads/main'");
     expect(ci).toContain("uses: ./.github/workflows/docker.yml");
-    expect(release).toContain('context.eventName !== "push"');
+    expect(release).toContain('!["push", "schedule"].includes(context.eventName)');
     expect(release).toContain('context.ref !== "refs/heads/main"');
     expect(release).toContain("const candidate = context.sha");
     expect(release).toContain("heads/main");
@@ -34,7 +34,7 @@ describe("Docker release trust gate", () => {
   it("pushes untagged candidates, audits all findings, and gates actionable findings", () => {
     expect(release).toContain("push-by-digest=true");
     expect(release).toContain("name-canonical=true");
-    expect(release).toContain(["@", "$", "{{ steps.build.outputs.digest }}"].join(""));
+    expect(release).toContain(["@", "$", "{{ steps.candidate.outputs.digest }}"].join(""));
     expect(release).toContain("severity: CRITICAL,HIGH");
     expect(release).toContain("- name: Audit exact candidate digest with Trivy");
     expect(release).toContain('ignore-unfixed: "false"');
@@ -58,7 +58,7 @@ describe("Docker release trust gate", () => {
 
   it("publishes immutable image tags before advancing the complete release pointer", () => {
     expect(release).toMatch(/^ {2}promote:\n/m);
-    expect(release).toContain("needs: [gate, build, validate-privacy-release]");
+    expect(release).toContain("needs: [gate, plan, build, validate-privacy-release]");
     expect(release).toContain("RELEASE_MANIFEST_IMAGE");
     expect(release).toContain("release-manifest.json");
     expect(release).toContain("docker buildx imagetools create");
@@ -112,6 +112,41 @@ describe("Docker release trust gate", () => {
         mkdirSync(digestDir, { recursive: true });
         writeFileSync(join(digestDir, "a".repeat(64)), "");
       }
+      const apps = [
+        "api",
+        "web",
+        "data-manager",
+        "ops-agent",
+        "privacy-backup",
+        "transitous-runner",
+        "transitous-tools",
+        "docs",
+      ];
+      const buildMetadata = {
+        version: 1,
+        images: Object.fromEntries(
+          apps.map((app) => [
+            app,
+            {
+              inputHash: "c".repeat(64),
+              sourceRevision: "a".repeat(40),
+              builtAt: "2026-09-05T12:00:00.000Z",
+            },
+          ]),
+        ),
+      };
+      mkdirSync(join(temp, "release-plan"));
+      writeFileSync(
+        join(temp, "release-plan/release-plan.json"),
+        JSON.stringify({
+          version: 1,
+          release: `${"a".repeat(40)}-1-1`,
+          sourceRevision: "a".repeat(40),
+          privacyFingerprint: "b".repeat(64),
+          images: apps.map((app) => ({ app, rebuild: true })),
+          buildMetadata,
+        }),
+      );
       const privacyEvidence = {
         version: 1,
         sourceBuildFingerprint: "b".repeat(64),
@@ -146,6 +181,7 @@ describe("Docker release trust gate", () => {
           IMAGE_PREFIX: "example.invalid/openmapx",
           RELEASE_MANIFEST_IMAGE: "example.invalid/openmapx/release-manifest",
           RELEASE_SHA: "a".repeat(40),
+          RELEASE_ID: `${"a".repeat(40)}-1-1`,
         },
       });
 
@@ -153,7 +189,8 @@ describe("Docker release trust gate", () => {
         JSON.parse(readFileSync(join(temp, "release-manifest", "release-manifest.json"), "utf8")),
       ).toEqual({
         schemaVersion: 1,
-        release: "a".repeat(40),
+        release: `${"a".repeat(40)}-1-1`,
+        buildMetadata,
         images: {
           api: `example.invalid/openmapx/api@sha256:${"a".repeat(64)}`,
           web: `example.invalid/openmapx/web@sha256:${"a".repeat(64)}`,

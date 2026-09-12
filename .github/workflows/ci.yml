@@ -4,6 +4,10 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Refresh OS packages even when application source has not changed. The same
+  # tests and trusted-main release gate run before publication.
+  schedule:
+    - cron: '23 4 * * 1'
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
@@ -521,7 +525,7 @@ jobs:
       - name: Fail if any gate job did not succeed
         # Pull requests build only affected deployable targets. A no-target PR
         # legitimately skips docker-build; main skips both selection and build
-        # because the downstream release workflow rebuilds and scans all images.
+        # because the release workflow selects builds and scans all images.
         if: >-
           needs.lint.result != 'success' ||
           needs.types.result != 'success' ||
@@ -548,8 +552,8 @@ jobs:
     needs: ci
     # The aggregate gate intentionally depends on PR-only Docker jobs, which
     # are skipped on pushes. Force evaluation past GitHub's transitive skipped-
-    # dependency propagation, then admit only a successful trusted main push.
-    if: always() && needs.ci.result == 'success' && github.event_name == 'push' && github.ref == 'refs/heads/main'
+    # dependency propagation, then admit trusted main pushes and refresh runs.
+    if: always() && needs.ci.result == 'success' && (github.event_name == 'push' || github.event_name == 'schedule') && github.ref == 'refs/heads/main'
     permissions:
       contents: read
       packages: write
