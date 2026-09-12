@@ -265,7 +265,7 @@ describe("GET /events failure semantics", () => {
     const h = eventsHarness();
     const res = await h.get({ bbox: BBOX });
     expect(res.status).toBe(200);
-    expect(res.headers["Cache-Control"]).toBe("public, max-age=90, s-maxage=90");
+    expect(res.headers["Cache-Control"]).toBe("public, max-age=60, s-maxage=60");
     expect(res.body).toEqual({ type: "FeatureCollection", features: [] });
   });
 
@@ -280,7 +280,7 @@ describe("GET /events failure semantics", () => {
     });
     const res = await h.get({ bbox: BBOX });
     expect(res.status).toBe(200);
-    expect(res.headers["Cache-Control"]).toBe("public, max-age=90, s-maxage=90");
+    expect(res.headers["Cache-Control"]).toBe("public, max-age=60, s-maxage=60");
     const body = res.body as { type: string; features: Array<{ properties: { id: string } }> };
     expect(body.type).toBe("FeatureCollection");
     expect(body.features.map((f) => f.properties.id)).toEqual(["ok:1"]);
@@ -417,5 +417,98 @@ describe("POST /flow-along-route", () => {
     expect(r1).toBeDefined();
     if (!r1) throw new Error("expected route r1 in the response");
     expect(r1.spans.length).toBeGreaterThan(0);
+  });
+});
+
+describe("GET /events restriction cache lifetime", () => {
+  const BBOX = "13.39,52.49,13.41,52.51";
+
+  function view(over: Record<string, unknown> = {}) {
+    return {
+      schemaVersion: 1,
+      vehicleScope: "specific",
+      completeness: "complete",
+      issues: [],
+      source: {
+        sourceId: "fi-digitraffic",
+        recordId: "GUID50465935",
+        recordVersion: "31",
+        sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
+        feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
+        publisher: "Fintraffic / Digitraffic",
+        license: "CC-BY-4.0",
+        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+        attribution: "Fintraffic / Digitraffic",
+        modificationNotice: "Normalized by OpenConditions",
+      },
+      facts: [],
+      evaluatedAt: new Date().toISOString(),
+      sourceCheckedAt: new Date().toISOString(),
+      freshUntil: new Date(Date.now() + 600_000).toISOString(),
+      nextTransitionAt: null,
+      isStale: false,
+      ...over,
+    };
+  }
+
+  function eventWith(restriction: Record<string, unknown>) {
+    return {
+      id: "fi-digitraffic:GUID50465935",
+      source: "fi-digitraffic",
+      provider: "road-conditions-openconditions",
+      type: "restriction",
+      severity: "high",
+      geometry: { type: "Point", coordinates: [10.5, 45.5] },
+      headline: "Tie 104",
+      ...restriction,
+    };
+  }
+
+  it("caps a restriction-bearing response at 60 seconds", async () => {
+    const h = eventsHarness({
+      providers: [
+        { id: "p", getEvents: async () => [eventWith({ restrictionDetails: view() })] },
+      ] as unknown as RoadConditionsProvider[],
+    });
+    const res = await h.get({ bbox: BBOX });
+    expect(res.status).toBe(200);
+    expect(res.headers["Cache-Control"]).toBe("public, max-age=60, s-maxage=60");
+  });
+
+  it("shortens the response to an imminent phase transition", async () => {
+    const h = eventsHarness({
+      providers: [
+        {
+          id: "p",
+          getEvents: async () => [
+            eventWith({
+              restrictionDetails: view({
+                nextTransitionAt: new Date(Date.now() + 5_000).toISOString(),
+              }),
+            }),
+          ],
+        },
+      ] as unknown as RoadConditionsProvider[],
+    });
+    const res = await h.get({ bbox: BBOX });
+    const header = String(res.headers["Cache-Control"]);
+    expect(header).toMatch(/^public, max-age=[1-9], s-maxage=[1-9]$/);
+  });
+
+  it("never caches a stale or unsupported restriction response", async () => {
+    for (const restriction of [
+      { restrictionDetails: view({ isStale: true }) },
+      { restrictionDetails: view({ freshUntil: null }) },
+      { restrictionDetailsUnsupported: true },
+    ]) {
+      const h = eventsHarness({
+        providers: [
+          { id: "p", getEvents: async () => [eventWith(restriction)] },
+        ] as unknown as RoadConditionsProvider[],
+      });
+      const res = await h.get({ bbox: BBOX });
+      expect(res.status).toBe(200);
+      expect(res.headers["Cache-Control"], JSON.stringify(restriction)).toBe("no-store");
+    }
   });
 });

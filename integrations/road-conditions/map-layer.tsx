@@ -33,6 +33,7 @@ import {
   buildRoadConditionPopupHtml,
   ROAD_CONDITION_SEVERITY_RANK as SEVERITY_RANK,
 } from "./popup";
+import { hasRestrictionView, restrictionRefreshDeadline } from "./restriction-freshness";
 import { isConditionalRoadState } from "./restrictions";
 import { RouteConditionsLayer } from "./route-layer";
 // The named import also runs the module side-effect that registers the
@@ -420,7 +421,24 @@ export function RoadConditionsLayer() {
       eventsByDisplayIdRef.current = eventsByDisplayId;
       publishGeoJson([{ sourceId: SOURCE, data }]);
       hasViewportDataRef.current = true;
-      setViewportFetchStatus("ready");
+      // Expire the displayed evaluation at the producer's own deadline, but
+      // only when something visible actually carries one — a response with no
+      // restriction view keeps the layer's normal refresh interval. A deadline
+      // that has already passed means the response arrived unusable, so the
+      // view is labelled stale rather than claiming to be current, and no
+      // immediate-refresh loop is started.
+      const events = [...eventsByDisplayId.values()].flat();
+      if (hasRestrictionView(events)) {
+        const due = restrictionRefreshDeadline(events, Date.now());
+        if (due > Date.now()) {
+          schedulerRef.current?.setFreshnessDeadline(due);
+          setViewportFetchStatus("ready");
+        } else {
+          setViewportFetchStatus("stale");
+        }
+      } else {
+        setViewportFetchStatus("ready");
+      }
     } catch {
       if (!request.isCurrent()) return;
       // Keep the last good source data visible while making the degraded state

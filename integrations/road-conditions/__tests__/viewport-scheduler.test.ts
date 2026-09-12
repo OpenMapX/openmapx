@@ -157,3 +157,98 @@ describe("createViewportFetchScheduler", () => {
     expect(onDue).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("absolute freshness deadline", () => {
+  const box = { west: 22.38, south: 60.455, east: 22.42, north: 60.475 };
+
+  it("fires exactly at the producer deadline, not at the default baseline", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-12T07:14:00Z"));
+      const onDue = vi.fn();
+      const scheduler = createViewportFetchScheduler({
+        freshnessDeadlineMs: 60000,
+        paddingFactor: 0.1,
+        getViewport: () => box,
+        onDue,
+      });
+      scheduler.recordFetch(box);
+      scheduler.setFreshnessDeadline(Date.now() + 5000);
+      vi.advanceTimersByTime(4999);
+      expect(onDue).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(onDue).toHaveBeenCalledTimes(1);
+      scheduler.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("ignores a deadline later than the default baseline", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-12T07:14:00Z"));
+      const onDue = vi.fn();
+      const scheduler = createViewportFetchScheduler({
+        freshnessDeadlineMs: 60000,
+        paddingFactor: 0.1,
+        getViewport: () => box,
+        onDue,
+      });
+      scheduler.recordFetch(box);
+      scheduler.setFreshnessDeadline(Date.now() + 600_000);
+      vi.advanceTimersByTime(59_999);
+      expect(onDue).not.toHaveBeenCalled();
+      vi.advanceTimersByTime(1);
+      expect(onDue).toHaveBeenCalledTimes(1);
+      scheduler.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("refreshes once for an already-elapsed deadline, then keeps the normal baseline", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-12T07:14:00Z"));
+      const onDue = vi.fn();
+      const scheduler = createViewportFetchScheduler({
+        freshnessDeadlineMs: 60000,
+        paddingFactor: 0.1,
+        getViewport: () => box,
+        onDue,
+      });
+      scheduler.recordFetch(box);
+      scheduler.setFreshnessDeadline(Date.now() - 1000);
+      vi.advanceTimersByTime(0);
+      expect(onDue).toHaveBeenCalledTimes(1);
+      // No immediate-refresh loop: the next call comes from a new fetch.
+      vi.advanceTimersByTime(30_000);
+      expect(onDue).toHaveBeenCalledTimes(1);
+      scheduler.dispose();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("drops a pending deadline on dispose", () => {
+    vi.useFakeTimers();
+    try {
+      vi.setSystemTime(new Date("2026-09-12T07:14:00Z"));
+      const onDue = vi.fn();
+      const scheduler = createViewportFetchScheduler({
+        freshnessDeadlineMs: 60000,
+        paddingFactor: 0.1,
+        getViewport: () => box,
+        onDue,
+      });
+      scheduler.recordFetch(box);
+      scheduler.setFreshnessDeadline(Date.now() + 5000);
+      scheduler.dispose();
+      vi.advanceTimersByTime(10_000);
+      expect(onDue).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

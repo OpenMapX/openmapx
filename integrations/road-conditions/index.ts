@@ -4,7 +4,35 @@ import { eventsToFeatureCollection } from "./eventsToGeojson.js";
 import { flowSpansForRoutes, parseRouteFlowBody } from "./flowAlongRoute.js";
 import { flowToFeatureCollection } from "./flowToGeojson.js";
 import { aggregateRoadConditions, aggregateRoadFlow } from "./orchestrator.js";
+import {
+  RESTRICTION_VIEW_MAX_AGE_MS,
+  restrictionRefreshDeadline,
+} from "./restriction-freshness.js";
 import type { RoadConditionSeverity, RoadConditionType } from "./types.js";
+
+/**
+ * Maximum lifetime of a road-event response. Bounded by the restriction
+ * contract rather than by a UI-comfort interval: a longer cache would outlive
+ * the source-freshness window a restriction view is evaluated against.
+ */
+const ROAD_EVENT_CACHE_MAX_AGE_MS = RESTRICTION_VIEW_MAX_AGE_MS;
+
+/**
+ * Seconds a cached FeatureCollection may still be served for, recomputed from
+ * the restriction views it carries. Zero means the payload is already past its
+ * producer deadline and must be rebuilt.
+ */
+function cachedResponseMaxAge(
+  fc: { features?: Array<{ properties?: Record<string, unknown> }> },
+  atMs: number,
+): number {
+  const events = (fc.features ?? []).map((feature) => ({
+    restrictionDetails: feature.properties?.restrictionDetails,
+    restrictionDetailsUnsupported: feature.properties?.restrictionDetailsUnsupported,
+  })) as unknown as Parameters<typeof restrictionRefreshDeadline>[0];
+  const deadline = restrictionRefreshDeadline(events, atMs);
+  return Math.max(0, Math.floor((deadline - atMs) / 1000));
+}
 
 /**
  * Parse a `west,south,east,north` query param into a BBox, rejecting malformed
@@ -70,18 +98,38 @@ export function setup(ctx: IntegrationContext): void {
       | undefined;
     const horizonDays = parseHorizonDays(scalarQueries(req.query).horizonDays);
 
-    const key = `conditions:query:roads:${bboxKey(bbox)}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
+    // Namespaced by the restriction contract version: a response now carries
+    // evaluated restriction views, so a cache entry written by an older shape
+    // must not be served against the new one.
+    const key = `conditions:query:roads:restriction-v1:${bboxKey(bbox)}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
 
     try {
-      const fc = await ctx.cache.withCache(key, 90, async () => {
-        const events = await aggregateRoadConditions(ctx, bbox, {
-          types: types.length > 0 ? types : undefined,
-          minSeverity,
-          horizonDays,
-        });
-        return eventsToFeatureCollection(events);
-      });
-      reply.header("Cache-Control", "public, max-age=90, s-maxage=90");
+      let deadlineMs = Date.now() + ROAD_EVENT_CACHE_MAX_AGE_MS;
+      const fc = await ctx.cache.withCache(
+        key,
+        ROAD_EVENT_CACHE_MAX_AGE_MS / 1000,
+        async () => {
+          const events = await aggregateRoadConditions(ctx, bbox, {
+            types: types.length > 0 ? types : undefined,
+            minSeverity,
+            horizonDays,
+          });
+          deadlineMs = restrictionRefreshDeadline(events, Date.now());
+          return eventsToFeatureCollection(events);
+        },
+        undefined,
+        // A response whose restriction views expire sooner than the cache TTL
+        // is not stored at all: serving it later would keep an "active" label
+        // alive past the freshness window that justified it.
+        () => deadlineMs >= Date.now() + ROAD_EVENT_CACHE_MAX_AGE_MS,
+      );
+      // Recheck on retrieval too: a cached payload may have been written before
+      // this request and its own deadline may already have elapsed.
+      const maxAge = cachedResponseMaxAge(fc, Date.now());
+      reply.header(
+        "Cache-Control",
+        maxAge <= 0 ? "no-store" : `public, max-age=${maxAge}, s-maxage=${maxAge}`,
+      );
       reply.send(fc);
     } catch (err) {
       // A total aggregation failure (every provider threw, or a step outside

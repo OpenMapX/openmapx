@@ -69,6 +69,16 @@ export interface ViewportFetchScheduler {
    */
   recordFetch: (viewport: ViewportBox, at?: number) => void;
   /**
+   * Shorten the current freshness timer to an ABSOLUTE deadline in epoch
+   * milliseconds — unlike `freshnessDeadlineMs`, which is a duration. The
+   * producer states when its evaluation stops being current, so the caller
+   * passes that instant through rather than converting it into a policy of its
+   * own. A deadline at or before now arms an immediate evaluation; a deadline
+   * later than the default baseline is ignored, so this can only tighten the
+   * refresh interval, never relax it.
+   */
+  setFreshnessDeadline: (deadlineMs: number) => void;
+  /**
    * Cancel any pending evaluation/freshness timers. Idempotent, and safe to
    * keep using the scheduler afterward: `markDirty`/`recordFetch` re-arm
    * whatever they need. Callers should call this whenever the thing driving
@@ -130,22 +140,28 @@ export function createViewportFetchScheduler(
   let lastEvalAt = 0;
   let lastFetchViewport: ViewportBox | null = null;
   let lastFetchAt = 0;
+  let absoluteDeadline: number | null = null;
 
   function performEvaluation(): void {
     lastEvalAt = now();
     const viewport = getViewport();
-    const freshnessDue = now() - lastFetchAt >= freshnessDeadlineMs;
+    const freshnessDue =
+      now() - lastFetchAt >= freshnessDeadlineMs ||
+      (absoluteDeadline !== null && now() >= absoluteDeadline);
     const outOfBounds =
       !lastFetchViewport || !isViewportContained(viewport, lastFetchViewport, paddingFactor);
     if (freshnessDue || outOfBounds) onDue();
   }
 
-  function armFreshnessTimer(): void {
+  function armFreshnessTimer(delayMs = freshnessDeadlineMs): void {
     if (freshnessTimer !== null) cancelTimeout(freshnessTimer);
-    freshnessTimer = scheduleTimeout(() => {
-      freshnessTimer = null;
-      performEvaluation();
-    }, freshnessDeadlineMs);
+    freshnessTimer = scheduleTimeout(
+      () => {
+        freshnessTimer = null;
+        performEvaluation();
+      },
+      Math.max(0, delayMs),
+    );
   }
 
   return {
@@ -163,9 +179,20 @@ export function createViewportFetchScheduler(
     recordFetch(viewport, at = now()) {
       lastFetchViewport = viewport;
       lastFetchAt = at;
+      // A new fetch resets the baseline; the caller re-applies the producer's
+      // deadline from the response it just received.
+      absoluteDeadline = null;
       armFreshnessTimer();
     },
+    setFreshnessDeadline(deadlineMs) {
+      if (!Number.isFinite(deadlineMs)) return;
+      const baseline = lastFetchAt + freshnessDeadlineMs;
+      if (deadlineMs >= baseline) return;
+      absoluteDeadline = deadlineMs;
+      armFreshnessTimer(deadlineMs - now());
+    },
     dispose() {
+      absoluteDeadline = null;
       if (evalTimer !== null) {
         cancelTimeout(evalTimer);
         evalTimer = null;
