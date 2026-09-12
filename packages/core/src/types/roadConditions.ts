@@ -127,6 +127,113 @@ export interface RoadConditionRoutingEvidence {
   evaluated_at: string;
 }
 
+/**
+ * The normalized restriction display contract, version 1, as published by
+ * OpenConditions. This mirrors the producer's type; it is a wire shape, not a
+ * re-implementation. A numeric fact here is a source-verified statement, never
+ * a permission for a particular vehicle to pass.
+ */
+export type RoadRestrictionIssueCode =
+  | "unsupported_type"
+  | "unsupported_unit"
+  | "unsupported_operator"
+  | "invalid_value"
+  | "invalid_window"
+  | "unsupported_schedule"
+  | "unsupported_status"
+  | "unknown_vehicle"
+  | "compound_condition"
+  | "conflicting_direction";
+
+export interface RoadRestrictionIssue {
+  code: RoadRestrictionIssueCode;
+  /** null for an unnormalized fact or a whole-record issue. */
+  factId: string | null;
+  sourcePath: string;
+  sourceText?: string;
+  sourceTokens?: Record<string, unknown>;
+  truncated?: true;
+}
+
+/** Source and rights provenance. `feedUrls` is the publisher's endpoint list. */
+export interface RoadRestrictionSource {
+  sourceId: string;
+  recordId: string;
+  recordVersion: string | null;
+  sourceUpdatedAt: string | null;
+  feedUrls: string[];
+  publisher: string;
+  license: string;
+  licenseUrl: string;
+  attribution: string;
+  modificationNotice: string;
+  notices?: string[];
+}
+
+/** Temporal state of one fact, computed by the producer at `evaluatedAt`. */
+export type RoadRestrictionState = "active" | "scheduled" | "ended" | "unknown";
+
+interface RoadRestrictionFactBase {
+  id: string;
+  state: RoadRestrictionState;
+  scope: {
+    kind: "event_road" | "roadwork_phase" | "detour";
+    phaseId: string | null;
+    locationDescription: string | null;
+    sourceLocationRefs: Record<string, unknown>;
+    /** The restriction's own extent is never established by an event binding. */
+    restrictionBinding: "not_established";
+  };
+  direction: {
+    basis: "road_reference" | "alert_c" | "openlr" | "unknown";
+    value: "positive" | "negative" | "both" | "unknown";
+    description: string | null;
+  };
+  validFrom: string | null;
+  validTo: string | null;
+  schedule?: RoadConditionSchedule[];
+  sourceTokens: Record<string, unknown>;
+  context: {
+    /** Display-only site presence; it never turns a restriction off. */
+    workingHours?: RoadConditionSchedule[];
+    restrictionsLiftable: boolean | null;
+    compliance: "mandatory" | "advisory" | "unknown";
+    operatorActionStatus: string | null;
+    validityStatus: string | null;
+    comments?: Array<{ text: string; language: string | null }>;
+  };
+}
+
+export type RoadRestrictionFact = RoadRestrictionFactBase &
+  (
+    | {
+        kind: "dimension";
+        dimension: "height" | "width" | "length" | "gross_weight";
+        meaning: "maximum_permitted" | "event_applies_when";
+        value: number;
+        unit: "m" | "kg";
+        operator: "lt" | "lte" | "eq" | "gte" | "gt";
+      }
+    | { kind: "vehicle_class"; meaning: "event_applies_when"; value: "truck" }
+    | { kind: "vehicle_usage"; meaning: "event_applies_when"; value: "emergency_services" }
+  );
+
+export interface PublishedRoadRestrictionDetailsV1 {
+  schemaVersion: 1;
+  vehicleScope: "specific" | "unknown";
+  completeness: "complete" | "partial";
+  facts: RoadRestrictionFact[];
+  issues: RoadRestrictionIssue[];
+  source: RoadRestrictionSource;
+  evaluatedAt: string;
+  sourceCheckedAt: string | null;
+  /** When the producer's view stops being verified-current. */
+  freshUntil: string | null;
+  /** Earliest future fact start, end or recurrence transition. */
+  nextTransitionAt: string | null;
+  isStale: boolean;
+}
+
 export interface RoadConditionEvent {
   /** Original compatible records retained by display deduplication. */
   sourceRecords?: RoadConditionEvent[];
@@ -217,6 +324,16 @@ export interface RoadConditionEvent {
    * roadworks site in effect right now is `isPlanned` with a past `validFrom`.
    */
   isPlanned?: boolean;
+  /** The publisher's own record type, when the canonical type is coarser. */
+  subtype?: string;
+  /**
+   * Source-verified vehicle restrictions, already evaluated by the producer.
+   * Present details, an empty partial envelope and `restrictionDetailsUnsupported`
+   * all count as restriction evidence and all block shared routing.
+   */
+  restrictionDetails?: PublishedRoadRestrictionDetailsV1;
+  /** Set when a present restriction envelope could not be validated. */
+  restrictionDetailsUnsupported?: true;
 }
 
 export interface RoadConditionsQuery {

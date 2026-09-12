@@ -232,6 +232,10 @@ export {
   isRoadConditionRoutingEvidence,
 } from "./roadConditionRouting";
 export {
+  hasRoadRestrictionEvidence,
+  readRoadRestrictionDetails,
+} from "./roadRestrictionDetails";
+export {
   compareSearchSuggestions,
   isUppercaseAcronymIntent,
   mergeAutocompleteSuggestions,

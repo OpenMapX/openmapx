@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { getRoadConditionRoutingDecision } from "../roadConditionRouting";
+import { readRoadRestrictionDetails } from "../roadRestrictionDetails";
 
 const now = Date.parse("2026-09-11T12:00:00Z");
 
-import { event } from "./fixtures/roadCondition";
+import { event, publishedRestriction } from "./fixtures/roadCondition";
 
 describe("road-condition routing evidence", () => {
   it("accepts a current, permitted complete binding until its source deadline", () => {
@@ -82,5 +83,44 @@ describe("road-condition routing evidence", () => {
       expect(() => getRoadConditionRoutingDecision(malformed, { evaluatedAt: now })).not.toThrow();
       expect(getRoadConditionRoutingDecision(malformed, { evaluatedAt: now }).eligible).toBe(false);
     }
+  });
+
+  it("rejects any restriction evidence, including an all-vehicle claim", () => {
+    const evaluatedAt = Date.parse("2026-09-11T12:00:00Z");
+    const eligibleControl = event();
+    expect(getRoadConditionRoutingDecision(eligibleControl, { evaluatedAt }).eligible).toBe(true);
+
+    const unsupported = readRoadRestrictionDetails({ restrictionDetails: { schemaVersion: 2 } });
+    expect(unsupported).toEqual({ restrictionDetailsUnsupported: true });
+    expect(
+      getRoadConditionRoutingDecision(
+        { ...eligibleControl, ...unsupported, routingEligible: true },
+        { evaluatedAt },
+      ),
+    ).toMatchObject({ eligible: false, reasons: ["vehicle_specific_restriction"] });
+
+    const valid = readRoadRestrictionDetails({ restrictionDetails: publishedRestriction() });
+    expect(valid.restrictionDetails).toBeDefined();
+    expect(
+      getRoadConditionRoutingDecision(
+        // A legacy "all traffic" claim cannot override restriction evidence.
+        { ...eligibleControl, ...valid },
+        { evaluatedAt },
+      ),
+    ).toMatchObject({ eligible: false, reasons: ["vehicle_specific_restriction"] });
+
+    // An empty-but-declared partial envelope is still evidence.
+    const partial = readRoadRestrictionDetails({
+      restrictionDetails: {
+        ...publishedRestriction(),
+        facts: [],
+        vehicleScope: "unknown",
+        completeness: "partial",
+        issues: [{ code: "unsupported_type", factId: null, sourcePath: "restrictions[0]" }],
+      },
+    });
+    expect(
+      getRoadConditionRoutingDecision({ ...eligibleControl, ...partial }, { evaluatedAt }).eligible,
+    ).toBe(false);
   });
 });

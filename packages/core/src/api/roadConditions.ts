@@ -7,6 +7,7 @@ import type {
   RouteFlowResponse,
   RouteFlowSpan,
 } from "../types/roadConditions";
+import { readRoadRestrictionDetails } from "../utils/roadRestrictionDetails";
 import { apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
@@ -78,6 +79,42 @@ function featureToEvent(feature: RoadConditionFeature): RoadConditionEvent | nul
     attribution: (p.attribution as RoadConditionEvent["attribution"]) ?? undefined,
     ...(typeof p.isForecast === "boolean" ? { isForecast: p.isForecast } : {}),
     ...(typeof p.isPlanned === "boolean" ? { isPlanned: p.isPlanned } : {}),
+    ...(str(p.subtype) ? { subtype: str(p.subtype) } : {}),
+    // Normalized fields the host already understands must survive transport,
+    // or the popup and the routing gate would see a thinner event than the
+    // provider published.
+    ...(Array.isArray(p.schedule) && p.schedule.length > 0
+      ? { schedule: p.schedule as RoadConditionEvent["schedule"] }
+      : {}),
+    ...(Array.isArray(p.vehiclesAffected)
+      ? {
+          vehiclesAffected: p.vehiclesAffected.filter(
+            (value): value is string => typeof value === "string",
+          ),
+        }
+      : {}),
+    ...(p.binding && typeof p.binding === "object"
+      ? { binding: p.binding as RoadConditionEvent["binding"] }
+      : {}),
+    ...(Array.isArray(p.segments)
+      ? { segments: p.segments as RoadConditionEvent["segments"] }
+      : {}),
+    ...(p.routingEvidence && typeof p.routingEvidence === "object"
+      ? { routingEvidence: p.routingEvidence as RoadConditionEvent["routingEvidence"] }
+      : {}),
+    ...(p.originKind === "feed" || p.originKind === "crowd" ? { originKind: p.originKind } : {}),
+    ...(typeof p.routingEligible === "boolean" ? { routingEligible: p.routingEligible } : {}),
+    ...(str(p.evidenceState) ? { evidenceState: str(p.evidenceState) } : {}),
+    ...(typeof p.confidenceScore === "number" ? { confidenceScore: p.confidenceScore } : {}),
+    ...(typeof p.isStale === "boolean" ? { isStale: p.isStale } : {}),
+    ...(typeof p.expiresAt === "string" ? { expiresAt: p.expiresAt } : {}),
+    ...(typeof p.speedLimitKph === "number" ? { speedLimitKph: p.speedLimitKph } : {}),
+    ...(Array.isArray(p.sourceRecords)
+      ? { sourceRecords: p.sourceRecords as RoadConditionEvent[] }
+      : {}),
+    // One malformed envelope must not discard the whole response: it becomes an
+    // explicit unsupported marker on its own event.
+    ...readRoadRestrictionDetails(p),
   };
 }
 

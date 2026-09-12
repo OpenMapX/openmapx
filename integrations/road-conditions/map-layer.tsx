@@ -1,6 +1,10 @@
 "use client";
 
-import { type RoadConditionEvent, useOverlayExclusion } from "@openmapx/core";
+import {
+  type RoadConditionEvent,
+  readRoadRestrictionDetails,
+  useOverlayExclusion,
+} from "@openmapx/core";
 import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
@@ -191,6 +195,11 @@ function rawFeatureToEvent(feature: RawFeature): RoadConditionEvent | null {
     event.routingEvidence = properties.routingEvidence as RoadConditionEvent["routingEvidence"];
   if (typeof properties.isForecast === "boolean") event.isForecast = properties.isForecast;
   if (typeof properties.isPlanned === "boolean") event.isPlanned = properties.isPlanned;
+  if (typeof properties.subtype === "string" && properties.subtype.length > 0)
+    event.subtype = properties.subtype;
+  // This layer fetches GeoJSON directly and bypasses the core client, so it
+  // needs the same validation rather than a looser cast.
+  Object.assign(event, readRoadRestrictionDetails(properties));
 
   return event;
 }

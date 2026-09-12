@@ -45,3 +45,63 @@ export const event = (): RoadConditionEvent => ({
     evaluated_at: "2026-09-11T12:00:00Z",
   },
 });
+
+/**
+ * A published restriction envelope as OpenConditions emits it: source
+ * semantics plus the producer's evaluation metadata. Used to prove the routing
+ * gate fires on restriction evidence alone, with every other eligibility
+ * condition still satisfied.
+ */
+export const publishedRestriction = (): NonNullable<RoadConditionEvent["restrictionDetails"]> => ({
+  schemaVersion: 1,
+  vehicleScope: "specific",
+  completeness: "complete",
+  issues: [],
+  source: {
+    sourceId: "fi-digitraffic",
+    recordId: "GUID50465935",
+    recordVersion: "31",
+    sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
+    feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
+    publisher: "Fintraffic / Digitraffic",
+    license: "CC-BY-4.0",
+    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+    attribution: "Fintraffic / Digitraffic",
+    modificationNotice:
+      "Normalized by OpenConditions; source units and structure may be transformed.",
+  },
+  facts: [
+    {
+      id: "GUID50465935:GUID50469933:roadwork_phase:restrictions[2]",
+      kind: "dimension",
+      dimension: "gross_weight",
+      meaning: "maximum_permitted",
+      value: 26000,
+      unit: "kg",
+      operator: "lte",
+      state: "active",
+      scope: {
+        kind: "roadwork_phase",
+        phaseId: "GUID50469933",
+        locationDescription: "Tie 104, Raasepori",
+        sourceLocationRefs: { scheme: "digitraffic_road_address", road: 104 },
+        restrictionBinding: "not_established",
+      },
+      direction: { basis: "road_reference", value: "both", description: null },
+      validFrom: "2026-07-19T21:00:00.000Z",
+      validTo: "2026-12-14T21:59:59.999Z",
+      sourceTokens: { type: "vehicle gross weight limit", quantity: 26, unit: "t" },
+      context: {
+        restrictionsLiftable: false,
+        compliance: "unknown",
+        operatorActionStatus: null,
+        validityStatus: null,
+      },
+    },
+  ],
+  evaluatedAt: "2026-09-11T12:00:00.000Z",
+  sourceCheckedAt: "2026-09-11T11:59:00.000Z",
+  freshUntil: "2026-09-11T12:09:00.000Z",
+  nextTransitionAt: "2026-12-14T21:59:59.999Z",
+  isStale: false,
+});

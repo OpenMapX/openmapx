@@ -4,6 +4,67 @@ import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 
 const NOW = Date.parse("2026-09-12T12:00:00Z");
 
+/**
+ * A published restriction envelope. The route gate keys on *presence* of a
+ * restriction claim, so this only has to be a well-formed envelope; host-side
+ * validation of its contents is covered in @openmapx/core.
+ */
+function publishedRestriction(): NonNullable<RoadConditionEvent["restrictionDetails"]> {
+  return {
+    schemaVersion: 1,
+    vehicleScope: "specific",
+    completeness: "complete",
+    issues: [],
+    source: {
+      sourceId: "fi-digitraffic",
+      recordId: "GUID50465935",
+      recordVersion: "31",
+      sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
+      feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
+      publisher: "Fintraffic / Digitraffic",
+      license: "CC-BY-4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      attribution: "Fintraffic / Digitraffic",
+      modificationNotice:
+        "Normalized by OpenConditions; source units and structure may be transformed.",
+    },
+    facts: [
+      {
+        id: "GUID50465935:GUID50469933:roadwork_phase:restrictions[2]",
+        kind: "dimension",
+        dimension: "gross_weight",
+        meaning: "maximum_permitted",
+        value: 26000,
+        unit: "kg",
+        operator: "lte",
+        state: "active",
+        scope: {
+          kind: "roadwork_phase",
+          phaseId: "GUID50469933",
+          locationDescription: null,
+          sourceLocationRefs: { scheme: "digitraffic_road_address", road: 104 },
+          restrictionBinding: "not_established",
+        },
+        direction: { basis: "road_reference", value: "both", description: null },
+        validFrom: "2026-07-19T21:00:00.000Z",
+        validTo: "2026-12-14T21:59:59.999Z",
+        sourceTokens: { type: "vehicle gross weight limit", quantity: 26, unit: "t" },
+        context: {
+          restrictionsLiftable: false,
+          compliance: "unknown",
+          operatorActionStatus: null,
+          validityStatus: null,
+        },
+      },
+    ],
+    evaluatedAt: "2026-09-12T12:00:00.000Z",
+    sourceCheckedAt: "2026-09-12T11:59:00.000Z",
+    freshUntil: "2026-09-12T12:09:00.000Z",
+    nextTransitionAt: "2026-12-14T21:59:59.999Z",
+    isStale: false,
+  };
+}
+
 function event(overrides: Partial<RoadConditionEvent> = {}): RoadConditionEvent {
   return {
     id: "oc:1",
@@ -143,5 +204,52 @@ describe("assessRoadConditionForRoute", () => {
       reasons: ["missing_routing_evidence"],
       validUntil: null,
     });
+  });
+
+  it("ignores a restriction-bearing event whatever the engine claims", () => {
+    const details = publishedRestriction();
+    for (const carrier of [
+      { restrictionDetails: details },
+      { restrictionDetailsUnsupported: true as const },
+    ]) {
+      expect(
+        assessRoadConditionForRoute(event(carrier), {
+          evaluatedAt: NOW,
+          travelAt: NOW,
+          mode: "driving",
+          sharedTrafficApplied: true,
+        }),
+      ).toEqual({
+        disposition: "ignore",
+        reasons: ["vehicle_specific_restriction"],
+        validUntil: null,
+      });
+    }
+  });
+
+  it("ignores a restriction-bearing event on the legacy-geometry path as well", () => {
+    expect(
+      assessRoadConditionForRoute(
+        event({ routingEvidence: undefined, restrictionDetails: publishedRestriction() }),
+        {
+          evaluatedAt: NOW,
+          travelAt: NOW,
+          mode: "driving",
+          sharedTrafficApplied: false,
+          allowLegacyGeometry: true,
+        },
+      ).disposition,
+    ).toBe("ignore");
+  });
+
+  it("still applies an unconditional closure with valid evidence", () => {
+    expect(
+      assessRoadConditionForRoute(event(), {
+        evaluatedAt: NOW,
+        travelAt: NOW,
+        mode: "driving",
+        sharedTrafficApplied: true,
+      }).disposition,
+    ).toBe("shared-traffic");
   });
 });

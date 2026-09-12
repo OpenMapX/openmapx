@@ -261,3 +261,123 @@ describe("fetchRouteFlow", () => {
     post.mockRestore();
   });
 });
+
+describe("road-condition restriction transport", () => {
+  beforeEach(() => vi.restoreAllMocks());
+
+  const mockGet = {
+    mockResolvedValueOnce(value: unknown) {
+      vi.spyOn(apiClient, "get").mockResolvedValue(value as never);
+    },
+  };
+
+  const details = {
+    schemaVersion: 1,
+    vehicleScope: "specific",
+    completeness: "complete",
+    issues: [],
+    source: {
+      sourceId: "fi-digitraffic",
+      recordId: "GUID50465935",
+      recordVersion: "31",
+      sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
+      feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
+      publisher: "Fintraffic / Digitraffic",
+      license: "CC-BY-4.0",
+      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
+      attribution: "Fintraffic / Digitraffic",
+      modificationNotice:
+        "Normalized by OpenConditions; source units and structure may be transformed.",
+    },
+    facts: [
+      {
+        id: "GUID50465935:GUID50469933:roadwork_phase:restrictions[2]",
+        kind: "dimension",
+        dimension: "gross_weight",
+        meaning: "maximum_permitted",
+        value: 26000,
+        unit: "kg",
+        operator: "lte",
+        state: "active",
+        scope: {
+          kind: "roadwork_phase",
+          phaseId: "GUID50469933",
+          locationDescription: "Tie 104, Raasepori",
+          sourceLocationRefs: { scheme: "digitraffic_road_address", road: 104 },
+          restrictionBinding: "not_established",
+        },
+        direction: { basis: "road_reference", value: "both", description: null },
+        validFrom: "2026-07-19T21:00:00.000Z",
+        validTo: "2026-12-14T21:59:59.999Z",
+        sourceTokens: { type: "vehicle gross weight limit", quantity: 26, unit: "t" },
+        context: {
+          restrictionsLiftable: false,
+          compliance: "unknown",
+          operatorActionStatus: null,
+          validityStatus: null,
+        },
+      },
+    ],
+    evaluatedAt: "2026-09-12T07:14:00.000Z",
+    sourceCheckedAt: "2026-09-12T07:13:00.000Z",
+    freshUntil: "2026-09-12T07:23:00.000Z",
+    nextTransitionAt: "2026-12-14T21:59:59.999Z",
+    isStale: false,
+  };
+
+  function feature(properties: Record<string, unknown>) {
+    return {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [23.5, 60.1] },
+      properties: {
+        id: "fi-digitraffic:GUID50465935",
+        source: "fi-digitraffic",
+        provider: "road-conditions-openconditions",
+        type: "restriction",
+        severity: "high",
+        headline: "Tie 104, Raasepori. Tietyö.",
+        ...properties,
+      },
+    };
+  }
+
+  it("carries a valid envelope through unchanged and deep-equal", async () => {
+    mockGet.mockResolvedValueOnce({
+      type: "FeatureCollection",
+      features: [feature({ restrictionDetails: details, subtype: "road construction" })],
+    });
+    const result = await fetchRoadConditionsWithStatus([19, 59, 32, 71]);
+    expect(result.ok).toBe(true);
+    expect(result.events[0]!.restrictionDetails).toEqual(details);
+    expect(result.events[0]!.subtype).toBe("road construction");
+    expect(result.events[0]!.restrictionDetailsUnsupported).toBeUndefined();
+  });
+
+  it("keeps a mixed response, marking only the malformed envelope unsupported", async () => {
+    mockGet.mockResolvedValueOnce({
+      type: "FeatureCollection",
+      features: [
+        feature({ id: "old:1" }),
+        feature({ id: "new:ok", restrictionDetails: details }),
+        feature({ id: "new:bad", restrictionDetails: { schemaVersion: 9 } }),
+      ],
+    });
+    const result = await fetchRoadConditionsWithStatus([19, 59, 32, 71]);
+    expect(result.ok).toBe(true);
+    expect(result.events).toHaveLength(3);
+    const byId = new Map(result.events.map((e) => [e.id, e]));
+    expect(byId.get("old:1")!.restrictionDetails).toBeUndefined();
+    expect(byId.get("old:1")!.restrictionDetailsUnsupported).toBeUndefined();
+    expect(byId.get("new:ok")!.restrictionDetails).toEqual(details);
+    expect(byId.get("new:bad")!.restrictionDetailsUnsupported).toBe(true);
+    expect(byId.get("new:bad")!.restrictionDetails).toBeUndefined();
+  });
+
+  it("reads an empty collection as a successful empty result", async () => {
+    mockGet.mockResolvedValueOnce({ type: "FeatureCollection", features: [] });
+    expect(await fetchRoadConditionsWithStatus([19, 59, 32, 71])).toEqual({
+      ok: true,
+      events: [],
+    });
+  });
+});

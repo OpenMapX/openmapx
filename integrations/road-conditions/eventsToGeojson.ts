@@ -61,6 +61,14 @@ export function eventsToFeatureCollection(
         // started yet, and shows their start date in the popup.
         isForecast: e.isForecast ?? null,
         isPlanned: e.isPlanned ?? null,
+        ...(e.subtype ? { subtype: e.subtype } : {}),
+        // Both restriction fields travel verbatim. `restrictionDetails: null`
+        // would read as a present-but-unreadable claim on the way back in, so
+        // an event with no claim carries neither key.
+        ...(e.restrictionDetails !== undefined ? { restrictionDetails: e.restrictionDetails } : {}),
+        ...(e.restrictionDetailsUnsupported === true
+          ? { restrictionDetailsUnsupported: true }
+          : {}),
       },
     })),
   };

@@ -1,5 +1,6 @@
 import type { RoadConditionEvent, RoadConditionRoutingEvidence } from "../types/roadConditions";
 import { isRoutingRelevantBinding } from "./edgeClosure";
+import { hasRoadRestrictionEvidence } from "./roadRestrictionDetails";
 
 /** Validate untrusted JSON before it can replace an accepted snapshot. */
 export function isRoadConditionRoutingEvidence(
@@ -108,7 +109,14 @@ export function isRoadConditionRoutingEvidence(
 export function getRoadConditionRoutingDecision(
   event: Pick<
     RoadConditionEvent,
-    "source" | "routingEvidence" | "originKind" | "routingEligible" | "isStale" | "schedule"
+    | "source"
+    | "routingEvidence"
+    | "originKind"
+    | "routingEligible"
+    | "isStale"
+    | "schedule"
+    | "restrictionDetails"
+    | "restrictionDetailsUnsupported"
   >,
   options: {
     evaluatedAt?: number;
@@ -119,6 +127,11 @@ export function getRoadConditionRoutingDecision(
 ): { eligible: boolean; reasons: string[]; validUntil: string | null } {
   const now = options.evaluatedAt ?? Date.now();
   const travel = options.travelAt ?? now;
+  // Checked before any evidence branch: a vehicle-specific or uninterpretable
+  // restriction must never reach shared routing, whatever the rest of the
+  // record claims. A legacy applicability of "all traffic" cannot override it.
+  if (hasRoadRestrictionEvidence(event))
+    return { eligible: false, reasons: ["vehicle_specific_restriction"], validUntil: null };
   const e = event.routingEvidence;
   if (!e || e.schema_version !== 1)
     return { eligible: false, reasons: ["missing_routing_evidence"], validUntil: null };

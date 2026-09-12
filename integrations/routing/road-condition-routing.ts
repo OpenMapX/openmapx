@@ -1,5 +1,6 @@
 import {
   getRoadConditionRoutingDecision,
+  hasRoadRestrictionEvidence,
   type RoadConditionEvent,
   type RoadConditionRouteImpact,
   type TravelMode,
@@ -64,6 +65,12 @@ export function assessRoadConditionForRoute(
   event: RoadConditionEvent,
   context: RoadConditionRouteContext,
 ): RoadConditionRouteDecision {
+  // Restriction evidence outranks every other disposition, including the
+  // legacy-geometry path, which would otherwise let a vehicle-conditioned
+  // record steer a route without any routing evidence at all.
+  if (hasRoadRestrictionEvidence(event)) {
+    return { disposition: "ignore", reasons: ["vehicle_specific_restriction"], validUntil: null };
+  }
   if (!event.routingEvidence) {
     if (event.binding || !context.allowLegacyGeometry) {
       return { disposition: "ignore", reasons: ["missing_routing_evidence"], validUntil: null };
