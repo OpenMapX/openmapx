@@ -91,3 +91,36 @@ describe("OpenConditions → OpenMapX road-condition wire contract v1", () => {
     expect(conditionsToEdges(parsed.conditions, ways).overrides.size).toBe(0);
   });
 });
+
+describe("restriction contract v1 — no conditional record reaches the edge graph", () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL("./fixtures/contracts/road-restrictions-v1.json", import.meta.url),
+      "utf8",
+    ),
+  ) as {
+    fixtureVersion: 1;
+    evaluatedAt: string;
+    segmentConditions: unknown;
+    expectedConditionalIds: string[];
+  };
+
+  it("applies the unconditional control and nothing else", () => {
+    expect(fixture.fixtureVersion).toBe(1);
+    expect(fixture.evaluatedAt).toBe("2026-09-11T12:00:00.000Z");
+    const parsed = parseConditionsJson(JSON.stringify(fixture.segmentConditions));
+    const mapped = conditionsToEdges(parsed.conditions, ways);
+    expect([...mapped.appliedObservationIds]).toEqual(["contract:closure-1"]);
+    expect([...mapped.overrides.keys()]).toEqual(["2:1:0"]);
+    for (const id of fixture.expectedConditionalIds) {
+      expect(mapped.appliedObservationIds.has(id), id).toBe(false);
+    }
+  });
+
+  it("carries no conditional record on the segment wire at all", () => {
+    const parsed = parseConditionsJson(JSON.stringify(fixture.segmentConditions));
+    const ids = parsed.conditions.map((condition) => condition.id);
+    expect(fixture.expectedConditionalIds.length).toBeGreaterThan(0);
+    for (const id of fixture.expectedConditionalIds) expect(ids, id).not.toContain(id);
+  });
+});

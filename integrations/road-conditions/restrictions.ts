@@ -139,7 +139,14 @@ function scheduleText(
 ): string {
   return schedules
     .map((entry) => {
-      const days = entry.byDay && entry.byDay.length > 0 ? entry.byDay.join(", ") : "";
+      // Localized weekday names, matching how the popup renders an event's own
+      // schedule; an unknown code falls back to itself rather than a raw key.
+      const days =
+        entry.byDay && entry.byDay.length > 0
+          ? entry.byDay
+              .map((day) => (WEEKDAY_CODES.has(day) ? translate(`schedule.days.${day}`) : day))
+              .join(", ")
+          : "";
       const band =
         entry.startTime && entry.endTime ? `${entry.startTime}–${entry.endTime}` : entry.startTime;
       const range =
@@ -156,6 +163,8 @@ function scheduleText(
 function safeUrl(raw: string): string | undefined {
   return /^https?:\/\/\S+$/i.test(raw) ? raw : undefined;
 }
+
+const WEEKDAY_CODES = new Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
 
 const ISO_DEFAULT = (value: string) => value;
 

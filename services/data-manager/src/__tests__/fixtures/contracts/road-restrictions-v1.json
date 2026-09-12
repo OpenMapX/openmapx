@@ -1,0 +1,261 @@
+{
+  "fixtureVersion": 1,
+  "evaluatedAt": "2026-09-11T12:00:00.000Z",
+  "displayEvents": [
+    {
+      "id": "contract:closure-1",
+      "source": "test-child",
+      "provider": "",
+      "type": "road_closure",
+      "severity": "high",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [
+            13.4,
+            52.5
+          ],
+          [
+            13.41,
+            52.5
+          ]
+        ]
+      },
+      "headline": "Road closed",
+      "isStale": false,
+      "validFrom": "2026-09-11T11:59:00.000Z",
+      "validTo": "2026-09-11T12:15:00.000Z",
+      "dataUpdatedAt": "2026-09-11T11:59:00.000Z",
+      "attribution": {
+        "provider": "Example road authority",
+        "license": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "originKind": "feed"
+    },
+    {
+      "id": "fi-digitraffic:GUID50465935",
+      "source": "fi-digitraffic",
+      "provider": "",
+      "type": "restriction",
+      "subtype": "road construction",
+      "severity": "high",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          23.536928,
+          60.117282
+        ]
+      },
+      "headline": "Tie 104, Raasepori. Tietyö.",
+      "isStale": false,
+      "roadState": "closed",
+      "roads": [
+        {
+          "name": "Turun kehätie",
+          "ref": "104"
+        }
+      ],
+      "validFrom": "2026-06-11T21:00:00.000Z",
+      "validTo": "2026-12-14T21:59:59.999Z",
+      "dataUpdatedAt": "2026-08-28T04:18:02.629Z",
+      "attribution": {
+        "provider": "Fintraffic / Digitraffic",
+        "license": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/"
+      },
+      "originKind": "feed",
+      "isPlanned": true,
+      "restrictionDetails": {
+        "schemaVersion": 1,
+        "vehicleScope": "specific",
+        "completeness": "complete",
+        "issues": [],
+        "source": {
+          "sourceId": "fi-digitraffic",
+          "recordId": "GUID50465935",
+          "recordVersion": "31",
+          "sourceUpdatedAt": "2026-08-28T04:18:02.629Z",
+          "feedUrls": [
+            "https://tie.digitraffic.fi/api/traffic-message/v2/traffic-announcements",
+            "https://tie.digitraffic.fi/api/traffic-message/v2/roadworks",
+            "https://tie.digitraffic.fi/api/traffic-message/v2/weight-restrictions",
+            "https://tie.digitraffic.fi/api/traffic-message/v2/exempted-transports"
+          ],
+          "publisher": "Fintraffic / Digitraffic",
+          "license": "CC-BY-4.0",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+          "attribution": "Fintraffic / Digitraffic",
+          "modificationNotice": "Normalized by OpenConditions; source units and structure may be transformed."
+        },
+        "facts": [
+          {
+            "id": "GUID50465935:GUID50469933:roadwork_phase:announcements[0].roadWorkPhases[1].restrictions[2]",
+            "kind": "dimension",
+            "dimension": "gross_weight",
+            "meaning": "maximum_permitted",
+            "value": 26000,
+            "unit": "kg",
+            "operator": "lte",
+            "scope": {
+              "kind": "roadwork_phase",
+              "phaseId": "GUID50469933",
+              "locationDescription": "Tie 104 välillä Pohja - Sammatti, Raasepori.",
+              "sourceLocationRefs": {
+                "scheme": "digitraffic_road_address",
+                "road": 104,
+                "roadSection": 1,
+                "primaryDistance": 1971,
+                "secondaryDistance": 2160
+              },
+              "restrictionBinding": "not_established"
+            },
+            "direction": {
+              "basis": "road_reference",
+              "value": "both",
+              "description": null
+            },
+            "validFrom": "2026-07-19T21:00:00.000Z",
+            "validTo": "2026-12-14T21:59:59.999Z",
+            "sourceTokens": {
+              "sourcePath": "announcements[0].roadWorkPhases[1].restrictions[2]",
+              "type": "vehicle gross weight limit",
+              "name": "Painorajoitus",
+              "quantity": 26,
+              "unit": "t",
+              "phaseId": "GUID50469933",
+              "direction": "both"
+            },
+            "context": {
+              "restrictionsLiftable": false,
+              "compliance": "unknown",
+              "operatorActionStatus": null,
+              "validityStatus": null,
+              "workingHours": [
+                {
+                  "scheduleTimezone": "Europe/Helsinki",
+                  "startDate": "2026-07-20",
+                  "endDate": "2026-12-14",
+                  "byDay": [
+                    "MO",
+                    "TU",
+                    "WE",
+                    "TH",
+                    "FR",
+                    "SA",
+                    "SU"
+                  ],
+                  "startTime": "00:00",
+                  "endTime": "23:59",
+                  "duration": "PT23H59M",
+                  "repeatFrequency": "P1D"
+                }
+              ]
+            },
+            "state": "active"
+          }
+        ],
+        "evaluatedAt": "2026-09-11T12:00:00.000Z",
+        "sourceCheckedAt": "2026-09-11T11:59:00.000Z",
+        "freshUntil": "2026-09-11T12:09:00.000Z",
+        "nextTransitionAt": "2026-12-14T21:59:59.999Z",
+        "isStale": false
+      }
+    }
+  ],
+  "segmentConditions": {
+    "schema_version": 1,
+    "complete": true,
+    "generated_at": "2026-09-11T12:00:00.000Z",
+    "at": "2026-09-11T12:00:00.000Z",
+    "resolver_version": "1.0.0",
+    "conditions": [
+      {
+        "id": "contract:closure-1",
+        "source": "test-child",
+        "type": "road_closure",
+        "severity": "high",
+        "road_state": "closed",
+        "speed_limit_kph": null,
+        "vehicles_affected": [],
+        "origin_kind": "feed",
+        "routing_eligible": true,
+        "valid_from": "2026-09-11T11:59:00.000Z",
+        "valid_to": "2026-09-11T12:15:00.000Z",
+        "binding": {
+          "status": "exact",
+          "confidence": 0.99,
+          "direction_mode": "single"
+        },
+        "routing_evidence": {
+          "schema_version": 1,
+          "observation_revision": "revision-1",
+          "binding_revision": "revision-1",
+          "graph_generation": "graph-generation-1",
+          "resolver_version": "1.0.0",
+          "source_id": "test-parent",
+          "child_source_id": "test-child",
+          "source_license": "CC0-1.0",
+          "license_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "attribution": "Example road authority",
+          "record_url": "https://example.test/conditions/1",
+          "source_checked_at": "2026-09-11T11:59:00.000Z",
+          "fresh_until": "2026-09-11T12:15:00.000Z",
+          "expires_at": "2026-09-11T12:15:00.000Z",
+          "valid_from": "2026-09-11T11:59:00.000Z",
+          "valid_to": "2026-09-11T12:15:00.000Z",
+          "next_transition_at": null,
+          "direction_mode": "forward",
+          "applicability": {
+            "kind": "all"
+          },
+          "rights": {
+            "source_redistribution": "yes",
+            "derived_redistribution": "yes",
+            "commercial_use": "yes",
+            "attribution_required": "yes",
+            "retention": "yes",
+            "evidence_origin": "feed-descriptor",
+            "evidence_version": "1",
+            "reviewed_at": "2026-09-10T12:00:00.000Z"
+          },
+          "segments": [
+            {
+              "segment_id": "123:f",
+              "direction": "forward",
+              "from_fraction": 0,
+              "to_fraction": 1
+            }
+          ],
+          "binding_status": "exact",
+          "reason_codes": [],
+          "evaluated_at": "2026-09-11T12:00:00.000Z"
+        },
+        "segments": [
+          {
+            "way_id": 123,
+            "dir": "f",
+            "start_fraction": 0,
+            "end_fraction": 1,
+            "geometry": {
+              "type": "LineString",
+              "coordinates": [
+                [
+                  13.4,
+                  52.5
+                ],
+                [
+                  13.41,
+                  52.5
+                ]
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "expectedConditionalIds": [
+    "fi-digitraffic:GUID50465935"
+  ]
+}
