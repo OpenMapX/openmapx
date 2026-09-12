@@ -182,12 +182,12 @@ are skipped automatically because those packages are marked `private`.
    builds for the deployable targets affected by the PR. After a merge to
    `main`, a separate release workflow accepts only the current commit after successful CI,
    rebuilds images whose Docker build inputs changed since the last published
-   release and reuses unchanged digests. All eight digests pass the current
+   release and reuses unchanged digests. All seven application digests pass the current
    vulnerability scan before publication. It publishes run-qualified release
    tags (`<commit>-<run-id>-<attempt>`) plus SHA convenience aliases and the
-   complete release manifest, then advances and verifies all eight application `latest`
+   complete release manifest, then advances and verifies all seven application `latest`
    aliases. These compatibility aliases move independently. The final
-   `release-manifest:latest` update is the atomic production deployment pointer.
+   `release-manifest:latest` update is the pointer for atomic release selection.
    Weekly scheduled CI forces a no-cache security refresh through the same gates.
    Images at least seven days old also refresh on the next release. Set the
    repository variable `OPENMAPX_FORCE_IMAGE_REBUILD=true` to force the next run
@@ -195,8 +195,13 @@ are skipped automatically because those packages are marked `private`.
    SHA aliases can move on a refresh of the same commit; pin a run-qualified tag
    or digest for rollback. Each image retains its original source revision and
    build time in the manifest's `buildMetadata` when reused. Initial migration
-   from a manifest without this metadata rebuilds all eight images.
+   from a manifest without this metadata rebuilds all seven images.
    Manual dispatch cannot bypass the successful-CI requirement.
+   Documentation publishes independently through `.github/workflows/docs.yml`,
+   with its own build, type check and mandatory image scan. It never waits for
+   application release jobs; see `docs/README.md` for its deployment procedure.
+   The application release manifest is a **release lockfile**: it fixes the image
+   set selected for an update. Container replacement still happens in steps.
 5. A maintainer reviews. Squash-merge is the default; we keep the merged
    PR's title and summary as the squash commit message, so make both
    accurate.

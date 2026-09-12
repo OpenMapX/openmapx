@@ -26,7 +26,12 @@ import {
   writePlatformFileAtomically,
 } from "../lib/platform-secret-files";
 import { combineServiceSelection } from "../lib/preset-selection";
-import { ensureReleaseOverlay, unpinnedReleaseWarning } from "../lib/release";
+import {
+  ensureReleaseOverlay,
+  releaseStatusLines,
+  selectRelease,
+  unpinnedReleaseWarning,
+} from "../lib/release";
 import { applyServiceSelection } from "../lib/service-selection";
 
 const {
@@ -452,7 +457,9 @@ export function registerComposeCommands(program: Command): void {
         }
         const overlay = await ensureReleaseOverlay();
         if (overlay.status === "resolved") {
-          log.ok(`Pinned release ${overlay.release} → ${overlay.path}`);
+          log.ok(`Atomic release selection ${overlay.release} → ${overlay.path}`);
+        } else if (overlay.status === "present") {
+          for (const line of releaseStatusLines(overlay.path)) log.dim(line);
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
           process.exit(1);
@@ -469,19 +476,22 @@ export function registerComposeCommands(program: Command): void {
   compose
     .command("release")
     .description(
-      "Resolve ghcr.io/openmapx/release-manifest:latest and (re)write docker-compose.release.yml pinning the release runtime images",
+      "Resolve the release lockfile for atomic release selection in docker-compose.release.yml",
     )
-    .action(async () => {
+    .option("--status", "Show locally selected release and image pins without registry access")
+    .action(async (options: { status?: boolean }) => {
       try {
-        const { resolveReleaseManifest, writeReleaseOverlay } = await import("../lib/release");
-        const manifest = await resolveReleaseManifest();
-        const path = writeReleaseOverlay(manifest);
-        log.ok(`Pinned release ${manifest.release} → ${path}`);
+        if (options.status) {
+          for (const line of releaseStatusLines()) log.info(line);
+          return;
+        }
+        const selected = await selectRelease({ report: log.info });
+        log.ok(`Atomic release selection ${selected.release} → ${selected.path}`);
         log.dim(
           "Apply it with `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner`.",
         );
       } catch (err) {
-        log.err(`Release resolution failed: ${(err as Error).message}`);
+        log.err(`Release lockfile operation failed: ${(err as Error).message}`);
         process.exit(1);
       }
     });

@@ -12,7 +12,6 @@ const apps = [
   "privacy-backup",
   "transitous-runner",
   "transitous-tools",
-  "docs",
 ];
 const prefix = "example.invalid/openmapx";
 const sha = "f".repeat(40);
@@ -157,7 +156,7 @@ describe("aggregate Docker promotion", () => {
     expect(manifest.images.api).toBe(`${prefix}/api@${digests.api}`);
     expect(manifest.buildMetadata.images.api.sourceRevision).toBe("b".repeat(40));
     expect(manifest.buildMetadata.images.api.builtAt).toBe("2026-09-10T12:00:00.000Z");
-    expect(manifest.buildMetadata.images.docs.sourceRevision).toBe(sha);
+    expect(manifest.buildMetadata.images["ops-agent"].sourceRevision).toBe(sha);
     expect(Object.keys(manifest.images)).toEqual(apps);
   });
   it.each([
@@ -168,6 +167,14 @@ describe("aggregate Docker promotion", () => {
     expect(status).toBe(1);
     expect(calls.flatMap(destinations).some((tag) => tag.endsWith(":latest"))).toBe(false);
     expect(calls.flatMap(destinations)).not.toContain(`${prefix}/release-manifest:${releaseId}`);
+  });
+  it("carries legacy docs metadata without contacting or tagging the docs image", () => {
+    const legacyDocsImage = `${prefix}/docs@sha256:${"a".repeat(64)}`;
+    const { manifest, calls, status } = promote("", false, [], { legacyDocsImage });
+    expect(status).toBe(0);
+    expect(manifest.images.docs).toBe(legacyDocsImage);
+    expect(calls.flat().some((arg) => arg.includes(`${prefix}/docs`))).toBe(false);
+    expect(manifest.buildMetadata.images.docs).toBeUndefined();
   });
   it("tags and verifies every approved digest, then advances the release pointer last", () => {
     const { calls, status, stderr } = promote();

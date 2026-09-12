@@ -12,6 +12,8 @@ import { join } from "node:path";
 import { load } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import {
+  canonicalReleaseManifest,
+  parseReleaseComposeSelection,
   parseReleaseManifest,
   type ReleaseManifest,
   releaseChannel,
@@ -315,4 +317,74 @@ describe("release channel", () => {
       parseReleaseManifest(JSON.stringify(manifest), "registry.example.org/fork"),
     ).toThrow(/not an approved/);
   });
+});
+
+describe("release lockfile compatibility and selection", () => {
+  it("accepts seven images without docs and keeps legacy canonical bytes", () => {
+    expect(canonicalReleaseManifest(manifest)).toBe(JSON.stringify(manifest));
+    const current = JSON.parse(JSON.stringify(manifest));
+    delete current.images.docs;
+    expect(parseReleaseManifest(JSON.stringify(current))).toEqual(current);
+    expect(canonicalReleaseManifest(current)).toBe(JSON.stringify(current));
+    current.images.docs = "ghcr.io/openmapx/docs:latest";
+    expect(() => parseReleaseManifest(JSON.stringify(current))).toThrow(/images.docs/);
+  });
+
+  it("round trips selected identity and seven images, including quoted release IDs", () => {
+    const selected = { ...manifest, release: 'release: "test"' };
+    const { docs: _docs, ...images } = manifest.images;
+    const rendered = renderReleaseCompose(selected);
+    expect(parseReleaseComposeSelection(rendered)).toEqual({ release: selected.release, images });
+    expect(rendered).not.toContain("ghcr.io/openmapx/docs");
+  });
+
+  it("reads legacy service pins without inventing a release identity", () => {
+    expect(
+      parseReleaseComposeSelection(`services:
+  app-api:
+    image: ${manifest.images.api}
+`),
+    ).toEqual({
+      release: null,
+      images: { api: manifest.images.api },
+    });
+    expect(() => parseReleaseComposeSelection("services: [")).toThrow();
+    expect(() => parseReleaseComposeSelection("hello")).toThrow();
+  });
+});
+
+it("does not attribute a modified service pin to stale release metadata", () => {
+  const rendered = renderReleaseCompose(manifest).replace(
+    `image: ${manifest.images.api}`,
+    `image: ghcr.io/openmapx/api@${digest("0")}`,
+  );
+  const selected = parseReleaseComposeSelection(rendered);
+  expect(selected.release).toBeNull();
+  expect(selected.images.api).toBe(`ghcr.io/openmapx/api@${digest("0")}`);
+});
+
+it.each(["app-api", "ops-agent"])(
+  "reports unknown helper selection when %s disagrees with its mirrored pin",
+  (serviceId) => {
+    const rendered = load(renderReleaseCompose(manifest)) as {
+      services: Record<string, { environment: Record<string, string> }>;
+    };
+    rendered.services[serviceId].environment.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE =
+      `ghcr.io/openmapx/privacy-backup@${digest("0")}`;
+    const selected = parseReleaseComposeSelection(JSON.stringify(rendered));
+    expect(selected.release).toBeNull();
+    expect(selected.images["privacy-backup"]).toBeUndefined();
+    expect(selected.images.api).toBe(manifest.images.api);
+    expect(selected.images["transitous-tools"]).toBe(manifest.images["transitous-tools"]);
+  },
+);
+
+it("does not claim a complete release when a mirrored helper pin is absent", () => {
+  const rendered = load(renderReleaseCompose(manifest)) as {
+    services: Record<string, { environment: Record<string, string> }>;
+  };
+  delete rendered.services["app-api"].environment.OPS_PRIVACY_BACKUP_COLLECTOR_IMAGE;
+  const selected = parseReleaseComposeSelection(JSON.stringify(rendered));
+  expect(selected.release).toBeNull();
+  expect(selected.images["privacy-backup"]).toBeUndefined();
 });

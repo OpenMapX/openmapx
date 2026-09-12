@@ -8,6 +8,7 @@ import { repoPaths } from "../lib/paths";
 import { expandPresets, UnknownPresetError } from "../lib/presets";
 import {
   ensureReleaseOverlay,
+  releaseStatusLines,
   touchesReleasePinnedServices,
   unpinnedReleaseWarning,
 } from "../lib/release";
@@ -388,7 +389,9 @@ export function registerServicesCommands(program: Command): void {
       if (touchesReleasePinnedServices(allIds)) {
         const overlay = await ensureReleaseOverlay();
         if (overlay.status === "resolved") {
-          log.ok(`Pinned release ${overlay.release} → ${overlay.path}`);
+          log.ok(`Atomic release selection ${overlay.release} → ${overlay.path}`);
+        } else if (overlay.status === "present") {
+          for (const line of releaseStatusLines(overlay.path)) log.dim(line);
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
           process.exit(1);
@@ -473,7 +476,9 @@ export function registerServicesCommands(program: Command): void {
         const overlay = await ensureReleaseOverlay();
         releasePinned = overlay.status === "present" || overlay.status === "resolved";
         if (overlay.status === "resolved") {
-          log.ok(`Pinned release ${overlay.release} → ${overlay.path}`);
+          log.ok(`Atomic release selection ${overlay.release} → ${overlay.path}`);
+        } else if (overlay.status === "present") {
+          for (const line of releaseStatusLines(overlay.path)) log.dim(line);
         } else if (overlay.status === "unpinned") {
           log.err(unpinnedReleaseWarning(overlay.reason));
           process.exit(1);

@@ -124,9 +124,6 @@ jobs:
           - app: transitous-tools
             context: services/motis/tools/transitous
             dockerfile: services/motis/tools/transitous/Dockerfile
-          - app: docs
-            context: docs
-            dockerfile: docs/Dockerfile
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -342,7 +339,7 @@ jobs:
           password: ${{ github.token }}
 
       # Run-qualified tags preserve each release; SHA tags remain convenience aliases.
-      # The release-manifest pointer below is the atomic deployment contract.
+      # The release-manifest pointer below is the atomic release-selection contract.
       - name: Promote every scanned digest to SHA and assemble the release manifest
         env:
           IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
@@ -386,7 +383,7 @@ jobs:
           NODE
           first=true
           image_lines=""
-          for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools docs; do
+          for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools; do
             shopt -s nullglob
             digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
@@ -446,6 +443,16 @@ jobs:
               throw new Error(`Approved digest does not match the release plan for ${app}`);
             }
           }
+          // Old updaters require a docs field. Carry the previous pin without
+          // contacting docs or advancing its independent publication channel.
+          if (plan.legacyDocsImage) {
+            const prefix = `${process.env.IMAGE_PREFIX}/docs@`;
+            if (!plan.legacyDocsImage.startsWith(prefix) ||
+                !/^sha256:[a-f0-9]{64}$/.test(plan.legacyDocsImage.slice(prefix.length))) {
+              throw new Error("Invalid legacy docs pin");
+            }
+            manifest.images.docs = plan.legacyDocsImage;
+          }
           manifest.buildMetadata = plan.buildMetadata;
           writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE
@@ -475,7 +482,7 @@ jobs:
         env:
           IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
         run: |
-          for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools docs; do
+          for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools; do
             shopt -s nullglob
             digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
             if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
@@ -501,7 +508,7 @@ jobs:
             fi
           done
 
-      # This one registry tag is the atomic deployment switch. If building,
+      # This one registry tag is the atomic release-selection switch. If building,
       # scanning, any SHA promotion, publishing the immutable manifest, or
       # updating/verifying an application alias fails, it retains the prior release.
       - name: Advance the complete release pointer

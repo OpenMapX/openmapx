@@ -23,6 +23,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import { JSON_SCHEMA, load } from "js-yaml";
 import z from "zod/v4";
 
 export const DEFAULT_RELEASE_MANIFEST_IMAGE = "ghcr.io/openmapx/release-manifest:latest";
@@ -43,7 +44,7 @@ export const PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH =
   "/run/openmapx/privacy-release-validation.json";
 const PRIVACY_RELEASE_EVIDENCE_DIRECTORY = ".release-evidence";
 
-const IMAGE_NAMES = [
+export const RELEASE_IMAGE_NAMES = [
   "api",
   "web",
   "data-manager",
@@ -51,7 +52,6 @@ const IMAGE_NAMES = [
   "privacy-backup",
   "transitous-runner",
   "transitous-tools",
-  "docs",
 ] as const;
 const DIGEST = "sha256:[a-f0-9]{64}";
 
@@ -106,7 +106,7 @@ export function releaseManifestImage(): string {
 export interface ReleaseManifest {
   schemaVersion: 1;
   release: string;
-  images: Record<(typeof IMAGE_NAMES)[number], string>;
+  images: Record<(typeof RELEASE_IMAGE_NAMES)[number], string> & { docs?: string };
   privacyReleaseValidation: PrivacyReleaseValidationEvidence;
 }
 
@@ -155,29 +155,29 @@ export function parseReleaseManifest(
   try {
     value = JSON.parse(raw);
   } catch (error) {
-    throw new Error("Release manifest is not valid JSON", { cause: error });
+    throw new Error("Release lockfile is not valid JSON", { cause: error });
   }
-  if (!value || typeof value !== "object") throw new Error("Release manifest must be an object");
+  if (!value || typeof value !== "object") throw new Error("Release lockfile must be an object");
   const candidate = value as {
     schemaVersion?: unknown;
     release?: unknown;
     images?: unknown;
     privacyReleaseValidation?: unknown;
   };
-  if (candidate.schemaVersion !== 1) throw new Error("Unsupported release manifest schemaVersion");
+  if (candidate.schemaVersion !== 1) throw new Error("Unsupported release lockfile schemaVersion");
   if (typeof candidate.release !== "string" || !candidate.release.trim()) {
-    throw new Error("Release manifest release must be a non-empty string");
+    throw new Error("Release lockfile release must be a non-empty string");
   }
   if (!candidate.images || typeof candidate.images !== "object") {
-    throw new Error("Release manifest images must be an object");
+    throw new Error("Release lockfile images must be an object");
   }
   const images = candidate.images as Record<string, unknown>;
-  for (const name of IMAGE_NAMES) {
+  for (const name of [...RELEASE_IMAGE_NAMES, ...(Object.hasOwn(images, "docs") ? ["docs"] : [])]) {
     const pattern = new RegExp(`^${escapeRegExp(imagePrefix)}/${escapeRegExp(name)}@${DIGEST}$`);
     const image = images[name];
     if (typeof image !== "string" || !pattern.test(image)) {
       throw new Error(
-        `Release manifest images.${name} is not an approved immutable reference under ${imagePrefix}`,
+        `Release lockfile images.${name} is not an approved immutable reference under ${imagePrefix}`,
       );
     }
   }
@@ -185,7 +185,7 @@ export function parseReleaseManifest(
   if (!validation.success) {
     const field = validation.error.issues[0]?.path.join(".");
     throw new Error(
-      `Release manifest privacyReleaseValidation${field ? `.${field}` : ""} is invalid`,
+      `Release lockfile privacyReleaseValidation${field ? `.${field}` : ""} is invalid`,
     );
   }
   return candidate as ReleaseManifest;
@@ -233,6 +233,7 @@ function privacyReleaseValidationEvidenceFilename(manifest: ReleaseManifest): st
 export function renderReleaseCompose(manifest: ReleaseManifest): string {
   const validationEvidenceFile = privacyReleaseValidationEvidenceFilename(manifest);
   return [
+    `x-openmapx-release: ${JSON.stringify({ release: manifest.release, images: Object.fromEntries(RELEASE_IMAGE_NAMES.map((name) => [name, manifest.images[name]])) })}`,
     "services:",
     "  app-api:",
     `    image: ${manifest.images.api}`,
@@ -382,4 +383,61 @@ export function transitousToolsImageFromReleaseCompose(overlayYaml: string): str
   return image && new RegExp(`^[a-z0-9][a-z0-9._/-]*/transitous-tools@${DIGEST}$`).test(image)
     ? image
     : null;
+}
+
+export interface ReleaseComposeSelection {
+  release: string | null;
+  images: Partial<Record<(typeof RELEASE_IMAGE_NAMES)[number], string>>;
+}
+
+/** Read local selection, never infer running container versions from the overlay. */
+export function parseReleaseComposeSelection(raw: string): ReleaseComposeSelection {
+  const object = (value: unknown): Record<string, unknown> =>
+    value !== null && typeof value === "object" && !Array.isArray(value)
+      ? (value as Record<string, unknown>)
+      : {};
+  const document = object(load(raw, { schema: JSON_SCHEMA }));
+  if (
+    !document.services ||
+    typeof document.services !== "object" ||
+    Array.isArray(document.services)
+  ) {
+    throw new Error("Release overlay must contain a services mapping");
+  }
+  const services = object(document.services);
+  const images: ReleaseComposeSelection["images"] = {};
+  const pins: Record<string, unknown> = {
+    api: object(services["app-api"]).image,
+    web: object(services["app-web"]).image,
+    "data-manager": object(services["data-manager"]).image,
+    "ops-agent": object(services["ops-agent"]).image,
+    "transitous-runner": object(services["transitous-runner"]).image,
+    "privacy-backup": object(object(services["ops-agent"]).environment)[
+      PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV
+    ],
+    "transitous-tools": object(object(services["data-manager"]).environment)[
+      TRANSITOUS_TOOLS_IMAGE_ENV
+    ],
+  };
+  // Both consumers must agree; otherwise no single helper pin describes this overlay.
+  const apiCollector = object(object(services["app-api"]).environment)[
+    PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV
+  ];
+  if (apiCollector !== pins["privacy-backup"]) delete pins["privacy-backup"];
+  for (const name of RELEASE_IMAGE_NAMES) {
+    const pin = pins[name];
+    if (typeof pin === "string" && new RegExp(`^\\S+@${DIGEST}$`).test(pin)) images[name] = pin;
+  }
+  const metadata = object(document["x-openmapx-release"]);
+  const metadataImages = object(metadata.images);
+  const matches = RELEASE_IMAGE_NAMES.every(
+    (name) => images[name] && metadataImages[name] === images[name],
+  );
+  return {
+    release:
+      matches && typeof metadata.release === "string" && metadata.release.trim()
+        ? metadata.release
+        : null,
+    images,
+  };
 }

@@ -91,7 +91,7 @@ export type ReleaseOverlayState =
 /**
  * Make sure `docker-compose.release.yml` exists before a command that would
  * otherwise start release runtime images from their manifest `:latest` tags
- * without the release manifest's atomic cross-service pin. Never
+ * without the release lockfile's atomic release selection. Never
  * overwrites an existing overlay — the admin updater and `compose release`
  * own deliberate release changes.
  */
@@ -114,9 +114,61 @@ export async function ensureReleaseOverlay(
 
 export function unpinnedReleaseWarning(reason: string): string {
   return (
-    `No ${repoPaths().composeReleasePath} and the release manifest could not be resolved (${reason}). ` +
-    "Refusing to start release runtime images without the atomic digest pins. " +
+    `No ${repoPaths().composeReleasePath} and the release lockfile could not be resolved (${reason}). ` +
+    "Refusing to start release runtime images without atomic release selection. " +
     "Run `pnpm openmapx compose release` once the registry is reachable, or set " +
     `${RELEASE_MANIFEST_IMAGE_ENV}="" to run local images deliberately.`
   );
+}
+
+function readSelection(path: string): coreServices.ReleaseComposeSelection | null {
+  return existsSync(path)
+    ? coreServices.parseReleaseComposeSelection(readFileSync(path, "utf8"))
+    : null;
+}
+
+/** Read-only local status; an existing overlay still applies when resolution is disabled. */
+export function releaseStatusLines(path = repoPaths().composeReleasePath): string[] {
+  const selected = readSelection(path);
+  const disabled = releaseChannel().kind === "disabled";
+  if (!selected)
+    return [
+      disabled
+        ? "Release pinning disabled; no release overlay selected."
+        : "No release lockfile selected locally. Run `pnpm openmapx compose release`.",
+    ];
+  return [
+    ...(disabled ? ["Release resolution disabled; existing overlay still applies."] : []),
+    `Selected release: ${selected.release ?? "unknown (legacy or modified overlay)"}`,
+    ...coreServices.RELEASE_IMAGE_NAMES.map(
+      (name) => `${name}: ${selected.images[name] ?? "unknown"}`,
+    ),
+    "These are locally selected pins; running containers have not been inspected.",
+  ];
+}
+
+export async function selectRelease(
+  opts: {
+    path?: string;
+    resolve?: () => Promise<ReleaseManifest>;
+    report?: (line: string) => void;
+  } = {},
+): Promise<{ path: string; release: string }> {
+  const path = opts.path ?? repoPaths().composeReleasePath;
+  const previous = readSelection(path);
+  const manifest = await (opts.resolve ?? resolveReleaseManifest)();
+  const report = opts.report ?? (() => undefined);
+  report(
+    `Previous release: ${previous ? (previous.release ?? "unknown (legacy or modified overlay)") : "none"}`,
+  );
+  report(`Candidate release: ${manifest.release}`);
+  for (const name of coreServices.RELEASE_IMAGE_NAMES) {
+    const before = previous?.images[name]?.split("@")[1];
+    const after = manifest.images[name].split("@")[1];
+    report(
+      `${name}: ${before ? (before === after ? "reused" : "changed") : "previous digest unknown"} (${before ?? "unknown"} → ${after})`,
+    );
+  }
+  writeReleaseOverlay(manifest, path);
+  return { path, release: manifest.release };
 }

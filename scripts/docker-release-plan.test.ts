@@ -89,7 +89,7 @@ describe("Dockerfile build input coverage", () => {
 });
 
 describe("selective release planning", () => {
-  it("bootstraps all eight builds without a previous release or legacy build metadata", () => {
+  it("bootstraps all seven builds without a previous release or legacy build metadata", () => {
     expect(
       createReleasePlan(options).images.every((image: { rebuild: boolean }) => image.rebuild),
     ).toBe(true);
@@ -101,11 +101,30 @@ describe("selective release planning", () => {
       ),
     ).toBe(true);
   });
+  it("carries a legacy docs pin for old readers without scheduling docs", () => {
+    const previous = {
+      ...baseline(),
+      images: { ...baseline().images, docs: `ghcr.io/openmapx/docs@sha256:${"a".repeat(64)}` },
+    };
+    const plan = createReleasePlan({ ...options, previous });
+    expect(plan.legacyDocsImage).toBe(previous.images.docs);
+    expect(plan.images.some((image: { app: string }) => image.app === "docs")).toBe(false);
+    expect(plan.buildMetadata.images.docs).toBeUndefined();
+    expect(() =>
+      createReleasePlan({
+        ...options,
+        previous: {
+          ...previous,
+          images: { ...previous.images, docs: "ghcr.io/openmapx/docs:latest" },
+        },
+      }),
+    ).toThrow();
+  });
   it("reuses all unchanged digests despite a new release revision", () => {
     const previous = baseline();
     const plan = createReleasePlan({ ...options, revision: "c".repeat(40), previous });
     expect(plan.images.map((image: { rebuild: boolean }) => image.rebuild)).toEqual(
-      Array(8).fill(false),
+      Array(7).fill(false),
     );
     expect(plan.buildMetadata).toEqual(previous.buildMetadata);
     expect(plan.images.find((image: { app: string }) => image.app === "api").digest).toBe(
@@ -125,7 +144,7 @@ describe("selective release planning", () => {
     expect(next.images.every((image: { rebuild: boolean }) => image.rebuild)).toBe(true);
     expect(() => createReleasePlan({ ...options, releaseId: `${"c".repeat(40)}-124-1` })).toThrow();
   });
-  it("rebuilds docs alone for a docs edit", () => {
+  it("does not rebuild application images for a docs edit", () => {
     const changed = tree.map((entry) =>
       entry.path === "docs/page.md" ? { ...entry, oid: "0".repeat(40) } : entry,
     );
@@ -134,7 +153,7 @@ describe("selective release planning", () => {
       plan.images
         .filter((image: { rebuild: boolean }) => image.rebuild)
         .map((image: { app: string }) => image.app),
-    ).toEqual(["docs"]);
+    ).toEqual([]);
   });
   it.each(["packages/shared/index.ts", "pnpm-lock.yaml"])(
     "rebuilds every root app copying %s",
@@ -239,7 +258,7 @@ describe("selective release planning", () => {
       privacyFingerprint: await computePrivacySourceFingerprint(root),
     };
     const plan = createReleasePlan(actual);
-    expect(plan.images).toHaveLength(8);
+    expect(plan.images).toHaveLength(7);
     const changedTree = actual.tree.map((entry: { path: string; oid: string; mode: string }) =>
       entry.path === "docs/docs/install/upgrading.md" ? { ...entry, oid: "0".repeat(40) } : entry,
     );
@@ -254,7 +273,7 @@ describe("selective release planning", () => {
       docsOnly.images
         .filter((image: { rebuild: boolean }) => image.rebuild)
         .map((image: { app: string }) => image.app),
-    ).toEqual(["docs"]);
+    ).toEqual([]);
 
     const sources = dockerInputs(actual.readDockerfile("apps/transitous-runner/Dockerfile"), ".");
     expect(sources).toContain("packages");

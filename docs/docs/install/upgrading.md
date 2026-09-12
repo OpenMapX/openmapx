@@ -44,7 +44,7 @@ release manifest, then pulling and replacing the exact image set. The steps
 below do both, in the right order.
 
 A complete release can reuse images from earlier releases: CI rebuilds only images
-whose inputs changed, then scans all eight selected digests before publishing.
+whose inputs changed, then scans all seven selected application digests before publishing.
 Shared dependency and privacy changes can require several images to rebuild.
 Unchanged images retain their digest and original build revision; the release
 identifier describes the complete selected set. Weekly security refreshes rebuild
@@ -54,6 +54,12 @@ For a reproducible rollback reference, use the run-qualified manifest tag
 `ghcr.io/openmapx/release-manifest:<commit>-<run-id>-<attempt>` (the identifier is
 also stored in its JSON `release` field), or a manifest digest. Bare commit-SHA
 aliases can move when a security refresh rebuilds the same source commit.
+
+The release manifest acts as a **release lockfile**. Atomic release selection
+means an update chooses one complete set of image digests. Container replacements
+still happen in steps; it does not promise a simultaneous switch or automatic
+rollback of database changes. The docs website has its own publication channel
+and is not part of this application update.
 
 ## 1. Optional: create a backup
 
@@ -128,6 +134,22 @@ as a standalone step unless you want to inspect the diff first.
 
 ## 4. Resolve the complete release and replace containers
 
+Inspect the locally selected release without contacting the registry:
+
+```bash
+pnpm openmapx compose release --status
+```
+
+This reports the selected release and its seven image pins. It does not inspect
+running containers. Older overlays without selection metadata show an unknown
+release identity while retaining their available image pins.
+
+Running `pnpm openmapx compose release` prints the previous and candidate release,
+then marks each image **changed**, **reused**, or **unknown** by comparing digests,
+and writes the selected lockfile as the Compose overlay. An existing overlay
+continues to apply even if release resolution is disabled with an empty
+`OPENMAPX_RELEASE_MANIFEST_IMAGE`; the status command reports that explicitly.
+
 This is the step that actually swaps in the new app version. The short form
 resolves the aggregate release pointer, writes the overlay, and replaces the
 core containers:
@@ -188,7 +210,7 @@ release_compose=(docker compose -f infra/docker/docker-compose.generated.yml -f 
 "${release_compose[@]}" up -d --force-recreate app-api app-web data-manager ops-agent transitous-runner
 ```
 
-The `release-manifest:latest` tag moves atomically only after every image in its
+The `release-manifest:latest` pointer selects a release atomically only after every image in its
 release has passed promotion. The generated overlay therefore keeps `app-api`,
 `app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous
 helper on the same release.

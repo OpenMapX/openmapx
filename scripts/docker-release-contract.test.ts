@@ -106,7 +106,6 @@ describe("Docker release trust gate", () => {
         "privacy-backup",
         "transitous-runner",
         "transitous-tools",
-        "docs",
       ]) {
         const digestDir = join(temp, "digests", `docker-digest-${app}-1-1`);
         mkdirSync(digestDir, { recursive: true });
@@ -120,7 +119,6 @@ describe("Docker release trust gate", () => {
         "privacy-backup",
         "transitous-runner",
         "transitous-tools",
-        "docs",
       ];
       const buildMetadata = {
         version: 1,
@@ -199,7 +197,6 @@ describe("Docker release trust gate", () => {
           "privacy-backup": `example.invalid/openmapx/privacy-backup@sha256:${"a".repeat(64)}`,
           "transitous-runner": `example.invalid/openmapx/transitous-runner@sha256:${"a".repeat(64)}`,
           "transitous-tools": `example.invalid/openmapx/transitous-tools@sha256:${"a".repeat(64)}`,
-          docs: `example.invalid/openmapx/docs@sha256:${"a".repeat(64)}`,
         },
         privacyReleaseValidation: privacyEvidence,
       });
@@ -221,8 +218,9 @@ describe("Docker release trust gate", () => {
     );
 
     const docsReadme = read("docs/README.md");
-    expect(docsReadme).toContain('if ! OPENMAPX_DOCS_IMAGE="$(jq -er');
-    expect(docsReadme).toContain("^ghcr\\.io/openmapx/docs@sha256:[0-9a-f]{64}$");
+    expect(docsReadme).toContain("docker pull ghcr.io/openmapx/docs:latest");
+    expect(docsReadme).not.toContain("docker pull ghcr.io/openmapx/release-manifest:latest");
+    expect(docsReadme).toContain(String.raw`^ghcr\\.io/openmapx/docs@sha256:[0-9a-f]{64}$`);
     expect(docsReadme).toContain("export OPENMAPX_DOCS_IMAGE");
   });
 

@@ -30,7 +30,6 @@ export const targets = [
     context: "services/motis/tools/transitous",
     dockerfile: "services/motis/tools/transitous/Dockerfile",
   },
-  { app: "docs", context: "docs", dockerfile: "docs/Dockerfile" },
 ];
 const shaPattern = /^[a-f0-9]{40}$/;
 const releasePattern = /^[a-f0-9]{40}(?:-[1-9][0-9]*-[1-9][0-9]*)?$/;
@@ -158,6 +157,14 @@ function validatePrevious(previous, imagePrefix) {
     )
       throw new Error(`Invalid previous release image: ${app}`);
   }
+  if (
+    previous.images.docs !== undefined &&
+    (typeof previous.images.docs !== "string" ||
+      !previous.images.docs.startsWith(`${imagePrefix}/docs@`) ||
+      !digestPattern.test(previous.images.docs.slice(`${imagePrefix}/docs@`.length)))
+  ) {
+    throw new Error("Invalid legacy docs image");
+  }
   if (previous.buildMetadata?.version !== 1) return;
   for (const { app } of targets) {
     const metadata = previous.buildMetadata.images?.[app];
@@ -234,6 +241,8 @@ export function createReleasePlan({
     privacyFingerprint,
     images,
     buildMetadata,
+    // Kept for older runtime readers only; docs publishes independently.
+    ...(previous?.images.docs ? { legacyDocsImage: previous.images.docs } : {}),
   };
 }
 

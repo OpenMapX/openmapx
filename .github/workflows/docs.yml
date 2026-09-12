@@ -1,0 +1,154 @@
+name: Build, Scan & Publish Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+      - ".trivyignore.yaml"
+      - ".nvmrc"
+  pull_request:
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs.yml"
+      - ".trivyignore.yaml"
+      - ".nvmrc"
+  schedule:
+    - cron: '47 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: docs-image-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/openmapx/docs
+
+jobs:
+  docs:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+      security-events: write
+    steps:
+      - name: Select trusted docs source
+        id: source
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            let sha = context.sha;
+            if (context.eventName !== "pull_request") {
+              if (!["push", "schedule", "workflow_dispatch"].includes(context.eventName) ||
+                  context.ref !== "refs/heads/main") {
+                throw new Error("Docs publication requires trusted main");
+              }
+              // Serial main runs select current source before building. A queued
+              // older run cannot roll docs back after a newer main revision.
+              const { data: main } = await github.rest.git.getRef({...context.repo, ref: "heads/main"});
+              sha = main.object.sha;
+            }
+            core.setOutput("sha", sha);
+            core.setOutput("release", `${sha}-${context.runId}-${process.env.GITHUB_RUN_ATTEMPT}`);
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ steps.source.outputs.sha }}
+          persist-credentials: false
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86 # v6
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+          cache-dependency-path: docs/pnpm-lock.yaml
+      - name: Check docs types
+        run: |
+          pnpm -C docs install --frozen-lockfile
+          pnpm -C docs typecheck
+      - name: Set up Docker Buildx
+        id: buildx
+        continue-on-error: true
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Retry Docker Buildx setup
+        if: steps.buildx.outcome == 'failure'
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+      - name: Log in to the candidate registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - name: Build docs candidate
+        id: build
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7
+        with:
+          context: docs
+          file: docs/Dockerfile
+          platforms: linux/amd64
+          pull: true
+          no-cache: ${{ github.event_name == 'schedule' || vars.OPENMAPX_FORCE_DOCS_REBUILD == 'true' }}
+          outputs: ${{ github.event_name == 'pull_request' && 'type=cacheonly' || format('type=image,name={0},push-by-digest=true,name-canonical=true,push=true', env.IMAGE) }}
+          labels: |
+            org.opencontainers.image.revision=${{ steps.source.outputs.sha }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+          cache-from: type=gha,scope=docs
+          cache-to: type=gha,mode=max,scope=docs
+          provenance: mode=max
+          sbom: true
+      - name: Audit docs candidate
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: sarif
+          output: trivy-docs.sarif
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          limit-severities-for-sarif: true
+          ignore-unfixed: "false"
+          exit-code: "0"
+      - name: Gate docs candidate
+        if: github.event_name != 'pull_request'
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25 # v0.36.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.build.outputs.digest }}
+          format: table
+          scanners: vuln
+          vuln-type: os,library
+          severity: CRITICAL,HIGH
+          ignore-unfixed: "true"
+          trivyignores: .trivyignore.yaml
+          exit-code: "1"
+      - name: Upload docs scan report
+        if: always() && github.event_name != 'pull_request' && (github.event.repository.visibility == 'public' || vars.ENABLE_CODE_SCANNING == 'true')
+        uses: github/codeql-action/upload-sarif@db488ddef3bf6cb639b32c2e9a7c0a7ea8271d28 # v4.37.8
+        with:
+          sarif_file: trivy-docs.sarif
+          category: trivy-docs
+      - name: Publish and verify docs aliases
+        if: github.event_name != 'pull_request'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          RELEASE_SHA: ${{ steps.source.outputs.sha }}
+          RELEASE_ID: ${{ steps.source.outputs.release }}
+        run: |
+          if [[ ! "$DIGEST" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            echo "Invalid scanned docs digest" >&2
+            exit 1
+          fi
+          for tag in "$RELEASE_ID" "$RELEASE_SHA" latest; do
+            docker buildx imagetools create --prefer-index=false --tag "${IMAGE}:${tag}" "${IMAGE}@${DIGEST}"
+            actual=$(docker buildx imagetools inspect "${IMAGE}:${tag}" --format '{{.Manifest.Digest}}')
+            if [ "$actual" != "$DIGEST" ]; then
+              echo "Published docs digest mismatch for ${tag}" >&2
+              exit 1
+            fi
+          done
+          printf '%s\n' "### Published documentation" "" "Source revision: ${RELEASE_SHA}" "" "Image: ${IMAGE}@${DIGEST}" "" "Rollback tag: ${IMAGE}:${RELEASE_ID}" >> "$GITHUB_STEP_SUMMARY"

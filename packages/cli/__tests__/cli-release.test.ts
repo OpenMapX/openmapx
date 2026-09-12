@@ -1,11 +1,16 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { registerComposeCommands } from "../src/commands/compose";
 import {
   ensureReleaseOverlay,
   type ReleaseDockerRunner,
+  releaseStatusLines,
+  selectRelease,
   touchesReleasePinnedServices,
+  writeReleaseOverlay,
 } from "../src/lib/release";
 
 const digest = (c: string) => `sha256:${c.repeat(64)}`;
@@ -167,4 +172,108 @@ describe("touchesReleasePinnedServices", () => {
     expect(touchesReleasePinnedServices(["transitous-runner"])).toBe(true);
     expect(touchesReleasePinnedServices(["motis", "valhalla"])).toBe(false);
   });
+});
+
+describe("local release visibility", () => {
+  it("reports selected pins locally and compares digests before selecting a new release", async () => {
+    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
+    const path = join(temp, "docker-compose.release.yml");
+    const previous = JSON.parse(manifestJson);
+    writeReleaseOverlay(previous, path);
+    const before = readFileSync(path, "utf8");
+    expect(releaseStatusLines(path).join("\n")).toContain("Selected release: deadbeef");
+    expect(readFileSync(path, "utf8")).toBe(before);
+    const next = JSON.parse(manifestJson);
+    next.release = "next";
+    next.images.api = `ghcr.io/openmapx/api@${digest("0")}`;
+    next.images.web = next.images.web.replace("ghcr.io/openmapx", "mirror.example/openmapx");
+    const lines: string[] = [];
+    await selectRelease({
+      path,
+      resolve: async () => next,
+      report: (line) => {
+        expect(readFileSync(path, "utf8")).toBe(before);
+        lines.push(line);
+      },
+    });
+    expect(lines.join("\n")).toContain("Previous release: deadbeef");
+    expect(lines.join("\n")).toContain("Candidate release: next");
+    expect(lines.join("\n")).toContain("api: changed");
+    expect(lines.join("\n")).toContain("web: reused");
+    expect(lines.join("\n")).not.toContain("docs:");
+    expect(releaseStatusLines(path).join("\n")).toContain("Selected release: next");
+  });
+
+  it("distinguishes disabled resolution from an existing active overlay", () => {
+    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
+    const path = join(temp, "docker-compose.release.yml");
+    vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_IMAGE", "");
+    try {
+      expect(releaseStatusLines(path).join("\n")).toContain("Release pinning disabled");
+      writeReleaseOverlay(JSON.parse(manifestJson), path);
+      expect(releaseStatusLines(path).join("\n")).toContain("existing overlay still applies");
+      expect(releaseStatusLines(path).join("\n")).toContain("Selected release: deadbeef");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it("leaves selected pins intact when resolution fails", async () => {
+    temp = mkdtempSync(join(tmpdir(), "omx-release-"));
+    const path = join(temp, "docker-compose.release.yml");
+    writeReleaseOverlay(JSON.parse(manifestJson), path);
+    const before = readFileSync(path, "utf8");
+    await expect(
+      selectRelease({
+        path,
+        resolve: async () => {
+          throw new Error("offline");
+        },
+      }),
+    ).rejects.toThrow("offline");
+    expect(readFileSync(path, "utf8")).toBe(before);
+  });
+});
+
+it("exposes read-only release status on the compose command", () => {
+  const program = new Command();
+  registerComposeCommands(program);
+  const release = program.commands
+    .find((command) => command.name() === "compose")
+    ?.commands.find((command) => command.name() === "release");
+  expect(release?.options.some((option) => option.long === "--status")).toBe(true);
+});
+
+it("compares legacy pins and rejects malformed local overlays before resolution", async () => {
+  temp = mkdtempSync(join(tmpdir(), "omx-release-"));
+  const path = join(temp, "docker-compose.release.yml");
+  const manifest = JSON.parse(manifestJson);
+  writeFileSync(path, `services:\n  app-api:\n    image: ${manifest.images.api}\n`);
+  const lines: string[] = [];
+  await selectRelease({ path, resolve: async () => manifest, report: (line) => lines.push(line) });
+  expect(lines.join("\n")).toContain("Previous release: unknown (legacy or modified overlay)");
+  expect(lines.join("\n")).toContain("api: reused");
+  writeFileSync(path, "services: [");
+  const resolve = vi.fn(async () => manifest);
+  await expect(selectRelease({ path, resolve })).rejects.toThrow();
+  expect(resolve).not.toHaveBeenCalled();
+  expect(readFileSync(path, "utf8")).toBe("services: [");
+  expect(() => releaseStatusLines(path)).toThrow();
+});
+
+it("does not report a candidate as selected when atomic overlay publication fails", async () => {
+  temp = mkdtempSync(join(tmpdir(), "omx-release-"));
+  const path = join(temp, "docker-compose.release.yml");
+  const previous = JSON.parse(manifestJson);
+  writeReleaseOverlay(previous, path);
+  const before = readFileSync(path, "utf8");
+  chmodSync(join(temp, ".release-evidence"), 0o755);
+  const next = { ...previous, release: "next" };
+  const lines: string[] = [];
+  await expect(
+    selectRelease({ path, resolve: async () => next, report: (line) => lines.push(line) }),
+  ).rejects.toThrow(/unsafe/);
+  expect(lines.join("\n")).toContain("Candidate release: next");
+  expect(lines.join("\n")).not.toContain("Selected release: next");
+  expect(readFileSync(path, "utf8")).toBe(before);
 });
