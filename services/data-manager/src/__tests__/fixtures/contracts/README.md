@@ -23,8 +23,8 @@ The normalized vehicle-restriction display contract, version 1. Copied from
 OpenConditions, where it is generated from real producer code at the frozen
 instant `2026-09-11T12:00:00.000Z`:
 `packages/publishers/src/__tests__/fixtures/contracts/road-restrictions-v1.json`.
-Biome formats this copy, so it differs from its source in whitespace only. The
-two are equivalent as parsed JSON, which is how they are compared.
+Both repositories format with the same Biome version and settings, so this copy
+is byte-identical to its source. The tests compare parsed JSON either way.
 
 Two consumer suites read it independently. `services/data-manager` parses
 `segmentConditions` with the real conditions parser and edge converter and
