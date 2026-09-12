@@ -181,8 +181,11 @@ are skipped automatically because those packages are marked `private`.
 4. PR CI runs lint, types, tests, production builds, and non-publishing Docker
    builds for the deployable targets affected by the PR. After a merge to
    `main`, a separate release workflow accepts only the current commit after successful CI,
-   scans exact image digests, and then promotes the complete set to SHA and
-   `latest` tags. Manual dispatch cannot bypass the successful-CI requirement.
+   scans exact image digests, publishes all eight SHA tags and the immutable
+   release manifest, then advances and verifies all eight application `latest`
+   aliases. These compatibility aliases move independently. The final
+   `release-manifest:latest` update is the atomic production deployment pointer.
+   Manual dispatch cannot bypass the successful-CI requirement.
 5. A maintainer reviews. Squash-merge is the default; we keep the merged
    PR's title and summary as the squash commit message, so make both
    accurate.

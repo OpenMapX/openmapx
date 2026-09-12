@@ -467,10 +467,11 @@ export function registerServicesCommands(program: Command): void {
         process.exit(1);
       }
 
+      let releasePinned = false;
       if (touchesReleasePinnedServices(allIds)) {
-        // An update of release services must move the set to one coherent
-        // digest-pinned release.
+        // Retain existing release pins, or resolve a complete release once.
         const overlay = await ensureReleaseOverlay();
+        releasePinned = overlay.status === "present" || overlay.status === "resolved";
         if (overlay.status === "resolved") {
           log.ok(`Pinned release ${overlay.release} → ${overlay.path}`);
         } else if (overlay.status === "unpinned") {
@@ -485,6 +486,10 @@ export function registerServicesCommands(program: Command): void {
 
       const pullCode = await dockerComposeStream(["pull", ...allIds]);
       if (pullCode !== 0) {
+        if (releasePinned) {
+          log.err("Could not pull the pinned release images; refusing to recreate services.");
+          process.exit(pullCode);
+        }
         log.warn("Some images could not be pulled (service may be locally built). Continuing.");
       }
 

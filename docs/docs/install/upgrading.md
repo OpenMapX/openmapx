@@ -181,6 +181,16 @@ release has passed promotion. The generated overlay therefore keeps `app-api`,
 `app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous
 helper on the same release.
 
+CI also maintains `latest` compatibility aliases for all eight application
+images, after publishing their SHA tags and immutable release manifest. Each
+alias is moved directly to its approved digest and verified before the release
+pointer advances. Existing stale aliases are overwritten; missing aliases are
+created without deleting any image versions. A failed alias update or digest
+check fails publication and leaves the release pointer unchanged. A subsequent
+successful publication reconciles all eight aliases. Because those aliases move
+independently, they can temporarily contain mixed releases; use the release
+manifest for production deployments.
+
 :::note[Admin updater and later service commands]
 The admin system updater performs this same release-manifest resolution and
 writes `docker-compose.release.yml` atomically after every digest-pinned image
@@ -190,7 +200,19 @@ digest-pinned release. Keep the overlay with the deployment;
 delete it only when intentionally leaving the published OpenMapX release channel.
 Forks and mirrored registries select their own channel with
 `OPENMAPX_RELEASE_MANIFEST_IMAGE` (see [Configuration](./configuration.md)).
+`services update` preserves an existing release selection and stops before
+container recreation if pulling that pinned release fails. Run `compose release`
+first when deliberately selecting a newer release.
 :::
+
+For tag-based or local-image workflows, an empty
+`OPENMAPX_RELEASE_MANIFEST_IMAGE` disables automatic release resolution. It does
+not remove or bypass an existing release overlay: deliberately remove that
+overlay when leaving the release channel. With no overlay, service updates pull
+the manifest tags and may continue after pull failures to allow local images.
+This is not an offline mode; Compose can still pull application images.
+`compose pull` uses existing Compose files without resolving a release, so run
+`compose release` first to ensure it pulls the production digests.
 
 To reconcile the **entire** enabled stack while retaining the selected app
 release, use the same overlay with Compose:

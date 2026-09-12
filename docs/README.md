@@ -21,8 +21,11 @@ pnpm serve          # preview the production build
 Pull-request CI builds the docs image without publishing it. After a successful
 CI run for the current `main` commit, `.github/workflows/docker.yml` builds all
 deployable images as untagged candidates, scans their exact digests, and only
-then promotes each digest to an immutable SHA tag. It
-publishes the complete set through the one atomic deployment pointer
+then promotes each digest to an immutable SHA tag. After publishing the immutable
+release manifest, it also advances and verifies `latest` compatibility aliases
+for all eight images, including docs. These aliases move independently; they
+cannot select an atomic multi-service release. CI publishes the complete set
+through the final atomic deployment pointer
 `ghcr.io/openmapx/release-manifest:latest`; resolving that manifest is
 recommended because separate image tags cannot advance atomically. It serves
 `docs.openmapx.org` as its own Compose project — completely separate from the

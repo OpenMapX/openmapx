@@ -322,6 +322,7 @@ jobs:
 
             IMAGE="${IMAGE_PREFIX}/${app}"
             docker buildx imagetools create \
+              --prefer-index=false \
               --tag "${IMAGE}:${RELEASE_SHA}" \
               "${IMAGE}@${DIGEST}"
             docker buildx imagetools inspect "${IMAGE}:${RELEASE_SHA}"
@@ -363,9 +364,42 @@ jobs:
             release-manifest
           docker buildx imagetools inspect "${RELEASE_MANIFEST_IMAGE}:${RELEASE_SHA}"
 
+      # Maintain the manifest-tag fallback only from a complete, scanned set.
+      # These aliases move independently; production uses the release pointer.
+      # Retag directly so existing consumers never hit a delete/recreate gap.
+      - name: Advance and verify application latest aliases
+        env:
+          IMAGE_PREFIX: ${{ env.IMAGE_PREFIX }}
+        run: |
+          for app in api web data-manager ops-agent privacy-backup transitous-runner transitous-tools docs; do
+            shopt -s nullglob
+            digest_files=("digests/docker-digest-${app}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"/*)
+            if [ "${#digest_files[@]}" -ne 1 ] || [ ! -f "${digest_files[0]}" ]; then
+              echo "Expected exactly one approved digest artifact for ${app}" >&2
+              exit 1
+            fi
+            digest_file="${digest_files[0]}"
+            DIGEST="sha256:${digest_file##*/}"
+            if [[ ! "$DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "Invalid approved digest for ${app}: $DIGEST" >&2
+              exit 1
+            fi
+
+            IMAGE="${IMAGE_PREFIX}/${app}"
+            docker buildx imagetools create \
+              --prefer-index=false \
+              --tag "${IMAGE}:latest" \
+              "${IMAGE}@${DIGEST}"
+            published_digest=$(docker buildx imagetools inspect "${IMAGE}:latest" --format '{{.Manifest.Digest}}')
+            if [ "$published_digest" != "$DIGEST" ]; then
+              echo "Published digest mismatch for ${IMAGE}:latest: expected ${DIGEST}, got ${published_digest}" >&2
+              exit 1
+            fi
+          done
+
       # This one registry tag is the atomic deployment switch. If building,
-      # scanning, any SHA promotion, or publishing the immutable manifest
-      # fails, it remains pointed at the last complete release.
+      # scanning, any SHA promotion, publishing the immutable manifest, or
+      # updating/verifying an application alias fails, it retains the prior release.
       - name: Advance the complete release pointer
         env:
           RELEASE_MANIFEST_IMAGE: ${{ env.IMAGE_PREFIX }}/release-manifest

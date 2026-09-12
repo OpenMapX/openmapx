@@ -44,7 +44,7 @@ describe("Docker release trust gate", () => {
     expect(release).toContain("trivyignores: .trivyignore.yaml");
     expect(release).toContain('exit-code: "1"');
     const ignorePolicy = read(".trivyignore.yaml");
-    for (const exception of ignorePolicy.split(/^  - id: /m).slice(1)) {
+    for (const exception of ignorePolicy.split(/^ {2}- id: /m).slice(1)) {
       expect(exception).toMatch(/paths: \["[^"*]+"\]/);
       expect(exception).toMatch(/expired_at: \d{4}-\d{2}-\d{2}/);
       expect(exception).toMatch(/statement: \S/);
@@ -76,7 +76,6 @@ describe("Docker release trust gate", () => {
     const promoteStart = release.indexOf("  promote:\n");
     const promoteJob = release.slice(promoteStart);
     expect(promoteJob).not.toContain("matrix:");
-    expect(promoteJob).not.toContain('"$' + '{IMAGE}:latest"');
   });
 
   it("writes parseable release JSON even when Docker promotion commands write to stdout", () => {
