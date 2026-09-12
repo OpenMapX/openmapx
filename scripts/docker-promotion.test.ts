@@ -168,11 +168,11 @@ describe("aggregate Docker promotion", () => {
     expect(calls.flatMap(destinations).some((tag) => tag.endsWith(":latest"))).toBe(false);
     expect(calls.flatMap(destinations)).not.toContain(`${prefix}/release-manifest:${releaseId}`);
   });
-  it("carries legacy docs metadata without contacting or tagging the docs image", () => {
+  it("publishes only application images despite unrelated plan metadata", () => {
     const legacyDocsImage = `${prefix}/docs@sha256:${"a".repeat(64)}`;
     const { manifest, calls, status } = promote("", false, [], { legacyDocsImage });
     expect(status).toBe(0);
-    expect(manifest.images.docs).toBe(legacyDocsImage);
+    expect(Object.keys(manifest.images)).toEqual(apps);
     expect(calls.flat().some((arg) => arg.includes(`${prefix}/docs`))).toBe(false);
     expect(manifest.buildMetadata.images.docs).toBeUndefined();
   });

@@ -441,7 +441,8 @@ export function registerServicesCommands(program: Command): void {
       "Pull selected release/local images and replace one or more services (render + hardlinks + docker compose up -d --force-recreate)",
     )
     .option("--preset <names>", "Comma/space-separated preset names")
-    .action(async (ids: string[], options: { preset?: string }) => {
+    .option("--no-deps", "Replace only selected services without starting their dependencies")
+    .action(async (ids: string[], options: { preset?: string; deps?: boolean }) => {
       const allIds = mergeIdsWithPresets(ids, options.preset);
       if (allIds.length === 0) {
         log.err("No services selected. Pass <ids...> or --preset.");
@@ -498,7 +499,13 @@ export function registerServicesCommands(program: Command): void {
         log.warn("Some images could not be pulled (service may be locally built). Continuing.");
       }
 
-      const code = await dockerComposeStream(["up", "-d", "--force-recreate", ...allIds]);
+      const code = await dockerComposeStream([
+        "up",
+        "-d",
+        "--force-recreate",
+        ...(options.deps === false ? ["--no-deps"] : []),
+        ...allIds,
+      ]);
       process.exit(code);
     });
 

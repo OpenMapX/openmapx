@@ -90,6 +90,13 @@ export {
   writeReleaseComposeArtifacts,
 } from "./release-manifest";
 export {
+  acquireReleaseStoreLock,
+  acquireStoreLock,
+  RELEASE_STORE_LOCK_NAME,
+  type ReleaseStoreLock,
+  type ReleaseStoreLockHooks,
+} from "./release-store-lock";
+export {
   detectConsumesCycle,
   findByCapability,
   type ResolverContext,

@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
-import type { Command } from "commander";
+import { type Command, Option } from "commander";
 import { assertCliDeploymentSecret } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
@@ -27,6 +27,7 @@ import {
 } from "../lib/platform-secret-files";
 import { combineServiceSelection } from "../lib/preset-selection";
 import {
+  clearReleaseSelection,
   ensureReleaseOverlay,
   releaseStatusLines,
   selectRelease,
@@ -479,10 +480,33 @@ export function registerComposeCommands(program: Command): void {
       "Resolve the release lockfile for atomic release selection in docker-compose.release.yml",
     )
     .option("--status", "Show locally selected release and image pins without registry access")
-    .action(async (options: { status?: boolean }) => {
+    .addOption(
+      new Option(
+        "--clear",
+        "Clear local release selection without changing running containers",
+      ).conflicts("status"),
+    )
+    .action(async (options: { status?: boolean; clear?: boolean }) => {
       try {
         if (options.status) {
           for (const line of releaseStatusLines()) log.info(line);
+          return;
+        }
+        if (options.clear) {
+          const result = await clearReleaseSelection();
+          log.ok(
+            result.cleared
+              ? `Cleared local release selection → ${result.path}`
+              : "No local release selection to clear.",
+          );
+          log.dim(
+            "Running containers, release evidence, and recorded running state are preserved.",
+          );
+          log.dim(
+            process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE?.trim() === ""
+              ? "Release resolution is disabled; the next start/update uses manifest image tags."
+              : 'Automatic release resolution will select a release on the next start/update. To use local images, separately set OPENMAPX_RELEASE_MANIFEST_IMAGE="".',
+          );
           return;
         }
         const selected = await selectRelease({ report: log.info });

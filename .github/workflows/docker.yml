@@ -444,16 +444,6 @@ jobs:
               throw new Error(`Approved digest does not match the release plan for ${app}`);
             }
           }
-          // Old updaters require a docs field. Carry the previous pin without
-          // contacting docs or advancing its independent publication channel.
-          if (plan.legacyDocsImage) {
-            const prefix = `${process.env.IMAGE_PREFIX}/docs@`;
-            if (!plan.legacyDocsImage.startsWith(prefix) ||
-                !/^sha256:[a-f0-9]{64}$/.test(plan.legacyDocsImage.slice(prefix.length))) {
-              throw new Error("Invalid legacy docs pin");
-            }
-            manifest.images.docs = plan.legacyDocsImage;
-          }
           manifest.buildMetadata = plan.buildMetadata;
           writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`);
           NODE

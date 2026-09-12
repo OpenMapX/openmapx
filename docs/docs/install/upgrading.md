@@ -215,23 +215,31 @@ release has passed promotion. The generated overlay therefore keeps `app-api`,
 `app-web`, `data-manager`, `ops-agent`, `transitous-runner`, and the Transitous
 helper on the same release.
 
-CI also maintains `latest` compatibility aliases for all eight application
+CI also maintains `latest` compatibility aliases for all seven application
 images, after publishing their SHA tags and immutable release manifest. Each
 alias is moved directly to its approved digest and verified before the release
 pointer advances. Existing stale aliases are overwritten; missing aliases are
 created without deleting any image versions. A failed alias update or digest
 check fails publication and leaves the release pointer unchanged. A subsequent
-successful publication reconciles all eight aliases. Because those aliases move
+successful publication reconciles all seven aliases. Because those aliases move
 independently, they can temporarily contain mixed releases; use the release
 manifest for production deployments.
 
 :::note[Admin updater and later service commands]
 The admin system updater performs this same release-manifest resolution and
 writes `docker-compose.release.yml` atomically after every digest-pinned image
-has been pulled. API and CLI service lifecycle commands automatically include an
+has been pulled. It replaces API, web, data-manager, and transitous-runner without
+restarting their dependencies. Before applying, it verifies that the running
+ops-agent image and its privacy-backup helper pin already match the selected
+release. If either differs or cannot be verified, it stops and gives the host-side
+update commands above. The agent does not replace its own container while it is
+executing the update. System status includes all five running application services.
+
+API and CLI service lifecycle commands automatically include an
 existing release overlay, so restarting or re-rendering the stack retains the
 digest-pinned release. Keep the overlay with the deployment;
-delete it only when intentionally leaving the published OpenMapX release channel.
+clear it with `pnpm openmapx compose release --clear` only when intentionally
+removing the local selection.
 Forks and mirrored registries select their own channel with
 `OPENMAPX_RELEASE_MANIFEST_IMAGE` (see [Configuration](./configuration.md)).
 `services update` preserves an existing release selection and stops before
@@ -241,8 +249,24 @@ first when deliberately selecting a newer release.
 
 For tag-based or local-image workflows, an empty
 `OPENMAPX_RELEASE_MANIFEST_IMAGE` disables automatic release resolution. It does
-not remove or bypass an existing release overlay: deliberately remove that
-overlay when leaving the release channel. With no overlay, service updates pull
+not remove or bypass an existing release overlay. Clear the local selection
+explicitly:
+
+```bash
+pnpm openmapx compose release --clear
+```
+
+This idempotent command removes only `infra/docker/docker-compose.release.yml`.
+It makes no Docker calls and preserves running containers, `.release-evidence`
+files that they may still mount, and `.ops-agent-releases` manifests and recorded
+running state. It refuses to clear while the release store is locked or an update
+transaction awaits completion or recovery. `--clear` cannot be combined with
+`--status`.
+
+Clearing does not change your environment. If automatic resolution remains
+enabled, the next start/update selects a release again. To use local images,
+separately set `OPENMAPX_RELEASE_MANIFEST_IMAGE=""` in your deployment environment.
+With no overlay and resolution disabled, service updates pull
 the manifest tags and may continue after pull failures to allow local images.
 This is not an offline mode; Compose can still pull application images.
 `compose pull` uses existing Compose files without resolving a release, so run

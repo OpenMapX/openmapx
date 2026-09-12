@@ -45,10 +45,9 @@ docker compose -f docs/deploy/docker-compose.yml -p openmapx-docs up -d
 
 For rollback, set `OPENMAPX_DOCS_IMAGE` to a previously published docs digest or
 run-qualified tag. SHA aliases can move on a refresh of the same source commit.
-Application release lockfiles may retain a **legacy** `images.docs` entry so older
-application updaters can still read them. That entry is no longer updated and must
-not be used to deploy the website. Existing docs deployments should switch their
-image selection to the procedure above; container and Traefik settings stay the same.
+Application release lockfiles contain only the seven application images: API, web,
+data-manager, ops-agent, privacy-backup, transitous-runner, and transitous-tools.
+Deploy the documentation website through its independent image channel above.
 
 Traefik issues the Let's Encrypt cert automatically (DNS already points at the
 host). See `Dockerfile`, `nginx.conf`, and `deploy/docker-compose.yml`.

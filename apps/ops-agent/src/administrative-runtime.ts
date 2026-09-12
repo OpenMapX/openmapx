@@ -35,20 +35,35 @@ import {
 import { runContainedProcess } from "./docker-runtime";
 import type { OpsExecutionContext, OpsRuntime } from "./runtime";
 
+const { acquireStoreLock, acquireReleaseStoreLock, RELEASE_STORE_LOCK_NAME } = coreServices;
+type ReleaseStoreLock = coreServices.ReleaseStoreLock;
+type ReleaseStoreLockHooks = coreServices.ReleaseStoreLockHooks;
+
 const MAX_BACKUP_MANIFEST_BYTES = 1024 * 1024;
 const MAX_BACKUP_SERVICES = 256;
 const MAX_BACKUP_VOLUMES = 4_096;
 const MAX_CLI_OUTPUT_BYTES = 1024 * 1024;
 const MAX_CLI_DURATION_MS = 30 * 60_000;
+const ADMIN_RELEASE_SERVICE_IDS = [
+  "data-manager",
+  "app-web",
+  "transitous-runner",
+  "app-api",
+] as const;
+const INSPECT_RELEASE_SERVICE_IDS = [
+  "app-api",
+  "app-web",
+  "data-manager",
+  "ops-agent",
+  "transitous-runner",
+] as const;
+const HOST_RELEASE_UPDATE_INSTRUCTION =
+  "This release requires a host-side update of ops-agent or its backup helper. Run `pnpm openmapx compose release`, then `pnpm openmapx services update app-api app-web data-manager ops-agent transitous-runner` on the host.";
 const MAX_RELEASE_MANIFEST_BYTES = 32 * 1024;
 const MAX_RELEASE_STATE_BYTES = 4 * 1024;
 const MAX_RELEASE_TRANSACTION_BYTES = 128 * 1024;
 const MAX_RELEASE_STORE_ENTRIES = 64;
-const RELEASE_STORE_LOCK_NAME = ".release-store.lock";
 const BACKUP_STORE_LOCK_NAME = ".backup-store.lock";
-const RELEASE_STORE_LOCK_TTL_MS = 15 * 60_000;
-const RELEASE_STORE_LOCK_ACQUIRE_TIMEOUT_MS = 60_000;
-const RELEASE_STORE_LOCK_RETRY_MS = 50;
 const MAX_RELEASE_STORE_BYTES = MAX_RELEASE_STORE_ENTRIES * MAX_RELEASE_MANIFEST_BYTES;
 const BACKUP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 const SERVICE_ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -758,103 +773,6 @@ function immutableWrite(path: string, contents: string): void {
   if (writeError !== undefined) throw writeError;
 }
 
-/**
- * A no-replace, cross-process lock over the release store.
- *
- * `mkdir` is atomic and fails with `EEXIST` when the directory already exists,
- * so it serializes ops-agent processes without a shared runtime. The owner
- * record inside it carries a lease: a holder that died without releasing is
- * reclaimed only after the lease expires, and reclamation itself races through
- * the same `mkdir`, so two reclaimers cannot both win.
- */
-interface ReleaseStoreLock {
-  release(): void;
-}
-
-interface ReleaseStoreLockHooks {
-  afterLockDirectoryCreate?: () => void;
-  beforeOwnerRecordWrite?: () => void;
-}
-
-async function acquireStoreLock(
-  directory: string,
-  lockName: string,
-  hooks: ReleaseStoreLockHooks = {},
-  nowMs: () => number = Date.now,
-): Promise<ReleaseStoreLock> {
-  const lockPath = join(directory, lockName);
-  const ownerPath = join(lockPath, "owner.json");
-  const deadline = nowMs() + RELEASE_STORE_LOCK_ACQUIRE_TIMEOUT_MS;
-  const owner = { pid: process.pid, nonce: randomUUID() };
-  while (true) {
-    try {
-      mkdirSync(lockPath, { mode: 0o700 });
-      hooks.afterLockDirectoryCreate?.();
-      hooks.beforeOwnerRecordWrite?.();
-      atomicWrite(ownerPath, JSON.stringify({ ...owner, acquiredAtMs: nowMs() }));
-      fsyncDirectory(lockPath);
-      return {
-        release() {
-          durableUnlink(ownerPath);
-          try {
-            rmSync(lockPath, { recursive: true, force: true });
-            fsyncDirectory(directory);
-          } catch {
-            // A already-removed lock directory is not an error: the caller's
-            // critical section is over either way.
-          }
-        },
-      };
-    } catch (error) {
-      if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
-    }
-    // Held by someone else. Reclaim only an expired lease, and only by
-    // removing the exact directory we observed as expired.
-    let expired = false;
-    try {
-      const raw = strictReadFile(ownerPath, MAX_RELEASE_STATE_BYTES);
-      const record = JSON.parse(raw) as { acquiredAtMs?: unknown };
-      expired =
-        typeof record.acquiredAtMs !== "number" ||
-        !Number.isFinite(record.acquiredAtMs) ||
-        nowMs() - record.acquiredAtMs > RELEASE_STORE_LOCK_TTL_MS;
-    } catch (error) {
-      // A lock directory without a readable owner record is either mid-
-      // acquisition or abandoned before its record landed. Treat it as
-      // expired only once it is older than the lease.
-      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
-        let createdAtMs = Number.POSITIVE_INFINITY;
-        try {
-          createdAtMs = lstatSync(lockPath).mtimeMs;
-        } catch {
-          continue;
-        }
-        expired = nowMs() - createdAtMs > RELEASE_STORE_LOCK_TTL_MS;
-      } else {
-        throw new Error("Release store lock is unreadable");
-      }
-    }
-    if (expired) {
-      try {
-        rmSync(lockPath, { recursive: true, force: true });
-        fsyncDirectory(directory);
-      } catch {
-        // Another process reclaimed it first; retry through mkdir.
-      }
-      continue;
-    }
-    if (nowMs() >= deadline) throw new Error("Release store is busy");
-    await new Promise((resolve) => setTimeout(resolve, RELEASE_STORE_LOCK_RETRY_MS));
-  }
-}
-
-function acquireReleaseStoreLock(
-  directory: string,
-  hooks: ReleaseStoreLockHooks = {},
-): Promise<ReleaseStoreLock> {
-  return acquireStoreLock(directory, RELEASE_STORE_LOCK_NAME, hooks);
-}
-
 function acquireBackupStoreLock(rootDir: string): Promise<ReleaseStoreLock> {
   const root = backupRoot(rootDir);
   mkdirSync(root, { recursive: true, mode: 0o700 });
@@ -1061,6 +979,75 @@ export function createDefaultReleaseEffects(
       return undefined;
     }
   };
+  // Inspect only the non-secret helper reference, never the complete environment.
+  const inspectAgentHelper = async (
+    containerId: string,
+    context: FixedCliOptions,
+  ): Promise<string | undefined> => {
+    const key = coreServices.PRIVACY_BACKUP_COLLECTOR_IMAGE_ENV;
+    try {
+      const value = (
+        await runDocker(
+          [
+            "container",
+            "inspect",
+            "--format",
+            `{{range .Config.Env}}{{if eq (index (split . "=") 0) "${key}"}}{{println .}}{{end}}{{end}}`,
+            containerId,
+          ],
+          context,
+        )
+      ).trim();
+      return value.startsWith(`${key}=`) && !value.includes("\n")
+        ? value.slice(key.length + 1)
+        : undefined;
+    } catch {
+      return undefined;
+    }
+  };
+  const requireCurrentAgent = async (
+    manifest: ReturnType<typeof coreServices.parseReleaseManifest>,
+    context: FixedCliOptions,
+  ): Promise<void> => {
+    let matches = false;
+    try {
+      const expected = await inspectImageId(
+        ["image", "inspect", "--format", "{{.Id}}", manifest.images["ops-agent"]],
+        context,
+      );
+      const containerId = (
+        await runDocker(
+          [
+            "compose",
+            "-f",
+            repositoryPaths.composeOutPath,
+            ...(isRegularComposeFile(repositoryPaths.composeReleasePath)
+              ? ["-f", repositoryPaths.composeReleasePath]
+              : []),
+            "ps",
+            "-q",
+            "ops-agent",
+          ],
+          context,
+        )
+      ).trim();
+      if (expected && /^[a-f0-9]{12,64}$/.test(containerId)) {
+        const running = await inspectImageId(
+          ["container", "inspect", "--format", "{{.Image}}", containerId],
+          context,
+        );
+        matches =
+          running === expected &&
+          (await inspectAgentHelper(containerId, context)) === manifest.images["privacy-backup"];
+      }
+    } catch {
+      /* Unknown state must not permit a partial system update. */
+    }
+    if (!matches) {
+      context.emitLog("stderr", HOST_RELEASE_UPDATE_INSTRUCTION);
+      throw new Error(HOST_RELEASE_UPDATE_INSTRUCTION);
+    }
+  };
   interface ReleaseTransaction {
     version: 1;
     phase: ReleaseTransactionPhase;
@@ -1105,11 +1092,11 @@ export function createDefaultReleaseEffects(
       !/^[a-f0-9]{64}$/.test(value.digest) ||
       !Array.isArray(value.serviceIds) ||
       value.serviceIds.length < 1 ||
-      value.serviceIds.length > 3 ||
+      value.serviceIds.length > ADMIN_RELEASE_SERVICE_IDS.length ||
       value.serviceIds.some(
         (serviceId) =>
           typeof serviceId !== "string" ||
-          !["app-api", "app-web", "data-manager"].includes(serviceId),
+          !(ADMIN_RELEASE_SERVICE_IDS as readonly string[]).includes(serviceId),
       ) ||
       new Set(value.serviceIds).size !== value.serviceIds.length ||
       (value.updateJobId !== undefined &&
@@ -1164,6 +1151,7 @@ export function createDefaultReleaseEffects(
         "app-api": manifest.images.api,
         "app-web": manifest.images.web,
         "data-manager": manifest.images["data-manager"],
+        "transitous-runner": manifest.images["transitous-runner"],
       };
       for (const serviceId of serviceIds) {
         const expected = await inspectImageId(
@@ -1190,7 +1178,7 @@ export function createDefaultReleaseEffects(
     if (transaction.previousOverlay === null) durableUnlink(paths.overlay);
     else atomicWrite(paths.overlay, transaction.previousOverlay);
     await writeTransaction({ ...transaction, phase: "rollback_services" });
-    await runFixedCli(["services", "update", ...transaction.serviceIds], context);
+    await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
     if (transaction.previousState === null) durableUnlink(paths.state);
     else atomicWrite(paths.state, transaction.previousState);
     durableUnlink(paths.transaction);
@@ -1207,6 +1195,9 @@ export function createDefaultReleaseEffects(
     if (releaseDigest(coreServices.canonicalReleaseManifest(manifest)) !== transaction.digest) {
       throw new Error("Release authority rejected");
     }
+    if (!transaction.phase.startsWith("rollback_") && transaction.serviceIds.length > 1) {
+      await requireCurrentAgent(manifest, context);
+    }
     if (transaction.phase === "prepared") {
       coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
       transaction = { ...transaction, phase: "overlay_written" };
@@ -1214,7 +1205,7 @@ export function createDefaultReleaseEffects(
     }
     if (transaction.phase === "overlay_written") {
       coreServices.writeReleaseComposeArtifacts(manifest, paths.overlay);
-      await runFixedCli(["services", "update", ...transaction.serviceIds], context);
+      await runFixedCli(["services", "update", "--no-deps", ...transaction.serviceIds], context);
       if (!(await verifyApplied(manifest, transaction.serviceIds, context))) {
         throw new Error("Release recovery verification failed");
       }
@@ -1381,9 +1372,11 @@ export function createDefaultReleaseEffects(
         "app-api": manifest?.images.api,
         "app-web": manifest?.images.web,
         "data-manager": manifest?.images["data-manager"],
+        "ops-agent": manifest?.images["ops-agent"],
+        "transitous-runner": manifest?.images["transitous-runner"],
       } as const;
       const services: OpsResultFor<"system.inspect">["services"] = [];
-      for (const serviceId of ["app-api", "app-web", "data-manager"] as const) {
+      for (const serviceId of INSPECT_RELEASE_SERVICE_IDS) {
         const pinnedImage = serviceImages[serviceId];
         let containerId: string | undefined;
         // A thrown or unparseable `ps -q` is an absent observation, not an
@@ -1413,14 +1406,19 @@ export function createDefaultReleaseEffects(
         const localImageId = pinnedImage
           ? await inspectImageId(["image", "inspect", "--format", "{{.Id}}", pinnedImage], context)
           : undefined;
+        const helper =
+          serviceId === "ops-agent" && containerId
+            ? await inspectAgentHelper(containerId, context)
+            : undefined;
         const state =
           !dockerReachable || !composeReady || !pinnedImage || !observed
             ? "unknown"
             : !containerId
               ? "not_running"
-              : !runningImageId || !localImageId
+              : !runningImageId || !localImageId || (serviceId === "ops-agent" && !helper)
                 ? "unknown"
-                : runningImageId === localImageId
+                : runningImageId === localImageId &&
+                    (serviceId !== "ops-agent" || helper === manifest?.images["privacy-backup"])
                   ? "current"
                   : "update_available";
         services.push({
@@ -1443,6 +1441,9 @@ export function createDefaultReleaseEffects(
     },
     apply: async (releaseId, serviceIds, context, updateJobId) => {
       await initialize();
+      // The agent cannot safely replace the container executing this transaction.
+      // A complete admin apply is allowed only when its own image and helper
+      // already match; otherwise the host CLI owns the full five-service update.
       // Claiming the transaction is a read-then-write across processes. Without
       // the lock two agents can both observe no active transaction and both
       // write `transaction.json`, so the loser's rollback state is lost.
@@ -1452,6 +1453,7 @@ export function createDefaultReleaseEffects(
       try {
         if (readTransaction()) throw new Error("Release transaction already active");
         manifest = loadManifest(releaseId);
+        if (serviceIds.length > 1) await requireCurrentAgent(manifest, context);
         const previousOverlay = existsSync(paths.overlay)
           ? strictReadFile(paths.overlay, MAX_RELEASE_MANIFEST_BYTES)
           : null;
@@ -1476,7 +1478,7 @@ export function createDefaultReleaseEffects(
       transaction = { ...transaction, phase: "overlay_written" };
       await writeTransaction(transaction);
       try {
-        await runFixedCli(["services", "update", ...serviceIds], context);
+        await runFixedCli(["services", "update", "--no-deps", ...serviceIds], context);
         if (!(await verifyApplied(manifest, serviceIds, context))) {
           throw new Error("Release application verification failed");
         }
@@ -1738,11 +1740,7 @@ export function createAdministrativeRuntime(
   };
   runtime["release.inspect"] = async () => releaseEffects.inspect();
   runtime["release.apply"] = async (operation, context) => {
-    await releaseEffects.apply(
-      operation.releaseId,
-      ["data-manager", "app-web", "app-api"],
-      context,
-    );
+    await releaseEffects.apply(operation.releaseId, [...ADMIN_RELEASE_SERVICE_IDS], context);
     return { releaseId: operation.releaseId };
   };
   runtime["appApi.replace"] = async (operation, context) => {
@@ -1755,11 +1753,7 @@ export function createAdministrativeRuntime(
       await runFixedCli(["backup", "create", "--name", operation.backupId], context);
     }
     await releaseEffects.pull(operation.releaseId, context);
-    await releaseEffects.apply(
-      operation.releaseId,
-      ["data-manager", "app-web", "app-api"],
-      context,
-    );
+    await releaseEffects.apply(operation.releaseId, [...ADMIN_RELEASE_SERVICE_IDS], context);
     return { releaseId: operation.releaseId };
   };
   return runtime;

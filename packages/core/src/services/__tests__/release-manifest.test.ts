@@ -34,7 +34,6 @@ const manifest: ReleaseManifest = {
     "privacy-backup": `ghcr.io/openmapx/privacy-backup@${digest("9")}`,
     "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
     "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
-    docs: `ghcr.io/openmapx/docs@${digest("1")}`,
   },
   privacyReleaseValidation: {
     version: 1,
@@ -319,20 +318,19 @@ describe("release channel", () => {
   });
 });
 
-describe("release lockfile compatibility and selection", () => {
-  it("accepts seven images without docs and keeps legacy canonical bytes", () => {
-    expect(canonicalReleaseManifest(manifest)).toBe(JSON.stringify(manifest));
-    const current = JSON.parse(JSON.stringify(manifest));
-    delete current.images.docs;
-    expect(parseReleaseManifest(JSON.stringify(current))).toEqual(current);
-    expect(canonicalReleaseManifest(current)).toBe(JSON.stringify(current));
-    current.images.docs = "ghcr.io/openmapx/docs:latest";
-    expect(() => parseReleaseManifest(JSON.stringify(current))).toThrow(/images.docs/);
-  });
+describe("release lockfile image contract and selection", () => {
+  it.each([`ghcr.io/openmapx/docs@${digest("1")}`, "ghcr.io/openmapx/docs:latest"])(
+    "strips unrelated image fields from parsed and canonical releases (%s)",
+    (docs) => {
+      const input = { ...manifest, images: { ...manifest.images, docs, unrelated: null } };
+      expect(parseReleaseManifest(JSON.stringify(input))).toEqual(manifest);
+      expect(canonicalReleaseManifest(input)).toBe(JSON.stringify(manifest));
+    },
+  );
 
   it("round trips selected identity and seven images, including quoted release IDs", () => {
     const selected = { ...manifest, release: 'release: "test"' };
-    const { docs: _docs, ...images } = manifest.images;
+    const images = manifest.images;
     const rendered = renderReleaseCompose(selected);
     expect(parseReleaseComposeSelection(rendered)).toEqual({ release: selected.release, images });
     expect(rendered).not.toContain("ghcr.io/openmapx/docs");

@@ -44,6 +44,7 @@ export const PRIVACY_RELEASE_VALIDATION_EVIDENCE_PATH =
   "/run/openmapx/privacy-release-validation.json";
 const PRIVACY_RELEASE_EVIDENCE_DIRECTORY = ".release-evidence";
 
+/** The seven application images; documentation publishes independently. */
 export const RELEASE_IMAGE_NAMES = [
   "api",
   "web",
@@ -106,7 +107,7 @@ export function releaseManifestImage(): string {
 export interface ReleaseManifest {
   schemaVersion: 1;
   release: string;
-  images: Record<(typeof RELEASE_IMAGE_NAMES)[number], string> & { docs?: string };
+  images: Record<(typeof RELEASE_IMAGE_NAMES)[number], string>;
   privacyReleaseValidation: PrivacyReleaseValidationEvidence;
 }
 
@@ -172,7 +173,7 @@ export function parseReleaseManifest(
     throw new Error("Release lockfile images must be an object");
   }
   const images = candidate.images as Record<string, unknown>;
-  for (const name of [...RELEASE_IMAGE_NAMES, ...(Object.hasOwn(images, "docs") ? ["docs"] : [])]) {
+  for (const name of RELEASE_IMAGE_NAMES) {
     const pattern = new RegExp(`^${escapeRegExp(imagePrefix)}/${escapeRegExp(name)}@${DIGEST}$`);
     const image = images[name];
     if (typeof image !== "string" || !pattern.test(image)) {
@@ -188,7 +189,10 @@ export function parseReleaseManifest(
       `Release lockfile privacyReleaseValidation${field ? `.${field}` : ""} is invalid`,
     );
   }
-  return candidate as ReleaseManifest;
+  return {
+    ...candidate,
+    images: Object.fromEntries(RELEASE_IMAGE_NAMES.map((name) => [name, images[name]])),
+  } as ReleaseManifest;
 }
 
 /** Stable bytes used by the ops-agent release store and transaction digest. */
@@ -204,7 +208,6 @@ export function canonicalReleaseManifest(manifest: ReleaseManifest): string {
       "privacy-backup": manifest.images["privacy-backup"],
       "transitous-runner": manifest.images["transitous-runner"],
       "transitous-tools": manifest.images["transitous-tools"],
-      docs: manifest.images.docs,
     },
     privacyReleaseValidation: {
       version: manifest.privacyReleaseValidation.version,

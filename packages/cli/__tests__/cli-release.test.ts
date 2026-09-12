@@ -1,10 +1,21 @@
-import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { Command } from "commander";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { registerComposeCommands } from "../src/commands/compose";
 import {
+  clearReleaseSelection,
   ensureReleaseOverlay,
   type ReleaseDockerRunner,
   releaseStatusLines,
@@ -25,7 +36,6 @@ const manifestJson = JSON.stringify({
     "privacy-backup": `ghcr.io/openmapx/privacy-backup@${digest("9")}`,
     "transitous-runner": `ghcr.io/openmapx/transitous-runner@${digest("e")}`,
     "transitous-tools": `ghcr.io/openmapx/transitous-tools@${digest("f")}`,
-    docs: `ghcr.io/openmapx/docs@${digest("1")}`,
   },
   privacyReleaseValidation: {
     version: 1,
@@ -276,4 +286,108 @@ it("does not report a candidate as selected when atomic overlay publication fail
   expect(lines.join("\n")).toContain("Candidate release: next");
   expect(lines.join("\n")).not.toContain("Selected release: next");
   expect(readFileSync(path, "utf8")).toBe(before);
+});
+
+describe("clearReleaseSelection", () => {
+  function fixture() {
+    temp = mkdtempSync(join(tmpdir(), "omx-release-clear-"));
+    const path = join(temp, "docker-compose.release.yml");
+    const store = join(temp, ".ops-agent-releases");
+    mkdirSync(store, { mode: 0o700 });
+    writeReleaseOverlay(JSON.parse(manifestJson), path);
+    writeFileSync(join(store, "current.json"), "running-state");
+    return { path, store };
+  }
+
+  it("clears only the local overlay idempotently and retains running release evidence", async () => {
+    const { path, store } = fixture();
+    const evidence = join(dirname(path), ".release-evidence");
+    const files = readdirSync(evidence).map((name) => [
+      name,
+      readFileSync(join(evidence, name), "utf8"),
+    ]);
+    vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_IMAGE", "");
+    try {
+      expect(await clearReleaseSelection({ path })).toEqual({ path, cleared: true });
+      expect(await clearReleaseSelection({ path })).toEqual({ path, cleared: false });
+      expect(process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE).toBe("");
+    } finally {
+      vi.unstubAllEnvs();
+    }
+    expect(existsSync(path)).toBe(false);
+    expect(readFileSync(join(store, "current.json"), "utf8")).toBe("running-state");
+    expect(
+      readdirSync(evidence).map((name) => [name, readFileSync(join(evidence, name), "utf8")]),
+    ).toEqual(files);
+    expect(readdirSync(store)).toEqual(["current.json"]);
+  });
+
+  it("refuses an active transaction even if the overlay is absent", async () => {
+    const { path, store } = fixture();
+    writeFileSync(join(store, "transaction.json"), "pending transaction");
+    const before = readFileSync(path, "utf8");
+    await expect(clearReleaseSelection({ path })).rejects.toThrow(/transaction/);
+    expect(readFileSync(path, "utf8")).toBe(before);
+    rmSync(path);
+    await expect(clearReleaseSelection({ path })).rejects.toThrow(/transaction/);
+  });
+
+  it("refuses a held or abandoned lock without changing it", async () => {
+    const { path, store } = fixture();
+    const lock = join(store, ".release-store.lock");
+    mkdirSync(lock);
+    writeFileSync(join(lock, "owner.json"), '{"acquiredAtMs":0}');
+    await expect(clearReleaseSelection({ path })).rejects.toThrow(/busy/);
+    expect(existsSync(path)).toBe(true);
+    expect(readFileSync(join(lock, "owner.json"), "utf8")).toBe('{"acquiredAtMs":0}');
+  });
+
+  it.each(["overlay", "store"])("refuses a symlinked %s", async (target) => {
+    const { path, store } = fixture();
+    const link = target === "overlay" ? path : store;
+    rmSync(link, { recursive: true });
+    const outside = join(dirname(path), "outside");
+    mkdirSync(outside);
+    writeFileSync(join(outside, "sentinel"), "retain");
+    symlinkSync(outside, link);
+    await expect(clearReleaseSelection({ path })).rejects.toThrow(/unsafe/);
+    expect(readFileSync(join(outside, "sentinel"), "utf8")).toBe("retain");
+  });
+
+  it("rejects --clear together with --status before taking action", async () => {
+    const program = new Command().exitOverride().configureOutput({ writeErr: () => {} });
+    registerComposeCommands(program);
+    await expect(
+      program.parseAsync(["compose", "release", "--clear", "--status"], { from: "user" }),
+    ).rejects.toThrow(/cannot be used with/);
+  });
+});
+
+it("clears through the command without registry access even with a malformed channel", async () => {
+  temp = mkdtempSync(join(tmpdir(), "omx-release-clear-command-"));
+  const directory = join(temp, "infra", "docker");
+  mkdirSync(directory, { recursive: true });
+  const path = join(directory, "docker-compose.release.yml");
+  writeFileSync(path, "services: {}\n");
+  vi.stubEnv("OPENMAPX_ROOT_DIR", temp);
+  vi.stubEnv("OPENMAPX_RELEASE_MANIFEST_IMAGE", "invalid");
+  vi.stubEnv("PATH", "");
+  const output = vi.spyOn(console, "log").mockImplementation(() => {});
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+  const exit = vi.spyOn(process, "exit").mockImplementation(() => {
+    throw new Error("unexpected CLI failure");
+  });
+  try {
+    const program = new Command();
+    registerComposeCommands(program);
+    await program.parseAsync(["compose", "release", "--clear"], { from: "user" });
+    expect(existsSync(path)).toBe(false);
+    expect(output.mock.calls.flat().join("\n")).toContain("next start/update");
+    expect(process.env.OPENMAPX_RELEASE_MANIFEST_IMAGE).toBe("invalid");
+  } finally {
+    output.mockRestore();
+    errors.mockRestore();
+    exit.mockRestore();
+    vi.unstubAllEnvs();
+  }
 });

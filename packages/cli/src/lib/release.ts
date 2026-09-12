@@ -1,6 +1,19 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import {
+  closeSync,
+  constants,
+  existsSync,
+  fsyncSync,
+  lstatSync,
+  mkdirSync,
+  mkdtempSync,
+  openSync,
+  readFileSync,
+  rmSync,
+  type Stats,
+  unlinkSync,
+} from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
 import { execa } from "execa";
 import { repoPaths } from "./paths";
@@ -171,4 +184,60 @@ export async function selectRelease(
   }
   writeReleaseOverlay(manifest, path);
   return { path, release: manifest.release };
+}
+
+/** Clear only local Compose selection; preserve evidence still mounted by running services. */
+export async function clearReleaseSelection(
+  opts: { path?: string } = {},
+): Promise<{ path: string; cleared: boolean }> {
+  const path = opts.path ?? repoPaths().composeReleasePath;
+  const parent = dirname(path);
+  const assertDirectory = (directory: string) => {
+    const stat = lstatSync(directory);
+    if (!stat.isDirectory() || stat.isSymbolicLink()) {
+      throw new Error("Release selection directory is unsafe");
+    }
+  };
+  assertDirectory(parent);
+  const store = join(parent, ".ops-agent-releases");
+  try {
+    mkdirSync(store, { mode: 0o700 });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+  }
+  assertDirectory(store);
+  const lock = await coreServices.acquireReleaseStoreLock(store, {}, { failIfBusy: true });
+  try {
+    try {
+      lstatSync(join(store, "transaction.json"));
+      throw new Error(
+        "Release transaction is active; finish or recover the update before clearing selection",
+      );
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+    let selected: Stats;
+    try {
+      selected = lstatSync(path);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return { path, cleared: false };
+      throw error;
+    }
+    if (!selected.isFile() || selected.isSymbolicLink() || selected.nlink !== 1) {
+      throw new Error("Release selection overlay is unsafe");
+    }
+    unlinkSync(path);
+    const descriptor = openSync(
+      parent,
+      constants.O_RDONLY | constants.O_DIRECTORY | constants.O_NOFOLLOW,
+    );
+    try {
+      fsyncSync(descriptor);
+    } finally {
+      closeSync(descriptor);
+    }
+    return { path, cleared: true };
+  } finally {
+    lock.release();
+  }
 }

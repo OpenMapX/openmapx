@@ -731,7 +731,13 @@ const motisTransitousInventory = z.strictObject({
     sources: z.array(motisGbfsSource).max(500),
   }),
 });
-const systemCoreServiceId = z.enum(["app-api", "app-web", "data-manager"]);
+const systemCoreServiceId = z.enum([
+  "app-api",
+  "app-web",
+  "data-manager",
+  "ops-agent",
+  "transitous-runner",
+]);
 const dockerImageId = z.string().regex(/^sha256:[a-f0-9]{64}$/);
 const pinnedImageReference = z
   .string()
@@ -843,7 +849,7 @@ export const OPS_RESULT_SCHEMAS = {
           state: z.enum(["current", "update_available", "not_running", "unknown"]),
         }),
       )
-      .max(3)
+      .max(5)
       .refine(
         (services) =>
           new Set(services.map((service) => service.serviceId)).size === services.length,

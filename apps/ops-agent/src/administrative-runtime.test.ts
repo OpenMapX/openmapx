@@ -560,7 +560,6 @@ describe("administrative release runtime", () => {
           "privacy-backup",
           "transitous-runner",
           "transitous-tools",
-          "docs",
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
       ),
       privacyReleaseValidation,
@@ -626,7 +625,6 @@ describe("administrative release runtime", () => {
           "privacy-backup",
           "transitous-runner",
           "transitous-tools",
-          "docs",
         ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${digit.repeat(64)}`]),
       ),
       privacyReleaseValidation,
@@ -677,7 +675,6 @@ describe("administrative release runtime", () => {
             "privacy-backup",
             "transitous-runner",
             "transitous-tools",
-            "docs",
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
         ),
         privacyReleaseValidation,
@@ -748,7 +745,6 @@ describe("administrative release runtime", () => {
             "privacy-backup",
             "transitous-runner",
             "transitous-tools",
-            "docs",
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
         ),
         privacyReleaseValidation,
@@ -789,7 +785,7 @@ describe("administrative release runtime", () => {
         { verifyAppliedRelease: async () => true },
       );
       await recovered.initialize?.();
-      expect(appliedCalls).toEqual([["services", "update", "app-api"]]);
+      expect(appliedCalls).toEqual([["services", "update", "--no-deps", "app-api"]]);
       expect(recoveredCalls).toHaveLength(
         crashPhase === "prepared" || crashPhase === "overlay_written" ? 1 : 0,
       );
@@ -823,7 +819,6 @@ describe("administrative release runtime", () => {
               "privacy-backup",
               "transitous-runner",
               "transitous-tools",
-              "docs",
             ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"3".repeat(64)}`]),
           ),
           privacyReleaseValidation,
@@ -876,7 +871,6 @@ describe("administrative release runtime", () => {
             "privacy-backup",
             "transitous-runner",
             "transitous-tools",
-            "docs",
           ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${tag.repeat(64)}`]),
         ),
         privacyReleaseValidation,
@@ -929,7 +923,6 @@ describe("administrative release runtime", () => {
               "privacy-backup",
               "transitous-runner",
               "transitous-tools",
-              "docs",
             ].map((name) => [name, `ghcr.io/openmapx/${name}@sha256:${"5".repeat(64)}`]),
           ),
           privacyReleaseValidation,
@@ -994,7 +987,6 @@ describe("administrative release runtime", () => {
           "privacy-backup",
           "transitous-runner",
           "transitous-tools",
-          "docs",
         ].map((name, index) => [
           name,
           `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
@@ -1039,6 +1031,8 @@ describe("administrative release runtime", () => {
         { serviceId: "app-api", state: "update_available", releaseMember: true },
         { serviceId: "app-web", state: "current", releaseMember: true },
         { serviceId: "data-manager", state: "not_running", releaseMember: true },
+        { serviceId: "ops-agent", state: "unknown", releaseMember: true },
+        { serviceId: "transitous-runner", state: "unknown", releaseMember: true },
       ],
     });
     expect(calls.flat()).not.toContain("attacker-container");
@@ -1071,7 +1065,6 @@ describe("administrative release runtime", () => {
               "privacy-backup",
               "transitous-runner",
               "transitous-tools",
-              "docs",
             ].map((name, index) => [
               name,
               `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
@@ -1151,7 +1144,6 @@ describe("administrative release runtime", () => {
             "privacy-backup",
             "transitous-runner",
             "transitous-tools",
-            "docs",
           ].map((name, index) => [
             name,
             `ghcr.io/openmapx/${name}@sha256:${String(index + 1).repeat(64)}`,
@@ -1259,7 +1251,7 @@ describe("administrative release runtime", () => {
     expect(calls).toEqual([
       "resolve",
       "pull:release-123",
-      "apply:release-123:data-manager,app-web,app-api",
+      "apply:release-123:data-manager,app-web,transitous-runner,app-api",
       "apply:release-123:app-api",
     ]);
     expect(cli).toEqual([]);
@@ -1306,7 +1298,7 @@ describe("administrative release runtime", () => {
     expect(order).toEqual([
       "cli:backup create --name pre-update-job-1",
       "pull:release-123",
-      "apply:release-123:data-manager,app-web,app-api",
+      "apply:release-123:data-manager,app-web,transitous-runner,app-api",
     ]);
   });
 

@@ -438,6 +438,19 @@ describe("ops contract", () => {
       ],
     };
     expect(parseOpsResult("system.inspect", result)).toEqual(result);
+    const complete = {
+      ...result,
+      services: ["app-api", "app-web", "data-manager", "ops-agent", "transitous-runner"].map(
+        (serviceId) => ({ ...result.services[0], serviceId }),
+      ),
+    };
+    expect(parseOpsResult("system.inspect", complete)).toEqual(complete);
+    expect(() =>
+      parseOpsResult("system.inspect", {
+        ...complete,
+        services: [...complete.services, complete.services[0]],
+      }),
+    ).toThrow();
     for (const invalid of [
       { ...result, services: [{ ...result.services[0], state: "up-to-date" }] },
       { ...result, services: [{ ...result.services[0], localImageId: null }] },

@@ -101,25 +101,17 @@ describe("selective release planning", () => {
       ),
     ).toBe(true);
   });
-  it("carries a legacy docs pin for old readers without scheduling docs", () => {
-    const previous = {
-      ...baseline(),
-      images: { ...baseline().images, docs: `ghcr.io/openmapx/docs@sha256:${"a".repeat(64)}` },
-    };
-    const plan = createReleasePlan({ ...options, previous });
-    expect(plan.legacyDocsImage).toBe(previous.images.docs);
-    expect(plan.images.some((image: { app: string }) => image.app === "docs")).toBe(false);
-    expect(plan.buildMetadata.images.docs).toBeUndefined();
-    expect(() =>
-      createReleasePlan({
+  it.each([`ghcr.io/openmapx/docs@sha256:${"a".repeat(64)}`, "ghcr.io/openmapx/docs:latest"])(
+    "ignores unrelated docs image metadata in a previous release (%s)",
+    (docs) => {
+      const previous = baseline();
+      const plan = createReleasePlan({
         ...options,
-        previous: {
-          ...previous,
-          images: { ...previous.images, docs: "ghcr.io/openmapx/docs:latest" },
-        },
-      }),
-    ).toThrow();
-  });
+        previous: { ...previous, images: { ...previous.images, docs } },
+      });
+      expect(plan).toEqual(createReleasePlan({ ...options, previous }));
+    },
+  );
   it("reuses all unchanged digests despite a new release revision", () => {
     const previous = baseline();
     const plan = createReleasePlan({ ...options, revision: "c".repeat(40), previous });

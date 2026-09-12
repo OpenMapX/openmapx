@@ -157,14 +157,6 @@ function validatePrevious(previous, imagePrefix) {
     )
       throw new Error(`Invalid previous release image: ${app}`);
   }
-  if (
-    previous.images.docs !== undefined &&
-    (typeof previous.images.docs !== "string" ||
-      !previous.images.docs.startsWith(`${imagePrefix}/docs@`) ||
-      !digestPattern.test(previous.images.docs.slice(`${imagePrefix}/docs@`.length)))
-  ) {
-    throw new Error("Invalid legacy docs image");
-  }
   if (previous.buildMetadata?.version !== 1) return;
   for (const { app } of targets) {
     const metadata = previous.buildMetadata.images?.[app];
@@ -241,8 +233,6 @@ export function createReleasePlan({
     privacyFingerprint,
     images,
     buildMetadata,
-    // Kept for older runtime readers only; docs publishes independently.
-    ...(previous?.images.docs ? { legacyDocsImage: previous.images.docs } : {}),
   };
 }
 

@@ -62,6 +62,28 @@ describe("services update pull failures", () => {
     ]);
   });
 
+  it("passes --no-deps only to recreation so an admin update cannot restart dependencies", async () => {
+    vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "present", path: "release.yml" });
+    await expect(
+      update("--no-deps", "data-manager", "app-web", "transitous-runner", "app-api"),
+    ).rejects.toThrow("exit:0");
+    expect(vi.mocked(dockerComposeStream).mock.calls).toEqual([
+      [["pull", "data-manager", "app-web", "transitous-runner", "app-api"]],
+      [
+        [
+          "up",
+          "-d",
+          "--force-recreate",
+          "--no-deps",
+          "data-manager",
+          "app-web",
+          "transitous-runner",
+          "app-api",
+        ],
+      ],
+    ]);
+  });
+
   it("allows an explicitly unpinned local image after a failed pull", async () => {
     vi.mocked(ensureReleaseOverlay).mockResolvedValue({ status: "disabled" });
     vi.mocked(dockerComposeStream).mockResolvedValueOnce(7);
