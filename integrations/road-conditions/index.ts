@@ -105,18 +105,21 @@ export function setup(ctx: IntegrationContext): void {
 
     try {
       let deadlineMs = Date.now() + ROAD_EVENT_CACHE_MAX_AGE_MS;
-      const fc = await ctx.cache.withCache(
+      let loaded = false;
+      const load = async () => {
+        loaded = true;
+        const events = await aggregateRoadConditions(ctx, bbox, {
+          types: types.length > 0 ? types : undefined,
+          minSeverity,
+          horizonDays,
+        });
+        deadlineMs = restrictionRefreshDeadline(events, Date.now());
+        return eventsToFeatureCollection(events);
+      };
+      let fc = await ctx.cache.withCache(
         key,
         ROAD_EVENT_CACHE_MAX_AGE_MS / 1000,
-        async () => {
-          const events = await aggregateRoadConditions(ctx, bbox, {
-            types: types.length > 0 ? types : undefined,
-            minSeverity,
-            horizonDays,
-          });
-          deadlineMs = restrictionRefreshDeadline(events, Date.now());
-          return eventsToFeatureCollection(events);
-        },
+        load,
         undefined,
         // A response whose restriction views expire sooner than the cache TTL
         // is not stored at all: serving it later would keep an "active" label
@@ -125,6 +128,10 @@ export function setup(ctx: IntegrationContext): void {
       );
       // Recheck on retrieval too: a cached payload may have been written before
       // this request and its own deadline may already have elapsed.
+      if (!loaded && cachedResponseMaxAge(fc, Date.now()) <= 0) {
+        await ctx.cache.del(key);
+        fc = await load();
+      }
       const maxAge = cachedResponseMaxAge(fc, Date.now());
       reply.header(
         "Cache-Control",

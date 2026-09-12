@@ -14,7 +14,7 @@ export const RESTRICTION_VIEW_MAX_AGE_MS = 60_000;
 /**
  * The next instant at which the visible restriction evaluation must be
  * refetched: the earliest published `freshUntil`/`nextTransitionAt`, capped at
- * one minute from `atMs`.
+ * one minute from the producer's `evaluatedAt` (never restarted by a cache read).
  *
  * Returns `atMs` when there is nothing to trust — a stale view, an
  * unsupported envelope, a missing freshness basis or an already-elapsed
@@ -35,6 +35,10 @@ export function restrictionRefreshDeadline(
     if (details === undefined) continue;
     sawView = true;
     if (details.isStale || details.freshUntil === null) return atMs;
+    const evaluatedAt = Date.parse(details.evaluatedAt);
+    if (!Number.isFinite(evaluatedAt) || evaluatedAt + RESTRICTION_VIEW_MAX_AGE_MS <= atMs)
+      return atMs;
+    earliest = Math.min(earliest, evaluatedAt + RESTRICTION_VIEW_MAX_AGE_MS);
     for (const deadline of [details.freshUntil, details.nextTransitionAt]) {
       if (deadline === null) continue;
       const epoch = Date.parse(deadline);

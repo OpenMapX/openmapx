@@ -8,6 +8,8 @@ let fake: FakeMap;
 // Mutable so the style-change test can bump it and re-render, the same way a
 // real style swap would change what `useMap()` returns.
 let mockStyleVersion = 0;
+const popupHtml = vi.hoisted(() => vi.fn());
+const popupRemove = vi.hoisted(() => vi.fn());
 
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ mapRef: { current: fake.map }, mapReady: true, styleVersion: mockStyleVersion }),
@@ -39,13 +41,15 @@ vi.mock("maplibre-gl", () => ({
     setLngLat() {
       return this;
     }
-    setHTML() {
+    setHTML(html: string) {
+      popupHtml(html);
       return this;
     }
     addTo() {
       return this;
     }
     remove() {
+      popupRemove();
       return this;
     }
   },
@@ -94,6 +98,8 @@ beforeEach(() => {
   fake = createFakeMap();
   mockStyleVersion = 0;
   fetchMock.mockReset();
+  popupHtml.mockClear();
+  popupRemove.mockClear();
   respondWith([]);
   vi.stubGlobal("fetch", fetchMock);
   useRoadConditionsStore.setState({ panelOpen: true, layerVisible: true });
@@ -577,6 +583,67 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     vi.useRealTimers();
   });
 
+  it("refreshes an open restriction popup through deadline, failure, recovery and withdrawal", async () => {
+    const fixture = JSON.parse(
+      readFileSync(
+        join(
+          process.cwd(),
+          "services/data-manager/src/__tests__/fixtures/contracts/road-restrictions-v1.json",
+        ),
+        "utf8",
+      ),
+    ) as { displayEvents: RoadConditionEvent[] };
+    const current = structuredClone(
+      fixture.displayEvents.find((event) => event.restrictionDetails?.facts.length)!,
+    );
+    const details = current.restrictionDetails!;
+    const at = Date.now();
+    details.evaluatedAt = new Date(at).toISOString();
+    details.freshUntil = new Date(at + 600_000).toISOString();
+    details.nextTransitionAt = new Date(at + 1_000).toISOString();
+    details.isStale = false;
+    details.facts.forEach((fact) => {
+      fact.state = "active";
+    });
+    const { eventsToFeatureCollection } = await import("../eventsToGeojson");
+    respondWith(eventsToFeatureCollection([current]).features);
+    render(<RoadConditionsLayer />);
+    await flush();
+    const marker = sourceFeatures("Point")[0]!;
+    fake.setRenderedFeatures(MARKER_LAYER, [
+      {
+        ...marker,
+        layer: { id: MARKER_LAYER, type: "symbol" },
+        source: SOURCE,
+        state: {},
+      } as unknown as import("maplibre-gl").MapGeoJSONFeature,
+    ]);
+    await act(async () => {
+      fake.emit("click", { point: { x: 10, y: 20 }, lngLat: { lng: 10.5, lat: 45.5 } });
+    });
+    expect(popupHtml).toHaveBeenCalledTimes(1);
+    expect(popupHtml.mock.lastCall![0]).toContain("restriction.state.active");
+
+    fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
+    await flush(1_000);
+    expect(popupHtml.mock.lastCall![0]).toContain("restriction.needsRefresh");
+    expect(popupHtml.mock.lastCall![0]).not.toContain("restriction.state.active");
+
+    details.evaluatedAt = new Date(at + 91_000).toISOString();
+    details.nextTransitionAt = null;
+    details.facts.forEach((fact) => {
+      fact.state = "ended";
+    });
+    respondWith(eventsToFeatureCollection([current]).features);
+    await flush(FRESHNESS_DEADLINE_MS);
+    expect(popupHtml.mock.lastCall![0]).toContain("restriction.state.ended");
+    expect(popupHtml.mock.lastCall![0]).not.toContain("restriction.needsRefresh");
+
+    respondWith([]);
+    await flush(60_000);
+    expect(popupRemove).toHaveBeenCalledTimes(1);
+  });
+
   it("bounds getBounds() reads and network requests under a 60Hz moveend burst that stays in the padded viewport", async () => {
     const getBoundsSpy = vi.spyOn(fake.map, "getBounds");
     render(<RoadConditionsLayer />);
@@ -796,7 +863,7 @@ describe("road-condition restriction display boundary", () => {
           id: "fi-digitraffic:GUID50465935",
           source: "fi-digitraffic",
           provider: "road-conditions-openconditions",
-          type: "restriction",
+          type: "road_closure",
           severity: "high",
           headline: "Tie 104, Raasepori",
           roadState: "closed",
@@ -807,6 +874,7 @@ describe("road-condition restriction display boundary", () => {
     const collection = sources.data as { features: Array<{ properties: unknown }> };
     const marker = collection.features[0]!.properties as Record<string, unknown>;
     expect(marker._restricted).toBe(true);
+    expect(marker._icon).toBe("rc:restriction:high");
     expect(marker.restrictionDetails).toEqual(details);
     const events = [...sources.eventsByDisplayId.values()].flat();
     expect(events[0]!.restrictionDetails).toEqual(details);

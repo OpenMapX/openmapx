@@ -1,6 +1,6 @@
 import { routeFingerprint } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { parseBbox, setup } from "../index.js";
 import type { RoadConditionEvent, RoadConditionsProvider, RoadFlowSegment } from "../types.js";
 
@@ -41,6 +41,7 @@ function eventsHarness(opts?: {
       routes.set(path, handler);
     },
     cache: {
+      del: async () => undefined,
       async withCache<T>(key: string, ttl: number, fn: () => Promise<T>): Promise<T> {
         cacheKeys.push(key);
         return opts?.withCache ? opts.withCache(key, ttl, fn) : fn();
@@ -472,7 +473,31 @@ describe("GET /events restriction cache lifetime", () => {
     });
     const res = await h.get({ bbox: BBOX });
     expect(res.status).toBe(200);
-    expect(res.headers["Cache-Control"]).toBe("public, max-age=60, s-maxage=60");
+    expect(res.headers["Cache-Control"]).toMatch(/^public, max-age=(59|60), s-maxage=(59|60)$/);
+  });
+
+  it("reloads an expired cached evaluation before returning it", async () => {
+    const getEvents = vi.fn(async () => []);
+    const h = eventsHarness({
+      providers: [{ id: "p", getEvents }] as unknown as RoadConditionsProvider[],
+      withCache: async <T>() =>
+        ({
+          type: "FeatureCollection",
+          features: [
+            {
+              properties: {
+                restrictionDetails: view({
+                  evaluatedAt: new Date(Date.now() - 61_000).toISOString(),
+                }),
+              },
+            },
+          ],
+        }) as T,
+    });
+    const response = await h.get({ bbox: BBOX });
+    expect(response.status).toBe(200);
+    expect(getEvents).toHaveBeenCalledTimes(1);
+    expect(response.body).toMatchObject({ features: [] });
   });
 
   it("shortens the response to an imminent phase transition", async () => {

@@ -29,7 +29,9 @@ import {
   type RoadConditionDisplayGroup,
 } from "./display";
 import { markerImageId } from "./markers";
-import { buildRoadConditionPopupHtml } from "./popup";
+import { buildRoadConditionPopupHtml, type RoadConditionPopupInput } from "./popup";
+import { hasRestrictionView, restrictionRefreshDeadline } from "./restriction-freshness";
+import { isConditionalRoadState } from "./restrictions";
 import { useRoadConditionsStore } from "./store";
 import {
   isFutureRoadCondition,
@@ -83,7 +85,10 @@ function buildRouteSourceData(displayGroups: RoadConditionDisplayGroup[]): Route
       properties: {
         headline: event.headline,
         severity: event.severity,
-        _icon: markerImageId(event.type, event.severity),
+        _icon: markerImageId(
+          isConditionalRoadState(event) ? "restriction" : event.type,
+          event.severity,
+        ),
         _id: group.events.length === 1 ? event.id : group.displayId,
         _displayId: group.displayId,
         _sev: SEVERITY_RANK[event.severity] ?? 0,
@@ -167,6 +172,8 @@ export function RouteConditionsLayer() {
   });
   const setRouteFetchStatus = useRoadConditionsStore((s) => s.setRouteFetchStatus);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const popupInputRef = useRef<RoadConditionPopupInput | null>(null);
+  const viewNeedsRefreshRef = useRef(false);
   const dtf = useDateTimeFormat();
   const dtfRef = useRef(dtf);
   useEffect(() => {
@@ -193,6 +200,15 @@ export function RouteConditionsLayer() {
     let inFlight = false;
     let activeRequest: ReturnType<typeof beginRequest> | null = null;
     let timer: ReturnType<typeof setInterval> | undefined;
+    let restrictionTimer: ReturnType<typeof setTimeout> | undefined;
+    const refreshOpenPopup = (needsRefresh: boolean) => {
+      if (popupRef.current && popupInputRef.current) {
+        popupRef.current.setHTML(
+          buildRoadConditionPopupHtml({ ...popupInputRef.current, atMs: Date.now(), needsRefresh })
+            .html,
+        );
+      }
+    };
 
     // A changed route must not briefly display incidents projected on the old
     // geometry. Failed refreshes are different: they retain the last good
@@ -207,18 +223,37 @@ export function RouteConditionsLayer() {
       const request = beginRequest();
       activeRequest = request;
       setRouteFetchStatus("loading");
+      viewNeedsRefreshRef.current = true;
+      refreshOpenPopup(true);
       try {
         const result = await fetchRoadConditionsWithStatus(box, { signal: request.signal });
         if (cancelled || !request.isCurrent()) return;
         if (result.ok) {
           setEvents(result.events);
           hasRouteDataRef.current = true;
-          setRouteFetchStatus("ready");
+          viewNeedsRefreshRef.current = false;
+          clearTimeout(restrictionTimer);
+          restrictionTimer = undefined;
+          const at = Date.now();
+          const deadline = restrictionRefreshDeadline(result.events, at);
+          setRouteFetchStatus(
+            hasRestrictionView(result.events) && deadline <= at ? "stale" : "ready",
+          );
+          if (hasRestrictionView(result.events) && deadline > at && map.getZoom() < minZoom) {
+            restrictionTimer = setTimeout(() => {
+              restrictionTimer = undefined;
+              void load();
+            }, deadline - at);
+          }
         } else {
+          viewNeedsRefreshRef.current = true;
+          refreshOpenPopup(true);
           setRouteFetchStatus(hasRouteDataRef.current ? "stale" : "error");
         }
       } catch {
         if (!cancelled && request.isCurrent()) {
+          viewNeedsRefreshRef.current = true;
+          refreshOpenPopup(true);
           setRouteFetchStatus(hasRouteDataRef.current ? "stale" : "error");
         }
       } finally {
@@ -226,6 +261,8 @@ export function RouteConditionsLayer() {
       }
     };
     const stopPolling = () => {
+      clearTimeout(restrictionTimer);
+      restrictionTimer = undefined;
       if (timer !== undefined) {
         clearInterval(timer);
         timer = undefined;
@@ -246,6 +283,10 @@ export function RouteConditionsLayer() {
         }
       } else {
         stopPolling();
+        if (popupRef.current) {
+          removeMapOverlayPopup(map, popupRef.current);
+          popupRef.current = null;
+        }
       }
     };
 
@@ -429,14 +470,18 @@ export function RouteConditionsLayer() {
         }
         if (hits.length === 0) return;
 
-        const content = buildRoadConditionPopupHtml({
+        const input: RoadConditionPopupInput = {
+          atMs: Date.now(),
+          needsRefresh: viewNeedsRefreshRef.current,
           hits,
           fallbackCoordinates: [event.lngLat.lng, event.lngLat.lat],
           eventsByDisplayId,
           formatDateTime: dtfRef.current.dateTime,
           formatDate: dtfRef.current.date,
           translate: (key, values) => tRef.current(key, values),
-        });
+        };
+        popupInputRef.current = input;
+        const content = buildRoadConditionPopupHtml(input);
         const popup = new maplibregl.Popup({
           closeButton: true,
           maxWidth: "300px",

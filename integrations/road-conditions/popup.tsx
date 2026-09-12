@@ -6,6 +6,7 @@ import {
 } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { buildStackedPopupCardItems, type PopupCardSpec } from "@/integration-api/map/popupCard";
+import { restrictionRefreshDeadline } from "./restriction-freshness";
 import { isConditionalRoadState, restrictionPopupProperties } from "./restrictions";
 import type { RoadConditionTranslate } from "./types";
 import { isFutureRoadCondition } from "./visual-style";
@@ -85,6 +86,11 @@ export interface RoadConditionPopupInput {
   formatDateTime: (value: string | number | Date) => string;
   formatDate: (value: string | number | Date) => string;
   translate: RoadConditionTranslate;
+  /** Refresh last-good context without presenting an expired evaluation as current. */
+  needsRefresh?: boolean;
+  atMs?: number;
+  /** Layer refreshes must not revive withdrawn records from old hit properties. */
+  requireCurrentEvents?: boolean;
 }
 
 export interface RoadConditionPopupContent {
@@ -404,6 +410,11 @@ function formatPopupEntry(
   const restrictionFields = sourceEntry._event
     ? restrictionPopupProperties(sourceEntry._event as RoadConditionEvent, input.translate, {
         formatDateTime: (value) => input.formatDateTime(value),
+        needsRefresh:
+          input.needsRefresh ||
+          (input.atMs !== undefined &&
+            restrictionRefreshDeadline([sourceEntry._event as RoadConditionEvent], input.atMs) <=
+              input.atMs),
       })
     : {};
   return {
@@ -476,6 +487,7 @@ export function buildRoadConditionPopupHtml(
       seen.add(displayId);
 
       const childEvents = input.eventsByDisplayId.get(displayId);
+      if (input.requireCurrentEvents && !childEvents?.length) continue;
       const popupGroups = childEvents?.length
         ? buildRoadConditionPopupGroups(displayId, childEvents, (headline, count) =>
             input.translate("panel.relatedRecords", { headline, count }),

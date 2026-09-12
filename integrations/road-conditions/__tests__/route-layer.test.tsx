@@ -1,7 +1,9 @@
-import { fetchRoadConditions } from "@openmapx/core";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { fetchRoadConditions, type RoadConditionEvent } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
-import { createFakeMap, type FakeMap, render, waitFor } from "@/test";
+import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
 
 let fake: FakeMap;
@@ -404,6 +406,62 @@ describe("RouteConditionsLayer", () => {
     await waitFor(() => expect(useRoadConditionsStore.getState().routeFetchStatus).toBe("stale"));
 
     expect(sourceFeatures("Point")).toHaveLength(1);
+  });
+
+  it("expires a route restriction popup at the producer deadline even if the refresh hangs", async () => {
+    vi.useFakeTimers();
+    let unmount: (() => void) | undefined;
+    try {
+      const fixture = JSON.parse(
+        readFileSync(
+          join(
+            process.cwd(),
+            "services/data-manager/src/__tests__/fixtures/contracts/road-restrictions-v1.json",
+          ),
+          "utf8",
+        ),
+      ) as { displayEvents: RoadConditionEvent[] };
+      const event = structuredClone(
+        fixture.displayEvents.find((entry) => entry.restrictionDetails?.facts.length)!,
+      );
+      event.geometry = events[0]!.geometry as RoadConditionEvent["geometry"];
+      const details = event.restrictionDetails!;
+      details.evaluatedAt = new Date().toISOString();
+      details.freshUntil = new Date(Date.now() + 600_000).toISOString();
+      details.nextTransitionAt = new Date(Date.now() + 1_000).toISOString();
+      details.isStale = false;
+      details.facts.forEach((fact) => {
+        fact.state = "active";
+      });
+      fetchMock.mockResolvedValueOnce([event]);
+      ({ unmount } = render(<RouteConditionsLayer />));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(0);
+      });
+      const marker = sourceFeatures("Point")[0]!;
+      fake.setRenderedFeatures("omx-road-conditions-route-markers", [
+        {
+          ...marker,
+          layer: { id: "omx-road-conditions-route-markers", type: "symbol" },
+          source: "omx-road-conditions-route",
+          state: {},
+        } as unknown as import("maplibre-gl").MapGeoJSONFeature,
+      ]);
+      await act(async () => {
+        fake.emit("click", { point: { x: 10, y: 10 }, lngLat: { lng: 8, lat: 50.005 } });
+      });
+      expect(popupState.html).toContain("restriction.state.active");
+      fetchMock.mockImplementationOnce(() => new Promise(() => {}));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+      expect(popupState.html).toContain("restriction.needsRefresh");
+      expect(popupState.html).not.toContain("restriction.state.active");
+    } finally {
+      unmount?.();
+      vi.useRealTimers();
+    }
   });
 
   it("coalesces a refresh while the route request is still in flight", async () => {

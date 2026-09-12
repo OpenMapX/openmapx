@@ -116,8 +116,9 @@ function windowText(
   fact: RoadRestrictionFact,
   translate: RoadConditionTranslate,
   formatDateTime: (value: string) => string,
+  needsRefresh = false,
 ): string {
-  const state = translate(STATE_KEY[fact.state]);
+  const state = translate(needsRefresh ? "restriction.needsRefresh" : STATE_KEY[fact.state]);
   if (fact.validFrom === null && fact.validTo === null) {
     // No understood bound is "timing unknown", never "always".
     return `${state} · ${translate("restriction.state.unknown")}`;
@@ -171,6 +172,8 @@ const ISO_DEFAULT = (value: string) => value;
 export interface RestrictionRowOptions {
   /** Absolute-time formatter; defaults to the ISO instant as published. */
   formatDateTime?: (value: string) => string;
+  /** The producer evaluation expired or the refresh failed; no local re-evaluation. */
+  needsRefresh?: boolean;
 }
 
 /**
@@ -192,6 +195,7 @@ export function restrictionRows(
   if (details === undefined) return [];
   const formatDateTime = options.formatDateTime ?? ISO_DEFAULT;
   const rows: RestrictionRow[] = [];
+  const needsRefresh = options.needsRefresh === true || details.isStale;
 
   // Ended facts stay available in the source details but outside the list of
   // current restrictions, so a driver is not shown a limit that has lapsed.
@@ -201,7 +205,7 @@ export function restrictionRows(
     rows.push({ label: translate("restriction.scopeLabel"), value: scopeText(fact, translate) });
     rows.push({
       label: translate("restriction.validityLabel"),
-      value: windowText(fact, translate, formatDateTime),
+      value: windowText(fact, translate, formatDateTime, needsRefresh),
     });
     rows.push({
       label: translate("restriction.directionLabel"),
@@ -219,6 +223,12 @@ export function restrictionRows(
         value: translate("restriction.liftable"),
       });
     }
+    if (fact.schedule && fact.schedule.length > 0) {
+      rows.push({
+        label: translate("restriction.validityLabel"),
+        value: scheduleText(fact.schedule, translate),
+      });
+    }
     if (fact.context.workingHours && fact.context.workingHours.length > 0) {
       rows.push({
         label: translate("restriction.workingHours"),
@@ -234,7 +244,7 @@ export function restrictionRows(
   for (const fact of ended) {
     rows.push({
       label: translate("restriction.endedLabel"),
-      value: `${factLabel(fact, translate)}: ${factValue(fact, translate)} · ${windowText(fact, translate, formatDateTime)}`,
+      value: `${factLabel(fact, translate)}: ${factValue(fact, translate)} · ${windowText(fact, translate, formatDateTime, needsRefresh)}`,
     });
   }
 
@@ -251,10 +261,10 @@ export function restrictionRows(
       value: translate("restriction.partial"),
     });
   }
-  if (details.isStale) {
+  if (details.isStale || needsRefresh) {
     rows.push({
       label: translate("restriction.freshnessLabel"),
-      value: translate("restriction.stale"),
+      value: translate(details.isStale ? "restriction.stale" : "restriction.needsRefresh"),
     });
   }
 
@@ -281,16 +291,11 @@ export function restrictionPopupProperties(
 ): Record<string, string> {
   const rows = restrictionRows(event, translate, options);
   if (rows.length === 0) return {};
-  const grouped = new Map<string, string[]>();
-  for (const row of rows) {
-    const existing = grouped.get(row.label) ?? [];
-    existing.push(row.value);
-    grouped.set(row.label, existing);
-  }
-  const out: Record<string, string> = {};
-  const lines: string[] = [];
-  for (const [label, values] of grouped) lines.push(`${label}: ${values.join(" · ")}`);
-  out.restrictionText = lines.join("\n");
+  // Preserve fact order: regrouping by label separates limits from their own
+  // phases, windows and directions and makes distinct predicates ambiguous.
+  const out: Record<string, string> = {
+    restrictionText: rows.map((row) => `${row.label}: ${row.value}`).join("\n"),
+  };
   if (event.restrictionDetails !== undefined) {
     const states = new Set(event.restrictionDetails.facts.map((fact) => fact.state));
     const label = states.has("active")
@@ -299,8 +304,16 @@ export function restrictionPopupProperties(
         ? "restriction.state.scheduled"
         : states.has("unknown")
           ? "restriction.state.unknown"
-          : "restriction.state.ended";
-    out.restrictionStateText = translate(label);
+          : states.has("ended")
+            ? "restriction.state.ended"
+            : "restriction.state.unknown";
+    out.restrictionStateText = translate(
+      event.restrictionDetails.isStale
+        ? "restriction.stale"
+        : options.needsRefresh
+          ? "restriction.needsRefresh"
+          : label,
+    );
   } else {
     out.restrictionStateText = translate("restriction.unsupported");
   }

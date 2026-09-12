@@ -62,6 +62,11 @@ describe("restrictionRefreshDeadline", () => {
     expect(restrictionRefreshDeadline([event()], NOW)).toBe(NOW + RESTRICTION_VIEW_MAX_AGE_MS);
   });
 
+  it("does not restart the producer evaluation lifetime at cache retrieval", () => {
+    expect(restrictionRefreshDeadline([event()], NOW + 50_000)).toBe(NOW + 60_000);
+    expect(restrictionRefreshDeadline([event()], NOW + 61_000)).toBe(NOW + 61_000);
+  });
+
   it("shortens to an imminent freshness deadline", () => {
     const deadline = restrictionRefreshDeadline(
       [event({ restrictionDetails: view({ freshUntil: "2026-09-12T07:14:20.000Z" }) })],

@@ -236,7 +236,10 @@ function markerProperties(
     type: event.type,
     severity: event.severity,
     attribution: attributionString(event.attribution),
-    _icon: markerImageId(event.type, event.severity),
+    _icon: markerImageId(
+      isConditionalRoadState(event) ? "restriction" : event.type,
+      event.severity,
+    ),
     // Keep the canonical id for compatibility with existing ungrouped marker
     // consumers; `_displayId` is the presentation identity used for grouping.
     _id: group.events.length === 1 ? event.id : group.displayId,
@@ -350,6 +353,11 @@ export function RoadConditionsLayer() {
   useIntegrationDomainAttribution(CREDIT_DOMAIN, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);
   const popupRef = useRef<maplibregl.Popup | null>(null);
+  const popupSelectionRef = useRef<{
+    hits: MapGeoJSONFeature[];
+    fallbackCoordinates: [number, number];
+  } | null>(null);
+  const viewNeedsRefreshRef = useRef(false);
   const eventsByDisplayIdRef = useRef<Map<string, RoadConditionEvent[]>>(new Map());
   const { publish: publishGeoJson, beginRequest } = useGeoJsonSourceDataBridge({
     mapRef,
@@ -382,6 +390,30 @@ export function RoadConditionsLayer() {
   const horizon = useRoadConditionsStore((s) => s.horizon);
   const setViewportFetchStatus = useRoadConditionsStore((s) => s.setViewportFetchStatus);
 
+  const refreshPopup = useCallback(
+    (needsRefresh: boolean) => {
+      const popup = popupRef.current;
+      const selection = popupSelectionRef.current;
+      if (!popup || !selection) return;
+      const content = buildRoadConditionPopupHtml({
+        ...selection,
+        eventsByDisplayId: eventsByDisplayIdRef.current,
+        formatDateTime: dtfRef.current.dateTime,
+        formatDate: dtfRef.current.date,
+        translate: (key, values) => tRef.current(key, values),
+        atMs: Date.now(),
+        needsRefresh,
+        requireCurrentEvents: true,
+      });
+      if (content.groupCount === 0) {
+        if (mapRef.current) removeMapOverlayPopup(mapRef.current, popup);
+        popupRef.current = null;
+        popupSelectionRef.current = null;
+      } else popup.setHTML(content.html);
+    },
+    [mapRef],
+  );
+
   const fetchData = useCallback(async () => {
     const map = mapRef.current;
     if (!map) {
@@ -394,6 +426,8 @@ export function RoadConditionsLayer() {
       return;
     }
     setViewportFetchStatus("loading");
+    viewNeedsRefreshRef.current = true;
+    refreshPopup(true);
     const b = map.getBounds();
     schedulerRef.current?.recordFetch({
       west: b.getWest(),
@@ -419,6 +453,8 @@ export function RoadConditionsLayer() {
         Array.isArray(fc.features) ? fc.features : [],
       );
       eventsByDisplayIdRef.current = eventsByDisplayId;
+      viewNeedsRefreshRef.current = false;
+      refreshPopup(false);
       publishGeoJson([{ sourceId: SOURCE, data }]);
       hasViewportDataRef.current = true;
       // Expire the displayed evaluation at the producer's own deadline, but
@@ -444,6 +480,8 @@ export function RoadConditionsLayer() {
       // Keep the last good source data visible while making the degraded state
       // explicit to the legend. A first-load failure has no stale data to keep.
       setViewportFetchStatus(hasViewportDataRef.current ? "stale" : "error");
+      viewNeedsRefreshRef.current = true;
+      refreshPopup(true);
     }
   }, [
     apiUrl,
@@ -454,6 +492,7 @@ export function RoadConditionsLayer() {
     horizon,
     minZoom,
     publishGeoJson,
+    refreshPopup,
     setViewportFetchStatus,
   ]);
 
@@ -668,14 +707,21 @@ export function RoadConditionsLayer() {
         }
         if (hits.length === 0) return;
 
-        const content = buildRoadConditionPopupHtml({
+        popupSelectionRef.current = {
           hits,
           fallbackCoordinates: [event.lngLat.lng, event.lngLat.lat],
+        };
+        const content = buildRoadConditionPopupHtml({
+          ...popupSelectionRef.current,
+          atMs: Date.now(),
+          needsRefresh: viewNeedsRefreshRef.current,
+          requireCurrentEvents: true,
           eventsByDisplayId: eventsByDisplayIdRef.current,
           formatDateTime: dtfRef.current.dateTime,
           formatDate: dtfRef.current.date,
           translate: (key, values) => tRef.current(key, values),
         });
+        if (content.groupCount === 0) return;
         const popup = new maplibregl.Popup({
           closeButton: true,
           maxWidth: "300px",

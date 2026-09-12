@@ -110,6 +110,60 @@ function event(over: Partial<RoadConditionEvent> = {}): RoadConditionEvent {
 }
 
 describe("restrictionRows", () => {
+  it("does not label an unsupported condition with no understood facts as ended", () => {
+    const partial = details();
+    partial.facts = [];
+    partial.vehicleScope = "unknown";
+    partial.completeness = "partial";
+    partial.issues = [{ code: "unsupported_type", factId: null, sourcePath: "condition" }];
+    const popup = restrictionPopupProperties(
+      event({ restrictionDetails: partial }),
+      englishTranslate,
+    );
+    expect(popup.restrictionStateText).toBe("Timing unknown");
+    expect(popup.restrictionText).toContain("Partial source interpretation");
+  });
+
+  it("keeps restriction recurrence separate from crew working hours", () => {
+    const recurring = details();
+    recurring.facts[0]!.schedule = [
+      {
+        scheduleTimezone: "Europe/Amsterdam",
+        startTime: "21:00",
+        endTime: "05:00",
+        repeatFrequency: "P1D",
+      },
+    ];
+    const rows = restrictionRows(event({ restrictionDetails: recurring }), englishTranslate);
+    expect(rows).toContainEqual({
+      label: "Restriction dates",
+      value: "21:00–05:00, Europe/Amsterdam",
+    });
+    expect(rows.find((row) => row.label.includes("Working hours"))?.value).toContain("06:00–12:00");
+  });
+  it("keeps each limit next to its own scope and dates in the actual popup text", () => {
+    const multiple = details();
+    const second = structuredClone(multiple.facts[0]!);
+    Object.assign(second, { id: "second", value: 75000, validFrom: "2026-09-15T10:00:00Z" });
+    second.scope = { ...second.scope, kind: "detour", locationDescription: "Detour road" };
+    multiple.facts.push(second);
+    const text = restrictionPopupProperties(
+      event({ restrictionDetails: multiple }),
+      englishTranslate,
+    ).restrictionText!;
+    expect(text.indexOf("26 t")).toBeLessThan(text.indexOf("Tie 104"));
+    expect(text.indexOf("2026-07-19")).toBeLessThan(text.indexOf("75 t"));
+    expect(text.indexOf("75 t")).toBeLessThan(text.indexOf("Detour road"));
+  });
+
+  it("replaces verified-current labels when the displayed view needs refresh", () => {
+    const popup = restrictionPopupProperties(event(), englishTranslate, { needsRefresh: true });
+    expect(popup.restrictionStateText).toBe("Needs refresh");
+    expect(popup.restrictionText).toContain("Needs refresh");
+    expect(popup.restrictionText).not.toContain("Active");
+    expect(popup.restrictionText).toContain("26 t");
+  });
+
   it("shows the verified limit, its scope, extent caveat and provenance", () => {
     const rows = restrictionRows(event(), englishTranslate);
     expect(rows.some((r) => r.value.includes("26 t"))).toBe(true);
