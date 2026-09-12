@@ -141,6 +141,444 @@
         "nextTransitionAt": "2026-12-14T21:59:59.999Z",
         "isStale": false
       }
+    },
+    {
+      "id": "nl-ndw:RWS01_M1080891_NARROW_LANES_D2_WWA",
+      "source": "nl-ndw",
+      "provider": "",
+      "groupId": "RWS01_SM1080891_D2_WWA",
+      "type": "road_closure",
+      "subtype": "roadMaintenance",
+      "severity": "medium",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[6.010251, 50.832798], [6.023702, 50.819553]]
+      },
+      "headline": "Road closure",
+      "isStale": false,
+      "roadState": "closed",
+      "roads": [],
+      "validFrom": "2025-09-05T22:59:03Z",
+      "validTo": "2027-03-30T21:59:00Z",
+      "dataUpdatedAt": "2026-09-09T15:00:38Z",
+      "attribution": {
+        "provider": "NDW / Rijkswaterstaat",
+        "license": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "originKind": "feed",
+      "isPlanned": false,
+      "restrictionDetails": {
+        "schemaVersion": 1,
+        "vehicleScope": "specific",
+        "completeness": "complete",
+        "facts": [
+          {
+            "id": "RWS01_M1080891_NARROW_LANES_D2_WWA:event:event_road:situationRecord.forVehiclesWithCharacteristicsOf[0].heightCharacteristic[0]",
+            "kind": "dimension",
+            "dimension": "height",
+            "meaning": "event_applies_when",
+            "value": 4.5,
+            "unit": "m",
+            "operator": "gt",
+            "scope": {
+              "kind": "event_road",
+              "phaseId": null,
+              "locationDescription": null,
+              "sourceLocationRefs": {
+                "scheme": "alert_c",
+                "countryCode": "8",
+                "tableNumber": "6.13",
+                "tableVersion": "A",
+                "primaryLocation": "10439",
+                "secondaryLocation": "10436",
+                "directionCoded": "positive",
+                "affectedDirection": "aligned"
+              },
+              "restrictionBinding": "not_established"
+            },
+            "direction": {
+              "basis": "alert_c",
+              "value": "positive",
+              "description": "aligned"
+            },
+            "validFrom": "2025-09-05T22:59:03.000Z",
+            "validTo": "2027-03-30T21:59:00.000Z",
+            "sourceTokens": {
+              "sourcePath": "situationRecord.forVehiclesWithCharacteristicsOf[0].heightCharacteristic[0]",
+              "sourceName": "ZN-ZO [RWS Zuid-Nederland District Zuid-Oost]",
+              "heightCharacteristic": {
+                "comparisonOperator": "greaterThan",
+                "vehicleHeight": "4.5"
+              }
+            },
+            "context": {
+              "restrictionsLiftable": null,
+              "compliance": "mandatory",
+              "operatorActionStatus": "implemented",
+              "validityStatus": "definedByValidityTimeSpec"
+            },
+            "state": "active"
+          }
+        ],
+        "issues": [],
+        "source": {
+          "sourceId": "nl-ndw",
+          "recordId": "RWS01_M1080891_NARROW_LANES_D2_WWA",
+          "recordVersion": "133",
+          "sourceUpdatedAt": "2026-09-09T15:00:38.000Z",
+          "feedUrls": ["https://opendata.ndw.nu/actueel_beeld.xml.gz"],
+          "publisher": "NDW / Rijkswaterstaat",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "attribution": "NDW / Rijkswaterstaat",
+          "modificationNotice": "Normalized by OpenConditions; source units and structure may be transformed.",
+          "notices": ["ZN-ZO [RWS Zuid-Nederland District Zuid-Oost]"]
+        },
+        "evaluatedAt": "2026-09-11T12:00:00.000Z",
+        "sourceCheckedAt": "2026-09-11T11:59:00.000Z",
+        "freshUntil": "2026-09-11T12:04:00.000Z",
+        "nextTransitionAt": "2027-03-30T21:59:00.000Z",
+        "isStale": false
+      }
+    },
+    {
+      "id": "nl-ndw:RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA",
+      "source": "nl-ndw",
+      "provider": "",
+      "groupId": "RWS01_SM1080891_D2_WWA",
+      "type": "lane_closure",
+      "subtype": "roadMaintenance",
+      "severity": "medium",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [[6.010251, 50.832798], [6.023702, 50.819553]]
+      },
+      "headline": "Lane closure",
+      "isStale": false,
+      "roads": [],
+      "validFrom": "2025-09-05T22:59:03Z",
+      "validTo": "2027-03-30T21:59:00Z",
+      "dataUpdatedAt": "2026-09-09T15:00:38Z",
+      "attribution": {
+        "provider": "NDW / Rijkswaterstaat",
+        "license": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "originKind": "feed",
+      "isPlanned": false,
+      "vehiclesAffected": ["emergencyServices"],
+      "restrictionDetails": {
+        "schemaVersion": 1,
+        "vehicleScope": "specific",
+        "completeness": "complete",
+        "facts": [
+          {
+            "id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA:event:event_road:situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleUsage[0]",
+            "kind": "vehicle_usage",
+            "meaning": "event_applies_when",
+            "value": "emergency_services",
+            "scope": {
+              "kind": "event_road",
+              "phaseId": null,
+              "locationDescription": null,
+              "sourceLocationRefs": {
+                "scheme": "alert_c",
+                "countryCode": "8",
+                "tableNumber": "6.13",
+                "tableVersion": "A",
+                "primaryLocation": "10439",
+                "secondaryLocation": "10436",
+                "directionCoded": "positive",
+                "affectedDirection": "aligned"
+              },
+              "restrictionBinding": "not_established"
+            },
+            "direction": {
+              "basis": "alert_c",
+              "value": "positive",
+              "description": "aligned"
+            },
+            "validFrom": "2025-09-05T22:59:03.000Z",
+            "validTo": "2027-03-30T21:59:00.000Z",
+            "sourceTokens": {
+              "sourcePath": "situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleUsage[0]",
+              "sourceName": "ZN-ZO [RWS Zuid-Nederland District Zuid-Oost]",
+              "vehicleUsage": "emergencyServices"
+            },
+            "context": {
+              "restrictionsLiftable": null,
+              "compliance": "advisory",
+              "operatorActionStatus": "implemented",
+              "validityStatus": "definedByValidityTimeSpec"
+            },
+            "state": "active"
+          }
+        ],
+        "issues": [],
+        "source": {
+          "sourceId": "nl-ndw",
+          "recordId": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA",
+          "recordVersion": "133",
+          "sourceUpdatedAt": "2026-09-09T15:00:38.000Z",
+          "feedUrls": ["https://opendata.ndw.nu/actueel_beeld.xml.gz"],
+          "publisher": "NDW / Rijkswaterstaat",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "attribution": "NDW / Rijkswaterstaat",
+          "modificationNotice": "Normalized by OpenConditions; source units and structure may be transformed.",
+          "notices": ["ZN-ZO [RWS Zuid-Nederland District Zuid-Oost]"]
+        },
+        "evaluatedAt": "2026-09-11T12:00:00.000Z",
+        "sourceCheckedAt": "2026-09-11T11:59:00.000Z",
+        "freshUntil": "2026-09-11T12:04:00.000Z",
+        "nextTransitionAt": "2027-03-30T21:59:00.000Z",
+        "isStale": false
+      }
+    },
+    {
+      "id": "nl-ndw:NLRWS_0005382945_1",
+      "source": "nl-ndw",
+      "provider": "",
+      "groupId": "NLRWS_0005382945",
+      "type": "road_closure",
+      "subtype": "other",
+      "severity": "low",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [4.93169, 51.801324],
+          [4.931925, 51.802058],
+          [4.932301, 51.802995],
+          [4.937833, 51.815003],
+          [4.938461, 51.816388],
+          [4.939101, 51.817903],
+          [4.940116, 51.820566],
+          [4.943859, 51.831017],
+          [4.944425, 51.832507],
+          [4.945005, 51.833854]
+        ]
+      },
+      "headline": "Verbod voor vrachtverkeer en autobussen (>3500kg). Lijnbussen toegestaan.",
+      "description": "Schade aan wegmeubilair",
+      "delaySeconds": 0,
+      "isStale": false,
+      "roadState": "closed",
+      "roads": [],
+      "validFrom": "2026-08-16T05:15:13.121025Z",
+      "validTo": null,
+      "schedule": [
+        {
+          "repeatFrequency": "P1D",
+          "startDate": "2026-08-16T05:15:13.121025Z",
+          "scheduleTimezone": "Europe/Amsterdam"
+        }
+      ],
+      "dataUpdatedAt": "2026-09-12T04:35:25.588336Z",
+      "attribution": {
+        "provider": "NDW / Rijkswaterstaat",
+        "license": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "originKind": "feed",
+      "isPlanned": false,
+      "vehiclesAffected": ["lorry"],
+      "restrictionDetails": {
+        "schemaVersion": 1,
+        "vehicleScope": "specific",
+        "completeness": "complete",
+        "facts": [
+          {
+            "id": "NLRWS_0005382945_1:event:event_road:situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleType[0]",
+            "kind": "vehicle_class",
+            "meaning": "event_applies_when",
+            "value": "truck",
+            "scope": {
+              "kind": "event_road",
+              "phaseId": null,
+              "locationDescription": null,
+              "sourceLocationRefs": {
+                "scheme": "alert_c",
+                "countryCode": "8",
+                "tableNumber": "6.13",
+                "tableVersion": "A",
+                "primaryLocation": "8318",
+                "secondaryLocation": "8316",
+                "directionCoded": "positive",
+                "affectedDirection": "aligned"
+              },
+              "restrictionBinding": "not_established"
+            },
+            "direction": {
+              "basis": "alert_c",
+              "value": "positive",
+              "description": "aligned"
+            },
+            "validFrom": "2026-08-16T05:15:13.121Z",
+            "validTo": null,
+            "sourceTokens": {
+              "sourcePath": "situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleType[0]",
+              "sourceName": "NLRWS",
+              "vehicleType": "lorry"
+            },
+            "context": {
+              "restrictionsLiftable": null,
+              "compliance": "mandatory",
+              "operatorActionStatus": "implemented",
+              "validityStatus": "definedByValidityTimeSpec",
+              "comments": [
+                {
+                  "text": "Verbod voor vrachtverkeer en autobussen (>3500kg). Lijnbussen toegestaan.",
+                  "language": "nl"
+                }
+              ]
+            },
+            "state": "active"
+          }
+        ],
+        "issues": [],
+        "source": {
+          "sourceId": "nl-ndw",
+          "recordId": "NLRWS_0005382945_1",
+          "recordVersion": "536",
+          "sourceUpdatedAt": "2026-09-12T04:35:25.588Z",
+          "feedUrls": ["https://opendata.ndw.nu/actueel_beeld.xml.gz"],
+          "publisher": "NDW / Rijkswaterstaat",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "attribution": "NDW / Rijkswaterstaat",
+          "modificationNotice": "Normalized by OpenConditions; source units and structure may be transformed.",
+          "notices": ["NLRWS"]
+        },
+        "evaluatedAt": "2026-09-11T12:00:00.000Z",
+        "sourceCheckedAt": "2026-09-11T11:59:00.000Z",
+        "freshUntil": "2026-09-11T12:04:00.000Z",
+        "nextTransitionAt": null,
+        "isStale": false
+      }
+    },
+    {
+      "id": "nl-ndw:NLRWS_0005406494_1",
+      "source": "nl-ndw",
+      "provider": "",
+      "groupId": "NLRWS_0005406494",
+      "type": "road_closure",
+      "subtype": "other",
+      "severity": "low",
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [4.945611, 51.835554],
+          [4.944696, 51.833558],
+          [4.944317, 51.832611],
+          [4.94123, 51.824027],
+          [4.939579, 51.819542],
+          [4.938649, 51.817278],
+          [4.938208, 51.816272],
+          [4.932025, 51.802831],
+          [4.931678, 51.801922],
+          [4.931482, 51.801278],
+          [4.931352, 51.800745],
+          [4.931125, 51.7996]
+        ]
+      },
+      "headline": "Verbod voor vrachtverkeer en autobussen (>3500kg). Lijnbussen toegestaan.",
+      "description": "Schade aan wegmeubilair",
+      "delaySeconds": 0,
+      "isStale": false,
+      "roadState": "closed",
+      "roads": [],
+      "validFrom": "2026-09-02T15:59:46.903139Z",
+      "validTo": null,
+      "schedule": [
+        {
+          "repeatFrequency": "P1D",
+          "startDate": "2026-09-02T15:59:46.903139Z",
+          "scheduleTimezone": "Europe/Amsterdam"
+        }
+      ],
+      "dataUpdatedAt": "2026-09-12T04:35:22.300621Z",
+      "attribution": {
+        "provider": "NDW / Rijkswaterstaat",
+        "license": "CC0-1.0",
+        "url": "https://creativecommons.org/publicdomain/zero/1.0/"
+      },
+      "originKind": "feed",
+      "isPlanned": false,
+      "vehiclesAffected": ["lorry"],
+      "restrictionDetails": {
+        "schemaVersion": 1,
+        "vehicleScope": "specific",
+        "completeness": "complete",
+        "facts": [
+          {
+            "id": "NLRWS_0005406494_1:event:event_road:situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleType[0]",
+            "kind": "vehicle_class",
+            "meaning": "event_applies_when",
+            "value": "truck",
+            "scope": {
+              "kind": "event_road",
+              "phaseId": null,
+              "locationDescription": null,
+              "sourceLocationRefs": {
+                "scheme": "alert_c",
+                "countryCode": "8",
+                "tableNumber": "6.13",
+                "tableVersion": "A",
+                "primaryLocation": "8316",
+                "secondaryLocation": "8318",
+                "directionCoded": "negative",
+                "affectedDirection": "aligned"
+              },
+              "restrictionBinding": "not_established"
+            },
+            "direction": {
+              "basis": "alert_c",
+              "value": "negative",
+              "description": "aligned"
+            },
+            "validFrom": "2026-09-02T15:59:46.903Z",
+            "validTo": null,
+            "sourceTokens": {
+              "sourcePath": "situationRecord.forVehiclesWithCharacteristicsOf[0].vehicleType[0]",
+              "sourceName": "NLRWS",
+              "vehicleType": "lorry"
+            },
+            "context": {
+              "restrictionsLiftable": null,
+              "compliance": "mandatory",
+              "operatorActionStatus": "implemented",
+              "validityStatus": "definedByValidityTimeSpec",
+              "comments": [
+                {
+                  "text": "Verbod voor vrachtverkeer en autobussen (>3500kg). Lijnbussen toegestaan.",
+                  "language": "nl"
+                }
+              ]
+            },
+            "state": "active"
+          }
+        ],
+        "issues": [],
+        "source": {
+          "sourceId": "nl-ndw",
+          "recordId": "NLRWS_0005406494_1",
+          "recordVersion": "190",
+          "sourceUpdatedAt": "2026-09-12T04:35:22.300Z",
+          "feedUrls": ["https://opendata.ndw.nu/actueel_beeld.xml.gz"],
+          "publisher": "NDW / Rijkswaterstaat",
+          "license": "CC0-1.0",
+          "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+          "attribution": "NDW / Rijkswaterstaat",
+          "modificationNotice": "Normalized by OpenConditions; source units and structure may be transformed.",
+          "notices": ["NLRWS"]
+        },
+        "evaluatedAt": "2026-09-11T12:00:00.000Z",
+        "sourceCheckedAt": "2026-09-11T11:59:00.000Z",
+        "freshUntil": "2026-09-11T12:04:00.000Z",
+        "nextTransitionAt": null,
+        "isStale": false
+      }
     }
   ],
   "segmentConditions": {
@@ -226,5 +664,11 @@
       }
     ]
   },
-  "expectedConditionalIds": ["fi-digitraffic:GUID50465935"]
+  "expectedConditionalIds": [
+    "fi-digitraffic:GUID50465935",
+    "nl-ndw:RWS01_M1080891_NARROW_LANES_D2_WWA",
+    "nl-ndw:RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA",
+    "nl-ndw:NLRWS_0005382945_1",
+    "nl-ndw:NLRWS_0005406494_1"
+  ]
 }

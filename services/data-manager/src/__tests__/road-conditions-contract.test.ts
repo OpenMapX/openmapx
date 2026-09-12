@@ -123,4 +123,17 @@ describe("restriction contract v1 — no conditional record reaches the edge gra
     expect(fixture.expectedConditionalIds.length).toBeGreaterThan(0);
     for (const id of fixture.expectedConditionalIds) expect(ids, id).not.toContain(id);
   });
+
+  it("covers the Dutch height, usage and class records by name", () => {
+    // Named explicitly so a fixture that silently lost them cannot pass the
+    // generic loops above by having nothing left to exclude.
+    expect(fixture.expectedConditionalIds).toEqual(
+      expect.arrayContaining([
+        "nl-ndw:RWS01_M1080891_NARROW_LANES_D2_WWA",
+        "nl-ndw:RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA",
+        "nl-ndw:NLRWS_0005382945_1",
+        "nl-ndw:NLRWS_0005406494_1",
+      ]),
+    );
+  });
 });

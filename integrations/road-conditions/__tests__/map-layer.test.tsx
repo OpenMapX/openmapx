@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
@@ -49,6 +51,7 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 
+import type { RoadConditionEvent } from "@openmapx/core";
 import { buildRoadConditionPopupGroups, buildSources, RoadConditionsLayer } from "../map-layer";
 
 const SOURCE = "omx-road-conditions";
@@ -826,5 +829,44 @@ describe("road-condition restriction display boundary", () => {
     const events = [...sources.eventsByDisplayId.values()].flat();
     expect(events[0]!.restrictionDetails).toBeUndefined();
     expect(events[0]!.restrictionDetailsUnsupported).toBe(true);
+  });
+});
+
+/**
+ * The Dutch contract records through the real map source builder: the producer
+ * fixture's display events, published as GeoJSON and rebuilt into display
+ * groups. This proves the conditional records reach the map without the layer
+ * having to know anything about DATEX.
+ */
+describe("road-condition display grouping — NDW contract records", () => {
+  // This project runs under jsdom, where `import.meta.url` is an http URL, so
+  // the shared fixture is read from the repository root instead.
+  const fixture = JSON.parse(
+    readFileSync(
+      join(
+        process.cwd(),
+        "services/data-manager/src/__tests__/fixtures/contracts/road-restrictions-v1.json",
+      ),
+      "utf8",
+    ),
+  ) as { displayEvents: RoadConditionEvent[]; expectedConditionalIds: string[] };
+
+  const ndwIds = fixture.expectedConditionalIds.filter((id) => id.startsWith("nl-ndw:"));
+
+  it("keeps every Dutch conditional record available for popup lookup", async () => {
+    const { eventsToFeatureCollection } = await import("../eventsToGeojson");
+    const events = fixture.displayEvents.filter((event) => ndwIds.includes(event.id));
+    expect(events).toHaveLength(4);
+    const fc = eventsToFeatureCollection(events);
+    const { eventsByDisplayId } = buildSources(
+      fc.features as unknown as Parameters<typeof buildSources>[0],
+    );
+    const reached = [...eventsByDisplayId.values()].flat().map((event) => event.id);
+    for (const id of ndwIds) expect(reached, id).toContain(id);
+    for (const event of [...eventsByDisplayId.values()].flat()) {
+      if (!ndwIds.includes(event.id)) continue;
+      expect(event.restrictionDetails, event.id).toBeDefined();
+      expect(event.restrictionDetailsUnsupported, event.id).toBeUndefined();
+    }
   });
 });

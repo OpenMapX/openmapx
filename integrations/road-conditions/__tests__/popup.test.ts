@@ -1,6 +1,8 @@
-import type { RoadConditionEvent } from "@openmapx/core";
+import { readFileSync } from "node:fs";
+import { type RoadConditionEvent, readRoadRestrictionDetails } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
+import { eventsToFeatureCollection } from "../eventsToGeojson";
 import { buildRoadConditionPopupGroups, buildRoadConditionPopupHtml } from "../popup";
 
 const events: RoadConditionEvent[] = [
@@ -391,5 +393,78 @@ describe("road-condition popup restriction rendering", () => {
       restrictionEvent({ id: "fi:plain", restrictionDetails: undefined, headline: "Other road" }),
     ]);
     expect(groupCount).toBeGreaterThanOrEqual(1);
+  });
+});
+
+/**
+ * The Dutch records from the shared producer fixture, taken through the real
+ * display boundary: the GeoJSON publisher, the client's restriction decoder and
+ * the popup formatter. Nothing here re-implements a producer transformation.
+ */
+describe("road-condition popup — NDW contract records", () => {
+  const fixture = JSON.parse(
+    readFileSync(
+      new URL(
+        "../../../services/data-manager/src/__tests__/fixtures/contracts/road-restrictions-v1.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  ) as { displayEvents: RoadConditionEvent[]; expectedConditionalIds: string[] };
+
+  /** Round-trip through the publisher and the client decoder, as the app does. */
+  function decoded(ids: string[]): RoadConditionEvent[] {
+    const events = fixture.displayEvents.filter((event) => ids.includes(event.id));
+    const fc = eventsToFeatureCollection(events);
+    return events.map((event) => {
+      const feature = fc.features.find((candidate) => candidate.id === event.id)!;
+      return { ...event, ...readRoadRestrictionDetails(feature.properties) };
+    });
+  }
+
+  function renderNdw(events: RoadConditionEvent[]) {
+    return buildRoadConditionPopupHtml({
+      hits: [
+        {
+          geometry: { type: "Point", coordinates: [6.01, 50.83] },
+          properties: { _displayId: "ndw" },
+        } as never,
+      ],
+      fallbackCoordinates: [6.01, 50.83],
+      eventsByDisplayId: new Map([["ndw", events]]),
+      formatDateTime: (value) => String(value),
+      formatDate: (value) => String(value),
+      translate: (key) => key,
+    });
+  }
+
+  it("renders the height condition as a comparison, not an unqualified closure", () => {
+    const { html } = renderNdw(decoded(["nl-ndw:RWS01_M1080891_NARROW_LANES_D2_WWA"]));
+    expect(html).toContain("4.5");
+    expect(html).toContain("restriction.operator.gt");
+    expect(html).toContain("restriction.appliesHeight");
+    expect(html).not.toContain("restriction.maxHeight");
+    // A conditional closure is labelled as reported context, never as a plain
+    // road state that would read as closed to every vehicle.
+    expect(html).toContain("restriction.reportedContext");
+  });
+
+  it("escapes the original Dutch source note without formalizing it", () => {
+    const { html } = renderNdw(decoded(["nl-ndw:NLRWS_0005382945_1"]));
+    expect(html).toContain("restriction.vehicle.truck");
+    expect(html).toContain("Verbod voor vrachtverkeer en autobussen (&gt;3500kg)");
+    expect(html).not.toContain("(>3500kg)");
+    expect(html).not.toContain("gross_weight");
+  });
+
+  it("keeps the collocated Dutch records as distinct cards", () => {
+    const events = decoded([
+      "nl-ndw:RWS01_M1080891_NARROW_LANES_D2_WWA",
+      "nl-ndw:RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA",
+    ]);
+    expect(events).toHaveLength(2);
+    const { html } = renderNdw(events);
+    expect(html).toContain("restriction.appliesHeight");
+    expect(html).toContain("restriction.usage.emergencyServices");
   });
 });
