@@ -7,9 +7,9 @@ sidebar_position: 4
 # Self-hosting OSM data queries
 
 Some features in OpenMapX don't want a precomputed routing graph or a rendered
-tile — they want to ask OpenStreetMap a question. *Where are the bike shops in
+tile — they want to ask OpenStreetMap a question. _Where are the bike shops in
 this bounding box? Which trails pass through here? What sea marks are near this
-coast?* The engine that answers those questions is **Overpass**, a read-only
+coast?_ The engine that answers those questions is **Overpass**, a read-only
 query API over the live OSM database. This guide covers what Overpass does for
 OpenMapX, how to run your own instead of hitting the public servers, and the
 one-time data step it needs.
@@ -50,17 +50,17 @@ to `http://overpass:80` on the internal Docker network with no extra
 configuration. When it isn't enabled, those same integrations fall back to the
 public Overpass servers, so the features keep working either way.
 
-| Feature | Integration | What it queries OSM for |
-| ------- | ----------- | ----------------------- |
-| POI / category search | `poi-overpass` | Places by category and tag — the OSM-backed half of [Search](../features/search.md) |
-| Transit POIs | `transit-overpass` | Stops and stations near a point |
-| Cycling overlay | `overlay-cycling` | Cycle tracks, lanes, parking, and bike shops |
-| Hiking overlay | `overlay-hiking` | Trail-route geometry and mountain shelters |
-| Nautical overlay | `overlay-nautical` | Sea marks and related coastal features |
+| Feature               | Integration        | What it queries OSM for                                                             |
+| --------------------- | ------------------ | ----------------------------------------------------------------------------------- |
+| POI / category search | `poi-overpass`     | Places by category and tag — the OSM-backed half of [Search](../features/search.md) |
+| Transit POIs          | `transit-overpass` | Stops and stations near a point                                                     |
+| Cycling overlay       | `overlay-cycling`  | Cycle tracks, lanes, parking, and bike shops                                        |
+| Hiking overlay        | `overlay-hiking`   | Trail-route geometry and mountain shelters                                          |
+| Nautical overlay      | `overlay-nautical` | Sea marks and related coastal features                                              |
 
 The map overlays appear in the layer picker, described under
 [Map layers & overlays](../features/map-layers.md). Each of these features depends
-on *some* Overpass endpoint being reachable; enabling the `overpass` service makes
+on _some_ Overpass endpoint being reachable; enabling the `overpass` service makes
 that endpoint your own.
 
 ## Enabling Overpass
@@ -145,11 +145,11 @@ Overpass is one of the most demanding services OpenMapX runs. It keeps the full
 tagged OSM database on disk and holds working set in memory, so both scale with
 the area you import:
 
-| Scale | Approx. database | Approx. import time |
-| ----- | ---------------- | ------------------- |
-| Single country | tens of GB | a few hours |
-| Continent | ~100 GB or more | many hours |
-| Planet | ~200 GB | a day or more |
+| Scale          | Approx. database | Approx. import time |
+| -------------- | ---------------- | ------------------- |
+| Single country | tens of GB       | a few hours         |
+| Continent      | ~100 GB or more  | many hours          |
+| Planet         | ~200 GB          | a day or more       |
 
 Plan disk and RAM against your chosen region before you start the import — see
 [Requirements](../install/requirements.md) for the full sizing breakdown and how

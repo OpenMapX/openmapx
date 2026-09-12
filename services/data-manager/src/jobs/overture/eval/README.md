@@ -31,12 +31,12 @@ node --import tsx/esm src/jobs/overture/eval/run.ts \
 Pairs are stratified across four name-similarity bands to avoid oversampling
 near-identical matches:
 
-| Band         | nameDice range |
-| ------------ | -------------- |
-| Low          | 0.0 – 0.4      |
-| Mid-low      | 0.4 – 0.7      |
-| Mid-high     | 0.7 – 0.9      |
-| High         | ≥ 0.9          |
+| Band     | nameDice range |
+| -------- | -------------- |
+| Low      | 0.0 – 0.4      |
+| Mid-low  | 0.4 – 0.7      |
+| Mid-high | 0.7 – 0.9      |
+| High     | ≥ 0.9          |
 
 ### 4. Label the pairs
 
@@ -99,15 +99,15 @@ only to make a release pass.
 
 ## File reference
 
-| File                          | Purpose                                        |
-| ----------------------------- | ---------------------------------------------- |
-| `metrics.ts`                  | `computeMetrics` + `SWEEP_GRID` (54 cells)     |
-| `candidates.ts`               | `generateCandidatePairs` with band sampling    |
-| `run.ts`                      | CLI entrypoint — loads labels, sweeps, prints  |
-| `search-quality.ts`           | Overture-only relevance and duplicate metrics  |
-| `search-quality-run.ts`       | CLI for labeled search-result JSON             |
-| `quality-baseline.ts`         | Permanent multi-region human-reviewed corpus   |
-| `quality-gate.ts`             | Pre-activation staged-release regression gate  |
+| File                    | Purpose                                       |
+| ----------------------- | --------------------------------------------- |
+| `metrics.ts`            | `computeMetrics` + `SWEEP_GRID` (54 cells)    |
+| `candidates.ts`         | `generateCandidatePairs` with band sampling   |
+| `run.ts`                | CLI entrypoint — loads labels, sweeps, prints |
+| `search-quality.ts`     | Overture-only relevance and duplicate metrics |
+| `search-quality-run.ts` | CLI for labeled search-result JSON            |
+| `quality-baseline.ts`   | Permanent multi-region human-reviewed corpus  |
+| `quality-gate.ts`       | Pre-activation staged-release regression gate |
 
 ## Overture-only search quality
 

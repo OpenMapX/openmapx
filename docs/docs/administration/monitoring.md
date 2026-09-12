@@ -87,7 +87,7 @@ for the timestamp meanings, sidecar diagnostics, and existing corrective
 workflows.
 
 :::note[Status vs. service catalog]
-The status dashboard reports *reachability* — can the API talk to each
+The status dashboard reports _reachability_ — can the API talk to each
 dependency right now. It is not the Docker control plane. To start, stop, or
 inspect a container's lifecycle state, use the service catalog under
 `/admin/services`; see [Services administration](./services-administration.md).
@@ -122,14 +122,14 @@ cooldown period and skips it on subsequent requests — the rest of the chain ke
 serving. After the cooldown the provider is tried again automatically. The
 defaults:
 
-| Parameter               | Default    | What it does                                              |
-| ----------------------- | ---------- | --------------------------------------------------------- |
-| Window size             | 100 calls  | Capped sliding window per provider.                       |
-| Failure-rate threshold  | 50%        | Window failure rate must exceed this to auto-disable.     |
-| Minimum sample size     | 10 calls   | Below this the threshold isn't evaluated (no cold-start flapping). |
-| Cooldown                | 5 minutes  | How long an auto-disabled provider is skipped.            |
-| EMA smoothing (α)       | 0.2        | Latency moving-average weighting.                         |
-| Redis TTL               | 30 days    | Refreshed on every write; idle providers eventually expire. |
+| Parameter              | Default   | What it does                                                       |
+| ---------------------- | --------- | ------------------------------------------------------------------ |
+| Window size            | 100 calls | Capped sliding window per provider.                                |
+| Failure-rate threshold | 50%       | Window failure rate must exceed this to auto-disable.              |
+| Minimum sample size    | 10 calls  | Below this the threshold isn't evaluated (no cold-start flapping). |
+| Cooldown               | 5 minutes | How long an auto-disabled provider is skipped.                     |
+| EMA smoothing (α)      | 0.2       | Latency moving-average weighting.                                  |
+| Redis TTL              | 30 days   | Refreshed on every write; idle providers eventually expire.        |
 
 State is keyed in Redis as `provider:health:<providerId>`, so you can inspect it
 directly — `redis-cli GET provider:health:<id>` returns the JSON window. Because
@@ -287,7 +287,7 @@ endpoint. Both are described below.
 For every condition that survives its filters, the cycle rewrites the affected
 directed edges in `traffic.tar`:
 
-- A **closure** becomes a genuine Valhalla *closed* record — a valid record
+- A **closure** becomes a genuine Valhalla _closed_ record — a valid record
   (both breakpoints `255`) whose overall speed is `0`. Costings refuse a closed
   edge, so the router detours around it natively; only a request that opts into
   `ignore_closures` drives through.
@@ -316,7 +316,7 @@ live data", so a lifted closure or an expired cap disappears within one cycle.
 
 ### How a closure is narrowed to the edges it really covers
 
-A bound condition arrives as one or more *spans* — a directed OSM way plus the
+A bound condition arrives as one or more _spans_ — a directed OSM way plus the
 occupied fraction of it, with the cut geometry. Closing the whole way would shut
 kilometres of motorway for a two-hundred-metre incident, so the cycle traces
 each span's geometry against `TRAFFIC_VALHALLA_URL`'s `/trace_attributes` and
@@ -331,7 +331,7 @@ map, on the same way and in the bound direction.
 Trace verdicts are cached in `traffic/span-edges-cache.json` under the
 data-manager's data directory, and pruned each cycle down to the spans still
 being reported, so lifted closures fall out of the file. Two things are
-deliberately *not* cached, so a bad minute cannot pin a span to the whole-way
+deliberately _not_ cached, so a bad minute cannot pin a span to the whole-way
 fallback for the rest of its life: a transport failure (the routing container
 unreachable, slow, or answering with an error), and a span left untraced because
 the pass hit its 30-second tracing budget. Both are retried on the next cycle.
@@ -366,7 +366,7 @@ not be resolved, the whole observation is withheld.
 Two limits are worth knowing. An applied closure is a fact about the graph, not
 about a departure time: a route planned for after the closure has ended still
 detours around it, whereas the point exclusions it replaces did honour the
-event's schedule. And the set asserts only that the *writer* wrote the record,
+event's schedule. And the set asserts only that the _writer_ wrote the record,
 not that the router has reloaded the tar — a Valhalla restart that fails after a
 `traffic.tar` rebuild is the one case the freshness window does not catch.
 
@@ -383,17 +383,17 @@ All of these come from the data-manager container
 (`pnpm openmapx services logs data-manager`, or its **Logs** tab in the admin
 panel).
 
-| Line                                                                      | Means                                                                                                                                              |
-| ------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `traffic-live: conditions applied`                                        | The healthy per-cycle summary: `closedEdges`, `cappedEdges`, `overridesUnresolved`, `requestedClosures`, `appliedConditions`, `edgeExactSpans`, `wholeWaySpans`, `missingWays`, `skipped`. |
-| `traffic-live: span tracing`                                              | Tracing counters for the cycle: `traced`, `unanswered`, `negative`, `skippedBudget`, `cacheHits`, `edgeExactSpans`, `wholeWaySpans`.                |
-| `traffic-live: bound ways missing from way→edge map, scheduling refresh`  | Conditions referenced ways this deployment's map does not know; a way→edge rebuild was kicked off (at most hourly). Persistent counts mean the graph and the feed's road spine are on different OSM vintages. |
-| `traffic-live: conditions fetch failed, reusing last good set`            | OpenConditions was unreachable; the previous set is still within `TRAFFIC_CONDITIONS_STALE_MS` and stays applied.                                   |
-| `traffic-live: conditions fetch failed and last set is stale, dropping closures` | The outage outlasted `TRAFFIC_CONDITIONS_STALE_MS`. Closures are dropped from the graph; the router falls back to point exclusions.           |
-| `traffic-live: span tracing failed, falling back to whole-way binding`    | The tracing pass itself failed. Closures still apply, whole-way instead of edge-exactly.                                                            |
-| `traffic-live: conditions classification failed, writing no overrides`    | Turning conditions into edge overrides threw. Live speeds are still written, but this cycle applies no closures or caps; the next cycle retries.    |
-| `traffic-live: span cache save failed`                                    | The trace cache could not be persisted. Harmless for correctness: the in-memory cache still serves the rest of this process, so only a restart loses the verdicts and re-traces them. |
-| `traffic-live: skipped out-of-range edges (traffic.tar/waysToEdges mismatch)` | The way→edge map references edges the current `traffic.tar` does not have. The daily traffic-extract cron resolves this by rebuilding both.     |
+| Line                                                                             | Means                                                                                                                                                                                                         |
+| -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `traffic-live: conditions applied`                                               | The healthy per-cycle summary: `closedEdges`, `cappedEdges`, `overridesUnresolved`, `requestedClosures`, `appliedConditions`, `edgeExactSpans`, `wholeWaySpans`, `missingWays`, `skipped`.                    |
+| `traffic-live: span tracing`                                                     | Tracing counters for the cycle: `traced`, `unanswered`, `negative`, `skippedBudget`, `cacheHits`, `edgeExactSpans`, `wholeWaySpans`.                                                                          |
+| `traffic-live: bound ways missing from way→edge map, scheduling refresh`         | Conditions referenced ways this deployment's map does not know; a way→edge rebuild was kicked off (at most hourly). Persistent counts mean the graph and the feed's road spine are on different OSM vintages. |
+| `traffic-live: conditions fetch failed, reusing last good set`                   | OpenConditions was unreachable; the previous set is still within `TRAFFIC_CONDITIONS_STALE_MS` and stays applied.                                                                                             |
+| `traffic-live: conditions fetch failed and last set is stale, dropping closures` | The outage outlasted `TRAFFIC_CONDITIONS_STALE_MS`. Closures are dropped from the graph; the router falls back to point exclusions.                                                                           |
+| `traffic-live: span tracing failed, falling back to whole-way binding`           | The tracing pass itself failed. Closures still apply, whole-way instead of edge-exactly.                                                                                                                      |
+| `traffic-live: conditions classification failed, writing no overrides`           | Turning conditions into edge overrides threw. Live speeds are still written, but this cycle applies no closures or caps; the next cycle retries.                                                              |
+| `traffic-live: span cache save failed`                                           | The trace cache could not be persisted. Harmless for correctness: the in-memory cache still serves the rest of this process, so only a restart loses the verdicts and re-traces them.                         |
+| `traffic-live: skipped out-of-range edges (traffic.tar/waysToEdges mismatch)`    | The way→edge map references edges the current `traffic.tar` does not have. The daily traffic-extract cron resolves this by rebuilding both.                                                                   |
 
 A healthy instance shows `unanswered` at zero and `edgeExactSpans` dominating
 `wholeWaySpans`. A rising `unanswered` points at the routing container, not at
@@ -450,7 +450,7 @@ traced in an earlier cycle, in which case it only shows in `cacheHits`.
 ## Audit log
 
 Every state-changing admin action is written to a durable audit trail. It's the
-record of *who did what, to what, and when* — the accountability layer behind the
+record of _who did what, to what, and when_ — the accountability layer behind the
 panel. Find it on `/admin/activity` under the **Audit Log** tab.
 
 Each entry captures the **action** (a dotted name like `service.restart` or
@@ -480,8 +480,8 @@ records, so the client can't suppress it. A few properties matter operationally:
 Sitting alongside the audit log on the same page is the **Jobs** tab — the running
 and recently-finished background jobs (installs, reloads, restarts, imports) with
 their streamed logs. Job rows are pruned after `ADMIN_JOB_RETENTION_DAYS` (default
-30). Between them, the audit log tells you the *intent* of every admin action and
-the jobs view shows the *execution*.
+30). Between them, the audit log tells you the _intent_ of every admin action and
+the jobs view shows the _execution_.
 
 Application job details are pushed to the browser over Server-Sent Events
 (`GET /api/admin/jobs/<id>/events`). Every event carries a per-job cursor; when

@@ -74,16 +74,16 @@ timeline response fails the whole day.
 
 ## Errors and recovery
 
-| Message/code | Meaning | What to do |
-| --- | --- | --- |
-| `TIMELINE_NOT_CONNECTED` | No connection exists. | Connect an instance in account settings. |
-| `TIMELINE_MANAGED_DISABLED` | Managed Dawarich is disabled, unprovisioned, or unhealthy. | Wait for the operator to recover it; do not reconnect or repaste the key. |
-| `TIMELINE_CREDENTIAL_INVALID` | Dawarich rejected the API key. | Create/copy the key at `/users/edit`, then reconnect. |
-| `TIMELINE_RATE_LIMITED` | The source asked OpenMapX to slow down. | Retry after the indicated delay. |
-| `TIMELINE_UPSTREAM_UNAVAILABLE` | Network or source service is unavailable. | Retry later; repeated transient failures may mark the connection degraded. |
-| `TIMELINE_INSTANCE_UNSUPPORTED` | The origin or required Dawarich API is unsupported. | Correct the URL or update the instance. |
-| `TIMELINE_PLAN_RESTRICTED` | The Dawarich account/plan denied an endpoint. | Review the account on that instance. |
-| `TIMELINE_RESPONSE_INVALID` | The source returned data outside the supported contract. | Check the supported Dawarich version and operator logs. |
+| Message/code                    | Meaning                                                    | What to do                                                                 |
+| ------------------------------- | ---------------------------------------------------------- | -------------------------------------------------------------------------- |
+| `TIMELINE_NOT_CONNECTED`        | No connection exists.                                      | Connect an instance in account settings.                                   |
+| `TIMELINE_MANAGED_DISABLED`     | Managed Dawarich is disabled, unprovisioned, or unhealthy. | Wait for the operator to recover it; do not reconnect or repaste the key.  |
+| `TIMELINE_CREDENTIAL_INVALID`   | Dawarich rejected the API key.                             | Create/copy the key at `/users/edit`, then reconnect.                      |
+| `TIMELINE_RATE_LIMITED`         | The source asked OpenMapX to slow down.                    | Retry after the indicated delay.                                           |
+| `TIMELINE_UPSTREAM_UNAVAILABLE` | Network or source service is unavailable.                  | Retry later; repeated transient failures may mark the connection degraded. |
+| `TIMELINE_INSTANCE_UNSUPPORTED` | The origin or required Dawarich API is unsupported.        | Correct the URL or update the instance.                                    |
+| `TIMELINE_PLAN_RESTRICTED`      | The Dawarich account/plan denied an endpoint.              | Review the account on that instance.                                       |
+| `TIMELINE_RESPONSE_INVALID`     | The source returned data outside the supported contract.   | Check the supported Dawarich version and operator logs.                    |
 
 Disabling managed Dawarich does not delete the OpenMapX connection or Dawarich
 volumes. After the operator re-enables and recovers the same service, the stored

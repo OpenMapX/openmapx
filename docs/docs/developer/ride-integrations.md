@@ -114,7 +114,7 @@ static files are cached, and only for the lifetime the feed itself declares.
 ## Personal data
 
 Pickup and dropoff coordinates are personal data, and a quote request is the first place
-in OpenMapX where a user's precise origin *and* destination leave the deployment together
+in OpenMapX where a user's precise origin _and_ destination leave the deployment together
 for a commercial third party. So:
 
 - Never log coordinates. The orchestrator logs the provider id, the method and a reason
@@ -137,7 +137,7 @@ language container (`data.en.feeds`) even though the prose reference shows a fla
 
 **Static files, TTL-cached.** `system_information`, `service_brands`, `zones`,
 `operating_rules`, `calendars`, `fares`, `booking_rules` and `vehicle_types` are fetched
-once and cached for the feed-declared `ttl`. A `ttl` of `0` means *always refresh* and
+once and cached for the feed-declared `ttl`. A `ttl` of `0` means _always refresh_ and
 must not be floored into a positive lifetime.
 
 **Availability.** Point-in-polygon of the pickup (and dropoff, when known) against

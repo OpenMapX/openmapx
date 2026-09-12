@@ -8,20 +8,20 @@ sidebar_position: 11
 
 Everything here is about material the repository must never contain, and the
 procedures that keep it recoverable anyway. Losing an Android upload key is
-recoverable; losing it *without a documented recovery path* means an app that can
+recoverable; losing it _without a documented recovery path_ means an app that can
 never be updated again under the same listing.
 
 ## What lives where
 
-| Material | Where it lives | In Git? |
-| --- | --- | --- |
-| Apple Team ID, application identifier | `apps/mobile/release/public-signing-identities.json` | Yes — published by the app itself |
-| Play app-signing SHA-256 fingerprint | Same file | Yes — published in the Play Console |
-| Apple distribution certificate + private key | macOS Keychain, plus one encrypted offline `.p12` | **Never** |
-| Provisioning profiles | Xcode-managed locally | **Never** |
-| Android upload keystore + passwords | Encrypted password manager, plus two tested offline backups | **Never** |
-| App Store Connect API key / app-specific password | Keychain | **Never** |
-| Reviewer credentials | Password manager, entered directly into the console | **Never** |
+| Material                                          | Where it lives                                              | In Git?                             |
+| ------------------------------------------------- | ----------------------------------------------------------- | ----------------------------------- |
+| Apple Team ID, application identifier             | `apps/mobile/release/public-signing-identities.json`        | Yes — published by the app itself   |
+| Play app-signing SHA-256 fingerprint              | Same file                                                   | Yes — published in the Play Console |
+| Apple distribution certificate + private key      | macOS Keychain, plus one encrypted offline `.p12`           | **Never**                           |
+| Provisioning profiles                             | Xcode-managed locally                                       | **Never**                           |
+| Android upload keystore + passwords               | Encrypted password manager, plus two tested offline backups | **Never**                           |
+| App Store Connect API key / app-specific password | Keychain                                                    | **Never**                           |
+| Reviewer credentials                              | Password manager, entered directly into the console         | **Never**                           |
 
 `apps/mobile/release/public-signing-identities.json` currently holds
 placeholders. That is the honest state: neither store account exists, so no

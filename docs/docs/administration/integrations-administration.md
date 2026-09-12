@@ -71,13 +71,13 @@ your edit anyway.
 
 There are five layers. Highest priority wins:
 
-| Priority | Source        | Where it comes from                                                    |
-| :------: | ------------- | --------------------------------------------------------------------- |
-|    5     | `env`         | A host environment variable, `INTEGRATION_<ID>_<KEY>`.                 |
-|    4     | `config.json` | A `config.json` file in the integration's own directory.              |
-|    3     | `vault`       | An admin-set secret in the encrypted vault.                           |
-|    2     | `database`    | A value you saved in the Config form.                                  |
-|    1     | `default`     | The `configSchema` default — nothing has overridden it.               |
+| Priority | Source        | Where it comes from                                      |
+| :------: | ------------- | -------------------------------------------------------- |
+|    5     | `env`         | A host environment variable, `INTEGRATION_<ID>_<KEY>`.   |
+|    4     | `config.json` | A `config.json` file in the integration's own directory. |
+|    3     | `vault`       | An admin-set secret in the encrypted vault.              |
+|    2     | `database`    | A value you saved in the Config form.                    |
+|    1     | `default`     | The `configSchema` default — nothing has overridden it.  |
 
 So an environment variable beats a local `config.json`, which beats a vaulted
 secret, which beats a value saved in the admin panel, which beats the schema
@@ -113,7 +113,7 @@ INTEGRATION_FUEL_DE_TANKERKOENIG_API_KEY=your-key-here
 
 For the bigger picture of where settings live — `.env`, the admin panel, and how
 they relate — see [Configuration](../install/configuration.md). The parallel
-cascade for *backend services* uses the `SERVICE_<ID>_<KEY>` prefix and only
+cascade for _backend services_ uses the `SERVICE_<ID>_<KEY>` prefix and only
 three layers; see [Managing services](../install/managing-services.md).
 
 ### Secrets
@@ -127,7 +127,7 @@ supplied by an **env** override, or **missing**.
 Set or rotate a secret from that tab. Its value is encrypted at rest in the
 database vault, which requires `OPENMAPX_SECRETS_KEY` to be set on the API host
 (generate one with `openssl rand -hex 32`). Without that key the vault is
-unavailable and the panel says so; an integration that *declares* secret fields
+unavailable and the panel says so; an integration that _declares_ secret fields
 will refuse to load at startup until the key is present, so this is a hard
 requirement rather than a silent degrade.
 
@@ -160,7 +160,7 @@ How a requirement resolves at load time:
   service is installed and enabled — no choice to make.
 - **A `capability:` requirement with exactly one provider** is auto-selected.
   Nothing to do; the single matching service is used.
-- **A `capability:` requirement with multiple providers** is *ambiguous*. The
+- **A `capability:` requirement with multiple providers** is _ambiguous_. The
   integration won't resolve that requirement until you pick a binding — until
   then it logs a warning and the requirement is left unsatisfied.
 - **An optional requirement** with no provider falls back to the integration's
@@ -168,7 +168,7 @@ How a requirement resolves at load time:
 
 You choose a binding on the integration's **Overview** tab. Each `capability:`
 requirement shows a dropdown listing every installed service that provides it;
-pick one to bind it, or choose *(none — use fallback)* to clear the binding and
+pick one to bind it, or choose _(none — use fallback)_ to clear the binding and
 let auto-select or the public fallback take over. The picker only offers
 services that genuinely provide the capability — a service that doesn't is
 rejected.
@@ -180,7 +180,7 @@ to take effect. Like every admin action, setting a binding is audit-logged.
 
 :::note[Bindings are per integration, not global]
 The same capability can be bound to different services for different
-integrations. Binding is also the *only* step you take in the panel — you still
+integrations. Binding is also the _only_ step you take in the panel — you still
 [enable the backing service](./services-administration.md) and render the stack
 separately; the binding just tells the integration which of the running
 providers to call.
@@ -239,7 +239,7 @@ from a gated source — so a gated source is never queried and never reaches the
 map.
 
 :::note[Disclosure tables still list every source]
-Disabling a source removes its *data* from results, but the `/privacy` and
+Disabling a source removes its _data_ from results, but the `/privacy` and
 `/terms` source-disclosure tables continue to list every source the build ships,
 so the published licence and privacy metadata stays complete.
 :::
@@ -283,14 +283,14 @@ coordinates, station names, credentials, or arbitrary error text.
 The existing authenticated/internal `GET /api/internal/metrics` endpoint exports
 the canonical air-quality instruments through the shared Prometheus renderer:
 
-| Instrument | Important bounded labels | Meaning |
-| --- | --- | --- |
-| `air_quality_requests_total` | method, outcome, cache result, headline class, rejection code, compatibility use, quota truncation | End-to-end canonical and legacy route outcomes |
-| `air_quality_request_duration_ms` | same as request counter | End-to-end latency |
-| `air_quality_evidence_count` | same as request counter | Returned evidence or station-feature count |
-| `air_quality_provider_calls_total` | provider ID, method, outcome, cache ownership, suppression | Provider dispatches plus policy/health preflight skips |
-| `air_quality_provider_call_duration_ms` | same as provider counter | Provider-call latency |
-| `air_quality_raster_age_seconds` | current, stale, unavailable | Served raster age when a raster provider is released |
+| Instrument                              | Important bounded labels                                                                           | Meaning                                                |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------- | ------------------------------------------------------ |
+| `air_quality_requests_total`            | method, outcome, cache result, headline class, rejection code, compatibility use, quota truncation | End-to-end canonical and legacy route outcomes         |
+| `air_quality_request_duration_ms`       | same as request counter                                                                            | End-to-end latency                                     |
+| `air_quality_evidence_count`            | same as request counter                                                                            | Returned evidence or station-feature count             |
+| `air_quality_provider_calls_total`      | provider ID, method, outcome, cache ownership, suppression                                         | Provider dispatches plus policy/health preflight skips |
+| `air_quality_provider_call_duration_ms` | same as provider counter                                                                           | Provider-call latency                                  |
+| `air_quality_raster_age_seconds`        | current, stale, unavailable                                                                        | Served raster age when a raster provider is released   |
 
 `cache_result="provider-managed"` means the provider owns its internal cache and
 the provider contract does not leak a per-call cache decision. The canonical
@@ -338,7 +338,7 @@ Configuring features one page at a time is tedious on a fresh deployment, so the
 list's toolbar links to **Bulk configure** (`/admin/integrations/bulk`), a single
 page that consolidates the same workflow. It renders every configurable
 integration's settings form and credentials table inline, expanding on demand,
-and drives the *same* save and credential endpoints as the per-integration pages
+and drives the _same_ save and credential endpoints as the per-integration pages
 — so there's no separate "bulk" behavior to learn, just every form in one place.
 
 The bulk page also publishes the complete **environment-variable catalogue** for
@@ -346,7 +346,7 @@ your installation: for each integration, the exact `INTEGRATION_<ID>_<KEY>`
 variable name behind every setting and secret, with present / missing flags and
 non-secret defaults. Copy the block you need into `infra/docker/.env` when you'd
 rather pin configuration in the environment than click through forms. Secret
-*values* are never exposed here — only their variable names and whether each is
+_values_ are never exposed here — only their variable names and whether each is
 currently set.
 
 For acting on backend services in bulk (start, stop, or update selected services),

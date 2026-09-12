@@ -1,0 +1,21 @@
+# Prettier owns only what Biome cannot parse: Markdown and YAML. Biome owns
+# everything else (see biome.json), so the two never format one file.
+node_modules/
+.next/
+dist/
+.turbo/
+pnpm-lock.yaml
+infra/docker/data/
+# Rendered by `pnpm openmapx compose render` from services/*/service.json
+infra/docker/docker-compose.generated.yml
+# Generated migrations and their snapshots (never hand-edited)
+**/db/migrations/
+# Frozen fixtures are compared as captured
+**/__fixtures__/
+# Generated from data-practices.json by store-answers.mts, which verifies the
+# committed files byte for byte under --check
+apps/mobile/compliance/apple-privacy-worksheet.md
+apps/mobile/compliance/google-data-safety-worksheet.md
+# Written by the semantic-taxonomy evaluation run; reformatting only guarantees
+# churn on the next run
+integrations/search-nlp/eval/reports/

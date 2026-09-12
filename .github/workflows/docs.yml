@@ -15,7 +15,7 @@ on:
       - ".trivyignore.yaml"
       - ".nvmrc"
   schedule:
-    - cron: '47 4 * * 1'
+    - cron: "47 4 * * 1"
   workflow_dispatch:
 
 concurrency:

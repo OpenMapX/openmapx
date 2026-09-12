@@ -31,17 +31,17 @@ different, sensible pattern — that's the fallback chain, not three full engine
 
 The three engines trade simplicity, completeness, and resource cost differently.
 
-| | **Photon** | **Nominatim** | **Pelias** |
-| --- | --- | --- | --- |
-| Best at | Search-as-you-type | Completeness, reverse, enrichment | Composite/modular geocoding |
-| Setup | Lowest — one container | Low — one container | High — four containers |
-| Getting data | Auto-downloads a prebuilt index | Imports OSM on first boot | Multi-step build pipeline |
-| Build step | None | None (self-imports) | `openmapx services build pelias` |
-| RAM ceiling (manifest) | 8 GB | 64 GB (import peak) | ~7 GB (stack total: 4 GB Elasticsearch + 2 GB PIP + 1 GB services) |
-| Disk (planet) | ~200 GB | ~330 GB | ~100 GB |
-| Reverse geocoding | Yes | Yes (also powers enrichment) | Yes |
-| Updates | Re-downloads the index periodically | Built-in OSM replication | Re-import |
-| Public fallback | Komoot's instance | The OSM instance | None — must self-host |
+|                        | **Photon**                          | **Nominatim**                     | **Pelias**                                                         |
+| ---------------------- | ----------------------------------- | --------------------------------- | ------------------------------------------------------------------ |
+| Best at                | Search-as-you-type                  | Completeness, reverse, enrichment | Composite/modular geocoding                                        |
+| Setup                  | Lowest — one container              | Low — one container               | High — four containers                                             |
+| Getting data           | Auto-downloads a prebuilt index     | Imports OSM on first boot         | Multi-step build pipeline                                          |
+| Build step             | None                                | None (self-imports)               | `openmapx services build pelias`                                   |
+| RAM ceiling (manifest) | 8 GB                                | 64 GB (import peak)               | ~7 GB (stack total: 4 GB Elasticsearch + 2 GB PIP + 1 GB services) |
+| Disk (planet)          | ~200 GB                             | ~330 GB                           | ~100 GB                                                            |
+| Reverse geocoding      | Yes                                 | Yes (also powers enrichment)      | Yes                                                                |
+| Updates                | Re-downloads the index periodically | Built-in OSM replication          | Re-import                                                          |
+| Public fallback        | Komoot's instance                   | The OSM instance                  | None — must self-host                                              |
 
 A few rules of thumb:
 
@@ -166,7 +166,7 @@ Nominatim bundles its own PostgreSQL and imports an OpenStreetMap extract on
 first start — there's no separate build command, but the import is the heaviest
 single step of any geocoder here.
 
-**Get the data, then start.** Nominatim *consumes* an `osm-pbf`, so download the
+**Get the data, then start.** Nominatim _consumes_ an `osm-pbf`, so download the
 extract and link it into place before starting:
 
 ```bash

@@ -42,11 +42,11 @@ confirm.
 Every extension carries one trust tier, and the tier is assigned by **where it
 came from** — a manifest can advertise but never grant its own trust:
 
-| Tier | Meaning | Source |
-| --- | --- | --- |
-| **built-in** | Ships in the OpenMapX monorepo | first-party |
-| **verified** | Identity-checked + passed automated validation (not audited) | the curated OpenMapX catalog (`openmapx/community-extensions`), where inclusion is a CI-gated pull request |
-| **community** | Unreviewed | a catalog source you added yourself, or a direct install by URL |
+| Tier          | Meaning                                                      | Source                                                                                                     |
+| ------------- | ------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| **built-in**  | Ships in the OpenMapX monorepo                               | first-party                                                                                                |
+| **verified**  | Identity-checked + passed automated validation (not audited) | the curated OpenMapX catalog (`openmapx/community-extensions`), where inclusion is a CI-gated pull request |
+| **community** | Unreviewed                                                   | a catalog source you added yourself, or a direct install by URL                                            |
 
 The default catalog source is the curated **verified** one. Anything you add
 under **Sources**, or install by raw URL, is surfaced as **community** and
@@ -138,7 +138,7 @@ Each service component shows a deterministic **security rating** (1–8) compute
 from what its manifest declares — published host ports lower it, auth-in-front
 and an owned (scoped) database schema raise it, and anything requiring built-in
 privileges floors it. It's an at-a-glance signal of how contained a service is
-*within* the allowed sandbox; it is not a verdict on the code. Integrations get
+_within_ the allowed sandbox; it is not a verdict on the code. Integrations get
 no numeric rating because installable integration artifacts are declarative-only;
 their companion services use the service rating instead.
 

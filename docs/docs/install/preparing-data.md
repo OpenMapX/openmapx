@@ -214,13 +214,13 @@ pnpm openmapx data build motis europe/germany
 
 The build kinds that prepare artifacts are:
 
-| Kind | Engine | Output |
-| ---- | ------ | ------ |
-| `osrm` | OSRM | Routing graph (`data/osrm-graph/`) — region scale only |
-| `otp` | OTP | Transit graph (`data/otp-graph/`) — region scale only |
-| `motis` | MOTIS | Prepared inputs for the MOTIS slot lifecycle |
-| `pelias` | Pelias | Geocoding index (Elasticsearch + supporting data) |
-| `tiles` | TileServer GL | MBTiles archive (`data/tile-mbtiles/`) from the OSM extract |
+| Kind     | Engine        | Output                                                      |
+| -------- | ------------- | ----------------------------------------------------------- |
+| `osrm`   | OSRM          | Routing graph (`data/osrm-graph/`) — region scale only      |
+| `otp`    | OTP           | Transit graph (`data/otp-graph/`) — region scale only       |
+| `motis`  | MOTIS         | Prepared inputs for the MOTIS slot lifecycle                |
+| `pelias` | Pelias        | Geocoding index (Elasticsearch + supporting data)           |
+| `tiles`  | TileServer GL | MBTiles archive (`data/tile-mbtiles/`) from the OSM extract |
 
 Engines that read raw source data directly — Valhalla, Nominatim, Overpass — have
 no build step here; they consume the downloaded extract as-is (Overpass needs a
@@ -272,7 +272,7 @@ into each one's directory, OpenMapX uses **hardlinks**: every consumer gets its 
 path that points at the same bytes on disk.
 
 When you run `openmapx compose render`, alongside the generated compose file it
-writes a *hardlink plan* — one entry per `consumes`/`produces` match across your
+writes a _hardlink plan_ — one entry per `consumes`/`produces` match across your
 enabled services. Apply that plan so each consumer's input directory points at the
 producer's data:
 

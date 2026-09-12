@@ -102,49 +102,49 @@ are required. Everything else is optional and defaults to "not present."
 
 The top-level descriptive fields.
 
-| Field | Type | Required | Notes |
-| :--- | :--- | :---: | :--- |
-| `id` | string | yes | Must match `^[a-z0-9][a-z0-9-]*$`. Becomes the compose service name and must equal the directory slug. |
-| `name` | string | yes | Human-readable label shown in the admin UI. |
-| `version` | string | yes | Free-form, semver by convention. |
-| `description` | string | no | Short tagline surfaced in the catalog and admin detail page. |
-| `author` | string | no | Free-form attribution. |
-| `license` | string | no | SPDX identifier by convention (`MIT`, `Apache-2.0`). |
-| `homepage` | URL | no | Project homepage; validated as a URL. |
-| `documentation` | URL | no | API/docs URL; validated as a URL. |
-| `quality` | enum | yes | `built-in`, `community-verified`, or `community`. Display/catalog label only; the sandbox uses where the manifest was loaded from (see [Quality tiers](#quality-tiers)). |
-| `platform` | string | no | Optional platform-version constraint a community manifest can declare against the OpenMapX core. |
-| `communityNetworkAccess` | service id[] | no | Audited first-party capability only. Explicitly attaches a built-in bridge service to the named community services' isolated networks while retaining `openmapx`. Rejected from community provenance at validation and render boundaries. Start with no entries; this is not a platform-network escape hatch. |
+| Field                    | Type         | Required | Notes                                                                                                                                                                                                                                                                                                         |
+| :----------------------- | :----------- | :------: | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `id`                     | string       |   yes    | Must match `^[a-z0-9][a-z0-9-]*$`. Becomes the compose service name and must equal the directory slug.                                                                                                                                                                                                        |
+| `name`                   | string       |   yes    | Human-readable label shown in the admin UI.                                                                                                                                                                                                                                                                   |
+| `version`                | string       |   yes    | Free-form, semver by convention.                                                                                                                                                                                                                                                                              |
+| `description`            | string       |    no    | Short tagline surfaced in the catalog and admin detail page.                                                                                                                                                                                                                                                  |
+| `author`                 | string       |    no    | Free-form attribution.                                                                                                                                                                                                                                                                                        |
+| `license`                | string       |    no    | SPDX identifier by convention (`MIT`, `Apache-2.0`).                                                                                                                                                                                                                                                          |
+| `homepage`               | URL          |    no    | Project homepage; validated as a URL.                                                                                                                                                                                                                                                                         |
+| `documentation`          | URL          |    no    | API/docs URL; validated as a URL.                                                                                                                                                                                                                                                                             |
+| `quality`                | enum         |   yes    | `built-in`, `community-verified`, or `community`. Display/catalog label only; the sandbox uses where the manifest was loaded from (see [Quality tiers](#quality-tiers)).                                                                                                                                      |
+| `platform`               | string       |    no    | Optional platform-version constraint a community manifest can declare against the OpenMapX core.                                                                                                                                                                                                              |
+| `communityNetworkAccess` | service id[] |    no    | Audited first-party capability only. Explicitly attaches a built-in bridge service to the named community services' isolated networks while retaining `openmapx`. Rejected from community provenance at validation and render boundaries. Start with no entries; this is not a platform-network escape hatch. |
 
 ## `container`
 
 The image and its runtime knobs. Most fields map one-to-one onto docker-compose
 service keys; the renderer copies them through.
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
-| `image` | string | **Required.** Lowercase, no tag suffix — matches `^[a-z0-9]([a-z0-9._\-/])*$`. Put the version in `tag`. |
-| `tag` | string | **Required.** The image tag (`latest`, `2.10.2`, `v3.6`); matches `^[a-zA-Z0-9._-]+$`. |
-| `containerName` | string | Pin the compose container to a fixed name (`container_name`) instead of the derived `<project>-<service>-<n>`. Required only when another service addresses this one by bare name over the Docker CLI (the data-manager does this for `motis`, `motis-staging`, `motis-feed-proxy`). It blocks scaling, so use it sparingly. |
-| `expose` | number[] | Container ports exposed to the service's attached Compose network. Required if `exposure.proxy.enabled` is `true`. |
-| `networkAliases` | string[] | Extra DNS aliases on the service's attached network (`openmapx` for built-ins, its isolated network for community services). Each must be a valid DNS label and may not collide with another service id or alias. Aliasing the service's own id is harmless. |
-| `command` | string \| string[] | Container command. First-party services may use Compose interpolation; community services render `$` literally. |
-| `entrypoint` | string \| string[] | Container entrypoint. First-party services may use Compose interpolation; community services render `$` literally. |
-| `environment` | object (string→string) | Environment variables. First-party services support `${VAR}`, `${VAR:-default}`, and `${VAR:?error message}` interpolation passed to Docker Compose for deployment-time resolution. Community services render `$` literally and should use `configSchema` for operator-supplied settings. |
-| `envFile` | string[] | `env_file` pass-through. Relative paths under `infra/docker/` only. First-party services only: it can expose the deployment `.env`. Third-party services should use `configSchema`; secret fields arrive through `/run/secrets/<KEY>` with `<KEY>_FILE`. |
-| `workingDir` | string | Working directory inside the container. |
-| `user` | string | Run-as user, e.g. `"${UID:-1000}:${GID:-1000}"`. |
-| `shmSize` | string | Shared-memory size, e.g. `"1g"`. |
-| `memory` | string | Memory limit, e.g. `"16g"`, `"512m"`. |
-| `restart` | enum | `no`, `on-failure`, `always`, or `unless-stopped`. |
-| `capAdd` | string[] | Linux capabilities to add, from a fixed allowlist; unknown strings are rejected. First-party services may request the full allowlist (`NET_ADMIN`, `SYS_ADMIN`, `IPC_LOCK`, …). Third-party services are held to a stricter safe subset — escape-class caps (`SYS_ADMIN`, `SYS_PTRACE`, `SYS_TIME`, `SYS_CHROOT`, `NET_ADMIN`, `MKNOD`, `DAC_READ_SEARCH`, `IPC_LOCK`, `AUDIT_WRITE`) are rejected. |
-| `capDrop` | string[] | Capabilities to drop. Accepts allowlisted names plus the special `"ALL"`. |
-| `devices` | string[] | Host devices to pass through. Each entry must match `/dev/<name>`. **Forbidden for third-party services** — only first-party manifests may pass devices. |
-| `privileged` | boolean | Run privileged. **Forbidden for third-party services.** |
-| `networkMode` | enum | `bridge` or `host`. `host` is **forbidden for third-party services.** |
-| `dependsOn` | array | Start-order dependencies — `{ "service": "<id>", "condition": "service_started" \| "service_healthy" }`. |
-| `logging` | object | Compose logging — `{ "driver": "...", "options": { ... } }`. |
-| `healthcheck` | object | See below. |
+| Field            | Type                   | Notes                                                                                                                                                                                                                                                                                                                                                                                               |
+| :--------------- | :--------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `image`          | string                 | **Required.** Lowercase, no tag suffix — matches `^[a-z0-9]([a-z0-9._\-/])*$`. Put the version in `tag`.                                                                                                                                                                                                                                                                                            |
+| `tag`            | string                 | **Required.** The image tag (`latest`, `2.10.2`, `v3.6`); matches `^[a-zA-Z0-9._-]+$`.                                                                                                                                                                                                                                                                                                              |
+| `containerName`  | string                 | Pin the compose container to a fixed name (`container_name`) instead of the derived `<project>-<service>-<n>`. Required only when another service addresses this one by bare name over the Docker CLI (the data-manager does this for `motis`, `motis-staging`, `motis-feed-proxy`). It blocks scaling, so use it sparingly.                                                                        |
+| `expose`         | number[]               | Container ports exposed to the service's attached Compose network. Required if `exposure.proxy.enabled` is `true`.                                                                                                                                                                                                                                                                                  |
+| `networkAliases` | string[]               | Extra DNS aliases on the service's attached network (`openmapx` for built-ins, its isolated network for community services). Each must be a valid DNS label and may not collide with another service id or alias. Aliasing the service's own id is harmless.                                                                                                                                        |
+| `command`        | string \| string[]     | Container command. First-party services may use Compose interpolation; community services render `$` literally.                                                                                                                                                                                                                                                                                     |
+| `entrypoint`     | string \| string[]     | Container entrypoint. First-party services may use Compose interpolation; community services render `$` literally.                                                                                                                                                                                                                                                                                  |
+| `environment`    | object (string→string) | Environment variables. First-party services support `${VAR}`, `${VAR:-default}`, and `${VAR:?error message}` interpolation passed to Docker Compose for deployment-time resolution. Community services render `$` literally and should use `configSchema` for operator-supplied settings.                                                                                                           |
+| `envFile`        | string[]               | `env_file` pass-through. Relative paths under `infra/docker/` only. First-party services only: it can expose the deployment `.env`. Third-party services should use `configSchema`; secret fields arrive through `/run/secrets/<KEY>` with `<KEY>_FILE`.                                                                                                                                            |
+| `workingDir`     | string                 | Working directory inside the container.                                                                                                                                                                                                                                                                                                                                                             |
+| `user`           | string                 | Run-as user, e.g. `"${UID:-1000}:${GID:-1000}"`.                                                                                                                                                                                                                                                                                                                                                    |
+| `shmSize`        | string                 | Shared-memory size, e.g. `"1g"`.                                                                                                                                                                                                                                                                                                                                                                    |
+| `memory`         | string                 | Memory limit, e.g. `"16g"`, `"512m"`.                                                                                                                                                                                                                                                                                                                                                               |
+| `restart`        | enum                   | `no`, `on-failure`, `always`, or `unless-stopped`.                                                                                                                                                                                                                                                                                                                                                  |
+| `capAdd`         | string[]               | Linux capabilities to add, from a fixed allowlist; unknown strings are rejected. First-party services may request the full allowlist (`NET_ADMIN`, `SYS_ADMIN`, `IPC_LOCK`, …). Third-party services are held to a stricter safe subset — escape-class caps (`SYS_ADMIN`, `SYS_PTRACE`, `SYS_TIME`, `SYS_CHROOT`, `NET_ADMIN`, `MKNOD`, `DAC_READ_SEARCH`, `IPC_LOCK`, `AUDIT_WRITE`) are rejected. |
+| `capDrop`        | string[]               | Capabilities to drop. Accepts allowlisted names plus the special `"ALL"`.                                                                                                                                                                                                                                                                                                                           |
+| `devices`        | string[]               | Host devices to pass through. Each entry must match `/dev/<name>`. **Forbidden for third-party services** — only first-party manifests may pass devices.                                                                                                                                                                                                                                            |
+| `privileged`     | boolean                | Run privileged. **Forbidden for third-party services.**                                                                                                                                                                                                                                                                                                                                             |
+| `networkMode`    | enum                   | `bridge` or `host`. `host` is **forbidden for third-party services.**                                                                                                                                                                                                                                                                                                                               |
+| `dependsOn`      | array                  | Start-order dependencies — `{ "service": "<id>", "condition": "service_started" \| "service_healthy" }`.                                                                                                                                                                                                                                                                                            |
+| `logging`        | object                 | Compose logging — `{ "driver": "...", "options": { ... } }`.                                                                                                                                                                                                                                                                                                                                        |
+| `healthcheck`    | object                 | See below.                                                                                                                                                                                                                                                                                                                                                                                          |
 
 ### Network isolation
 
@@ -183,16 +183,16 @@ port probe, and `exec` runs `command` directly.
 }
 ```
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
-| `type` | enum | **Required.** `http`, `tcp`, or `exec`. |
-| `path` | string | HTTP path to probe (`http` only). |
-| `port` | number | Port to probe (`http`/`tcp`). |
-| `command` | string \| string[] | Command to run (`exec` only). First-party services may use Compose interpolation; community services render `$` literally. |
-| `interval` | string | Probe interval, e.g. `"30s"`. |
-| `timeout` | string | Per-probe timeout. |
-| `retries` | number | Failures before "unhealthy." |
-| `startPeriod` | string | Grace period during startup before failures count — useful for engines that build an index on first boot. |
+| Field         | Type               | Notes                                                                                                                      |
+| :------------ | :----------------- | :------------------------------------------------------------------------------------------------------------------------- |
+| `type`        | enum               | **Required.** `http`, `tcp`, or `exec`.                                                                                    |
+| `path`        | string             | HTTP path to probe (`http` only).                                                                                          |
+| `port`        | number             | Port to probe (`http`/`tcp`).                                                                                              |
+| `command`     | string \| string[] | Command to run (`exec` only). First-party services may use Compose interpolation; community services render `$` literally. |
+| `interval`    | string             | Probe interval, e.g. `"30s"`.                                                                                              |
+| `timeout`     | string             | Per-probe timeout.                                                                                                         |
+| `retries`     | number             | Failures before "unhealthy."                                                                                               |
+| `startPeriod` | string             | Grace period during startup before failures count — useful for engines that build an index on first boot.                  |
 
 ## Capabilities and data flow
 
@@ -237,14 +237,14 @@ with a producer's `produces` entry of the same `type`.
 ]
 ```
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
-| `type` | string | **Required.** The data type to bind. |
-| `mountAt` | string | **Required.** Absolute container path; no `..`. |
-| `instance` | string | Optional producer-instance id for multi-instance types (e.g. one OSM extract per region). Omit to bind the default/only instance. |
-| `targetFilename` | string | Optional fixed filename to expose inside the mount, for services with a hard-coded input name (Nominatim's `data.osm.pbf`). The producer dir must then hold exactly one file. |
-| `readOnly` | boolean | Defaults to `false`. |
-| `required` | boolean | When `true`, a missing producer makes the render fail. When absent/`false`, a missing producer just omits the mount. |
+| Field            | Type    | Notes                                                                                                                                                                         |
+| :--------------- | :------ | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `type`           | string  | **Required.** The data type to bind.                                                                                                                                          |
+| `mountAt`        | string  | **Required.** Absolute container path; no `..`.                                                                                                                               |
+| `instance`       | string  | Optional producer-instance id for multi-instance types (e.g. one OSM extract per region). Omit to bind the default/only instance.                                             |
+| `targetFilename` | string  | Optional fixed filename to expose inside the mount, for services with a hard-coded input name (Nominatim's `data.osm.pbf`). The producer dir must then hold exactly one file. |
+| `readOnly`       | boolean | Defaults to `false`.                                                                                                                                                          |
+| `required`       | boolean | When `true`, a missing producer makes the render fail. When absent/`false`, a missing producer just omits the mount.                                                          |
 
 ### `produces`
 
@@ -260,11 +260,11 @@ producer's data root. In practice the built-in producer for these types is the
 ]
 ```
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
-| `type` | string | **Required.** The data type produced. |
-| `sourceDir` | string | **Required.** Directory (relative to the data root) the service writes to. |
-| `instance` | string | Optional instance id when the same type is produced more than once. Must match `^[a-z0-9][a-z0-9-]*$`. |
+| Field       | Type   | Notes                                                                                                  |
+| :---------- | :----- | :----------------------------------------------------------------------------------------------------- |
+| `type`      | string | **Required.** The data type produced.                                                                  |
+| `sourceDir` | string | **Required.** Directory (relative to the data root) the service writes to.                             |
+| `instance`  | string | Optional instance id when the same type is produced more than once. Must match `^[a-z0-9][a-z0-9-]*$`. |
 
 Well-known data types include `osm-pbf`, `osm-pbf-bz2`, `osrm-graph`,
 `otp-graph`, `motis-data`, `motis-staging-data`, `motis-feed-proxy-config`,
@@ -288,12 +288,12 @@ on disk, an Overpass index).
 ]
 ```
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
-| `name` | string | **Required.** Must match `^openmapx-[a-z0-9-]+$`. A third-party service must use `openmapx-<serviceId>-<suffix>` so it cannot attach a platform or another extension's volume. |
-| `mountAt` | string | **Required.** Absolute container path; no `..`. |
-| `readOnly` | boolean | Defaults to `false`. |
-| `backup` | boolean | When `true`, included in `pnpm openmapx backup create`/`restore`/`list`. |
+| Field      | Type    | Notes                                                                                                                                                                          |
+| :--------- | :------ | :----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `name`     | string  | **Required.** Must match `^openmapx-[a-z0-9-]+$`. A third-party service must use `openmapx-<serviceId>-<suffix>` so it cannot attach a platform or another extension's volume. |
+| `mountAt`  | string  | **Required.** Absolute container path; no `..`.                                                                                                                                |
+| `readOnly` | boolean | Defaults to `false`.                                                                                                                                                           |
+| `backup`   | boolean | When `true`, included in `pnpm openmapx backup create`/`restore`/`list`.                                                                                                       |
 
 ### `bindMounts`
 
@@ -311,22 +311,22 @@ for persistent state instead.
 ]
 ```
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
-| `source` | string | **Required.** See the first-party source kinds below. Community services cannot declare this field because all community bind mounts are rejected. |
-| `target` | string | **Required.** Absolute container path; first-party services may use a Compose-variable reference. No `..`. |
-| `readOnly` | boolean | Defaults to `true`. |
+| Field      | Type    | Notes                                                                                                                                                                                                                                                          |
+| :--------- | :------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `source`   | string  | **Required.** See the first-party source kinds below. Community services cannot declare this field because all community bind mounts are rejected.                                                                                                             |
+| `target`   | string  | **Required.** Absolute container path; first-party services may use a Compose-variable reference. No `..`.                                                                                                                                                     |
+| `readOnly` | boolean | Defaults to `true`.                                                                                                                                                                                                                                            |
 | `optional` | boolean | First-party only. When `true`, the mount is silently dropped at render time if the host source is absent. Used for operator-supplied secrets declared once but materialized only when the file is dropped in place. Not allowed with Compose-variable sources. |
 
 The `source` may be one of:
 
-| Source kind | Available to | Behavior |
-| :--- | :--- | :--- |
-| Relative path (`config/foo.json`) | **built-in only** | Resolved against the service's own directory. No `..`, no absolute paths. |
-| `@docker-socket` | **built-in only** | Mounts the host's `/var/run/docker.sock`. |
-| `@service:<slug>:<rel-path>` | **built-in only** | Mounts a path from another built-in service's directory (shared config). The renderer fails fast if the named service is unknown or the path escapes its directory. |
-| `@infra:<rel-path>` | **built-in only** | Resolves against `infra/docker/` — the directory the compose file renders into. Used to bind the shared `infra/docker/data/` tree. |
-| `${VAR}` / `${VAR:-default}` | **first-party only** | Compose-variable reference passed through verbatim; Docker substitutes it at `up` time. Third-party manifests cannot let the deployment environment choose a host path. |
+| Source kind                       | Available to         | Behavior                                                                                                                                                                |
+| :-------------------------------- | :------------------- | :---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Relative path (`config/foo.json`) | **built-in only**    | Resolved against the service's own directory. No `..`, no absolute paths.                                                                                               |
+| `@docker-socket`                  | **built-in only**    | Mounts the host's `/var/run/docker.sock`.                                                                                                                               |
+| `@service:<slug>:<rel-path>`      | **built-in only**    | Mounts a path from another built-in service's directory (shared config). The renderer fails fast if the named service is unknown or the path escapes its directory.     |
+| `@infra:<rel-path>`               | **built-in only**    | Resolves against `infra/docker/` — the directory the compose file renders into. Used to bind the shared `infra/docker/data/` tree.                                      |
+| `${VAR}` / `${VAR:-default}`      | **first-party only** | Compose-variable reference passed through verbatim; Docker substitutes it at `up` time. Third-party manifests cannot let the deployment environment choose a host path. |
 
 ## `exposure`
 
@@ -353,11 +353,11 @@ the internet unless the manifest opts in, in one of two ways.
 
 Publishes a container port on the host.
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
-| `container` | number | **Required.** Port inside the container. |
-| `host` | number | **Required.** Port on the host. |
-| `protocol` | enum | `tcp` (default) or `udp`. |
+| Field         | Type   | Notes                                                                                                                                  |
+| :------------ | :----- | :------------------------------------------------------------------------------------------------------------------------------------- |
+| `container`   | number | **Required.** Port inside the container.                                                                                               |
+| `host`        | number | **Required.** Port on the host.                                                                                                        |
+| `protocol`    | enum   | `tcp` (default) or `udp`.                                                                                                              |
 | `bindAddress` | string | Recommended `127.0.0.1` (loopback). The admin install preview flags a non-loopback bind as **publicly accessible** before you confirm. |
 
 ### `exposure.proxy`
@@ -368,15 +368,15 @@ community services because they cannot claim routes on the platform origin.
 Enabling the proxy requires `container.expose` to declare at least one port
 (otherwise validation fails).
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
-| `enabled` | boolean | **Required.** First-party only; when `true`, requires `container.expose`. |
-| `pathPrefix` | string | HTTP prefix Traefik routes here. Must match `^/[a-zA-Z0-9._\-/]*$`. |
-| `stripPrefix` | boolean | If `true`, the prefix is stripped before forwarding. |
-| `middleware` | string[] | Traefik middleware names (e.g. `tiles-cache@file`). |
-| `priority` | number | Higher wins when rules overlap. Use a low value for catch-all routes. |
-| `authRequired` | boolean | Reserved for a future forward-auth integration. |
-| `additionalRoutes` | array | Extra routers pointing at the same backend. Each entry sets exactly one of `path` (exact match) or `pathPrefix`, plus optional `middleware`. |
+| Field              | Type     | Notes                                                                                                                                        |
+| :----------------- | :------- | :------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enabled`          | boolean  | **Required.** First-party only; when `true`, requires `container.expose`.                                                                    |
+| `pathPrefix`       | string   | HTTP prefix Traefik routes here. Must match `^/[a-zA-Z0-9._\-/]*$`.                                                                          |
+| `stripPrefix`      | boolean  | If `true`, the prefix is stripped before forwarding.                                                                                         |
+| `middleware`       | string[] | Traefik middleware names (e.g. `tiles-cache@file`).                                                                                          |
+| `priority`         | number   | Higher wins when rules overlap. Use a low value for catch-all routes.                                                                        |
+| `authRequired`     | boolean  | Reserved for a future forward-auth integration.                                                                                              |
+| `additionalRoutes` | array    | Extra routers pointing at the same backend. Each entry sets exactly one of `path` (exact match) or `pathPrefix`, plus optional `middleware`. |
 
 ## `configSchema`
 
@@ -428,11 +428,11 @@ value, command, label, or health-check text.
 Each declared key resolves through a three-layer cascade at render time, highest
 priority first:
 
-| Priority | Source | Where it lives |
-| :---: | :--- | :--- |
-| 3 | Environment variable | `SERVICE_<ID>_<KEY>` in `infra/docker/.env` |
-| 2 | Database | the admin panel's per-service config form |
-| 1 | Schema default | `configSchema.properties.<key>.default` |
+| Priority | Source               | Where it lives                              |
+| :------: | :------------------- | :------------------------------------------ |
+|    3     | Environment variable | `SERVICE_<ID>_<KEY>` in `infra/docker/.env` |
+|    2     | Database             | the admin panel's per-service config form   |
+|    1     | Schema default       | `configSchema.properties.<key>.default`     |
 
 The env-var name is `SERVICE_` + the uppercased service id (hyphens become
 underscores) + `_` + the uppercased config key — for `valhalla` and key
@@ -510,10 +510,10 @@ Hints for the admin catalog.
 "ui": { "category": "routing", "icon": "icons/valhalla.svg" }
 ```
 
-| Field | Type | Notes |
-| :--- | :--- | :--- |
+| Field      | Type   | Notes                                                                                                                                    |
+| :--------- | :----- | :--------------------------------------------------------------------------------------------------------------------------------------- |
 | `category` | string | Groups the service in the catalog. Used today: `infrastructure`, `application`, `routing`, `transit`, `geocoding`, `tiles`, `osm-query`. |
-| `icon` | string | Path to an icon under the service's directory. |
+| `icon`     | string | Path to an icon under the service's directory.                                                                                           |
 
 ## Quality tiers
 
@@ -526,9 +526,9 @@ manifest must declare `quality: "built-in"`, and a third-party manifest may not
 declare it. A manifest cannot grant itself first-party privileges by changing
 this field.
 
-| Origin | Sandbox |
-| :--- | :--- |
-| First-party (`services/`, `quality: "built-in"`) | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`. |
+| Origin                                                                                 | Sandbox                                                                                                                                                                                                                                                                                                                                                                   |
+| :------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| First-party (`services/`, `quality: "built-in"`)                                       | May use first-party-only host privileges and special sources such as `@docker-socket`, `@service:`, `@infra:`, host networking, privileged mode, and narrowly reviewed `communityNetworkAccess`.                                                                                                                                                                          |
 | Third-party (`services/.community/`, `quality: "community"` or `"community-verified"`) | Identical sandbox for both labels: one isolated per-service network; no `communityNetworkAccess`, bind mounts of any kind, host networking, privileged mode, devices, escape-class capabilities, deployment `envFile`, Compose-variable bind paths, or Traefik proxy routes; named volumes must use `openmapx-<serviceId>-<suffix>`, and network aliases may not collide. |
 
 The third-party rules apply at validation and again at render time. Community

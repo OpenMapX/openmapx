@@ -13,7 +13,7 @@ stack if anything structural changed, fetch the newer images, and replace the
 containers. Database migrations apply themselves on the next API boot, so there
 is no separate migration step to run.
 
-This page covers a normal code/image upgrade. Refreshing the *data* a deployment
+This page covers a normal code/image upgrade. Refreshing the _data_ a deployment
 serves — new OSM extracts, GTFS feeds, rebuilt indexes — is a different cadence
 and lives in [Preparing data](./preparing-data.md).
 
@@ -410,7 +410,7 @@ To recover, confirm the referenced repository or integration is in the state
 you want, then delete the journal named in the log (and, for `.rollback-*`
 journals, the matching `.rollback-*` backup directory) and start `app-api`
 again. Never delete a journal whose backup still exists unless you intend to
-keep the *new* files it was about to roll back.
+keep the _new_ files it was about to roll back.
 
 ## Air-quality API compatibility
 

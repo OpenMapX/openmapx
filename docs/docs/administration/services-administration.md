@@ -15,8 +15,8 @@ take stock of the data on disk. Under the hood these are the same operations the
 CLI exposes, so reach for whichever surface fits the moment.
 
 If you haven't met the service model yet, start with
-[How it works](../overview/how-it-works.md): a *service* is a backend daemon
-described by a `service.json` manifest, *capabilities* tie services to the
+[How it works](../overview/how-it-works.md): a _service_ is a backend daemon
+described by a `service.json` manifest, _capabilities_ tie services to the
 integrations that need them, and the compose renderer turns your enabled
 manifests into a running stack. This page assumes that picture and focuses on the
 web UI.
@@ -35,13 +35,13 @@ equivalent CLI command," that's where to find it.
 discovered — first-party services shipped in the repo and any community services
 you've installed — in one table:
 
-| Column   | What it shows                                                    |
-| -------- | ---------------------------------------------------------------- |
-| Service  | The display name and its manifest `id`                           |
-| Version  | The manifest version                                             |
+| Column   | What it shows                                                              |
+| -------- | -------------------------------------------------------------------------- |
+| Service  | The display name and its manifest `id`                                     |
+| Version  | The manifest version                                                       |
 | Quality  | A badge: **Built-in**, **Verified** (community-verified), or **Community** |
-| Provides | The capabilities the service offers (`routing-engine`, `geocoder`, …) |
-| Status   | The container's Docker state — running, exited, restarting, not running |
+| Provides | The capabilities the service offers (`routing-engine`, `geocoder`, …)      |
+| Status   | The container's Docker state — running, exited, restarting, not running    |
 
 A summary across the top counts the total, running, and stopped services, and
 you can narrow the list with the search box (by name, id, or capability) and the
@@ -58,7 +58,7 @@ selection is coming from. You can edit the comma-separated list of root ids and
 When the selection is being driven by the `OPENMAPX_ENABLED_SERVICES` environment
 variable, the panel says so and disables editing — the environment variable wins,
 and the UI keeps that unambiguous rather than letting you save a file that won't
-be read. Saving the selection changes what *will* be rendered and started; it
+be read. Saving the selection changes what _will_ be rendered and started; it
 doesn't touch running containers until you start or update them.
 
 ### Bulk actions
@@ -104,10 +104,10 @@ bind-mounted config files.
 Each field carries a **source** chip telling you where its current value comes
 from, following the three-layer cascade that resolves at render time:
 
-| Source     | Meaning                                                            |
-| ---------- | ----------------------------------------------------------------- |
-| `default`  | The schema's default — nothing has overridden it.                 |
-| `database` | A value you saved here, stored in the database.                   |
+| Source     | Meaning                                                             |
+| ---------- | ------------------------------------------------------------------- |
+| `default`  | The schema's default — nothing has overridden it.                   |
+| `database` | A value you saved here, stored in the database.                     |
 | `env`      | A host environment variable (`SERVICE_<ID>_<KEY>`) is dictating it. |
 
 Environment variables always win, so any field driven by one is shown **disabled**
@@ -149,7 +149,7 @@ The header buttons drive the container, each queued through the job runner:
   label reads **Apply changes** when the service is already running and **Start** when
   it isn't.
 - **Stop** — stops the container.
-- **Restart** — an *in-place* reboot. It does not re-render, so it won't pick up a
+- **Restart** — an _in-place_ reboot. It does not re-render, so it won't pick up a
   changed manifest, `.env`, or config — use it to bounce a service whose image
   and config are unchanged.
 
@@ -161,7 +161,7 @@ action is rate-limited and recorded in the audit log.
 
 ## Compose preview
 
-`/admin/services/compose` renders the `docker-compose` YAML the renderer *would*
+`/admin/services/compose` renders the `docker-compose` YAML the renderer _would_
 write for your currently enabled services, regenerated on each request. It
 follows the same selection and config resolution as the CLI render, so it's a
 faithful preview — a good last look before you bring the stack up, especially
@@ -244,7 +244,7 @@ A few service-adjacent pages sit alongside this one:
   services, and bundles of both) from the unified Extensions store. Installing a
   bundle's service adds it to the catalog you operate from this page.
 
-For configuring the *features* that run on top of these services — the geocoding
+For configuring the _features_ that run on top of these services — the geocoding
 and routing orchestrators, transit providers, overlays, and external data
 sources — see [Integrations & bindings](./integrations-administration.md). For
 health snapshots and the running job log, see [Monitoring](./monitoring.md).

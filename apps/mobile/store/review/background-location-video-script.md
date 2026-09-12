@@ -12,30 +12,30 @@ Use a public route between public places.**
 
 ## Shots
 
-1. **Cold open** (0:00–0:05). The app launching. Caption: *No permission is
-   requested at launch.*
+1. **Cold open** (0:00–0:05). The app launching. Caption: _No permission is
+   requested at launch._
 
 2. **Planning** (0:05–0:20). Search a public destination, open Directions, show
-   the ground and transit options. Caption: *Plan a route.*
+   the ground and transit options. Caption: _Plan a route._
 
 3. **The disclosure** (0:20–0:35). Tap Start. Hold on the full-screen disclosure
-   long enough to read it. Caption: *Before any permission is requested.*
+   long enough to read it. Caption: _Before any permission is requested._
 
 4. **The denial path** (0:35–0:45). Choose "While using the app". Show guidance
    running, then lock the screen, then unlock to show it paused with its honest
-   message. Caption: *Foreground-only works, and says what it cannot do.*
+   message. Caption: _Foreground-only works, and says what it cannot do._
 
 5. **Grant** (0:45–0:55). End, start again, this time granting background
-   location at the OS prompt. Caption: *Allow all the time.*
+   location at the OS prompt. Caption: _Allow all the time._
 
 6. **Locked-screen guidance** (0:55–1:15). Minimise, then lock. Show the ongoing
    notification on the lock screen. Let a spoken instruction play. Caption:
-   *Guidance continues with the screen locked. This is why the permission is
-   needed.*
+   _Guidance continues with the screen locked. This is why the permission is
+   needed._
 
 7. **Cleanup** (1:15–1:30). Return to the app, tap End. Show the notification
    disappearing and the map returning to its ordinary state. Caption:
-   *Ending navigation stops location immediately.*
+   _Ending navigation stops location immediately._
 
 ## Before publishing
 

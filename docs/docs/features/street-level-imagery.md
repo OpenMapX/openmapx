@@ -39,8 +39,8 @@ layer, colour-coded per provider, and the viewer moves between them seamlessly.
 
 ## Providers
 
-| Provider  | Default  | Credentials  | Notes                                                                  |
-| --------- | -------- | ------------ | ---------------------------------------------------------------------- |
+| Provider  | Default  | Credentials  | Notes                                                                   |
+| --------- | -------- | ------------ | ----------------------------------------------------------------------- |
 | Panoramax | Enabled  | None         | Open STAC API. Self-hostable. Imagery under CC BY-SA 4.0 or Etalab 2.0. |
 | Mapillary | Disabled | Access token | Opt-in. Review its Terms before enabling — see below.                   |
 

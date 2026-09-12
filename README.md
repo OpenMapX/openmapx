@@ -28,7 +28,7 @@ OpenMapX is a complete mapping platform you run on your own infrastructure: sear
 ## Highlights
 
 - **Complete mapping platform** — geocoding, traffic-aware and EV routing, public-transit planning and navigation, live vehicles, street-level imagery, POI search, knowledge enrichment, reviews, crowd reports, weather, and dozens of overlays
-- **Two-layer plugin system** — *services* (containers: Valhalla, Nominatim, MOTIS, …) and *integrations* (app features: providers, overlays, data sources, tools). Both support community plugins from any Git URL
+- **Two-layer plugin system** — _services_ (containers: Valhalla, Nominatim, MOTIS, …) and _integrations_ (app features: providers, overlays, data sources, tools). Both support community plugins from any Git URL
 - **105 built-in integrations** and **29 built-in services** rendered into a generated `docker-compose.yml`
 - **Self-host the provider stack** — routing, geocoding, transit, tiles, search, and data pipelines have local/open implementations; the lightweight app, database, cache, proxy, and data-manager form the required core
 - **Open data** — OpenStreetMap, GTFS via Transitous, Wikidata, Wikipedia, Mapillary, NASA, NOAA, ECCC, DWD, MeteoAlarm, OpenAQ, USGS, NPS, and more
@@ -41,9 +41,9 @@ OpenMapX is a complete mapping platform you run on your own infrastructure: sear
 
 OpenMapX has two complementary plugin layers. Knowing which is which makes everything else easier to read.
 
-| Layer | Lives in | Manifest | Purpose |
-|---|---|---|---|
-| **Services** | `services/<slug>/` | `service.json` | Backend daemons that run as Docker containers (databases, routing engines, geocoders, transit engines, tile servers). Each declares its image, ports, volumes, capabilities (`provides:`), data inputs (`consumes:`), and exposure. |
+| Layer            | Lives in             | Manifest        | Purpose                                                                                                                                                                                                                                                                              |
+| ---------------- | -------------------- | --------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Services**     | `services/<slug>/`   | `service.json`  | Backend daemons that run as Docker containers (databases, routing engines, geocoders, transit engines, tile servers). Each declares its image, ports, volumes, capabilities (`provides:`), data inputs (`consumes:`), and exposure.                                                  |
 | **Integrations** | `integrations/<id>/` | `manifest.json` | App-level features that consume services and external APIs (geocoding, routing, transit, overlays, data sources, photos, reviews, weather, knowledge). Each declares its domain, frontend components, backend routes, config schema, attribution, and which services it `requires:`. |
 
 Both layers support **community plugins** managed from the admin panel and the `openmapx` CLI.
@@ -153,16 +153,16 @@ See the [Admin panel](https://docs.openmapx.org/administration/admin-panel/) doc
 
 ## Tech stack
 
-| Layer | Tech |
-|---|---|
-| Frontend | Next.js 16, React 19, MapLibre GL JS 6, MUI 9, Tailwind 4, Zustand, TanStack Query, next-intl, Serwist |
-| API | Fastify 5, Drizzle ORM, Better Auth (email/password, OAuth OSM/Mapillary, passkeys, 2FA, admin role) |
-| Data | PostgreSQL 18 + PostGIS 3.6, Valkey 8 (Redis-compatible), Elasticsearch (Pelias backend) |
-| Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner |
-| Geocoding | Photon, Nominatim, Pelias |
-| Tiles | TileServer GL, Martin (PostGIS vector tiles) |
-| Tooling | Turborepo, pnpm 11, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik |
-| Language | TypeScript end-to-end (Node 24+) |
+| Layer             | Tech                                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------------------ |
+| Frontend          | Next.js 16, React 19, MapLibre GL JS 6, MUI 9, Tailwind 4, Zustand, TanStack Query, next-intl, Serwist |
+| API               | Fastify 5, Drizzle ORM, Better Auth (email/password, OAuth OSM/Mapillary, passkeys, 2FA, admin role)   |
+| Data              | PostgreSQL 18 + PostGIS 3.6, Valkey 8 (Redis-compatible), Elasticsearch (Pelias backend)               |
+| Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner                                                                 |
+| Geocoding         | Photon, Nominatim, Pelias                                                                              |
+| Tiles             | TileServer GL, Martin (PostGIS vector tiles)                                                           |
+| Tooling           | Turborepo, pnpm 11, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik          |
+| Language          | TypeScript end-to-end (Node 24+)                                                                       |
 
 ## Contributing
 

@@ -89,7 +89,7 @@ Out of scope (report upstream instead):
   agency APIs, etc.).
 - Community integrations distributed from external repositories. Report those to
   their authors first. If a vulnerability affects the integration loading or
-  sandboxing mechanism in OpenMapX itself, that *is* in scope.
+  sandboxing mechanism in OpenMapX itself, that _is_ in scope.
 - Findings that require a misconfigured or out-of-date self-hosted deployment,
   physical access, or social engineering of a maintainer.
 

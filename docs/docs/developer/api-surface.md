@@ -107,14 +107,14 @@ A single route can override the plugin-wide level:
 fastify.post("/mobile-auth/issue", { config: { auth: "session" } }, handler);
 ```
 
-| Level | Meaning |
-| --- | --- |
-| `public` | No credentials required. |
-| `session` | A signed-in user session. |
-| `admin` | An administrator session. |
-| `service` | An administrator session **or** a service-to-service token (`/api/data-manager`). |
-| `internal` | No application check — reachability is expected to be restricted by the network (`/api/internal/*`). |
-| `unspecified` | Nobody has classified it. Fails the freshness test. |
+| Level         | Meaning                                                                                              |
+| ------------- | ---------------------------------------------------------------------------------------------------- |
+| `public`      | No credentials required.                                                                             |
+| `session`     | A signed-in user session.                                                                            |
+| `admin`       | An administrator session.                                                                            |
+| `service`     | An administrator session **or** a service-to-service token (`/api/data-manager`).                    |
+| `internal`    | No application check — reachability is expected to be restricted by the network (`/api/internal/*`). |
+| `unspecified` | Nobody has classified it. Fails the freshness test.                                                  |
 
 `unspecified` is deliberately distinct from `public`: an unclassified route must
 never be documented as open.
@@ -133,14 +133,14 @@ bytes. Fastify enforces that parser limit for fixed-length and chunked requests
 before either handler runs. Their schemas reject unknown keys and use these
 field bounds:
 
-| Operation | Field | Accepted value or length |
-| --- | --- | --- |
-| `POST /api/mobile-auth/issue` | `purpose` | `sign-in`, `link-provider`, or `add-passkey` |
-|  | `codeChallenge` | 43–128 base64url characters |
-|  | `state` | 16–128 base64url characters |
-| `POST /api/mobile-auth/exchange` | `callbackCode` | 16–256 base64url characters |
-|  | `codeVerifier` | 43–128 base64url characters |
-|  | `state` | 16–128 base64url characters |
+| Operation                        | Field           | Accepted value or length                     |
+| -------------------------------- | --------------- | -------------------------------------------- |
+| `POST /api/mobile-auth/issue`    | `purpose`       | `sign-in`, `link-provider`, or `add-passkey` |
+|                                  | `codeChallenge` | 43–128 base64url characters                  |
+|                                  | `state`         | 16–128 base64url characters                  |
+| `POST /api/mobile-auth/exchange` | `callbackCode`  | 16–256 base64url characters                  |
+|                                  | `codeVerifier`  | 43–128 base64url characters                  |
+|                                  | `state`         | 16–128 base64url characters                  |
 
 ### Cookie mutation and CSRF boundary
 
@@ -199,11 +199,11 @@ They return `Cache-Control: private, max-age=0`; provider and distributed caches
 reduce upstream work without turning location-specific responses into shared
 browser-cache entries.
 
-| Route | Required query | Optional query | Bounds |
-| --- | --- | --- | --- |
-| `GET /api/integrations/air-quality/current` | `lat`, `lng` | `countryCode`, `subdivisionCode`, `comparisonStandard` | WGS84 coordinates; uppercase ISO hints |
-| `GET /api/integrations/air-quality/forecast` | `lat`, `lng` | current options plus `hours` | `hours` defaults to 48 and is 1–120 |
-| `GET /api/integrations/air-quality/stations` | `south`, `west`, `north`, `east` | `zoom`, `pollutant`, `limit`, `cursor` | viewport at most 20° latitude × 30° longitude; antimeridian supported; zoom 0–22; limit 1–500 |
+| Route                                        | Required query                   | Optional query                                         | Bounds                                                                                        |
+| -------------------------------------------- | -------------------------------- | ------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `GET /api/integrations/air-quality/current`  | `lat`, `lng`                     | `countryCode`, `subdivisionCode`, `comparisonStandard` | WGS84 coordinates; uppercase ISO hints                                                        |
+| `GET /api/integrations/air-quality/forecast` | `lat`, `lng`                     | current options plus `hours`                           | `hours` defaults to 48 and is 1–120                                                           |
+| `GET /api/integrations/air-quality/stations` | `south`, `west`, `north`, `east` | `zoom`, `pollutant`, `limit`, `cursor`                 | viewport at most 20° latitude × 30° longitude; antimeridian supported; zoom 0–22; limit 1–500 |
 
 Every scalar key may occur once. Invalid/repeated values return HTTP 400 with
 `{ code: "INVALID_QUERY", message, details? }`. A valid request with no evidence

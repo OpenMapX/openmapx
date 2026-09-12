@@ -88,7 +88,7 @@ extensions — integrations, services, and bundles of both — across **Browse**
 (built-in / verified / community) and, for services, a security rating before you
 confirm. See [Community extensions](./community-extensions.md).
 
-### Services *(self-hosted only)*
+### Services _(self-hosted only)_
 
 The backend control plane, with sub-pages for the day-to-day work:
 
@@ -110,7 +110,7 @@ The full picture of services and the `openmapx` CLI that backs these pages is in
 [Services administration](./services-administration.md) and [Managing
 services](../install/managing-services.md).
 
-### Maintenance *(self-hosted only)*
+### Maintenance _(self-hosted only)_
 
 Stages current core images without restarting containers, compares them with
 the running application, and updates Data Manager, Web, API, Ops Agent, and
@@ -193,17 +193,17 @@ requirements.
 The panel covers the routine operator workflows while keeping development-only
 and unusually destructive primitives in the CLI.
 
-| CLI area | Admin equivalent |
-| --- | --- |
-| Service discovery, selection, lifecycle, builds, status, and logs | **Services** catalog and detail pages |
-| Core image pull/update and deep checks | **Maintenance** |
-| OSM, GTFS, styles, builds, links, cleanup, and Overture full sync/resume/status | **Services → Data workflows** |
-| Extension browse/install/update/remove | **Extensions** |
-| User roles and account administration | **Users** |
-| Backup create/list/restore/delete | **Services → Backups** |
-| Cache inspection and safe namespace clearing | **Cache** |
-| POI ingest state/list/detail/sync/live-only sync | **POI ingest** |
-| Transitous lock inspection and audited pin bump | **Transit** |
+| CLI area                                                                        | Admin equivalent                      |
+| ------------------------------------------------------------------------------- | ------------------------------------- |
+| Service discovery, selection, lifecycle, builds, status, and logs               | **Services** catalog and detail pages |
+| Core image pull/update and deep checks                                          | **Maintenance**                       |
+| OSM, GTFS, styles, builds, links, cleanup, and Overture full sync/resume/status | **Services → Data workflows**         |
+| Extension browse/install/update/remove                                          | **Extensions**                        |
+| User roles and account administration                                           | **Users**                             |
+| Backup create/list/restore/delete                                               | **Services → Backups**                |
+| Cache inspection and safe namespace clearing                                    | **Cache**                             |
+| POI ingest state/list/detail/sync/live-only sync                                | **POI ingest**                        |
+| Transitous lock inspection and audited pin bump                                 | **Transit**                           |
 
 Integration scaffolding, validation, building, and packaging remain CLI-only
 because they are developer workflows, not production administration. Raw

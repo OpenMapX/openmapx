@@ -110,11 +110,11 @@ There is a third artifact, and the three make different accuracy claims. Keeping
 them distinct is what stops an export from being read as more authoritative than
 it is:
 
-| Artifact | Egress model | Claim | Cost |
-| --- | --- | --- | --- |
-| **Estimated** field | straight line from each reached stop | barrier-blind visual estimate | one MOTIS request |
-| **Sampled** polygons | street-routed at each lattice point, interpolated between | accurate at the sample points; boundary uncertain within about one cell | 8–32 MOTIS requests |
-| **Exact** point check | street-routed at that coordinate | authoritative for that coordinate | one or two MOTIS requests |
+| Artifact              | Egress model                                              | Claim                                                                   | Cost                      |
+| --------------------- | --------------------------------------------------------- | ----------------------------------------------------------------------- | ------------------------- |
+| **Estimated** field   | straight line from each reached stop                      | barrier-blind visual estimate                                           | one MOTIS request         |
+| **Sampled** polygons  | street-routed at each lattice point, interpolated between | accurate at the sample points; boundary uncertain within about one cell | 8–32 MOTIS requests       |
+| **Exact** point check | street-routed at that coordinate                          | authoritative for that coordinate                                       | one or two MOTIS requests |
 
 Sampled polygons are downloadable RFC 7946 GeoJSON. The file carries an
 `openmapx` member holding the origin, departure minute, walk profile, source,

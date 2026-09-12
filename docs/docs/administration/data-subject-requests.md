@@ -160,7 +160,14 @@ For overlapping rotation, add the new key to the JSON ring, for example: The fil
 the descriptions with securely generated key material:
 
 ```json
-{"formatVersion":1,"activeVersion":2,"keys":[{"version":1,"key":"existing canonical 32-byte base64url key"},{"version":2,"key":"new canonical 32-byte base64url key"}]}
+{
+  "formatVersion": 1,
+  "activeVersion": 2,
+  "keys": [
+    { "version": 1, "key": "existing canonical 32-byte base64url key" },
+    { "version": 2, "key": "new canonical 32-byte base64url key" }
+  ]
+}
 ```
 
 The ring accepts at most eight distinct positive key versions. Prepare the

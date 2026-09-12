@@ -9,7 +9,7 @@ sidebar_position: 7
 Most of what an OpenMapX deployment stores is rebuildable. The routing graphs,
 geocoding indexes, and rendered tiles are all derived from the OSM extracts and
 GTFS feeds the data-manager already tracks, so losing them costs build time, not
-information. What you cannot regenerate is the *state* that accumulated while the
+information. What you cannot regenerate is the _state_ that accumulated while the
 instance ran: the user accounts, admin settings, integration configuration, and
 ingested POI data in the database, plus the TLS certificates and secrets that
 keep the front door open.
@@ -62,7 +62,7 @@ never touches:
 These rebuild from the OSM PBF and GTFS feeds the data-manager manages. On a
 country-sized deployment they can run to tens or hundreds of gigabytes, so
 snapshotting them would dominate every backup for no recovery benefit — and after
-a disaster you usually want a *fresh* index from current source data anyway, not a
+a disaster you usually want a _fresh_ index from current source data anyway, not a
 stale one from an old archive. To rebuild these after a restore, follow
 [Preparing data](../install/preparing-data.md).
 
@@ -79,6 +79,7 @@ aside yourself and store it somewhere safe:
 ```bash
 cp infra/docker/.env infra/docker/.env.bak
 ```
+
 :::
 
 For real disaster recovery, also remember that `infra/docker/backups/` lives on

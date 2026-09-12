@@ -116,15 +116,15 @@ archives your source directory. Anything not on this list simply is not
 collected, so a stray `.env`, key, or scratch file next to a declared file
 cannot reach a release:
 
-| Included | Limit |
-| --- | --- |
-| `manifest.json` (after schema validation) | — |
-| `openmapx-artifact.json` (generated) | — |
-| `dist/frontend/index.js`, `dist/backend/index.mjs` when permitted | — |
-| `dist/licenses.json` (generated) | — |
-| `strings/<locale>.json` matching `[a-z0-9-]{2,35}` | 100 files, 256 KiB each |
-| The exact manifest-referenced SVG preview | 64 KiB |
-| `LICENSE`, `LICENSE.txt`, `LICENSE.md`, `NOTICE`, `NOTICE.txt` | 1 MiB each |
+| Included                                                          | Limit                   |
+| ----------------------------------------------------------------- | ----------------------- |
+| `manifest.json` (after schema validation)                         | —                       |
+| `openmapx-artifact.json` (generated)                              | —                       |
+| `dist/frontend/index.js`, `dist/backend/index.mjs` when permitted | —                       |
+| `dist/licenses.json` (generated)                                  | —                       |
+| `strings/<locale>.json` matching `[a-z0-9-]{2,35}`                | 100 files, 256 KiB each |
+| The exact manifest-referenced SVG preview                         | 64 KiB                  |
+| `LICENSE`, `LICENSE.txt`, `LICENSE.md`, `NOTICE`, `NOTICE.txt`    | 1 MiB each              |
 
 Everything else is excluded: source and tests, source maps, `package.json`,
 lockfiles, dotfiles and `.env*`, VCS data, `node_modules/`, caches, unreferenced

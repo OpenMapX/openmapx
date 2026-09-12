@@ -29,7 +29,7 @@ builds on. For the end-to-end mechanics of a manifest and `setup(ctx)`, see
 The `data-source` domain orchestrator is **merge-all**. When a user switches on a
 category, the orchestrator finds the provider for it, queries the visible
 bounding box, and renders the returned points; for categories that aggregate
-several upstream feeds, the *provider itself* fans out to those feeds in parallel
+several upstream feeds, the _provider itself_ fans out to those feeds in parallel
 and merges them into one set. There is no priority ranking between providers of
 different categories — each category is its own provider, selected by id.
 
@@ -40,7 +40,7 @@ A provider answers four kinds of question for a viewport:
 - **Detail** — given one point's id, return the rich content for the place panel.
 - **Filters** — describe the filter controls to offer (connector type, fuel
   grade, available-only, and so on).
-- **Map context** *(optional)* — return shaded zones that belong with the
+- **Map context** _(optional)_ — return shaded zones that belong with the
   points, such as a scooter operator's no-parking areas.
 
 Search and detail return their payload wrapped in a `MobilityResult<T>`, so
@@ -100,12 +100,12 @@ app enumerates available sources:
 
 ```ts
 export interface DataSourceMeta {
-  minZoom: number;                  // below this zoom the layer is hidden
+  minZoom: number; // below this zoom the layer is hidden
   markerStyle: DataSourceMarkerStyle;
-  placeCategory: string;            // panel heading, e.g. "Gas Station"
-  placeCategoryRaw: string;         // raw category, e.g. "fuel"
-  osmFilters?: OsmFilter[];         // OSM tags to snap a clicked point to a POI
-  showResultsList?: boolean;        // show result cards under the filters
+  placeCategory: string; // panel heading, e.g. "Gas Station"
+  placeCategoryRaw: string; // raw category, e.g. "fuel"
+  osmFilters?: OsmFilter[]; // OSM tags to snap a clicked point to a POI
+  showResultsList?: boolean; // show result cards under the filters
 }
 ```
 
@@ -123,23 +123,23 @@ a marker:
 
 ```ts
 export interface DataSourceResult {
-  id: string;                 // globally unique; usually "<sourceId>/<upstreamId>"
+  id: string; // globally unique; usually "<sourceId>/<upstreamId>"
   name: string;
-  coordinates: LngLat;        // [lng, lat]
-  source: string;             // the contributing sourceId, for attribution
-  sources?: string[];         // all sources when a point merges several feeds
-  variant: string;            // drives marker color (e.g. "fast", "unknown")
-  status?: string;            // "operational" | "non-operational" | …
-  summary?: I18nToken;        // short localized label under the marker
+  coordinates: LngLat; // [lng, lat]
+  source: string; // the contributing sourceId, for attribution
+  sources?: string[]; // all sources when a point merges several feeds
+  variant: string; // drives marker color (e.g. "fast", "unknown")
+  status?: string; // "operational" | "non-operational" | …
+  summary?: I18nToken; // short localized label under the marker
   operator?: string;
-  kind?: "station" | "vehicle";   // fixed vs free-floating; gates OSM snapping
+  kind?: "station" | "vehicle"; // fixed vs free-floating; gates OSM snapping
   attributions?: DataSourceAttribution[]; // per-record runtime credit
-  sortValues?: Record<string, number>;    // for client-side sorting
+  sortValues?: Record<string, number>; // for client-side sorting
 }
 ```
 
 The `source` (or `sources`) field is load-bearing: it names which manifest
-`dataSource` credited *this* point, which is how the per-view attribution strip
+`dataSource` credited _this_ point, which is how the per-view attribution strip
 shows only the feeds that actually contributed.
 
 `getDetail` returns the richer `DataSourceDetail`, which drives the place panel:
@@ -197,7 +197,7 @@ export const setManifestDataSources = attribution.set;
 
 class FuelDataSourceProvider implements MobilityDataSourceProvider {
   readonly id = "fuel";
-  readonly meta = META;              // minZoom, icon markerStyle, placeCategory…
+  readonly meta = META; // minZoom, icon markerStyle, placeCategory…
   readonly searchCacheTtl = 120;
   readonly detailCacheTtl = 120;
 
@@ -216,12 +216,13 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
   ): Promise<MobilityResult<DataSourceResult[]>> {
     // Country-specific price feed if one covers the bbox; else OSM locations.
     const stations = await searchFuelStations(bbox);
-    const results = (stations ?? await searchByCategory(CATEGORY_FILTERS.fuel, bbox))
-      .map(mapToResult);
+    const results = (stations ?? (await searchByCategory(CATEGORY_FILTERS.fuel, bbox))).map(
+      mapToResult,
+    );
 
     return withAttribution(
       results,
-      attribution.forResults(results),    // credit only the sources present
+      attribution.forResults(results), // credit only the sources present
       freshnessNow({ hasRealtimeData: false }),
     );
   }
@@ -326,7 +327,7 @@ store gives you three readers:
   feeds.
 
 Returning only the credited subset is what makes the map's attribution strip
-show *just* the feeds visible right now — browsing fuel in one German city
+show _just_ the feeds visible right now — browsing fuel in one German city
 credits Tankerkönig alone, not the whole European stack. The frontend layer
 intersects the manifest's declared sources with the `sourceId`s in the response,
 adds any per-record `result.attributions`, and feeds the result into the map's
@@ -337,9 +338,9 @@ switched off.
 
 ```ts
 export interface Freshness {
-  fetchedAt: string;          // ISO 8601, always set
-  dataAsOf?: string;          // upstream "valid as of" timestamp
-  hasRealtimeData: boolean;   // drives the "live" badge in the UI
+  fetchedAt: string; // ISO 8601, always set
+  dataAsOf?: string; // upstream "valid as of" timestamp
+  hasRealtimeData: boolean; // drives the "live" badge in the UI
   isStale: boolean;
 }
 ```

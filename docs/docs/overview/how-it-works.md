@@ -36,7 +36,7 @@ routes, a typed config schema, attribution, and the services it **requires**.
 
 ## Capabilities tie the two together
 
-Services *provide* capabilities; integrations *require* them. This indirection is
+Services _provide_ capabilities; integrations _require_ them. This indirection is
 what keeps OpenMapX swappable: the routing integration asks for a
 `routing-engine`, and whether that is Valhalla or OSRM is a deployment choice,
 not a code change. When more than one running service can satisfy a requirement,

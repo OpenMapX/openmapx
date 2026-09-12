@@ -48,18 +48,18 @@ openmapx/
 └── docs/                     this documentation site
 ```
 
-Two directories hold *generated output only*. `infra/docker/` is written by
+Two directories hold _generated output only_. `infra/docker/` is written by
 `pnpm openmapx compose render` and never edited by hand — there is no
 hand-maintained `docker-compose.yml`. `custom_integrations/` and the community
 service tree under `services/.community/` are populated at runtime from Git URLs.
 
 ### Applications
 
-| App | Stack | Responsibility |
-| --- | --- | --- |
-| `apps/web` | Next.js 16 · React 19 · MapLibre GL JS 6 · MUI 9 · Tailwind 4 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state. |
-| `apps/api` | Fastify 5 | The backend-for-frontend (BFF) gateway. It is *also* the integration host: it discovers, validates, configures, and runs every integration, resolves their service requirements, gates the admin API, and runs background jobs. |
-| `apps/ops-agent` | Fastify 5 | A private, authenticated broker for a closed set of typed Docker and trusted-repository effects. It has no public route, host port, or community network attachment. |
+| App              | Stack                                                                                                | Responsibility                                                                                                                                                                                                                                                    |
+| ---------------- | ---------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`       | Next.js 16 · React 19 · MapLibre GL JS 6 · MUI 9 · Tailwind 4 · Zustand · TanStack Query · next-intl | The user-facing App Router UI. Layouts and request boundaries use Next.js normally; the interactive map, panels, and navigation shell are client components. The MapLibre instance is shared through React context rather than serialized into application state. |
+| `apps/api`       | Fastify 5                                                                                            | The backend-for-frontend (BFF) gateway. It is _also_ the integration host: it discovers, validates, configures, and runs every integration, resolves their service requirements, gates the admin API, and runs background jobs.                                   |
+| `apps/ops-agent` | Fastify 5                                                                                            | A private, authenticated broker for a closed set of typed Docker and trusted-repository effects. It has no public route, host port, or community network attachment.                                                                                              |
 
 The browser never talks to backend engines directly. The web app calls
 `apps/api`, and `apps/api` reaches the engines over the private Docker network.
@@ -73,23 +73,23 @@ source-only workspace packages (most expose `main: ./src/index.ts` and are
 transpiled by Next.js rather than pre-built), so a change in a package is picked
 up without a separate build step.
 
-| Package | Owns |
-| --- | --- |
-| `@openmapx/core` | The shared spine: domain types (`Place`, `Route`, geometry, `BBox`), Zustand stores, the typed API client, TanStack Query hooks, the strict ops-agent contract/client, and the **services framework** (manifest schema, registry, the compose renderer, the `DataManagerClient`, capability resolution). |
-| `@openmapx/integration-framework` | The manifest schema, registry, loader, the `IntegrationContext` runtime type, and the **typed provider contracts** (one per domain — `TransitProvider`, `RealtimeProvider`, `MobilityDataSourceProvider`, `GeocodingProvider`, `RoutingProvider`, `WeatherProvider`, and more). |
-| `@openmapx/mobility-formats` | Pure, stateless parsers over raw bytes: GTFS, GTFS-RT, GBFS, NeTEx, SIRI, OJP, DATEX II, CSV. No I/O, no policy. |
-| `@openmapx/mobility-formats-tomp` | The TOMP-API (OpenAPI-generated) client, split out so its codegen dependencies don't bleed into every bundle that touches the other formats. |
-| `@openmapx/mobility-core` | The canonical mobility model — one entity type per domain, plus `Attribution`, `Freshness`, `MobilityResult<T>`, the TTL/dedup policy constants, and the GBFS client. |
-| `@openmapx/db-schema` | Drizzle ORM table definitions shared between `apps/api` and `services/data-manager` (job tables, feed state, provider health). |
-| `@openmapx/cli` | The `openmapx` operator command line — services, compose, data/POI ingest, integrations/extensions, users, backups, cache, Transitous, and diagnostic checks. |
-| `@openmapx/i18n` | Locale JSON for `en` and `de`, plus a `check-translations` gate that fails CI when locales drift. Consumed by `apps/web` (next-intl) and `apps/api` (integration string lookups). |
-| `@openmapx/poi-source-registry` | A mutable in-process store of trusted built-in POI declarations. The data manager imports only image-baked integration modules; community POI JavaScript is rejected. |
-| `@openmapx/presets` | OSM preset matching and category chips, built on iD's tagging schema. |
-| `@openmapx/ev-charge-planner` | Pure EV trip planning: vehicle energy models, charge curves, corridor candidates, matrix scoring, network/availability/tariff policy, and itinerary estimates. |
-| `@openmapx/extension-cli` | Community-extension manifest/service scaffolding, validation, and declarative packaging. Executable behavior belongs in an isolated service container. |
-| `@openmapx/openconditions-contrib-client` | Browser-side device enrollment, canonical claim validation/signing, reporting tokens, and signed votes for crowd reports. |
-| `@openmapx/transitous-core` | Shared Transitous catalog normalization and feed-selection logic used by the CLI, API, and data pipeline. |
-| `@openmapx/place-ids`, `@openmapx/mangrove-client`, `@openmapx/mangrove-react`, `@openmapx/command-palette`, `@openmapx/noaa-coops-data`, `@openmapx/ourairports-data`, `@openmapx/hardlinks`, `@openmapx/motis-feed-proxy-config`, `@openmapx/hey-api-client-fetch` | Focused utilities — stable place identifiers, Mangrove review signing, the search palette, bundled open datasets (tide stations, airports), the local hardlink applier, the MOTIS feed-proxy nginx config renderer, and the workspace fetch runtime used by generated API clients. |
+| Package                                                                                                                                                                                                                                                              | Owns                                                                                                                                                                                                                                                                                                     |
+| -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `@openmapx/core`                                                                                                                                                                                                                                                     | The shared spine: domain types (`Place`, `Route`, geometry, `BBox`), Zustand stores, the typed API client, TanStack Query hooks, the strict ops-agent contract/client, and the **services framework** (manifest schema, registry, the compose renderer, the `DataManagerClient`, capability resolution). |
+| `@openmapx/integration-framework`                                                                                                                                                                                                                                    | The manifest schema, registry, loader, the `IntegrationContext` runtime type, and the **typed provider contracts** (one per domain — `TransitProvider`, `RealtimeProvider`, `MobilityDataSourceProvider`, `GeocodingProvider`, `RoutingProvider`, `WeatherProvider`, and more).                          |
+| `@openmapx/mobility-formats`                                                                                                                                                                                                                                         | Pure, stateless parsers over raw bytes: GTFS, GTFS-RT, GBFS, NeTEx, SIRI, OJP, DATEX II, CSV. No I/O, no policy.                                                                                                                                                                                         |
+| `@openmapx/mobility-formats-tomp`                                                                                                                                                                                                                                    | The TOMP-API (OpenAPI-generated) client, split out so its codegen dependencies don't bleed into every bundle that touches the other formats.                                                                                                                                                             |
+| `@openmapx/mobility-core`                                                                                                                                                                                                                                            | The canonical mobility model — one entity type per domain, plus `Attribution`, `Freshness`, `MobilityResult<T>`, the TTL/dedup policy constants, and the GBFS client.                                                                                                                                    |
+| `@openmapx/db-schema`                                                                                                                                                                                                                                                | Drizzle ORM table definitions shared between `apps/api` and `services/data-manager` (job tables, feed state, provider health).                                                                                                                                                                           |
+| `@openmapx/cli`                                                                                                                                                                                                                                                      | The `openmapx` operator command line — services, compose, data/POI ingest, integrations/extensions, users, backups, cache, Transitous, and diagnostic checks.                                                                                                                                            |
+| `@openmapx/i18n`                                                                                                                                                                                                                                                     | Locale JSON for `en` and `de`, plus a `check-translations` gate that fails CI when locales drift. Consumed by `apps/web` (next-intl) and `apps/api` (integration string lookups).                                                                                                                        |
+| `@openmapx/poi-source-registry`                                                                                                                                                                                                                                      | A mutable in-process store of trusted built-in POI declarations. The data manager imports only image-baked integration modules; community POI JavaScript is rejected.                                                                                                                                    |
+| `@openmapx/presets`                                                                                                                                                                                                                                                  | OSM preset matching and category chips, built on iD's tagging schema.                                                                                                                                                                                                                                    |
+| `@openmapx/ev-charge-planner`                                                                                                                                                                                                                                        | Pure EV trip planning: vehicle energy models, charge curves, corridor candidates, matrix scoring, network/availability/tariff policy, and itinerary estimates.                                                                                                                                           |
+| `@openmapx/extension-cli`                                                                                                                                                                                                                                            | Community-extension manifest/service scaffolding, validation, and declarative packaging. Executable behavior belongs in an isolated service container.                                                                                                                                                   |
+| `@openmapx/openconditions-contrib-client`                                                                                                                                                                                                                            | Browser-side device enrollment, canonical claim validation/signing, reporting tokens, and signed votes for crowd reports.                                                                                                                                                                                |
+| `@openmapx/transitous-core`                                                                                                                                                                                                                                          | Shared Transitous catalog normalization and feed-selection logic used by the CLI, API, and data pipeline.                                                                                                                                                                                                |
+| `@openmapx/place-ids`, `@openmapx/mangrove-client`, `@openmapx/mangrove-react`, `@openmapx/command-palette`, `@openmapx/noaa-coops-data`, `@openmapx/ourairports-data`, `@openmapx/hardlinks`, `@openmapx/motis-feed-proxy-config`, `@openmapx/hey-api-client-fetch` | Focused utilities — stable place identifiers, Mangrove review signing, the search palette, bundled open datasets (tide stations, airports), the local hardlink applier, the MOTIS feed-proxy nginx config renderer, and the workspace fetch runtime used by generated API clients.                       |
 
 ## Runtime topology
 
@@ -141,7 +141,7 @@ graph TD
 ```
 
 **The reverse proxy.** [Traefik](https://traefik.io/) terminates TLS and is the
-only container with a public surface. Every other container is reachable *only*
+only container with a public surface. Every other container is reachable _only_
 on the internal `openmapx` Docker network, addressed by service id
 (`http://valhalla:8002`, `http://nominatim:8080`). A service becomes
 externally reachable only if its manifest opts in — either with a Traefik route
@@ -153,7 +153,7 @@ lowest priority so that more specific prefixes — `/api`, `/tiles`, `/martin`,
 **The always-on core.** A handful of services are selected by default —
 `traefik`, `well-known`, `app-api`, `app-web`, `postgis`, `redis`, `data-manager`,
 and `ops-agent`. Everything heavy (routing engines, geocoders, transit engines,
-the Overpass server, tile servers) is opt-in: you add it to the *selection* and
+the Overpass server, tile servers) is opt-in: you add it to the _selection_ and
 re-render. PostGIS is the system of record for application data and operational
 pipeline metadata; it does not store GTFS schedules. Redis (Valkey) is the
 cache.
@@ -200,7 +200,7 @@ transactional Transitous/operator-source pipeline that imports candidate static
 schedules into an inactive MOTIS slot. MOTIS is the only compiled static
 schedule runtime. The data-manager promotes a complete candidate only after its
 functional probes pass, so requested and active source state may differ and a
-failed job preserves the prior live dataset. Shared artifacts are *hardlinked*
+failed job preserves the prior live dataset. Shared artifacts are _hardlinked_
 into consumer directories so several engines can use one multi-gigabyte file at
 zero disk cost. The compose renderer plans those links from each service's
 `consumes:`/`produces:` declarations; `data-manager` applies the plan. See
@@ -373,7 +373,7 @@ interface MobilityResult<T> {
 Because `Attribution` and `Freshness` are defined once, the orchestrator can
 merge attributions from many providers — deduplicated, precedence preserved, so
 the primary contributor renders first — and the UI's attribution strip is always
-correct without per-provider special-casing. The TTL and dedup *policy* (cache
+correct without per-provider special-casing. The TTL and dedup _policy_ (cache
 lifetimes per data class, dedup radii, name-similarity thresholds) lives in one
 `policy.ts`, so cache and deduplication behavior is consistent across every
 mobility domain rather than reinvented per integration. This layer also carries
@@ -393,7 +393,7 @@ capability, coverage, and current health.
 
 A naive design would have each transit provider parse its own GTFS, define its
 own stop type, and stamp its own attribution. That collapses three concerns —
-*decoding*, *modeling*, and *sourcing* — into every provider, and they drift.
+_decoding_, _modeling_, and _sourcing_ — into every provider, and they drift.
 The three-layer split forces them apart: a parser bug is fixed once; the
 canonical model means a stop from MOTIS and a stop from a HAFAS endpoint are the
 same shape; and attribution plus freshness are structural, not optional. Adding a

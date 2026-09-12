@@ -76,7 +76,6 @@ fence. Prepared predicted CSVs are consumed only from their unique generation pa
 
 Do not count local synthetic results as a seven-day feed soak or national graph coverage. Use OpenConditions' pilot readiness diagnostics and actual successful graph import provenance before expansion. Roll back event actuation by restoring shadow, allowing the existing short lease to expire, and verifying the cleared graph. Keep ingestion/provider evidence available for diagnosis.
 
-
 ## Per-request engine proof probe
 
 The final proxy serves port 8002 and forwards to a fixed loopback engine on 8004.

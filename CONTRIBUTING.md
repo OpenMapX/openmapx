@@ -55,7 +55,7 @@ and the [self-hosting guide](https://docs.openmapx.org/install/getting-started/)
 Every PR must pass the same checks CI runs:
 
 ```bash
-pnpm lint           # Biome
+pnpm lint           # Biome, then Prettier for Markdown and YAML
 pnpm check-types    # tsc across the workspace
 pnpm test           # Vitest
 ```
@@ -131,11 +131,15 @@ Conventions:
 
 - Biome handles formatting and basic linting; configuration lives in
   `biome.json`. Don't reformat unrelated code in a feature PR.
+- Biome cannot parse Markdown or YAML, so Prettier owns exactly those two
+  extensions and nothing else (`.prettierrc.json`, `.prettierignore`). One tool
+  per file type, so the two never format the same file. Generated documents are
+  excluded, because their generators compare the committed bytes.
 - TypeScript everywhere. Avoid `any`; prefer `unknown` plus a narrowing
   type guard at the boundary.
 - Don't add divider comments (`// ----` or `// ====`).
-- Add a comment only when the *why* is non-obvious. Don't narrate the
-  *what* — well-named identifiers cover that.
+- Add a comment only when the _why_ is non-obvious. Don't narrate the
+  _what_ — well-named identifiers cover that.
 
 ### Commit messages
 

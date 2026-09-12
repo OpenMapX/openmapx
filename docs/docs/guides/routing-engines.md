@@ -26,15 +26,15 @@ integration model underneath all of this, see [How it works](../overview/how-it-
 The two engines are complementary, not redundant, and the routing orchestrator
 picks between them by capability rather than hard-wiring either one:
 
-| | Valhalla | OSRM |
-| --- | --- | --- |
-| Modes | driving, motorcycle, cycling, walking | driving only |
-| Scale | region or **planet** | **region only** |
-| Speed | fast | fastest |
-| Elevation profiles | yes (SRTM) | no |
-| Time-aware routing | yes (departure/arrival) | no |
-| Map matching | yes | no |
-| Build step | none (builds on first start) | required (`services build osrm`) |
+|                    | Valhalla                              | OSRM                             |
+| ------------------ | ------------------------------------- | -------------------------------- |
+| Modes              | driving, motorcycle, cycling, walking | driving only                     |
+| Scale              | region or **planet**                  | **region only**                  |
+| Speed              | fast                                  | fastest                          |
+| Elevation profiles | yes (SRTM)                            | no                               |
+| Time-aware routing | yes (departure/arrival)               | no                               |
+| Map matching       | yes                                   | no                               |
+| Build step         | none (builds on first start)          | required (`services build osrm`) |
 
 A useful way to think about it:
 
@@ -203,6 +203,7 @@ pnpm openmapx services stop osrm
 pnpm openmapx services build osrm --region europe/germany
 pnpm openmapx services start osrm
 ```
+
 :::
 
 Once the graph exists, render, link, and start as usual:
@@ -312,7 +313,7 @@ make sure both endpoints sit on a drivable road.
 The routing integrations don't hold a hard-coded address for their engine; they
 resolve it through the **`routing-engine` capability**. Both `valhalla` and
 `osrm` services declare `provides: ["routing-engine"]`, and the engine adapters
-(`routing-valhalla`, `routing-osrm`) declare an *optional* requirement on the
+(`routing-valhalla`, `routing-osrm`) declare an _optional_ requirement on the
 matching service. At startup each adapter is bound to its local service and
 reaches it over the private Docker network — `http://valhalla:8002`,
 `http://osrm:5000` — with no configuration on your part.
@@ -339,7 +340,7 @@ and the capability model in [How it works](../overview/how-it-works.md) and the
 Both engines hold their routing data in memory, so RAM scales with the region you
 build. The manifest memory ceilings are **16 GB for Valhalla** (sized for planet)
 and **8 GB for OSRM** (region-scale); steady-state runtime use for a single
-country is well under those limits. The expensive moments are the *builds* —
+country is well under those limits. The expensive moments are the _builds_ —
 Valhalla's first-start tile build and OSRM's `osrm-extract` stage are both CPU-
 and memory-hungry, and want a few GB to tens of GB of headroom depending on
 region size.

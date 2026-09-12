@@ -28,7 +28,7 @@ which optional engines and data sources to run.
 - **A pluggable backend** — each daemon (the routing engine, the geocoder, the
   transit engine, the tile server, …) is described by a manifest and runs as a
   container.
-- **A pluggable feature set** — 105 built-in *integrations* span search,
+- **A pluggable feature set** — 105 built-in _integrations_ span search,
   routing, transit, live mobility, places, overlays, weather, and more.
   Community extensions — integrations, services, or bundles of both —
   install from one unified **Extensions** store.
@@ -46,12 +46,12 @@ which optional engines and data sources to run.
 Almost everything in OpenMapX is one of two plugin types. Knowing which is which
 makes the rest of the documentation easier to follow.
 
-|                  | Services                                                                                                      | Integrations                                                                                            |
-| ---------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------- |
-| **Live in**      | `services/<slug>/`                                                                                            | `integrations/<id>/`                                                                                    |
-| **Described by** | `service.json`                                                                                               | `manifest.json`                                                                                          |
-| **Are**          | Backend daemons that run as containers — databases, routing engines, geocoders, transit engines, tile servers | App-level features that consume services and external APIs to deliver functionality to users            |
-| **Declare**      | Image, ports, volumes, the capabilities they *provide*, the data they *consume*, host/proxy exposure          | Domain, frontend components, backend routes, config schema, attribution, the services they *require*    |
+|                  | Services                                                                                                      | Integrations                                                                                         |
+| ---------------- | ------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| **Live in**      | `services/<slug>/`                                                                                            | `integrations/<id>/`                                                                                 |
+| **Described by** | `service.json`                                                                                                | `manifest.json`                                                                                      |
+| **Are**          | Backend daemons that run as containers — databases, routing engines, geocoders, transit engines, tile servers | App-level features that consume services and external APIs to deliver functionality to users         |
+| **Declare**      | Image, ports, volumes, the capabilities they _provide_, the data they _consume_, host/proxy exposure          | Domain, frontend components, backend routes, config schema, attribution, the services they _require_ |
 
 The compose renderer turns the enabled **services** (29 built-in plus community additions) into a generated
 `docker-compose` stack — there is no hand-maintained compose file. The API

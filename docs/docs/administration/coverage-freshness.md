@@ -30,12 +30,12 @@ silently mix pages from different evidence collections.
 
 Capability status is the result of several independent observations:
 
-| Status | Meaning |
-| --- | --- |
+| Status      | Meaning                                                                                                                             |
+| ----------- | ----------------------------------------------------------------------------------------------------------------------------------- |
 | Operational | A registered operation has the required evidence, regional relation, usable freshness, runtime observation, and dependency binding. |
-| Limited | It can be used with a qualification such as stale data, degraded runtime, or a partial regional overlap. |
-| Unavailable | A required provider is disabled, unsupported, outside the selected region, expired for a live operation, or excluded by policy. |
-| Unknown | A required fact has not been observed, is invalid, or cannot be joined to a qualified source. |
+| Limited     | It can be used with a qualification such as stale data, degraded runtime, or a partial regional overlap.                            |
+| Unavailable | A required provider is disabled, unsupported, outside the selected region, expired for a live operation, or excluded by policy.     |
+| Unknown     | A required fact has not been observed, is invalid, or cannot be joined to a qualified source.                                       |
 
 The **Attention** filter includes stale or expired streams, failed attempts,
 unverified region/version associations, and rights requiring attention under
@@ -48,13 +48,13 @@ failure: a successful empty observation is shown as a valid empty result.
 Dates are rendered with the browser's timezone and a timezone abbreviation.
 They are not interchangeable:
 
-| Clock | Meaning |
-| --- | --- |
-| Collection time | When the bounded evidence collector assembled the report. It says nothing about the age of the underlying data. |
-| Last attempt | The latest fetch, validation, import, or write attempt, including failures and skips. It never proves publication. |
-| Last successful check | When the active version was successfully checked. A version/hash association is required for a source to become current. |
-| Last published | When the currently recorded artifact or cache snapshot was made active. A later failed attempt does not erase it. |
-| Upstream as-of | The source's own content clock, when supplied. A successful poll can still contain old upstream observations. |
+| Clock                        | Meaning                                                                                                                               |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| Collection time              | When the bounded evidence collector assembled the report. It says nothing about the age of the underlying data.                       |
+| Last attempt                 | The latest fetch, validation, import, or write attempt, including failures and skips. It never proves publication.                    |
+| Last successful check        | When the active version was successfully checked. A version/hash association is required for a source to become current.              |
+| Last published               | When the currently recorded artifact or cache snapshot was made active. A later failed attempt does not erase it.                     |
+| Upstream as-of               | The source's own content clock, when supplied. A successful poll can still contain old upstream observations.                         |
 | Expires / freshness deadline | The next validity boundary derived from the source policy or actual live TTL. At the boundary, `now >= deadline` is stale or expired. |
 
 Static and live streams are shown independently. For example, a successful

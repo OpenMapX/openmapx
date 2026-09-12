@@ -23,14 +23,14 @@ South must be below north. A box may cross the antimeridian by setting `west`
 greater than `east`; its unwrapped span still cannot exceed 30 longitude
 degrees. Latitude span is limited to 20 degrees.
 
-| Parameter | Requirement |
-| --- | --- |
-| `south`, `north` | `-90` through `90`; span at most 20° |
-| `west`, `east` | `-180` through `180`; unwrapped span at most 30° |
-| `zoom` | Optional integer `0`–`22`; defaults to `0` |
-| `pollutant` | Optional: `pm25`, `pm10`, `o3`, `no2`, `so2`, `co`, `nh3`, or `no`; defaults to `pm25` |
-| `limit` | Optional integer `1`–`500`; defaults to `500` |
-| `cursor` | Optional opaque continuation token, at most 2,048 characters |
+| Parameter        | Requirement                                                                            |
+| ---------------- | -------------------------------------------------------------------------------------- |
+| `south`, `north` | `-90` through `90`; span at most 20°                                                   |
+| `west`, `east`   | `-180` through `180`; unwrapped span at most 30°                                       |
+| `zoom`           | Optional integer `0`–`22`; defaults to `0`                                             |
+| `pollutant`      | Optional: `pm25`, `pm10`, `o3`, `no2`, `so2`, `co`, `nh3`, or `no`; defaults to `pm25` |
+| `limit`          | Optional integer `1`–`500`; defaults to `500`                                          |
+| `cursor`         | Optional opaque continuation token, at most 2,048 characters                           |
 
 Every scalar query key may occur only once. Invalid or repeated input returns
 HTTP 400 `INVALID_QUERY`.

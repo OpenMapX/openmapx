@@ -280,8 +280,8 @@ the host backs with concrete implementations. The structural definition lives in
 ```ts
 interface IntegrationContext {
   readonly id: string;
-  readonly manifest: IntegrationManifest;     // the parsed manifest
-  readonly config: Record<string, unknown>;   // resolved config (cascade applied)
+  readonly manifest: IntegrationManifest; // the parsed manifest
+  readonly config: Record<string, unknown>; // resolved config (cascade applied)
   // …
 }
 ```
@@ -294,12 +294,12 @@ where they came from.
 
 ```ts
 interface IntegrationContext {
-  readonly http: HttpClient;          // fetch wrapper with optional Redis caching
-  readonly cache: CacheClient;        // namespaced KV (int:<id>:<key>) with withCache()
+  readonly http: HttpClient; // fetch wrapper with optional Redis caching
+  readonly cache: CacheClient; // namespaced KV (int:<id>:<key>) with withCache()
   readonly liveStore: LiveStoreClient; // shared, non-namespaced data-manager keyspace
-  readonly db?: DatabaseClient;       // only when the manifest requires postgis
-  readonly log: Logger;               // tagged structured logger
-  readonly secrets: SecretsClient;    // decrypted vault access
+  readonly db?: DatabaseClient; // only when the manifest requires postgis
+  readonly log: Logger; // tagged structured logger
+  readonly secrets: SecretsClient; // decrypted vault access
   // …
 }
 ```
@@ -309,7 +309,7 @@ interface IntegrationContext {
 - **`cache`** is a key-value store namespaced per integration (`int:<id>:<key>`),
   with a `withCache(key, ttl, fn)` read-through helper. Namespacing means one
   integration cannot collide with another's keys.
-- **`liveStore`** is a deliberately *un-namespaced* reader for the shared
+- **`liveStore`** is a deliberately _un-namespaced_ reader for the shared
   `poi:live:<sourceId>` keyspace written by the data-manager's ingest pipeline.
   It is separate from `cache` precisely because the data-manager knows nothing
   about integration ids — prefixing here would miss every write.
@@ -323,11 +323,11 @@ and CLI scripts — and orchestrators treat absence as a benign no-op:
 
 ```ts
 interface IntegrationContext {
-  readonly attributionIndex?: AttributionIndexHandle;  // resolve sourceIds + MOTIS feeds
-  readonly providerHealth?: ProviderHealthHandle;      // record latency/outcome; cooldowns
-  readonly metricsRecorder?: MetricsRecorder;          // OpenTelemetry per-call counters
-  readonly upstreamRuntime?: UpstreamRuntime;           // distributed cache/lease/quota
-  readonly cursorCodec?: OpaqueCursorCodec;             // signed, purpose-scoped cursors
+  readonly attributionIndex?: AttributionIndexHandle; // resolve sourceIds + MOTIS feeds
+  readonly providerHealth?: ProviderHealthHandle; // record latency/outcome; cooldowns
+  readonly metricsRecorder?: MetricsRecorder; // OpenTelemetry per-call counters
+  readonly upstreamRuntime?: UpstreamRuntime; // distributed cache/lease/quota
+  readonly cursorCodec?: OpaqueCursorCodec; // signed, purpose-scoped cursors
   // …
 }
 ```
@@ -366,23 +366,23 @@ orchestrator picks it up at request time:
 
 ```ts
 interface IntegrationContext {
-  registerTransitProvider(p: TransitProvider): void;          // → "transit"
-  registerRealtimeProvider(p: RealtimeProvider): void;        // → "live-transit"
+  registerTransitProvider(p: TransitProvider): void; // → "transit"
+  registerRealtimeProvider(p: RealtimeProvider): void; // → "live-transit"
   registerMobilityDataSource(p: MobilityDataSourceProvider): void; // → "data-source"
-  registerWeatherProvider(p: WeatherProvider): void;          // → "weather"
-  registerGeocodingProvider(p: GeocodingProvider): void;      // → "geocoding"
-  registerRoutingProvider(p: RoutingProvider): void;          // → "routing"
-  registerPhotoProvider(p: PhotoProvider): void;              // → "photos"
-  registerReviewProvider(p: ReviewProvider): void;            // → "reviews"
-  registerPoiSearchProvider(p: PoiSearchProvider): void;      // → "poi-search"
-  registerKnowledgeProvider(p: KnowledgeProvider): void;      // → "knowledge"
-  registerGtfsCatalogProvider(p: GtfsCatalogProvider): void;  // → "gtfs-catalog"
+  registerWeatherProvider(p: WeatherProvider): void; // → "weather"
+  registerGeocodingProvider(p: GeocodingProvider): void; // → "geocoding"
+  registerRoutingProvider(p: RoutingProvider): void; // → "routing"
+  registerPhotoProvider(p: PhotoProvider): void; // → "photos"
+  registerReviewProvider(p: ReviewProvider): void; // → "reviews"
+  registerPoiSearchProvider(p: PoiSearchProvider): void; // → "poi-search"
+  registerKnowledgeProvider(p: KnowledgeProvider): void; // → "knowledge"
+  registerGtfsCatalogProvider(p: GtfsCatalogProvider): void; // → "gtfs-catalog"
   registerRoadConditionsProvider(p: RoadConditionsProvider): void; // → "road-conditions"
 
-  registerPoiSources(sources: readonly PoiSource[]): void;    // → data-manager ingest
-  registerRoute(method, path, handler, options?): void;       // options.rateLimitTier
-  registerHealthCheck(fn: CustomHealthCheckFn): void;         // overrides manifest probe
-  registerDisclosure(d: Disclosure): void;                    // surfaces a capability note
+  registerPoiSources(sources: readonly PoiSource[]): void; // → data-manager ingest
+  registerRoute(method, path, handler, options?): void; // options.rateLimitTier
+  registerHealthCheck(fn: CustomHealthCheckFn): void; // overrides manifest probe
+  registerDisclosure(d: Disclosure): void; // surfaces a capability note
 }
 ```
 
@@ -438,20 +438,20 @@ interface; the domain orchestrator consumes the typed shape. The contracts in
 the mobility domains return their data wrapped in a `MobilityResult<T>`, so
 attribution and freshness flow through every call unmodified.
 
-| Domain | Contract | What providers in it do |
-| --- | --- | --- |
-| `geocoding` | `GeocodingProvider` | Forward geocode, autocomplete, reverse geocode. |
-| `routing` | `RoutingProvider` | Turn-by-turn directions, plus optional isochrones and map-matching. |
-| `transit` | `TransitProvider` | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts. |
-| `live-transit` | `RealtimeProvider` | Realtime overlays: vehicle positions, service alerts, trip-update deltas. |
-| `data-source` | `MobilityDataSourceProvider` | External POI sources — bike/car/scooter sharing, parking, fuel, EV charging, webcams. |
-| `weather` | `WeatherProvider` | Current conditions, hourly and daily forecasts. |
-| `photos` | `PhotoProvider` | Place imagery, including fast OSM-tag-based hero lookups. |
-| `reviews` | `ReviewProvider` | Fetch, aggregate, and submit place reviews. |
-| `poi-search` | `PoiSearchProvider` | Category and free-text POI search within a bounding box. |
-| `knowledge` | `KnowledgeProvider` | Place enrichment from reference sources. |
-| `gtfs-catalog` | `GtfsCatalogProvider` | List GTFS feeds for the schedule-feed importer to ingest. |
-| `road-conditions` | `RoadConditionsProvider` | Live road/traffic conditions — incidents, roadworks, closures, and per-segment congestion speeds. |
+| Domain            | Contract                     | What providers in it do                                                                           |
+| ----------------- | ---------------------------- | ------------------------------------------------------------------------------------------------- |
+| `geocoding`       | `GeocodingProvider`          | Forward geocode, autocomplete, reverse geocode.                                                   |
+| `routing`         | `RoutingProvider`            | Turn-by-turn directions, plus optional isochrones and map-matching.                               |
+| `transit`         | `TransitProvider`            | Stops, departures/arrivals, routes, trip planning, vehicle positions, alerts.                     |
+| `live-transit`    | `RealtimeProvider`           | Realtime overlays: vehicle positions, service alerts, trip-update deltas.                         |
+| `data-source`     | `MobilityDataSourceProvider` | External POI sources — bike/car/scooter sharing, parking, fuel, EV charging, webcams.             |
+| `weather`         | `WeatherProvider`            | Current conditions, hourly and daily forecasts.                                                   |
+| `photos`          | `PhotoProvider`              | Place imagery, including fast OSM-tag-based hero lookups.                                         |
+| `reviews`         | `ReviewProvider`             | Fetch, aggregate, and submit place reviews.                                                       |
+| `poi-search`      | `PoiSearchProvider`          | Category and free-text POI search within a bounding box.                                          |
+| `knowledge`       | `KnowledgeProvider`          | Place enrichment from reference sources.                                                          |
+| `gtfs-catalog`    | `GtfsCatalogProvider`        | List GTFS feeds for the schedule-feed importer to ingest.                                         |
+| `road-conditions` | `RoadConditionsProvider`     | Live road/traffic conditions — incidents, roadworks, closures, and per-segment congestion speeds. |
 
 A few patterns recur across the contracts and are worth calling out:
 
@@ -477,7 +477,7 @@ integration, are separate developer pages.
 
 ## Map overlays
 
- A trusted built-in integration that draws on the map (`domains` includes
+A trusted built-in integration that draws on the map (`domains` includes
 `map-overlay`, with a `layerSelector` entry so users can toggle it) ships a
 `map-layer.tsx`. Its
 legend is the one part it can declare instead of writing.
@@ -526,7 +526,7 @@ along the bottom of the map for as long as the layer is drawn. Legends never
 carry credits — they explain colors and symbols only, and can be collapsed away.
 
 Credit an overlay's own `dataSources` with `useIntegrationAttribution(id,
-visible)`. When the overlay paints data published by *sibling* integrations
+visible)`. When the overlay paints data published by _sibling_ integrations
 (a domain orchestrator such as live transit or road conditions), its own
 `dataSources` list is empty, so credit the whole domain instead with
 `useIntegrationDomainAttribution(domain, visible)` — crediting an empty list
@@ -625,7 +625,7 @@ integration through `ctx.getRequiredService(key)`. The resolution rules:
 - **`{ service: "<id>" }`** is satisfied when that specific service is installed
   and enabled. The lookup key is the service id.
 - **`{ capability: "<cap>" }`** with exactly one installed provider auto-selects
-  it. With multiple providers it is *ambiguous* and stays unresolved until an
+  it. With multiple providers it is _ambiguous_ and stays unresolved until an
   administrator picks a binding; the host logs a warning meanwhile. The lookup
   key is the capability name.
 - **`{ optional: true }`** that goes unresolved falls through silently — the

@@ -102,31 +102,31 @@ agree. The shape is nested:
 ```ts
 interface TransitCapabilities {
   stops: {
-    lookup: boolean;        // getStop
-    nearby: boolean;        // getStopsNearby
-    bbox: boolean;          // getStopsInBbox
-    search: boolean;        // searchStopsByName
+    lookup: boolean; // getStop
+    nearby: boolean; // getStopsNearby
+    bbox: boolean; // getStopsInBbox
+    search: boolean; // searchStopsByName
     infrastructure: boolean; // getStopInfrastructure
-    platforms: boolean;     // getStopPlatforms
-    timetable: boolean;     // getStopTimetable
+    platforms: boolean; // getStopPlatforms
+    timetable: boolean; // getStopTimetable
   };
-  departures: boolean;      // getDepartures
-  arrivals: boolean;        // getArrivals
+  departures: boolean; // getDepartures
+  arrivals: boolean; // getArrivals
   routes: {
-    lookup: boolean;        // getRoute
-    forStop: boolean;       // getRoutesForStop
-    stops: boolean;         // getRouteStops
-    geometry: boolean;      // getLegGeometry
+    lookup: boolean; // getRoute
+    forStop: boolean; // getRoutesForStop
+    stops: boolean; // getRouteStops
+    geometry: boolean; // getLegGeometry
   };
-  planning: boolean;        // planTrip
+  planning: boolean; // planTrip
   vehiclePositions: boolean; // getVehiclePositions / getVehicleRadar
-  vehicleJourney: boolean;  // getVehicleJourney
+  vehicleJourney: boolean; // getVehicleJourney
   alerts: {
-    byStop: boolean;        // getAlertsForStop
-    byRoute: boolean;       // getAlertsForRoute
-    byBbox: boolean;        // getAlertsForBbox
+    byStop: boolean; // getAlertsForStop
+    byRoute: boolean; // getAlertsForRoute
+    byBbox: boolean; // getAlertsForBbox
   };
-  facilities: boolean;      // getFacilities
+  facilities: boolean; // getFacilities
 }
 ```
 

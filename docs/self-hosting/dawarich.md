@@ -118,7 +118,7 @@ pnpm openmapx compose up --domain example.org
 
 The selection expands to the app, Sidekiq, dedicated PostGIS, dedicated Redis,
 and Traefik. Inspect the generated file before starting: its router rule must be
-`` Host(`timeline.example.org`) `` with no `/dawarich-app` path prefix, and neither
+``Host(`timeline.example.org`)`` with no `/dawarich-app` path prefix, and neither
 data service may have a `ports` entry.
 
 ## Authentication and the user API key
@@ -193,13 +193,13 @@ data exists.
 
 Dawarich persistence uses five named volumes:
 
-| Volume | Purpose | Backup mode |
-| --- | --- | --- |
-| `openmapx-dawarich-db-data` | PostgreSQL/PostGIS location data and accounts | `pg_dump` |
-| `openmapx-dawarich-public` | public/static application files | `tar` |
-| `openmapx-dawarich-watched` | watched import drop directory | `tar` |
-| `openmapx-dawarich-storage` | Active Storage attachments/imports | `tar` |
-| `openmapx-dawarich-redis-data` | transient queues and caches | none |
+| Volume                         | Purpose                                       | Backup mode |
+| ------------------------------ | --------------------------------------------- | ----------- |
+| `openmapx-dawarich-db-data`    | PostgreSQL/PostGIS location data and accounts | `pg_dump`   |
+| `openmapx-dawarich-public`     | public/static application files               | `tar`       |
+| `openmapx-dawarich-watched`    | watched import drop directory                 | `tar`       |
+| `openmapx-dawarich-storage`    | Active Storage attachments/imports            | `tar`       |
+| `openmapx-dawarich-redis-data` | transient queues and caches                   | none        |
 
 Backups record the producing service version. A valid Dawarich backup contains
 app version `1.10.3` and PostGIS version `17-3.5`. Redis is deliberately not a
@@ -233,13 +233,13 @@ location history. Retain off-host backups and follow Dawarich's official
 
 ## Image and architecture release check
 
-| Component | Reviewed release | Reviewed OCI index / source | Native architectures tested or inspected | Support note |
-| --- | --- | --- | --- | --- |
-| OpenMapX | dependency-complete baseline `1a2d0396fb97b1957a6907ef41877f91cab640eb` plus this release change | repository source | CI targets plus staging host | Record the final release commit with acceptance evidence |
-| Better Auth OAuth Provider | `better-auth` and `@better-auth/oauth-provider` | exact package lock | server runtime | One persisted confidential client; admin API only, no direct table writes |
-| Dawarich app + worker | `freikin/dawarich:1.10.3` | `sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b` | linux/amd64, linux/arm64, linux/arm/v7 inspected; arm64 entrypoints exercised | Upstream Dawarich release |
-| Dedicated PostGIS | `ghcr.io/baosystems/postgis:17-3.5` | index `sha256:789ecd05031a4f98b06d6e48e0d9be054fd4c5df2cd8b14ef967bad24f359a07`; Bao revision `603ccfa15a094bf677524275bdf7e8a7478885ce` | linux/amd64 + linux/arm64 inspected; native arm64 PostgreSQL 17.5/PostGIS 3.5.2 exercised | Bao rebuilds weekly and explicitly provides no support |
-| Dedicated Redis | `redis:7.4-alpine` | mutable pinned release tag; re-inspect before release | linux/amd64 + linux/arm64 inspected | Transient queues/cache; not restored |
+| Component                  | Reviewed release                                                                                 | Reviewed OCI index / source                                                                                                              | Native architectures tested or inspected                                                  | Support note                                                              |
+| -------------------------- | ------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| OpenMapX                   | dependency-complete baseline `1a2d0396fb97b1957a6907ef41877f91cab640eb` plus this release change | repository source                                                                                                                        | CI targets plus staging host                                                              | Record the final release commit with acceptance evidence                  |
+| Better Auth OAuth Provider | `better-auth` and `@better-auth/oauth-provider`                                                  | exact package lock                                                                                                                       | server runtime                                                                            | One persisted confidential client; admin API only, no direct table writes |
+| Dawarich app + worker      | `freikin/dawarich:1.10.3`                                                                        | `sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b`                                                                | linux/amd64, linux/arm64, linux/arm/v7 inspected; arm64 entrypoints exercised             | Upstream Dawarich release                                                 |
+| Dedicated PostGIS          | `ghcr.io/baosystems/postgis:17-3.5`                                                              | index `sha256:789ecd05031a4f98b06d6e48e0d9be054fd4c5df2cd8b14ef967bad24f359a07`; Bao revision `603ccfa15a094bf677524275bdf7e8a7478885ce` | linux/amd64 + linux/arm64 inspected; native arm64 PostgreSQL 17.5/PostGIS 3.5.2 exercised | Bao rebuilds weekly and explicitly provides no support                    |
+| Dedicated Redis            | `redis:7.4-alpine`                                                                               | mutable pinned release tag; re-inspect before release                                                                                    | linux/amd64 + linux/arm64 inspected                                                       | Transient queues/cache; not restored                                      |
 
 The application manifest pins the human-readable `freikin/dawarich:1.10.3`
 tag. On 2026-08-09 its OCI index was verified as linux/amd64, linux/arm64, and

@@ -168,12 +168,12 @@ This runs the `dev` task across the workspace (web on `3000`, API on `3001`).
 Running each app in its own terminal is equally fine, and often clearer when you
 are watching one of them closely.
 
-| Process | Port | URL |
+| Process | Port | URL                         |
 | ------- | ---- | --------------------------- |
-| Web app | 3000 | `http://localhost:3000` |
-| API     | 3001 | `http://localhost:3001` |
+| Web app | 3000 | `http://localhost:3000`     |
+| API     | 3001 | `http://localhost:3001`     |
 | PostGIS | 5432 | `postgres://localhost:5432` |
-| Redis   | 6379 | `redis://localhost:6379` |
+| Redis   | 6379 | `redis://localhost:6379`    |
 
 ## Optional self-hosted backends
 
@@ -228,6 +228,7 @@ Tooling notes:
 
   There are intentionally no per-package Vitest configs or `test` scripts —
   scope a run with a path/name filter instead of `pnpm -C <pkg> test`.
+
 - **Type-checking** is per-package via `pnpm check-types`. The API and web both
   type-check their integration and service-worker configs in addition to the
   main project.

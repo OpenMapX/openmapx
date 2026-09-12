@@ -22,12 +22,12 @@ manual column on a virtual device when changing the protocol.
 
 ## The matrix
 
-| Native | Web | Navigation | Notes |
-| --- | --- | --- | --- |
-| v3 | v3 | Works | The first release pairing. |
-| v3 | Previous-only | **Refused** | Update required. No browser engine, no partial session. |
-| v3 | Future-only | **Refused** | Update required. No browser engine, no partial session. |
-| v3 | Malformed hello | **Refused** | Channel stays unhandshaken rather than half-open. |
+| Native | Web             | Navigation  | Notes                                                   |
+| ------ | --------------- | ----------- | ------------------------------------------------------- |
+| v3     | v3              | Works       | The first release pairing.                              |
+| v3     | Previous-only   | **Refused** | Update required. No browser engine, no partial session. |
+| v3     | Future-only     | **Refused** | Update required. No browser engine, no partial session. |
+| v3     | Malformed hello | **Refused** | Channel stays unhandshaken rather than half-open.       |
 
 ## Future version changes
 

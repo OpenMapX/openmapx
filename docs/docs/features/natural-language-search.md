@@ -12,7 +12,7 @@ turns a sentence like that into a real search: it reads the query, works out the
 categories, filters, area, and hours you're asking for, and runs them through the
 same category and place search the rest of the app uses.
 
-It sits *alongside* ordinary search, never in front of it. When the search bar
+It sits _alongside_ ordinary search, never in front of it. When the search bar
 recognizes a query as a question rather than a place name, it offers a separate
 natural-language suggestion above the usual autocomplete results. Pick it and the
 map fills with matches; ignore it and your normal results are untouched.
@@ -21,14 +21,14 @@ map fills with matches; ignore it and your normal results are untouched.
 
 A parsed query becomes a structured **search intent**:
 
-| Part of the query | Becomes… |
-| --- | --- |
-| "cafe", "pharmacy", "EV charging" | One or more **categories** to search |
-| "vegan", "with wifi", "wheelchair", "outdoor seating" | **OSM attribute filters** |
-| "near the park", "near me", "in Berlin" | A **spatial constraint** (resolved to an area — place names through your geocoder) |
-| "open now", "open 24h", "open Monday at 9" | A **time constraint** wired into the opening-hours filter |
-| "nearest", "best", "top-rated" | A **sort order** (distance / rating) |
-| "quiet", "cozy", "cheap" | **Unmapped qualities** — noted, but with no OSM tag to filter on |
+| Part of the query                                     | Becomes…                                                                           |
+| ----------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| "cafe", "pharmacy", "EV charging"                     | One or more **categories** to search                                               |
+| "vegan", "with wifi", "wheelchair", "outdoor seating" | **OSM attribute filters**                                                          |
+| "near the park", "near me", "in Berlin"               | A **spatial constraint** (resolved to an area — place names through your geocoder) |
+| "open now", "open 24h", "open Monday at 9"            | A **time constraint** wired into the opening-hours filter                          |
+| "nearest", "best", "top-rated"                        | A **sort order** (distance / rating)                                               |
+| "quiet", "cozy", "cheap"                              | **Unmapped qualities** — noted, but with no OSM tag to filter on                   |
 
 The intent also carries a confidence score; low-confidence parses — and queries
 that look like a proper place name — are dropped, so a misread never hijacks an
@@ -57,15 +57,15 @@ The default is entirely local:
 ]
 ```
 
-| Provider type | What it connects to | Credential | Cloud |
-| --- | --- | --- | --- |
-| `keyword` | Built-in deterministic parser | None | No |
-| `ollama` | Ollama's OpenAI-compatible API | None | No; public endpoints are rejected |
-| `anthropic` | Anthropic Claude | `anthropicApiKey` | Yes |
-| `openai` | OpenAI Responses or Chat Completions | `openaiApiKey` | Yes |
-| `google` | Google Gemini | `googleApiKey` | Yes |
-| `openrouter` | OpenRouter and its model/provider catalogue | `openrouterApiKey` | Yes |
-| `openai-compatible` | Any compatible local or hosted endpoint | `compatibleApiKey` or none | Declared by `local` |
+| Provider type       | What it connects to                         | Credential                 | Cloud                             |
+| ------------------- | ------------------------------------------- | -------------------------- | --------------------------------- |
+| `keyword`           | Built-in deterministic parser               | None                       | No                                |
+| `ollama`            | Ollama's OpenAI-compatible API              | None                       | No; public endpoints are rejected |
+| `anthropic`         | Anthropic Claude                            | `anthropicApiKey`          | Yes                               |
+| `openai`            | OpenAI Responses or Chat Completions        | `openaiApiKey`             | Yes                               |
+| `google`            | Google Gemini                               | `googleApiKey`             | Yes                               |
+| `openrouter`        | OpenRouter and its model/provider catalogue | `openrouterApiKey`         | Yes                               |
+| `openai-compatible` | Any compatible local or hosted endpoint     | `compatibleApiKey` or none | Declared by `local`               |
 
 All model-backed providers use the AI SDK through direct provider instances.
 OpenMapX does not route them through the Vercel AI Gateway, so no Vercel account,
@@ -77,12 +77,12 @@ Every definition has an operator-chosen `id`; it is not restricted to a fixed
 provider enum. This allows multiple models or endpoints of the same type in one
 chain.
 
-| Field | Required | Meaning |
-| --- | --- | --- |
-| `id` | Yes | Unique lowercase identifier, 1–64 characters: letters, digits, `.`, `_`, and `-` |
-| `type` | Yes | One of the provider types listed above |
-| `label` | No | Operator-facing/result label; otherwise derived from type and model |
-| `model` | All except `keyword` | Exact model identifier understood by that provider |
+| Field       | Required                | Meaning                                                                                                     |
+| ----------- | ----------------------- | ----------------------------------------------------------------------------------------------------------- |
+| `id`        | Yes                     | Unique lowercase identifier, 1–64 characters: letters, digits, `.`, `_`, and `-`                            |
+| `type`      | Yes                     | One of the provider types listed above                                                                      |
+| `label`     | No                      | Operator-facing/result label; otherwise derived from type and model                                         |
+| `model`     | All except `keyword`    | Exact model identifier understood by that provider                                                          |
 | `timeoutMs` | Model-backed types only | Per-attempt timeout, 250–120,000 ms; defaults to 10 seconds for Ollama and 3 seconds for the other adapters |
 
 Provider order is significant. Provider IDs must be unique even when their
@@ -95,11 +95,11 @@ definition can still select a different model, label, timeout, and position.
 
 `keyword` has no additional fields.
 
-| Type | Additional fields |
-| --- | --- |
-| `ollama` | Optional `baseURL`, which must use a private/local hostname or IP. OpenMapX appends `/v1` and defaults to the enabled `local-ai` service, then `http://localhost:11434`. |
-| `openai` | `api` may be `responses` (default) or `chat`. |
-| `openrouter` | `providerOrder` (default `[]`), `allowFallbacks` (default `true`), `dataCollection` (`deny` by default), and `zeroDataRetention` (`true` by default). |
+| Type                | Additional fields                                                                                                                                                                        |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ollama`            | Optional `baseURL`, which must use a private/local hostname or IP. OpenMapX appends `/v1` and defaults to the enabled `local-ai` service, then `http://localhost:11434`.                 |
+| `openai`            | `api` may be `responses` (default) or `chat`.                                                                                                                                            |
+| `openrouter`        | `providerOrder` (default `[]`), `allowFallbacks` (default `true`), `dataCollection` (`deny` by default), and `zeroDataRetention` (`true` by default).                                    |
 | `openai-compatible` | `baseURL`, `credential` (`compatibleApiKey` by default, or `none`), `supportsStructuredOutputs` (default `true`), `local` (default `false`), and processor metadata for cloud endpoints. |
 
 The built-in Anthropic, Google, and OpenAI adapters need only their model and
@@ -270,13 +270,13 @@ saving them. Credentials remain in the vault-backed Credentials tab.
 `providers` is the sole provider/model configuration surface; there is no
 parallel per-vendor model or endpoint setting.
 
-| Setting | Default | Meaning |
-| --- | --- | --- |
-| `providers` | Local Ollama, then keyword | Ordered definitions described above |
-| `privacyMode` | `consent` | `strict`, `consent`, or `open` |
-| `roundCoordsDecimals` | `2` | Coordinate precision included in the model prompt and intent cache key |
-| `intentCacheTtlSeconds` | `86400` | Parsed-intent cache lifetime |
-| `rateLimitPerIpPerHour` | `200` | Fixed-window parse limit per client IP |
+| Setting                 | Default                    | Meaning                                                                |
+| ----------------------- | -------------------------- | ---------------------------------------------------------------------- |
+| `providers`             | Local Ollama, then keyword | Ordered definitions described above                                    |
+| `privacyMode`           | `consent`                  | `strict`, `consent`, or `open`                                         |
+| `roundCoordsDecimals`   | `2`                        | Coordinate precision included in the model prompt and intent cache key |
+| `intentCacheTtlSeconds` | `86400`                    | Parsed-intent cache lifetime                                           |
+| `rateLimitPerIpPerHour` | `200`                      | Fixed-window parse limit per client IP                                 |
 
 Definitions whose required credential is absent are skipped with an operator
 warning. If the whole provider array is invalid—for example, duplicate IDs or a
@@ -322,11 +322,11 @@ body is:
 required; `lang` is optional. `cloudAccess` is deliberately explicit and
 fail-closed:
 
-| Value | Behavior |
-| --- | --- |
-| `deny` | Local and keyword providers only; also the default for missing or unknown values |
-| `consented` | Allows cloud in `consent` and `open`; `strict` still overrides it |
-| `defer-to-server` | Allows cloud only when the operator selected `open` |
+| Value             | Behavior                                                                         |
+| ----------------- | -------------------------------------------------------------------------------- |
+| `deny`            | Local and keyword providers only; also the default for missing or unknown values |
+| `consented`       | Allows cloud in `consent` and `open`; `strict` still overrides it                |
+| `defer-to-server` | Allows cloud only when the operator selected `open`                              |
 
 The response includes the validated `intent`, its `resolvedBbox`, provider ID
 and label, whether that result used cloud, whether cloud is available under the
@@ -336,14 +336,14 @@ whether the intent came from cache. A request rejected by the hourly limit retur
 
 ## Troubleshooting
 
-| Symptom | Check |
-| --- | --- |
-| Cloud definition never runs | Confirm the matching vault credential exists, the provider is before `keyword`, and privacy mode/consent permits cloud. |
-| Custom endpoint is rejected | Cloud endpoints require HTTPS and processor metadata; local endpoints require a private hostname/IP. |
-| Compatible endpoint rejects `response_format` | Set `supportsStructuredOutputs` to `false`. |
-| Ollama requests use the wrong path | Configure the Ollama server root; OpenMapX appends `/v1`. |
-| Every model falls back to keyword | Inspect provider warnings for timeout, invalid model ID, or structured-output validation errors. |
-| A recently failed cloud provider is skipped | Wait up to 60 seconds for its circuit breaker after correcting the underlying problem. |
+| Symptom                                       | Check                                                                                                                   |
+| --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| Cloud definition never runs                   | Confirm the matching vault credential exists, the provider is before `keyword`, and privacy mode/consent permits cloud. |
+| Custom endpoint is rejected                   | Cloud endpoints require HTTPS and processor metadata; local endpoints require a private hostname/IP.                    |
+| Compatible endpoint rejects `response_format` | Set `supportsStructuredOutputs` to `false`.                                                                             |
+| Ollama requests use the wrong path            | Configure the Ollama server root; OpenMapX appends `/v1`.                                                               |
+| Every model falls back to keyword             | Inspect provider warnings for timeout, invalid model ID, or structured-output validation errors.                        |
+| A recently failed cloud provider is skipped   | Wait up to 60 seconds for its circuit breaker after correcting the underlying problem.                                  |
 
 ## Related features
 

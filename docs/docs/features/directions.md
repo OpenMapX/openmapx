@@ -57,10 +57,10 @@ provider** — a thin adapter in front of a routing engine.
 
 Two engine adapters ship in the box:
 
-| Integration        | Engine    | Modes                       | Scale       | Extras                                                  |
-| ------------------ | --------- | --------------------------- | ----------- | ------------------------------------------------------- |
-| `routing-valhalla` | Valhalla  | driving, motorcycle, cycling, walking | planet | elevation profiles, departure/arrival times, map matching |
-| `routing-osrm`     | OSRM      | driving                     | region only | very fast driving queries                               |
+| Integration        | Engine   | Modes                                 | Scale       | Extras                                                    |
+| ------------------ | -------- | ------------------------------------- | ----------- | --------------------------------------------------------- |
+| `routing-valhalla` | Valhalla | driving, motorcycle, cycling, walking | planet      | elevation profiles, departure/arrival times, map matching |
+| `routing-osrm`     | OSRM     | driving                               | region only | very fast driving queries                                 |
 
 When the app requests directions, the orchestrator looks at the travel mode and
 selects every provider that supports it, in registration order. It tries them in
@@ -190,7 +190,7 @@ motorcycle) into a revocable **share link**: the Share button offers "Create
 share link" next to the classic copy-the-URL option.
 
 Route shares are created in snapshot mode without expiration (they remain valid
-until explicitly rotated or deleted). The link stores only the route *inputs* —
+until explicitly rotated or deleted). The link stores only the route _inputs_ —
 between 2 and 10 waypoints (with coordinates and labels up to 200 characters),
 the selected travel mode, and avoid options (highways, tolls, ferries) — so viewers
 always get a fresh, traffic-evaluated route calculated by the engine upon opening.

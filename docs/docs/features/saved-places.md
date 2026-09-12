@@ -30,11 +30,11 @@ Any list can be exported to a standard geographic file, so you can take your
 places to another tool — a GPS device, a hiking app, Google Earth, or an OSM
 editor:
 
-| Format      | Best for                                              | File         |
-| ----------- | ----------------------------------------------------- | ------------ |
-| **GPX**     | GPS devices and outdoor apps (OsmAnd, Organic Maps…)  | `.gpx`       |
-| **GeoJSON** | Web maps, GIS tools, and scripting                    | `.geojson`   |
-| **KML**     | Google Earth and Google My Maps                       | `.kml`       |
+| Format      | Best for                                             | File       |
+| ----------- | ---------------------------------------------------- | ---------- |
+| **GPX**     | GPS devices and outdoor apps (OsmAnd, Organic Maps…) | `.gpx`     |
+| **GeoJSON** | Web maps, GIS tools, and scripting                   | `.geojson` |
+| **KML**     | Google Earth and Google My Maps                      | `.kml`     |
 
 Open the **Saved** panel, go to the **Lists** tab, open a list, then use the
 list's overflow (⋮) menu and choose **Export as GPX**, **Export as GeoJSON**, or

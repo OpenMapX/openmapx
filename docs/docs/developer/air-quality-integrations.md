@@ -24,13 +24,13 @@ Do not accept an upstream coherence key as proof. The normalizer derives it. A d
 
 These fields answer different questions:
 
-| Field | Meaning |
-| --- | --- |
-| `dataAuthority` / index `authority` | Who is responsible for the evidence or calculation |
-| `basis` | Ground, model, or a disclosed hybrid |
-| `derivation` | Agency/provider-published index or OpenMapX-computed index |
-| `methodId` / `methodRevision` | Exact calculation or publication method |
-| `standardId` / `standardRevision` | Reviewed regional standard, when conformance is proven |
+| Field                               | Meaning                                                    |
+| ----------------------------------- | ---------------------------------------------------------- |
+| `dataAuthority` / index `authority` | Who is responsible for the evidence or calculation         |
+| `basis`                             | Ground, model, or a disclosed hybrid                       |
+| `derivation`                        | Agency/provider-published index or OpenMapX-computed index |
+| `methodId` / `methodRevision`       | Exact calculation or publication method                    |
+| `standardId` / `standardRevision`   | Reviewed regional standard, when conformance is proven     |
 
 A field called `us_aqi` or `european_aqi` is not enough to claim an OpenMapX standard revision. Leave `standardId` null until its windows, rounding, breakpoint behavior, categories, and fixtures pass conformance. Published Canadian AQHI/AQHI+ is validated only with named community coverage, issue/valid times, and the declared conventional or hourly PM2.5 wildfire method. It is never recalculated from one station. Québec resolves to Info-Smog; an ECCC AQHI there can remain secondary evidence but cannot impersonate Info-Smog.
 
@@ -49,13 +49,13 @@ An adapter returns a typed failure when required series, samples, units, coheren
 
 The calculated adapters consume these exact intervals:
 
-| Standard | Current evidence | Daily/history evidence |
-| --- | --- | --- |
-| US EPA 2024 | Particle NowCast from the latest 12 hourly slots; one- and eight-hour ozone; eight-hour CO; one-hour NO2; one- and 24-hour SO2 | 24-hour particles/SO2 and the daily maxima of rolling one- or eight-hour gas windows. A complete rolling eight-hour day therefore needs the preceding seven hourly slots. |
-| EEA European AQI | One complete hourly concentration per pollutant | Same hourly method at the evidence time |
-| UK DAQI | 24-hour PM, eight-hour O3, one-hour NO2, and 15-minute SO2 at 75% capture | Same pollutant windows at the evidence time |
-| CPCB NAQI | 24-hour PM/NO2/SO2/NH3 or eight-hour CO/O3, at least 16 hours in the preceding day, three pollutants, and one particle | Same running windows. The official table leaves Severe concentration bands open-ended and states no concentration-rounding rule for the decimal gaps between integer-labelled bands; OpenMapX returns `unverified_method` on either unsettled path instead of inventing breakpoints. |
-| HJ 633-2026 | One-hour concentrations for all six pollutants | Daily SO2/NO2/CO/PM means and the daily maximum eight-hour O3 mean; output method IDs distinguish real-time and daily AQI. |
+| Standard         | Current evidence                                                                                                               | Daily/history evidence                                                                                                                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| US EPA 2024      | Particle NowCast from the latest 12 hourly slots; one- and eight-hour ozone; eight-hour CO; one-hour NO2; one- and 24-hour SO2 | 24-hour particles/SO2 and the daily maxima of rolling one- or eight-hour gas windows. A complete rolling eight-hour day therefore needs the preceding seven hourly slots.                                                                                                            |
+| EEA European AQI | One complete hourly concentration per pollutant                                                                                | Same hourly method at the evidence time                                                                                                                                                                                                                                              |
+| UK DAQI          | 24-hour PM, eight-hour O3, one-hour NO2, and 15-minute SO2 at 75% capture                                                      | Same pollutant windows at the evidence time                                                                                                                                                                                                                                          |
+| CPCB NAQI        | 24-hour PM/NO2/SO2/NH3 or eight-hour CO/O3, at least 16 hours in the preceding day, three pollutants, and one particle         | Same running windows. The official table leaves Severe concentration bands open-ended and states no concentration-rounding rule for the decimal gaps between integer-labelled bands; OpenMapX returns `unverified_method` on either unsettled path instead of inventing breakpoints. |
+| HJ 633-2026      | One-hour concentrations for all six pollutants                                                                                 | Daily SO2/NO2/CO/PM means and the daily maximum eight-hour O3 mean; output method IDs distinguish real-time and daily AQI.                                                                                                                                                           |
 
 Every contributing interval must match the declared cadence and occupy a unique cadence-aligned slot. Duplicate, off-grid, stale, wrong-duration, or wrong-unit samples do not manufacture completeness.
 

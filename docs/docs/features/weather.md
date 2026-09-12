@@ -49,7 +49,7 @@ than the map center.
 ## How it works
 
 A single **weather** integration is the orchestrator. It doesn't talk to any
-upstream itself — it discovers the forecast *providers* that are enabled and
+upstream itself — it discovers the forecast _providers_ that are enabled and
 queries them in turn. Each provider is its own integration that registers under
 the `weather` domain and declares a numeric **priority**; the orchestrator sorts
 them low-to-high and walks the list:
@@ -57,8 +57,7 @@ them low-to-high and walks the list:
 1. Ask the highest-priority eligible provider.
 2. If it throws, times out, or has no data for the point, fall through to the
    next one.
-3. Return the first successful answer; if none answer, the request returns a
-   502.
+3. Return the first successful answer; if none answer, the request returns a 502.
 
 That fallback is what makes a region-specific provider safe to put first. Bright
 Sky, for example, only has data for Germany (it serves Germany's national weather
@@ -78,12 +77,12 @@ repeat views are cheap.
 OpenMapX ships four weather forecast providers. Air quality is a separate
 evidence platform and provider domain.
 
-| Provider | Integration | Upstream | Coverage | API key | Priority |
-| --- | --- | --- | --- | --- | :-: |
-| **Bright Sky** | `weather-bright-sky` | DWD, via Bright Sky | Germany | No | 3 |
-| **OpenWeather** | `weather-openweathermap` | OpenWeatherMap | Global | **Yes** | 5 |
-| **MET Norway** | `weather-met-norway` | MET Norway Locationforecast | Global | No | 8 |
-| **Open-Meteo** | `weather-open-meteo` | Open-Meteo | Global | No | 10 |
+| Provider        | Integration              | Upstream                    | Coverage | API key | Priority |
+| --------------- | ------------------------ | --------------------------- | -------- | ------- | :------: |
+| **Bright Sky**  | `weather-bright-sky`     | DWD, via Bright Sky         | Germany  | No      |    3     |
+| **OpenWeather** | `weather-openweathermap` | OpenWeatherMap              | Global   | **Yes** |    5     |
+| **MET Norway**  | `weather-met-norway`     | MET Norway Locationforecast | Global   | No      |    8     |
+| **Open-Meteo**  | `weather-open-meteo`     | Open-Meteo                  | Global   | No      |    10    |
 
 Lower priority numbers are tried first. With the defaults, a point in Germany is
 answered by Bright Sky; everywhere else falls to MET Norway, and Open-Meteo is

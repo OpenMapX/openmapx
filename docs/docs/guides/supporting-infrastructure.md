@@ -34,14 +34,14 @@ saved places, and the rows the data-manager's POI ingest
 pipeline writes all live here. `app-api`, `data-manager`, and `martin` (when the
 tile stack is enabled) all connect to it over the private Docker network.
 
-| Property | Value |
-| --- | --- |
-| Image | `ghcr.io/baosystems/postgis:18-3.6` (PostgreSQL 18, PostGIS 3.6) |
-| Database / user | `openmapx` / `postgres` |
-| Memory limit | `2g` |
-| Volume | `openmapx-pgdata` at `/var/lib/postgresql` (backed up) |
-| Internal address | `postgis:5432` |
-| Host binding | `127.0.0.1:5432` (loopback only) |
+| Property         | Value                                                            |
+| ---------------- | ---------------------------------------------------------------- |
+| Image            | `ghcr.io/baosystems/postgis:18-3.6` (PostgreSQL 18, PostGIS 3.6) |
+| Database / user  | `openmapx` / `postgres`                                          |
+| Memory limit     | `2g`                                                             |
+| Volume           | `openmapx-pgdata` at `/var/lib/postgresql` (backed up)           |
+| Internal address | `postgis:5432`                                                   |
+| Host binding     | `127.0.0.1:5432` (loopback only)                                 |
 
 Other containers reach the database by service name — `app-api`, for instance, is
 handed `postgresql://postgres:${POSTGRES_PASSWORD}@postgis:5432/openmapx`. The
@@ -152,13 +152,13 @@ wire protocol exactly, so `app-api` connects with an ordinary Redis client at
 `redis://redis:6379` and `redis-cli` works unchanged. The service id stays
 `redis` for compatibility even though the image is Valkey.
 
-| Property | Value |
-| --- | --- |
-| Image | `valkey/valkey:8-alpine` |
-| Memory limit | `512m` |
-| Volume | `openmapx-redisdata` at `/data` (backed up) |
-| Internal address | `redis:6379` |
-| Host binding | `127.0.0.1:6379` (loopback only) |
+| Property         | Value                                       |
+| ---------------- | ------------------------------------------- |
+| Image            | `valkey/valkey:8-alpine`                    |
+| Memory limit     | `512m`                                      |
+| Volume           | `openmapx-redisdata` at `/data` (backed up) |
+| Internal address | `redis:6379`                                |
+| Host binding     | `127.0.0.1:6379` (loopback only)            |
 
 Everything in the cache is derived from somewhere else and carries a time-to-live,
 so it expires and repopulates on its own. `app-api` caches upstream provider
@@ -195,12 +195,12 @@ each request to the right container by hostname and path. It is the **only**
 service published to the public internet — everything else binds to loopback or
 stays on the private network.
 
-| Property | Value |
-| --- | --- |
-| Image | `traefik:v3.6` |
-| Memory limit | `256m` |
-| Volume | `openmapx-traefik-acme` at `/etc/traefik` (backed up — holds the certificates) |
-| Published ports | TCP `80`, TCP `443`, UDP `443` (HTTP/3 / QUIC) |
+| Property        | Value                                                                          |
+| --------------- | ------------------------------------------------------------------------------ |
+| Image           | `traefik:v3.6`                                                                 |
+| Memory limit    | `256m`                                                                         |
+| Volume          | `openmapx-traefik-acme` at `/etc/traefik` (backed up — holds the certificates) |
+| Published ports | TCP `80`, TCP `443`, UDP `443` (HTTP/3 / QUIC)                                 |
 
 Traefik holds **no Docker socket**: an internet-facing reverse proxy with host
 authority is an architectural risk OpenMapX explicitly removes. Instead, Traefik
@@ -266,13 +266,13 @@ with the `/tiles` prefix stripped before the request reaches it. A service with
 no `pathPrefix` — the web app — gets the catch-all rule at the lowest priority, so it
 handles every path no more specific rule claimed. The core layout that ships today:
 
-| Path | Service |
-| --- | --- |
-| `/api/*` | `app-api` |
-| `/.well-known/*` | `well-known` |
-| `/tiles/*` | `tileserver` (prefix stripped) |
-| `/martin/*` | `martin` (prefix stripped) |
-| `/*` | `app-web` (catch-all, lowest priority) |
+| Path             | Service                                |
+| ---------------- | -------------------------------------- |
+| `/api/*`         | `app-api`                              |
+| `/.well-known/*` | `well-known`                           |
+| `/tiles/*`       | `tileserver` (prefix stripped)         |
+| `/martin/*`      | `martin` (prefix stripped)             |
+| `/*`             | `app-web` (catch-all, lowest priority) |
 
 Because routes come from manifests, exposing a service is a render-time decision,
 not a manual Traefik edit: add the `exposure.proxy` block, re-render, and the routes

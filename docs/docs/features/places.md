@@ -16,7 +16,7 @@ a path straight into directions or transit.
 
 Nothing here depends on one proprietary place database. The address and core
 attributes come from your [geocoder](./search.md) and OpenStreetMap; everything
-else is contributed by *enrichment integrations* you can enable, disable, or
+else is contributed by _enrichment integrations_ you can enable, disable, or
 swap independently. A place still resolves and displays with none of them — you
 simply get less context.
 
@@ -34,12 +34,12 @@ instead of a photo.
 
 Below the header, a row of round **action buttons** is always present:
 
-| Action         | What it does                                                                 |
-| -------------- | ---------------------------------------------------------------------------- |
+| Action         | What it does                                                                         |
+| -------------- | ------------------------------------------------------------------------------------ |
 | **Directions** | Sets this place as the destination and opens the [directions panel](./directions.md) |
-| **Save**       | Adds the place to one of your [saved lists](./saved-places.md) (sign-in required) |
-| **Nearby**     | Opens the Explore box centered on this place to find what's around it         |
-| **Share**      | Copies a deep link to the place (uses the native share sheet where available) |
+| **Save**       | Adds the place to one of your [saved lists](./saved-places.md) (sign-in required)    |
+| **Nearby**     | Opens the Explore box centered on this place to find what's around it                |
+| **Share**      | Copies a deep link to the place (uses the native share sheet where available)        |
 
 ### The Overview tab
 
@@ -56,7 +56,7 @@ Overview is a stack of detail rows, each self-hiding when it has nothing to show
 - **Add a label** — tag the place as Home, Work, or a custom name for fast recall.
 - **Local time** — the current wall clock at the place, its UTC offset, and how
   far ahead or behind you it is. Shown only when the place is in a different time
-  zone *and* a different offset from yours, so a place across a border that keeps
+  zone _and_ a different offset from yours, so a place across a border that keeps
   the same clock adds no row.
 - **Weather**, **Sunrise & sunset**, and (on the coast) **Tides** and **Marine
   weather** — expandable readouts for the place's exact location.
@@ -115,11 +115,11 @@ enrichment degrades gracefully rather than blocking the panel.
 These add the context behind the core place data. Each is an independent plugin
 in the `knowledge` domain.
 
-| Integration               | Contributes                                                                          | Source license      |
-| ------------------------- | ------------------------------------------------------------------------------------ | ------------------- |
-| `knowledge-wikipedia`     | The article summary shown on Info, plus the Wikipedia link and Commons images        | CC BY-SA / GFDL     |
-| `knowledge-wikidata`      | The "About this place" structured facts and a fallback description                    | CC0                 |
-| `knowledge-sun-time`      | Sunrise, sunset, and day-length for the place's exact coordinates, plus a coordinate-to-time-zone lookup | Free with attribution |
+| Integration           | Contributes                                                                                              | Source license        |
+| --------------------- | -------------------------------------------------------------------------------------------------------- | --------------------- |
+| `knowledge-wikipedia` | The article summary shown on Info, plus the Wikipedia link and Commons images                            | CC BY-SA / GFDL       |
+| `knowledge-wikidata`  | The "About this place" structured facts and a fallback description                                       | CC0                   |
+| `knowledge-sun-time`  | Sunrise, sunset, and day-length for the place's exact coordinates, plus a coordinate-to-time-zone lookup | Free with attribution |
 
 A place is matched to Wikipedia and Wikidata through its OSM `wikipedia` and
 `wikidata` tags (and the geocoder fills these in where it can), so the encyclopedia
@@ -139,13 +139,13 @@ geo-search around the coordinates — and the results are merged and deduplicate
 into one gallery. Street-level imagery providers are sorted last, after editorial
 photos.
 
-| Integration        | Source            | Notes                                                          |
-| ------------------ | ----------------- | -------------------------------------------------------------- |
-| `photos`           | OSM `image=` tags, Google Photos previews | The base provider; resolves image tags and link previews |
-| `photos-wikimedia` | Wikimedia Commons | Tag-linked and geo-searched Commons photos                     |
-| `photos-flickr`    | Flickr            | Geotagged photos (needs a Flickr API key)                      |
-| `photos-panoramax` | Panoramax         | Open street-level imagery (sorted after editorial photos)      |
-| `photos-mapillary` | Mapillary         | Street-level imagery (sorted last; needs an access token)      |
+| Integration        | Source                                    | Notes                                                     |
+| ------------------ | ----------------------------------------- | --------------------------------------------------------- |
+| `photos`           | OSM `image=` tags, Google Photos previews | The base provider; resolves image tags and link previews  |
+| `photos-wikimedia` | Wikimedia Commons                         | Tag-linked and geo-searched Commons photos                |
+| `photos-flickr`    | Flickr                                    | Geotagged photos (needs a Flickr API key)                 |
+| `photos-panoramax` | Panoramax                                 | Open street-level imagery (sorted after editorial photos) |
+| `photos-mapillary` | Mapillary                                 | Street-level imagery (sorted last; needs an access token) |
 
 Each photo carries its own attribution, shown in the gallery, and the OSM
 `image=` tag always takes priority as the place's primary picture. The same

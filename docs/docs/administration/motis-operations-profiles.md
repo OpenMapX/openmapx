@@ -4,11 +4,11 @@ OpenMapX runs MOTIS regionally by default. The selected profile is an explicit s
 
 ## Profiles
 
-| Profile | Acquisition | Hosted runtime fallback | Required scope | Status |
-|---|---|---|---|---|
-| `regional-assisted` | Pinned Transitous artifacts or origin build | Allowed | Countries or feed allow-list | Supported default |
-| `regional-sovereign` | Pinned catalog plus origin downloads | Prohibited | Countries/feed allow-list and local OSM | Supported with network isolation |
-| `planet` | Pinned build inputs and allow-listed GBFS batches | Prohibited by default | `MOTIS_PLANET_CONFIRM=true` plus operator capacity | Experimental |
+| Profile              | Acquisition                                       | Hosted runtime fallback | Required scope                                     | Status                           |
+| -------------------- | ------------------------------------------------- | ----------------------- | -------------------------------------------------- | -------------------------------- |
+| `regional-assisted`  | Pinned Transitous artifacts or origin build       | Allowed                 | Countries or feed allow-list                       | Supported default                |
+| `regional-sovereign` | Pinned catalog plus origin downloads              | Prohibited              | Countries/feed allow-list and local OSM            | Supported with network isolation |
+| `planet`             | Pinned build inputs and allow-listed GBFS batches | Prohibited by default   | `MOTIS_PLANET_CONFIRM=true` plus operator capacity | Experimental                     |
 
 Configure at minimum:
 

@@ -32,20 +32,20 @@ over each other. Two durable session records disagree the first time one crashes
 
 ## The authority matrix
 
-| Concern | Ordinary browser / PWA | Installed shell |
-| --- | --- | --- |
-| Location stream | Browser geolocation watch | Native, exclusively |
-| One-off "where am I" | `navigator.geolocation` | Native `location.request` (protocol v2) |
-| Route progress, off-route, coasting | Browser engine | Native processor |
-| Reroute / replan decisions | Browser | Native |
-| Voice cues | `SpeechSynthesis` | Native TTS |
-| Get-off alert | Web notification + tone | Native scheduled alert |
-| Wake lock | Screen Wake Lock API | Native |
-| Durable session | IndexedDB | Native SQLite |
-| Transit live refresh | Browser polling | Native, single token consumer |
-| Community frontend bundles | Never executed | Never executed |
-| Microphone / voice search | Available | Never offered |
-| Rendering, search, planning | Web | Web |
+| Concern                             | Ordinary browser / PWA    | Installed shell                         |
+| ----------------------------------- | ------------------------- | --------------------------------------- |
+| Location stream                     | Browser geolocation watch | Native, exclusively                     |
+| One-off "where am I"                | `navigator.geolocation`   | Native `location.request` (protocol v2) |
+| Route progress, off-route, coasting | Browser engine            | Native processor                        |
+| Reroute / replan decisions          | Browser                   | Native                                  |
+| Voice cues                          | `SpeechSynthesis`         | Native TTS                              |
+| Get-off alert                       | Web notification + tone   | Native scheduled alert                  |
+| Wake lock                           | Screen Wake Lock API      | Native                                  |
+| Durable session                     | IndexedDB                 | Native SQLite                           |
+| Transit live refresh                | Browser polling           | Native, single token consumer           |
+| Community frontend bundles          | Never executed            | Never executed                          |
+| Microphone / voice search           | Available                 | Never offered                           |
+| Rendering, search, planning         | Web                       | Web                                     |
 
 The shell's presence is announced by an immutable descriptor injected before any
 page script runs. Shell-only restrictions are decided from that descriptor alone,

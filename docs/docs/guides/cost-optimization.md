@@ -7,8 +7,8 @@ sidebar_position: 7
 # Cost & resource optimization
 
 OpenMapX scales from a 4 GB box to a planet-wide cluster, and the difference
-between those two is almost entirely *which engines you turn on and how much
-data you feed them*. The [Requirements](../install/requirements.md) page
+between those two is almost entirely _which engines you turn on and how much
+data you feed them_. The [Requirements](../install/requirements.md) page
 explains the sizing model: a lightweight always-on core, plus optional heavy
 engines you opt into. This guide builds on that model with the levers that move
 the bill the most, roughly in order of impact.
@@ -26,18 +26,18 @@ Everything that pushes a host into the 16–64 GB range is one of the heavy
 engines, each of which declares a memory ceiling in its
 `services/<id>/service.json` manifest:
 
-| Engine | Manifest RAM ceiling | What it buys you |
-| ------ | -------------------- | ---------------- |
-| Nominatim | 64 GB (import peak) | full geocoding, reverse, place enrichment |
-| Overpass | 32 GB | OSM category / feature [queries](./osm-data-queries.md) |
-| Valhalla | 16 GB | planet-scale [routing](./routing-engines.md) |
-| MOTIS | 16 GB | planet-scale [transit](./transit-engines.md) |
-| OTP | 16 GB | region-scale transit |
-| Local AI (Ollama) | 8 GB | natural-language search query embeddings |
-| Photon | 8 GB | search-as-you-type [geocoding](./geocoders.md) |
-| OSRM | 8 GB | region-scale driving routes |
-| Elasticsearch (Pelias) | 4 GB | composite geocoding store |
-| Dawarich (App + Sidekiq) | ~2 GB | self-hosted personal timeline |
+| Engine                   | Manifest RAM ceiling | What it buys you                                        |
+| ------------------------ | -------------------- | ------------------------------------------------------- |
+| Nominatim                | 64 GB (import peak)  | full geocoding, reverse, place enrichment               |
+| Overpass                 | 32 GB                | OSM category / feature [queries](./osm-data-queries.md) |
+| Valhalla                 | 16 GB                | planet-scale [routing](./routing-engines.md)            |
+| MOTIS                    | 16 GB                | planet-scale [transit](./transit-engines.md)            |
+| OTP                      | 16 GB                | region-scale transit                                    |
+| Local AI (Ollama)        | 8 GB                 | natural-language search query embeddings                |
+| Photon                   | 8 GB                 | search-as-you-type [geocoding](./geocoders.md)          |
+| OSRM                     | 8 GB                 | region-scale driving routes                             |
+| Elasticsearch (Pelias)   | 4 GB                 | composite geocoding store                               |
+| Dawarich (App + Sidekiq) | ~2 GB                | self-hosted personal timeline                           |
 
 Before enabling any of these, ask which user-facing features you actually need.
 If you don't offer transit directions, skip MOTIS and OTP. If you never surface
@@ -64,15 +64,15 @@ in the internal Docker address when you've actually co-deployed that service. In
 other words, if a self-hosted engine isn't in your selection, OpenMapX
 transparently reaches out to a public one instead:
 
-| Capability | Hosted default it falls back to | Self-hosted engine you skip |
-| ---------- | ------------------------------- | --------------------------- |
-| Geocoding (full) | `nominatim.openstreetmap.org` | Nominatim |
-| Geocoding (typeahead) | `photon.komoot.io` | Photon |
-| OSM queries | `overpass-api.de` | Overpass |
-| Driving routes | `router.project-osrm.org` | OSRM |
-| Multi-modal routing | Stadia Maps Valhalla (`api.stadiamaps.com`) | Valhalla |
-| Transit | Transitous / MOTIS cloud (`api.transitous.org`) | MOTIS |
-| Map tiles | MapTiler Cloud fallback | TileServer GL |
+| Capability            | Hosted default it falls back to                 | Self-hosted engine you skip |
+| --------------------- | ----------------------------------------------- | --------------------------- |
+| Geocoding (full)      | `nominatim.openstreetmap.org`                   | Nominatim                   |
+| Geocoding (typeahead) | `photon.komoot.io`                              | Photon                      |
+| OSM queries           | `overpass-api.de`                               | Overpass                    |
+| Driving routes        | `router.project-osrm.org`                       | OSRM                        |
+| Multi-modal routing   | Stadia Maps Valhalla (`api.stadiamaps.com`)     | Valhalla                    |
+| Transit               | Transitous / MOTIS cloud (`api.transitous.org`) | MOTIS                       |
+| Map tiles             | MapTiler Cloud fallback                         | TileServer GL               |
 
 A common lean deployment self-hosts nothing in this table: the [search](../features/search.md),
 [directions](../features/directions.md), and [public-transit](../features/public-transit.md)
@@ -83,7 +83,7 @@ as traffic or privacy needs grow.
 :::caution[Hosted endpoints have trade-offs]
 Public instances come with caveats you must weigh:
 
-- **Privacy.** OpenMapX proxies these calls *through your server* rather than
+- **Privacy.** OpenMapX proxies these calls _through your server_ rather than
   exposing them to the browser, so end users never talk to the third party
   directly — but your server does, and the upstream provider sees your traffic.
   Self-hosting is the only way to keep every query fully on your infrastructure.
@@ -99,7 +99,7 @@ For anything beyond light or evaluation use, plan to self-host the engines that
 carry your real query volume.
 :::
 
-To point an engine at a *specific* hosted host (for example, your own managed
+To point an engine at a _specific_ hosted host (for example, your own managed
 Valhalla), set its URL in `infra/docker/.env` — `VALHALLA_URL` (isochrones /
 elevation), `OVERPASS_URL`, `MOTIS_URL`, and so on; the routing providers take
 `INTEGRATION_ROUTING_VALHALLA_ENDPOINT` / `INTEGRATION_ROUTING_OSRM_ENDPOINT`. An
@@ -159,7 +159,7 @@ especially once you've scoped to a region.
 
 ## 5. Build heavy, then run lean
 
-Several engines need far more RAM to *build* their index than to *serve*
+Several engines need far more RAM to _build_ their index than to _serve_
 queries afterward. Nominatim's 64 GB ceiling is its import peak; steady-state
 runtime use is a small fraction of that. The same gap applies to Overpass.
 

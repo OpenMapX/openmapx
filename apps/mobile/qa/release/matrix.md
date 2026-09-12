@@ -9,14 +9,14 @@ report about a build nobody can identify later, which is the same as no report.
 
 ## Pre-beta virtual matrix
 
-| Path | Why it is here |
-| --- | --- |
-| Current iOS simulator | The version most users will be on |
-| Minimum-target iOS simulator (16.4) where Xcode supplies one | The oldest supported OS, where layout and API availability diverge |
-| Android API 36 emulator | The target SDK |
-| Android API 24 emulator | The minimum SDK |
+| Path                                                               | Why it is here                                                                         |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
+| Current iOS simulator                                              | The version most users will be on                                                      |
+| Minimum-target iOS simulator (16.4) where Xcode supplies one       | The oldest supported OS, where layout and API availability diverge                     |
+| Android API 36 emulator                                            | The target SDK                                                                         |
+| Android API 24 emulator                                            | The minimum SDK                                                                        |
 | Android 16 KiB page-size emulator, compatibility mode **disabled** | Play requires 16 KiB support from 31 August 2026; compatibility mode hides the failure |
-| Small-screen and tablet layout smoke | Not to claim tablet support, but to confirm nothing is unreachable |
+| Small-screen and tablet layout smoke                               | Not to claim tablet support, but to confirm nothing is unreachable                     |
 
 ## Volunteer target matrix (blocks public rollout, not beta upload)
 

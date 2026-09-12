@@ -16,17 +16,17 @@ review before enabling wording that describes the workflow as verified.
 The release pipeline must replace the values below with the exact source
 revision and generated evidence version before recording an approval:
 
-| Item | Required value |
-| --- | --- |
-| Evidence version | `gdpr-release-v1.<sha256>` derived from the review label, source fingerprint and deployment facts |
-| Repository revision | the immutable release commit |
-| Privacy migration range | `0020`–`0036` (receipt snapshots, assisted identity, email challenges and delivery leases included) |
-| Catalogue version | the `version` field of every registration in `apps/api/src/privacy/catalogue.ts` |
-| Managed Dawarich image | `freikin/dawarich:1.10.3` |
-| Managed Dawarich application commit | `da551a0e32f67b4d8ac6d50132c26634d6ad29a4` |
-| Managed Dawarich image digest | `sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b` |
-| Managed Dawarich schema fingerprint | `cddd7f3971bf07ffdcc51909714d90c0d476644e414c68aa9613a601cf4bc8f1` |
-| Backup manifest contract | format `2`, regular files, size and lowercase SHA-256 verified immediately before extraction |
+| Item                                | Required value                                                                                      |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------- |
+| Evidence version                    | `gdpr-release-v1.<sha256>` derived from the review label, source fingerprint and deployment facts   |
+| Repository revision                 | the immutable release commit                                                                        |
+| Privacy migration range             | `0020`–`0036` (receipt snapshots, assisted identity, email challenges and delivery leases included) |
+| Catalogue version                   | the `version` field of every registration in `apps/api/src/privacy/catalogue.ts`                    |
+| Managed Dawarich image              | `freikin/dawarich:1.10.3`                                                                           |
+| Managed Dawarich application commit | `da551a0e32f67b4d8ac6d50132c26634d6ad29a4`                                                          |
+| Managed Dawarich image digest       | `sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b`                           |
+| Managed Dawarich schema fingerprint | `cddd7f3971bf07ffdcc51909714d90c0d476644e414c68aa9613a601cf4bc8f1`                                  |
+| Backup manifest contract            | format `2`, regular files, size and lowercase SHA-256 verified immediately before extraction        |
 
 An image, application commit, schema relation, collector contract, catalogue
 copy, legal setting or archive schema change invalidates the previous evidence
@@ -159,18 +159,18 @@ legal approvals remain separate requirements.
 
 Validation recorded during the review:
 
-| Check | Result |
-| --- | --- |
-| Full Vitest suite | 1,392 files passed; 14,776 tests passed, 65 skipped |
-| Database suite against isolated PostgreSQL/PostGIS | 10 files, 51 tests passed |
-| Pinned Dawarich Docker fixture | Passed |
-| Final archive writer/assembler regressions | 6 tests passed |
-| Readiness regressions | 3 tests passed |
-| Repository type checking | All 29 tasks passed; API types rechecked after final writer change |
-| Lint and translations | Passed with existing repository warnings |
-| Policy checks | Passed |
-| OpenAPI validation | 363 operations, document up to date |
-| `git diff --check` | Passed |
+| Check                                              | Result                                                             |
+| -------------------------------------------------- | ------------------------------------------------------------------ |
+| Full Vitest suite                                  | 1,392 files passed; 14,776 tests passed, 65 skipped                |
+| Database suite against isolated PostgreSQL/PostGIS | 10 files, 51 tests passed                                          |
+| Pinned Dawarich Docker fixture                     | Passed                                                             |
+| Final archive writer/assembler regressions         | 6 tests passed                                                     |
+| Readiness regressions                              | 3 tests passed                                                     |
+| Repository type checking                           | All 29 tasks passed; API types rechecked after final writer change |
+| Lint and translations                              | Passed with existing repository warnings                           |
+| Policy checks                                      | Passed                                                             |
+| OpenAPI validation                                 | 363 operations, document up to date                                |
+| `git diff --check`                                 | Passed                                                             |
 
 The isolated database container and its test volume were removed. No worktree,
 staging, commit, or push was performed.
@@ -240,20 +240,20 @@ retention fixtures from deleting another suite's test cases.
 
 ### Follow-up verification
 
-| Check | Result |
-| --- | --- |
-| Full Vitest suite | 1,416 files passed; 14,897 tests passed; 98 skipped |
-| Migrated PostgreSQL/PostGIS suite with real retained-backup input | 19 files, 84 tests passed |
-| Controller-wide composite | Two clean semantic runs, every applicable registration represented |
-| Pinned live Dawarich Docker fixture | Passed |
-| Real-schema backup Docker fixture | Passed, including column/FK drift rejection and encrypted assembly |
-| Versioned key ring, private-file and CLI compatibility tests | 70 focused tests passed |
-| Repository type checking | All 29 tasks passed |
-| Lint and translations | Passed; 0 translation errors, 227 warnings, 164 informational notices |
-| Policy and OpenAPI | Passed; 368 OpenAPI operations |
-| Fingerprint and runtime-package regression tests | 6 tests passed; six reviewed build-input mutations independently verified |
-| API production Docker image | Passed with compilation offline; shared translator/core import as UID 1000 with networking disabled; embedded/source/evidence fingerprints match |
-| Documentation build and final whitespace check | Passed |
+| Check                                                             | Result                                                                                                                                           |
+| ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Full Vitest suite                                                 | 1,416 files passed; 14,897 tests passed; 98 skipped                                                                                              |
+| Migrated PostgreSQL/PostGIS suite with real retained-backup input | 19 files, 84 tests passed                                                                                                                        |
+| Controller-wide composite                                         | Two clean semantic runs, every applicable registration represented                                                                               |
+| Pinned live Dawarich Docker fixture                               | Passed                                                                                                                                           |
+| Real-schema backup Docker fixture                                 | Passed, including column/FK drift rejection and encrypted assembly                                                                               |
+| Versioned key ring, private-file and CLI compatibility tests      | 70 focused tests passed                                                                                                                          |
+| Repository type checking                                          | All 29 tasks passed                                                                                                                              |
+| Lint and translations                                             | Passed; 0 translation errors, 227 warnings, 164 informational notices                                                                            |
+| Policy and OpenAPI                                                | Passed; 368 OpenAPI operations                                                                                                                   |
+| Fingerprint and runtime-package regression tests                  | 6 tests passed; six reviewed build-input mutations independently verified                                                                        |
+| API production Docker image                                       | Passed with compilation offline; shared translator/core import as UID 1000 with networking disabled; embedded/source/evidence fingerprints match |
+| Documentation build and final whitespace check                    | Passed                                                                                                                                           |
 
 The tested archive limits include a 2 GiB plaintext bound and 512 entries, with
 512 MiB per encrypted replay member and 256 KiB per projected record. Receipt
@@ -282,7 +282,6 @@ All review changes remain uncommitted on `main`. No worktree, staging, commit,
 push, production notification or deployment approval was performed. The
 disposable verification database/container volume and the root-owned API build
 tag were removed after verification.
-
 
 ## Restore-erasure alignment — 2026-09-05
 
@@ -327,17 +326,17 @@ database job.
 
 Verification for the follow-up:
 
-| Check | Result |
-| --- | --- |
-| Migrated PostgreSQL suite | 19 files, 85 tests passed |
-| Actual Docker/Compose restore fixture | 6 tests passed |
-| Final affected unit/contract suites | 7 files, 121 tests passed |
-| Changed-file formatting/lint and documentation build | Passed |
-| Final CLI backup unit suite | 70 tests passed |
-| Journal, Compose and API key-validation tests | 44 focused tests passed |
-| Repository type checking | All 29 tasks passed; final CLI fixture types also passed |
-| CI database wiring contract | 2 tests passed |
-| Release validation | Translation, policy and OpenAPI validators passed |
+| Check                                                | Result                                                   |
+| ---------------------------------------------------- | -------------------------------------------------------- |
+| Migrated PostgreSQL suite                            | 19 files, 85 tests passed                                |
+| Actual Docker/Compose restore fixture                | 6 tests passed                                           |
+| Final affected unit/contract suites                  | 7 files, 121 tests passed                                |
+| Changed-file formatting/lint and documentation build | Passed                                                   |
+| Final CLI backup unit suite                          | 70 tests passed                                          |
+| Journal, Compose and API key-validation tests        | 44 focused tests passed                                  |
+| Repository type checking                             | All 29 tasks passed; final CLI fixture types also passed |
+| CI database wiring contract                          | 2 tests passed                                           |
+| Release validation                                   | Translation, policy and OpenAPI validators passed        |
 
 The broad unit run passed 14,916 tests and reported one mixed-volume test
 assertion from before the final readiness arguments were updated. The corrected
@@ -359,7 +358,6 @@ reference was changed.
 The disposable verification database and every fixture Compose container and
 volume were removed after testing. Existing user containers were untouched.
 
-
 ## Current formats only — 2026-09-05
 
 The operator confirmed that no OpenMapX instances have been deployed. The
@@ -379,12 +377,12 @@ for extraction or restore.
 
 Final verification after removal:
 
-| Check | Result |
-| --- | --- |
+| Check                                                  | Result                                                         |
+| ------------------------------------------------------ | -------------------------------------------------------------- |
 | Affected journal, key, backup and contract unit suites | 8 files, 191 tests passed; 4 Linux-only tests skipped on macOS |
-| Real Docker/PostgreSQL restore suite | 6 tests passed, including unsupported-schema rejection |
-| Repository type checking | All 29 tasks passed |
-| Release validation | Translation, policy and OpenAPI checks passed; 368 operations |
+| Real Docker/PostgreSQL restore suite                   | 6 tests passed, including unsupported-schema rejection         |
+| Repository type checking                               | All 29 tasks passed                                            |
+| Release validation                                     | Translation, policy and OpenAPI checks passed; 368 operations  |
 
 The current source fingerprint is
 `cd0a7c4e850008885b2fe290e77eda54d125a480544bc136891f51caacae24ea`.
@@ -429,20 +427,20 @@ reran the focused regressions and found no remaining blocker in that recheck.
 
 Verification for this setup checkpoint:
 
-| Check | Result |
-| --- | --- |
-| Final full Vitest run | 1,424 files and 14,975 tests passed; 24 files and 106 tests skipped |
-| Documentation build and final whitespace check | Passed |
-| Combined backend/settings/release integration checks | 142 tests passed; 4 platform-specific tests skipped |
-| Final release publication, rollback and provisioning checks | 85 tests passed; 4 platform-specific tests skipped |
-| Privacy API regressions | 179 tests passed; 37 database/fixture-dependent tests skipped |
-| Final UI slice and static URL guard | 26 tests passed |
-| Independent UI finding recheck | 14 tests passed |
-| Repository type checking | All 29 tasks passed |
-| Changed-file Biome | Passed; one existing informational template-style diagnostic |
-| Release validation | Passed: 0 translation errors, policy checks and 368-operation OpenAPI document |
-| Production API image | Built successfully; embedded fingerprint matches current source and generated evidence |
-| Runtime smoke checks | Non-root, read-only evidence mount and root filesystem; shared German translator resolves without fallback |
+| Check                                                       | Result                                                                                                     |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| Final full Vitest run                                       | 1,424 files and 14,975 tests passed; 24 files and 106 tests skipped                                        |
+| Documentation build and final whitespace check              | Passed                                                                                                     |
+| Combined backend/settings/release integration checks        | 142 tests passed; 4 platform-specific tests skipped                                                        |
+| Final release publication, rollback and provisioning checks | 85 tests passed; 4 platform-specific tests skipped                                                         |
+| Privacy API regressions                                     | 179 tests passed; 37 database/fixture-dependent tests skipped                                              |
+| Final UI slice and static URL guard                         | 26 tests passed                                                                                            |
+| Independent UI finding recheck                              | 14 tests passed                                                                                            |
+| Repository type checking                                    | All 29 tasks passed                                                                                        |
+| Changed-file Biome                                          | Passed; one existing informational template-style diagnostic                                               |
+| Release validation                                          | Passed: 0 translation errors, policy checks and 368-operation OpenAPI document                             |
+| Production API image                                        | Built successfully; embedded fingerprint matches current source and generated evidence                     |
+| Runtime smoke checks                                        | Non-root, read-only evidence mount and root filesystem; shared German translator resolves without fallback |
 
 The source fingerprint is
 `ae0a17675ab6af4f04f5a6acb2551662011e3e8dee1e2a02852e831a9db2a7ae`.

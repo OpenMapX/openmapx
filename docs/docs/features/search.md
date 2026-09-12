@@ -21,18 +21,18 @@ geocoders — each one a plugin you can swap, self-host, or chain behind another
 The search bar accepts far more than a place name, and it understands several of
 the things you might type without a separate mode:
 
-| You type…                          | You get…                                                       |
-| ---------------------------------- | -------------------------------------------------------------- |
-| A place or business name           | Matching addresses, POIs, streets, and regions                 |
-| A street address                   | The pinpointed location, with the formatted address            |
-| A category word ("coffee", "fuel") | A category search that plots every match in the current view   |
+| You type…                          | You get…                                                                        |
+| ---------------------------------- | ------------------------------------------------------------------------------- |
+| A place or business name           | Matching addresses, POIs, streets, and regions                                  |
+| A street address                   | The pinpointed location, with the formatted address                             |
+| A category word ("coffee", "fuel") | A category search that plots every match in the current view                    |
 | A plain-language question          | A parsed intent that runs the matching category, filter, area, and hours search |
-| A transit stop name                | The stop, with its line modes, opening straight to the stop    |
-| An airport name or IATA/ICAO code  | The airport, opening its detail panel (runways, frequencies)   |
-| A public place or stop code        | The matching airport, station, or coded OSM feature            |
-| An explicit alias or acronym       | The canonical place name, with the matched value shown beside it |
-| Latitude/longitude or a Plus Code  | A pin at those exact coordinates                               |
-| "Home" / "Work" or a saved label   | Your own labeled places, surfaced near the top                 |
+| A transit stop name                | The stop, with its line modes, opening straight to the stop                     |
+| An airport name or IATA/ICAO code  | The airport, opening its detail panel (runways, frequencies)                    |
+| A public place or stop code        | The matching airport, station, or coded OSM feature                             |
+| An explicit alias or acronym       | The canonical place name, with the matched value shown beside it                |
+| Latitude/longitude or a Plus Code  | A pin at those exact coordinates                                                |
+| "Home" / "Work" or a saved label   | Your own labeled places, surfaced near the top                                  |
 
 Suggestions arrive **as you type**: the bar debounces your input, fetches
 autocomplete results, and ranks them locally so the closest match floats to the
@@ -74,7 +74,7 @@ browser vendor's speech service; consult that browser's privacy documentation.
 
 ### Category and POI search
 
-Beyond named places, you can search by *category* — "restaurants," "pharmacies,"
+Beyond named places, you can search by _category_ — "restaurants," "pharmacies,"
 "EV charging." Category search asks a separate POI-search service for everything
 of that kind inside the current map viewport and plots the lot. It is backed by
 `poi-overpass`, which queries OpenStreetMap through Overpass. Deployments can
@@ -106,7 +106,7 @@ code, which region-aware features use to decide what's available where you are.
 Name and address requests go to the **geocoding** integration, which
 exposes the search routes (`/geocode`, `/autocomplete`, `/geocode/reverse`) and
 owns the logic around them — query normalization, caching, and result shaping.
-What it does *not* do is talk to a geocoder directly. That job belongs to the
+What it does _not_ do is talk to a geocoder directly. That job belongs to the
 provider integrations it orchestrates.
 
 Specialist code and alias matches use the separate **search-suggestions**
@@ -128,16 +128,16 @@ setup is just a chain of length one.
 
 Each provider in the chain is its own integration, wrapping one geocoding engine:
 
-| Provider     | Integration          | Backed by                                                    |
-| ------------ | -------------------- | ------------------------------------------------------------ |
-| `nominatim`  | `geocoding-nominatim`| Nominatim — self-hosted from OSM, or the public OSM instance |
-| `photon`     | `geocoding-photon`   | Photon — self-hosted, or the public Komoot instance          |
-| `pelias`     | `geocoding-pelias`   | Pelias — self-hosted (Elasticsearch-backed)                  |
-| `maptiler`   | `geocoding-maptiler` | MapTiler Cloud (hosted; needs an API key)                    |
-| `motis`      | `geocoding-motis`    | A self-hosted MOTIS server, with Transitous as cloud fallback |
-| `transitous` | `geocoding-motis`    | The public Transitous geocoder (an alias of the MOTIS provider) |
-| `db-ris`     | `geocoding-db-ris`   | Deutsche Bahn RIS Stations (German rail stops; needs credentials) |
-| `entur`      | `geocoding-entur`    | The Entur geocoder (Norwegian transit and places)            |
+| Provider     | Integration           | Backed by                                                         |
+| ------------ | --------------------- | ----------------------------------------------------------------- |
+| `nominatim`  | `geocoding-nominatim` | Nominatim — self-hosted from OSM, or the public OSM instance      |
+| `photon`     | `geocoding-photon`    | Photon — self-hosted, or the public Komoot instance               |
+| `pelias`     | `geocoding-pelias`    | Pelias — self-hosted (Elasticsearch-backed)                       |
+| `maptiler`   | `geocoding-maptiler`  | MapTiler Cloud (hosted; needs an API key)                         |
+| `motis`      | `geocoding-motis`     | A self-hosted MOTIS server, with Transitous as cloud fallback     |
+| `transitous` | `geocoding-motis`     | The public Transitous geocoder (an alias of the MOTIS provider)   |
+| `db-ris`     | `geocoding-db-ris`    | Deutsche Bahn RIS Stations (German rail stops; needs credentials) |
+| `entur`      | `geocoding-entur`     | The Entur geocoder (Norwegian transit and places)                 |
 
 Mixing engines is the point. You might run Photon for fast self-hosted
 autocomplete and fall back to MapTiler for global coverage, or put a
@@ -154,7 +154,7 @@ engine produced a match.
 Two touches improve recall along the way. Queries are **expanded for transit
 abbreviations** in several languages before they're sent on, so "Aachen Hbf"
 and "Aachen Hauptbahnhof" find the same station regardless of which form you
-type (likewise *Bf* / *Bahnhof*, *Stn* / *Station*, *St-* / *Saint-*). And
+type (likewise _Bf_ / _Bahnhof_, _Stn_ / _Station_, _St-_ / _Saint-_). And
 results are **cached** at two layers — a small in-memory cache for hot
 autocomplete prefixes plus a shared Valkey (Redis-compatible) cache — keyed on the normalized query
 so common searches return without touching an upstream engine. When an upstream

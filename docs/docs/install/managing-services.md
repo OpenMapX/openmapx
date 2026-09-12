@@ -115,7 +115,7 @@ the file — the environment variable is the source of truth in that case, and t
 CLI keeps it unambiguous.
 
 :::note[Selection is not the same as running]
-Editing the selection changes what *will* be rendered and started. It does not
+Editing the selection changes what _will_ be rendered and started. It does not
 touch running containers. Enabling a service is followed by a render and a start
 (below) before it actually comes up.
 :::
@@ -126,19 +126,19 @@ A **preset** is a named bundle of root services, so you can say "start the
 routing stack" instead of listing every id. Presets work on `services start`,
 `stop`, `restart`, `update`, and on `compose render` / `compose up`:
 
-| Preset      | Services                                                  |
-| ----------- | --------------------------------------------------------- |
-| `app`       | `app-api`, `app-web`, `well-known`                        |
-| `proxy`     | `traefik`                                                 |
-| `dev`       | `postgis`, `redis`                                        |
-| `routing`   | `osrm`, `valhalla`                                        |
-| `transit`   | `motis`, `motis-feed-proxy`, `otp`                        |
+| Preset      | Services                                                      |
+| ----------- | ------------------------------------------------------------- |
+| `app`       | `app-api`, `app-web`, `well-known`                            |
+| `proxy`     | `traefik`                                                     |
+| `dev`       | `postgis`, `redis`                                            |
+| `routing`   | `osrm`, `valhalla`                                            |
+| `transit`   | `motis`, `motis-feed-proxy`, `otp`                            |
 | `pelias`    | `pelias`, `pelias-pip`, `pelias-placeholder`, `elasticsearch` |
-| `nominatim` | `nominatim`                                               |
-| `photon`    | `photon`                                                  |
-| `overpass`  | `overpass`                                                |
-| `tiles`     | `tileserver`                                              |
-| `martin`    | `martin`                                                  |
+| `nominatim` | `nominatim`                                                   |
+| `photon`    | `photon`                                                      |
+| `overpass`  | `overpass`                                                    |
+| `tiles`     | `tileserver`                                                  |
+| `martin`    | `martin`                                                      |
 
 Services that are not grouped into a preset — including `data-manager`,
 `ops-agent`, `local-ai`, `dawarich-app`, `dawarich-postgis`, `dawarich-redis`,
@@ -275,11 +275,11 @@ Many services expose operator-tunable settings through a `configSchema` in their
 manifest (Valhalla's elevation and admin-boundary toggles, for example). Values
 resolve at render time through a three-layer cascade, highest priority first:
 
-| Priority | Source                | Where it lives                              |
-| :------: | --------------------- | ------------------------------------------- |
-|    3     | Environment variable  | `SERVICE_<ID>_<KEY>` in `infra/docker/.env` |
-|    2     | Database              | the admin panel's per-service config form   |
-|    1     | Schema default        | the manifest's `configSchema` default       |
+| Priority | Source               | Where it lives                              |
+| :------: | -------------------- | ------------------------------------------- |
+|    3     | Environment variable | `SERVICE_<ID>_<KEY>` in `infra/docker/.env` |
+|    2     | Database             | the admin panel's per-service config form   |
+|    1     | Schema default       | the manifest's `configSchema` default       |
 
 Environment variables always win, which keeps Docker deployments predictable.
 The env-var name is `SERVICE_` + the uppercased service id (hyphens become

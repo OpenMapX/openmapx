@@ -19,12 +19,12 @@ You control both from the **layer picker** in the bottom-left corner of the map.
 A base style is the foundation, and exactly one is active at a time. OpenMapX
 ships four:
 
-| Style          | What it shows                                                              |
-| -------------- | ------------------------------------------------------------------------- |
-| **Default**    | The standard OpenMapX street map — roads, labels, land use, water.        |
-| **Satellite**  | True-color aerial and satellite imagery instead of drawn streets.         |
-| **Terrain**    | A relief-shaded map that emphasizes elevation, slopes, and landforms.     |
-| **Cycling**    | A bike-oriented base that foregrounds cycle routes and infrastructure.    |
+| Style         | What it shows                                                          |
+| ------------- | ---------------------------------------------------------------------- |
+| **Default**   | The standard OpenMapX street map — roads, labels, land use, water.     |
+| **Satellite** | True-color aerial and satellite imagery instead of drawn streets.      |
+| **Terrain**   | A relief-shaded map that emphasizes elevation, slopes, and landforms.  |
+| **Cycling**   | A bike-oriented base that foregrounds cycle routes and infrastructure. |
 
 Where the imagery comes from depends on how your instance is configured. The
 street and terrain bases are served by your tile stack (a self-hosted tile
@@ -41,8 +41,8 @@ integration declares a few things in its manifest:
 - a **map-layer component** that draws onto the MapLibre map,
 - an optional **legend** explaining its colors or symbols,
 - its **data source** and the **attribution** that must appear while it's on,
-- and where it belongs in the picker (the *Map details* group, or the *Map
-  tools* group).
+- and where it belongs in the picker (the _Map details_ group, or the _Map
+  tools_ group).
 
 The web app discovers these at runtime and builds the picker from whatever
 overlay integrations are enabled — so the list below describes the full catalog,
@@ -69,15 +69,15 @@ The built-in overlays group into a few themes.
 
 ### Transportation
 
-| Overlay                | Shows                                                | Data                          |
-| ---------------------- | ---------------------------------------------------- | ----------------------------- |
-| **Traffic**            | Live traffic-flow coloring on roads                  | TomTom Traffic (needs an API key) |
-| **Traffic flow**       | Congestion coloring from your own road-conditions feeds | [OpenConditions](../developer/building-an-external-extension.md) speed data |
-| **Transit lines**      | Public-transport routes and lines                    | OpenStreetMap                 |
+| Overlay                   | Shows                                                                                                | Data                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| **Traffic**               | Live traffic-flow coloring on roads                                                                  | TomTom Traffic (needs an API key)                                                  |
+| **Traffic flow**          | Congestion coloring from your own road-conditions feeds                                              | [OpenConditions](../developer/building-an-external-extension.md) speed data        |
+| **Transit lines**         | Public-transport routes and lines                                                                    | OpenStreetMap                                                                      |
 | **Schematic transit map** | Metro-map style network plans with layout and network-group choice (mutually excludes Transit lines) | [LOOM](./schematic-transit-map.md) (University of Freiburg), OpenStreetMap-derived |
-| **Live transit**       | Real-time bus, tram, and train positions             | Live-vehicle feeds (e.g. DB RIS, Entur) |
-| **Airports**           | Airport locations and metadata                       | OurAirports                   |
-| **Road conditions**    | Incidents, roadworks, and closures (community extension) | [OpenConditions](../developer/building-an-external-extension.md) |
+| **Live transit**          | Real-time bus, tram, and train positions                                                             | Live-vehicle feeds (e.g. DB RIS, Entur)                                            |
+| **Airports**              | Airport locations and metadata                                                                       | OurAirports                                                                        |
+| **Road conditions**       | Incidents, roadworks, and closures (community extension)                                             | [OpenConditions](../developer/building-an-external-extension.md)                   |
 
 The traffic overlay needs a TomTom API key (set in the admin panel or via
 `.env`), and only renders above a minimum zoom. The **Traffic flow** overlay is
@@ -115,12 +115,12 @@ and layers enabled only by the context switch back off when it ends.
 
 ### Environment & weather
 
-| Overlay              | Shows                                                  | Data                                  |
-| -------------------- | ----------------------------------------------------- | ------------------------------------- |
-| **Weather**          | Precipitation radar animation, plus temperature/precipitation/cloud/wind/pressure tiles | RainViewer, OpenWeather, Open-Meteo |
-| **Weather alerts**   | Active severe-weather warnings                        | NOAA, Environment Canada, DWD, MeteoAlarm |
-| **Air quality**      | Raw pollutant concentrations from monitoring stations | Canonical provider orchestration (including OpenAQ when configured) |
-| **Environment**      | Readings from community environmental sensors         | openSenseMap, Sensor.Community        |
+| Overlay            | Shows                                                                                   | Data                                                                |
+| ------------------ | --------------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
+| **Weather**        | Precipitation radar animation, plus temperature/precipitation/cloud/wind/pressure tiles | RainViewer, OpenWeather, Open-Meteo                                 |
+| **Weather alerts** | Active severe-weather warnings                                                          | NOAA, Environment Canada, DWD, MeteoAlarm                           |
+| **Air quality**    | Raw pollutant concentrations from monitoring stations                                   | Canonical provider orchestration (including OpenAQ when configured) |
+| **Environment**    | Readings from community environmental sensors                                           | openSenseMap, Sensor.Community                                      |
 
 The weather overlay's radar loop works out of the box via RainViewer (returning
 HTTP 451 if RainViewer is excluded by policy); its temperature, precipitation, cloud,
@@ -136,8 +136,8 @@ for its pollutant, provenance, and degraded-data semantics.
 
 ### Daylight & time zones
 
-| Overlay                   | Shows                                                          | Data                                        |
-| -------------------------- | --------------------------------------------------------------- | -------------------------------------------- |
+| Overlay                   | Shows                                                                                                                                | Data                                                                                   |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------- |
 | **Daylight & time zones** | Day/night terminator with civil, nautical, and astronomical twilight shading, plus time zone boundaries and their current UTC offset | Terminator computed locally; boundaries from timezone-boundary-builder (OpenStreetMap) |
 
 The terminator is computed locally from the sun's position for the selected
@@ -153,25 +153,25 @@ with `pnpm --filter @openmapx/integration-overlay-sun-time refresh-timezones`.
 
 ### Hazards & natural events
 
-| Overlay              | Shows                                                  | Data            |
-| -------------------- | ----------------------------------------------------- | --------------- |
-| **Earthquakes**      | Recent earthquakes, sized by magnitude                | USGS            |
-| **Wildfires**        | Active fire hotspots                                   | NASA FIRMS      |
-| **Natural events**   | Storms, volcanoes, floods, and other ongoing events   | NASA EONET, GDACS |
+| Overlay            | Shows                                               | Data              |
+| ------------------ | --------------------------------------------------- | ----------------- |
+| **Earthquakes**    | Recent earthquakes, sized by magnitude              | USGS              |
+| **Wildfires**      | Active fire hotspots                                | NASA FIRMS        |
+| **Natural events** | Storms, volcanoes, floods, and other ongoing events | NASA EONET, GDACS |
 
 These pull from public hazard feeds and are useful for situational awareness at
 a glance.
 
 ### Recreation & specialty
 
-| Overlay              | Shows                                                  | Data                         |
-| -------------------- | ----------------------------------------------------- | ---------------------------- |
-| **Cycling**          | Cycle tracks, lanes, parking, and bike shops          | OpenStreetMap (via Overpass) |
-| **Hiking**           | Hiking trails and mountain shelters                   | Waymarked Trails, Refuges.info, OpenStreetMap |
-| **Winter sports**    | Ski areas, pistes, and lifts                          | OpenSnowMap                  |
-| **Nautical**         | Sea marks, depths, tides, and water levels            | OpenSeaMap and marine agencies |
-| **Satellite imagery**| A true-color satellite overlay (distinct from the satellite base) | NASA GIBS / MODIS |
-| **3D buildings**     | Extruded building footprints from the active vector style | OpenMapTiles-compatible building layers |
+| Overlay               | Shows                                                             | Data                                          |
+| --------------------- | ----------------------------------------------------------------- | --------------------------------------------- |
+| **Cycling**           | Cycle tracks, lanes, parking, and bike shops                      | OpenStreetMap (via Overpass)                  |
+| **Hiking**            | Hiking trails and mountain shelters                               | Waymarked Trails, Refuges.info, OpenStreetMap |
+| **Winter sports**     | Ski areas, pistes, and lifts                                      | OpenSnowMap                                   |
+| **Nautical**          | Sea marks, depths, tides, and water levels                        | OpenSeaMap and marine agencies                |
+| **Satellite imagery** | A true-color satellite overlay (distinct from the satellite base) | NASA GIBS / MODIS                             |
+| **3D buildings**      | Extruded building footprints from the active vector style         | OpenMapTiles-compatible building layers       |
 
 ### Map tools
 

@@ -24,10 +24,10 @@ not provide the base map.
 
 The `tileserver` service consumes only prepared map data:
 
-| Input | Mounted at | Produced by |
-| --- | --- | --- |
+| Input          | Mounted at      | Produced by                          |
+| -------------- | --------------- | ------------------------------------ |
 | `tile-mbtiles` | `/data/mbtiles` | `openmapx services build tileserver` |
-| `tile-fonts` | `/data/fonts` | `openmapx data download fonts` |
+| `tile-fonts`   | `/data/fonts`   | `openmapx data download fonts`       |
 
 Its checked-in configuration deliberately has no TileServer style catalog. The
 web app serves `/styles/openmapx-streets.json`, `/styles/openmapx-dark.json`, and

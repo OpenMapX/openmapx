@@ -7,7 +7,7 @@
 # pnpm-workspace.yaml to give the docs build the same protections. (The root's
 # app-specific `overrides` and `publicHoistPattern` are deliberately not copied.)
 packages:
-  - '.'
+  - "."
 
 # Don't run dependency install scripts unless explicitly allowed; never
 # blanket-allow them.
@@ -19,7 +19,7 @@ dangerouslyAllowAllBuilds: false
 # its platform optional-dependency, not this script), so they're skipped
 # (false) — which still explicitly acknowledges them so the strict check passes.
 allowBuilds:
-  '@swc/core': false
+  "@swc/core": false
   core-js: false
 
 # Reject git/http/file ("exotic") transitive dependencies.

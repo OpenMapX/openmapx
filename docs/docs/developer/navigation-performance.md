@@ -30,12 +30,12 @@ Add `navperf=1` to the query string of a navigation session
 (`https://…/?navperf=1`) and start guidance. A small dark panel appears on the
 left, next to the simulator panel (`?navsim=1`), with:
 
-| Control | Effect |
-| --- | --- |
+| Control              | Effect                                                                                |
+| -------------------- | ------------------------------------------------------------------------------------- |
 | **start** / **stop** | Attaches or detaches all measurement. Nothing is measured before the first **start**. |
-| **reset** | Zeroes the aggregates and restarts the measurement window without detaching. |
-| **export** | Downloads the current aggregates as `navperf-run.json`. |
-| **meta** | Reveals the scenario picker and the manual test-metadata fields. |
+| **reset**            | Zeroes the aggregates and restarts the measurement window without detaching.          |
+| **export**           | Downloads the current aggregates as `navperf-run.json`.                               |
+| **meta**             | Reveals the scenario picker and the manual test-metadata fields.                      |
 
 The readout refreshes once per second — deliberately, so the HUD is not itself a
 per-frame workload.
@@ -153,16 +153,16 @@ mid-range phone disagree by a factor of five on identical code. Operation counts
 do not vary with device speed, so those are the CI-adjacent budgets. Each is
 introduced by a specific optimization step and is expected to hold from then on.
 
-| Budget | From |
-| --- | --- |
-| One `Marker.addTo` per map/session; one marker attachment per map/session; no perpetual no-fix/settled RAF loop; unchanged moving-frame camera/puck cadence | 021 |
-| One navigation-store publication per accepted real fix | 022 |
-| No full route snapshot or route-package geometry scan between checkpoints | 023 |
-| No full active-route GeoJSON source upload on progress-only changes | 025 |
-| One road-condition request/polling/projection owner per route/window revision across engine, alerts and crowd prompt | 026 |
-| Bounded viewport road-condition scheduler evaluations regardless of MapLibre `moveend` frequency | 027 |
-| No cold dialog/menu/root render on progress-only updates | 028 |
-| Sub-quadratic flow-overlap operation growth | 029 |
+| Budget                                                                                                                                                                                        | From            |
+| --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- |
+| One `Marker.addTo` per map/session; one marker attachment per map/session; no perpetual no-fix/settled RAF loop; unchanged moving-frame camera/puck cadence                                   | 021             |
+| One navigation-store publication per accepted real fix                                                                                                                                        | 022             |
+| No full route snapshot or route-package geometry scan between checkpoints                                                                                                                     | 023             |
+| No full active-route GeoJSON source upload on progress-only changes                                                                                                                           | 025             |
+| One road-condition request/polling/projection owner per route/window revision across engine, alerts and crowd prompt                                                                          | 026             |
+| Bounded viewport road-condition scheduler evaluations regardless of MapLibre `moveend` frequency                                                                                              | 027             |
+| No cold dialog/menu/root render on progress-only updates                                                                                                                                      | 028             |
+| Sub-quadratic flow-overlap operation growth                                                                                                                                                   | 029             |
 | No production module invokes legacy `snapToRoute`; prepared matcher construction happens once per stable geometry or once per ephemeral batch, never inside a point/sample/waypoint/stop loop | 024 / 026 / 029 |
 
 The HUD's `map`, `progress` and `net` counters are how most of these are checked

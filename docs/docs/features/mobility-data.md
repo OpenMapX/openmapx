@@ -67,7 +67,7 @@ viewport:
 
 Two properties of the contract matter for everyone running OpenMapX:
 
-**Multi-source merge.** A single category usually draws on *several* upstream
+**Multi-source merge.** A single category usually draws on _several_ upstream
 feeds at once. The integration queries every feed that covers the visible area
 in parallel and merges the results into one set of points, so you don't pick a
 provider — you get whichever sources have coverage where you're looking. Fuel
@@ -76,7 +76,7 @@ feed takes over; everywhere else, OpenStreetMap supplies locations without
 prices. The same point can even be assembled from more than one feed.
 
 **Attribution and freshness travel with the data.** Every response carries the
-credits for exactly the sources that contributed to *this* view and a freshness
+credits for exactly the sources that contributed to _this_ view and a freshness
 stamp (when it was fetched, whether it's realtime, whether it's gone stale).
 Browsing fuel in one German city credits only Tankerkönig, not the whole
 European stack of feeds. The credits appear in the map's attribution strip while
@@ -102,19 +102,19 @@ below.
 ## The built-in sources
 
 OpenMapX ships seven data-source categories. The table groups them by what they
-show; the *Origins* column is a representative sample, not the full list — most
+show; the _Origins_ column is a representative sample, not the full list — most
 categories aggregate many regional feeds, and OpenStreetMap is the global
 fallback for the location-only sources.
 
-| Category          | What it shows                                  | Origins (representative)                                                                 |
-| ----------------- | ---------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| **EV charging**   | Charging stations, status, connectors          | OpenChargeMap, AFDC/NREL, Bundesnetzagentur, France IRVE, NOBIL, SFOE, NDW/DOT-NL, EVRoam NZ, E-Control AT, and national feeds across Europe, Asia, and Australia; OpenStreetMap fallback |
-| **Fuel**          | Gas stations + live prices                     | Tankerkönig (DE), E-Control (AT), Prix Carburants (FR), Minetur (ES), OpenStreetMap      |
-| **Parking**       | Parking + Park & Ride, live occupancy          | ParkAPI / ParkenDD, MobiData BW, DB BahnPark, Autobahn GmbH, plus many city and regional open-data portals, OpenStreetMap |
-| **Bike sharing**  | Docks + free-floating bikes, availability      | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO) |
-| **Car sharing**   | Car-sharing stations + vehicles                | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals |
-| **E-scooters**    | Free-floating scooters + operator zones        | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                |
-| **Webcams**       | Traffic + scenic cameras, still or live video  | Windy, OpenStreetMap, Caltrans, TfL, NPS, many US 511 feeds, Finland/Sweden/Norway/Iceland/Spain, Ontario, Hong Kong, NSW, and Taiwan |
+| Category         | What it shows                                 | Origins (representative)                                                                                                                                                                  |
+| ---------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **EV charging**  | Charging stations, status, connectors         | OpenChargeMap, AFDC/NREL, Bundesnetzagentur, France IRVE, NOBIL, SFOE, NDW/DOT-NL, EVRoam NZ, E-Control AT, and national feeds across Europe, Asia, and Australia; OpenStreetMap fallback |
+| **Fuel**         | Gas stations + live prices                    | Tankerkönig (DE), E-Control (AT), Prix Carburants (FR), Minetur (ES), OpenStreetMap                                                                                                       |
+| **Parking**      | Parking + Park & Ride, live occupancy         | ParkAPI / ParkenDD, MobiData BW, DB BahnPark, Autobahn GmbH, plus many city and regional open-data portals, OpenStreetMap                                                                 |
+| **Bike sharing** | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                  |
+| **Car sharing**  | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                 |
+| **E-scooters**   | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                 |
+| **Webcams**      | Traffic + scenic cameras, still or live video | Windy, OpenStreetMap, Caltrans, TfL, NPS, many US 511 feeds, Finland/Sweden/Norway/Iceland/Spain, Ontario, Hong Kong, NSW, and Taiwan                                                     |
 
 A few notes on origins:
 

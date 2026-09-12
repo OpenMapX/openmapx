@@ -23,13 +23,13 @@ run, and any one of them can be left out in favor of a hosted endpoint.
 Everything is run from a clone of the repository; there is nothing to install
 globally beyond the host tooling below.
 
-| Software           | Version          | Why it's needed                                                      |
-| ------------------ | ---------------- | ------------------------------------------------------------------- |
-| **Docker Engine**  | recent (27+)     | Runs every OpenMapX service as a container                          |
-| **Docker Compose** | v2              | Orchestrates the generated stack (`docker compose`, not `docker-compose`) |
-| **Node.js**        | 24 or newer      | Runs the `openmapx` CLI directly off TypeScript — no build step      |
-| **pnpm**           | 11 (`pnpm@latest`) | Workspace package manager for the monorepo                         |
-| **git**            | any              | Cloning the repo and any community extensions that ship a service   |
+| Software           | Version            | Why it's needed                                                           |
+| ------------------ | ------------------ | ------------------------------------------------------------------------- |
+| **Docker Engine**  | recent (27+)       | Runs every OpenMapX service as a container                                |
+| **Docker Compose** | v2                 | Orchestrates the generated stack (`docker compose`, not `docker-compose`) |
+| **Node.js**        | 24 or newer        | Runs the `openmapx` CLI directly off TypeScript — no build step           |
+| **pnpm**           | 11 (`pnpm@latest`) | Workspace package manager for the monorepo                                |
+| **git**            | any                | Cloning the repo and any community extensions that ship a service         |
 
 A few notes:
 
@@ -75,10 +75,10 @@ The always-on core — `traefik`, `well-known`, `app-api`, `app-web`, `postgis`,
 `redis`, `data-manager`, and `ops-agent` — is what you get with the default service selection.
 It needs only modest resources:
 
-| Resource | Baseline (core only)        |
-| -------- | --------------------------- |
-| RAM      | ~4 GB                       |
-| CPU      | 2 cores                     |
+| Resource | Baseline (core only)          |
+| -------- | ----------------------------- |
+| RAM      | ~4 GB                         |
+| CPU      | 2 cores                       |
 | Disk     | ~20 GB (plus downloaded data) |
 
 On its own, the core renders maps and serves the app, but the self-hosted
@@ -94,21 +94,21 @@ the rough disk footprint of the data each engine builds. **The heavy engines are
 called out** — running one or two of them at once is what pushes a host into the
 16–64 GB range.
 
-| Engine | Capability | RAM (manifest ceiling) | Disk (approx.) | Weight |
-| ------ | ---------- | ---------------------- | -------------- | ------ |
-| **Nominatim** | Full geocoding + reverse + enrichment | 64 GB | ~330 GB (planet) | **Heavy** — peak RAM during import |
-| **Overpass** | OSM category/feature queries | 32 GB | ~200–300 GB (planet) | **Heavy** |
-| **Valhalla** | Planet-scale routing | 16 GB | ~50–100 GB (planet) | **Heavy** |
-| **MOTIS** | Planet-scale transit routing | 16 GB | ~50 GB | **Heavy** |
-| **OTP** | Region-scale transit routing | 16 GB | ~10 GB (region) | Region-only |
-| **Photon** | Lightweight search-as-you-type geocoding | 8 GB | ~200 GB (planet index) | Moderate |
-| **Local AI** (Ollama) | Natural-language query embeddings | 8 GB | ~10–20 GB (models) | Moderate |
-| **OSRM** | Region-scale routing | 8 GB | ~30 GB (region) | Region-only |
-| **Elasticsearch** (Pelias backend) | Composite geocoding store | 4 GB | ~100 GB (planet) | Moderate |
-| **Dawarich** (App + Sidekiq) | Personal timeline history | ~2 GB | ~5 GB | Light |
-| **TileServer GL** | Self-hosted vector/raster tiles | 2 GB | ~80 GB (planet MBTiles) | Moderate |
-| **Transitous Runner** | Automated GTFS schedule updates | 512 MB | ~5 GB | Light |
-| **Martin** | PostGIS dynamic vector tiles | — | shares PostGIS | Light |
+| Engine                             | Capability                               | RAM (manifest ceiling) | Disk (approx.)          | Weight                             |
+| ---------------------------------- | ---------------------------------------- | ---------------------- | ----------------------- | ---------------------------------- |
+| **Nominatim**                      | Full geocoding + reverse + enrichment    | 64 GB                  | ~330 GB (planet)        | **Heavy** — peak RAM during import |
+| **Overpass**                       | OSM category/feature queries             | 32 GB                  | ~200–300 GB (planet)    | **Heavy**                          |
+| **Valhalla**                       | Planet-scale routing                     | 16 GB                  | ~50–100 GB (planet)     | **Heavy**                          |
+| **MOTIS**                          | Planet-scale transit routing             | 16 GB                  | ~50 GB                  | **Heavy**                          |
+| **OTP**                            | Region-scale transit routing             | 16 GB                  | ~10 GB (region)         | Region-only                        |
+| **Photon**                         | Lightweight search-as-you-type geocoding | 8 GB                   | ~200 GB (planet index)  | Moderate                           |
+| **Local AI** (Ollama)              | Natural-language query embeddings        | 8 GB                   | ~10–20 GB (models)      | Moderate                           |
+| **OSRM**                           | Region-scale routing                     | 8 GB                   | ~30 GB (region)         | Region-only                        |
+| **Elasticsearch** (Pelias backend) | Composite geocoding store                | 4 GB                   | ~100 GB (planet)        | Moderate                           |
+| **Dawarich** (App + Sidekiq)       | Personal timeline history                | ~2 GB                  | ~5 GB                   | Light                              |
+| **TileServer GL**                  | Self-hosted vector/raster tiles          | 2 GB                   | ~80 GB (planet MBTiles) | Moderate                           |
+| **Transitous Runner**              | Automated GTFS schedule updates          | 512 MB                 | ~5 GB                   | Light                              |
+| **Martin**                         | PostGIS dynamic vector tiles             | —                      | shares PostGIS          | Light                              |
 
 A few patterns worth knowing:
 
@@ -129,11 +129,11 @@ A few patterns worth knowing:
 
 As a rough planning guide, once you account for the engines you've chosen:
 
-| Scale          | RAM       | Disk               | CPU       |
-| -------------- | --------- | ------------------ | --------- |
-| Single country | 16 GB     | 200–500 GB SSD     | 4 cores   |
-| Continent      | 32–64 GB  | 500 GB – 1 TB SSD  | 8 cores   |
-| Planet         | 64+ GB    | 2+ TB NVMe SSD     | 16 cores  |
+| Scale          | RAM      | Disk              | CPU      |
+| -------------- | -------- | ----------------- | -------- |
+| Single country | 16 GB    | 200–500 GB SSD    | 4 cores  |
+| Continent      | 32–64 GB | 500 GB – 1 TB SSD | 8 cores  |
+| Planet         | 64+ GB   | 2+ TB NVMe SSD    | 16 cores |
 
 These are starting points for a host running the common set of engines at that
 scale, not hard minimums. Trim the engine list and the numbers come down quickly.

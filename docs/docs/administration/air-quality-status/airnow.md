@@ -19,7 +19,6 @@ blocker: "The bulk files expose reporting-area name/state but no stable reportin
 **Status:** blocked
 **Owner:** optional AirNow implementation plan
 
-Official `reportingarea.dat` and `cityzipcodes.csv` were reviewed on 30 August
-2026. They avoid retiring coordinate services, but cannot satisfy the approved
+Official `reportingarea.dat` and `cityzipcodes.csv` were reviewed on 30 August 2026. They avoid retiring coordinate services, but cannot satisfy the approved
 stable-code identity and governance design without an approved AirNow account.
 No centroid fallback or unpublished API contract was implemented.

@@ -12,7 +12,7 @@ a renamed café, a stale phone number, hours that changed last spring — you ca
 fix it from inside OpenMapX instead of switching to a separate editor.
 
 This is deliberately a small feature. OpenMapX is not a general-purpose map
-editor, and it does not try to be one. It transports *your* correction to
+editor, and it does not try to be one. It transports _your_ correction to
 OpenStreetMap in a way that keeps the project's public, attributable, verifiable
 editing model intact.
 
@@ -50,7 +50,7 @@ categories match a place equally well, OpenMapX will not pick one for you.
 
 ## Live OpenStreetMap is the source of truth
 
-The place panel shows a *merged* view: OpenStreetMap plus whatever enrichment
+The place panel shows a _merged_ view: OpenStreetMap plus whatever enrichment
 integrations you have enabled. None of that merged data is ever used to fill an
 editor field.
 

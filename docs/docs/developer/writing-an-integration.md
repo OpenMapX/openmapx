@@ -161,16 +161,14 @@ A few things worth pausing on:
 ### Declaring a backend dependency
 
 Our example talks to a public HTTP API and needs no self-hosted service. When an
-integration *does* need one — a routing engine, an Overpass server, PostGIS —
+integration _does_ need one — a routing engine, an Overpass server, PostGIS —
 declare it under `requires`. Each entry names exactly one of `service` (a
 specific service slug) or `capability` (any provider of that capability), and may
 be `optional`:
 
 ```json
 {
-  "requires": [
-    { "service": "valhalla", "optional": true }
-  ]
+  "requires": [{ "service": "valhalla", "optional": true }]
 }
 ```
 
@@ -207,7 +205,7 @@ example needs none, but a provider with a key looks like this:
 
 A property marked `"x-openmapx-secret": true` is a credential: it is hidden from
 the config form and API responses, set through the Credentials tab, and stored in
-the encrypted vault. Note that declaring *any* secret field makes the integration
+the encrypted vault. Note that declaring _any_ secret field makes the integration
 refuse to load unless `OPENMAPX_SECRETS_KEY` is set — a missing key is a hard boot
 error, not a silent degrade. The layered resolution of these values — defaults,
 database, vault, `config.json`, and environment — is the config cascade, and the
@@ -493,10 +491,17 @@ directly:
 ```ts
 const { flyTo, fitBounds } = useMap();
 flyTo([lng, lat], 15);
-fitBounds([[west, south], [east, north]], 60, { maxZoom: 16 });
+fitBounds(
+  [
+    [west, south],
+    [east, north],
+  ],
+  60,
+  { maxZoom: 16 },
+);
 ```
 
-`fitBounds`' padding is breathing room *inside* the visible area. The app
+`fitBounds`' padding is breathing room _inside_ the visible area. The app
 subtracts the side panel, the mobile sheet, and the navigation chrome itself, so
 an integration never needs to know how wide the panel is. It also leaves the
 map's rotation alone — a user who aligned the map to the street grid keeps that

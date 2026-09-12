@@ -7,7 +7,7 @@ sidebar_position: 3
 # Self-hosting transit engines
 
 Public-transit journey planning in OpenMapX is answered by a chain of providers,
-and at the top of that chain sits a transit *engine* you run yourself. This guide
+and at the top of that chain sits a transit _engine_ you run yourself. This guide
 covers the two OpenMapX ships with — **MOTIS** and **OpenTripPlanner (OTP)** —
 from picking one, through downloading and preparing the data they need, to
 pointing the transit integration at the running container.
@@ -25,14 +25,14 @@ Both engines build a transit graph from an OpenStreetMap extract plus GTFS feeds
 and answer journey, stop, and departure queries. They differ sharply in the scale
 they handle.
 
-| | **MOTIS** | **OpenTripPlanner** |
-| --- | --- | --- |
-| Coverage | A single country up to the **whole planet** | A **single region** — country or smaller |
-| GTFS feeds | Hundreds | Roughly **ten** before the graph stops fitting in memory |
-| Planet extract | Supported | Refused by the build (see below) |
-| Schedule import | At container **startup** (re-importable in place) | At **build** time, baked into `graph.obj` |
-| API | MOTIS v2 REST (Transitous-compatible) | REST v1 + GraphQL v2 |
-| Integration | `transit-motis` (`transit-motis-local`, priority 1) | `transit-otp` |
+|                 | **MOTIS**                                           | **OpenTripPlanner**                                      |
+| --------------- | --------------------------------------------------- | -------------------------------------------------------- |
+| Coverage        | A single country up to the **whole planet**         | A **single region** — country or smaller                 |
+| GTFS feeds      | Hundreds                                            | Roughly **ten** before the graph stops fitting in memory |
+| Planet extract  | Supported                                           | Refused by the build (see below)                         |
+| Schedule import | At container **startup** (re-importable in place)   | At **build** time, baked into `graph.obj`                |
+| API             | MOTIS v2 REST (Transitous-compatible)               | REST v1 + GraphQL v2                                     |
+| Integration     | `transit-motis` (`transit-motis-local`, priority 1) | `transit-otp`                                            |
 
 **MOTIS is the primary engine** and the recommended choice for almost every
 deployment. It's the top of the transit chain (`transit-motis-local`), scales
@@ -357,8 +357,8 @@ pnpm openmapx services start otp
 
 ## Pointing the transit integration at your engine
 
-Running the engine is a *service* decision; whether the transit orchestrator
-*uses* it is an *integration* decision. The two engines map to two integrations,
+Running the engine is a _service_ decision; whether the transit orchestrator
+_uses_ it is an _integration_ decision. The two engines map to two integrations,
 each resolving its endpoint through the standard config cascade.
 
 **MOTIS** is wired through the `transit-motis` integration (and, for stop search,
@@ -402,7 +402,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://localhost:8090/otp/routers/defau
 ```
 
 Liveness is necessary but not sufficient: MOTIS answers `/api/v1/health` the
-moment its server binds, *before* the timetable index is queryable. To confirm
+moment its server binds, _before_ the timetable index is queryable. To confirm
 the import actually succeeded, hit a query endpoint that needs loaded data. These
 are the MOTIS v2 (2.10.x) paths — note the `map/` segment, which is easy to get
 wrong:

@@ -70,11 +70,11 @@ you write lines up with reviews written elsewhere for the same spot.
 Matching reviews to the right place is the genuinely hard part, because two
 different cafés can sit within a few meters of each other. OpenMapX queries
 Mangrove spatially, then tightens the result locally: a returned review only
-attaches to a place when it is close enough *and* shares an identity signal —
+attaches to a place when it is close enough _and_ shares an identity signal —
 the same OpenStreetMap element, or a matching place name — with reviews that have
 neither only attaching when the pin sits effectively on top of the place. The
 upshot is that the Reviews tab tries hard to show reviews that are really about
-*this* place and not its neighbors.
+_this_ place and not its neighbors.
 
 ### Writing a review is signed in your browser
 
@@ -123,7 +123,7 @@ key; registering a passkey does not encrypt other OpenMapX content. See the
 :::
 
 :::caution[Don't lose your key]
-Your private key *is* your reviewing identity. If you lose it — and have no
+Your private key _is_ your reviewing identity. If you lose it — and have no
 backup — you can no longer edit or delete your existing reviews, and a new key
 starts a fresh identity. The encrypted modes also mean that if you forget your
 passphrase and have no passkey, the key cannot be recovered. Use the export

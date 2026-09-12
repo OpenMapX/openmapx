@@ -56,7 +56,7 @@ The native suites cover the framework-free half of the audio module — cue
 deduplication and eviction, audio-session and audio-focus transitions,
 interruption handling, locale selection, rate clamping and input bounds. The half
 that touches `AVAudioSession` and `TextToSpeech` is covered by the local Release
-builds instead: committing an XCTest or instrumentation target *inside* a
+builds instead: committing an XCTest or instrumentation target _inside_ a
 generated project would contradict the rule that those projects are disposable.
 
 ### `pnpm mobile:prebuild:check`
@@ -108,7 +108,7 @@ With the app running:
    Android 14+ requires a location foreground service to begin while visible.
 2. Grant foreground and then background location. Watch `permission:` and
    `stream running:` update.
-3. Background the app. Simulate movement (Xcode's *Features → Location*, or
+3. Background the app. Simulate movement (Xcode's _Features → Location_, or
    `adb emu geo fix`). Watch `callbacks:` and `fixes accepted/rejected:` climb
    while no UI is in the foreground.
 4. Press **Profile** to switch cadence. Confirm `stream running:` stays `true`
@@ -143,16 +143,16 @@ substrings.
 It lists these eight risks, and the schema refuses to accept the record with any
 of them missing:
 
-| Risk | Why a virtual device cannot settle it |
-|---|---|
-| `ios-suspension-delivery` | The simulator does not suspend and resume an app the way iOS does. |
-| `android-oem-background-killing` | Vendor battery managers exist only on vendor hardware. |
+| Risk                                   | Why a virtual device cannot settle it                                       |
+| -------------------------------------- | --------------------------------------------------------------------------- |
+| `ios-suspension-delivery`              | The simulator does not suspend and resume an app the way iOS does.          |
+| `android-oem-background-killing`       | Vendor battery managers exist only on vendor hardware.                      |
 | `real-permission-settings-transitions` | Round trips through the real Settings app, including Allow Once escalation. |
-| `locked-screen-callback-gaps` | Requires a locked physical screen and a real location provider. |
-| `silent-mode-speech` | There is no hardware silent switch to test against. |
-| `bluetooth-audio-focus` | Requires real Bluetooth routing and a competing audio app. |
-| `battery-drain` | No battery. |
-| `thermal-behavior` | No thermal budget. |
+| `locked-screen-callback-gaps`          | Requires a locked physical screen and a real location provider.             |
+| `silent-mode-speech`                   | There is no hardware silent switch to test against.                         |
+| `bluetooth-audio-focus`                | Requires real Bluetooth routing and a competing audio app.                  |
+| `battery-drain`                        | No battery.                                                                 |
+| `thermal-behavior`                     | No thermal budget.                                                          |
 
 ## The deferred volunteer-beta procedure
 
@@ -196,11 +196,11 @@ The command reports and exits 0 when Maestro is not installed, because these
 flows qualify a device that may not be attached — a missing local tool is not a
 failure of the code. Any flow that actually runs and fails does fail the command.
 
-| Flow | What it protects |
-| --- | --- |
-| `launch.yaml` | Nothing is requested at launch. A permission dialog on a cold start means some initialisation reached the driver before the user asked for anything. |
-| `webview-reload.yaml` | A reload resets the bridge channel and nothing else, and the reloaded document renegotiates rather than reusing the old nonce. |
-| `foreground-only.yaml` | Choosing the limited mode never requests background permission, and guidance pauses the moment the app stops being visible. |
+| Flow                   | What it protects                                                                                                                                     |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `launch.yaml`          | Nothing is requested at launch. A permission dialog on a cold start means some initialisation reached the driver before the user asked for anything. |
+| `webview-reload.yaml`  | A reload resets the bridge channel and nothing else, and the reloaded document renegotiates rather than reusing the old nonce.                       |
+| `foreground-only.yaml` | Choosing the limited mode never requests background permission, and guidance pauses the moment the app stops being visible.                          |
 
 The two bridge flows need a development build pointed at the local protocol
 fixture. That is only possible in a development build: the release configuration
@@ -249,16 +249,16 @@ network.
 
 What it settles, so no volunteer has to:
 
-| Property | How |
-| --- | --- |
-| One committed revision per batch | Revisions collected across a 20-fix drive and asserted strictly increasing |
-| Progress never regresses | `alongMeters` collected across 30 fixes |
-| No duplicate cue across a restart | The coordinator, processor and prepared-route cache are rebuilt between *every* fix; only the database survives |
-| No cue replay on a redelivered batch | The same 20 fixes delivered twice |
-| Captured route works offline | A full drive with a client that returns no route |
-| A failed reroute keeps the old route | Deliberate deviation with an empty answer |
-| Stop is final | A batch delivered after the stop does not resurrect the session |
-| Cleanup is complete | Row counts after stop: one acknowledgement, nothing location-bearing |
+| Property                             | How                                                                                                             |
+| ------------------------------------ | --------------------------------------------------------------------------------------------------------------- |
+| One committed revision per batch     | Revisions collected across a 20-fix drive and asserted strictly increasing                                      |
+| Progress never regresses             | `alongMeters` collected across 30 fixes                                                                         |
+| No duplicate cue across a restart    | The coordinator, processor and prepared-route cache are rebuilt between _every_ fix; only the database survives |
+| No cue replay on a redelivered batch | The same 20 fixes delivered twice                                                                               |
+| Captured route works offline         | A full drive with a client that returns no route                                                                |
+| A failed reroute keeps the old route | Deliberate deviation with an empty answer                                                                       |
+| Stop is final                        | A batch delivered after the stop does not resurrect the session                                                 |
+| Cleanup is complete                  | Row counts after stop: one acknowledgement, nothing location-bearing                                            |
 
 ### The background limitation, stated plainly
 
@@ -268,7 +268,7 @@ app, and this shell does not pretend otherwise:
 
 - coasting is foreground-only, and refuses to extrapolate while off route,
   stationary or rerouting;
-- a delivery gap is filled with bounded synthetic points *after the fact*, when
+- a delivery gap is filled with bounded synthetic points _after the fact_, when
   the next real fix arrives — never invented while nothing was running;
 - after a long blackout the coast decelerates to a stop where the estimate ran
   out. It does not jump to wherever the user turned out to be;
@@ -297,16 +297,16 @@ through the production boundaries, with only the outside world faked.
 
 What it settles:
 
-| Property | How |
-| --- | --- |
-| One revision per tick, strictly increasing | Collected across a 40-minute ride |
-| A leg that never moves backwards | Collected minute by minute |
-| Schedule fallback with no position at all | Every tick delivered with an empty batch after one seeding fix |
-| Schedule progress labelled honestly | Confidence asserted as not `gps` |
-| No duplicate cue across a restart | Coordinator, processor and prepared index rebuilt between every tick |
-| The rotating token never published | Every bridge message searched for the fixture token |
-| A replacement adopted whole | New itinerary, new token, reset leg |
-| Complete cleanup after a stop | Row counts, and the terminal row searched for token, stop names and coordinates |
+| Property                                   | How                                                                             |
+| ------------------------------------------ | ------------------------------------------------------------------------------- |
+| One revision per tick, strictly increasing | Collected across a 40-minute ride                                               |
+| A leg that never moves backwards           | Collected minute by minute                                                      |
+| Schedule fallback with no position at all  | Every tick delivered with an empty batch after one seeding fix                  |
+| Schedule progress labelled honestly        | Confidence asserted as not `gps`                                                |
+| No duplicate cue across a restart          | Coordinator, processor and prepared index rebuilt between every tick            |
+| The rotating token never published         | Every bridge message searched for the fixture token                             |
+| A replacement adopted whole                | New itinerary, new token, reset leg                                             |
+| Complete cleanup after a stop              | Row counts, and the terminal row searched for token, stop names and coordinates |
 
 ### The token discipline, stated plainly
 

@@ -7,7 +7,7 @@ on:
   # Refresh OS packages even when application source has not changed. The same
   # tests and trusted-main release gate run before publication.
   schedule:
-    - cron: '23 4 * * 1'
+    - cron: "23 4 * * 1"
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

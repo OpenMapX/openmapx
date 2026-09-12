@@ -31,21 +31,21 @@ upstream URL. Those requests are rejected by `.strict()` Zod schemas in
 `@openmapx/core` before a route handler runs.
 
 Everything that turns a semantic operation into tags lives in
-`tag-policy.ts` on the server, and preview and publish call the *same* pure
+`tag-policy.ts` on the server, and preview and publish call the _same_ pure
 function — so what a person approves is exactly what is sent.
 
 ## Tag ownership
 
 Each field owns a bounded set of keys:
 
-| Field | Owned keys |
-| --- | --- |
-| Name | `name` only — never `name:<lang>`, `alt_name` or `official_name` |
-| Category | the concrete identifying tags of one iD preset |
-| Address | only `addr:*` keys already present on that exact element |
-| Opening hours | `opening_hours` |
-| Phone / email / website | whichever of `x` / `contact:x` already exists |
-| Accessibility | `wheelchair` |
+| Field                   | Owned keys                                                       |
+| ----------------------- | ---------------------------------------------------------------- |
+| Name                    | `name` only — never `name:<lang>`, `alt_name` or `official_name` |
+| Category                | the concrete identifying tags of one iD preset                   |
+| Address                 | only `addr:*` keys already present on that exact element         |
+| Opening hours           | `opening_hours`                                                  |
+| Phone / email / website | whichever of `x` / `contact:x` already exists                    |
+| Accessibility           | `wheelchair`                                                     |
 
 When both alias keys exist, the field is **disabled** rather than merged. When
 no address exists, one cannot be introduced.
@@ -107,7 +107,7 @@ transmitted, the service re-reads the element and the known changeset:
 - byte-identical unchanged base → safe failure, retryable;
 - anything else → `AMBIGUOUS_RESULT` with trusted inspection links and no retry.
 
-If changeset *creation* itself times out without returning an id, there is
+If changeset _creation_ itself times out without returning an id, there is
 nothing to address: no update is sent, creation is not retried, and the unknown
 empty changeset is left for OSM to expire.
 
@@ -125,7 +125,7 @@ cannot look effective.
 
 :::warning
 Better Auth's generic-OAuth **link** route uses `body.scopes || configuredScopes`
-— a supplied array *replaces* the provider defaults (the sign-in route
+— a supplied array _replaces_ the provider defaults (the sign-in route
 concatenates instead). Since one provider token is stored per account, an
 authorization request must always carry base identity **plus** the intended
 action scope **plus** any contribution scope already in effect. Sending only the
