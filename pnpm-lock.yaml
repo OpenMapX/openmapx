@@ -1630,7 +1630,7 @@ importers:
         version: 4.0.58(zod@4.4.3)
       '@ai-sdk/openai-compatible':
         specifier: ^3.0.43
-        version: 3.0.43(zod@4.4.3)
+        version: 3.0.44(zod@4.4.3)
       '@openmapx/brands':
         specifier: workspace:^
         version: link:../../packages/brands
@@ -2660,8 +2660,8 @@ packages:
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
 
-  '@ai-sdk/openai-compatible@3.0.43':
-    resolution: {integrity: sha512-QurboftQF0jGshbNM5KHNNpttp7huKSV7rN+C7ylcT5XsLZPud1eCMqyX0zlYFxm6pE4MEc/1PgFX12tm85yqg==}
+  '@ai-sdk/openai-compatible@3.0.44':
+    resolution: {integrity: sha512-pK7mERd/aIJVtyQCe/nV3G3iEJCY1no8GHDOGbgpNC+petjSfsxj+ni0Q8WVVehTUiY9B04F3Xvir+icBgORCg==}
     engines: {node: '>=22'}
     peerDependencies:
       zod: ^3.25.76 || ^4.1.8
@@ -11270,7 +11270,7 @@ snapshots:
       '@ai-sdk/provider-utils': 5.0.36(zod@4.4.3)
       zod: 4.4.3
 
-  '@ai-sdk/openai-compatible@3.0.43(zod@4.4.3)':
+  '@ai-sdk/openai-compatible@3.0.44(zod@4.4.3)':
     dependencies:
       '@ai-sdk/provider': 4.0.10
       '@ai-sdk/provider-utils': 5.0.36(zod@4.4.3)
