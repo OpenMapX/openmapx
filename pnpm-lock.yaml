@@ -167,7 +167,7 @@ importers:
         version: 6.0.0(supports-color@8.1.1)
       lettermint:
         specifier: ^2.4.1
-        version: 2.4.1
+        version: 2.5.0
       nodemailer:
         specifier: ^10.0.0
         version: 10.0.0
@@ -8869,8 +8869,8 @@ packages:
     resolution: {integrity: sha512-b94GiNHQNy6JNTrt5w6zNyffMrNkXZb3KTkCZJb2V1xaEGCk093vkZ2jk3tpaeP33/OiXC+WvK9AxUebnf5nbw==}
     engines: {node: '>= 0.6.3'}
 
-  lettermint@2.4.1:
-    resolution: {integrity: sha512-Mc2+ClcmxJbiYKrOGwmXwiu/drzFZIUs8XmfUEj55ls2xfGnDEmf6SRWutan3suyyioj92at+J2E89Zlz4Jx5g==}
+  lettermint@2.5.0:
+    resolution: {integrity: sha512-mdaY2/vq2n86jV1odYuToEtWYlQTNq9q8ieqv+8sUYzIQRarTL5n9W/jbKUfGAtcyLhSEOaP4G+74QM6GZndLg==}
 
   leven@3.1.0:
     resolution: {integrity: sha512-qsda+H8jTaUaN/x5vzW2rzc+8Rw4TAQ/4KjB46IwK5VH+IlVeeeje/EoZRpiXvIqjFgK84QffqPztGI3VBLG1A==}
@@ -18078,7 +18078,7 @@ snapshots:
     dependencies:
       readable-stream: 2.3.8
 
-  lettermint@2.4.1: {}
+  lettermint@2.5.0: {}
 
   leven@3.1.0: {}
 
