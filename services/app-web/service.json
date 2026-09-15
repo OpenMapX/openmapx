@@ -2,7 +2,7 @@
   "id": "app-web",
   "name": "OpenMapX Web",
   "version": "1.0.0",
-  "description": "Next.js 16 frontend. MapLibre + MUI + Tailwind.",
+  "description": "Next.js 16 frontend. MapLibre + MUI.",
   "license": "MIT",
   "quality": "built-in",
   "subjectData": {

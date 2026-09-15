@@ -1,5 +1,13 @@
 "use client";
 
+import Alert from "@mui/material/Alert";
+import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import Checkbox from "@mui/material/Checkbox";
+import FormControlLabel from "@mui/material/FormControlLabel";
+import Paper from "@mui/material/Paper";
+import Skeleton from "@mui/material/Skeleton";
+import Typography from "@mui/material/Typography";
 import { useCallback, useEffect, useState } from "react";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 
@@ -44,16 +52,11 @@ function deriveCategoryOrder(services: ServiceStatus[]): string[] {
   return order;
 }
 
+/** Palette color for a status, shared by its dot and its label. */
 const STATUS_COLORS: Record<string, string> = {
-  up: "bg-green-500",
-  down: "bg-red-500",
-  unconfigured: "bg-gray-300 dark:bg-neutral-600",
-};
-
-const STATUS_TEXT_COLORS: Record<string, string> = {
-  up: "text-green-600 dark:text-green-400",
-  down: "text-red-600 dark:text-red-400",
-  unconfigured: "text-gray-400 dark:text-neutral-500",
+  up: "success.main",
+  down: "error.main",
+  unconfigured: "text.disabled",
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -112,125 +115,184 @@ export default function StatusDashboard() {
   const unconfiguredCount = data?.services.filter((s) => s.status === "unconfigured").length ?? 0;
 
   return (
-    <div>
-      <div className="max-w-4xl mx-auto">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-neutral-100">System Status</h1>
-          <div className="flex items-center gap-3">
-            <label className="flex items-center gap-1.5 text-sm text-gray-500 dark:text-neutral-400 cursor-pointer select-none">
-              <input
-                type="checkbox"
+    <Box sx={{ maxWidth: 896, mx: "auto" }}>
+      <Box
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: 2,
+          mb: 1,
+        }}
+      >
+        <Typography component="h1" sx={{ fontSize: 24, lineHeight: "32px", fontWeight: 700 }}>
+          System Status
+        </Typography>
+        <Box sx={{ display: "flex", alignItems: "center", gap: 1.5 }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                size="small"
                 checked={autoRefresh}
                 onChange={(e) => setAutoRefresh(e.target.checked)}
-                className="rounded"
               />
-              Auto-refresh
-            </label>
-            <button
-              type="button"
-              onClick={fetchStatus}
-              disabled={loading}
-              className="px-3 py-1.5 text-sm font-medium bg-white dark:bg-neutral-800 border border-gray-300 dark:border-neutral-700 rounded-md shadow-sm hover:bg-gray-50 dark:hover:bg-neutral-700 dark:text-neutral-100 disabled:opacity-50 transition-colors"
+            }
+            label="Auto-refresh"
+            sx={{
+              mr: 0,
+              color: "text.secondary",
+              "& .MuiFormControlLabel-label": { fontSize: 14 },
+            }}
+          />
+          <Button variant="outlined" size="small" onClick={fetchStatus} disabled={loading}>
+            {loading ? "Checking…" : "Refresh"}
+          </Button>
+        </Box>
+      </Box>
+
+      {data && (
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            columnGap: 2,
+            rowGap: 0.5,
+            mb: 3,
+            fontSize: 14,
+          }}
+        >
+          <Box component="span" sx={{ color: "success.main", fontWeight: 500 }}>
+            {upCount} operational
+          </Box>
+          {downCount > 0 && (
+            <Box component="span" sx={{ color: "error.main", fontWeight: 500 }}>
+              {downCount} down
+            </Box>
+          )}
+          {unconfiguredCount > 0 && (
+            <Box component="span" sx={{ color: "text.disabled" }}>
+              {unconfiguredCount} not configured
+            </Box>
+          )}
+          <Box component="span" sx={{ color: "text.disabled", ml: "auto" }}>
+            {new Date(data.timestamp).toLocaleString()}
+          </Box>
+        </Box>
+      )}
+
+      {error && !data && (
+        <Alert severity="error" sx={{ mb: 3 }}>
+          Failed to load status: {error}
+        </Alert>
+      )}
+
+      {loading && !data && (
+        <Box sx={{ display: "flex", flexDirection: "column", gap: 3 }}>
+          {[1, 2, 3].map((i) => (
+            <Box key={i}>
+              <Skeleton variant="rounded" width={128} height={16} sx={{ mb: 1 }} />
+              <Paper
+                variant="outlined"
+                sx={{ p: 2, display: "flex", flexDirection: "column", gap: 1.5 }}
+              >
+                <Skeleton variant="rounded" height={16} />
+                <Skeleton variant="rounded" height={16} width="75%" />
+              </Paper>
+            </Box>
+          ))}
+        </Box>
+      )}
+
+      {categories.map((category) => {
+        const services = grouped[category];
+        if (!services?.length) return null;
+        return (
+          <Box key={category} sx={{ mb: 3 }}>
+            <Typography
+              component="h2"
+              sx={{
+                mb: 1,
+                fontSize: 12,
+                fontWeight: 600,
+                color: "text.secondary",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+              }}
             >
-              {loading ? "Checking\u2026" : "Refresh"}
-            </button>
-          </div>
-        </div>
-
-        {data && (
-          <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm mb-6">
-            <span className="text-green-600 dark:text-green-400 font-medium">
-              {upCount} operational
-            </span>
-            {downCount > 0 && (
-              <span className="text-red-600 dark:text-red-400 font-medium">{downCount} down</span>
-            )}
-            {unconfiguredCount > 0 && (
-              <span className="text-gray-400 dark:text-neutral-500">
-                {unconfiguredCount} not configured
-              </span>
-            )}
-            <span className="text-gray-400 dark:text-neutral-500 ml-auto">
-              {new Date(data.timestamp).toLocaleString()}
-            </span>
-          </div>
-        )}
-
-        {error && !data && (
-          <div className="bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-900 rounded-lg p-4 text-sm text-red-700 dark:text-red-300 mb-6">
-            Failed to load status: {error}
-          </div>
-        )}
-
-        {loading && !data && (
-          <div className="space-y-6">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="animate-pulse">
-                <div className="h-4 w-32 bg-gray-200 dark:bg-neutral-700 rounded mb-2" />
-                <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg p-4 space-y-3">
-                  <div className="h-4 bg-gray-100 dark:bg-neutral-700 rounded w-full" />
-                  <div className="h-4 bg-gray-100 dark:bg-neutral-700 rounded w-3/4" />
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {categories.map((category) => {
-          const services = grouped[category];
-          if (!services?.length) return null;
-          return (
-            <div key={category} className="mb-6">
-              <h2 className="text-xs font-semibold text-gray-500 dark:text-neutral-400 uppercase tracking-wider mb-2">
-                {category}
-              </h2>
-              <div className="bg-white dark:bg-neutral-800 border border-gray-200 dark:border-neutral-700 rounded-lg divide-y divide-gray-100 dark:divide-neutral-700/60 shadow-sm">
-                {services.map((s) => (
-                  <div key={s.id} className="px-4 py-3 flex items-start gap-3">
-                    <span
-                      className={`mt-1.5 shrink-0 w-2.5 h-2.5 rounded-full ${STATUS_COLORS[s.status] ?? "bg-gray-300 dark:bg-neutral-600"}`}
+              {category}
+            </Typography>
+            <Paper
+              variant="outlined"
+              sx={{ "& > :not(:last-child)": { borderBottom: 1, borderColor: "divider" } }}
+            >
+              {services.map((s) => {
+                const color = STATUS_COLORS[s.status] ?? "text.disabled";
+                return (
+                  <Box
+                    key={s.id}
+                    sx={{ display: "flex", alignItems: "flex-start", gap: 1.5, px: 2, py: 1.5 }}
+                  >
+                    <Box
+                      component="span"
+                      sx={{
+                        mt: 0.75,
+                        flexShrink: 0,
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        bgcolor: color,
+                      }}
                     />
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-baseline gap-2 flex-wrap">
-                        <span className="font-medium text-sm text-gray-900 dark:text-neutral-100">
+                    <Box sx={{ minWidth: 0, flex: 1 }}>
+                      <Box
+                        sx={{ display: "flex", alignItems: "baseline", flexWrap: "wrap", gap: 1 }}
+                      >
+                        <Typography component="span" sx={{ fontSize: 14, fontWeight: 500 }}>
                           {s.name}
-                        </span>
-                        <span
-                          className={`text-xs font-medium ${STATUS_TEXT_COLORS[s.status] ?? "text-gray-400 dark:text-neutral-500"}`}
-                        >
+                        </Typography>
+                        <Typography component="span" sx={{ fontSize: 12, fontWeight: 500, color }}>
                           {STATUS_LABELS[s.status] ?? s.status}
-                        </span>
+                        </Typography>
                         {s.responseTime != null && (
-                          <span className="text-xs text-gray-400 dark:text-neutral-500">
+                          <Typography
+                            component="span"
+                            sx={{ fontSize: 12, color: "text.disabled" }}
+                          >
                             {s.responseTime}ms
-                          </span>
+                          </Typography>
                         )}
-                      </div>
+                      </Box>
                       {s.url && (
-                        <div
-                          className="text-xs text-gray-500 dark:text-neutral-400 font-mono truncate mt-0.5"
+                        <Typography
+                          noWrap
                           title={s.url}
+                          sx={{
+                            mt: 0.25,
+                            fontSize: 12,
+                            fontFamily: "monospace",
+                            color: "text.secondary",
+                          }}
                         >
                           {s.url}
-                        </div>
+                        </Typography>
                       )}
                       {s.error && (
-                        <div className="text-xs text-red-500 dark:text-red-400 mt-0.5">
+                        <Typography sx={{ mt: 0.25, fontSize: 12, color: "error.main" }}>
                           {s.error}
-                        </div>
+                        </Typography>
                       )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          );
-        })}
+                    </Box>
+                  </Box>
+                );
+              })}
+            </Paper>
+          </Box>
+        );
+      })}
 
-        <div className="text-center text-xs text-gray-400 dark:text-neutral-500 mt-8 pb-4">
-          OpenMapX Status Dashboard
-        </div>
-      </div>
-    </div>
+      <Typography sx={{ mt: 4, pb: 2, textAlign: "center", fontSize: 12, color: "text.disabled" }}>
+        OpenMapX Status Dashboard
+      </Typography>
+    </Box>
   );
 }

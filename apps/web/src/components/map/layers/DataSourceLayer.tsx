@@ -1,5 +1,7 @@
 "use client";
 
+import Box from "@mui/material/Box";
+import { alpha } from "@mui/material/styles";
 import type {
   DataSourceMapContextSelection,
   DataSourceMeta,
@@ -810,26 +812,69 @@ export function DataSourceLayer() {
     setInspectedContext(properties);
   };
   return (
-    <aside
-      className="pointer-events-auto absolute bottom-24 left-3 z-20 max-w-xs rounded-lg bg-background/95 p-3 text-xs shadow-lg backdrop-blur"
+    <Box
+      component="aside"
       aria-label={t("contextLegend")}
+      sx={(theme) => ({
+        pointerEvents: "auto",
+        position: "absolute",
+        bottom: 96,
+        left: 12,
+        zIndex: 20,
+        maxWidth: 320,
+        p: 1.5,
+        borderRadius: 1,
+        bgcolor: theme.vars
+          ? `rgba(${theme.vars.palette.background.paperChannel} / 0.95)`
+          : alpha(theme.palette.background.paper, 0.95),
+        fontSize: 12,
+        lineHeight: "16px",
+        boxShadow: "0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1)",
+        backdropFilter: "blur(8px)",
+      })}
     >
-      <div className="font-medium">{t("contextLegend")}</div>
-      <ul className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1">
+      <Box sx={{ fontWeight: 500 }}>{t("contextLegend")}</Box>
+      <Box
+        component="ul"
+        sx={{
+          mt: 1,
+          display: "grid",
+          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+          columnGap: 1.5,
+          rowGap: 0.5,
+        }}
+      >
         {legendItems.map(([zoneClass, label]) => (
-          <li key={zoneClass} className="flex items-center gap-1.5">
-            <span
-              className="size-2.5 rounded-sm border border-current"
+          <Box
+            component="li"
+            key={zoneClass}
+            sx={{ display: "flex", alignItems: "center", gap: 0.75 }}
+          >
+            <Box
+              component="span"
               data-zone-class={zoneClass}
               aria-hidden="true"
+              sx={{ width: 10, height: 10, borderRadius: 0.5, border: "1px solid currentColor" }}
             />
             {label}
-          </li>
+          </Box>
         ))}
-      </ul>
-      <details className="mt-2 border-t pt-2">
-        <summary className="cursor-pointer">{t("contextInspectAreas")}</summary>
-        <ul className="mt-1 max-h-32 space-y-1 overflow-y-auto">
+      </Box>
+      <Box component="details" sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: "divider" }}>
+        <Box component="summary" sx={{ cursor: "pointer" }}>
+          {t("contextInspectAreas")}
+        </Box>
+        <Box
+          component="ul"
+          sx={{
+            mt: 0.5,
+            maxHeight: 128,
+            overflowY: "auto",
+            display: "flex",
+            flexDirection: "column",
+            gap: 0.5,
+          }}
+        >
           {mapContext?.geojson.features.map((feature, index) => {
             const properties = (feature.properties ?? {}) as Record<string, unknown>;
             const label = String(
@@ -840,28 +885,36 @@ export function DataSourceLayer() {
             );
             return (
               <li key={String(properties.contextId ?? index)}>
-                <button
+                <Box
+                  component="button"
                   type="button"
-                  className="w-full truncate text-left underline"
                   onClick={() => inspectContextFeature(properties)}
+                  sx={{
+                    width: "100%",
+                    overflow: "hidden",
+                    textOverflow: "ellipsis",
+                    whiteSpace: "nowrap",
+                    textAlign: "left",
+                    textDecoration: "underline",
+                  }}
                 >
                   {label}
-                </button>
+                </Box>
               </li>
             );
           })}
-        </ul>
-      </details>
+        </Box>
+      </Box>
       {inspectedContext && (
-        <div className="mt-3 border-t pt-2" role="status">
-          <div className="font-medium">
+        <Box role="status" sx={{ mt: 1.5, pt: 1, borderTop: 1, borderColor: "divider" }}>
+          <Box sx={{ fontWeight: 500 }}>
             {String(
               inspectedContext.zoneName ??
                 inspectedContext.stationName ??
                 inspectedContext.providerName ??
                 t("contextArea"),
             )}
-          </div>
+          </Box>
           {inspectedContext.providerName != null && (
             <div>{String(inspectedContext.providerName)}</div>
           )}
@@ -873,26 +926,35 @@ export function DataSourceLayer() {
                 })}
               </div>
             )}
-          <dl className="mt-1 grid grid-cols-2 gap-x-2">
+          <Box
+            component="dl"
+            sx={{
+              mt: 0.5,
+              display: "grid",
+              gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+              columnGap: 1,
+            }}
+          >
             <dt>{t("contextRideStart")}</dt>
             <dd>{inspectedContext.rideStartAllowed === false ? t("no") : t("yes")}</dd>
             <dt>{t("contextRideEnd")}</dt>
             <dd>{inspectedContext.rideEndAllowed === false ? t("no") : t("yes")}</dd>
             <dt>{t("contextRideThrough")}</dt>
             <dd>{inspectedContext.rideThroughAllowed === false ? t("no") : t("yes")}</dd>
-          </dl>
+          </Box>
           {typeof inspectedContext.maximumSpeedKph === "number" && (
             <div>{t("contextMaximumSpeed", { speed: inspectedContext.maximumSpeedKph })}</div>
           )}
-          <button
+          <Box
+            component="button"
             type="button"
-            className="mt-2 underline"
             onClick={() => setInspectedContext(null)}
+            sx={{ mt: 1, textDecoration: "underline" }}
           >
             {t("close")}
-          </button>
-        </div>
+          </Box>
+        </Box>
       )}
-    </aside>
+    </Box>
   );
 }

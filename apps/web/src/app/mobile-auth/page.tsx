@@ -1,3 +1,5 @@
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { type AuthPurpose, MobileAuthClient } from "./MobileAuthClient";
@@ -18,6 +20,15 @@ const PURPOSES: ReadonlySet<string> = new Set<AuthPurpose>([
 ]);
 
 const BASE64URL = /^[A-Za-z0-9_-]+$/;
+
+const MAIN_SX = {
+  display: "flex",
+  minHeight: "100dvh",
+  alignItems: "center",
+  justifyContent: "center",
+  px: 3,
+  py: 5,
+} as const;
 
 export async function generateMetadata(): Promise<Metadata> {
   const t = await getTranslations("mobileAuth");
@@ -63,22 +74,22 @@ export default async function MobileAuthPage({
 
   if (!state || !codeChallenge || method !== "S256") {
     return (
-      <main className="flex min-h-dvh items-center justify-center px-6 py-10">
-        <p role="alert" className="max-w-sm text-center">
+      <Box component="main" sx={MAIN_SX}>
+        <Typography role="alert" sx={{ maxWidth: 384, textAlign: "center" }}>
           {t("invalidRequest")}
-        </p>
-      </main>
+        </Typography>
+      </Box>
     );
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-6 py-10">
+    <Box component="main" sx={MAIN_SX}>
       <MobileAuthClient
         purpose={purpose}
         state={state}
         codeChallenge={codeChallenge}
         callbackScheme={process.env.NEXT_PUBLIC_MOBILE_SCHEME ?? "openmapx"}
       />
-    </main>
+    </Box>
   );
 }

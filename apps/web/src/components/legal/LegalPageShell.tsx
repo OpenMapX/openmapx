@@ -112,7 +112,17 @@ export function LegalPageShell({ sections, children }: Props) {
           py: 4,
         }}
       >
-        <Box sx={{ maxWidth: 820 }}>{children}</Box>
+        <Box
+          sx={{
+            maxWidth: 820,
+            // The legal copy writes plain lists, and the base reset in
+            // globals.css strips list markers from every list.
+            "& ul:not([class])": { listStyle: "disc", pl: 3, my: 1 },
+            "& ul:not([class]) ul:not([class])": { listStyle: "circle", my: 0 },
+          }}
+        >
+          {children}
+        </Box>
       </Box>
     </Box>
   );

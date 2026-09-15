@@ -153,16 +153,16 @@ See the [Admin panel](https://docs.openmapx.org/administration/admin-panel/) doc
 
 ## Tech stack
 
-| Layer             | Tech                                                                                                   |
-| ----------------- | ------------------------------------------------------------------------------------------------------ |
-| Frontend          | Next.js 16, React 19, MapLibre GL JS 6, MUI 9, Tailwind 4, Zustand, TanStack Query, next-intl, Serwist |
-| API               | Fastify 5, Drizzle ORM, Better Auth (email/password, OAuth OSM/Mapillary, passkeys, 2FA, admin role)   |
-| Data              | PostgreSQL 18 + PostGIS 3.6, Valkey 8 (Redis-compatible), Elasticsearch (Pelias backend)               |
-| Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner                                                                 |
-| Geocoding         | Photon, Nominatim, Pelias                                                                              |
-| Tiles             | TileServer GL, Martin (PostGIS vector tiles)                                                           |
-| Tooling           | Turborepo, pnpm 11, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik          |
-| Language          | TypeScript end-to-end (Node 24+)                                                                       |
+| Layer             | Tech                                                                                                 |
+| ----------------- | ---------------------------------------------------------------------------------------------------- |
+| Frontend          | Next.js 16, React 19, MapLibre GL JS 6, MUI 9, Zustand, TanStack Query, next-intl, Serwist           |
+| API               | Fastify 5, Drizzle ORM, Better Auth (email/password, OAuth OSM/Mapillary, passkeys, 2FA, admin role) |
+| Data              | PostgreSQL 18 + PostGIS 3.6, Valkey 8 (Redis-compatible), Elasticsearch (Pelias backend)             |
+| Routing & transit | Valhalla, OSRM, MOTIS, OpenTripPlanner                                                               |
+| Geocoding         | Photon, Nominatim, Pelias                                                                            |
+| Tiles             | TileServer GL, Martin (PostGIS vector tiles)                                                         |
+| Tooling           | Turborepo, pnpm 11, Biome, Vitest, Husky + Commitlint, Changesets, Docker Compose v2, Traefik        |
+| Language          | TypeScript end-to-end (Node 24+)                                                                     |
 
 ## Contributing
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Box from "@mui/material/Box";
 import { useColorScheme } from "@mui/material/styles";
 import type { LngLat } from "@openmapx/core";
 import { useMapStore, useNavigationStore } from "@openmapx/core";
@@ -327,10 +328,10 @@ export function MapCanvas() {
 
   // Outer div owns the absolute positioning.
   // MapLibre gets the inner div so its .maplibregl-map class (position: relative)
-  // doesn't clobber inset-0, which only works on absolutely-positioned elements.
+  // doesn't clobber the inset, which only works on absolutely-positioned elements.
   return (
-    <div className="absolute inset-0">
-      <div ref={containerRef} className="w-full h-full" />
-    </div>
+    <Box sx={{ position: "absolute", inset: 0 }}>
+      <Box ref={containerRef} sx={{ width: "100%", height: "100%" }} />
+    </Box>
   );
 }

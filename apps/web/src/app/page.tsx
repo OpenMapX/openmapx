@@ -1,3 +1,4 @@
+import Box from "@mui/material/Box";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { Suspense } from "react";
 import { GlobalKeybindings } from "@/components/command-palette/GlobalKeybindings";
@@ -117,7 +118,7 @@ export default function HomePage() {
     <MapProvider>
       <GlobalKeybindings />
       <ElevationHoverProvider>
-        <div className="relative w-full h-dvh overflow-hidden">
+        <Box sx={{ position: "relative", width: "100%", height: "100dvh", overflow: "hidden" }}>
           {/* Shares one road-conditions fetch/timer/projection between the
               reroute engine and approach-alert selector in NavigationView and
               the crowd-report approach prompt lazily loaded beneath
@@ -209,7 +210,7 @@ export default function HomePage() {
               <ShareIntentHandler />
             </Suspense>
           </NavIncidentsProvider>
-        </div>
+        </Box>
       </ElevationHoverProvider>
     </MapProvider>
   );

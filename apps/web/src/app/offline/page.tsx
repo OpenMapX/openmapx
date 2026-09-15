@@ -1,3 +1,5 @@
+import Box from "@mui/material/Box";
+import Typography from "@mui/material/Typography";
 import type { Metadata } from "next";
 import { getTranslations } from "next-intl/server";
 import { OfflineActions } from "./OfflineActions";
@@ -17,9 +19,32 @@ export default async function OfflinePage() {
   const t = await getTranslations("offline");
 
   return (
-    <main className="flex min-h-dvh items-center justify-center px-6 py-10">
-      <div className="w-full max-w-md text-center">
-        <div className="mx-auto mb-6 flex h-16 w-16 items-center justify-center rounded-full bg-[var(--omx-brand-light)] text-[var(--omx-brand)]">
+    <Box
+      component="main"
+      sx={{
+        display: "flex",
+        minHeight: "100dvh",
+        alignItems: "center",
+        justifyContent: "center",
+        px: 3,
+        py: 5,
+      }}
+    >
+      <Box sx={{ width: "100%", maxWidth: 448, textAlign: "center" }}>
+        <Box
+          sx={{
+            mx: "auto",
+            mb: 3,
+            display: "flex",
+            width: 64,
+            height: 64,
+            alignItems: "center",
+            justifyContent: "center",
+            borderRadius: "50%",
+            bgcolor: "var(--omx-brand-light)",
+            color: "var(--omx-brand)",
+          }}
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             width="32"
@@ -41,24 +66,63 @@ export default async function OfflinePage() {
             <path d="M5 13.06a10 10 0 015.17-1.46" />
             <line x1="12" y1="20" x2="12.01" y2="20" />
           </svg>
-        </div>
+        </Box>
 
-        <h1 className="mb-3 text-2xl font-semibold tracking-tight">{t("pageTitle")}</h1>
-        <p className="mb-8 text-sm text-[var(--omx-overlay-text)] opacity-70">
+        <Typography
+          component="h1"
+          sx={{
+            mb: 1.5,
+            fontSize: 24,
+            lineHeight: "32px",
+            fontWeight: 600,
+            letterSpacing: "-0.025em",
+          }}
+        >
+          {t("pageTitle")}
+        </Typography>
+        <Typography
+          sx={{
+            mb: 4,
+            fontSize: 14,
+            lineHeight: "20px",
+            color: "var(--omx-overlay-text)",
+            opacity: 0.7,
+          }}
+        >
           {t("pageDescription")}
-        </p>
+        </Typography>
 
-        <div className="mb-8 rounded-lg bg-[var(--omx-overlay-bg)] p-4 text-left text-sm shadow-sm ring-1 ring-[var(--omx-border-light)]">
-          <h2 className="mb-2 font-medium">{t("stillWorks")}</h2>
-          <ul className="space-y-1.5 opacity-80">
+        <Box
+          sx={{
+            mb: 4,
+            p: 2,
+            borderRadius: 1,
+            bgcolor: "var(--omx-overlay-bg)",
+            textAlign: "left",
+            fontSize: 14,
+            lineHeight: "20px",
+            boxShadow:
+              "0 0 0 1px var(--omx-border-light), 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)",
+          }}
+        >
+          <Typography
+            component="h2"
+            sx={{ mb: 1, fontSize: "inherit", lineHeight: "inherit", fontWeight: 500 }}
+          >
+            {t("stillWorks")}
+          </Typography>
+          <Box
+            component="ul"
+            sx={{ display: "flex", flexDirection: "column", gap: 0.75, opacity: 0.8 }}
+          >
             <li>• {t("stillWorksTiles")}</li>
             <li>• {t("stillWorksRoutes")}</li>
             <li>• {t("stillWorksDownloaded")}</li>
-          </ul>
-        </div>
+          </Box>
+        </Box>
 
         <OfflineActions retryLabel={t("retry")} openMapLabel={t("openMap")} />
-      </div>
-    </main>
+      </Box>
+    </Box>
   );
 }

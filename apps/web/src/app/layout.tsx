@@ -8,6 +8,7 @@ import "@photo-sphere-viewer/virtual-tour-plugin/index.css";
 import "maplibre-theme/icons.default.css";
 import "maplibre-theme/classic.css";
 import "@fontsource-variable/plus-jakarta-sans";
+import "./reset.css";
 import "./globals.css";
 import { headers } from "next/headers";
 import { OfflineNotice } from "@/components/OfflineNotice";
@@ -63,7 +64,7 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
       <head>
         <link rel="stylesheet" href="/fonts/material-icons.css" />
       </head>
-      <body className="h-dvh overflow-hidden antialiased">
+      <body>
         <InitColorSchemeScript attribute="class" defaultMode="system" nonce={nonce} />
         <AppRouterCacheProvider>
           <NextIntlClientProvider locale={locale} messages={messages}>

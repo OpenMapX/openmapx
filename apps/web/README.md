@@ -1,8 +1,8 @@
 # OpenMapX web application
 
 This workspace contains the OpenMapX map UI. It is a Next.js 16 App Router
-application built with React 19, MapLibre GL JS 5, MUI 9, Tailwind 4, Zustand,
-TanStack Query, next-intl, and Serwist. It is designed to run with `apps/api`;
+application built with React 19, MapLibre GL JS 5, MUI 9, Zustand, TanStack
+Query, next-intl, and Serwist. It is designed to run with `apps/api`;
 browser-facing provider requests normally go through that API.
 
 ## Develop

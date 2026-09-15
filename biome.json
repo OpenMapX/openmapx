@@ -31,9 +31,6 @@
     "lineWidth": 100
   },
   "css": {
-    "parser": {
-      "tailwindDirectives": true
-    },
     "formatter": {
       "enabled": false
     },
