@@ -1,4 +1,4 @@
-FROM docker.io/golang:1.27@sha256:4013ae0f9e7994f8535c58c811f8f863fbed38b72e0d51e6592156f758d66146 AS build-gtfsclean
+FROM docker.io/golang:1.27@sha256:512690a5660563b57d37ecc31129e7f136e831db2aed24a1dbeb8ad7380dc0fa AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
