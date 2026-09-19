@@ -206,7 +206,12 @@
     "straightLineDistance": "≈ {dist} straight-line",
     "handoffFailed": "Could not start the next leg. Please try again.",
     "parkingFeeFree": "Free",
-    "parkingFeePaid": "Paid"
+    "parkingFeePaid": "Paid",
+    "exitNumber": "Exit {number}",
+    "toward": "toward {places}",
+    "junctionViewLabel": "Junction view",
+    "junctionLaneSummary": "Use lane {lane} of {total}",
+    "junctionPhotoCaption": "© {author} · {license} · {date}"
   },
   "common": {
     "close": "Close",
@@ -2177,7 +2182,11 @@
     "persistentStorageOn": "Protected — the browser won't evict your downloaded map packages or the offline app between sessions.",
     "persistentStorageOff": "Not protected — the browser may delete cached tiles, downloaded map packages, and the offline app when storage runs low. This can stop the app from opening offline.",
     "enablePersistentStorage": "Protect offline storage",
-    "back": "Back to map"
+    "back": "Back to map",
+    "junctionView": "Junction view",
+    "junctionViewHint": "Show a schematic of motorway exits and forks while navigating.",
+    "junctionPhotos": "Junction photos",
+    "junctionPhotosHint": "Prefetch a street-level photo of the exit approach, with its author and licence."
   },
   "pwa": {
     "updateAvailable": "A new version is available",

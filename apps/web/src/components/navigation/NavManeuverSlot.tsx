@@ -1,12 +1,16 @@
 "use client";
 
 import {
+  countryAtMeters,
   guidanceApproachMeters,
   shouldPreviewNextStep,
+  stepStartMeters,
   upcomingManeuverIndex,
+  useCountryFromCoordinates,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
+import { useMemo } from "react";
 import { ManeuverBanner } from "./ManeuverBanner";
 
 /**
@@ -19,6 +23,7 @@ export function NavManeuverSlot() {
   const progress = useNavigationStore((s) => s.progress);
   const mode = useNavigationStore((s) => s.mode);
   const units = useSettingsStore((s) => s.units);
+  const routeCountries = useNavigationStore((s) => s.routeCountries);
 
   // Show the nav chrome from the static route immediately on Start; live
   // position (progress) refines it once GPS fixes arrive. Without this, the
@@ -45,6 +50,20 @@ export function NavManeuverSlot() {
     !!nextStep &&
     shouldPreviewNextStep(mode, speedMps, distanceToManeuver, nextStep.duration, nextStep.distance);
 
+  // Signs take the colours of the country they stand in: the countries along
+  // the route come from its map-match, and one reverse geocode of the origin
+  // covers engines without them. A route without signage never pays it.
+  const hasSign = !!step?.sign;
+  const signCountry = useMemo(
+    () =>
+      route && routeCountries && hasSign
+        ? countryAtMeters(routeCountries, stepStartMeters(route.steps, upcomingIndex))
+        : undefined,
+    [route, routeCountries, hasSign, upcomingIndex],
+  );
+  const { data: originCountry } = useCountryFromCoordinates(route?.geometry[0] ?? null, hasSign);
+  const country = signCountry ?? originCountry;
+
   if (!step) return null;
 
   return (
@@ -55,6 +74,8 @@ export function NavManeuverSlot() {
       nextInstruction={showNextStep ? nextStep?.instruction : undefined}
       nextManeuver={showNextStep ? nextStep?.maneuver : undefined}
       lanes={showLanes ? step.lanes : undefined}
+      sign={step.sign}
+      country={country}
       units={units}
     />
   );

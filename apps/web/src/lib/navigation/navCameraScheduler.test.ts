@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import {
   CAMERA_BEARING_EPSILON,
   CAMERA_LNGLAT_EPSILON,
+  CAMERA_PITCH_EPSILON,
+  CAMERA_PITCH_SETTLED_DEG,
   CAMERA_ZOOM_EPSILON,
   cameraPoseChanged,
   PUCK_BEARING_EPSILON,
   PUCK_LNGLAT_EPSILON,
   puckPoseChanged,
   SETTLED_FRAMES_BEFORE_SLEEP,
+  settleScalar,
   shouldKeepAnimating,
 } from "./navCameraScheduler";
 
@@ -55,6 +58,15 @@ describe("puckPoseChanged", () => {
 });
 
 describe("cameraPoseChanged", () => {
+  it("treats a pitch change above the threshold as a change and sub-threshold drift as none", () => {
+    const last = { ...cam(13.4, 52.5, 90, 16), pitch: 55 };
+    expect(cameraPoseChanged(last, { ...cam(13.4, 52.5, 90, 16), pitch: 55.5 }, true)).toBe(true);
+    expect(cameraPoseChanged(last, { ...cam(13.4, 52.5, 90, 16), pitch: 55.1 }, true)).toBe(false);
+    expect(cameraPoseChanged(last, { ...cam(13.4, 52.5, 90, 16), pitch: undefined }, true)).toBe(
+      false,
+    );
+  });
+
   it("ignores sub-pixel centre and bearing drift", () => {
     const last = cam(13.4, 52.5, 90, 16);
     expect(cameraPoseChanged(last, cam(13.4 + CAMERA_LNGLAT_EPSILON / 2, 52.5, 90, 16), true)).toBe(
@@ -108,6 +120,7 @@ describe("shouldKeepAnimating", () => {
   const frame = (over: Partial<Parameters<typeof shouldKeepAnimating>[0]> = {}) =>
     shouldKeepAnimating({
       publishedThisFrame: false,
+      easing: false,
       settledFrames: SETTLED_FRAMES_BEFORE_SLEEP,
       holdUntilMs: 0,
       nowMs: 1000,
@@ -126,5 +139,49 @@ describe("shouldKeepAnimating", () => {
   it("needs two settled frames before it sleeps", () => {
     expect(frame({ settledFrames: 1 })).toBe(true);
     expect(frame({ settledFrames: 2 })).toBe(false);
+  });
+
+  it("keeps running while an ease is short of its target, even with nothing published", () => {
+    expect(frame({ easing: true })).toBe(true);
+  });
+});
+
+describe("settleScalar", () => {
+  it("lands on the target once within the settle distance", () => {
+    expect(settleScalar(59.995, 60, CAMERA_PITCH_SETTLED_DEG)).toBe(60);
+  });
+
+  it("leaves a value short of that alone", () => {
+    expect(settleScalar(59.9, 60, CAMERA_PITCH_SETTLED_DEG)).toBe(59.9);
+  });
+
+  it("brings a stopped traveller's pitch all the way back where the publish threshold alone would not", () => {
+    // 60 fps with a one-second ease: each frame moves the pitch less than the
+    // threshold that publishes it, so a loop that sleeps on unpublished frames
+    // stalls two frames in.
+    const dt = 1 / 60;
+    const alpha = 1 - Math.exp(-dt / 1.0);
+    let pitch = 60;
+    let published = 60;
+    let settled = 0;
+    let frames = 0;
+    for (; frames < 2000; frames += 1) {
+      pitch = settleScalar(pitch + (55 - pitch) * alpha, 55, CAMERA_PITCH_SETTLED_DEG);
+      const publish = Math.abs(pitch - published) > CAMERA_PITCH_EPSILON;
+      if (publish) published = pitch;
+      settled = publish ? 0 : settled + 1;
+      const keepGoing = shouldKeepAnimating({
+        publishedThisFrame: publish,
+        easing: pitch !== 55,
+        settledFrames: settled,
+        holdUntilMs: 0,
+        nowMs: 0,
+      });
+      if (!keepGoing) break;
+    }
+    expect(pitch).toBe(55);
+    expect(Math.abs(published - 55)).toBeLessThanOrEqual(CAMERA_PITCH_EPSILON);
+    // About eight time constants, not the whole budget.
+    expect(frames).toBeLessThan(700);
   });
 });

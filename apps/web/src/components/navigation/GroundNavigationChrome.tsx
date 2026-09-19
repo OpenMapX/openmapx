@@ -28,6 +28,7 @@ import { useNavChromeObstructions } from "@/lib/navigation/useNavChromeObstructi
 import { ArrivalCard } from "./ArrivalCard";
 import { ARRIVAL_WAYPOINT_MATCH_TOLERANCE_METERS } from "./arrivalHandoffState";
 import { FasterRouteBanner } from "./FasterRouteBanner";
+import { JunctionViewSlot } from "./JunctionViewSlot";
 import { NavAlertSlot } from "./NavAlertSlot";
 import { NavBottomBarSlot } from "./NavBottomBarSlot";
 import { NavDirectionsDialog } from "./NavDirectionsDialog";
@@ -205,6 +206,7 @@ export function GroundNavigationChrome({ coverage }: Props) {
             }}
           >
             <NavManeuverSlot />
+            <JunctionViewSlot />
             <NavOfflineBannerSlot coverage={coverage} />
             <NavAlertSlot />
             {rerouting && (

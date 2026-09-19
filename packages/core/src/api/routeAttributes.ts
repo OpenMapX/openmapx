@@ -1,3 +1,4 @@
+import { matchCountriesByPoint } from "../navigation/routeCountries";
 import { matchSpeedLimitsByPoint } from "../navigation/speedLimits";
 import { extractTrafficSignals } from "../navigation/trafficSignals";
 import type { LngLat } from "../types/geometry";
@@ -14,6 +15,8 @@ export interface RouteMatchWindow {
    * array (the window is a slice of `route.geometry`).
    */
   speedLimitsByPoint: (number | null)[];
+  /** ISO country code per matched trace point, aligned like `speedLimitsByPoint`. */
+  countriesByPoint: (string | null)[];
 }
 
 /**
@@ -27,7 +30,7 @@ export async function fetchRouteMatchWindow(
   trace: LngLat[],
   mode: TravelMode,
 ): Promise<RouteMatchWindow> {
-  if (trace.length < 2) return { signals: [], speedLimitsByPoint: [] };
+  if (trace.length < 2) return { signals: [], speedLimitsByPoint: [], countriesByPoint: [] };
   try {
     const res = await apiClient.post<MatchResult>(API_ENDPOINTS.routingMatch, {
       trace: trace.map(([lng, lat]) => ({ lat, lng })),
@@ -44,8 +47,9 @@ export async function fetchRouteMatchWindow(
     return {
       signals: extractTrafficSignals(res),
       speedLimitsByPoint: aligned ? matchSpeedLimitsByPoint(res) : [],
+      countriesByPoint: aligned ? matchCountriesByPoint(res) : [],
     };
   } catch {
-    return { signals: [], speedLimitsByPoint: [] };
+    return { signals: [], speedLimitsByPoint: [], countriesByPoint: [] };
   }
 }

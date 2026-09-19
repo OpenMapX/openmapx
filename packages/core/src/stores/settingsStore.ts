@@ -9,6 +9,8 @@ const TIME_FORMAT_STORAGE_KEY = "openmapx:timeFormat";
 const DATE_FORMAT_STORAGE_KEY = "openmapx:dateFormat";
 const VOICE_TIMING_STORAGE_KEY = "openmapx:voiceGuidanceTiming";
 const SPEED_CAMERA_ALERTS_STORAGE_KEY = "openmapx:speedCameraAlerts";
+const JUNCTION_VIEW_STORAGE_KEY = "openmapx:junctionView";
+const JUNCTION_PHOTOS_STORAGE_KEY = "openmapx:junctionPhotos";
 const AI_SEARCH_STORAGE_KEY = "openmapx:aiSearch";
 const INCIDENT_ALERTS_STORAGE_KEY = "openmapx:incidentAlerts";
 const AVOID_INCIDENTS_STORAGE_KEY = "openmapx:avoidIncidents";
@@ -65,6 +67,16 @@ function readVoiceTiming(): VoiceGuidanceTiming {
 // some countries and a privacy-sensitive feature, so the user must enable them.
 function readSpeedCameraAlerts(): boolean {
   return getStorage().getString(SPEED_CAMERA_ALERTS_STORAGE_KEY) === "true";
+}
+
+// The junction view is a guidance feature, not an opt-in extra: on by default,
+// switchable off by users who find the column too tall. Photos ride on it.
+function readJunctionView(): boolean {
+  return getStorage().getString(JUNCTION_VIEW_STORAGE_KEY) !== "false";
+}
+
+function readJunctionPhotos(): boolean {
+  return getStorage().getString(JUNCTION_PHOTOS_STORAGE_KEY) !== "false";
 }
 
 // Natural-language ("AI") search is on by default; users can opt out for privacy
@@ -169,6 +181,12 @@ interface SettingsState {
   /** Opt-in speed-camera approach alerts (off by default; region-gated downstream). */
   speedCameraAlerts: boolean;
   setSpeedCameraAlerts: (v: boolean) => void;
+  /** Schematic junction view for motorway exits during navigation (on by default). */
+  junctionView: boolean;
+  setJunctionView: (v: boolean) => void;
+  /** Street-level photo preview of the exit approach (on by default; needs junctionView). */
+  junctionPhotos: boolean;
+  setJunctionPhotos: (v: boolean) => void;
   /** Natural-language ("AI") search understanding (on by default; opt-out). */
   aiSearchEnabled: boolean;
   setAiSearchEnabled: (v: boolean) => void;
@@ -248,6 +266,16 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   setSpeedCameraAlerts: (speedCameraAlerts) => {
     getStorage().setString(SPEED_CAMERA_ALERTS_STORAGE_KEY, String(speedCameraAlerts));
     set({ speedCameraAlerts });
+  },
+  junctionView: readJunctionView(),
+  setJunctionView: (junctionView) => {
+    getStorage().setString(JUNCTION_VIEW_STORAGE_KEY, String(junctionView));
+    set({ junctionView });
+  },
+  junctionPhotos: readJunctionPhotos(),
+  setJunctionPhotos: (junctionPhotos) => {
+    getStorage().setString(JUNCTION_PHOTOS_STORAGE_KEY, String(junctionPhotos));
+    set({ junctionPhotos });
   },
   aiSearchEnabled: readAiSearch(),
   setAiSearchEnabled: (aiSearchEnabled) => {
@@ -338,6 +366,8 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       dateFormat: readDateFormat(),
       voiceGuidanceTiming: readVoiceTiming(),
       speedCameraAlerts: readSpeedCameraAlerts(),
+      junctionView: readJunctionView(),
+      junctionPhotos: readJunctionPhotos(),
       aiSearchEnabled: readAiSearch(),
       incidentAlerts: readIncidentAlerts(),
       avoidIncidents: readAvoidIncidents(),

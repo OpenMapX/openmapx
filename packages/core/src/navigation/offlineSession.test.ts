@@ -297,6 +297,43 @@ describe("navigation session snapshot", () => {
     expect(parsed).toEqual(original);
   });
 
+  it("round-trips junction bearings and the motorway flag", () => {
+    const withBearings = richStep();
+    withBearings.bearingBefore = 283;
+    withBearings.bearingAfter = 300;
+    withBearings.motorway = true;
+    const primary = { ...richRoute(), steps: [withBearings, arriveStep()] };
+    const original = createNavigationSessionSnapshot(input({ route: primary, routes: [primary] }));
+    expect(original.route.steps[0].bearingBefore).toBe(283);
+    expect(original.route.steps[0].bearingAfter).toBe(300);
+    expect(original.route.steps[0].motorway).toBe(true);
+    const parsed = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(original)));
+    expect(parsed).toEqual(original);
+  });
+
+  it("does not gain junction fields when the engine sent none", () => {
+    const primary = { ...richRoute(), steps: [{ ...arriveStep() }] };
+    const original = createNavigationSessionSnapshot(input({ route: primary, routes: [primary] }));
+    expect(original.route.steps[0].bearingBefore).toBeUndefined();
+    expect(original.route.steps[0].bearingAfter).toBeUndefined();
+    expect(original.route.steps[0].motorway).toBeUndefined();
+    const parsed = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(original)));
+    expect(parsed).toEqual(original);
+    expect(parsed?.route.steps[0].bearingBefore).toBeUndefined();
+  });
+
+  it.each([
+    ["an out-of-range bearing", onStep("bearingBefore", 400)],
+    ["a non-numeric bearing", onStep("bearingAfter", "west")],
+    ["a motorway flag as a string", onStep("motorway", "yes")],
+  ])("returns null for %s", (_name, corrupt) => {
+    const snapshot = structuredClone(
+      createNavigationSessionSnapshot(richInput()),
+    ) as unknown as Record<string, unknown>;
+    corrupt(snapshot);
+    expect(parseNavigationSessionSnapshot(snapshot)).toBeNull();
+  });
+
   it("rejects transit, unsupported modes, missing geometry, and empty steps", () => {
     const base = createNavigationSessionSnapshot(input());
     expect(parseNavigationSessionSnapshot({ ...base, kind: "transit" })).toBeNull();

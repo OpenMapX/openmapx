@@ -24,6 +24,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OfflineRouteCoverage } from "@/lib/navigation/offlineRouteCoverage";
+import { createQueryWrapper } from "@/test";
 import type { NavMenuProps } from "./NavMenu";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -32,6 +33,7 @@ vi.mock("@/lib/useWakeLock", () => ({ useWakeLock: () => {} }));
 vi.mock("@/lib/navigation/useNavigationEngine", () => ({ useNavigationEngine: () => {} }));
 vi.mock("@/lib/navigation/useNavCamera", () => ({ useNavCamera: () => {} }));
 vi.mock("@/lib/navigation/useNavAlerts", () => ({ useNavAlerts: () => null }));
+vi.mock("@/lib/navigation/useNavJunctions", () => ({ useNavJunctions: () => {} }));
 
 // Mutable so individual tests can flip the pending-session-resume case without
 // re-declaring the whole module mock. Referenced only from inside the factory's
@@ -289,11 +291,17 @@ function buildProgress(i: number): NavProgress {
   };
 }
 
+// The banner slot's sign-palette country lookup is a TanStack query, so the
+// tree needs the same provider the app root supplies.
+const QueryWrapper = createQueryWrapper();
+
 function renderNavigationView() {
   return render(
-    <NavIncidentContext.Provider value={INCIDENT_RESOURCE}>
-      <NavigationView />
-    </NavIncidentContext.Provider>,
+    <QueryWrapper>
+      <NavIncidentContext.Provider value={INCIDENT_RESOURCE}>
+        <NavigationView />
+      </NavIncidentContext.Provider>
+    </QueryWrapper>,
   );
 }
 

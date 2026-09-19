@@ -5,13 +5,39 @@ import Box from "@mui/material/Box";
 import Collapse from "@mui/material/Collapse";
 import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
-import type { Route } from "@openmapx/core";
-import { formatDistance, formatDuration } from "@openmapx/core";
+import type { Route, RouteCountrySpan, RouteStep } from "@openmapx/core";
+import {
+  countryAtMeters,
+  formatDistance,
+  formatDuration,
+  useCountryFromCoordinates,
+  useNavigationStore,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { ElevationProfile } from "@/components/elevation/ElevationProfile";
 import { DirectionsDetailHeader } from "@/components/panels/directions/DirectionsDetailHeader";
 import { StepRow } from "@/components/panels/directions/StepRow";
+
+/**
+ * The sign-palette country for each step, where the step's maneuver sits
+ * along the route. Only the route being navigated has countries from its
+ * map-match; any other route, and any stretch not matched yet, falls back to
+ * the origin's.
+ */
+function stepCountries(
+  steps: readonly RouteStep[],
+  startMeters: number,
+  spans: RouteCountrySpan[] | null,
+  fallback: string | null | undefined,
+): (string | null | undefined)[] {
+  let along = startMeters;
+  return steps.map((step) => {
+    const country = spans ? countryAtMeters(spans, along) : undefined;
+    along += step.distance;
+    return country ?? fallback;
+  });
+}
 
 export function DetailsView({
   route,
@@ -36,6 +62,13 @@ export function DetailsView({
       : formatDistance(route.distance);
 
   const intermediateLabels = waypointLabels ? waypointLabels.slice(1, -1).filter(Boolean) : [];
+
+  // One reverse geocode for the sign palette, only when some step carries
+  // signage — a plain route pays no lookup.
+  const countryEnabled = route.steps.some((step) => !!step.sign);
+  const { data: country } = useCountryFromCoordinates(route.geometry[0] ?? null, countryEnabled);
+  const routeCountries = useNavigationStore((s) => (s.route === route ? s.routeCountries : null));
+  const countries = stepCountries(route.steps, 0, routeCountries, country);
 
   return (
     <Box>
@@ -84,6 +117,8 @@ export function DetailsView({
           route={route}
           waypointLabels={waypointLabels ?? [originLabel, destinationLabel]}
           units={units}
+          country={country}
+          routeCountries={routeCountries}
           t={t}
         />
       ) : (
@@ -106,6 +141,10 @@ export function DetailsView({
               distance={step.distance}
               duration={step.duration}
               units={units}
+              lanes={step.lanes}
+              maneuver={step.maneuver}
+              sign={step.sign}
+              country={countries[i]}
             />
           ))}
           <Box sx={{ px: 2, py: 1.5 }}>
@@ -129,11 +168,15 @@ function LegByLegView({
   route,
   waypointLabels,
   units,
+  country,
+  routeCountries,
   t,
 }: {
   route: Route;
   waypointLabels: string[];
   units: "metric" | "imperial";
+  country: string | null | undefined;
+  routeCountries: RouteCountrySpan[] | null;
   t: ReturnType<typeof useTranslations>;
 }) {
   const [expandedLegs, setExpandedLegs] = useState<Set<number>>(
@@ -152,6 +195,10 @@ function LegByLegView({
   return (
     <>
       {route.legs.map((leg, i) => {
+        const legStartMeters = route.legs
+          .slice(0, i)
+          .reduce((sum, previous) => sum + previous.steps.reduce((m, s) => m + s.distance, 0), 0);
+        const legCountries = stepCountries(leg.steps, legStartMeters, routeCountries, country);
         const fromLabel = waypointLabels[i] || t("origin");
         const toLabel = waypointLabels[i + 1] || t("destination");
         const legDist =
@@ -227,6 +274,10 @@ function LegByLegView({
                   distance={step.distance}
                   duration={step.duration}
                   units={units}
+                  lanes={step.lanes}
+                  maneuver={step.maneuver}
+                  sign={step.sign}
+                  country={legCountries[j]}
                 />
               ))}
               <Box sx={{ px: 2, py: 1 }}>

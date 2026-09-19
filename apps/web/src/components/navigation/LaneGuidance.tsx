@@ -20,6 +20,7 @@ export function LaneGuidance({
   lanes,
   maneuver,
   variant = "standalone",
+  size = "regular",
 }: {
   lanes?: ManeuverLane[];
   maneuver?: Maneuver;
@@ -28,14 +29,16 @@ export function LaneGuidance({
    * banner's darkened sub-row: transparent, white arrows keyed by opacity.
    */
   variant?: "standalone" | "banner";
+  /** "compact" shrinks the cells for the directions list rows. */
+  size?: "regular" | "compact";
 }) {
   // Trust the engine's valid/active lanes; otherwise recommend them from the
   // maneuver (exact → same-side → unrestricted) so under-tagged lanes still light up.
   const resolved = resolveRecommendedLanes(lanes, maneuver);
   if (resolved.length === 0) return null;
   const banner = variant === "banner";
-  const cell = banner ? 38 : 36;
-  const arrowSize = banner ? 32 : 30;
+  const cell = size === "compact" ? 28 : banner ? 38 : 36;
+  const arrowSize = size === "compact" ? 24 : banner ? 32 : 30;
   return (
     <Box
       sx={{

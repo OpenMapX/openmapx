@@ -3,14 +3,21 @@ import {
   type LngLat,
   type StreetLevelImage,
   type StreetLevelLink,
+  type StreetLevelSearchQuery,
 } from "@openmapx/core";
 import type { StreetLevelCapabilities, StreetLevelProvider } from "@openmapx/integration-framework";
 
 const GRAPH = "https://graph.mapillary.com";
 const FIELDS =
-  "id,computed_geometry,compass_angle,camera_type,captured_at,sequence,thumb_2048_url,thumb_original_url";
+  "id,computed_geometry,compass_angle,camera_type,captured_at,sequence,thumb_1024_url,thumb_2048_url,thumb_original_url";
 // Mapillary's /images endpoint rejects anything wider than ~0.0002 deg per side.
 const NEAREST_DELTAS = [0.0001, 0.00015, 0.0002];
+/**
+ * The documented ceiling for a bbox query on /images: its area "must be
+ * smaller than 0.01 degrees square". A 1 km radius is two orders of magnitude
+ * under that, so the clamp only ever bites on a malformed radius.
+ */
+const SEARCH_MAX_BBOX_AREA_DEG2 = 0.01;
 const PANO_CAMERA_TYPES = new Set(["spherical", "equirectangular"]);
 
 interface GraphImage {
@@ -21,6 +28,7 @@ interface GraphImage {
   camera_type?: string;
   captured_at?: number;
   sequence?: string;
+  thumb_1024_url?: string;
   thumb_2048_url?: string;
   thumb_original_url?: string;
 }
@@ -49,6 +57,7 @@ export function graphImageToStreetLevelImage(
     fovDeg: isPano ? 360 : undefined,
     sequenceId: raw.sequence,
     assets: {
+      thumb: raw.thumb_1024_url,
       sd: raw.thumb_2048_url,
       hd: raw.thumb_original_url,
     },
@@ -98,6 +107,9 @@ export function createMapillaryProvider(options: {
         // Imagery is fetched through the backend image proxy, so the
         // browser never contacts the provider directly.
         endUserExposure: "server-only",
+        // Mapillary's Terms forbid use "in connection with real-time navigation
+        // or route guidance", so the junction photo never draws on it.
+        allowsNavigationUse: false,
         coverage: {
           kind: "mvt",
           tileUrlTemplate: options.tileUrlTemplate,
@@ -112,6 +124,9 @@ export function createMapillaryProvider(options: {
             capturedAt: "captured_at",
           },
         },
+        // /images has no look-at concept and no heading parameter; the route
+        // filters by heading client-side.
+        search: { heading: false, capturedAfter: true, lookingAt: false },
       };
     },
 
@@ -174,6 +189,41 @@ export function createMapillaryProvider(options: {
       if (previous) links.push(toLink(previous, "prev"));
       if (next) links.push(toLink(next, "next"));
       return links;
+    },
+
+    async searchImages(query: StreetLevelSearchQuery): Promise<StreetLevelImage[]> {
+      const params = new URLSearchParams();
+      let latDelta = query.radiusM / 110_970;
+      let lngDelta = query.radiusM / (111_320 * Math.cos((query.lngLat[1] * Math.PI) / 180));
+      const area = 4 * latDelta * lngDelta;
+      if (area >= SEARCH_MAX_BBOX_AREA_DEG2) {
+        const shrink = Math.sqrt((SEARCH_MAX_BBOX_AREA_DEG2 * 0.99) / area);
+        latDelta *= shrink;
+        lngDelta *= shrink;
+      }
+      params.set(
+        "bbox",
+        [
+          query.lngLat[0] - lngDelta,
+          query.lngLat[1] - latDelta,
+          query.lngLat[0] + lngDelta,
+          query.lngLat[1] + latDelta,
+        ]
+          .map((d) => d.toFixed(7))
+          .join(","),
+      );
+      if (query.capturedAfter) {
+        const date = new Date(query.capturedAfter);
+        if (!Number.isNaN(date.getTime())) {
+          params.set("start_captured_at", date.toISOString());
+        }
+      }
+      params.set("limit", String(Math.min(query.limit ?? 20, 50)));
+      const data = await fetchJson<GraphImagesResponse>(
+        `${GRAPH}/images?${params.toString()}&fields=${FIELDS}&access_token=${token}`,
+        { label: "Mapillary search" },
+      );
+      return (data?.data ?? []).map((raw) => graphImageToStreetLevelImage(raw, id));
     },
   };
 }

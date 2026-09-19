@@ -24,6 +24,23 @@ export function guidanceApproachMeters(mode: TravelMode, currentSpeedMps: number
   return Math.max(g.minMeters, Math.max(currentSpeedMps, 0) * leadSeconds);
 }
 
+/** Lead time for the junction photo, seconds, and the floor it never drops below. */
+const PHOTO_LEAD_SECONDS = 30;
+const PHOTO_MIN_METERS = 300;
+
+/**
+ * Distance at which the junction photo is worth showing. The gantry goes up
+ * with the rest of the guidance, minutes ahead on the motorway, but a picture
+ * of a junction that far off shows a road you cannot place yet — and it holds
+ * a large part of the screen. Half a minute of travel puts it up when what it
+ * shows is about to appear through the windscreen, never beyond the guidance
+ * window that carries it.
+ */
+export function junctionPhotoApproachMeters(mode: TravelMode, currentSpeedMps: number): number {
+  const lead = Math.max(Math.max(currentSpeedMps, 0) * PHOTO_LEAD_SECONDS, PHOTO_MIN_METERS);
+  return Math.min(lead, guidanceApproachMeters(mode, currentSpeedMps));
+}
+
 /**
  * Whether to preview the maneuver *after* the upcoming one ("Then …"). Two
  * conditions: we're inside the approach window for the current maneuver (so it's

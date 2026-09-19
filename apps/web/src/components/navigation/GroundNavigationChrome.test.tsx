@@ -29,6 +29,7 @@ vi.mock("./NavBottomBarSlot", () => ({
   NavBottomBarSlot: ({ menuToggle }: { menuToggle?: ReactNode }) => <div>{menuToggle}</div>,
 }));
 vi.mock("./NavManeuverSlot", () => ({ NavManeuverSlot: () => null }));
+vi.mock("./JunctionViewSlot", () => ({ JunctionViewSlot: () => null }));
 vi.mock("./NavOfflineBannerSlot", () => ({ NavOfflineBannerSlot: () => null }));
 vi.mock("./NavAlertSlot", () => ({ NavAlertSlot: () => null }));
 vi.mock("./NavStatusSlot", () => ({ NavStatusSlot: () => null }));

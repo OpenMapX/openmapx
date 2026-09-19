@@ -3,7 +3,12 @@ import {
   MAX_VECTOR_TILE_BYTES,
   VECTOR_TILE_MEDIA_TYPES,
 } from "@openmapx/core/server";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  filterImagesByHeading,
+  type IntegrationContext,
+  parseStreetLevelSearchQuery,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 import { createPanoramaxProvider } from "./provider.js";
 
 const DEFAULT_INSTANCE_URL = "https://api.panoramax.xyz/api";
@@ -125,5 +130,31 @@ export function setup(ctx: IntegrationContext): void {
     );
     if (!found.ok) return;
     reply.send(found.value);
+  });
+
+  // Searchable surface for the navigation photo prefetch. Panoramax's fov
+  // tolerance means "sees the point", not "faces the bearing", and the bbox
+  // fallback has no heading filter at all — so the route applies the heading
+  // filter itself, for both modes.
+  ctx.registerRoute("GET", "/search", async (req, reply) => {
+    const parsed = parseStreetLevelSearchQuery(scalarQueries(req.query));
+    if (!parsed) {
+      reply.status(400).send({ message: "Invalid search query" });
+      return;
+    }
+    const found = await upstream(ctx, reply, "Panoramax imagery search", () =>
+      provider.searchImages({
+        lngLat: parsed.lngLat,
+        radiusM: parsed.radiusM,
+        ...(parsed.heading !== undefined ? { heading: parsed.heading } : {}),
+        headingToleranceDeg: parsed.headingToleranceDeg,
+        ...(parsed.capturedAfter ? { capturedAfter: parsed.capturedAfter } : {}),
+        ...(parsed.lookingAt ? { lookingAt: parsed.lookingAt } : {}),
+        limit: parsed.limit,
+      }),
+    );
+    if (!found.ok) return;
+    reply.header("Cache-Control", "public, max-age=3600");
+    reply.send(filterImagesByHeading(found.value, parsed.heading, parsed.headingToleranceDeg));
   });
 }

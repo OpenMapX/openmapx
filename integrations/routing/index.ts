@@ -1,6 +1,7 @@
 import {
   type ConnectorStandard,
   type EvVehicleSpec,
+  type JunctionLookupResult,
   overpassQuerySafe,
   type TravelMode,
 } from "@openmapx/core";
@@ -28,6 +29,13 @@ import {
   parseDirectionsRequest,
 } from "./directions-request.js";
 import { runEvPlan } from "./ev-plan.js";
+import {
+  buildJunctionsQuery,
+  JUNCTION_CACHE_TTL_SECONDS,
+  junctionCacheKey,
+  mapJunctionWays,
+  parseJunctionPoints,
+} from "./junctions.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { NoScheduleProviderError, runSchedulePlan } from "./schedule-plan.js";
@@ -766,6 +774,65 @@ export function setup(ctx: IntegrationContext): void {
       reply.send(result);
     } catch {
       reply.send({ alerts: [] }); // optional layer: never fail navigation over it
+    }
+  });
+
+  /**
+   * POST /navigation/junctions — per-lane gantry tags for motorway decision
+   * points, from OSM `destination:*:lanes` / `turn:lanes` on the approach way.
+   * All uncached points of a request share ONE Overpass query (one polyline
+   * `around` statement each over its route trace): the public instance allows
+   * two concurrent slots per IP, so a per-point fan-out would rate-limit itself.
+   * Results are cached per point for a week; a point Overpass could not answer
+   * for comes back empty with `unavailable: true` and nothing cached, so the
+   * client asks again later while the panel falls back to the engine sign. A
+   * POST response is not HTTP-cacheable; the server cache is the cache.
+   */
+  ctx.registerRoute("POST", "/navigation/junctions", async (req, reply) => {
+    const points = parseJunctionPoints(req.body);
+    if (!points) {
+      reply.status(400).send({ error: "body must be { points: [...] } with 1–40 valid points" });
+      return;
+    }
+    const unavailable = (): Omit<JunctionLookupResult, "index"> => ({
+      approach: [],
+      ramps: [],
+      onMotorway: false,
+      unavailable: true,
+    });
+    try {
+      const keys = points.map(junctionCacheKey);
+      const cached = await Promise.all(
+        keys.map((key) => ctx.cache.get<Omit<JunctionLookupResult, "index">>(key)),
+      );
+      const missing = points.flatMap((point, index) => (cached[index] ? [] : [{ point, index }]));
+      const fetched = new Map<number, Omit<JunctionLookupResult, "index">>();
+      if (missing.length > 0) {
+        const data = await overpassQuerySafe(
+          buildJunctionsQuery(missing.map((entry) => entry.point)),
+          null,
+        );
+        // Overpass reports a timeout or memory limit hit mid-query with a 200
+        // and a `remark`, over elements that may be cut short: no answer, and
+        // nothing to cache for a week.
+        if (data && !data.remark) {
+          await Promise.all(
+            missing.map(async ({ point, index }) => {
+              const result = mapJunctionWays(data.elements ?? [], point);
+              fetched.set(index, result);
+              await ctx.cache.set(keys[index], result, JUNCTION_CACHE_TTL_SECONDS);
+            }),
+          );
+        }
+      }
+      reply.send({
+        junctions: points.map((_point, index) => ({
+          index,
+          ...(cached[index] ?? fetched.get(index) ?? unavailable()),
+        })),
+      });
+    } catch {
+      reply.send({ junctions: points.map((_point, index) => ({ index, ...unavailable() })) });
     }
   });
 

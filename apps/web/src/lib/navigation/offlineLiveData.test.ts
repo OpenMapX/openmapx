@@ -53,6 +53,7 @@ describe("offline live-data gating", () => {
     fetchRouteMatchWindow.mockReset().mockResolvedValue({
       signals: [],
       speedLimitsByPoint: [50, null],
+      countriesByPoint: ["DE", "DE"],
     });
     fetchRoadAlerts.mockReset().mockResolvedValue([]);
     useNavigationStore.getState().stopNavigation();
@@ -100,6 +101,24 @@ describe("offline live-data gating", () => {
     await waitFor(() => expect(result.current).toEqual([]));
     expect(useNavigationStore.getState().liveSpeedLimits).toBeNull();
     expect(useNavigationStore.getState().route?.steps[0]?.speedLimit).toBe(50);
+  });
+
+  it("publishes the route's countries and keeps them offline", async () => {
+    useNavigationStore.getState().setConnectivity("online");
+    renderHook(() => useNavTrafficSignals());
+    await waitFor(() =>
+      expect(useNavigationStore.getState().routeCountries).toEqual([
+        { fromMeters: 0, countryCode: "DE" },
+      ]),
+    );
+
+    act(() => useNavigationStore.getState().setConnectivity("offline"));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(useNavigationStore.getState().routeCountries).toEqual([
+      { fromMeters: 0, countryCode: "DE" },
+    ]);
   });
 
   it("allows the live hooks to fetch again after connectivity returns", async () => {

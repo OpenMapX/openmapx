@@ -82,6 +82,7 @@ vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
 }));
 
 import { NavigationRouteLayer } from "./NavigationRouteLayer";
+import { NavManeuverArrowLayer } from "./NavManeuverArrowLayer";
 import { NavTrafficSignalsLayer } from "./NavTrafficSignalsLayer";
 import { RouteTrafficLayer } from "./RouteTrafficLayer";
 
@@ -98,6 +99,7 @@ function NavigationStack() {
       <NavTrafficSignalsLayer />
       <RouteTrafficLayer />
       <NavigationRouteLayer />
+      <NavManeuverArrowLayer />
     </>
   );
 }
@@ -109,9 +111,15 @@ describe("layer groups from several components on one map", () => {
   it("straddles the basemap labels correctly whatever order the components mount in", () => {
     render(<NavigationStack />);
 
-    // Everything the navigation stack draws belongs under the labels except the
-    // traffic-signal icons, which are the one `nav-top` layer.
-    expect(aboveLabels(ids())).toEqual(["nav-traffic-signals"]);
+    // Everything the navigation stack draws belongs under the labels except
+    // the maneuver arrow (route-markers) and the traffic-signal icons, which
+    // are the `nav-top` layers.
+    expect(aboveLabels(ids())).toEqual([
+      "nav-maneuver-arrow-casing",
+      "nav-maneuver-arrow",
+      "nav-maneuver-arrow-head",
+      "nav-traffic-signals",
+    ]);
     expect(ids()).toEqual([
       "water",
       "nav-route-alts",
@@ -123,6 +131,9 @@ describe("layer groups from several components on one map", () => {
       "route-traffic-active",
       "route-traffic-current",
       "place-labels",
+      "nav-maneuver-arrow-casing",
+      "nav-maneuver-arrow",
+      "nav-maneuver-arrow-head",
       "nav-traffic-signals",
     ]);
   });
@@ -136,7 +147,12 @@ describe("layer groups from several components on one map", () => {
     });
 
     expect(ids()).toEqual(before);
-    expect(aboveLabels(ids())).toEqual(["nav-traffic-signals"]);
+    expect(aboveLabels(ids())).toEqual([
+      "nav-maneuver-arrow-casing",
+      "nav-maneuver-arrow",
+      "nav-maneuver-arrow-head",
+      "nav-traffic-signals",
+    ]);
     const navData = fake.state.sources.get("nav-route-source")?.data as { features: unknown[] };
     expect(navData.features.length).toBeGreaterThan(0);
   });

@@ -99,6 +99,18 @@ describe("transformTraceEdge", () => {
     const plain = transformTraceEdge({ length: 0.1 });
     expect(plain.endNodeTrafficSignal).toBeUndefined();
   });
+
+  it("resolves the end node's country through the admins list", () => {
+    // A trace from Eindhoven to Düsseldorf: the Dutch admins come first.
+    const admins = [{ country_code: "NL" }, { country_code: "NL" }, { country_code: "de" }];
+    expect(
+      transformTraceEdge({ length: 0.1, end_node: { admin_index: 2 } }, admins).endNodeCountryCode,
+    ).toBe("DE");
+    expect(
+      transformTraceEdge({ length: 0.1, end_node: { admin_index: 7 } }, admins).endNodeCountryCode,
+    ).toBeUndefined();
+    expect(transformTraceEdge({ length: 0.1 }, admins).endNodeCountryCode).toBeUndefined();
+  });
 });
 
 describe("valhallaLanes", () => {
@@ -139,6 +151,11 @@ describe("TRACE_ATTRIBUTE_FILTER", () => {
   it("requests the node.traffic_signal attribute", () => {
     expect(TRACE_ATTRIBUTE_FILTER).toContain("node.traffic_signal");
   });
+
+  it("requests each node's country", () => {
+    expect(TRACE_ATTRIBUTE_FILTER).toContain("node.admin_index");
+    expect(TRACE_ATTRIBUTE_FILTER).toContain("admin.country_code");
+  });
 });
 
 describe("valhallaSign", () => {
@@ -167,6 +184,57 @@ describe("valhallaSign", () => {
     expect(valhallaSign({ exit_toward_elements: [{ text: "Köln" }] })).toEqual({
       exitToward: ["Köln"],
     });
+  });
+});
+
+describe("transformTrip motorway flag and bearings", () => {
+  // Minimal two-maneuver trip shaped like the live A57 approach: a motorway
+  // start maneuver flagged `highway`, then an unflagged exit maneuver (the
+  // serializer writes `highway` only when true and omits it on ramps).
+  const trip = {
+    summary: { length: 2, time: 120 },
+    legs: [
+      {
+        shape: "_p~iF~ps|U",
+        summary: { length: 2, time: 120 },
+        maneuvers: [
+          {
+            type: 2,
+            instruction: "Drive northwest.",
+            length: 1,
+            time: 60,
+            begin_shape_index: 0,
+            end_shape_index: 1,
+            highway: true,
+            bearing_after: 298,
+          },
+          {
+            type: 20,
+            instruction: "Take the exit toward Neuss-Zentrum.",
+            length: 1,
+            time: 60,
+            begin_shape_index: 1,
+            end_shape_index: 2,
+            bearing_before: 283,
+            bearing_after: 300,
+          },
+        ],
+      },
+    ],
+  };
+
+  it("maps highway and bearings on the motorway maneuver", () => {
+    const step = transformTrip(trip, "driving").steps[0];
+    expect(step.motorway).toBe(true);
+    expect(step.bearingBefore).toBeUndefined();
+    expect(step.bearingAfter).toBe(298);
+  });
+
+  it("keeps the exit maneuver unflagged and carries its bearings", () => {
+    const step = transformTrip(trip, "driving").steps[1];
+    expect(step.motorway).toBeUndefined();
+    expect(step.bearingBefore).toBe(283);
+    expect(step.bearingAfter).toBe(300);
   });
 });
 

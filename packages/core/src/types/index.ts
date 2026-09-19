@@ -82,6 +82,17 @@ export type {
 export type { I18nToken, Translatable } from "./i18nToken";
 export type { Identified, Ids } from "./identified";
 export { makeId, parseId, withId } from "./identified";
+export type {
+  GantryModel,
+  GantryPanel,
+  JunctionDecisionPoint,
+  JunctionKind,
+  JunctionLookupPoint,
+  JunctionLookupResult,
+  JunctionSchematic,
+  JunctionWay,
+  OsmLaneTags,
+} from "./junction";
 export type { NeighborhoodCard, NeighborhoodsResponse } from "./neighborhood";
 export type {
   DaySchedule,
@@ -275,6 +286,7 @@ export type {
   StreetLevelImage,
   StreetLevelLink,
   StreetLevelRef,
+  StreetLevelSearchQuery,
   StreetLevelTiledAsset,
 } from "./streetLevel";
 export type {

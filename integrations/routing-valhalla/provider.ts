@@ -118,6 +118,10 @@ interface ValhallaManeuver {
   verbal_succinct_transition_instruction?: string;
   roundabout_exit_count?: number;
   sign?: ValhallaSign;
+  /** Serialised only when true — absent (never false) on ramps and unflagged edges. */
+  highway?: boolean;
+  bearing_before?: number;
+  bearing_after?: number;
 }
 
 interface ValhallaLeg {
@@ -340,6 +344,9 @@ function transformLeg(leg: ValhallaLeg): RouteLeg {
     verbalSuccinct: m.verbal_succinct_transition_instruction,
     roundaboutExitCount: m.roundabout_exit_count,
     sign: valhallaSign(m.sign),
+    motorway: m.highway === true ? true : undefined,
+    bearingBefore: typeof m.bearing_before === "number" ? m.bearing_before : undefined,
+    bearingAfter: typeof m.bearing_after === "number" ? m.bearing_after : undefined,
   }));
 
   const firstNamed = leg.maneuvers.find((m) => m.street_names && m.street_names.length > 0);
@@ -404,7 +411,12 @@ interface ValhallaTraceEdge {
   names?: string[];
   begin_shape_index?: number;
   end_shape_index?: number;
-  end_node?: { traffic_signal?: boolean };
+  end_node?: { traffic_signal?: boolean; admin_index?: number };
+}
+
+/** An administrative area referenced by `end_node.admin_index`. */
+interface ValhallaTraceAdmin {
+  country_code?: string;
 }
 
 interface ValhallaTraceMatchedPoint {
@@ -419,6 +431,7 @@ interface ValhallaTraceMatchedPoint {
 interface ValhallaTraceAttributesResponse {
   shape?: string;
   edges?: ValhallaTraceEdge[];
+  admins?: ValhallaTraceAdmin[];
   matched_points?: ValhallaTraceMatchedPoint[];
 }
 
@@ -432,6 +445,8 @@ export const TRACE_ATTRIBUTE_FILTER = [
   "edge.begin_shape_index",
   "edge.end_shape_index",
   "node.traffic_signal",
+  "node.admin_index",
+  "admin.country_code",
   "matched.point",
   "matched.type",
   "matched.edge_index",
@@ -440,7 +455,12 @@ export const TRACE_ATTRIBUTE_FILTER = [
   "shape",
 ] as const;
 
-export function transformTraceEdge(edge: ValhallaTraceEdge): MatchEdge {
+export function transformTraceEdge(
+  edge: ValhallaTraceEdge,
+  admins: ValhallaTraceAdmin[] = [],
+): MatchEdge {
+  const adminIndex = edge.end_node?.admin_index;
+  const countryCode = adminIndex === undefined ? undefined : admins[adminIndex]?.country_code;
   return {
     wayId: edge.way_id,
     length: (edge.length ?? 0) * 1000, // km -> metres
@@ -453,6 +473,7 @@ export function transformTraceEdge(edge: ValhallaTraceEdge): MatchEdge {
     beginShapeIndex: edge.begin_shape_index ?? 0,
     endShapeIndex: edge.end_shape_index ?? 0,
     endNodeTrafficSignal: edge.end_node?.traffic_signal,
+    ...(countryCode ? { endNodeCountryCode: countryCode.toUpperCase() } : {}),
   };
 }
 
@@ -831,7 +852,7 @@ export const valhallaService: RoutingProvider = {
 
     return {
       geometry: data.shape ? decodePolyline(data.shape, 6) : [],
-      edges: (data.edges ?? []).map(transformTraceEdge),
+      edges: (data.edges ?? []).map((edge) => transformTraceEdge(edge, data.admins)),
       points: (data.matched_points ?? []).map(transformMatchedPoint),
       mode,
     };

@@ -4,6 +4,7 @@ import {
   createNavigationSessionSnapshot,
   type NavigationSessionSnapshot,
 } from "../navigation/offlineSession";
+import type { RouteCountrySpan } from "../navigation/routeCountries";
 import type { TransitProgress } from "../navigation/transitProgress";
 import type { CameraMode, NavProgress, NavStatus } from "../navigation/types";
 import { getStorage } from "../platform/storage";
@@ -229,6 +230,12 @@ interface NavigationState {
    * indices belong to the old geometry.
    */
   liveSpeedLimits: (number | null)[] | null;
+  /**
+   * The countries the route passes through, as spans along it, from the same
+   * windowed map-match; the sign palette follows them across borders. Null
+   * until the first window lands, and reset with the route.
+   */
+  routeCountries: RouteCountrySpan[] | null;
   voiceEnabled: boolean;
   keepScreenOn: boolean;
   // Transit follow-along state (only populated when kind === "transit").
@@ -302,6 +309,7 @@ interface NavigationState {
   applyGroundFix: (update: GroundFixStoreUpdate) => void;
   setSpeedLimit: (v: number | null) => void;
   setLiveSpeedLimits: (v: (number | null)[] | null) => void;
+  setRouteCountries: (v: RouteCountrySpan[] | null) => void;
   setOffRoute: (v: boolean) => void;
   setWeakGps: (v: boolean) => void;
   setCoasting: (v: boolean) => void;
@@ -420,6 +428,7 @@ const ROUTE_IDENTITY_RESET = {
   progress: null as NavProgress | null,
   offRoute: false,
   liveSpeedLimits: null as (number | null)[] | null,
+  routeCountries: null as RouteCountrySpan[] | null,
   currentSpeedLimit: null as number | null,
 };
 
@@ -445,6 +454,7 @@ const INITIAL = {
   cameraMode: "follow" as CameraMode,
   currentSpeedLimit: null,
   liveSpeedLimits: null as (number | null)[] | null,
+  routeCountries: null as RouteCountrySpan[] | null,
   itinerary: null as TripItinerary | null,
   transitProgress: null as TransitProgress | null,
   transitRerouteNeeded: false,
@@ -584,6 +594,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
     })),
   setSpeedLimit: (currentSpeedLimit) => set({ currentSpeedLimit }),
   setLiveSpeedLimits: (liveSpeedLimits) => set({ liveSpeedLimits }),
+  setRouteCountries: (routeCountries) => set({ routeCountries }),
   setOffRoute: (offRoute) => set({ offRoute }),
   setWeakGps: (weakGps) => set({ weakGps }),
   setCoasting: (coasting) => set({ coasting }),

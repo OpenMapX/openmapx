@@ -8,6 +8,7 @@ import {
 } from "@openmapx/integration-framework/react";
 import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createQueryWrapper } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -23,6 +24,7 @@ vi.mock("@/lib/useWakeLock", () => ({
 vi.mock("@/lib/navigation/useNavigationEngine", () => ({ useNavigationEngine: () => {} }));
 vi.mock("@/lib/navigation/useNavCamera", () => ({ useNavCamera: () => {} }));
 vi.mock("@/lib/navigation/useNavAlerts", () => ({ useNavAlerts: () => null }));
+vi.mock("@/lib/navigation/useNavJunctions", () => ({ useNavJunctions: () => {} }));
 vi.mock("@/lib/navigation/useNavigationSessionPersistence", () => ({
   useNavigationSessionPersistence: () => ({
     pending: null,
@@ -73,11 +75,17 @@ const route = {
   summary: "via test",
 } as unknown as Route;
 
+// The banner slot's sign-palette country lookup is a TanStack query, so the
+// tree needs the same provider the app root supplies.
+const QueryWrapper = createQueryWrapper();
+
 function renderNavigationView() {
   return render(
-    <NavIncidentContext.Provider value={INCIDENT_RESOURCE}>
-      <NavigationView />
-    </NavIncidentContext.Provider>,
+    <QueryWrapper>
+      <NavIncidentContext.Provider value={INCIDENT_RESOURCE}>
+        <NavigationView />
+      </NavIncidentContext.Provider>
+    </QueryWrapper>,
   );
 }
 

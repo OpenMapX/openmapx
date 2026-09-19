@@ -60,7 +60,9 @@ When this is set, a provider that is enabled but not listed stays inactive.
 Mapillary's imagery is openly licensed (CC BY-SA 4.0), but its **platform Terms**
 prohibit use "in connection with real-time navigation or route guidance" and
 require applications to materially supplement Mapillary rather than replicate it.
-OpenMapX is a navigation product, so Mapillary ships **disabled by default**.
+OpenMapX is a navigation product, so Mapillary ships **disabled by default**,
+and even when enabled its imagery is never used for the junction photo shown
+while navigating — only in the viewer and on place panels.
 Review those terms against your own deployment before enabling it. Mapillary is
 also API-only — there is no self-hostable fallback.
 :::
@@ -108,8 +110,31 @@ contract and exposing the same routes under
 | `/capabilities`      | Coverage tile descriptor, colour, licence, privacy |
 | `/tiles/{z}/{x}/{y}` | Coverage vector tiles, proxied                     |
 | `/nearest`           | Nearest image to a coordinate                      |
+| `/search`            | Area/point search (heading, age, radius filters)   |
 | `/images/:id`        | One image's metadata and assets                    |
 | `/images/:id/links`  | Navigable neighbours for the viewer's arrows       |
+
+### During navigation
+
+While driving, the [junction view](./directions.md#turn-by-turn-navigation) can
+show a recent street-level image of an exit's approach, taken 30–200 m upstream
+and facing along the road — preferably where OpenStreetMap says the exit lanes
+already exist, so every lane to choose from is in the picture. It is prefetched when the route starts (never per GPS
+fix), the road ahead is projected onto it as a ribbon that narrows with distance
+and bends into the ramp — moving over from the lane the picture was taken in to
+the exit lane the overhead gantry names, and scaled to the frame's own shape,
+taken from the picture's sensor dimensions and the loaded image. The lens's
+field of view comes from Panoramax, else from the photo's focal length, else is
+assumed to be a phone's; for a dashcam or action camera with no lens data the
+road is not drawn at all, since a wide lens would put it off the road. For a regular photo
+the provider's thumbnail is used rather than the full frame, to keep mobile data low; a
+360° photo loads its reduced full frame, since its thumbnail is only a crop from the
+middle. Switching junction photos off hides them at once, including ones already
+loaded. A caption below the
+image names the author, the licence, and the capture month — no links, so nothing
+pulls attention off the road while the trip is live. Only providers whose terms allow
+use during navigation are searched, which today means Panoramax. With no
+qualifying image the junction view shows its schematic instead.
 
 The web app talks only to these routes, so it never needs to know which provider
 is behind them.

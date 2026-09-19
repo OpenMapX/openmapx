@@ -206,7 +206,12 @@
     "straightLineDistance": "≈ {dist} Luftlinie",
     "handoffFailed": "Der nächste Abschnitt konnte nicht gestartet werden. Bitte versuche es erneut.",
     "parkingFeeFree": "Kostenlos",
-    "parkingFeePaid": "Kostenpflichtig"
+    "parkingFeePaid": "Kostenpflichtig",
+    "exitNumber": "Ausfahrt {number}",
+    "toward": "Richtung {places}",
+    "junctionViewLabel": "Kreuzungsansicht",
+    "junctionLaneSummary": "Spur {lane} von {total} nutzen",
+    "junctionPhotoCaption": "© {author} · {license} · {date}"
   },
   "common": {
     "close": "Schließen",
@@ -2177,7 +2182,11 @@
     "persistentStorageOn": "Geschützt – der Browser löscht deine heruntergeladenen Kartenpakete und die Offline-App nicht zwischen Sitzungen.",
     "persistentStorageOff": "Nicht geschützt – bei wenig Speicher kann der Browser zwischengespeicherte Kacheln, heruntergeladene Kartenpakete und die Offline-App löschen. Dann lässt sich die App offline nicht mehr öffnen.",
     "enablePersistentStorage": "Offline-Speicher schützen",
-    "back": "Zurück zur Karte"
+    "back": "Zurück zur Karte",
+    "junctionView": "Kreuzungsansicht",
+    "junctionViewHint": "Zeigt während der Navigation eine schematische Ansicht von Autobahnabfahrten und Gabelungen.",
+    "junctionPhotos": "Abfahrtsfotos",
+    "junctionPhotosHint": "Lädt vorab ein Street-Level-Foto der Ausfahrtszufahrt, mit Urheber und Lizenz."
   },
   "pwa": {
     "updateAvailable": "Eine neue Version ist verfügbar",

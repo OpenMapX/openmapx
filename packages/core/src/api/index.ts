@@ -15,6 +15,7 @@ export {
   postEvDirections,
 } from "./directions";
 export { API_ENDPOINTS } from "./endpoints";
+export { fetchJunctionLookups } from "./junctions";
 export {
   connectTimeline,
   disconnectTimeline,
@@ -69,6 +70,7 @@ export {
 } from "./roadConditions";
 export { fetchRouteMatchWindow, type RouteMatchWindow } from "./routeAttributes";
 export { fetchSpeedLimit } from "./speedLimit";
+export { searchStreetLevelImages } from "./streetLevel";
 export { fetchTrafficSignals } from "./trafficSignals";
 export {
   buildTransitPlanParams,

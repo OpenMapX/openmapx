@@ -11,6 +11,7 @@ export const API_ENDPOINTS = {
   directionsSchedule: "/api/integrations/routing/directions/schedule",
   routingMatch: "/api/integrations/routing/match",
   navigationAlerts: "/api/integrations/routing/navigation/alerts",
+  navigationJunctions: "/api/integrations/routing/navigation/junctions",
   roadConditions: "/api/integrations/road-conditions/events",
   roadConditionsFlowRoute: "/api/integrations/road-conditions/flow-along-route",
   crowdReportsSubmit: "/api/integrations/crowd-reports/reports",

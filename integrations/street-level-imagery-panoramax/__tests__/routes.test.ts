@@ -41,6 +41,7 @@ describe("street-level-imagery-panoramax setup", () => {
       "/images/:id",
       "/images/:id/links",
       "/nearest",
+      "/search",
       "/tiles/:z/:x/:y",
     ]);
   });
@@ -141,5 +142,101 @@ describe("upstream failure handling", () => {
       ?.handler({ params: {}, query: { lat: "48.85", lng: "2.35" } } as never, reply as never);
 
     expect(reply.status).toHaveBeenCalledWith(404);
+  });
+});
+
+describe("GET /search", () => {
+  it("registers the search route in the sorted path list", () => {
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    expect(routes.map((r) => r.path).sort()).toEqual([
+      "/capabilities",
+      "/images/:id",
+      "/images/:id/links",
+      "/nearest",
+      "/search",
+      "/tiles/:z/:x/:y",
+    ]);
+  });
+
+  it("rejects an invalid lng with 400", async () => {
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await routes
+      .find((r) => r.path === "/search")
+      ?.handler(
+        { params: {}, query: { lng: "nope", lat: "51", radius: "400" } } as never,
+        reply as never,
+      );
+    expect(reply.status).toHaveBeenCalledWith(400);
+  });
+
+  it("filters results by heading in the route and caches for an hour", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          type: "FeatureCollection",
+          features: [
+            {
+              id: "facing-away",
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [2.35, 48.85] },
+              properties: { "view:azimuth": 97 },
+            },
+            {
+              id: "facing-along",
+              type: "Feature",
+              geometry: { type: "Point", coordinates: [2.36, 48.86] },
+              properties: { "view:azimuth": 283 },
+            },
+          ],
+        }),
+      ),
+    );
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await routes
+      .find((r) => r.path === "/search")
+      ?.handler(
+        {
+          params: {},
+          query: {
+            lng: "2.35",
+            lat: "48.85",
+            radius: "400",
+            heading: "283",
+            headingTolerance: "30",
+          },
+        } as never,
+        reply as never,
+      );
+    expect(reply.status).not.toHaveBeenCalled();
+    const sent = reply.send.mock.calls[0]?.[0] as { id: string }[];
+    expect(sent.map((i) => i.id)).toEqual(["facing-along"]);
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "public, max-age=3600");
+    vi.unstubAllGlobals();
+  });
+
+  it("reports an upstream failure as 502", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => {
+        throw new Error("upstream down");
+      }),
+    );
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await routes
+      .find((r) => r.path === "/search")
+      ?.handler(
+        { params: {}, query: { lng: "2.35", lat: "48.85", radius: "400" } } as never,
+        reply as never,
+      );
+    expect(reply.status).toHaveBeenCalledWith(502);
+    vi.unstubAllGlobals();
   });
 });

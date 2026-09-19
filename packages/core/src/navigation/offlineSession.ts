@@ -85,6 +85,9 @@ function copyStep(step: RouteStep): RouteStep {
       },
     }),
     ...(step.drivingSide !== undefined && { drivingSide: step.drivingSide }),
+    ...(step.bearingBefore !== undefined && { bearingBefore: step.bearingBefore }),
+    ...(step.bearingAfter !== undefined && { bearingAfter: step.bearingAfter }),
+    ...(step.motorway !== undefined && { motorway: step.motorway }),
   };
 }
 
@@ -199,6 +202,17 @@ function validateStep(step: unknown): step is RouteStep {
   ) {
     return false;
   }
+  if (
+    (value.bearingBefore !== undefined &&
+      (!isFiniteNumber(value.bearingBefore) ||
+        value.bearingBefore < 0 ||
+        value.bearingBefore >= 360)) ||
+    (value.bearingAfter !== undefined &&
+      (!isFiniteNumber(value.bearingAfter) || value.bearingAfter < 0 || value.bearingAfter >= 360))
+  ) {
+    return false;
+  }
+  if (value.motorway !== undefined && typeof value.motorway !== "boolean") return false;
   return true;
 }
 

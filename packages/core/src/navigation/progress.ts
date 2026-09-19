@@ -96,3 +96,14 @@ export function upcomingManeuverIndex(currentStepIndex: number, stepCount: numbe
   if (stepCount <= 0) return 0;
   return Math.min(currentStepIndex + 1, stepCount - 1);
 }
+
+/**
+ * Along-route distance at which `steps[stepIndex]` begins — the point where its
+ * maneuver happens, in the same metric `computeProgress` uses for
+ * `distanceToNextManeuver` (summed step distances, not geometry).
+ */
+export function stepStartMeters(steps: readonly { distance: number }[], stepIndex: number): number {
+  let along = 0;
+  for (let i = 0; i < stepIndex && i < steps.length; i += 1) along += steps[i].distance;
+  return along;
+}

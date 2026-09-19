@@ -79,6 +79,7 @@ import * as mapContext from "@/integration-api/map/MapContext";
 import type { ResolvedPadding } from "@/lib/cameraPadding";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { createFakeMap, type FakeMap } from "@/test";
+import { CAMERA_ZOOM_EPSILON } from "./navCameraScheduler";
 import { useNavCamera } from "./useNavCamera";
 
 interface MarkerRecord {
@@ -179,7 +180,11 @@ const FIX_STEP_METERS = (SPEED_MPS * ROUND_FRAMES * FRAME_MS) / 1000;
 const ENTER_ZOOM = 16;
 const SETTLE_UNTIL = CLOCK_START + 370;
 
-function makeProgress(alongMeters: number, speedMps: number): NavProgress {
+function makeProgress(
+  alongMeters: number,
+  speedMps: number,
+  distanceToNextManeuver = 100,
+): NavProgress {
   const { point, bearing } = positionAt(geometry, cum, alongMeters);
   return {
     snapped: point,
@@ -190,7 +195,7 @@ function makeProgress(alongMeters: number, speedMps: number): NavProgress {
     bearing,
     speedMps,
     currentStepIndex: 0,
-    distanceToNextManeuver: 100,
+    distanceToNextManeuver,
     distanceRemaining: routeLengthMeters - alongMeters,
     durationRemaining: 100,
   };
@@ -240,8 +245,15 @@ function modelMovingReplay(replay: Replay): { puck: PuckFrame[]; camera: CameraF
   let displayed = START_ALONG;
   let displayedBearing: number | null = positionAt(geometry, cum, START_ALONG).bearing;
   let displayedZoom = ENTER_ZOOM;
+  let displayedPitch = 55;
   let lastFrame: number | null = null;
-  let lastCam: { lng: number; lat: number; bearing: number; zoom: number } | null = null;
+  let lastCam: {
+    lng: number;
+    lat: number;
+    bearing: number;
+    zoom: number;
+    pitch: number;
+  } | null = null;
   let now = CLOCK_START;
   let frame = 0;
 
@@ -266,14 +278,24 @@ function modelMovingReplay(replay: Replay): { puck: PuckFrame[]; camera: CameraF
       if (now < SETTLE_UNTIL) {
         lastCam = null;
       } else {
+        // Approach window active throughout the replay (driving, 100 m out):
+        // the zoom target is boosted one level above the speed zoom and the
+        // pitch leans in, both eased with their own time constants.
+        const approaching = true;
         const zAlpha = 1 - Math.exp(-Math.max(dt, 0) / 1.6);
-        displayedZoom = displayedZoom + (targetZoomForSpeed(SPEED_MPS) - displayedZoom) * zAlpha;
+        const zoomTarget = approaching
+          ? Math.min(targetZoomForSpeed(SPEED_MPS) + 1.0, 17.5)
+          : targetZoomForSpeed(SPEED_MPS);
+        displayedZoom = displayedZoom + (zoomTarget - displayedZoom) * zAlpha;
+        const tAlpha = 1 - Math.exp(-Math.max(dt, 0) / 1.0);
+        displayedPitch = displayedPitch + ((approaching ? 60 : 55) - displayedPitch) * tAlpha;
         const moved =
           !lastCam ||
           Math.abs(point[0] - lastCam.lng) > 1e-6 ||
           Math.abs(point[1] - lastCam.lat) > 1e-6 ||
           Math.abs(((displayedBearing - lastCam.bearing + 540) % 360) - 180) > 0.05 ||
-          Math.abs(displayedZoom - lastCam.zoom) > 0.004;
+          Math.abs(displayedZoom - lastCam.zoom) > 0.004 ||
+          Math.abs(displayedPitch - lastCam.pitch) > 0.2;
         if (moved) {
           camera.push({
             frame,
@@ -286,6 +308,7 @@ function modelMovingReplay(replay: Replay): { puck: PuckFrame[]; camera: CameraF
             lat: point[1],
             bearing: displayedBearing,
             zoom: displayedZoom,
+            pitch: displayedPitch,
           };
         }
       }
@@ -349,6 +372,18 @@ function lastJumpPadding(fake: FakeMap): ResolvedPadding | undefined {
 function applyFix(alongMeters: number, speedMps = SPEED_MPS): void {
   act(() => {
     useNavigationStore.getState().applyProgress(makeProgress(alongMeters, speedMps));
+  });
+}
+
+function applyApproachFix(
+  alongMeters: number,
+  speedMps: number,
+  distanceToNextManeuver: number,
+): void {
+  act(() => {
+    useNavigationStore
+      .getState()
+      .applyProgress(makeProgress(alongMeters, speedMps, distanceToNextManeuver));
   });
 }
 
@@ -469,14 +504,21 @@ describe("useNavCamera quiescence", () => {
   });
 
   it("stops scheduling frames once a stationary pose has converged", async () => {
-    const { frames } = await mountNavCamera();
+    const { fake, frames } = await mountNavCamera();
     applyFix(START_ALONG, 0);
     frames.flush(1200, FRAME_MS);
     expect(frames.pending()).toBe(0);
     const settled = frames.requests();
-    // The standstill auto-zoom is the last thing to converge, and it does so in
-    // a few seconds rather than for the rest of the trip.
-    expect(settled).toBeLessThan(400);
+    // The standstill auto-zoom is the last thing to converge. It runs until it
+    // has arrived rather than until its steps turn too small to publish (which
+    // left it short), and that still takes seconds, not the rest of the trip.
+    expect(settled).toBeLessThan(900);
+    const zoom = fake.state.cameraTransitions.filter((t) => t.method === "jumpTo").at(-1)?.options
+      .zoom as number;
+    // The default fix is 100 m from the maneuver, inside the approach window:
+    // the standstill zoom plus the approach boost, capped at 17.5.
+    const approachZoom = Math.min(targetZoomForSpeed(0) + 1, 17.5);
+    expect(Math.abs(zoom - approachZoom)).toBeLessThanOrEqual(2 * CAMERA_ZOOM_EPSILON);
     frames.flush(300, FRAME_MS);
     expect(frames.requests()).toBe(settled);
   });
@@ -510,7 +552,7 @@ describe("useNavCamera quiescence", () => {
     const before = harness.frames.requests();
     harness.frames.flush(2000, FRAME_MS);
     expect(harness.frames.pending()).toBe(0);
-    expect(harness.frames.requests() - before).toBeLessThan(600);
+    expect(harness.frames.requests() - before).toBeLessThan(900);
   });
 });
 
@@ -795,9 +837,10 @@ describe("useNavCamera camera ownership", () => {
       const harness = await mountNavCamera();
       // Hand zoom to the user first: the auto-zoom keeps creeping toward the
       // standstill zoom long after the pose is still, and a frame it publishes
-      // would be indistinguishable from one the padding asked for.
+      // would be indistinguishable from one the padding asked for. Well outside
+      // the approach window too, so the pose itself is fully still.
       act(() => harness.fake.emit("zoomstart", {}));
-      applyFix(START_ALONG, 0);
+      applyApproachFix(START_ALONG, 0, 3000);
       harness.frames.flush(1200);
       expect(harness.frames.pending()).toBe(0);
       let transitions = harness.fake.state.cameraTransitions.length;
@@ -889,5 +932,97 @@ describe("useNavCamera camera ownership", () => {
         false,
       );
     });
+  });
+});
+
+describe("useNavCamera approach camera", () => {
+  const APPROACH_SPEED = 30;
+  const PLAIN_ZOOM = targetZoomForSpeed(APPROACH_SPEED);
+
+  function lastJump(fake: FakeMap) {
+    return fake.state.cameraTransitions.filter((t) => t.method === "jumpTo").at(-1)?.options;
+  }
+
+  it("tilts to the approach pitch and boosts the zoom inside the approach window", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, APPROACH_SPEED, 200);
+    harness.frames.flush(240, FRAME_MS);
+    const options = lastJump(harness.fake);
+    expect(options?.pitch).toBeGreaterThan(59);
+    expect(options?.zoom).toBeGreaterThan(PLAIN_ZOOM + 0.5);
+  });
+
+  it("keeps the plain driving pose far from the maneuver", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, APPROACH_SPEED, 3000);
+    harness.frames.flush(240, FRAME_MS);
+    const options = lastJump(harness.fake);
+    expect(options?.pitch).toBe(55);
+    expect(options?.zoom).toBeLessThan(PLAIN_ZOOM + 0.3);
+  });
+
+  it("brings the tilt all the way back for a traveller stopped when the window closes", async () => {
+    const harness = await mountNavCamera();
+    // Stopped at the light at the end of the ramp, still inside the window.
+    applyApproachFix(START_ALONG, 0, 50);
+    harness.frames.flush(1200, FRAME_MS);
+    expect(lastJump(harness.fake)?.pitch).toBeGreaterThan(59.5);
+
+    // The maneuver moves on while the car stands still: nothing moves the puck,
+    // and each frame's pitch step is under the threshold that publishes it.
+    applyApproachFix(START_ALONG, 0, 5000);
+    harness.frames.flush(1200, FRAME_MS);
+    expect(harness.frames.pending()).toBe(0);
+    expect(Math.abs((lastJump(harness.fake)?.pitch as number) - 55)).toBeLessThanOrEqual(0.2);
+  });
+
+  it("raises the pitch but stops commanding zoom after the user zoomed", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, APPROACH_SPEED, 200);
+    act(() => harness.fake.emit("zoomstart", {}));
+    harness.frames.flush(240, FRAME_MS);
+    const jumps = harness.fake.state.cameraTransitions.filter((t) => t.method === "jumpTo");
+    expect(jumps.length).toBeGreaterThan(0);
+    expect((jumps.at(-1)?.options.pitch as number) ?? 0).toBeGreaterThan(59);
+    expect(jumps.every((t) => t.options.zoom === undefined)).toBe(true);
+  });
+
+  it("issues no camera transform at all while a pointer is down", async () => {
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, APPROACH_SPEED, 200);
+    harness.frames.flush(30, FRAME_MS);
+    const transitions = harness.fake.state.cameraTransitions.length;
+    act(() => harness.fake.emit("touchstart"));
+    harness.frames.flush(60, FRAME_MS);
+    expect(harness.fake.state.cameraTransitions).toHaveLength(transitions);
+  });
+
+  it("never tilts for walking", async () => {
+    useNavigationStore.getState().stopNavigation();
+    useNavigationStore.getState().startGroundNavigation(route, "walking", [
+      [0, 0],
+      [0.02, 0.003],
+    ]);
+    const harness = await mountNavCamera({ startNavigation: false });
+    applyApproachFix(START_ALONG, 1.4, 20);
+    harness.frames.flush(240, FRAME_MS);
+    const jumps = harness.fake.state.cameraTransitions.filter((t) => t.method === "jumpTo");
+    expect(jumps.length).toBeGreaterThan(0);
+    expect(jumps.every((t) => (t.options.pitch as number) === 0)).toBe(true);
+  });
+
+  it("snaps the pitch on the first published frame under reduced motion", async () => {
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query.includes("reduce"),
+        addEventListener() {},
+        removeEventListener() {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia;
+    const harness = await mountNavCamera();
+    applyApproachFix(START_ALONG, APPROACH_SPEED, 200);
+    // Past the enter-follow settle window, so the per-frame loop owns the camera.
+    harness.frames.flush(40, FRAME_MS);
+    const firstJump = harness.fake.state.cameraTransitions.find((t) => t.method === "jumpTo");
+    expect(firstJump?.options.pitch).toBe(60);
   });
 });

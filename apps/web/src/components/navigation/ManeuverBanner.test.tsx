@@ -6,6 +6,8 @@ vi.mock("next-intl", () => ({
     if (key === "in") return `In ${String(values?.distance ?? "")}`;
     if (key === "then") return `Then ${String(values?.instruction ?? "")}`;
     if (key === "thenLabel") return "Then";
+    if (key === "exitNumber") return `Exit ${String(values?.number ?? "")}`;
+    if (key === "toward") return `toward ${String(values?.places ?? "")}`;
     return key;
   },
 }));
@@ -15,6 +17,10 @@ vi.mock("@openmapx/core", () => ({
     sys === "imperial" ? `${m} ft` : `${m} m`,
   // Passthrough: the lanes already carry valid/active flags in these tests.
   resolveRecommendedLanes: (lanes?: unknown[]) => lanes ?? [],
+  visibleToward: (list: string[], max = 3) => list.slice(0, max),
+  signHeadline: (sign?: { exitToward?: string[]; exitNames?: string[] }) =>
+    sign?.exitToward?.length ? sign.exitToward : (sign?.exitNames ?? []),
+  refKind: () => "motorway",
 }));
 
 import { lowercaseFirstWord, ManeuverBanner } from "./ManeuverBanner";
@@ -93,5 +99,47 @@ describe("ManeuverBanner", () => {
     expect(html).toContain("Then");
     // …so the full next-step instruction text is not spelled out.
     expect(html).not.toContain("2nd Ave");
+  });
+
+  it("renders the sign strip between the headline and the instruction", () => {
+    const html = renderToStaticMarkup(
+      <ManeuverBanner
+        instruction="Take exit 20 toward Neuss-Zentrum"
+        distanceToManeuver={300}
+        maneuver={{ type: "turn", modifier: "right" }}
+        sign={{
+          exitNumbers: ["20"],
+          exitBranches: ["A 46"],
+          exitToward: ["Neuss-Zentrum"],
+        }}
+        country="DE"
+        units="metric"
+      />,
+    );
+    const headlineAt = html.indexOf("In 300 m");
+    const stripAt = html.indexOf('data-testid="exit-sign-strip"');
+    const instructionAt = html.indexOf("Take exit 20");
+    expect(stripAt).toBeGreaterThan(headlineAt);
+    expect(instructionAt).toBeGreaterThan(stripAt);
+    expect(html).toContain("Exit 20");
+    expect(html).toContain("Neuss-Zentrum");
+  });
+
+  it("keeps the lane sub-row when both sign and lanes are present", () => {
+    const html = renderToStaticMarkup(
+      <ManeuverBanner
+        instruction="Take exit 20"
+        distanceToManeuver={300}
+        maneuver={{ type: "turn", modifier: "right" }}
+        sign={{ exitNumbers: ["20"] }}
+        lanes={[
+          { indications: ["through"], valid: false },
+          { indications: ["right"], valid: true, active: "right" },
+        ]}
+        units="metric"
+      />,
+    );
+    expect(html).toContain('data-testid="exit-sign-strip"');
+    expect(html).toContain('data-valid="true"');
   });
 });

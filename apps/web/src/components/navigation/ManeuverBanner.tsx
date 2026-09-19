@@ -2,11 +2,12 @@
 
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
-import { formatMeasurementDistance, type ManeuverLane } from "@openmapx/core";
+import { formatMeasurementDistance, type ManeuverLane, type ManeuverSign } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type Maneuver, maneuverIconFor } from "@/lib/navigation/maneuverIcon";
 import { LaneGuidance } from "./LaneGuidance";
 import { NavBannerShell } from "./NavBannerShell";
+import { ExitSignStrip } from "./signs/ExitSignStrip";
 
 /**
  * De-capitalize the leading word so a routing-engine instruction (which always
@@ -26,7 +27,7 @@ export function lowercaseFirstWord(instruction: string): string {
   return instruction;
 }
 
-interface Props {
+export interface ManeuverBannerProps {
   instruction: string;
   distanceToManeuver: number;
   maneuver?: Maneuver;
@@ -38,6 +39,10 @@ interface Props {
    * banner's sub-row, replacing the "Then …" preview.
    */
   lanes?: ManeuverLane[];
+  /** Interchange signage for the upcoming maneuver, when the engine supplies it. */
+  sign?: ManeuverSign;
+  /** Country of the route origin, for the sign palette. */
+  country?: string | null;
   units: "metric" | "imperial";
 }
 
@@ -48,8 +53,10 @@ export function ManeuverBanner({
   nextInstruction,
   nextManeuver,
   lanes,
+  sign,
+  country,
   units,
-}: Props) {
+}: ManeuverBannerProps) {
   const t = useTranslations("navigation");
   const Icon = maneuverIconFor(maneuver).component;
   const NextIcon = nextInstruction ? maneuverIconFor(nextManeuver).component : null;
@@ -102,6 +109,7 @@ export function ManeuverBanner({
       <Typography variant="h6" sx={{ lineHeight: 1.1 }}>
         {t("in", { distance: formatMeasurementDistance(distanceToManeuver, units) })}
       </Typography>
+      {sign && <ExitSignStrip sign={sign} country={country} size="banner" />}
       <Typography variant="body1">{instruction}</Typography>
     </NavBannerShell>
   );

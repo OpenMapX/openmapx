@@ -292,6 +292,11 @@ export {
   type MergeAllOptions,
 } from "./strategies";
 export {
+  filterImagesByHeading,
+  type ParsedStreetLevelSearch,
+  parseStreetLevelSearchQuery,
+} from "./street-level-search";
+export {
   createTidesIntegration,
   type MetObservation,
   type TideCurvePoint,

@@ -4787,6 +4787,23 @@
         "x-openmapx-source": "integrations/routing/index.ts"
       }
     },
+    "/api/integrations/routing/navigation/junctions": {
+      "post": {
+        "operationId": "postApiIntegrationsRoutingNavigationJunctions",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "POST /navigation/junctions (routing)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "routing",
+        "x-openmapx-source": "integrations/routing/index.ts"
+      }
+    },
     "/api/integrations/search-nlp/parse": {
       "post": {
         "operationId": "postApiIntegrationsSearchNlpParse",
@@ -4901,6 +4918,23 @@
           }
         },
         "summary": "GET /nearest (street-level-imagery-mapillary)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-mapillary",
+        "x-openmapx-source": "integrations/street-level-imagery-mapillary/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-mapillary/search": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryMapillarySearch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /search (street-level-imagery-mapillary)",
         "tags": [
           "integrations"
         ],
@@ -5032,6 +5066,23 @@
           }
         },
         "summary": "GET /nearest (street-level-imagery-panoramax)",
+        "tags": [
+          "integrations"
+        ],
+        "x-openmapx-auth": "public",
+        "x-openmapx-integration": "street-level-imagery-panoramax",
+        "x-openmapx-source": "integrations/street-level-imagery-panoramax/index.ts"
+      }
+    },
+    "/api/integrations/street-level-imagery-panoramax/search": {
+      "get": {
+        "operationId": "getApiIntegrationsStreetLevelImageryPanoramaxSearch",
+        "responses": {
+          "default": {
+            "description": "Integration response"
+          }
+        },
+        "summary": "GET /search (street-level-imagery-panoramax)",
         "tags": [
           "integrations"
         ],

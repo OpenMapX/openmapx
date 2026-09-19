@@ -8,6 +8,7 @@ import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@
 import { fetchJson } from "@openmapx/core";
 import type {
   ManeuverLane,
+  ManeuverSign,
   RoutingOptions,
   RoutingProvider,
 } from "@openmapx/integration-routing/types";
@@ -26,6 +27,8 @@ interface OsrmManeuver {
   modifier?: string;
   location: [number, number];
   exit?: number;
+  bearing_before?: number;
+  bearing_after?: number;
 }
 
 interface OsrmLane {
@@ -37,6 +40,8 @@ interface OsrmLane {
 
 interface OsrmIntersection {
   lanes?: OsrmLane[];
+  /** Per-intersection road classes (car profile: both `motorway` and `motorway_link` carry "motorway"). */
+  classes?: string[];
 }
 
 interface OsrmMaxspeed {
@@ -54,6 +59,12 @@ interface OsrmStep {
   duration: number;
   name: string;
   ref?: string;
+  /** Exit/interchange signage, comma- and semicolon-separated. */
+  destinations?: string;
+  /** Exit number(s), e.g. "21". */
+  exits?: string;
+  /** Roundabout name, when this is a rotary maneuver. */
+  rotary_name?: string;
   maneuver: OsrmManeuver;
   geometry: { type: "LineString"; coordinates: [number, number][] };
   intersections?: OsrmIntersection[];
@@ -124,11 +135,16 @@ function generateInstruction(maneuver: OsrmManeuver, name: string, ref?: string)
   }
 }
 
-/** Lane guidance from the first intersection that carries lanes, if any. */
+/**
+ * Lane guidance for the maneuver itself. OSRM places the maneuver at
+ * `intersections[0]` and attaches that intersection's `lanes` to it, so any
+ * lanes on later intersections belong to other maneuvers and reading them
+ * would silently report unrelated guidance.
+ */
 function osrmLanes(step: OsrmStep): ManeuverLane[] | undefined {
-  const withLanes = step.intersections?.find((i) => i.lanes && i.lanes.length > 0);
-  if (!withLanes?.lanes) return undefined;
-  return withLanes.lanes.map((l) => {
+  const lanes = step.intersections?.[0]?.lanes;
+  if (!lanes || lanes.length === 0) return undefined;
+  return lanes.map((l) => {
     const lane: ManeuverLane = {
       indications: l.indications ?? [],
       valid: Boolean(l.valid),
@@ -136,6 +152,40 @@ function osrmLanes(step: OsrmStep): ManeuverLane[] | undefined {
     if (l.valid_indication) lane.active = l.valid_indication;
     return lane;
   });
+}
+
+/**
+ * Interchange signage from the OSRM step fields. `destinations` carries the
+ * signed road refs before a colon ("A 57: Köln, Bonn") when OSM has
+ * `destination:ref`; those become exit branches and the towns the toward
+ * list. `exits` splits on the same comma/semicolon separators; `ref` becomes
+ * an exit branch only for ramp/fork maneuvers (on a through road it names the
+ * road itself, not the exit).
+ */
+export function osrmSign(step: OsrmStep): ManeuverSign | undefined {
+  const splitList = (raw: string | undefined): string[] | undefined => {
+    const list = raw
+      ?.split(/[,;]/)
+      .map((entry) => entry.trim())
+      .filter(Boolean);
+    return list && list.length > 0 ? list : undefined;
+  };
+  const out: ManeuverSign = {};
+  const exitNumbers = splitList(step.exits);
+  const destinationParts = step.destinations?.match(/^([^:]+):\s*(.+)$/);
+  const destinationRefs = destinationParts ? splitList(destinationParts[1]) : undefined;
+  const exitToward = splitList(destinationParts ? destinationParts[2] : step.destinations);
+  const exitNames = splitList(step.rotary_name);
+  const branchTypes = new Set(["off ramp", "on ramp", "fork"]);
+  const stepRef = branchTypes.has(step.maneuver.type) ? splitList(step.ref) : undefined;
+  const exitBranches = [...(destinationRefs ?? []), ...(stepRef ?? [])].filter(
+    (ref, index, all) => all.indexOf(ref) === index,
+  );
+  if (exitNumbers) out.exitNumbers = exitNumbers;
+  if (exitBranches.length > 0) out.exitBranches = exitBranches;
+  if (exitToward) out.exitToward = exitToward;
+  if (exitNames) out.exitNames = exitNames;
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 /** Normalize one OSRM maxspeed entry to km/h, or null when unknown/absent. */
@@ -228,6 +278,12 @@ export function transformOsrmStep(step: OsrmStep): RouteStep {
     lanes: osrmLanes(step),
     speedLimit: osrmSpeedLimit(step),
     drivingSide: step.driving_side,
+    sign: osrmSign(step),
+    motorway: step.intersections?.[0]?.classes?.includes("motorway") === true ? true : undefined,
+    bearingBefore:
+      typeof step.maneuver.bearing_before === "number" ? step.maneuver.bearing_before : undefined,
+    bearingAfter:
+      typeof step.maneuver.bearing_after === "number" ? step.maneuver.bearing_after : undefined,
   };
 }
 

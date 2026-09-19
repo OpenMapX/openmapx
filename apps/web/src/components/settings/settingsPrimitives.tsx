@@ -21,7 +21,16 @@ export function Section({ title, children }: { title: string; children: ReactNod
 }
 
 /** A label on the left, a control on the right. */
-export function SettingRow({ label, children }: { label: string; children: ReactNode }) {
+export function SettingRow({
+  label,
+  children,
+  disabled = false,
+}: {
+  label: string;
+  children: ReactNode;
+  /** Dims the row when the switch cannot be used (e.g. a nested setting's parent is off). */
+  disabled?: boolean;
+}) {
   return (
     <Box
       sx={{
@@ -30,6 +39,7 @@ export function SettingRow({ label, children }: { label: string; children: React
         justifyContent: "space-between",
         gap: 2,
         py: 0.75,
+        ...(disabled && { opacity: 0.5 }),
       }}
     >
       <Typography variant="body2">{label}</Typography>
@@ -42,13 +52,15 @@ export function SettingRow({ label, children }: { label: string; children: React
 export function SwitchControl({
   checked,
   onChange,
+  disabled = false,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
+  disabled?: boolean;
 }) {
   return (
     <Box sx={{ display: "flex", justifyContent: "flex-end" }}>
-      <Switch checked={checked} onChange={(e) => onChange(e.target.checked)} />
+      <Switch checked={checked} onChange={(e) => onChange(e.target.checked)} disabled={disabled} />
     </Box>
   );
 }

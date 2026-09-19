@@ -65,6 +65,10 @@ export function NavigationSettingsDialog({
   const setAutoSwitchFasterRoutes = useSettingsStore((s) => s.setAutoSwitchFasterRoutes);
   const mapNorthUp = useSettingsStore((s) => s.mapNorthUp);
   const setMapNorthUp = useSettingsStore((s) => s.setMapNorthUp);
+  const junctionView = useSettingsStore((s) => s.junctionView);
+  const setJunctionView = useSettingsStore((s) => s.setJunctionView);
+  const junctionPhotos = useSettingsStore((s) => s.junctionPhotos);
+  const setJunctionPhotos = useSettingsStore((s) => s.setJunctionPhotos);
 
   const avoidHighways = useDirectionsStore((s) => s.avoidHighways);
   const setAvoidHighways = useDirectionsStore((s) => s.setAvoidHighways);
@@ -147,6 +151,18 @@ export function NavigationSettingsDialog({
             <SwitchControl checked={speedCameraAlerts} onChange={setSpeedCameraAlerts} />
           </SettingRow>
           {hint(ts("speedCameraAlertsHint"))}
+          <SettingRow label={ts("junctionView")}>
+            <SwitchControl checked={junctionView} onChange={setJunctionView} />
+          </SettingRow>
+          {hint(ts("junctionViewHint"))}
+          <SettingRow label={ts("junctionPhotos")} disabled={!junctionView}>
+            <SwitchControl
+              checked={junctionView && junctionPhotos}
+              onChange={setJunctionPhotos}
+              disabled={!junctionView}
+            />
+          </SettingRow>
+          {hint(ts("junctionPhotosHint"))}
         </Section>
 
         <Section title={tn("sectionRouting")}>

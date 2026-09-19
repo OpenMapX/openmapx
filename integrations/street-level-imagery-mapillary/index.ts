@@ -3,7 +3,12 @@ import {
   MAX_VECTOR_TILE_BYTES,
   VECTOR_TILE_MEDIA_TYPES,
 } from "@openmapx/core/server";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  filterImagesByHeading,
+  type IntegrationContext,
+  parseStreetLevelSearchQuery,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 import { createMapillaryProvider } from "./provider.js";
 
 const TILE_PATH = "/api/integrations/street-level-imagery-mapillary/tiles/{z}/{x}/{y}";
@@ -141,5 +146,30 @@ export function setup(ctx: IntegrationContext): void {
     );
     if (!found.ok) return;
     reply.send(found.value);
+  });
+
+  // Searchable surface for the navigation photo prefetch. Mapillary's /images
+  // has no heading parameter, so the route applies the heading filter itself.
+  ctx.registerRoute("GET", "/search", async (req, reply) => {
+    if (!token) {
+      reply.status(503).send({ message: "Mapillary token not configured" });
+      return;
+    }
+    const parsed = parseStreetLevelSearchQuery(scalarQueries(req.query));
+    if (!parsed) {
+      reply.status(400).send({ message: "Invalid search query" });
+      return;
+    }
+    const found = await upstream(ctx, reply, "Mapillary imagery search", () =>
+      provider.searchImages({
+        lngLat: parsed.lngLat,
+        radiusM: parsed.radiusM,
+        ...(parsed.capturedAfter ? { capturedAfter: parsed.capturedAfter } : {}),
+        limit: parsed.limit,
+      }),
+    );
+    if (!found.ok) return;
+    reply.header("Cache-Control", "public, max-age=3600");
+    reply.send(filterImagesByHeading(found.value, parsed.heading, parsed.headingToleranceDeg));
   });
 }

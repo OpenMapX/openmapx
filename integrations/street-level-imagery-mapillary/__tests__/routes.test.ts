@@ -60,6 +60,7 @@ describe("street-level-imagery-mapillary setup", () => {
       "/images/:id",
       "/images/:id/links",
       "/nearest",
+      "/search",
       "/tiles/:z/:x/:y",
     ]);
   });
@@ -78,6 +79,15 @@ describe("street-level-imagery-mapillary setup", () => {
     const sent = reply.send.mock.calls[0]?.[0] as { id: string; coverage: { kind: string } };
     expect(sent.id).toBe("mapillary");
     expect(sent.coverage.kind).toBe("mvt");
+  });
+
+  it("declares that its terms rule out use during navigation", () => {
+    const { ctx, routes } = buildCtx({ accessToken: "" });
+    setup(ctx);
+    const reply = makeReply();
+    void findRoute(routes, "/capabilities").handler(makeRequest({}), reply);
+    const sent = reply.send.mock.calls[0]?.[0] as { allowsNavigationUse: boolean };
+    expect(sent.allowsNavigationUse).toBe(false);
   });
 });
 
@@ -179,5 +189,142 @@ describe("street-level-imagery-mapillary /nearest", () => {
     await findRoute(routes, "/nearest").handler(makeRequest({ lat: "52.52", lng: "13.41" }), reply);
     const sent = reply.send.mock.calls[0]?.[0] as { id: string };
     expect(sent.id).toBe("near");
+  });
+});
+
+describe("street-level-imagery-mapillary /search", () => {
+  let fetchMock: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("registers the search route in the sorted path list", () => {
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    expect(routes.map((r) => r.path).sort()).toEqual([
+      "/capabilities",
+      "/images/:id",
+      "/images/:id/links",
+      "/nearest",
+      "/search",
+      "/tiles/:z/:x/:y",
+    ]);
+  });
+
+  it("rejects invalid input with 400", async () => {
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await findRoute(routes, "/search").handler(
+      makeRequest({ lng: "nope", lat: "51", radius: "400" }),
+      reply,
+    );
+    expect(reply.status).toHaveBeenCalledWith(400);
+  });
+
+  it("builds a bbox spanning the whole radius, with the capture filter", async () => {
+    fetchMock.mockImplementation(async () => Response.json({ data: [] }));
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    await findRoute(routes, "/search").handler(
+      makeRequest({ lng: "6.676", lat: "51.179", radius: "400", after: "2018-01-01" }),
+      makeReply(),
+    );
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get("start_captured_at")).toBe("2018-01-01T00:00:00.000Z");
+    const bbox = (url.searchParams.get("bbox") ?? "").split(",").map(Number);
+    // 400 m either side of the centre: ~0.0072° of latitude and ~0.0115° of
+    // longitude at 51° N — a photo 300 m upstream must fall inside.
+    expect(bbox[3] - bbox[1]).toBeCloseTo(0.00721, 4);
+    expect(bbox[2] - bbox[0]).toBeCloseTo(0.01143, 4);
+    // Well under the documented 0.01 deg² ceiling for a bbox query.
+    expect((bbox[2] - bbox[0]) * (bbox[3] - bbox[1])).toBeLessThan(0.01);
+    expect(Number(url.searchParams.get("limit"))).toBeLessThanOrEqual(50);
+  });
+
+  it("asks for the 1024 px thumbnail and maps it as the image's thumb", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({
+        data: [
+          {
+            id: "1",
+            computed_geometry: { type: "Point", coordinates: [6.68, 51.18] },
+            compass_angle: 283,
+            captured_at: 1_600_000_000_000,
+            thumb_1024_url: "https://scontent.example/1024.jpg",
+            thumb_2048_url: "https://scontent.example/2048.jpg",
+          },
+        ],
+      }),
+    );
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await findRoute(routes, "/search").handler(
+      makeRequest({ lng: "6.676", lat: "51.179", radius: "200" }),
+      reply,
+    );
+    const url = new URL(String(fetchMock.mock.calls[0][0]));
+    expect(url.searchParams.get("fields")).toContain("thumb_1024_url");
+    const sent = (reply.send as ReturnType<typeof vi.fn>).mock.calls[0][0] as {
+      assets: { thumb?: string; sd?: string };
+    }[];
+    expect(sent[0].assets.thumb).toBe("https://scontent.example/1024.jpg");
+    expect(sent[0].assets.sd).toBe("https://scontent.example/2048.jpg");
+  });
+
+  it("filters results by heading in the route and caches for an hour", async () => {
+    fetchMock.mockImplementation(async () =>
+      Response.json({
+        data: [
+          {
+            id: "1",
+            computed_geometry: { type: "Point", coordinates: [6.68, 51.18] },
+            compass_angle: 97,
+          },
+          {
+            id: "facing-along",
+            computed_geometry: { type: "Point", coordinates: [6.69, 51.18] },
+            compass_angle: 283,
+          },
+        ],
+      }),
+    );
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await findRoute(routes, "/search").handler(
+      makeRequest({
+        lng: "6.676",
+        lat: "51.179",
+        radius: "400",
+        heading: "283",
+        headingTolerance: "30",
+      }),
+      reply,
+    );
+    const sent = reply.send.mock.calls[0]?.[0] as { id: string }[];
+    expect(sent.map((i) => i.id)).toEqual(["facing-along"]);
+    expect(reply.header).toHaveBeenCalledWith("Cache-Control", "public, max-age=3600");
+  });
+
+  it("reports an upstream failure as 502", async () => {
+    fetchMock.mockImplementation(async () => {
+      throw new Error("upstream down");
+    });
+    const { ctx, routes } = buildCtx();
+    setup(ctx);
+    const reply = makeReply();
+    await findRoute(routes, "/search").handler(
+      makeRequest({ lng: "6.676", lat: "51.179", radius: "400" }),
+      reply,
+    );
+    expect(reply.status).toHaveBeenCalledWith(502);
   });
 });

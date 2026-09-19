@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import type { ManeuverLane } from "../../types/routing";
-import { guidanceApproachMeters, resolveRecommendedLanes, shouldPreviewNextStep } from "../lanes";
+import {
+  guidanceApproachMeters,
+  junctionPhotoApproachMeters,
+  resolveRecommendedLanes,
+  shouldPreviewNextStep,
+} from "../lanes";
 
 const lane = (indications: string[], valid = false): ManeuverLane => ({ indications, valid });
 
@@ -37,6 +42,28 @@ describe("resolveRecommendedLanes", () => {
     const lanes = [lane(["through"]), lane(["through"]), lane(["slight_right"])];
     const out = resolveRecommendedLanes(lanes, { type: "keep", modifier: "left" });
     expect(out.map((l) => l.valid)).toEqual([true, true, false]);
+  });
+});
+
+describe("junctionPhotoApproachMeters", () => {
+  it("shows the photo about half a minute out, not the whole guidance window", () => {
+    // 30 s at ~120 km/h, where the gantry has already been up for 2970 m.
+    expect(junctionPhotoApproachMeters("driving", 33)).toBe(990);
+    expect(junctionPhotoApproachMeters("driving", 33)).toBeLessThan(
+      guidanceApproachMeters("driving", 33),
+    );
+  });
+
+  it("keeps a floor so a slow approach still shows the photo in time", () => {
+    expect(junctionPhotoApproachMeters("driving", 0)).toBe(300);
+  });
+
+  it("never outlasts the guidance window it sits inside", () => {
+    for (const speed of [0, 5, 14, 25, 33, 45]) {
+      expect(junctionPhotoApproachMeters("driving", speed)).toBeLessThanOrEqual(
+        guidanceApproachMeters("driving", speed),
+      );
+    }
   });
 });
 

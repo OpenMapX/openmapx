@@ -15,6 +15,9 @@ vi.mock("@/lib/navigation/useNavCamera", () => ({
     calls.camera += 1;
   },
 }));
+vi.mock("@/lib/navigation/useNavJunctions", () => ({
+  useNavJunctions: () => {},
+}));
 vi.mock("@/lib/useWakeLock", () => ({
   useWakeLock: (enabled: boolean) => {
     calls.wakeLock.push(enabled);

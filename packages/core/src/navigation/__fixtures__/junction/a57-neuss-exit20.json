@@ -1,0 +1,729 @@
+{
+  "manifest": {
+    "capturedAt": "2026-09-15",
+    "sources": {
+      "valhalla": "public instance valhalla1.openstreetmap.de (re-run 2026-09-15)",
+      "osm": "Overpass API 0.7.62, ways 314653469 (v10, 2023-12-21T08:33:16Z), 314653466 (v11, 2023-12-21T20:07:04Z), 163585518 (v13, 2025-10-30T01:16:29Z). 314653466 ends at the split and is the exit-20 gantry way; 314653469 begins at the split and carries the A 57 / A 46 lane destinations of the following fork; 163585518 is the exit ramp.",
+      "panoramax": "api.panoramax.xyz STAC search, re-run 2026-09-15"
+    },
+    "licence": {
+      "osm": "OpenStreetMap data © OpenStreetMap contributors, ODbL",
+      "panoramax": "CC BY-SA 4.0 per item; authors motocultrice and thetornado76"
+    },
+    "synthetic": [
+      "route geometry vertices are evenly spaced at bearing 283/300 (exact node spacing not captured)",
+      "image id 00000000-0000-4000-8000-000000000001 (no-heading case) is synthetic; its shape mirrors the live items"
+    ]
+  },
+  "route": {
+    "distance": 1670,
+    "duration": 80,
+    "geometry": [
+      [
+        6.6963779,
+        51.1760333
+      ],
+      [
+        6.6935853,
+        51.1764387
+      ],
+      [
+        6.6907928,
+        51.1768442
+      ],
+      [
+        6.6880003,
+        51.1772496
+      ],
+      [
+        6.6852077,
+        51.177655
+      ],
+      [
+        6.6824152,
+        51.1780604
+      ],
+      [
+        6.6796226,
+        51.1784659
+      ],
+      [
+        6.6768301,
+        51.1788713
+      ],
+      [
+        6.6760855,
+        51.1791416
+      ],
+      [
+        6.6753409,
+        51.179412
+      ],
+      [
+        6.6747204,
+        51.1796373
+      ],
+      [
+        6.6734794,
+        51.1800879
+      ]
+    ],
+    "legs": [],
+    "steps": [
+      {
+        "instruction": "Keep right onto A 57",
+        "distance": 1400,
+        "duration": 60,
+        "coordinates": [
+          [
+            6.6963779,
+            51.1760333
+          ],
+          [
+            6.6935853,
+            51.1764387
+          ],
+          [
+            6.6907928,
+            51.1768442
+          ],
+          [
+            6.6880003,
+            51.1772496
+          ],
+          [
+            6.6852077,
+            51.177655
+          ],
+          [
+            6.6824152,
+            51.1780604
+          ],
+          [
+            6.6796226,
+            51.1784659
+          ],
+          [
+            6.6768301,
+            51.1788713
+          ]
+        ],
+        "maneuver": {
+          "type": "depart"
+        },
+        "motorway": true,
+        "bearingAfter": 298,
+        "roadNames": [
+          "A 57"
+        ]
+      },
+      {
+        "instruction": "An der Ausfahrt 20 abfahren Richtung Neuss-Zentrum",
+        "distance": 170,
+        "duration": 12,
+        "coordinates": [
+          [
+            6.6768301,
+            51.1788713
+          ],
+          [
+            6.6760855,
+            51.1791416
+          ],
+          [
+            6.6753409,
+            51.179412
+          ],
+          [
+            6.6747204,
+            51.1796373
+          ]
+        ],
+        "maneuver": {
+          "type": "fork",
+          "modifier": "right"
+        },
+        "sign": {
+          "exitNumbers": [
+            "20"
+          ],
+          "exitToward": [
+            "Neuss-Zentrum"
+          ],
+          "exitNames": [
+            "Kreuz Neuss-West"
+          ]
+        },
+        "lanes": [
+          {
+            "indications": [
+              "through"
+            ],
+            "valid": false
+          },
+          {
+            "indications": [
+              "through"
+            ],
+            "valid": false
+          },
+          {
+            "indications": [
+              "through"
+            ],
+            "valid": false
+          },
+          {
+            "indications": [
+              "through"
+            ],
+            "valid": false
+          },
+          {
+            "indications": [
+              "slight right"
+            ],
+            "valid": true,
+            "active": "slight right"
+          }
+        ],
+        "bearingBefore": 283,
+        "bearingAfter": 300,
+        "roadNames": [
+          "A 57"
+        ]
+      },
+      {
+        "instruction": "Arrive",
+        "distance": 100,
+        "duration": 8,
+        "coordinates": [
+          [
+            6.6747204,
+            51.1796373
+          ],
+          [
+            6.6734794,
+            51.1800879
+          ]
+        ],
+        "maneuver": {
+          "type": "arrive"
+        }
+      }
+    ],
+    "mode": "driving",
+    "summary": "via A 57"
+  },
+  "ways": [
+    {
+      "wayId": 314653469,
+      "timestamp": "2023-12-21T08:33:16Z",
+      "version": 10,
+      "tags": {
+        "highway": "motorway",
+        "ref": "A 57",
+        "lanes": "5",
+        "oneway": "yes",
+        "destination:lanes": "Krefeld;Düsseldorf Nord;Büttgen|Krefeld;Düsseldorf Nord;Büttgen|Krefeld;Düsseldorf Nord;Büttgen|Heinsberg;Aachen;Neuss-Holzheim|Heinsberg;Aachen;Neuss-Holzheim",
+        "destination:ref:lanes": "A 57|A 57|A 57|A 46|A 46",
+        "turn:lanes": "none|none|none|none|slight_right"
+      },
+      "geom": [
+        [
+          6.6768301,
+          51.1788713
+        ],
+        [
+          6.6760874,
+          51.1789836
+        ],
+        [
+          6.6751203,
+          51.1791214
+        ]
+      ]
+    },
+    {
+      "wayId": 314653466,
+      "timestamp": "2023-12-21T20:07:04Z",
+      "version": 11,
+      "tags": {
+        "highway": "motorway",
+        "ref": "A 57",
+        "int_ref": "E 31",
+        "lanes": "5",
+        "oneway": "yes",
+        "destination:lanes": "|||Heinsberg;Aachen;Neuss-Holzheim|Heinsberg;Aachen;Neuss-Holzheim;Neuss-Zentrum",
+        "destination:ref:lanes": "A 57|A 57|A 57|A 46|A 46;Neuss-Zentrum",
+        "turn:lanes": "none|none|none|none|slight_right"
+      },
+      "geom": [
+        [
+          6.6774012,
+          51.1787881
+        ],
+        [
+          6.6768301,
+          51.1788713
+        ]
+      ]
+    },
+    {
+      "wayId": 163585518,
+      "timestamp": "2025-10-30T01:16:29Z",
+      "version": 13,
+      "tags": {
+        "highway": "motorway_link",
+        "lanes": "1",
+        "oneway": "yes",
+        "destination": "Neuss-Zentrum"
+      },
+      "geom": [
+        [
+          6.6768301,
+          51.1788713
+        ],
+        [
+          6.6764196,
+          51.1790176
+        ],
+        [
+          6.675696,
+          51.179145
+        ],
+        [
+          6.674891,
+          51.1792572
+        ],
+        [
+          6.6742068,
+          51.1793544
+        ],
+        [
+          6.6739444,
+          51.1794002
+        ],
+        [
+          6.6735974,
+          51.1794787
+        ],
+        [
+          6.6720406,
+          51.1799143
+        ],
+        [
+          6.6719683,
+          51.1799424
+        ],
+        [
+          6.6719121,
+          51.1799821
+        ],
+        [
+          6.6719001,
+          51.1800403
+        ],
+        [
+          6.6719333,
+          51.1800889
+        ],
+        [
+          6.671999,
+          51.1802095
+        ]
+      ]
+    }
+  ],
+  "images": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.6785,
+          51.1787
+        ]
+      },
+      "properties": {
+        "datetime": "2019-09-10T06:24:45.000000+00:00",
+        "license": "CC-BY-SA-4.0",
+        "pers:interior_orientation": {},
+        "geovisio:producer": "motocultrice"
+      },
+      "providers": [
+        {
+          "name": "motocultrice",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/00/00/00/00/01/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    },
+    {
+      "id": "5f5dcbc8-1aee-4b36-b51a-d565f856b841",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.679050225,
+          51.178607844
+        ]
+      },
+      "properties": {
+        "datetime": "2019-09-10T06:24:31.771000+00:00",
+        "license": "CC-BY-SA-4.0",
+        "view:azimuth": 283,
+        "pers:interior_orientation": {
+          "camera_model": "ONEPLUS A5000",
+          "camera_manufacturer": "OnePlus",
+          "sensor_array_dimensions": [
+            4608,
+            3456
+          ]
+        },
+        "geovisio:producer": "motocultrice"
+      },
+      "providers": [
+        {
+          "id": "59efd8b7-aeb9-401e-8a28-fd4e6d58aa62",
+          "name": "motocultrice",
+          "roles": [
+            "producer"
+          ]
+        },
+        {
+          "name": "raymond",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/5f/5d/cb/c8/1aee-4b36-b51a-d565f856b841/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    },
+    {
+      "id": "caea047f-f3c0-4819-8354-11805e6597c3",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.678013787,
+          51.1787552
+        ]
+      },
+      "properties": {
+        "datetime": "2019-09-10T06:24:34.836000+00:00",
+        "license": "CC-BY-SA-4.0",
+        "view:azimuth": 282,
+        "pers:interior_orientation": {
+          "camera_model": "ONEPLUS A5000",
+          "camera_manufacturer": "OnePlus",
+          "sensor_array_dimensions": [
+            4608,
+            3456
+          ]
+        },
+        "geovisio:producer": "motocultrice"
+      },
+      "providers": [
+        {
+          "id": "59efd8b7-aeb9-401e-8a28-fd4e6d58aa62",
+          "name": "motocultrice",
+          "roles": [
+            "producer"
+          ]
+        },
+        {
+          "name": "raymond",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/ca/ea/04/7f/f3c0-4819-8354-11805e6597c3/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    },
+    {
+      "id": "b77f03dc-b947-4802-bda7-6ac54bc29c0a",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.677636758,
+          51.178806692
+        ]
+      },
+      "properties": {
+        "datetime": "2019-09-10T06:24:35.903000+00:00",
+        "license": "CC-BY-SA-4.0",
+        "view:azimuth": 282,
+        "pers:interior_orientation": {
+          "camera_model": "ONEPLUS A5000",
+          "camera_manufacturer": "OnePlus",
+          "sensor_array_dimensions": [
+            4608,
+            3456
+          ]
+        },
+        "geovisio:producer": "motocultrice"
+      },
+      "providers": [
+        {
+          "id": "59efd8b7-aeb9-401e-8a28-fd4e6d58aa62",
+          "name": "motocultrice",
+          "roles": [
+            "producer"
+          ]
+        },
+        {
+          "name": "raymond",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/b7/7f/03/dc/b947-4802-bda7-6ac54bc29c0a/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    },
+    {
+      "id": "ceba5384-8940-425b-a4b2-8aafcc5eb123",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.679683024,
+          51.178520969
+        ]
+      },
+      "properties": {
+        "datetime": "2019-09-10T06:24:29.845000+00:00",
+        "license": "CC-BY-SA-4.0",
+        "view:azimuth": 283,
+        "pers:interior_orientation": {
+          "camera_model": "ONEPLUS A5000",
+          "camera_manufacturer": "OnePlus",
+          "sensor_array_dimensions": [
+            4608,
+            3456
+          ]
+        },
+        "geovisio:producer": "motocultrice"
+      },
+      "providers": [
+        {
+          "id": "59efd8b7-aeb9-401e-8a28-fd4e6d58aa62",
+          "name": "motocultrice",
+          "roles": [
+            "producer"
+          ]
+        },
+        {
+          "name": "raymond",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/ce/ba/53/84/8940-425b-a4b2-8aafcc5eb123/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    },
+    {
+      "id": "90f4aefe-1310-4f08-b6b4-57e442a3e7ec",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.6792165,
+          51.1783987
+        ]
+      },
+      "properties": {
+        "datetime": "2025-04-26T13:50:30.111931+00:00",
+        "license": "CC-BY-SA-4.0",
+        "view:azimuth": 97,
+        "pers:interior_orientation": {
+          "camera_model": "moto g(9) plus",
+          "focal_length": 5.53,
+          "camera_manufacturer": "motorola",
+          "sensor_array_dimensions": [
+            4640,
+            3472
+          ]
+        },
+        "geovisio:producer": "thetornado76"
+      },
+      "providers": [
+        {
+          "id": "fed63bc3-6fdc-4ef4-927d-cc574ed92ab4",
+          "name": "thetornado76",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/90/f4/ae/fe/1310-4f08-b6b4-57e442a3e7ec/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    },
+    {
+      "id": "219c2552-e47a-4754-b9cd-e8584174b1f8",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.6796192,
+          51.1783435
+        ]
+      },
+      "properties": {
+        "datetime": "2025-04-26T13:50:31.161564+00:00",
+        "license": "CC-BY-SA-4.0",
+        "view:azimuth": 98,
+        "pers:interior_orientation": {
+          "camera_model": "moto g(9) plus",
+          "focal_length": 5.53,
+          "camera_manufacturer": "motorola",
+          "sensor_array_dimensions": [
+            4640,
+            3472
+          ]
+        },
+        "geovisio:producer": "thetornado76"
+      },
+      "providers": [
+        {
+          "id": "fed63bc3-6fdc-4ef4-927d-cc574ed92ab4",
+          "name": "thetornado76",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/21/9c/25/52/e47a-4754-b9cd-e8584174b1f8/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    },
+    {
+      "id": "8acfda9a-eafc-4b38-bb26-e92f8cfc6c05",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.684467038,
+          51.177855286
+        ]
+      },
+      "properties": {
+        "datetime": "2019-09-10T06:24:16.923000+00:00",
+        "license": "CC-BY-SA-4.0",
+        "view:azimuth": 282,
+        "pers:interior_orientation": {
+          "camera_model": "ONEPLUS A5000",
+          "camera_manufacturer": "OnePlus",
+          "sensor_array_dimensions": [
+            4608,
+            3456
+          ]
+        },
+        "geovisio:producer": "motocultrice"
+      },
+      "providers": [
+        {
+          "id": "59efd8b7-aeb9-401e-8a28-fd4e6d58aa62",
+          "name": "motocultrice",
+          "roles": [
+            "producer"
+          ]
+        },
+        {
+          "name": "raymond",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/8a/cf/da/9a/eafc-4b38-bb26-e92f8cfc6c05/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    },
+    {
+      "id": "b6653d58-8dfe-4468-977b-6ec379d0d96d",
+      "type": "Feature",
+      "geometry": {
+        "type": "Point",
+        "coordinates": [
+          6.672512452,
+          51.179545685
+        ]
+      },
+      "properties": {
+        "datetime": "2019-09-10T06:24:49.811000+00:00",
+        "license": "CC-BY-SA-4.0",
+        "view:azimuth": 287,
+        "pers:interior_orientation": {
+          "camera_model": "ONEPLUS A5000",
+          "camera_manufacturer": "OnePlus",
+          "sensor_array_dimensions": [
+            4608,
+            3456
+          ]
+        },
+        "geovisio:producer": "motocultrice"
+      },
+      "providers": [
+        {
+          "id": "59efd8b7-aeb9-401e-8a28-fd4e6d58aa62",
+          "name": "motocultrice",
+          "roles": [
+            "producer"
+          ]
+        },
+        {
+          "name": "raymond",
+          "roles": [
+            "producer"
+          ]
+        }
+      ],
+      "assets": {
+        "sd": {
+          "href": "https://panoramax.openstreetmap.fr/derivates/b6/65/3d/58/8dfe-4468-977b-6ec379d0d96d/sd.jpg",
+          "type": "image/jpeg"
+        }
+      }
+    }
+  ]
+}

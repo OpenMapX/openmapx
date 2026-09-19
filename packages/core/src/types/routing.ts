@@ -112,6 +112,18 @@ export interface RouteStep {
    * not expose it per maneuver, so it is undefined on Valhalla-served routes.
    */
   drivingSide?: "left" | "right";
+  /** Travel bearing immediately before / after the maneuver, degrees clockwise from north. */
+  bearingBefore?: number;
+  bearingAfter?: number;
+  /**
+   * True when the engine flags the maneuver as motorway. Valhalla sets it only
+   * for motorway-class edges that are not ramps, so an exit maneuver on the
+   * `motorway_link` is usually unflagged while the step before it is; OSRM's
+   * default car profile gives both `motorway` and `motorway_link` the class
+   * `motorway`. Absent when the engine sent nothing. Junction detection reads
+   * this step and the previous one.
+   */
+  motorway?: boolean;
 }
 
 export interface RouteLeg {
@@ -298,6 +310,8 @@ export interface MatchEdge {
    * `MatchResult.geometry[endShapeIndex]`.
    */
   endNodeTrafficSignal?: boolean;
+  /** ISO 3166-1 alpha-2 country (upper case) of this edge's END node, when the engine exposes it. */
+  endNodeCountryCode?: string;
   /** Inclusive index into the matched shape where this edge begins. */
   beginShapeIndex: number;
   /** Inclusive index into the matched shape where this edge ends. */

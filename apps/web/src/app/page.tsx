@@ -21,6 +21,7 @@ import { GlobeProjection } from "@/components/map/layers/GlobeProjection";
 import { ImportedGeometryLayer } from "@/components/map/layers/ImportedGeometryLayer";
 import { MapLayerStack } from "@/components/map/layers/MapLayerStack";
 import { NavigationRouteLayer } from "@/components/map/layers/NavigationRouteLayer";
+import { NavManeuverArrowLayer } from "@/components/map/layers/NavManeuverArrowLayer";
 import { NavTrafficSignalsLayer } from "@/components/map/layers/NavTrafficSignalsLayer";
 import { PlaceBoundaryLayer } from "@/components/map/layers/PlaceBoundaryLayer";
 import { RasterBaseLayer } from "@/components/map/layers/RasterBaseLayer";
@@ -151,6 +152,7 @@ export default function HomePage() {
             <MapLayerStack />
             <RouteLayer />
             <NavigationRouteLayer />
+            <NavManeuverArrowLayer />
             <RouteTrafficLayer />
             <NavTrafficSignalsLayer />
             <NavigationView />

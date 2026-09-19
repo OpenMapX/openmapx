@@ -93,4 +93,33 @@ describe("useSettingsStore", () => {
     expect(useSettingsStore.getState().avoidIncidents).toBe(true);
     expect(storage.getString("openmapx:avoidIncidents")).toBe("true");
   });
+
+  it("junction view and junction photos default on", () => {
+    configureStorage(makeMemoryStorage());
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().junctionView).toBe(true);
+    expect(useSettingsStore.getState().junctionPhotos).toBe(true);
+  });
+
+  it("setJunctionView(false) persists and hydrates back as disabled", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    useSettingsStore.getState().setJunctionView(false);
+    expect(useSettingsStore.getState().junctionView).toBe(false);
+    expect(storage.getString("openmapx:junctionView")).toBe("false");
+    useSettingsStore.setState({ junctionView: true });
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().junctionView).toBe(false);
+  });
+
+  it("setJunctionPhotos(false) persists and hydrates back as disabled", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    useSettingsStore.getState().setJunctionPhotos(false);
+    expect(useSettingsStore.getState().junctionPhotos).toBe(false);
+    expect(storage.getString("openmapx:junctionPhotos")).toBe("false");
+    useSettingsStore.setState({ junctionPhotos: true });
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().junctionPhotos).toBe(false);
+  });
 });

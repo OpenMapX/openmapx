@@ -30,6 +30,20 @@ export const CAMERA_LNGLAT_EPSILON = 1e-6;
 export const CAMERA_BEARING_EPSILON = 0.05;
 export const CAMERA_ZOOM_EPSILON = 0.004;
 /**
+ * Pitch threshold. The approach tilt eases at a second-scale time constant, so
+ * a fifth of a degree per published frame is well inside the visible slope —
+ * anything smaller reads as a converged pitch.
+ */
+export const CAMERA_PITCH_EPSILON = 0.2;
+/**
+ * Where a scalar ease counts as arrived. Far below the publication thresholds:
+ * an ease's per-frame steps fall under those long before it has arrived, so
+ * they cannot be what ends it (see `settleScalar`), and landing on the target
+ * from this close never moves a published pose by anything visible.
+ */
+export const CAMERA_PITCH_SETTLED_DEG = 0.01;
+export const CAMERA_ZOOM_SETTLED = 0.0005;
+/**
  * Padding threshold. Padding shifts the whole projection, so it is measured in
  * the same screen pixels the chrome that produced it is: half a pixel is the
  * finest move that can land on a different device pixel.
@@ -51,6 +65,7 @@ export interface PuckPose {
 
 export interface CameraPose extends PuckPose {
   zoom: number;
+  pitch?: number;
   padding?: Required<PaddingOptions>;
 }
 
@@ -97,6 +112,13 @@ function paddingChanged(
   );
 }
 
+/** A pose that carries no pitch leaves the map's pitch alone, so it never counts as changed. */
+function pitchChanged(last: number | undefined, next: number | undefined): boolean {
+  if (next === undefined) return false;
+  if (last === undefined) return true;
+  return Math.abs(next - last) > CAMERA_PITCH_EPSILON;
+}
+
 /**
  * Whether a camera pose warrants another `jumpTo`. Zoom only participates while
  * the loop still commands zoom — once the user has taken zoom control the loop
@@ -109,12 +131,30 @@ export function cameraPoseChanged(
 ): boolean {
   if (poseChanged(last, next, CAMERA_LNGLAT_EPSILON, CAMERA_BEARING_EPSILON)) return true;
   if (paddingChanged(last?.padding, next.padding)) return true;
+  if (pitchChanged(last?.pitch, next.pitch)) return true;
   return commandsZoom && !!last && Math.abs(next.zoom - last.zoom) > CAMERA_ZOOM_EPSILON;
+}
+
+/**
+ * An eased scalar (pitch, zoom), landed on its target once within `settledWithin`
+ * of it. Until then the ease is still under way, and the frame must say so: a
+ * one-second ease moves a fraction of a degree per frame, under the threshold
+ * that publishes it, so with the traveller stopped (no puck movement to keep
+ * the loop awake) the loop would sleep two frames in and leave the tilt short.
+ * Kept running, the steps add up and publish every few frames instead.
+ */
+export function settleScalar(value: number, target: number, settledWithin: number): number {
+  return Math.abs(target - value) <= settledWithin ? target : value;
 }
 
 export interface FrameSettlement {
   /** Whether this frame moved the puck or the camera. */
   publishedThisFrame: boolean;
+  /**
+   * Whether an eased scalar is still short of its target. Its steps may each be
+   * too small to publish, so a frame that published nothing proves nothing.
+   */
+  easing: boolean;
   /** Consecutive frames that published nothing, counting this one. */
   settledFrames: number;
   /**
@@ -129,6 +169,6 @@ export interface FrameSettlement {
 /** Whether the loop should request another frame after the one just run. */
 export function shouldKeepAnimating(frame: FrameSettlement): boolean {
   if (frame.nowMs < frame.holdUntilMs) return true;
-  if (frame.publishedThisFrame) return true;
+  if (frame.publishedThisFrame || frame.easing) return true;
   return frame.settledFrames < SETTLED_FRAMES_BEFORE_SLEEP;
 }

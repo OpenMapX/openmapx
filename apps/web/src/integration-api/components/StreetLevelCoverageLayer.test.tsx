@@ -12,6 +12,8 @@ const capability = (id: string): StreetLevelCapabilities => ({
   name: id,
   color: "#000",
   endUserExposure: "direct",
+  allowsNavigationUse: true,
+  search: { heading: false, capturedAfter: true, lookingAt: false },
   coverage: {
     kind: "mvt",
     tileUrlTemplate: `/api/integrations/street-level-imagery-${id}/tiles/{z}/{x}/{y}`,

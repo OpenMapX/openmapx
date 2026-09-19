@@ -3,6 +3,7 @@ import type {
   StreetLevelCapabilities,
   StreetLevelImage,
   StreetLevelLink,
+  StreetLevelSearchQuery,
 } from "@openmapx/core";
 
 export type {
@@ -10,6 +11,7 @@ export type {
   StreetLevelCoverage,
   StreetLevelImage,
   StreetLevelLink,
+  StreetLevelSearchQuery,
 } from "@openmapx/core";
 
 /**
@@ -27,4 +29,6 @@ export interface StreetLevelProvider {
   findNearest(lngLat: LngLat, radiusM?: number): Promise<StreetLevelImage | null>;
   getImage(id: string): Promise<StreetLevelImage | null>;
   getLinks(id: string): Promise<StreetLevelLink[]>;
+  /** Searchable surface for area/point queries (navigation photo prefetch). */
+  searchImages(query: StreetLevelSearchQuery): Promise<StreetLevelImage[]>;
 }

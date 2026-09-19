@@ -41,15 +41,23 @@ describe("transformOsrmStep", () => {
     expect(s.roadNames).toEqual(["Main St", "A 57", "E 31"]);
   });
 
-  it("carries lanes from the first intersection with lanes", () => {
-    const s = transformOsrmStep(osrmStep);
-    expect(s.lanes).toEqual([
-      { indications: ["left"], valid: false },
-      { indications: ["straight"], valid: true },
-    ]);
+  it("carries lanes only from the maneuver intersection (intersections[0])", () => {
+    const s = transformOsrmStep({
+      ...osrmStep,
+      intersections: [
+        { lanes: undefined },
+        {
+          lanes: [
+            { valid: false, indications: ["left"] },
+            { valid: true, indications: ["straight"] },
+          ],
+        },
+      ],
+    });
+    expect(s.lanes).toBeUndefined();
   });
 
-  it("captures valid_indication as the active lane indication", () => {
+  it("maps intersections[0].lanes with valid_indication as active", () => {
     const s = transformOsrmStep({
       ...osrmStep,
       intersections: [
@@ -105,6 +113,78 @@ describe("transformOsrmStep", () => {
       annotation: { maxspeed: [{ unknown: true }, { speed: 70, unit: "km/h" }] },
     });
     expect(s.speedLimit).toBe(70);
+  });
+
+  it("builds the exit sign from destinations, exits and ref on a ramp", () => {
+    const s = transformOsrmStep({
+      ...osrmStep,
+      name: "",
+      destinations: "Köln, Bonn",
+      exits: "21",
+      ref: "A 57",
+      maneuver: { type: "off ramp", location: [0, 0] as [number, number] },
+    });
+    expect(s.sign).toEqual({
+      exitNumbers: ["21"],
+      exitBranches: ["A 57"],
+      exitToward: ["Köln", "Bonn"],
+    });
+  });
+
+  it("splits the signed refs off a 'ref: towns' destinations string", () => {
+    // The shape the public demo server returns for the A57 approach.
+    const s = transformOsrmStep({
+      ...osrmStep,
+      destinations: "A 57: Köln, Bonn",
+      maneuver: { type: "fork", modifier: "slight right", location: [0, 0] as [number, number] },
+    });
+    expect(s.sign).toEqual({ exitBranches: ["A 57"], exitToward: ["Köln", "Bonn"] });
+    // A ref repeated by the step's own `ref` is listed once.
+    const withRef = transformOsrmStep({
+      ...osrmStep,
+      ref: "A 57",
+      destinations: "A 57: Köln",
+      maneuver: { type: "fork", modifier: "slight right", location: [0, 0] as [number, number] },
+    });
+    expect(withRef.sign?.exitBranches).toEqual(["A 57"]);
+  });
+
+  it("maps rotary_name onto exitNames", () => {
+    const s = transformOsrmStep({
+      ...osrmStep,
+      rotary_name: "Place Charles de Gaulle",
+      maneuver: { type: "rotary", location: [0, 0] as [number, number] },
+    });
+    expect(s.sign).toEqual({ exitNames: ["Place Charles de Gaulle"] });
+  });
+
+  it("does not set exitBranches on a plain turn step", () => {
+    const s = transformOsrmStep({ ...osrmStep, ref: "A 57" });
+    expect(s.sign).toBeUndefined();
+  });
+
+  it("derives the motorway flag from the maneuver intersection classes", () => {
+    const s = transformOsrmStep({
+      ...osrmStep,
+      intersections: [{ classes: ["motorway"] }],
+    });
+    expect(s.motorway).toBe(true);
+    expect(transformOsrmStep(osrmStep).motorway).toBeUndefined();
+  });
+
+  it("carries maneuver bearings", () => {
+    const s = transformOsrmStep({
+      ...osrmStep,
+      maneuver: {
+        type: "off ramp",
+        modifier: "right",
+        location: [0, 0] as [number, number],
+        bearing_before: 283,
+        bearing_after: 300,
+      },
+    });
+    expect(s.bearingBefore).toBe(283);
+    expect(s.bearingAfter).toBe(300);
   });
 });
 

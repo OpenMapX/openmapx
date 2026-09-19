@@ -1,7 +1,9 @@
 import {
+  appendCountrySpans,
   cumulativeDistances,
   fetchRouteMatchWindow,
   type LngLat,
+  type RouteCountrySpan,
   signalCoordKey,
   useNavigationStore,
   windowGeometry,
@@ -41,6 +43,7 @@ export function useNavTrafficSignals(): LngLat[] {
   const mode = useNavigationStore((s) => s.mode);
   const connectivity = useNavigationStore((s) => s.connectivity);
   const setLiveSpeedLimits = useNavigationStore((s) => s.setLiveSpeedLimits);
+  const setRouteCountries = useNavigationStore((s) => s.setRouteCountries);
   const setLiveDataUnavailable = useNavigationStore((s) => s.setLiveDataUnavailable);
 
   const [signals, setSignals] = useState<LngLat[]>([]);
@@ -48,6 +51,8 @@ export function useNavTrafficSignals(): LngLat[] {
   const fetchingRef = useRef(false);
   // Speed limits accumulated across windows, indexed by route.geometry point.
   const limitsRef = useRef<(number | null)[]>([]);
+  // Countries along the route, extended window by window.
+  const countriesRef = useRef<RouteCountrySpan[]>([]);
   // Bumped on every route change so a fetch still in flight from the previous
   // route can't apply its (now stale) attributes to the new one.
   const genRef = useRef(0);
@@ -64,6 +69,9 @@ export function useNavTrafficSignals(): LngLat[] {
     if (connectivity === "offline" || !route || route.geometry.length < 2) {
       setSignals([]);
       setLiveSpeedLimits(null);
+      // Countries describe the route, not live conditions: going offline keeps
+      // them, and a new route clears them with the rest of its derived state.
+      if (!route) setRouteCountries(null);
       if (connectivity === "offline") setLiveDataUnavailable(true);
       limitsRef.current = [];
       windowRef.current = { nextStart: 0, endMeters: 0, done: true };
@@ -71,16 +79,23 @@ export function useNavTrafficSignals(): LngLat[] {
     }
     const gen = genRef.current;
     limitsRef.current = new Array(route.geometry.length).fill(null);
+    // The first window is fetched again after a reconnect; its answer replaces
+    // the spans rather than appending out of route order.
+    countriesRef.current = [];
     setLiveSpeedLimits(null);
     const w = windowGeometry(route.geometry, 0, MAX_TRACE_POINTS, cum);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
     fetchingRef.current = true;
     fetchRouteMatchWindow(w.trace, mode)
-      .then(({ signals: found, speedLimitsByPoint }) => {
+      .then(({ signals: found, speedLimitsByPoint, countriesByPoint }) => {
         if (genRef.current !== gen) return;
         setSignals(found);
         writeLimits(limitsRef.current, 0, speedLimitsByPoint);
         setLiveSpeedLimits([...limitsRef.current]);
+        if (countriesByPoint.length > 0) {
+          countriesRef.current = appendCountrySpans(countriesRef.current, cum, 0, countriesByPoint);
+          setRouteCountries(countriesRef.current);
+        }
         setLiveDataUnavailable(false);
       })
       .catch(() => {
@@ -91,7 +106,15 @@ export function useNavTrafficSignals(): LngLat[] {
         // previous-route fetch must not clear the new route's in-flight flag.
         if (genRef.current === gen) fetchingRef.current = false;
       });
-  }, [route, mode, cum, connectivity, setLiveDataUnavailable, setLiveSpeedLimits]);
+  }, [
+    route,
+    mode,
+    cum,
+    connectivity,
+    setLiveDataUnavailable,
+    setLiveSpeedLimits,
+    setRouteCountries,
+  ]);
 
   // Advance the window as the driver nears its far edge (long routes only).
   useEffect(() => {
@@ -107,8 +130,17 @@ export function useNavTrafficSignals(): LngLat[] {
     const w = windowGeometry(route.geometry, startIndex, MAX_TRACE_POINTS, cum);
     windowRef.current = { nextStart: w.nextStart, endMeters: w.endMeters, done: w.done };
     fetchRouteMatchWindow(w.trace, mode)
-      .then(({ signals: found, speedLimitsByPoint }) => {
+      .then(({ signals: found, speedLimitsByPoint, countriesByPoint }) => {
         if (genRef.current !== gen) return;
+        if (countriesByPoint.length > 0) {
+          countriesRef.current = appendCountrySpans(
+            countriesRef.current,
+            cum,
+            startIndex,
+            countriesByPoint,
+          );
+          setRouteCountries(countriesRef.current);
+        }
         if (speedLimitsByPoint.length > 0) {
           writeLimits(limitsRef.current, startIndex, speedLimitsByPoint);
           setLiveSpeedLimits([...limitsRef.current]);
@@ -134,7 +166,16 @@ export function useNavTrafficSignals(): LngLat[] {
       .finally(() => {
         if (genRef.current === gen) fetchingRef.current = false;
       });
-  }, [alongMeters, route, mode, cum, connectivity, setLiveDataUnavailable, setLiveSpeedLimits]);
+  }, [
+    alongMeters,
+    route,
+    mode,
+    cum,
+    connectivity,
+    setLiveDataUnavailable,
+    setLiveSpeedLimits,
+    setRouteCountries,
+  ]);
 
   return signals;
 }

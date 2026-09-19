@@ -240,10 +240,36 @@ device's location to follow your progress along the route and shows, in real
 time:
 
 - a **maneuver banner** with the next turn, its distance, and a direction icon;
+- **interchange signage** on motorway exits: an exit-number badge, route shields
+  in the sign colours of the country each exit is in (so a trip into Switzerland
+  switches to green motorway signs at the border), and the toward destinations —
+  in the banner and the directions list, straight from the routing engine's sign
+  data;
 - **lane guidance** at junctions that have it, dimming the lanes you should not
   take and brightening the one to follow;
 - a **speed-limit badge** when the road's limit is known;
 - an **arrival card** with the remaining distance and estimated time of arrival.
+
+On the approach to any maneuver, the camera **tilts and closes in** so the turn
+reads as a place, and an **arrow on the map** traces the route through the split.
+Both revert automatically after the maneuver, and a pinch or drag during the
+approach is never interrupted.
+
+For motorway and expressway exits, forks, and splits while driving, a **junction view** card
+appears under the banner. It shows the lanes of the overhead gantry with the
+correct one highlighted and the ramp peeling off at the split angle. The schematic
+is drawn on the client from open data: with network access it shows the real
+per-lane destinations OpenStreetMap carries on the approach segment
+(`destination:*:lanes`, fetched once per route through Overpass — set
+`OVERPASS_URL` to a self-hosted instance for multi-user deployments), and offline
+it falls back to the engine's exit sign. The lane to take comes from the routing
+engine when it reports lanes (a self-hosted Valhalla does); otherwise it is read
+from OpenStreetMap's per-lane turn arrows (`turn:lanes`), and only when neither
+says does the outermost lane on the exit's side stand in. About half a minute
+before the exit, a photo preview shows a recent **street-level image** of the
+approach — with its author, licence, and capture date — when coverage from
+[Panoramax](./street-level-imagery.md) exists (Mapillary is never used here: its terms rule out use during navigation). Both the junction view and its photo preview are on by default and can be
+switched off in the navigation settings.
 
 Navigation also speaks instructions aloud (voice guidance can be toggled off) and
 offers a **keep-screen-on** option that holds a wake lock so the display does not

@@ -2,6 +2,7 @@ import type { Route } from "@integrations/routing/types";
 import type { LngLat } from "@openmapx/core";
 import {
   cumulativeDistances,
+  guidanceApproachMeters,
   positionAt,
   stepDeadReckon,
   useNavigationStore,
@@ -18,11 +19,14 @@ import {
 import { prefersReducedMotion } from "@/lib/reducedMotion";
 import {
   CAMERA_PADDING_EPSILON,
+  CAMERA_PITCH_SETTLED_DEG,
+  CAMERA_ZOOM_SETTLED,
   type CameraPose,
   cameraPoseChanged,
   type PuckPose,
   puckPoseChanged,
   SETTLED_FRAMES_BEFORE_SLEEP,
+  settleScalar,
   shouldKeepAnimating,
 } from "./navCameraScheduler";
 
@@ -53,6 +57,14 @@ const ZOOM_TAU = 1.6;
 // briskly enough to look attached to the chrome rather than to lag behind it.
 const PADDING_TAU = 0.2;
 const USER_CAM_SUSPEND_MS = 350;
+// Approach tilt: inside the maneuver approach window the follow camera leans
+// toward the road ahead and closes in a level, so the maneuver reads as a place.
+// Restored to the mode pitch once the maneuver is passed. 60° is MapLibre's
+// default `maxPitch`; anything steeper is clamped by the map.
+const APPROACH_PITCH = 60;
+const APPROACH_ZOOM_BOOST = 1.0;
+const APPROACH_MAX_ZOOM = 17.5;
+const PITCH_TAU = 1.0;
 
 type CameraActivityEvent = maplibregl.MapMovementEvent | maplibregl.MapWheelEvent;
 
@@ -197,6 +209,11 @@ export function useNavCamera(): void {
   // loop follows at their zoom instead of auto-zooming); and the time until
   // which a recent user camera gesture suspends the follow loop.
   const displayedZoomRef = useRef<number | null>(null);
+  // Eased pitch, seeded by the enter-follow ease and eased toward either the
+  // mode pitch or the approach pitch.
+  const displayedPitchRef = useRef<number | null>(null);
+  // The approach predicate the frame loop reads imperatively.
+  const approachRef = useRef(false);
   // Eased camera padding, so a chrome change slides the framing instead of
   // stepping it. null = "take whatever the map currently shows".
   const displayedPaddingRef = useRef<ResolvedPadding | null>(null);
@@ -301,6 +318,19 @@ export function useNavCamera(): void {
     requestFrame();
   }, [progress, requestFrame]);
 
+  // The approach predicate for the camera tilt, written for the frame loop to
+  // read imperatively. Re-evaluated from the distance to the next maneuver,
+  // the speed and the travel mode — two comparisons per fix, no allocation.
+  useEffect(() => {
+    const motorised = mode === "driving" || mode === "motorcycle";
+    const distance = progress?.distanceToNextManeuver;
+    approachRef.current =
+      motorised &&
+      distance !== undefined &&
+      distance <= guidanceApproachMeters(mode, progress?.speedMps ?? 0);
+    requestFrame();
+  }, [requestFrame, mode, progress?.distanceToNextManeuver, progress?.speedMps]);
+
   // (Re)entering follow: establish zoom + pitch with a short ease, then let the
   // per-frame loop take over centre/bearing once it settles.
   useEffect(() => {
@@ -329,6 +359,7 @@ export function useNavCamera(): void {
     // Seed the eased follow-zoom and padding so the per-frame loop continues
     // from here.
     displayedZoomRef.current = enterZoom;
+    displayedPitchRef.current = PITCH[mode] ?? 0;
     displayedPaddingRef.current = enterPadding;
     paddingTargetRef.current = enterPadding;
     settleUntilRef.current = performance.now() + SETTLE_MS;
@@ -385,6 +416,8 @@ export function useNavCamera(): void {
       // Set by anything this frame actually sent to MapLibre. A frame that sends
       // nothing is a frame the user could not have seen.
       let published = false;
+      // Set while the eased pitch or zoom is still short of its target.
+      let easing = false;
       const map = mapRef?.current;
       const marker = markerRef.current;
       const line = lineRef.current;
@@ -444,18 +477,42 @@ export function useNavCamera(): void {
           // cancel the user's gesture or zoom animation. Re-center on a free frame.
           lastCamRef.current = null;
         } else {
-          // Follow center + bearing. Auto-zoom toward the speed-derived target,
-          // unless the user has taken zoom control — then leave zoom untouched so
-          // navigation continues at their chosen zoom.
+          // Follow center + bearing. Auto-zoom toward the speed-derived target
+          // (boosted inside the maneuver approach window), unless the user has
+          // taken zoom control — then leave zoom untouched so navigation
+          // continues at their chosen zoom.
           const commandZoom = !userZoomedRef.current;
+          const approaching = approachRef.current;
+          const speed = useNavigationStore.getState().progress?.speedMps ?? 0;
           let zoom = map.getZoom();
           if (commandZoom) {
-            const speed = useNavigationStore.getState().progress?.speedMps ?? 0;
             const base = displayedZoomRef.current ?? zoom;
             const zAlpha = 1 - Math.exp(-Math.max(dt, 0) / ZOOM_TAU);
-            displayedZoomRef.current = base + (targetZoomForSpeed(speed) - base) * zAlpha;
+            const target = approaching
+              ? Math.min(targetZoomForSpeed(speed) + APPROACH_ZOOM_BOOST, APPROACH_MAX_ZOOM)
+              : targetZoomForSpeed(speed);
+            displayedZoomRef.current = settleScalar(
+              base + (target - base) * zAlpha,
+              target,
+              CAMERA_ZOOM_SETTLED,
+            );
             zoom = displayedZoomRef.current;
+            if (zoom !== target) easing = true;
           }
+          // Pitch eases toward the approach tilt inside the window and back to
+          // the mode pitch outside it. Under reduced motion the target applies
+          // in one step instead of easing. Mode is read imperatively, like the
+          // other store values the frame consumes.
+          const travelMode = useNavigationStore.getState().mode;
+          const pitchTarget = approaching ? APPROACH_PITCH : (PITCH[travelMode] ?? 0);
+          const tAlpha = prefersReducedMotion() ? 1 : 1 - Math.exp(-Math.max(dt, 0) / PITCH_TAU);
+          const pitchBase = displayedPitchRef.current ?? pitchTarget;
+          displayedPitchRef.current = settleScalar(
+            pitchBase + (pitchTarget - pitchBase) * tAlpha,
+            pitchTarget,
+            CAMERA_PITCH_SETTLED_DEG,
+          );
+          if (displayedPitchRef.current !== pitchTarget) easing = true;
           // The follow loop owns padding for as long as it owns the camera, so
           // the sync component stays out and the two can't ease against each
           // other.
@@ -479,12 +536,14 @@ export function useNavCamera(): void {
             lat: point[1],
             bearing: cameraBearing,
             zoom,
+            pitch: displayedPitchRef.current,
             padding,
           };
           if (cameraPoseChanged(lastCamRef.current, camPose, commandZoom)) {
             const camOpts: maplibregl.JumpToOptions = {
               center: point as LngLat,
               bearing: cameraBearing,
+              pitch: displayedPitchRef.current,
               padding,
             };
             if (commandZoom) camOpts.zoom = zoom;
@@ -503,6 +562,7 @@ export function useNavCamera(): void {
       if (
         shouldKeepAnimating({
           publishedThisFrame: published,
+          easing,
           settledFrames: settledFramesRef.current,
           holdUntilMs,
           nowMs: now,
@@ -542,6 +602,8 @@ export function useNavCamera(): void {
       lastCamRef.current = null;
       displayedPaddingRef.current = null;
       paddingTargetRef.current = null;
+      displayedPitchRef.current = null;
+      approachRef.current = false;
       userZoomedRef.current = false;
       userCamActivityUntilRef.current = 0;
       userInteractingRef.current = false;

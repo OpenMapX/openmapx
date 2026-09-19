@@ -50,8 +50,28 @@ export {
   type ProjectEventsOptions,
   projectEventsToRoute,
 } from "./incidentProjection";
-export { guidanceApproachMeters, resolveRecommendedLanes, shouldPreviewNextStep } from "./lanes";
+export {
+  findJunctionCandidates,
+  findJunctionDecisionPoints,
+  sameJunction,
+} from "./junctionDetect";
+export { junctionLookupPoints } from "./junctionLookup";
+export { type SelectJunctionPhotoOptions, selectJunctionPhoto } from "./junctionPhoto";
+export { buildJunctionSchematic } from "./junctionSchematic";
+export {
+  guidanceApproachMeters,
+  junctionPhotoApproachMeters,
+  resolveRecommendedLanes,
+  shouldPreviewNextStep,
+} from "./lanes";
+export { mergeExitPanel, parseLaneTags, selectApproachWay, selectRampWay } from "./laneTags";
 export { isLiveNavigationStatus } from "./liveStatus";
+export {
+  type ManeuverArrowSpans,
+  maneuverArrowLine,
+  maneuverArrowSpans,
+  maneuverArrowTipBearing,
+} from "./maneuverArrow";
 export {
   enforceAggregateBounds,
   type GroundNavigationStartPackage,
@@ -110,6 +130,15 @@ export {
   parseNavigationSessionSnapshot,
 } from "./offlineSession";
 export { navOptionsForMode } from "./options";
+export {
+  type ApproachCamera,
+  approachCamera,
+  type PhotoCropWindow,
+  type PhotoPathPoint,
+  type PhotoProjectionOptions,
+  type PhotoRoutePath,
+  projectRoutePath,
+} from "./photoProjection";
 export { processFix } from "./processFix";
 export {
   DEFAULT_TRANSIT_TICK_OPTIONS,
@@ -123,7 +152,7 @@ export {
   type TransitTickResult,
   type TransitTickState,
 } from "./processTransitFix";
-export { computeProgress, upcomingManeuverIndex } from "./progress";
+export { computeProgress, stepStartMeters, upcomingManeuverIndex } from "./progress";
 export {
   extractTimeline,
   freshNavTickState,
@@ -144,6 +173,12 @@ export {
   shouldRerouteForClosure,
   updateOffRouteScore,
 } from "./reroute";
+export {
+  appendCountrySpans,
+  countryAtMeters,
+  matchCountriesByPoint,
+  type RouteCountrySpan,
+} from "./routeCountries";
 export {
   asRouteMatcher,
   type PreparedRouteMatcher,
@@ -167,6 +202,7 @@ export {
   progressBucketStartMeters,
   routeAheadBounds,
 } from "./searchAlongRoute";
+export { refKind, signHeadline, visibleToward } from "./signFormat";
 export { simulatePositions } from "./simulatePositions";
 export { snapToRoute } from "./snap";
 export { isOverSpeed, OVER_SPEED_TOLERANCE_KMH } from "./speedAlert";
