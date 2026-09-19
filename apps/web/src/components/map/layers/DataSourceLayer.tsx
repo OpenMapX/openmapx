@@ -42,10 +42,13 @@ import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { pickDataSourceContextAction } from "./dataSourceContextInteraction";
 import {
+  CONTEXT_ZONE_STYLES,
+  type ContextZoneClass,
   contextColorExpression,
   contextFillOpacityExpression,
   contextLineWidthExpression,
   contextSortKeyExpression,
+  contextZoneClassesIn,
 } from "./dataSourceContextStyle";
 import { pickHoveredDataSourceItemId } from "./dataSourceHover";
 
@@ -72,6 +75,15 @@ function mapContextFillLayerId(dsId: string) {
 function mapContextOutlineLayerId(dsId: string) {
   return `ds-${dsId}-map-context-outline`;
 }
+
+const ZONE_LABEL_KEYS = {
+  no_ride: "contextNoRide",
+  no_parking: "contextNoParking",
+  no_start: "contextNoStart",
+  parking_hub: "contextStationParking",
+  slow_zone: "contextSlowZone",
+  station_area: "contextStationArea",
+} as const satisfies Record<ContextZoneClass, string>;
 
 /**
  * Buckets a data-source result's live availability into a marker color state.
@@ -789,16 +801,9 @@ export function DataSourceLayer() {
     };
   }, [mapRef]);
 
-  const hasContext = (mapContext?.geojson.features.length ?? 0) > 0;
-  if (!hasContext) return null;
-  const legendItems = [
-    ["no_ride", t("contextNoRide")],
-    ["no_parking", t("contextNoParking")],
-    ["no_start", t("contextNoStart")],
-    ["parking_hub", t("contextStationParking")],
-    ["slow_zone", t("contextSlowZone")],
-    ["station_area", t("contextStationArea")],
-  ] as const;
+  const contextFeatures = mapContext?.geojson.features ?? [];
+  if (contextFeatures.length === 0) return null;
+  const legendZoneClasses = contextZoneClassesIn(contextFeatures);
   const inspectContextFeature = (properties: Record<string, unknown>) => {
     if (
       activeSource &&
@@ -834,32 +839,49 @@ export function DataSourceLayer() {
       })}
     >
       <Box sx={{ fontWeight: 500 }}>{t("contextLegend")}</Box>
-      <Box
-        component="ul"
-        sx={{
-          mt: 1,
-          display: "grid",
-          gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-          columnGap: 1.5,
-          rowGap: 0.5,
-        }}
-      >
-        {legendItems.map(([zoneClass, label]) => (
-          <Box
-            component="li"
-            key={zoneClass}
-            sx={{ display: "flex", alignItems: "center", gap: 0.75 }}
-          >
-            <Box
-              component="span"
-              data-zone-class={zoneClass}
-              aria-hidden="true"
-              sx={{ width: 10, height: 10, borderRadius: 0.5, border: "1px solid currentColor" }}
-            />
-            {label}
-          </Box>
-        ))}
-      </Box>
+      {legendZoneClasses.length > 0 && (
+        <Box
+          component="ul"
+          sx={{
+            mt: 1,
+            display: "grid",
+            gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+            columnGap: 1.5,
+            rowGap: 0.5,
+          }}
+        >
+          {legendZoneClasses.map((zoneClass) => {
+            const style = CONTEXT_ZONE_STYLES[zoneClass];
+            return (
+              <Box
+                component="li"
+                key={zoneClass}
+                sx={{ display: "flex", alignItems: "center", gap: 0.75 }}
+              >
+                <Box
+                  component="span"
+                  data-zone-class={zoneClass}
+                  aria-hidden="true"
+                  sx={(theme) => ({
+                    flexShrink: 0,
+                    width: 10,
+                    height: 10,
+                    borderRadius: 0.5,
+                    border: "1.5px solid",
+                    borderColor: style.light,
+                    bgcolor: alpha(style.light, style.fillOpacity),
+                    ...theme.applyStyles("dark", {
+                      borderColor: style.dark,
+                      bgcolor: alpha(style.dark, style.fillOpacity),
+                    }),
+                  })}
+                />
+                {t(ZONE_LABEL_KEYS[zoneClass])}
+              </Box>
+            );
+          })}
+        </Box>
+      )}
       <Box component="details" sx={{ mt: 1, pt: 1, borderTop: 1, borderColor: "divider" }}>
         <Box component="summary" sx={{ cursor: "pointer" }}>
           {t("contextInspectAreas")}
