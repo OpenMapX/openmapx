@@ -1,6 +1,7 @@
 import type { CanonicalOfflinePackageRequest, OfflineMapPackageManifest } from "@openmapx/core";
 import type postgres from "postgres";
 import {
+  assertOfflineArtifactIdentity,
   assertOfflinePackagePrincipal,
   DEFAULT_PRINCIPAL_MAX_LOGICAL_BYTES,
   DEFAULT_PRINCIPAL_MAX_QUEUED,
@@ -8,8 +9,13 @@ import {
   DEFAULT_PRINCIPAL_MAX_RUNNING,
   type OfflinePackageAccountingStore,
   type OfflinePackageAdmission,
+  type OfflinePackageAdmissionOptions,
+  type OfflinePackageArtifactAccess,
+  OfflinePackageCapacityError,
   type OfflinePackageCompletion,
   OfflinePackagePrincipalQuotaError,
+  type OfflinePackageRemoval,
+  removeOfflineArtifact,
 } from "./accounting.js";
 import type { OfflinePackageJobRecord } from "./types.js";
 
@@ -148,7 +154,10 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
     return { running: Number(row?.running ?? 0), queued: Number(row?.queued ?? 0) };
   }
 
-  private async pruneAndCheckGlobalCapacity(tx: postgres.TransactionSql): Promise<void> {
+  private async pruneAndCheckGlobalCapacity(
+    tx: postgres.TransactionSql,
+    needsQueuedSlot: boolean,
+  ): Promise<void> {
     await tx`
       DELETE FROM data_manager.offline_package_jobs
       WHERE status <> 'preparing'
@@ -163,9 +172,9 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
         )::text AS queued
       FROM data_manager.offline_package_jobs
     `;
-    if (Number(counts?.queued ?? 0) >= this.maxGlobalQueued) {
-      throw new Error(
-        `offline package capacity: preparation queue is full (${this.maxGlobalQueued} waiting jobs)`,
+    if (needsQueuedSlot && Number(counts?.queued ?? 0) >= this.maxGlobalQueued) {
+      throw new OfflinePackageCapacityError(
+        `preparation queue is full (${this.maxGlobalQueued} waiting jobs)`,
       );
     }
     if (Number(counts?.tracked ?? 0) >= this.maxTrackedJobs) {
@@ -186,62 +195,58 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       `;
     }
     if (Number(counts?.tracked ?? 0) >= this.maxTrackedJobs) {
-      throw new Error(
-        `offline package capacity: job metadata limit is full (${this.maxTrackedJobs} jobs)`,
+      throw new OfflinePackageCapacityError(
+        `job metadata limit is full (${this.maxTrackedJobs} jobs)`,
       );
     }
+  }
+
+  private async invalidateArtifact(tx: postgres.TransactionSql, packageId: string): Promise<void> {
+    await tx`
+      UPDATE data_manager.offline_package_jobs
+      SET status = 'expired', manifest = NULL, error_code = 'expired',
+          error_message = 'offline package artifact unavailable; prepare the area again',
+          updated_at = clock_timestamp(), lease_owner = NULL, lease_expires_at = NULL
+      WHERE package_id = ${packageId} AND status = 'ready-to-download'
+    `;
+    await tx`DELETE FROM data_manager.offline_package_artifact_references WHERE package_id = ${packageId}`;
   }
 
   async admit(
     principal: string,
     candidate: OfflinePackageJobRecord,
+    options: OfflinePackageAdmissionOptions,
   ): Promise<OfflinePackageAdmission> {
     assertOfflinePackagePrincipal(principal);
     return await this.sql.begin(async (tx) => {
       await this.lockGlobal(tx);
       await this.lockPrincipal(tx, principal);
       await this.lockRequest(tx, candidate.request.requestKey);
-      const owned = await tx<JobRow[]>`
-        SELECT ${tx.unsafe(JOB_COLUMNS)}
-        FROM data_manager.offline_package_jobs j
-        JOIN data_manager.offline_package_job_owners o ON o.job_id = j.id
-        WHERE o.principal = ${principal}
-          AND j.request_key = ${candidate.request.requestKey}
-          AND j.status NOT IN ('failed', 'expired')
-        ORDER BY j.created_at ASC, j.id ASC
-        LIMIT 1
-      `;
-      if (owned[0]) {
-        return {
-          record: recordFromRow(owned[0]),
-          createdJob: false,
-          createdOwner: false,
-          unreferencedPackageIds: [],
-        };
-      }
-
-      const counts = await this.principalActiveCounts(tx, principal);
-      const shared = await tx<JobRow[]>`
-        SELECT ${tx.unsafe(JOB_COLUMNS)}
-        FROM data_manager.offline_package_jobs j
+      const sharedRows = await tx<JobRow[]>`
+        SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j
         WHERE j.request_key = ${candidate.request.requestKey}
           AND j.status IN ('preparing', 'ready-to-download')
-        ORDER BY j.created_at ASC, j.id ASC
-        LIMIT 1
-        FOR UPDATE
+        ORDER BY j.created_at ASC, j.id ASC LIMIT 1 FOR UPDATE
       `;
-      if (shared[0]) {
-        const unreferencedPackageIds: string[] = [];
-        if (shared[0].status === "preparing") {
+      let shared: JobRow | undefined = sharedRows[0];
+      const owned = shared
+        ? await tx`
+        SELECT 1 FROM data_manager.offline_package_job_owners
+        WHERE job_id = ${shared.id} AND principal = ${principal}
+      `
+        : [];
+      if (shared?.status === "preparing") {
+        if (owned.length === 0) {
+          const counts = await this.principalActiveCounts(tx, principal);
           const [lease] = await tx<{ running: boolean }[]>`
             SELECT lease_expires_at > clock_timestamp() AS running
-            FROM data_manager.offline_package_jobs
-            WHERE id = ${shared[0].id}
+            FROM data_manager.offline_package_jobs WHERE id = ${shared.id}
           `;
           const running = lease?.running === true;
           if (
-            (running && counts.running >= this.maxRunningPerPrincipal) ||
-            (!running && counts.queued >= this.maxQueuedPerPrincipal)
+            running
+              ? counts.running >= this.maxRunningPerPrincipal
+              : counts.queued >= this.maxQueuedPerPrincipal
           ) {
             throw new OfflinePackagePrincipalQuotaError(
               running
@@ -249,57 +254,95 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
                 : `queued limit is ${this.maxQueuedPerPrincipal}`,
             );
           }
-        } else {
-          const manifest = shared[0].manifest;
-          if (!manifest) throw new Error("Ready offline package is missing its manifest");
-          unreferencedPackageIds.push(
-            ...(await this.retainReference(
-              tx,
-              principal,
-              manifest.packageId,
-              manifest.archive.byteLength,
-              shared[0].created_at,
-            )),
-          );
+          await tx`INSERT INTO data_manager.offline_package_job_owners (job_id, principal, created_at)
+            VALUES (${shared.id}, ${principal}, clock_timestamp())`;
         }
-        await tx`
-          INSERT INTO data_manager.offline_package_job_owners (job_id, principal, created_at)
-          VALUES (${shared[0].id}, ${principal}, clock_timestamp())
-        `;
         return {
-          record: recordFromRow(shared[0]),
+          record: recordFromRow(shared),
           createdJob: false,
-          createdOwner: true,
-          unreferencedPackageIds: await this.unreferenced(tx, unreferencedPackageIds),
+          createdOwner: owned.length === 0,
+          unreferencedPackageIds: [],
         };
       }
-      if (counts.queued >= this.maxQueuedPerPrincipal) {
-        throw new OfflinePackagePrincipalQuotaError(
-          `queued limit is ${this.maxQueuedPerPrincipal}`,
-        );
+      const packageId = candidate.packageId;
+      const manifest =
+        candidate.status !== "failed" && packageId
+          ? await options.readManifest(packageId)
+          : undefined;
+      if (manifest) assertOfflineArtifactIdentity(candidate, manifest);
+      const preparing = !manifest && candidate.status !== "failed";
+      if (preparing) {
+        if (options.allowNewPreparingJob === false)
+          throw new OfflinePackageCapacityError("preparation queue is full");
+        const counts = await this.principalActiveCounts(tx, principal);
+        if (counts.queued >= this.maxQueuedPerPrincipal)
+          throw new OfflinePackagePrincipalQuotaError(
+            `queued limit is ${this.maxQueuedPerPrincipal}`,
+          );
       }
-      await this.pruneAndCheckGlobalCapacity(tx);
-      await tx`
-        INSERT INTO data_manager.offline_package_jobs (
-          id, request_key, package_id, request, status, manifest, error_code,
-          error_message, created_at, updated_at
-        ) VALUES (
-          ${candidate.jobId}, ${candidate.request.requestKey}, ${candidate.packageId ?? `invalid-${candidate.jobId}`},
-          ${tx.json(candidate.request as never)}, ${candidate.status}, ${candidate.manifest ? tx.json(candidate.manifest as never) : null},
-          ${candidate.errorCode ?? null}, ${candidate.errorMessage ?? null},
-          ${new Date(candidate.createdAtMs)}, ${new Date(candidate.updatedAtMs)}
-        )
-      `;
-      await tx`
-        INSERT INTO data_manager.offline_package_job_owners (job_id, principal, created_at)
-        VALUES (${candidate.jobId}, ${principal}, clock_timestamp())
-      `;
+      if (!manifest && packageId && candidate.status !== "failed") {
+        await this.invalidateArtifact(tx, packageId);
+        shared = undefined;
+      }
+      const createdJob = !shared;
+      const status = manifest ? "ready-to-download" : preparing ? "preparing" : "failed";
+      if (!shared) {
+        await this.pruneAndCheckGlobalCapacity(tx, preparing);
+        await tx`
+          INSERT INTO data_manager.offline_package_jobs (
+            id, request_key, package_id, request, status, manifest, error_code,
+            error_message, created_at, updated_at
+          ) VALUES (
+            ${candidate.jobId}, ${candidate.request.requestKey}, ${packageId ?? `invalid-${candidate.jobId}`},
+            ${tx.json(candidate.request as never)}, ${status}, ${manifest ? tx.json(manifest as never) : null},
+            ${candidate.errorCode ?? null}, ${candidate.errorMessage ?? null},
+            ${new Date(candidate.createdAtMs)}, ${new Date(candidate.updatedAtMs)}
+          )
+        `;
+        [shared] = await tx<
+          JobRow[]
+        >`SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j WHERE id = ${candidate.jobId}`;
+      }
+      if (!shared) throw new Error("Offline package admission was not persisted");
+      const evicted = manifest
+        ? await this.retainReference(
+            tx,
+            principal,
+            manifest.packageId,
+            manifest.archive.byteLength,
+            new Date(candidate.createdAtMs),
+          )
+        : [];
+      // Ownership may outlive a quota-evicted artifact reference. Always retain
+      // verified bytes before taking this idempotent owner path.
+      const createdOwner = createdJob || owned.length === 0;
+      if (createdOwner) {
+        await tx`INSERT INTO data_manager.offline_package_job_owners (job_id, principal, created_at)
+          VALUES (${shared.id}, ${principal}, clock_timestamp())`;
+      }
+      if (manifest) {
+        await tx`UPDATE data_manager.offline_package_jobs SET manifest = ${tx.json(manifest as never)} WHERE id = ${shared.id}`;
+        shared.manifest = manifest;
+      }
       return {
-        record: structuredClone(candidate),
-        createdJob: true,
-        createdOwner: true,
-        unreferencedPackageIds: [],
+        record: recordFromRow(shared),
+        createdJob,
+        createdOwner,
+        unreferencedPackageIds: await this.unreferenced(tx, evicted),
       };
+    });
+  }
+
+  async removeUnreferencedArtifact(
+    packageId: string,
+    storage: OfflinePackageArtifactAccess,
+  ): Promise<OfflinePackageRemoval> {
+    return await this.sql.begin(async (tx) => {
+      await this.lockGlobal(tx);
+      if ((await this.unreferenced(tx, [packageId])).length === 0) return { status: "retained" };
+      return await removeOfflineArtifact(packageId, storage, () =>
+        this.invalidateArtifact(tx, packageId),
+      );
     });
   }
 
@@ -381,103 +424,6 @@ export class PostgresOfflinePackageAccountingStore implements OfflinePackageAcco
       if (row && !row.referenced && !row.active) result.push(packageId);
     }
     return result;
-  }
-
-  async admitReady(
-    principal: string,
-    candidate: OfflinePackageJobRecord,
-    manifest: OfflineMapPackageManifest,
-  ): Promise<OfflinePackageAdmission & OfflinePackageCompletion> {
-    assertOfflinePackagePrincipal(principal);
-    return await this.sql.begin(async (tx) => {
-      await this.lockGlobal(tx);
-      await this.lockPrincipal(tx, principal);
-      await this.lockRequest(tx, candidate.request.requestKey);
-      let [row] = await tx<JobRow[]>`
-        SELECT ${tx.unsafe(JOB_COLUMNS)}
-        FROM data_manager.offline_package_jobs j
-        WHERE j.request_key = ${candidate.request.requestKey}
-          AND j.status IN ('preparing', 'ready-to-download')
-        ORDER BY j.created_at ASC, j.id ASC LIMIT 1 FOR UPDATE
-      `;
-      const createdJob = !row;
-      if (!row) {
-        await this.pruneAndCheckGlobalCapacity(tx);
-        await tx`
-          INSERT INTO data_manager.offline_package_jobs (
-            id, request_key, package_id, request, status, manifest,
-            created_at, updated_at
-          ) VALUES (
-            ${candidate.jobId}, ${candidate.request.requestKey}, ${manifest.packageId},
-            ${tx.json(candidate.request as never)}, 'ready-to-download', ${tx.json(manifest as never)},
-            ${new Date(candidate.createdAtMs)}, ${new Date(candidate.updatedAtMs)}
-          )
-        `;
-        [row] = await tx<JobRow[]>`
-          SELECT ${tx.unsafe(JOB_COLUMNS)} FROM data_manager.offline_package_jobs j
-          WHERE j.id = ${candidate.jobId}
-        `;
-      }
-      if (!row) throw new Error("Offline package ready admission was not persisted");
-      const owned = await tx`
-        SELECT 1 FROM data_manager.offline_package_job_owners
-        WHERE job_id = ${row.id} AND principal = ${principal}
-      `;
-      if (owned.length > 0) {
-        return {
-          record: recordFromRow(row),
-          createdJob: false,
-          createdOwner: false,
-          unreferencedPackageIds: [],
-        };
-      }
-      if (row.status === "preparing") {
-        const counts = await this.principalActiveCounts(tx, principal);
-        const [lease] = await tx<{ running: boolean }[]>`
-          SELECT lease_expires_at > clock_timestamp() AS running
-          FROM data_manager.offline_package_jobs
-          WHERE id = ${row.id}
-        `;
-        const running = lease?.running === true;
-        if (
-          (running && counts.running >= this.maxRunningPerPrincipal) ||
-          (!running && counts.queued >= this.maxQueuedPerPrincipal)
-        ) {
-          throw new OfflinePackagePrincipalQuotaError(
-            running
-              ? `running limit is ${this.maxRunningPerPrincipal}`
-              : `queued limit is ${this.maxQueuedPerPrincipal}`,
-          );
-        }
-        await tx`
-          INSERT INTO data_manager.offline_package_job_owners (job_id, principal, created_at)
-          VALUES (${row.id}, ${principal}, clock_timestamp())
-        `;
-        return {
-          record: recordFromRow(row),
-          createdJob: false,
-          createdOwner: true,
-          unreferencedPackageIds: [],
-        };
-      }
-      const evicted = await this.retainReference(
-        tx,
-        principal,
-        manifest.packageId,
-        manifest.archive.byteLength,
-        new Date(candidate.createdAtMs),
-      );
-      await tx`
-        INSERT INTO data_manager.offline_package_job_owners (job_id, principal, created_at)
-        VALUES (${row.id}, ${principal}, clock_timestamp())
-      `;
-      return {
-        record: recordFromRow(row),
-        createdJob,
-        createdOwner: true,
-        unreferencedPackageIds: await this.unreferenced(tx, evicted),
-      };
-    });
   }
 
   async getOwnedJob(

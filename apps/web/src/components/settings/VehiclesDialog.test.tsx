@@ -60,9 +60,37 @@ describe("VehiclesDialog", () => {
     await userEvent.click(screen.getByRole("button", { name: "vehicles.save" }));
     await waitFor(() =>
       expect(state.create).toHaveBeenCalledWith(
-        expect.objectContaining({ name: "Red Polo", kind: "car" }),
+        expect.objectContaining({ name: "Red Polo", kind: "car", isDefault: false }),
       ),
     );
+  });
+
+  it.each([
+    { powertrain: "petrol", ev: null },
+    {
+      powertrain: "electric",
+      ev: {
+        batteryKwh: 60,
+        baseWhPerKm: 180,
+        massTonnes: 2,
+        maxDcKw: 150,
+        maxAcKw: 11,
+        vehicleTaperSocPct: 80,
+        connectors: ["ccs2", "type2"],
+      },
+    },
+  ])("preserves the default selection when editing a $powertrain vehicle", async (spec) => {
+    state.vehicles = [{ ...CAR, ...spec }];
+    render(<VehiclesDialog open onClose={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "vehicles.edit" }));
+    await userEvent.clear(screen.getByLabelText("vehicles.name"));
+    await userEvent.type(screen.getByLabelText("vehicles.name"), "Renamed car");
+    await userEvent.click(screen.getByRole("button", { name: "vehicles.save" }));
+
+    expect(state.update).toHaveBeenCalledTimes(1);
+    const patch = state.update.mock.calls[0][0];
+    expect(patch).toMatchObject({ id: "v1", name: "Renamed car", powertrain: spec.powertrain });
+    expect(patch).not.toHaveProperty("isDefault");
   });
 
   it("refuses to save a vehicle with no name", async () => {

@@ -9,7 +9,7 @@ import type { Sql } from "postgres";
 import { createGithubIssueSink, type GithubIssueSink } from "../github-issue-sink.js";
 import { createLogMetricsSink, type PoiIngestMetricsSink } from "./metrics.js";
 import { combineMetricsSinks, createOtelMetricsSink } from "./otel-metrics.js";
-import { createPoiJobRow, getLastPoiFeedState } from "./persistence.js";
+import { createPoiJobRow, finalizePoiJobRow, getLastPoiFeedState } from "./persistence.js";
 import { runOneAndPersist } from "./runner.js";
 import { createPoiSingleFlight, type PoiSingleFlight } from "./single-flight.js";
 import { detectStalePoiSources, emitPoiAlerts } from "./staleness-alerts.js";
@@ -194,9 +194,26 @@ export function setupPoiIngestCron(opts: PoiSchedulerOptions): PoiSchedulerHandl
     let previousStaticHash: string | undefined;
     let previousStaticRowCount: number | undefined;
     if (kind === "bundled") {
-      const prev = await getLastPoiFeedState(sourceId);
-      previousStaticHash = prev?.lastStaticHash ?? undefined;
-      previousStaticRowCount = prev?.lastStaticRowCount ?? undefined;
+      try {
+        const prev = await getLastPoiFeedState(sourceId);
+        previousStaticHash = prev?.lastStaticHash ?? undefined;
+        previousStaticRowCount = prev?.lastStaticRowCount ?? undefined;
+      } catch (err) {
+        // The runner has not taken ownership of cleanup yet.
+        try {
+          await finalizePoiJobRow(jobId, "error");
+        } catch (finalizeErr) {
+          logger.warn("poi-ingest-cron: finalizePoiJobRow failed", {
+            sourceId,
+            kind,
+            jobId,
+            err: (finalizeErr as Error).message,
+          });
+        } finally {
+          singleFlight.release(sourceId, kind);
+        }
+        throw err;
+      }
     }
 
     await runOneAndPersist({

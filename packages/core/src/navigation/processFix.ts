@@ -176,14 +176,16 @@ export function processFix(
   // `distanceRemaining <= lastStep.distance` would collapse to `<= 0` and only
   // fire when snapped exactly at the route end. `committedStepIndex >= lastIndex
   // - 1` reaches true on the last travel step, so a multi-step route can't
-  // false-arrive near the start. A step-less route has no gate to reach, so
-  // arrival there is destination distance alone.
+  // false-arrive near the start. Also require actual destination proximity:
+  // a distant off-route fix can project onto the endpoint with zero remaining
+  // distance. A step-less route has no gate to reach.
   const lastIndex = route.steps.length - 1;
+  const destination = route.geometry.at(-1);
   const arrived =
-    route.steps.length === 0
-      ? prog.distanceRemaining <= opts.arrivalThresholdMeters
-      : prog.distanceRemaining <= opts.arrivalThresholdMeters &&
-        gate.committedStepIndex >= lastIndex - 1;
+    destination !== undefined &&
+    haversineDistance(fix.coords, destination) <= opts.arrivalThresholdMeters &&
+    prog.distanceRemaining <= opts.arrivalThresholdMeters &&
+    (route.steps.length === 0 || gate.committedStepIndex >= lastIndex - 1);
 
   // Announce the UPCOMING maneuver (at the end of the current step), not the one
   // already performed at the start of it. distanceToNextManeuver counts down to

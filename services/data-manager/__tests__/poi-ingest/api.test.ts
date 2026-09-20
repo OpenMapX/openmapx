@@ -443,6 +443,50 @@ describe("POST /poi-ingest/sources/:id/sync", () => {
     await app.close();
   });
 
+  it.each([false, true])(
+    "allows a bundled retry after initialization fails (finalization fails: %s)",
+    async (finalizationFails) => {
+      getLastPoiFeedStateMock.mockRejectedValueOnce(new Error("feed state unavailable"));
+      if (finalizationFails) {
+        finalizePoiJobRowMock.mockRejectedValueOnce(new Error("database unavailable"));
+      }
+      createPoiJobRowMock.mockResolvedValueOnce("failed-job").mockResolvedValueOnce("retry-job");
+      let resolvePipeline!: (result: ReturnType<typeof makeResult>) => void;
+      const pipeline = new Promise<ReturnType<typeof makeResult>>((resolve) => {
+        resolvePipeline = resolve;
+      });
+      runBundledIngestMock.mockReturnValue(pipeline);
+      const { app, singleFlight } = await buildApp({ sources: [bundledSource("bundled-1")] });
+      try {
+        const failed = await app.inject({
+          method: "POST",
+          url: "/poi-ingest/sources/bundled-1/sync",
+          payload: {},
+        });
+        expect(failed.statusCode).toBe(500);
+        expect(singleFlight.getInflight("bundled-1", "bundled")).toBeNull();
+        expect(finalizePoiJobRowMock).toHaveBeenCalledWith("failed-job", "error");
+        expect(runBundledIngestMock).not.toHaveBeenCalled();
+
+        const retried = await app.inject({
+          method: "POST",
+          url: "/poi-ingest/sources/bundled-1/sync",
+          payload: {},
+        });
+        expect(retried.statusCode).toBe(202);
+        expect(singleFlight.getInflight("bundled-1", "bundled")).not.toBeNull();
+        resolvePipeline(makeResult("bundled-1", "bundled"));
+        await vi.waitFor(() => {
+          expect(singleFlight.getInflight("bundled-1", "bundled")).toBeNull();
+        });
+        expect(finalizePoiJobRowMock).toHaveBeenCalledWith("retry-job", "ok");
+      } finally {
+        resolvePipeline(makeResult("bundled-1", "bundled"));
+        await app.close();
+      }
+    },
+  );
+
   it("bundled source: uses kind=bundled and reads previous hash", async () => {
     runBundledIngestMock.mockResolvedValue(
       makeResult("bundled-1", "bundled", {

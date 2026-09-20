@@ -19,6 +19,7 @@ import {
   type OfflinePackageSourceDescriptor,
 } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { MemoryOfflinePackageAccountingStore } from "../src/offline-packages/accounting.js";
 import {
   OfflinePackageGenerator,
   offlinePackageIdForRequest,
@@ -33,6 +34,7 @@ import {
   OfflinePackageStorage,
   packageDirectory,
 } from "../src/offline-packages/storage.js";
+import type { OfflinePackageExtractorOptions } from "../src/offline-packages/types.js";
 
 const roots: string[] = [];
 const principal = "a".repeat(64);
@@ -648,5 +650,202 @@ describe("offline package generation", () => {
 
     expect(await generator.getJob(principal, recovered.jobId)).toBeUndefined();
     await expect(generator.getManifest(packageId)).resolves.toMatchObject({ packageId });
+  });
+});
+
+function deferredVoid() {
+  let resolve = () => {};
+  const promise = new Promise<void>((done) => {
+    resolve = done;
+  });
+  return { promise, resolve: () => resolve() };
+}
+
+/** Real storage/accounting; only extraction's external tool is replaced. */
+function artifactFixture(maxQueuedJobs = 64) {
+  const dataDir = createDataDir();
+  const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
+  let now = Date.parse("2026-09-01T10:00:00Z");
+  const accounting = new MemoryOfflinePackageAccountingStore({ clock: () => now++ });
+  const extract = vi.fn(async (options: OfflinePackageExtractorOptions) => {
+    writeFileSync(options.destinationPath, "pmtiles");
+    return {
+      byteLength: 7,
+      sha256: generatedArchiveSha256,
+      etag: `sha256-${generatedArchiveSha256}`,
+      bounds: options.request.effective.bbox,
+      minZoom: options.request.effective.minZoom,
+      maxZoom: options.request.effective.maxZoom,
+      tileCount: 1,
+      tileCompression: "none" as const,
+      attribution: sourceDescriptor.attribution,
+      sourceBytesRead: 128,
+      destinationBytesWritten: 7,
+      temporaryBytesPeak: 7,
+    };
+  });
+  const generator = new OfflinePackageGenerator({
+    source: () => ({
+      descriptor: sourceDescriptor,
+      mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+      fontsDirectory: join(dataDir, "tile-fonts"),
+      packageRoot: storage.packageRoot,
+    }),
+    storage,
+    accounting,
+    extractor: extract,
+    maxConcurrent: 1,
+    maxQueuedJobs,
+    clock: () => new Date(now++),
+  });
+  const area = (index: number): OfflinePackageRequest => ({
+    ...request,
+    bbox: { west: index + 1, south: 1, east: index + 2, north: 2 },
+  });
+  const ready = async (index: number, owner = principal) => {
+    const job = await generator.prepare(owner, area(index));
+    await vi.waitFor(async () =>
+      expect((await generator.getJob(owner, job.jobId))?.status).toBe("ready-to-download"),
+    );
+    await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+    const completed = await generator.getJob(owner, job.jobId);
+    if (!completed?.packageId) throw new Error("Ready fixture has no package ID");
+    return { ...completed, packageId: completed.packageId };
+  };
+  return { generator, storage, accounting, extract, area, ready };
+}
+
+describe("offline artifact eviction and recovery", () => {
+  it.each([principal, "b".repeat(64)])(
+    "regenerates evicted bytes for retrying owner %s",
+    async (owner) => {
+      const { generator, storage, extract, ready } = artifactFixture();
+      const first = await ready(0);
+      for (let index = 1; index < 6; index++) await ready(index);
+      expect(await storage.readPublishedManifest(first.packageId)).toBeUndefined();
+      expect(await generator.openArchive(first.packageId)).toBeUndefined();
+      const retried = await ready(0, owner);
+      expect(retried.jobId).not.toBe(first.jobId);
+      expect(extract).toHaveBeenCalledTimes(7);
+      const archive = await generator.openArchive(retried.packageId);
+      try {
+        expect(archive).toBeDefined();
+        expect(readFileSync(archive?.path ?? "", "utf8")).toBe("pmtiles");
+      } finally {
+        archive?.release();
+      }
+    },
+  );
+
+  it("reacquires a quota reference without extracting when a reader prevented deletion", async () => {
+    const { generator, storage, accounting, extract, ready } = artifactFixture();
+    const first = await ready(0);
+    const archive = await generator.openArchive(first.packageId);
+    expect(archive).toBeDefined();
+    try {
+      for (let index = 1; index < 6; index++) await ready(index);
+      expect(await accounting.hasArtifactReference(first.packageId)).toBe(false);
+      expect(await storage.readPublishedManifest(first.packageId)).toBeDefined();
+      expect((await generator.getJob(principal, first.jobId))?.status).toBe("ready-to-download");
+      const recovered = await ready(0);
+      expect(recovered.jobId).toBe(first.jobId);
+      expect(extract).toHaveBeenCalledTimes(6);
+      expect(await accounting.hasArtifactReference(first.packageId)).toBe(true);
+      expect(await accounting.retainedUsage(principal)).toEqual({
+        references: 5,
+        logicalBytes: 35,
+      });
+    } finally {
+      archive?.release();
+    }
+  });
+
+  it.each([false, true])(
+    "keeps sixth package ready when old artifact cleanup throws (deleted: %s)",
+    async (deleted) => {
+      const { generator, storage, extract, ready } = artifactFixture();
+      const first = await ready(0);
+      const remove = storage.removePackage.bind(storage);
+      const spy = vi.spyOn(storage, "removePackage").mockImplementation(async (id) => {
+        if (id !== first.packageId) return remove(id);
+        if (deleted) await remove(id);
+        throw new Error("fixture obsolete artifact cleanup failed");
+      });
+      try {
+        let sixth = first;
+        for (let index = 1; index < 6; index++) sixth = await ready(index);
+        expect(spy).toHaveBeenCalledWith(first.packageId);
+        expect((await generator.getJob(principal, sixth.jobId))?.status).toBe("ready-to-download");
+        expect(await storage.readPublishedManifest(sixth.packageId)).toBeDefined();
+        const retried = await ready(0);
+        expect(extract).toHaveBeenCalledTimes(deleted ? 7 : 6);
+        expect(await generator.getManifest(retried.packageId)).toBeDefined();
+      } finally {
+        spy.mockRestore();
+      }
+    },
+  );
+
+  it("admits ready cache hits while the local preparation queue is full", async () => {
+    const { generator, extract, area, ready } = artifactFixture(1);
+    const cached = await ready(0);
+    const gate = deferredVoid();
+    const extractNormally = extract.getMockImplementation();
+    if (!extractNormally) throw new Error("Missing fixture extractor");
+    extract.mockImplementationOnce(async (options) => {
+      await gate.promise;
+      return extractNormally(options);
+    });
+    try {
+      await generator.prepare(principal, area(1));
+      await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(2));
+      await generator.prepare("b".repeat(64), area(2));
+      await expect(generator.prepare("c".repeat(64), area(3))).rejects.toThrow(/queue.*full/i);
+      const hit = await generator.prepare(principal, area(0));
+      expect(hit).toMatchObject({
+        jobId: cached.jobId,
+        status: "ready-to-download",
+        packageId: cached.packageId,
+      });
+      expect(extract).toHaveBeenCalledTimes(2);
+    } finally {
+      gate.resolve();
+      await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+    }
+  });
+
+  it("shares the preparing job while its archive is published but completion is pending", async () => {
+    const { generator, storage, extract, area } = artifactFixture(1);
+    const gate = deferredVoid();
+    const published = deferredVoid();
+    const publish = storage.publishPackage.bind(storage);
+    const spy = vi.spyOn(storage, "publishPackage").mockImplementationOnce(async (input) => {
+      await publish(input);
+      published.resolve();
+      await gate.promise;
+    });
+    try {
+      const first = await generator.prepare(principal, area(0));
+      await published.promise;
+      expect(await storage.readPublishedManifest(first.packageId ?? "")).toBeDefined();
+      await generator.prepare("b".repeat(64), area(1));
+      const shared = await generator.prepare("c".repeat(64), area(0));
+      expect(shared).toMatchObject({
+        jobId: first.jobId,
+        status: "preparing",
+        packageId: first.packageId,
+      });
+      expect(extract).toHaveBeenCalledTimes(1);
+      gate.resolve();
+      await vi.waitFor(async () =>
+        expect((await generator.getJob("c".repeat(64), shared.jobId))?.status).toBe(
+          "ready-to-download",
+        ),
+      );
+    } finally {
+      gate.resolve();
+      await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+      spy.mockRestore();
+    }
   });
 });

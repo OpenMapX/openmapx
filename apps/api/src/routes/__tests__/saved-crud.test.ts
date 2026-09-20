@@ -105,7 +105,19 @@ describe("saved lists", () => {
   });
 
   it("seeds 3 default lists when the user has none", async () => {
-    prime([]); // no existing lists; the subsequent insert result is unused
+    const now = new Date("2026-09-01T10:00:00Z");
+    const persisted = [
+      { id: "favorites", name: "$favorites", icon: "heart", sortOrder: 0 },
+      { id: "want-to-go", name: "$wantToGo", icon: "flag", sortOrder: 1 },
+      { id: "starred", name: "$starredPlaces", icon: "star", sortOrder: 2 },
+    ].map((row) => ({
+      ...row,
+      isPrivate: true,
+      createdAt: now,
+      updatedAt: now,
+      placeCount: 0,
+    }));
+    prime([], [], persisted); // initial read, insert, then persisted-list read
     const res = await app.inject({ method: "GET", url: "/api/saved/lists" });
     expect(res.statusCode).toBe(200);
     expect(res.json().lists).toHaveLength(3);

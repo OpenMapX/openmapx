@@ -193,6 +193,38 @@ describe("processFix", () => {
     expect(r.arrived).toBe(true);
   });
 
+  describe.each([true, false])("destination proximity with steps=%s", (withSteps) => {
+    const arrivalRoute = { ...route, steps: withSteps ? route.steps : [] };
+
+    it.each([
+      { name: "on a parallel road", coords: [0.004, 0.01] as [number, number] },
+      { name: "beyond the destination", coords: [0.014, 0] as [number, number] },
+      {
+        name: "outside arrival range but inside reroute range",
+        coords: [0.004, 0.00036] as [number, number],
+      },
+    ])("does not arrive $name when projected onto the endpoint", ({ coords }) => {
+      const result = processFix(
+        arrivalRoute,
+        { coords, accuracy: 5, timestampMs: 5000 },
+        emptyState,
+        opts,
+      );
+      expect(result.progress?.distanceRemaining).toBe(0);
+      expect(result.arrived).toBe(false);
+    });
+
+    it("arrives with a small lateral offset inside the arrival threshold", () => {
+      const result = processFix(
+        arrivalRoute,
+        { coords: [0.004, 0.00018], accuracy: 5, timestampMs: 5000 },
+        emptyState,
+        opts,
+      );
+      expect(result.arrived).toBe(true);
+    });
+  });
+
   it("arrives within the threshold on a route whose final step has 0 distance", () => {
     // Real Valhalla/OSRM routes end with a 0-distance 'arrive' maneuver.
     const geom: [number, number][] = [

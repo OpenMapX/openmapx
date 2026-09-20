@@ -179,8 +179,10 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
 
   const handleSave = () => {
     if (!draft || !payload) return;
-    if (draft.id) update.mutate({ id: draft.id, ...payload });
-    else create.mutate(payload);
+    if (draft.id) {
+      const { isDefault: _isDefault, ...patch } = payload;
+      update.mutate({ id: draft.id, ...patch });
+    } else create.mutate(payload);
     setDraft(null);
   };
 

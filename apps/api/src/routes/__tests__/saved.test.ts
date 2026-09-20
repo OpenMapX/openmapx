@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { buildTestApp } from "../../test/app.js";
 import { mockRequireAuth } from "../../test/auth.js";
-import { createDbMock, type DbMock } from "../../test/db.js";
+import { createDbMock, type DbMock, makeQueryChain } from "../../test/db.js";
 
 const USER_ID = "user-A";
 
@@ -152,7 +152,21 @@ describe("GET /api/saved/lists", () => {
   });
 
   it("seeds default lists for a first-time user when none exist", async () => {
-    dbMock.queueSelect([]); // no existing lists
+    dbMock.db.select.mockImplementationOnce(() => makeQueryChain([]));
+    dbMock.db.select.mockImplementationOnce(() => {
+      const inserted = (
+        dbMock.db.insert.mock.results[0].value as {
+          values: { mock: { calls: [{ userId: string }[]][] } };
+        }
+      ).values.mock.calls[0][0];
+      return makeQueryChain(
+        inserted.map(({ userId: _userId, ...row }) => ({
+          ...row,
+          isPrivate: true,
+          placeCount: 0,
+        })),
+      );
+    });
 
     const res = await app.inject({ method: "GET", url: "/api/saved/lists" });
 
@@ -160,6 +174,57 @@ describe("GET /api/saved/lists", () => {
     const names = res.json().lists.map((l: { name: string }) => l.name);
     expect(names).toEqual(["$favorites", "$wantToGo", "$starredPlaces"]);
     expect(dbMock.db.insert).toHaveBeenCalledTimes(1);
+  });
+
+  it("returns persisted list IDs and counts when another request wins default seeding", async () => {
+    dbMock.queueSelect([]);
+    dbMock.queueInsert([]); // The competing request inserted the default names first.
+    dbMock.queueSelect([
+      {
+        id: "persisted-favorites",
+        name: "$favorites",
+        icon: "heart",
+        isPrivate: true,
+        sortOrder: 0,
+        createdAt: new Date("2026-09-01T10:00:00Z"),
+        updatedAt: new Date("2026-09-01T10:00:00Z"),
+        placeCount: 2,
+      },
+      {
+        id: "persisted-want-to-go",
+        name: "$wantToGo",
+        icon: "flag",
+        isPrivate: true,
+        sortOrder: 1,
+        createdAt: new Date("2026-09-01T10:00:00Z"),
+        updatedAt: new Date("2026-09-01T10:00:00Z"),
+        placeCount: 0,
+      },
+      {
+        id: "persisted-starred",
+        name: "$starredPlaces",
+        icon: "star",
+        isPrivate: true,
+        sortOrder: 2,
+        createdAt: new Date("2026-09-01T10:00:00Z"),
+        updatedAt: new Date("2026-09-01T10:00:00Z"),
+        placeCount: 1,
+      },
+    ]);
+
+    const res = await app.inject({ method: "GET", url: "/api/saved/lists" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().lists.map((list: { id: string }) => list.id)).toEqual([
+      "persisted-favorites",
+      "persisted-want-to-go",
+      "persisted-starred",
+    ]);
+    expect(res.json().lists.map((list: { placeCount: number }) => list.placeCount)).toEqual([
+      2, 0, 1,
+    ]);
+    expect(selectWhereArgs(1)).toContain(USER_ID);
+    expect(selectWhereArgs(1)).toContain("saved_list.user_id");
   });
 });
 

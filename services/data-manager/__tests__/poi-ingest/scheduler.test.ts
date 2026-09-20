@@ -329,6 +329,39 @@ describe("setupPoiIngestCron", () => {
     handles.stop();
   });
 
+  it.each([false, true])(
+    "releases a bundled initialization failure for retry (finalization fails: %s)",
+    async (finalizationFails) => {
+      getLastPoiFeedStateMock.mockRejectedValueOnce(new Error("feed state unavailable"));
+      if (finalizationFails) {
+        finalizePoiJobRowMock.mockRejectedValueOnce(new Error("database unavailable"));
+      }
+      createPoiJobRowMock.mockResolvedValueOnce("failed-job").mockResolvedValueOnce("retry-job");
+      runBundledIngestMock.mockResolvedValue(makeResult("bundled-1", "bundled"));
+      const handles = setupPoiIngestCron({
+        sql: fakeSql(),
+        redis: fakeRedis(),
+        logger: makeLogger(),
+        sources: [bundledSource("bundled-1")],
+        metricsSink: noopMetricsSink,
+      });
+      try {
+        await expect(handles.runNow("bundled-1", "bundled")).rejects.toThrow(
+          "feed state unavailable",
+        );
+        expect(handles.singleFlight.getInflight("bundled-1", "bundled")).toBeNull();
+        expect(finalizePoiJobRowMock).toHaveBeenCalledWith("failed-job", "error");
+        expect(runBundledIngestMock).not.toHaveBeenCalled();
+
+        await handles.runNow("bundled-1", "bundled");
+        expect(finalizePoiJobRowMock).toHaveBeenCalledWith("retry-job", "ok");
+        expect(handles.singleFlight.getInflight("bundled-1", "bundled")).toBeNull();
+      } finally {
+        handles.stop();
+      }
+    },
+  );
+
   it("rethrows on invalid registry at boot", () => {
     const logger = makeLogger();
     const bad = [

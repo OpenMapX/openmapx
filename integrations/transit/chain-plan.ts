@@ -1,17 +1,21 @@
 import type { ChainedTripPlan, ChainedTripSegment, ChainPlanWarning } from "@openmapx/core";
 import {
+  arrivalBefore,
+  departureAfter,
   fidelityFor,
   planScheduledTrip,
   requiredTemporalSemantics,
   resolveScheduleConstraints,
   type ScheduleAnchor,
   type TemporalCapabilities,
+  type TripSchedule,
   type WaypointSchedule,
   worstSupport,
 } from "@openmapx/core";
 import type { TripPlanRequest } from "@openmapx/integration-framework";
 import type { MobilityResult } from "@openmapx/mobility-core/result";
 import type { TripItinerary, TripPlan } from "@openmapx/mobility-core/transit";
+import { composeBackwardTransitSchedule } from "./backward-chain-schedule.js";
 
 export interface PlanTransitChainArgs {
   waypoints: { lat: number; lng: number }[];
@@ -62,6 +66,11 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
     anchor: args.anchor,
   });
 
+  const finalStop = resolved.stops.at(-1);
+  if (resolved.stops.length < 2 || !finalStop) {
+    throw new Error("Transit chains require at least two stops");
+  }
+
   const level = worstSupport(
     requiredTemporalSemantics(resolved).map((semantic) => args.capabilities[semantic]),
   );
@@ -75,7 +84,7 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
     segmentIndex: number,
     instantMs: number,
     pinArrival: boolean,
-  ): Promise<{ seconds: number; payload: ChainedTripSegment }> => {
+  ): Promise<ChainedTripSegment> => {
     const request: TripPlanRequest = {
       ...args.baseRequest,
       from: args.waypoints[segmentIndex],
@@ -87,8 +96,15 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
     };
 
     const result = await args.planTrip(request);
-    const itineraries = result.data?.itineraries ?? [];
-    const deadline = pinArrival ? null : resolved.stops[segmentIndex + 1].latestArrivalMs;
+    const options = result.data?.itineraries ?? [];
+    const itineraries = pinArrival
+      ? options.filter((option) => {
+          const start = Date.parse(option.startTime);
+          const end = Date.parse(option.endTime);
+          return Number.isFinite(start) && Number.isFinite(end) && end >= start;
+        })
+      : options;
+    const deadline = pinArrival ? instantMs : resolved.stops[segmentIndex + 1].latestArrivalMs;
     const chosen = selectItinerary(itineraries, deadline);
     if (!chosen) {
       warnings.push({ kind: "no-connection", segmentIndex });
@@ -108,14 +124,6 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
     }
 
     const startMs = Date.parse(chosen.startTime);
-    const endMs = Date.parse(chosen.endTime);
-    // A transit leg's real cost from a given moment includes waiting for the
-    // service, so the oracle reports the whole span. The wait is preserved
-    // separately rather than folded away, so the timeline can still say
-    // "leave at 09:00, the train goes at 09:17".
-    const seconds = pinArrival
-      ? Math.round((instantMs - startMs) / 1000)
-      : Math.round((endMs - instantMs) / 1000);
     const boardingWaitSeconds = pinArrival
       ? 0
       : Math.max(0, Math.round((startMs - instantMs) / 1000));
@@ -129,15 +137,53 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
       delaySeconds: arrivalDelaySeconds(chosen),
     };
     segments[segmentIndex] = segment;
-    return { seconds, payload: segment };
+    return segment;
   };
 
-  const planned = await planScheduledTrip({
-    resolved,
-    forward: (segmentIndex, departureMs) => runSegment(segmentIndex, departureMs, false),
-    backward: (segmentIndex, arrivalMs) => runSegment(segmentIndex, arrivalMs, true),
-    providerId: provider,
-  });
+  let schedule: TripSchedule;
+  if (resolved.direction === "backward") {
+    let deadline = Math.min(resolved.anchorMs, finalStop.latestArrivalMs ?? resolved.anchorMs);
+    const violations = [...resolved.violations];
+    for (let index = resolved.stops.length - 2; index >= 0; index -= 1) {
+      let segment: ChainedTripSegment;
+      try {
+        segment = await runSegment(index, deadline, true);
+      } catch {
+        violations.push({ kind: "unreachable", fromIndex: index, toIndex: index + 1 });
+        break;
+      }
+      deadline = arrivalBefore(resolved.stops[index], Date.parse(segment.itinerary.startTime));
+    }
+    const retained = segments.filter(
+      (segment): segment is ChainedTripSegment => segment !== undefined,
+    );
+    for (let index = 1; index < retained.length; index += 1) {
+      const segment = retained[index];
+      const ready = departureAfter(
+        resolved.stops[segment.fromIndex],
+        Date.parse(retained[index - 1].itinerary.endTime),
+      );
+      segment.boardingWaitSeconds = Math.max(
+        0,
+        Math.round((Date.parse(segment.itinerary.startTime) - ready) / 1000),
+      );
+    }
+    schedule = composeBackwardTransitSchedule({ resolved, segments: retained, violations });
+  } else {
+    const planned = await planScheduledTrip({
+      resolved,
+      forward: async (segmentIndex, departureMs) => {
+        const segment = await runSegment(segmentIndex, departureMs, false);
+        // Forward cost still includes waiting from the requested departure.
+        return {
+          seconds: Math.round((Date.parse(segment.itinerary.endTime) - departureMs) / 1000),
+          payload: segment,
+        };
+      },
+      providerId: provider,
+    });
+    schedule = planned.schedule;
+  }
 
   const solved = segments.filter((segment): segment is ChainedTripSegment => segment !== undefined);
 
@@ -150,7 +196,7 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
     if (leaves < lands) {
       warnings.push({
         kind: "missed-connection",
-        afterSegmentIndex: index,
+        afterSegmentIndex: solved[index].fromIndex,
         overlapSeconds: Math.round((lands - leaves) / 1000),
       });
     }
@@ -158,7 +204,7 @@ export async function planTransitChain(args: PlanTransitChainArgs): Promise<Chai
 
   return {
     segments: solved,
-    schedule: planned.schedule,
+    schedule,
     fidelity: fidelityFor(level),
     warnings,
     ...(provider ? { provider } : {}),

@@ -1,12 +1,23 @@
 import type { ChainedTripPlan } from "@openmapx/core";
 import { describe, expect, it, vi } from "vitest";
-import { render, screen } from "@/test";
+import { render, screen, userEvent } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
 vi.mock("@/components/panels/directions/TransitRouteView", () => ({
-  TransitItineraryCard: ({ itinerary }: { itinerary: { duration: number } }) => (
-    <div data-testid="itinerary-card">{itinerary.duration}</div>
+  TransitItineraryCard: ({
+    itinerary,
+    onDetails,
+  }: {
+    itinerary: { duration: number };
+    onDetails: () => void;
+  }) => (
+    <div data-testid="itinerary-card">
+      {itinerary.duration}
+      <button type="button" onClick={onDetails}>
+        Details
+      </button>
+    </div>
   ),
 }));
 
@@ -109,5 +120,76 @@ describe("TransitChainView", () => {
       />,
     );
     expect(screen.getByText("directions.chainNoConnection")).toBeTruthy();
+  });
+});
+
+describe("backward partial transit chains", () => {
+  it("places warnings at original segment indices and retains the failed prefix warning once", async () => {
+    const onDetails = vi.fn();
+    render(
+      <TransitChainView
+        plan={{
+          ...plan,
+          segments: plan.segments.map((segment, index) => ({
+            ...segment,
+            fromIndex: index + 1,
+            toIndex: index + 2,
+          })),
+          warnings: [
+            { kind: "missed-connection", afterSegmentIndex: 1, overlapSeconds: 300 },
+            { kind: "cancelled-leg", segmentIndex: 2 },
+            { kind: "no-connection", segmentIndex: 0 },
+          ],
+        }}
+        waypointLabels={[...labels, "Hotel"]}
+        onSegmentDetails={onDetails}
+      />,
+    );
+    const cards = screen.getAllByTestId("itinerary-card");
+    const missed = screen.getByText("directions.chainMissedConnection");
+    const cancelled = screen.getByText("directions.chainCancelledLeg");
+    const failed = screen.getByText("directions.chainNoConnection");
+    expect(screen.getAllByRole("alert")).toHaveLength(3);
+    expect(
+      cards[0].compareDocumentPosition(missed) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      missed.compareDocumentPosition(cards[1]) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      cards[1].compareDocumentPosition(cancelled) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      cancelled.compareDocumentPosition(failed) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    await userEvent.click(screen.getAllByRole("button", { name: "Details" })[0]);
+    expect(onDetails).toHaveBeenCalledWith(0);
+  });
+
+  it("shows the actual late arrival and the existing deadline alert", () => {
+    render(
+      <TransitChainView
+        plan={{
+          ...plan,
+          schedule: {
+            ...plan.schedule,
+            departure: "2026-09-01T09:30:00+00:00",
+            arrival: "2026-09-01T10:30:00+00:00",
+            violations: [
+              {
+                kind: "late-arrival",
+                waypointIndex: 1,
+                requiredBy: "2026-09-01T10:00:00+00:00",
+                earliestArrival: "2026-09-01T10:30:00+00:00",
+                shortfallSeconds: 1800,
+              },
+            ],
+          },
+        }}
+        waypointLabels={labels}
+      />,
+    );
+    expect(screen.getByText(/09:30 – 10:30/)).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("directions.scheduleLateArrival");
   });
 });

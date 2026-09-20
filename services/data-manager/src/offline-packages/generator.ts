@@ -19,7 +19,9 @@ import {
   assertOfflinePackagePrincipal,
   MemoryOfflinePackageAccountingStore,
   type OfflinePackageAccountingStore,
+  OfflinePackageCapacityError,
   OfflinePackagePrincipalQuotaError,
+  type OfflinePackageRemoval,
 } from "./accounting.js";
 import { OfflinePackageSourceError } from "./source-catalog.js";
 import type {
@@ -46,14 +48,7 @@ const combineGlyphPbf = loadCommonJs("@mapbox/glyph-pbf-composite") as {
   combine(buffers: Buffer[], fontstack?: string): Buffer | undefined;
 };
 
-export class OfflinePackageCapacityError extends Error {
-  readonly errorCode = "capacity" as const;
-
-  constructor(message: string) {
-    super(`offline package capacity: ${message}`);
-    this.name = "OfflinePackageCapacityError";
-  }
-}
+export { OfflinePackageCapacityError } from "./accounting.js";
 
 function packageErrorCode(error: unknown): OfflinePackageJob["errorCode"] {
   if (error instanceof OfflinePackageSourceError) return "generation-failed";
@@ -230,38 +225,15 @@ export class OfflinePackageGenerator {
         updatedAtMs: this.clock().getTime(),
       };
       await this.ensureTrackingCapacity(job.createdAtMs);
-      await this.accounting.admit(principal, job);
+      await this.accounting.admit(principal, job, {
+        readManifest: (id) => this.storage.readPublishedManifest(id),
+        allowNewPreparingJob: this.pending.length < this.maxQueuedJobs,
+      });
       this.jobs.set(job.jobId, job);
       return asOfflinePackageJob(job);
     }
 
     const packageId = offlinePackageIdForRequest(canonical);
-    const existingManifest = await this.storage.readPublishedManifest(packageId);
-    if (existingManifest) {
-      const now = this.clock().getTime();
-      const recovered: OfflinePackageJobRecord = {
-        jobId: randomUUID(),
-        request: canonical,
-        status: "ready-to-download",
-        packageId,
-        manifest: existingManifest,
-        createdAtMs: now,
-        updatedAtMs: now,
-      };
-      await this.ensureTrackingCapacity(now);
-      const admission = await this.accounting.admitReady(principal, recovered, existingManifest);
-      for (const evictedPackageId of admission.unreferencedPackageIds) {
-        await this.storage.removePackage(evictedPackageId);
-      }
-      this.jobs.set(admission.record.jobId, admission.record);
-      return asOfflinePackageJob(admission.record);
-    }
-
-    if (this.pending.length >= this.maxQueuedJobs) {
-      throw new OfflinePackageCapacityError(
-        `preparation queue is full (${this.maxQueuedJobs} waiting jobs)`,
-      );
-    }
     const now = this.clock().getTime();
     await this.ensureTrackingCapacity(now);
     const job: OfflinePackageJobRecord = {
@@ -272,12 +244,16 @@ export class OfflinePackageGenerator {
       createdAtMs: now,
       updatedAtMs: now,
     };
-    const admission = await this.accounting.admit(principal, job);
+    const admission = await this.accounting.admit(principal, job, {
+      readManifest: (id) => this.storage.readPublishedManifest(id),
+      allowNewPreparingJob: this.pending.length < this.maxQueuedJobs,
+    });
     for (const evictedPackageId of admission.unreferencedPackageIds) {
-      await this.storage.removePackage(evictedPackageId);
+      await this.removeUnreferencedPackage(evictedPackageId);
     }
     this.jobs.set(admission.record.jobId, admission.record);
-    if (admission.createdJob) this.pending.push(admission.record);
+    if (admission.createdJob && admission.record.status === "preparing")
+      this.pending.push(admission.record);
     this.logger?.info("offline-package.prepare", {
       jobId: admission.record.jobId,
       packageId: admission.record.packageId,
@@ -525,6 +501,22 @@ export class OfflinePackageGenerator {
     }
   }
 
+  private async removeUnreferencedPackage(packageId: string): Promise<OfflinePackageRemoval> {
+    try {
+      const result = await this.accounting.removeUnreferencedArtifact(packageId, {
+        readManifest: (id) => this.storage.readPublishedManifest(id),
+        remove: (id) => this.storage.removePackage(id),
+      });
+      if (result.status === "failed")
+        this.logger?.warn("offline-package.cleanup.failed", { packageId, error: result.message });
+      return result;
+    } catch (error) {
+      const message = packageErrorMessage(error);
+      this.logger?.warn("offline-package.cleanup.failed", { packageId, error: message });
+      return { status: "failed", message };
+    }
+  }
+
   private async ensureCapacity(datasetVersion: string): Promise<void> {
     const packages = await this.storage.listPublishedPackages();
     let usage = {
@@ -557,8 +549,8 @@ export class OfflinePackageGenerator {
       if (!candidate) {
         throw new Error("offline package capacity: configured package budget is full");
       }
-      if (await this.accounting.hasArtifactReference(candidate.manifest.packageId)) continue;
-      if (!(await this.storage.removePackage(candidate.manifest.packageId))) continue;
+      const removed = await this.removeUnreferencedPackage(candidate.manifest.packageId);
+      if (removed.status !== "removed" && removed.status !== "absent") continue;
       usage = {
         packageCount: usage.packageCount - 1,
         byteLength: usage.byteLength - candidate.byteLength,
@@ -662,7 +654,7 @@ export class OfflinePackageGenerator {
       temporaryPath = undefined;
       const completion = await this.accounting.complete(job.jobId, this.workerId, manifest);
       for (const evictedPackageId of completion.unreferencedPackageIds) {
-        await this.storage.removePackage(evictedPackageId);
+        await this.removeUnreferencedPackage(evictedPackageId);
       }
       job.manifest = manifest;
       job.status = "ready-to-download";
@@ -678,11 +670,6 @@ export class OfflinePackageGenerator {
       });
     } catch (error) {
       if (temporaryPath) rmSync(temporaryPath, { force: true });
-      if (error instanceof OfflinePackagePrincipalQuotaError && job.packageId) {
-        if (!(await this.accounting.hasArtifactReference(job.packageId))) {
-          await this.storage.removePackage(job.packageId);
-        }
-      }
       if (job.status === "preparing") {
         job.status = "failed";
         job.errorCode = packageErrorCode(error);
@@ -695,6 +682,9 @@ export class OfflinePackageGenerator {
           job.errorMessage,
           job.updatedAtMs,
         );
+      }
+      if (error instanceof OfflinePackagePrincipalQuotaError && job.packageId) {
+        await this.removeUnreferencedPackage(job.packageId);
       }
       this.logger?.warn("offline-package.generation.failed", {
         jobId: job.jobId,

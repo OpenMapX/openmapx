@@ -7,6 +7,15 @@ export const DEFAULT_PRINCIPAL_MAX_QUEUED = 2;
 export const DEFAULT_PRINCIPAL_MAX_REFERENCES = 5;
 export const DEFAULT_PRINCIPAL_MAX_LOGICAL_BYTES = 5 * 1024 ** 3;
 
+export class OfflinePackageCapacityError extends Error {
+  readonly errorCode = "capacity" as const;
+
+  constructor(message: string) {
+    super(`offline package capacity: ${message}`);
+    this.name = "OfflinePackageCapacityError";
+  }
+}
+
 export class OfflinePackagePrincipalQuotaError extends Error {
   readonly errorCode = "principal-quota" as const;
 
@@ -26,13 +35,77 @@ export interface OfflinePackageAdmission extends OfflinePackageCompletion {
   createdOwner: boolean;
 }
 
+export interface OfflinePackageAdmissionOptions {
+  /** Called under the accounting lock; only bounded local metadata I/O is allowed. */
+  readManifest(packageId: string): Promise<OfflineMapPackageManifest | undefined>;
+  allowNewPreparingJob?: boolean;
+}
+
+export interface OfflinePackageArtifactAccess {
+  readManifest(packageId: string): Promise<OfflineMapPackageManifest | undefined>;
+  remove(packageId: string): Promise<boolean>;
+}
+
+export type OfflinePackageRemoval =
+  | { status: "removed" | "absent" | "retained" }
+  | { status: "failed"; message: string };
+
+/** The caller holds its accounting lock until deletion and reconciliation finish. */
+export async function removeOfflineArtifact(
+  packageId: string,
+  storage: OfflinePackageArtifactAccess,
+  invalidate: () => void | Promise<void>,
+): Promise<OfflinePackageRemoval> {
+  let removed: boolean;
+  try {
+    removed = await storage.remove(packageId);
+  } catch (error) {
+    // Deletion can throw after unlinking. Do not roll back confirmed invalidation
+    // merely because filesystem cleanup failed; admission also repairs crash gaps.
+    let absent = false;
+    try {
+      absent = !(await storage.readManifest(packageId));
+    } catch {
+      // An inspection error is not evidence that the artifact is absent.
+    }
+    if (absent) await invalidate();
+    return { status: "failed", message: error instanceof Error ? error.message : String(error) };
+  }
+  if (removed) {
+    await invalidate();
+    return { status: "removed" };
+  }
+  try {
+    if (await storage.readManifest(packageId)) return { status: "retained" };
+  } catch (error) {
+    return { status: "failed", message: error instanceof Error ? error.message : String(error) };
+  }
+  await invalidate();
+  return { status: "absent" };
+}
+
+export function assertOfflineArtifactIdentity(
+  candidate: OfflinePackageJobRecord,
+  manifest: OfflineMapPackageManifest,
+): void {
+  if (
+    manifest.packageId !== candidate.packageId ||
+    manifest.requestKey !== candidate.request.requestKey
+  ) {
+    throw new Error("Offline package artifact does not match the canonical request");
+  }
+}
+
 export interface OfflinePackageAccountingStore {
-  admit(principal: string, candidate: OfflinePackageJobRecord): Promise<OfflinePackageAdmission>;
-  admitReady(
+  admit(
     principal: string,
     candidate: OfflinePackageJobRecord,
-    manifest: OfflineMapPackageManifest,
-  ): Promise<OfflinePackageAdmission & OfflinePackageCompletion>;
+    options: OfflinePackageAdmissionOptions,
+  ): Promise<OfflinePackageAdmission>;
+  removeUnreferencedArtifact(
+    packageId: string,
+    storage: OfflinePackageArtifactAccess,
+  ): Promise<OfflinePackageRemoval>;
   getOwnedJob(principal: string, jobId: string): Promise<OfflinePackageJobRecord | undefined>;
   loadRunnable(): Promise<OfflinePackageJobRecord[]>;
   claim(jobId: string, workerId: string, maxRunning: number, leaseMs: number): Promise<boolean>;
@@ -161,97 +234,118 @@ export class MemoryOfflinePackageAccountingStore implements OfflinePackageAccoun
     }
   }
 
+  private invalidateArtifact(packageId: string): void {
+    for (const stored of this.jobs.values()) {
+      if (stored.record.packageId !== packageId || stored.record.status !== "ready-to-download")
+        continue;
+      stored.record = {
+        ...stored.record,
+        status: "expired",
+        manifest: undefined,
+        errorCode: "expired",
+        errorMessage: "offline package artifact unavailable; prepare the area again",
+        updatedAtMs: this.clock(),
+      };
+      stored.leaseOwner = undefined;
+      stored.leaseExpiresAtMs = undefined;
+    }
+    for (const refs of this.references.values()) refs.delete(packageId);
+  }
+
   async admit(
     principal: string,
     candidate: OfflinePackageJobRecord,
+    options: OfflinePackageAdmissionOptions,
   ): Promise<OfflinePackageAdmission> {
     assertPrincipal(principal);
-    return await this.atomic(() => {
-      for (const stored of this.jobs.values()) {
-        if (
-          stored.owners.has(principal) &&
-          stored.record.request.requestKey === candidate.request.requestKey &&
-          stored.record.status !== "failed" &&
-          stored.record.status !== "expired"
-        ) {
-          return {
-            record: cloneRecord(stored.record),
-            createdJob: false,
-            createdOwner: false,
-            unreferencedPackageIds: [],
-          };
-        }
-      }
-
+    return await this.atomic(async () => {
       const now = this.clock();
+      const shared = [...this.jobs.values()].find(
+        (stored) =>
+          stored.record.request.requestKey === candidate.request.requestKey &&
+          (stored.record.status === "preparing" || stored.record.status === "ready-to-download"),
+      );
       let running = 0;
       let queued = 0;
       for (const stored of this.jobs.values()) {
         if (!stored.owners.has(principal) || stored.record.status !== "preparing") continue;
-        if ((stored.leaseExpiresAtMs ?? 0) > now) running += 1;
-        else queued += 1;
+        if ((stored.leaseExpiresAtMs ?? 0) > now) running++;
+        else queued++;
       }
-
-      const shared = [...this.jobs.values()].find(
-        (stored) =>
-          stored.record.request.requestKey === candidate.request.requestKey &&
-          stored.record.status !== "failed" &&
-          stored.record.status !== "expired",
-      );
-      if (shared) {
-        const sharedRunning =
-          shared.record.status === "preparing" && (shared.leaseExpiresAtMs ?? 0) > now;
-        if (
-          shared.record.status === "preparing" &&
-          (sharedRunning ? running >= this.maxRunning : queued >= this.maxQueued)
-        ) {
+      if (shared?.record.status === "preparing") {
+        const owned = shared.owners.has(principal);
+        const live = (shared.leaseExpiresAtMs ?? 0) > now;
+        if (!owned && (live ? running >= this.maxRunning : queued >= this.maxQueued)) {
           throw new OfflinePackagePrincipalQuotaError(
-            sharedRunning
-              ? `running limit is ${this.maxRunning}`
-              : `queued limit is ${this.maxQueued}`,
+            live ? `running limit is ${this.maxRunning}` : `queued limit is ${this.maxQueued}`,
           );
-        }
-        const removed = new Set<string>();
-        if (shared.record.status === "ready-to-download") {
-          const manifest = shared.record.manifest;
-          if (!manifest) throw new Error("Ready offline package is missing its manifest");
-          if (manifest.archive.byteLength > this.maxLogicalBytes) {
-            throw new OfflinePackagePrincipalQuotaError(
-              `artifact exceeds ${this.maxLogicalBytes} logical bytes`,
-            );
-          }
-          const refs = new Map(this.references.get(principal) ?? []);
-          if (!refs.has(manifest.packageId)) {
-            this.evictForNewReference(refs, manifest.archive.byteLength, removed);
-            refs.set(manifest.packageId, {
-              packageId: manifest.packageId,
-              byteLength: manifest.archive.byteLength,
-              retainedAtMs: shared.record.createdAtMs,
-            });
-          }
-          this.references.set(principal, refs);
         }
         shared.owners.add(principal);
         return {
           record: cloneRecord(shared.record),
           createdJob: false,
-          createdOwner: true,
+          createdOwner: !owned,
+          unreferencedPackageIds: [],
+        };
+      }
+      const packageId = candidate.packageId;
+      const manifest =
+        candidate.status !== "failed" && packageId
+          ? await options.readManifest(packageId)
+          : undefined;
+      if (manifest) {
+        assertOfflineArtifactIdentity(candidate, manifest);
+        if (manifest.archive.byteLength > this.maxLogicalBytes) {
+          throw new OfflinePackagePrincipalQuotaError(
+            `artifact exceeds ${this.maxLogicalBytes} logical bytes`,
+          );
+        }
+        // Stage all quota effects. atomic() is a mutex, not rollback support.
+        const refs = new Map(this.references.get(principal) ?? []);
+        const removed = new Set<string>();
+        if (!refs.has(manifest.packageId)) {
+          this.evictForNewReference(refs, manifest.archive.byteLength, removed);
+          refs.set(manifest.packageId, {
+            packageId: manifest.packageId,
+            byteLength: manifest.archive.byteLength,
+            retainedAtMs: candidate.createdAtMs,
+          });
+        }
+        const stored = shared ?? { record: cloneRecord(candidate), owners: new Set<string>() };
+        const owned = stored.owners.has(principal);
+        stored.record = {
+          ...stored.record,
+          status: "ready-to-download",
+          manifest: structuredClone(manifest),
+        };
+        stored.owners.add(principal);
+        this.references.set(principal, refs);
+        this.jobs.set(stored.record.jobId, stored);
+        return {
+          record: cloneRecord(stored.record),
+          createdJob: !shared,
+          createdOwner: !owned,
           unreferencedPackageIds: [...removed].filter(
-            (packageId) =>
-              ![...this.references.values()].some((references) => references.has(packageId)),
+            (id) => ![...this.references.values()].some((items) => items.has(id)),
           ),
         };
       }
-
-      if (candidate.status === "preparing" && queued >= this.maxQueued) {
-        throw new OfflinePackagePrincipalQuotaError(`queued limit is ${this.maxQueued}`);
+      if (candidate.status !== "failed") {
+        if (options.allowNewPreparingJob === false)
+          throw new OfflinePackageCapacityError("preparation queue is full");
+        if (queued >= this.maxQueued)
+          throw new OfflinePackagePrincipalQuotaError(`queued limit is ${this.maxQueued}`);
       }
-      this.jobs.set(candidate.jobId, {
-        record: cloneRecord(candidate),
-        owners: new Set([principal]),
-      });
+      // Invalidate only after all admission checks have passed.
+      if (packageId && candidate.status !== "failed") this.invalidateArtifact(packageId);
+      const record = {
+        ...cloneRecord(candidate),
+        status: candidate.status === "failed" ? ("failed" as const) : ("preparing" as const),
+        manifest: undefined,
+      };
+      this.jobs.set(record.jobId, { record, owners: new Set([principal]) });
       return {
-        record: cloneRecord(candidate),
+        record: cloneRecord(record),
         createdJob: true,
         createdOwner: true,
         unreferencedPackageIds: [],
@@ -259,90 +353,19 @@ export class MemoryOfflinePackageAccountingStore implements OfflinePackageAccoun
     });
   }
 
-  async admitReady(
-    principal: string,
-    candidate: OfflinePackageJobRecord,
-    manifest: OfflineMapPackageManifest,
-  ): Promise<OfflinePackageAdmission & OfflinePackageCompletion> {
-    assertPrincipal(principal);
-    if (manifest.archive.byteLength > this.maxLogicalBytes) {
-      throw new OfflinePackagePrincipalQuotaError(
-        `artifact exceeds ${this.maxLogicalBytes} logical bytes`,
+  async removeUnreferencedArtifact(
+    packageId: string,
+    storage: OfflinePackageArtifactAccess,
+  ): Promise<OfflinePackageRemoval> {
+    return await this.atomic(async () => {
+      if (
+        this.isBeingPrepared(packageId) ||
+        [...this.references.values()].some((refs) => refs.has(packageId))
+      )
+        return { status: "retained" };
+      return await removeOfflineArtifact(packageId, storage, () =>
+        this.invalidateArtifact(packageId),
       );
-    }
-    return await this.atomic(() => {
-      let stored = [...this.jobs.values()].find(
-        (item) =>
-          item.record.request.requestKey === candidate.request.requestKey &&
-          item.record.status !== "failed" &&
-          item.record.status !== "expired",
-      );
-      const createdJob = !stored;
-      if (!stored) {
-        stored = {
-          record: {
-            ...cloneRecord(candidate),
-            status: "ready-to-download",
-            manifest: structuredClone(manifest),
-          },
-          owners: new Set(),
-        };
-        this.jobs.set(stored.record.jobId, stored);
-      }
-      if (stored.owners.has(principal)) {
-        return {
-          record: cloneRecord(stored.record),
-          createdJob: false,
-          createdOwner: false,
-          unreferencedPackageIds: [],
-        };
-      }
-      if (stored.record.status === "preparing") {
-        const now = this.clock();
-        let running = 0;
-        let queued = 0;
-        for (const item of this.jobs.values()) {
-          if (!item.owners.has(principal) || item.record.status !== "preparing") continue;
-          if ((item.leaseExpiresAtMs ?? 0) > now) running += 1;
-          else queued += 1;
-        }
-        const sharedRunning = (stored.leaseExpiresAtMs ?? 0) > now;
-        if (sharedRunning ? running >= this.maxRunning : queued >= this.maxQueued) {
-          throw new OfflinePackagePrincipalQuotaError(
-            sharedRunning
-              ? `running limit is ${this.maxRunning}`
-              : `queued limit is ${this.maxQueued}`,
-          );
-        }
-        stored.owners.add(principal);
-        return {
-          record: cloneRecord(stored.record),
-          createdJob: false,
-          createdOwner: true,
-          unreferencedPackageIds: [],
-        };
-      }
-      const refs = new Map(this.references.get(principal) ?? []);
-      const removed = new Set<string>();
-      if (!refs.has(manifest.packageId)) {
-        this.evictForNewReference(refs, manifest.archive.byteLength, removed);
-        refs.set(manifest.packageId, {
-          packageId: manifest.packageId,
-          byteLength: manifest.archive.byteLength,
-          retainedAtMs: candidate.createdAtMs,
-        });
-      }
-      this.references.set(principal, refs);
-      stored.owners.add(principal);
-      return {
-        record: cloneRecord(stored.record),
-        createdJob,
-        createdOwner: true,
-        unreferencedPackageIds: [...removed].filter(
-          (packageId) =>
-            ![...this.references.values()].some((references) => references.has(packageId)),
-        ),
-      };
     });
   }
 

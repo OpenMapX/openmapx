@@ -7,7 +7,7 @@ import type { Sql } from "postgres";
 import { db } from "../../db/index.js";
 import type { DriftGuard } from "./drift-guard.js";
 import type { PoiIngestMetricsSink } from "./metrics.js";
-import { createPoiJobRow, getLastPoiFeedState } from "./persistence.js";
+import { createPoiJobRow, finalizePoiJobRow, getLastPoiFeedState } from "./persistence.js";
 import { runOneAndPersist } from "./runner.js";
 import type { PoiSingleFlight } from "./single-flight.js";
 import type { PoiIngestKind, PoiJobLogger } from "./types.js";
@@ -375,9 +375,26 @@ export function registerPoiIngestApi(app: FastifyInstance, opts: PoiIngestApiOpt
     let previousStaticHash: string | undefined;
     let previousStaticRowCount: number | undefined;
     if (kind === "bundled") {
-      const prev = await getLastPoiFeedState(source.id);
-      previousStaticHash = prev?.lastStaticHash ?? undefined;
-      previousStaticRowCount = prev?.lastStaticRowCount ?? undefined;
+      try {
+        const prev = await getLastPoiFeedState(source.id);
+        previousStaticHash = prev?.lastStaticHash ?? undefined;
+        previousStaticRowCount = prev?.lastStaticRowCount ?? undefined;
+      } catch (err) {
+        // The async runner has not taken ownership of cleanup yet.
+        try {
+          await finalizePoiJobRow(jobId, "error");
+        } catch (finalizeErr) {
+          logger.warn("poi-ingest-api: finalizePoiJobRow failed", {
+            sourceId: source.id,
+            kind,
+            jobId,
+            err: (finalizeErr as Error).message,
+          });
+        } finally {
+          opts.singleFlight.release(source.id, kind);
+        }
+        throw err;
+      }
     }
 
     void (async () => {

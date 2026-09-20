@@ -33,20 +33,23 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
 
     const placeCount = sql<number>`(SELECT COUNT(*) FROM saved_place WHERE saved_place.list_id = saved_list.id)::int`;
 
-    let lists = await db
-      .select({
-        id: savedList.id,
-        name: savedList.name,
-        icon: savedList.icon,
-        isPrivate: savedList.isPrivate,
-        sortOrder: savedList.sortOrder,
-        createdAt: savedList.createdAt,
-        updatedAt: savedList.updatedAt,
-        placeCount,
-      })
-      .from(savedList)
-      .where(eq(savedList.userId, userId))
-      .orderBy(savedList.sortOrder);
+    const readLists = () =>
+      db
+        .select({
+          id: savedList.id,
+          name: savedList.name,
+          icon: savedList.icon,
+          isPrivate: savedList.isPrivate,
+          sortOrder: savedList.sortOrder,
+          createdAt: savedList.createdAt,
+          updatedAt: savedList.updatedAt,
+          placeCount,
+        })
+        .from(savedList)
+        .where(eq(savedList.userId, userId))
+        .orderBy(savedList.sortOrder);
+
+    let lists = await readLists();
 
     if (lists.length === 0) {
       const now = new Date();
@@ -60,16 +63,9 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         updatedAt: now,
       }));
       await db.insert(savedList).values(rows).onConflictDoNothing();
-      lists = rows.map((r) => ({
-        id: r.id,
-        name: r.name,
-        icon: r.icon,
-        isPrivate: true,
-        sortOrder: r.sortOrder,
-        createdAt: r.createdAt,
-        updatedAt: r.updatedAt,
-        placeCount: 0,
-      }));
+      // A concurrent request may have inserted these names with different IDs.
+      // Return the persisted rows, including any places already saved to them.
+      lists = await readLists();
     }
 
     return { lists };

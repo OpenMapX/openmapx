@@ -42,6 +42,7 @@ export function TransitChainView({
 }: TransitChainViewProps) {
   const t = useTranslations("directions");
   const labelFor = (index: number) => waypointLabels[index] ?? String(index + 1);
+  const displayedSegments = new Set(plan.segments.map((segment) => segment.fromIndex));
 
   const messageFor = (warning: ChainPlanWarning): string => {
     switch (warning.kind) {
@@ -96,7 +97,7 @@ export function TransitChainView({
             onDetails={() => onSegmentDetails?.(index)}
           />
           {plan.warnings
-            .filter((warning) => warningSegment(warning) === index)
+            .filter((warning) => warningSegment(warning) === segment.fromIndex)
             .map((warning) => (
               <Typography
                 key={warningKey(warning)}
@@ -112,7 +113,10 @@ export function TransitChainView({
         </Fragment>
       ))}
       {plan.warnings
-        .filter((warning) => warningSegment(warning) === plan.segments.length)
+        .filter((warning) => {
+          const index = warningSegment(warning);
+          return index === null || !displayedSegments.has(index);
+        })
         .map((warning) => (
           <Typography
             key={warningKey(warning)}

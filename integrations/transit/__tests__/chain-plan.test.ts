@@ -332,3 +332,206 @@ describe("planTransitChain", () => {
     }
   });
 });
+
+describe("backward actual transit times", () => {
+  const base = {
+    waypoints: [COLOGNE, BONN],
+    schedules: [{ timeZone: "UTC" }, { timeZone: "UTC" }],
+    anchor: { kind: "arriveBy" as const, wallClock: "2026-09-01T10:00" },
+    baseRequest: {},
+    capabilities: CAPABILITIES,
+  };
+
+  it("reports the actual late arrival and exact shortfall", async () => {
+    const plan = await planTransitChain({
+      ...base,
+      planTrip: async () => result([itinerary("2026-09-01T09:30:00Z", "2026-09-01T10:30:00Z")]),
+    });
+    expect(plan.schedule.arrival).toBe("2026-09-01T10:30:00+00:00");
+    expect(plan.schedule.totalTravelSeconds).toBe(3600);
+    expect(plan.schedule.violations).toContainEqual({
+      kind: "late-arrival",
+      waypointIndex: 1,
+      requiredBy: "2026-09-01T10:00:00+00:00",
+      earliestArrival: "2026-09-01T10:30:00+00:00",
+      shortfallSeconds: 1800,
+    });
+  });
+
+  it("preserves early arrival without adding destination waiting", async () => {
+    const plan = await planTransitChain({
+      ...base,
+      planTrip: async () => result([itinerary("2026-09-01T09:00:00Z", "2026-09-01T09:50:00Z")]),
+    });
+    expect(plan.schedule.arrival).toBe("2026-09-01T09:50:00+00:00");
+    expect(plan.schedule.totalTravelSeconds).toBe(3000);
+    expect(plan.schedule.totalWaitSeconds).toBe(0);
+    expect(plan.schedule.violations).toEqual([]);
+  });
+
+  it("selects an on-time alternative instead of the provider's first late service", async () => {
+    const plan = await planTransitChain({
+      ...base,
+      planTrip: async () =>
+        result([
+          itinerary("2026-09-01T09:30:00Z", "2026-09-01T10:30:00Z"),
+          itinerary("2026-09-01T09:00:00Z", "2026-09-01T09:55:00Z"),
+        ]),
+    });
+    expect(plan.segments[0].itinerary.endTime).toBe("2026-09-01T09:55:00Z");
+  });
+
+  it("uses the stricter final waypoint deadline for requests and violations", async () => {
+    const planTrip = vi.fn(async (_request: TripPlanRequest) =>
+      result([itinerary("2026-09-01T09:00:00Z", "2026-09-01T09:50:00Z")]),
+    );
+    const plan = await planTransitChain({
+      ...base,
+      schedules: [{ timeZone: "UTC" }, { timeZone: "UTC", arriveBy: "2026-09-01T09:45" }],
+      planTrip,
+    });
+    expect(planTrip.mock.calls[0][0]).toMatchObject({ arrivalTime: "2026-09-01T09:45:00.000Z" });
+    expect(plan.schedule.violations.filter((v) => v.kind === "late-arrival")).toEqual([
+      {
+        kind: "late-arrival",
+        waypointIndex: 1,
+        requiredBy: "2026-09-01T09:45:00+00:00",
+        earliestArrival: "2026-09-01T09:50:00+00:00",
+        shortfallSeconds: 300,
+      },
+    ]);
+  });
+
+  it("separates boarding wait from mandatory dwell and departure windows", async () => {
+    const plan = await planTransitChain({
+      ...base,
+      waypoints: [COLOGNE, BONN, AACHEN],
+      schedules: [
+        { timeZone: "UTC" },
+        { timeZone: "UTC", dwellSeconds: 600, departAfter: "2026-09-01T10:20" },
+        { timeZone: "UTC" },
+      ],
+      anchor: { kind: "arriveBy", wallClock: "2026-09-01T12:00" },
+      planTrip: async (request) =>
+        result([
+          request.from.lat === BONN.lat
+            ? itinerary("2026-09-01T10:30:00Z", "2026-09-01T11:00:00Z")
+            : itinerary("2026-09-01T09:00:00Z", "2026-09-01T10:00:00Z"),
+        ]),
+    });
+    expect(plan.segments.map((segment) => segment.boardingWaitSeconds)).toEqual([0, 600]);
+    expect(plan.schedule.totalWaitSeconds).toBe(1200);
+  });
+
+  it("walks from service departure minus dwell and reports insufficient dwell", async () => {
+    const planTrip = vi.fn(async (request: TripPlanRequest) =>
+      request.from.lat === BONN.lat
+        ? result([itinerary("2026-09-01T11:00:00Z", "2026-09-01T11:50:00Z")])
+        : result([itinerary("2026-09-01T10:00:00Z", "2026-09-01T10:55:00Z")]),
+    );
+    const plan = await planTransitChain({
+      ...base,
+      waypoints: [COLOGNE, BONN, AACHEN],
+      schedules: [{ timeZone: "UTC" }, { timeZone: "UTC", dwellSeconds: 600 }, { timeZone: "UTC" }],
+      anchor: { kind: "arriveBy", wallClock: "2026-09-01T12:00" },
+      planTrip,
+    });
+    expect(planTrip.mock.calls[1][0].arrivalTime).toBe("2026-09-01T10:50:00.000Z");
+    expect(plan.schedule.stops[1]).toMatchObject({
+      arrival: "2026-09-01T10:55:00+00:00",
+      departure: "2026-09-01T11:00:00+00:00",
+      dwellSeconds: 600,
+      waitSeconds: 0,
+    });
+    expect(plan.schedule.violations).toContainEqual({
+      kind: "early-departure",
+      waypointIndex: 1,
+      allowedFrom: "2026-09-01T11:05:00+00:00",
+      latestDeparture: "2026-09-01T11:00:00+00:00",
+      shortfallSeconds: 300,
+    });
+    expect(plan.warnings).not.toContainEqual(
+      expect.objectContaining({ kind: "missed-connection" }),
+    );
+  });
+
+  it("retains original suffix indices and overlap warnings when the prefix fails", async () => {
+    const planTrip = vi.fn(async (request: TripPlanRequest) =>
+      request.from.lat === AACHEN.lat
+        ? result([itinerary("2026-09-01T11:00:00Z", "2026-09-01T11:50:00Z")])
+        : request.from.lat === BONN.lat
+          ? result([itinerary("2026-09-01T10:00:00Z", "2026-09-01T11:05:00Z")])
+          : result([]),
+    );
+    const plan = await planTransitChain({
+      ...base,
+      waypoints: [COLOGNE, BONN, AACHEN, COLOGNE],
+      schedules: [
+        { timeZone: "UTC" },
+        { timeZone: "UTC", dwellSeconds: 600 },
+        { timeZone: "UTC" },
+        { timeZone: "UTC" },
+      ],
+      anchor: { kind: "arriveBy", wallClock: "2026-09-01T12:00" },
+      planTrip,
+    });
+    expect(plan.segments.map((s) => s.fromIndex)).toEqual([1, 2]);
+    expect(plan.schedule.stops.map((s) => s.waypointIndex)).toEqual([1, 2, 3]);
+    expect(plan.schedule.stops[0]).toMatchObject({
+      dwellSeconds: 0,
+      waitSeconds: 0,
+      departure: "2026-09-01T10:00:00+00:00",
+    });
+    expect(plan.schedule.stops[0].arrival).toBeUndefined();
+    expect(plan.schedule.totalDwellSeconds).toBe(0);
+    expect(plan.warnings).toContainEqual({
+      kind: "missed-connection",
+      afterSegmentIndex: 1,
+      overlapSeconds: 300,
+    });
+    expect(plan.warnings).toContainEqual({ kind: "no-connection", segmentIndex: 0 });
+  });
+
+  it("filters invalid intervals but retains zero-duration service", async () => {
+    const plan = await planTransitChain({
+      ...base,
+      planTrip: async () =>
+        result([
+          itinerary("invalid", "2026-09-01T09:00:00Z"),
+          itinerary("2026-09-01T09:30:00Z", "2026-09-01T09:00:00Z"),
+          itinerary("2026-09-01T10:00:00Z", "2026-09-01T10:00:00Z"),
+        ]),
+    });
+    expect(plan.schedule.totalTravelSeconds).toBe(0);
+    expect(plan.schedule.departure).toBe("2026-09-01T10:00:00+00:00");
+    expect(plan.segments[0].alternatives).toEqual([]);
+  });
+
+  it("returns a destination-only diagnostic when every interval is invalid", async () => {
+    const plan = await planTransitChain({
+      ...base,
+      planTrip: async () => result([itinerary("invalid", "invalid")]),
+    });
+    expect(plan.segments).toEqual([]);
+    expect(plan.schedule.stops).toEqual([
+      { waypointIndex: 1, timeZone: "UTC", dwellSeconds: 0, waitSeconds: 0, utcOffsetMinutes: 0 },
+    ]);
+    expect(plan.schedule.departure).toBe("2026-09-01T10:00:00+00:00");
+    expect(plan.schedule.arrival).toBe("2026-09-01T10:00:00+00:00");
+    expect(plan.schedule.violations).toContainEqual({
+      kind: "unreachable",
+      fromIndex: 0,
+      toIndex: 1,
+    });
+  });
+
+  it("retains positive actual duration when the service starts after the deadline", async () => {
+    const plan = await planTransitChain({
+      ...base,
+      planTrip: async () => result([itinerary("2026-09-01T10:15:00Z", "2026-09-01T10:45:00Z")]),
+    });
+    expect(plan.schedule.totalTravelSeconds).toBe(1800);
+    expect(plan.schedule.departure).toBe("2026-09-01T10:15:00+00:00");
+    expect(plan.schedule.arrival).toBe("2026-09-01T10:45:00+00:00");
+  });
+});
