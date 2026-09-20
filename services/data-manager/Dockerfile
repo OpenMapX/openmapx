@@ -113,14 +113,14 @@ FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
-# libexpat1 is named explicitly because the packages that pull it in are
-# satisfied by the base image's older build, which predates the fix for
-# CVE-2026-56408.
+# Explicitly upgrade libraries already satisfied by the pinned base image:
+# libexpat1 fixes CVE-2026-56408; libpcre2-8-0 fixes CVE-2026-86145,
+# CVE-2026-89157 and CVE-2026-89161.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       osmium-tool curl unzip bzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
-      libexpat1 \
+      libexpat1 libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Static Docker CLI so the data-manager can invoke `docker exec` (feed-proxy
@@ -130,9 +130,9 @@ RUN apt-get update \
 # the daemon, systemd units, or third-party apt repos. Pin to a recent stable
 # release; the CLI is forward/backward-compatible with daemons within a few
 # minor versions.
-ARG DOCKER_CLI_VERSION=29.7.2
-ARG DOCKER_CLI_SHA256_AMD64=803d433f226db4776e1768fd319fc6c6e4935a456acf84fcc0080818b854bc8f
-ARG DOCKER_CLI_SHA256_ARM64=43d143448adf2c2787704e7d7704fd6d62d367a54c5edaef0a3f75509cb0938d
+ARG DOCKER_CLI_VERSION=29.8.1
+ARG DOCKER_CLI_SHA256_AMD64=d8db66739d2e28d4933786d73e918d9be643a67fbd835db1bf740d650a259e70
+ARG DOCKER_CLI_SHA256_ARM64=667395fbffab52901b80181dfbb39ea76da2fbd7642c4fbddd24e42146b07b48
 RUN set -eux; \
     arch="$(uname -m)"; \
     case "$arch" in \

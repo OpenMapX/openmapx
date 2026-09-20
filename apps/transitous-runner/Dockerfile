@@ -63,9 +63,10 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # git is required because the upstream attribution script reads the catalog's
 # submodule metadata; there is no credential helper and no remote configured.
+# Explicitly upgrade PCRE2 inherited from the pinned base to its security fix.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      ca-certificates curl git python3 python3-pip python3-venv age \
+      ca-certificates curl git python3 python3-pip python3-venv age libpcre2-8-0 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED

@@ -24,9 +24,10 @@ ARG MOTIS_SHA256_ARM64=236175665bda3714481aa26879b5ebd9078e29950b8bc35bdd07d9d49
 # available inside the RUN below.
 ARG TARGETARCH
 
+# Explicitly upgrade PCRE2 inherited from the pinned base to its security fix.
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
-      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age \
+      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age libpcre2-8-0 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
