@@ -9,7 +9,7 @@
     "registrationIds": [],
     "operatorInstructions": null
   },
-  "domains": ["geocoding"],
+  "domains": ["geocoding", "search-suggestions"],
   "dependencies": ["geocoding"],
   "backend": {
     "routes": false

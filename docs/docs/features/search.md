@@ -52,7 +52,9 @@ badge shows what matched.
 
 Coverage is intentionally tiered. OurAirports provides global airport codes.
 Enabled transit providers contribute the public stop codes their source
-actually exposes. OpenStreetMap aliases, references, and generated acronyms are
+actually exposes. Regional geocoders such as Entur (Norway) and DB RIS (German
+railway stations) contribute their stop places when the map is centred inside
+their coverage. OpenStreetMap aliases, references, and generated acronyms are
 available inside the one PBF region for which the operator has built the local
 search index. Generated acronyms require an exact match and are limited to
 high-signal institutions and facilities; lowercase matches must also be nearby

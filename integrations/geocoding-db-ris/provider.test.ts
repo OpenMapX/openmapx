@@ -74,12 +74,15 @@ describe("dbRisGeocodingService.autocomplete", () => {
     expect(results).toEqual([
       {
         id: "eva:8000207",
+        ids: { eva: "8000207" },
         label: "Köln Hbf",
         sublabel: "Köln",
         coordinates: [6.9589, 50.9431],
         type: "transit_stop",
         transitStop: {
           id: "eva:8000207",
+          primaryScheme: "eva",
+          ids: { eva: "8000207" },
           name: "Köln Hbf",
           lat: 50.9431,
           lng: 6.9589,

@@ -119,6 +119,42 @@ describe("search suggestion primitives", () => {
     expect(merged[0].contributingProviders).toEqual(["search-osm-aliases", "transit", "db"]);
   });
 
+  it("measures same-place distance geodesically so high latitudes are not penalised", () => {
+    // 0.015° of longitude at 60°N is roughly 830 m: the same station seen by two sources.
+    const merged = mergeAutocompleteSuggestions(
+      [
+        {
+          id: "nsr:StopPlace:337",
+          label: "Oslo S",
+          coordinates: [10.75, 59.911],
+          type: "transit_stop",
+          provider: "geocoding-entur",
+        },
+        {
+          id: "osm:node/1",
+          label: "Oslo S",
+          coordinates: [10.765, 59.911],
+          type: "poi",
+          provider: "geocoder",
+        },
+      ],
+      "oslo",
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].contributingProviders).toEqual(["geocoding-entur", "geocoder"]);
+  });
+
+  it("keeps same-named places apart beyond a kilometre", () => {
+    const merged = mergeAutocompleteSuggestions(
+      [
+        { id: "one", label: "Bahnhofstraße", coordinates: [7, 50], type: "street" },
+        { id: "two", label: "Bahnhofstraße", coordinates: [7.02, 50], type: "street" },
+      ],
+      "bahnhof",
+    );
+    expect(merged).toHaveLength(2);
+  });
+
   it("does not coordinate-deduplicate different canonical labels", () => {
     const merged = mergeAutocompleteSuggestions(
       [

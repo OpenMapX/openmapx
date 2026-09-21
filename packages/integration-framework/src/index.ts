@@ -205,6 +205,10 @@ export { integrationEnvVarName } from "./env-var";
 export type { IntegrationEvent } from "./events";
 export { IntegrationEventBus } from "./events";
 export {
+  createGeocoderSuggestionProvider,
+  type GeocoderSuggestionOptions,
+} from "./geocoder-suggestions";
+export {
   type BoundingBoxLimits,
   clampViewportBoundingBox,
   type PointLimits,

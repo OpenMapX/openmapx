@@ -7,6 +7,7 @@ import {
   resolvePoiIconPath,
   type SearchResult,
 } from "@openmapx/core";
+import type { Wgs84BoundingBox } from "@openmapx/integration-framework";
 import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 
@@ -102,10 +103,28 @@ const MODE_KEY_MAP: Record<string, TransportMode> = {
   monorail: "monorail",
 };
 
+/**
+ * Generous bounding boxes for the countries Entur's geocoder can be scoped to.
+ * Used only to skip suggestion fan-out for queries anchored far away; the
+ * `boundary.country` filter on the request does the precise scoping.
+ */
+const COUNTRY_COVERAGE: Record<string, Wgs84BoundingBox> = {
+  NOR: [4, 57.5, 32, 72],
+  SWE: [10.5, 55, 24.5, 69.5],
+};
+
 let baseUrl = DEFAULT_BASE_URL;
 let clientName = DEFAULT_CLIENT_NAME;
 let boundaryCountry = DEFAULT_BOUNDARY_COUNTRY;
 let multiModal: EnturMultiModal = DEFAULT_MULTI_MODAL;
+
+/**
+ * Coverage box for the configured boundary country, or `undefined` when the
+ * geocoder is unscoped or scoped to a country without a known box.
+ */
+export function getEnturCoverage(): Wgs84BoundingBox | undefined {
+  return boundaryCountry ? COUNTRY_COVERAGE[boundaryCountry] : undefined;
+}
 
 export function setEnturGeocodingConfig(config: {
   endpoint?: string;

@@ -72,8 +72,11 @@ export function stopPlaceToAutocompleteResult(
 ): AutocompleteResult {
   const name = stopName(stop, lang);
   const city = stopCity(stop, lang);
+  const ids = { eva: stop.evaNumber };
   const transitStop: TransitStop = {
     id: `eva:${stop.evaNumber}`,
+    primaryScheme: "eva",
+    ids,
     name,
     lat: stop.position.latitude,
     lng: stop.position.longitude,
@@ -82,6 +85,7 @@ export function stopPlaceToAutocompleteResult(
   };
   return {
     id: `eva:${stop.evaNumber}`,
+    ids,
     label: name,
     sublabel: city || undefined,
     coordinates: [stop.position.longitude, stop.position.latitude],

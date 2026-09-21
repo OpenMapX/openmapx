@@ -5,7 +5,13 @@ import type { SearchMatchKind } from "../types/searchSuggestion";
 import { haversineDistance } from "./coordinates";
 
 const MAX_PROXIMITY_METERS = 100_000;
-const COORDINATE_DEDUPE_SQUARED_DEGREES = 0.0001;
+/**
+ * Two same-named suggestions closer than this are treated as one place. Wide
+ * enough that a station record from a rail operator, the OSM station node and
+ * a timetable stop (which can sit several hundred metres apart on a large
+ * station) collapse; the label check keeps distinct neighbours apart.
+ */
+const SAME_PLACE_MAX_METERS = 1_000;
 
 const MATCH_TIERS: Record<SearchMatchKind, number> = {
   authoritative_code: 400,
@@ -98,9 +104,7 @@ function hasSharedIdentity(a?: Ids, b?: Ids): boolean {
 function hasSameCanonicalLocation(a: AutocompleteResult, b: AutocompleteResult): boolean {
   if (!a.coordinates || !b.coordinates) return false;
   if (normalizeSearchTerm(a.label) !== normalizeSearchTerm(b.label)) return false;
-  const lngDelta = a.coordinates[0] - b.coordinates[0];
-  const latDelta = a.coordinates[1] - b.coordinates[1];
-  return lngDelta * lngDelta + latDelta * latDelta < COORDINATE_DEDUPE_SQUARED_DEGREES;
+  return haversineDistance(a.coordinates, b.coordinates) < SAME_PLACE_MAX_METERS;
 }
 
 function sameSuggestion(a: AutocompleteResult, b: AutocompleteResult): boolean {
