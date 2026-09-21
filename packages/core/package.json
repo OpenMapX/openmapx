@@ -143,7 +143,7 @@
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.7",
     "esbuild": "^0.28.2",
-    "react-dom": "19.2.8",
+    "react-dom": "19.3.0",
     "typescript": "^6.0.3",
     "vitest": "^4.1.11"
   },
@@ -169,7 +169,7 @@
     "better-auth": "1.7.2",
     "js-yaml": "^5.4.1",
     "opening_hours": "^3.14.0",
-    "react": "19.2.8",
+    "react": "19.3.0",
     "tz-lookup": "^6.1.25",
     "undici": "8.10.2",
     "zod": "^4.5.4",
