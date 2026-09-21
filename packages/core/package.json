@@ -156,9 +156,9 @@
     }
   },
   "dependencies": {
-    "@better-auth/core": "1.7.2",
-    "@better-auth/oauth-provider": "1.7.2",
-    "@better-auth/passkey": "1.7.2",
+    "@better-auth/core": "1.7.4",
+    "@better-auth/oauth-provider": "1.7.4",
+    "@better-auth/passkey": "1.7.4",
     "@openmapx/air-quality": "workspace:*",
     "@openmapx/mobility-core": "workspace:^",
     "@tanstack/react-query": "^5.102.8",
@@ -166,7 +166,7 @@
     "@turf/nearest-point-on-line": "^7.4.0",
     "@types/geojson": "^7946.0.16",
     "@types/tz-lookup": "^6.1.2",
-    "better-auth": "1.7.2",
+    "better-auth": "1.7.4",
     "js-yaml": "^5.4.1",
     "opening_hours": "^3.14.0",
     "react": "19.3.0",
