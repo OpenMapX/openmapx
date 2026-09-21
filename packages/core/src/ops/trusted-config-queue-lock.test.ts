@@ -431,7 +431,10 @@ describe("trusted configuration retained-budget lock", () => {
       ownerGid: statSync(root).gid,
       participant: "ops-agent",
       operationKey: "opk1_fedcba9876543210",
-      ttlMs: 100,
+      // The crashed holder's short lease is what has to expire here; the
+      // recovered lease needs a TTL that survives a scheduler stall, otherwise
+      // assertHeld reports a busy queue on a loaded runner.
+      ttlMs: 5_000,
       acquireTimeoutMs: 1_000,
     });
     recovered.assertHeld();
@@ -446,7 +449,9 @@ describe("trusted configuration retained-budget lock", () => {
       ownerGid: statSync(root).gid,
       participant: "api" as const,
       operationKey: "opk1_0123456789abcdef",
-      ttlMs: 100,
+      // The losing attempt is bounded by its acquire timeout, so the holder's
+      // lease only has to stay live across it and the assertion below.
+      ttlMs: 5_000,
       acquireTimeoutMs: 75,
     };
     const first = await acquireTrustedConfigurationQueueLock(options);
