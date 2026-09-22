@@ -64,7 +64,7 @@ function isHighCardinalityQuery(query: Query): boolean {
  * into a second giant string. It intentionally favors a conservative estimate
  * over exact JavaScript heap accounting.
  */
-function estimateBytes(value: unknown, stopAfter: number): number {
+function estimateBytes(value: unknown, stopAfter: number): { bytes: number; exact: boolean } {
   const stack: unknown[] = [value];
   const seen = new WeakSet<object>();
   let bytes = 0;
@@ -99,7 +99,23 @@ function estimateBytes(value: unknown, stopAfter: number): number {
     }
   }
 
-  return bytes;
+  return { bytes, exact: stack.length === 0 };
+}
+
+// Query data is immutable; weak keys let removed queries and payloads be collected.
+const measurements = new WeakMap<Query, { data: unknown; bytes: number; exact: boolean }>();
+
+function measureQuery(query: Query, stopAfter: number): number {
+  const previous = measurements.get(query);
+  if (
+    previous &&
+    Object.is(previous.data, query.state.data) &&
+    (previous.exact || previous.bytes > stopAfter)
+  )
+    return previous.bytes;
+  const result = estimateBytes(query.state.data, stopAfter);
+  measurements.set(query, { data: query.state.data, ...result });
+  return result.bytes;
 }
 
 function measure(client: QueryClient, stopAfter: number): MeasuredQuery[] {
@@ -110,7 +126,7 @@ function measure(client: QueryClient, stopAfter: number): MeasuredQuery[] {
     .map((query) => ({
       query,
       active: query.getObserversCount() > 0,
-      estimatedBytes: estimateBytes(query.state.data, stopAfter),
+      estimatedBytes: measureQuery(query, stopAfter),
     }));
 }
 
@@ -160,12 +176,12 @@ export function pruneHighCardinalityQueryCache(
 
   return {
     before,
-    after: collectHighCardinalityQueryCacheMetrics(client),
+    after: { activeCount: before.activeCount, inactiveCount, estimatedBytes },
     removed,
   };
 }
 
-/** Install a debounced budget check for successful/removed query-cache events. */
+/** Install a debounced check for data and observer membership changes. */
 export function installHighCardinalityQueryCacheBudget(client: QueryClient): () => void {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const schedule = () => {
@@ -175,7 +191,18 @@ export function installHighCardinalityQueryCacheBudget(client: QueryClient): () 
       pruneHighCardinalityQueryCache(client);
     }, 1_000);
   };
-  const unsubscribe = client.getQueryCache().subscribe(schedule);
+  const unsubscribe = client.getQueryCache().subscribe((event) => {
+    if (!isHighCardinalityQuery(event.query)) return;
+    if (
+      event.type === "added" ||
+      event.type === "observerAdded" ||
+      event.type === "observerRemoved" ||
+      (event.type === "updated" &&
+        (event.action.type === "success" || event.action.type === "setState"))
+    )
+      schedule();
+    // Removal only lowers the budget; scheduling it would feed back into pruning.
+  });
   schedule();
 
   return () => {

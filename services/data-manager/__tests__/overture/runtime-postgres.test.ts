@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { DatabaseClient } from "@openmapx/integration-framework";
+import { latLngToCell } from "h3-js";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { resolveGers } from "../../../../integrations/knowledge-overture/provider.js";
 import { buildSchemaDDL } from "../../src/jobs/overture/schema.js";
@@ -37,6 +38,42 @@ describe.skipIf(skipE2e)("Overture runtime behavior in PostGIS", () => {
     if (previousDatabaseUrl === undefined) delete process.env.DATABASE_URL;
     else process.env.DATABASE_URL = previousDatabaseUrl;
   });
+
+  it("backfills 25,000 rows in key order, preserves prefilled values, and restarts after a failed batch", async () => {
+    await pg.sql.unsafe(buildSchemaDDL("overture_h3test", { deferPlacesIndexes: true }));
+    await ingestModule.backfillDerivedColumns("overture_h3test");
+    await pg.sql.unsafe(`INSERT INTO overture_h3test.places (gers_id, geom, h3_r8, release)
+      SELECT lpad(i::text, 8, '0'), ST_SetSRID(ST_MakePoint(8 + (i % 100) / 10000.0, 50),4326),
+        CASE WHEN i % 7 = 0 THEN 'prefilled' ELSE NULL END, 'synthetic'
+      FROM generate_series(25000,1,-1) i`);
+    await pg.sql.unsafe(`CREATE FUNCTION overture_h3test.fail_late() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN IF NEW.gers_id > '00010000' THEN RAISE EXCEPTION 'injected late batch failure'; END IF; RETURN NEW; END $$;
+      CREATE TRIGGER fail_late BEFORE UPDATE ON overture_h3test.places FOR EACH ROW EXECUTE FUNCTION overture_h3test.fail_late()`);
+    await expect(ingestModule.backfillDerivedColumns("overture_h3test")).rejects.toThrow(
+      "injected late batch failure",
+    );
+    const [partial] = await pg.sql.unsafe(
+      `SELECT count(*)::int AS count FROM overture_h3test.places WHERE h3_r8 IS NOT NULL AND h3_r8 <> 'prefilled'`,
+    );
+    expect(partial.count).toBe(5000);
+    await pg.sql.unsafe("DROP TRIGGER fail_late ON overture_h3test.places");
+    await ingestModule.backfillDerivedColumns("overture_h3test");
+    const rows = await pg.sql.unsafe<{ gers_id: string; h3_r8: string }[]>(
+      "SELECT gers_id, h3_r8 FROM overture_h3test.places",
+    );
+    expect(rows).toHaveLength(25000);
+    for (const row of rows) {
+      const i = Number(row.gers_id);
+      expect(row.h3_r8).toBe(
+        i % 7 === 0 ? "prefilled" : latLngToCell(50, 8 + (i % 100) / 10000, 8),
+      );
+    }
+    // An all-filled restart must perform no writes.
+    await pg.sql.unsafe(
+      `CREATE TRIGGER fail_late BEFORE UPDATE ON overture_h3test.places FOR EACH ROW EXECUTE FUNCTION overture_h3test.fail_late()`,
+    );
+    await ingestModule.backfillDerivedColumns("overture_h3test");
+  }, 60_000);
 
   it("executes the spatial fallback with one SRID and resolves the nearby place", async () => {
     await pg.sql.unsafe(

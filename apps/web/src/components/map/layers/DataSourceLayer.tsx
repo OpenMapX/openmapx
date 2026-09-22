@@ -33,7 +33,7 @@ import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSour
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
-import { upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
+import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
@@ -211,6 +211,7 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
 }
 
 export function DataSourceLayer() {
+  const publish = useRef(createGeoJsonSourcePublisher()).current;
   const t = useTranslations("dataSources");
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const activeSource = useDataSourceStore((s) => s.activeSource);
@@ -428,6 +429,21 @@ export function DataSourceLayer() {
     prevSourceRef.current = activeSource;
   }, [activeSource, mapReady, styleVersion, mapRef]);
 
+  const geojson = useMemo(
+    () =>
+      buildGeoJson(
+        filteredResults,
+        (summary) => {
+          if (summary === undefined) return undefined;
+          if (isI18nToken(summary)) return resolveToken(summary);
+          if (typeof summary === "number") return String(summary);
+          return translateDataSourceSummary(summary, t);
+        },
+        activeMeta?.markerStyle.type === "icon" ? `ds-marker-${activeSource}` : undefined,
+      ),
+    [filteredResults, activeMeta, activeSource, resolveToken, t],
+  );
+
   // Sync GeoJSON source + layers
   useEffect(() => {
     void styleVersion;
@@ -453,22 +469,12 @@ export function DataSourceLayer() {
 
       const useIconMarkers = activeMeta.markerStyle.type === "icon";
       const imageId = useIconMarkers ? `ds-marker-${activeSource}` : undefined;
-      const geojson = buildGeoJson(
-        filteredResults,
-        (summary) => {
-          if (summary === undefined) return undefined;
-          if (isI18nToken(summary)) return resolveToken(summary);
-          if (typeof summary === "number") return String(summary);
-          return translateDataSourceSummary(summary, t);
-        },
-        imageId,
-      );
 
-      upsertGeoJsonSource(map, sid, geojson);
+      publish(map, sid, geojson);
 
       const mapContextData = mapContext?.geojson;
       if (mapContextData && mapContextData.features.length > 0) {
-        upsertGeoJsonSource(map, mapContextSid, mapContextData);
+        publish(map, mapContextSid, mapContextData);
 
         if (!map.getLayer(mapContextFillLid)) {
           const isDark = document.documentElement.classList.contains("dark");
@@ -636,14 +642,13 @@ export function DataSourceLayer() {
   }, [
     activeSource,
     activeMeta,
-    filteredResults,
+    geojson,
+    publish,
     viewportZoom,
     mapReady,
     styleVersion,
     mapRef,
     mapContext,
-    t,
-    resolveToken,
   ]);
 
   const { setSelectedPlace } = usePlaceStore();

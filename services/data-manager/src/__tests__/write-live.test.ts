@@ -9,11 +9,12 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { type EdgeOverride, edgeKey } from "../jobs/traffic/conditions-to-edges.js";
+import { createLiveTrafficWriter } from "../jobs/traffic/live-writer-client.js";
 import { encodeClosedTrafficSpeed, encodeTrafficSpeed } from "../jobs/traffic/traffic-speed.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
-import { writeLiveTraffic } from "../jobs/traffic/write-live.js";
+import { writeLiveTraffic as writeDirect } from "../jobs/traffic/write-live.js";
 
 /**
  * Hand-crafted USTAR tar fixture matching the CONFIRMED Valhalla
@@ -178,7 +179,10 @@ function backwardRecordOffset(): number {
   return TILE_DATA_OFFSET + TRAFFIC_TILE_HEADER_SIZE + TRAFFIC_SPEED_RECORD_SIZE * BACKWARD_INDEX;
 }
 
-describe("writeLiveTraffic", () => {
+describe.each(["direct", "worker"] as const)("writeLiveTraffic %s", (mode) => {
+  const owner = createLiveTrafficWriter();
+  const writeLiveTraffic = mode === "direct" ? writeDirect : owner.write;
+  afterAll(() => owner.close());
   let dir: string;
   let tarPath: string;
   let statePath: string;
@@ -558,7 +562,10 @@ function overrideMap(
   return new Map(entries.map((entry) => [edgeKey(entry.edge), entry]));
 }
 
-describe("writeLiveTraffic overrides", () => {
+describe.each(["direct", "worker"] as const)("writeLiveTraffic overrides %s", (mode) => {
+  const owner = createLiveTrafficWriter();
+  const writeLiveTraffic = mode === "direct" ? writeDirect : owner.write;
+  afterAll(() => owner.close());
   let dir: string;
   let tarPath: string;
   let statePath: string;

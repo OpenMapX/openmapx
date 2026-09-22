@@ -19,10 +19,10 @@ import {
 } from "@openmapx/core";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
-import { upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
+import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
@@ -222,6 +222,7 @@ function buildTransitGeoJson(stops: TransitStop[]) {
 }
 
 export function CategoryResultMarkers() {
+  const publish = useRef(createGeoJsonSourcePublisher()).current;
   const { mapRef, mapReady, styleVersion, flyTo } = useMap();
   const {
     activeCategory,
@@ -240,6 +241,19 @@ export function CategoryResultMarkers() {
   const hoveredPlace = results?.find((p) => p.id === hoveredCategoryPlaceId) ?? null;
   usePinMarker(hoveredPlace?.coordinates ?? null, hoveredPlace?.name ?? "");
 
+  const fallbackImageId =
+    mode === "text" ? "category-marker-text" : `category-marker-${activeCategory}`;
+  const categoryGeojson = useMemo(
+    () => buildGeoJson(results ?? [], fallbackImageId, new Set()),
+    [results, fallbackImageId],
+  );
+  const qids = useMemo(() => distinctBrandQids(results ?? []), [results]);
+  const transitModes = useMemo(
+    () => [...new Set((transitStops ?? []).flatMap((stop) => stop.modes))],
+    [transitStops],
+  );
+  const transitGeojson = useMemo(() => buildTransitGeoJson(transitStops ?? []), [transitStops]);
+
   // Sync GeoJSON source + layers
   useEffect(() => {
     void styleVersion;
@@ -253,6 +267,11 @@ export function CategoryResultMarkers() {
     // just be a local variable inside `sync` — it has to span every `sync`
     // call this effect instance made.
     let cancelled = false;
+    const initialized = new WeakSet<object>();
+    const markerPending = new WeakSet<object>();
+    const brandPending = new WeakSet<object>();
+    const brandPublished = new WeakMap<object, string>();
+    let categoryData = categoryGeojson;
 
     const removeCategoryLayers = () => {
       if (map.getLayer(LABEL_LAYER_ID)) map.removeLayer(LABEL_LAYER_ID);
@@ -287,14 +306,20 @@ export function CategoryResultMarkers() {
           return;
         }
 
-        const geojson = buildTransitGeoJson(transitStops);
+        const source = publish(map, TRANSIT_SOURCE_ID, transitGeojson);
+        if (
+          markerPending.has(source) ||
+          (map.getLayer(TRANSIT_LAYER_ID) &&
+            map.getLayer(TRANSIT_LABEL_LAYER_ID) &&
+            transitModes.every((mode) => map.hasImage(`transit-marker-${mode}`)))
+        )
+          return;
+        markerPending.add(source);
 
-        upsertGeoJsonSource(map, TRANSIT_SOURCE_ID, geojson);
-
-        // Load marker images for all unique modes, then add layers
-        const uniqueModes = Array.from(new Set(transitStops.flatMap((s) => s.modes)));
-        void Promise.all(uniqueModes.map((m) => loadTransitMarkerImage(map, m))).then(() => {
-          if (!map.getSource(TRANSIT_SOURCE_ID)) return;
+        // Reconcile missing layers/images without republishing unchanged data.
+        void Promise.all(transitModes.map((m) => loadTransitMarkerImage(map, m))).then(() => {
+          markerPending.delete(source);
+          if (cancelled || map.getSource(TRANSIT_SOURCE_ID) !== source) return;
           if (!map.getLayer(TRANSIT_LAYER_ID)) {
             addLayerInSlot(
               map,
@@ -350,61 +375,68 @@ export function CategoryResultMarkers() {
 
       const iconPath =
         mode === "text" ? TEXT_MARKER_ICON_PATH : poiCategoryIconPath(activeCategory ?? "");
-      const fallbackImageId =
-        mode === "text" ? "category-marker-text" : `category-marker-${activeCategory}`;
+
       // First paint uses only the fallback icon — this is the entire branded
       // vs. unbranded distinction of the pre-brand code, unchanged. Brand
       // logos are layered on afterward so a slow or empty logo fetch never
       // delays markers from appearing at all.
-      const geojson = buildGeoJson(results, fallbackImageId, new Set());
-
-      upsertGeoJsonSource(map, SOURCE_ID, geojson);
+      const existing = map.getSource(SOURCE_ID);
+      if (!existing || !initialized.has(existing)) categoryData = categoryGeojson;
+      const source = publish(map, SOURCE_ID, categoryData);
+      initialized.add(source);
 
       // Load image then add layers (image may already be cached)
-      void loadMarkerImage(map, fallbackImageId, iconPath).then(() => {
-        if (!map.getSource(SOURCE_ID)) return;
-        if (!map.getLayer(LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: LAYER_ID,
-              type: "symbol",
-              source: SOURCE_ID,
-              layout: {
-                "icon-image": ["get", "imageId"],
-                "icon-allow-overlap": true,
-                "icon-ignore-placement": true,
+      if (
+        !markerPending.has(source) &&
+        (!map.getLayer(LAYER_ID) || !map.getLayer(LABEL_LAYER_ID) || !map.hasImage(fallbackImageId))
+      ) {
+        markerPending.add(source);
+        void loadMarkerImage(map, fallbackImageId, iconPath).then(() => {
+          markerPending.delete(source);
+          if (cancelled || map.getSource(SOURCE_ID) !== source) return;
+          if (!map.getLayer(LAYER_ID)) {
+            addLayerInSlot(
+              map,
+              {
+                id: LAYER_ID,
+                type: "symbol",
+                source: SOURCE_ID,
+                layout: {
+                  "icon-image": ["get", "imageId"],
+                  "icon-allow-overlap": true,
+                  "icon-ignore-placement": true,
+                },
               },
-            },
-            "route-markers",
-            6,
-          );
-        }
-        if (!map.getLayer(LABEL_LAYER_ID)) {
-          addLayerInSlot(
-            map,
-            {
-              id: LABEL_LAYER_ID,
-              type: "symbol",
-              source: SOURCE_ID,
-              layout: {
-                "text-field": ["get", "name"],
-                "text-size": 11,
-                "text-offset": [0, 2.0],
-                "text-anchor": "top",
-                "text-max-width": 8,
+              "route-markers",
+              6,
+            );
+          }
+          if (!map.getLayer(LABEL_LAYER_ID)) {
+            addLayerInSlot(
+              map,
+              {
+                id: LABEL_LAYER_ID,
+                type: "symbol",
+                source: SOURCE_ID,
+                layout: {
+                  "text-field": ["get", "name"],
+                  "text-size": 11,
+                  "text-offset": [0, 2.0],
+                  "text-anchor": "top",
+                  "text-max-width": 8,
+                },
+                paint: {
+                  "text-color": "#333333",
+                  "text-halo-color": "#FFFFFF",
+                  "text-halo-width": 1.5,
+                },
               },
-              paint: {
-                "text-color": "#333333",
-                "text-halo-color": "#FFFFFF",
-                "text-halo-width": 1.5,
-              },
-            },
-            "route-markers",
-            7,
-          );
-        }
-      });
+              "route-markers",
+              7,
+            );
+          }
+        });
+      }
 
       // Brand logos: one image load per distinct QID in this result set
       // (`loadBrandMarkerImage` short-circuits on `map.hasImage`, so panning
@@ -412,21 +444,29 @@ export function CategoryResultMarkers() {
       // fallback-icon load above; once resolved, swap the matching pins over
       // to their logo. `cancelled`/`getSource` re-checked here because this can
       // resolve after a newer `sync()` call (or teardown) already moved on.
-      const qids = distinctBrandQids(results);
-      if (qids.length > 0) {
+      const allBrandIds = qids.map(brandImageId);
+      if (
+        qids.length > 0 &&
+        !brandPending.has(source) &&
+        !(
+          allBrandIds.every((id) => map.hasImage(id)) &&
+          brandPublished.get(source) === allBrandIds.join(",")
+        )
+      ) {
+        brandPending.add(source);
         void Promise.all(
           qids.map(async (qid) => ((await loadBrandMarkerImage(map, qid)) ? qid : null)),
         ).then((loaded) => {
-          if (cancelled || !map.getSource(SOURCE_ID)) return;
+          brandPending.delete(source);
+          if (cancelled || map.getSource(SOURCE_ID) !== source) return;
           const brandImageIds = new Set(
             loaded.filter((qid): qid is string => qid !== null).map((qid) => brandImageId(qid)),
           );
-          if (brandImageIds.size === 0) return;
-          upsertGeoJsonSource(
-            map,
-            SOURCE_ID,
-            buildGeoJson(results, fallbackImageId, brandImageIds),
-          );
+          const revision = [...brandImageIds].join(",");
+          if (brandImageIds.size === 0 || brandPublished.get(source) === revision) return;
+          brandPublished.set(source, revision);
+          categoryData = buildGeoJson(results, fallbackImageId, brandImageIds);
+          publish(map, SOURCE_ID, categoryData);
         });
       }
     };
@@ -437,6 +477,12 @@ export function CategoryResultMarkers() {
       unsubscribeStyle();
     };
   }, [
+    publish,
+    categoryGeojson,
+    qids,
+    transitModes,
+    transitGeojson,
+    fallbackImageId,
     results,
     activeCategory,
     mode,

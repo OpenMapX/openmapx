@@ -163,91 +163,90 @@ export function createPlaceTransit(
     placeId?: string,
   ): Promise<MobilityResult<TransitStop[]>> {
     const key = hashKey("transit:place-stops", { id: placeCacheId(lat, lng, name, placeId) });
-    const cached = await cache.get<CachedStopsEnvelope>(key);
-    if (cached) {
-      return { data: cached.stops, attributions: cached.attributions, freshness: cached.freshness };
-    }
+    // All four station-panel requests share this discovery, including cold misses.
+    const envelope = await cache.withCache<CachedStopsEnvelope>(key, TTL.placeStops, async () => {
+      // Scope dynamic providers to a ~1 degree buffer around the place (approx 100 km) so that
+      // providers from distant regions don't contribute stops that share stop-database
+      // IDs but would then return their own regional routes via getRoutesForStop.
+      const buf = 1.0;
+      const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
+      // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
+      // providers indexing either form are found, then deduplicate by stop id.
+      const variants = getQueryVariants(name);
+      const variantResults = await Promise.all(
+        variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
+      );
+      const attributions = mergeAttributions(
+        ctx.attributionIndex,
+        ...variantResults.map((r) => r.attributions),
+      );
+      const freshness = mergeFreshness(...variantResults.map((r) => r.freshness));
+      const seen = new Set<string>();
+      const raw = variantResults
+        .flatMap((r) => r.data)
+        .filter((s) => {
+          if (seen.has(s.id)) return false;
+          seen.add(s.id);
+          return true;
+        });
+      const normVariants = variants
+        .map((v) => normalizeLinkName(v))
+        .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
 
-    // Scope dynamic providers to a ~1 degree buffer around the place (approx 100 km) so that
-    // providers from distant regions don't contribute stops that share stop-database
-    // IDs but would then return their own regional routes via getRoutesForStop.
-    const buf = 1.0;
-    const placeBbox: BBox = [lng - buf, lat - buf, lng + buf, lat + buf];
-    // Search with all synonym variants (e.g. "Hbf" + "Hauptbahnhof") so that
-    // providers indexing either form are found, then deduplicate by stop id.
-    const variants = getQueryVariants(name);
-    const variantResults = await Promise.all(
-      variants.map((v) => orchestrator.searchByNameRaw(v, 30, placeBbox)),
-    );
-    const attributions = mergeAttributions(
-      ctx.attributionIndex,
-      ...variantResults.map((r) => r.attributions),
-    );
-    const freshness = mergeFreshness(...variantResults.map((r) => r.freshness));
-    const seen = new Set<string>();
-    const raw = variantResults
-      .flatMap((r) => r.data)
-      .filter((s) => {
-        if (seen.has(s.id)) return false;
-        seen.add(s.id);
-        return true;
+      // First-pass candidates: distance + fuzzy name match against any query variant.
+      const prelim = raw.filter((stop) => {
+        if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
+        const stopNorm = normalizeLinkName(stop.name);
+        if (!stopNorm) return false;
+        let best = 0;
+        for (const q of normVariants) {
+          const score = diceSimilarity(stopNorm, q);
+          if (score > best) best = score;
+        }
+        return best >= MIN_NAME_DICE;
       });
-    const normVariants = variants
-      .map((v) => normalizeLinkName(v))
-      .filter((v, i, arr) => v.length > 0 && arr.indexOf(v) === i);
 
-    // First-pass candidates: distance + fuzzy name match against any query variant.
-    const prelim = raw.filter((stop) => {
-      if (haversineMeters(lat, lng, stop.lat, stop.lng) > LINK_RADIUS_M) return false;
-      const stopNorm = normalizeLinkName(stop.name);
-      if (!stopNorm) return false;
-      let best = 0;
+      if (prelim.length === 0) {
+        return { stops: [], attributions, freshness };
+      }
+
+      // Second-pass pruning: avoid linking by city token only.
+      // Keep candidates that share at least one informative token from the place
+      // name variants (tokens present in some, but not all, prelim candidates).
+      const tokenFreq = new Map<string, number>();
+      const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(s.name)));
+      for (const tokens of prelimTokenSets) {
+        for (const t of tokens) {
+          tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
+        }
+      }
+
+      const placeTokens = new Set<string>();
       for (const q of normVariants) {
-        const score = diceSimilarity(stopNorm, q);
-        if (score > best) best = score;
+        for (const t of tokenizeLinkName(q)) {
+          if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
+          if (/^\d+$/.test(t)) continue;
+          placeTokens.add(t);
+        }
       }
-      return best >= MIN_NAME_DICE;
+
+      const informativeTokens = Array.from(placeTokens).filter((t) => {
+        const count = tokenFreq.get(t) ?? 0;
+        return count > 0 && count < prelim.length;
+      });
+
+      const linked =
+        informativeTokens.length === 0
+          ? prelim
+          : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
+
+      return { stops: linked, attributions, freshness };
     });
-
-    if (prelim.length === 0) {
-      const envelope: CachedStopsEnvelope = { stops: [], attributions, freshness };
-      await cache.set(key, envelope, TTL.placeStops);
-      return { data: [], attributions, freshness };
-    }
-
-    // Second-pass pruning: avoid linking by city token only.
-    // Keep candidates that share at least one informative token from the place
-    // name variants (tokens present in some, but not all, prelim candidates).
-    const tokenFreq = new Map<string, number>();
-    const prelimTokenSets = prelim.map((s) => new Set(tokenizeLinkName(s.name)));
-    for (const tokens of prelimTokenSets) {
-      for (const t of tokens) {
-        tokenFreq.set(t, (tokenFreq.get(t) ?? 0) + 1);
-      }
-    }
-
-    const placeTokens = new Set<string>();
-    for (const q of normVariants) {
-      for (const t of tokenizeLinkName(q)) {
-        if (t.length < MIN_INFORMATIVE_TOKEN_LEN) continue;
-        if (/^\d+$/.test(t)) continue;
-        placeTokens.add(t);
-      }
-    }
-
-    const informativeTokens = Array.from(placeTokens).filter((t) => {
-      const count = tokenFreq.get(t) ?? 0;
-      return count > 0 && count < prelim.length;
-    });
-
-    const linked =
-      informativeTokens.length === 0
-        ? prelim
-        : prelim.filter((_, i) => informativeTokens.some((t) => prelimTokenSets[i].has(t)));
-
-    const envelope: CachedStopsEnvelope = { stops: linked, attributions, freshness };
-    await cache.set(key, envelope, TTL.placeStops);
-    return { data: linked, attributions, freshness };
+    return {
+      data: envelope.stops,
+      attributions: envelope.attributions,
+      freshness: envelope.freshness,
+    };
   }
 
   // Route merging

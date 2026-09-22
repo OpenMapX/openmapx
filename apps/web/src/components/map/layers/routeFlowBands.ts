@@ -25,15 +25,36 @@ export function clipSpans(spans: readonly RouteFlowSpan[], alongMeters: number):
 }
 
 interface PreparedRouteLine {
-  line: ReturnType<typeof lineString>;
+  geometry: LngLat[];
+  kilometers: Float64Array;
   totalMeters: number;
 }
 
-/** Turf line + measured length, built once per route geometry. */
+const preparedRoutes = new WeakMap<LngLat[], PreparedRouteLine>();
+
+/** The cumulative Turf metric is built once for each immutable route geometry. */
 function prepareRouteLine(geometry: LngLat[]): PreparedRouteLine | null {
   if (geometry.length < 2) return null;
-  const line = lineString(geometry);
-  return { line, totalMeters: length(line, { units: "kilometers" }) * 1000 };
+  const cached = preparedRoutes.get(geometry);
+  if (cached) return cached;
+  const kilometers = new Float64Array(geometry.length);
+  for (let i = 1; i < geometry.length; i++) {
+    kilometers[i] = kilometers[i - 1] + length(lineString([geometry[i - 1], geometry[i]]));
+  }
+  const prepared = { geometry, kilometers, totalMeters: kilometers[geometry.length - 1] * 1000 };
+  preparedRoutes.set(geometry, prepared);
+  return prepared;
+}
+
+function lowerBound(distances: Float64Array, value: number): number {
+  let lo = 0;
+  let hi = distances.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if (distances[mid] < value) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /**
@@ -43,16 +64,24 @@ function prepareRouteLine(geometry: LngLat[]): PreparedRouteLine | null {
  * dropped if what survives the clamp is imperceptibly short.
  */
 function sliceSpanFeature(
-  line: ReturnType<typeof lineString>,
-  totalMeters: number,
+  prepared: PreparedRouteLine,
   start: number,
   end: number,
 ): GeoJSON.Feature<GeoJSON.LineString> | null {
+  const { totalMeters, kilometers, geometry } = prepared;
   const clampedStart = Math.max(0, Math.min(start, totalMeters));
   const clampedEnd = Math.max(0, Math.min(end, totalMeters));
   if (clampedEnd - clampedStart < MIN_DRAWN_METERS) return null;
   try {
-    return lineSliceAlong(line, clampedStart / 1000, clampedEnd / 1000, { units: "kilometers" });
+    if (!Number.isFinite(totalMeters)) return null;
+    const startKm = clampedStart / 1000;
+    const endKm = clampedEnd / 1000;
+    const first = Math.max(0, lowerBound(kilometers, startKm) - 1);
+    const last = Math.max(first + 1, lowerBound(kilometers, endKm));
+    const window = lineString(geometry.slice(first, last + 1));
+    return lineSliceAlong(window, startKm - kilometers[first], endKm - kilometers[first], {
+      units: "kilometers",
+    });
   } catch {
     // Reachable when route.geometry itself is degenerate (a bad polyline
     // decode leaves a NaN coordinate): `length` then returns NaN, which both
@@ -81,12 +110,7 @@ export function buildStaticSpanFeatures(
     const prepared = prepareRouteLine(route.geometry);
     if (!prepared) continue;
     for (const span of spans) {
-      const sliced = sliceSpanFeature(
-        prepared.line,
-        prepared.totalMeters,
-        span.startMeters,
-        span.endMeters,
-      );
+      const sliced = sliceSpanFeature(prepared, span.startMeters, span.endMeters);
       if (!sliced) continue;
       features.push({
         type: "Feature",
@@ -123,19 +147,17 @@ export function buildCurrentSpanFeatures(
   alongMeters: number,
 ): GeoJSON.Feature[] {
   if (alongMeters <= 0) return [];
+  const eligible = spans.filter(
+    (span) =>
+      !(span.startMeters >= alongMeters) && !(span.endMeters - alongMeters < MIN_DRAWN_METERS),
+  );
+  if (eligible.length === 0) return [];
   const prepared = prepareRouteLine(route.geometry);
   if (!prepared) return [];
 
   const features: GeoJSON.Feature[] = [];
-  for (const span of spans) {
-    if (span.startMeters >= alongMeters) continue;
-    if (span.endMeters - alongMeters < MIN_DRAWN_METERS) continue;
-    const sliced = sliceSpanFeature(
-      prepared.line,
-      prepared.totalMeters,
-      alongMeters,
-      span.endMeters,
-    );
+  for (const span of eligible) {
+    const sliced = sliceSpanFeature(prepared, alongMeters, span.endMeters);
     if (!sliced) continue;
     features.push({
       type: "Feature",

@@ -4,7 +4,10 @@ import type { ImportedGeometry } from "@openmapx/core";
 import { geoJsonBBox, useImportedGeometryStore } from "@openmapx/core";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
-import { removeLayerAndSource, upsertGeoJsonSource } from "@/integration-api/map/layerStyleUtils";
+import {
+  createGeoJsonSourcePublisher,
+  removeLayerAndSource,
+} from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 
@@ -20,6 +23,7 @@ const COLOR = "#7c3aed";
  * points, in a distinct purple. Fits the map to the import once per file.
  */
 export function ImportedGeometryLayer() {
+  const publish = useRef(createGeoJsonSourcePublisher()).current;
   const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
   const imported = useImportedGeometryStore((s) => s.imported);
   // The import this layer has already framed the camera to. Keyed on the
@@ -42,7 +46,7 @@ export function ImportedGeometryLayer() {
     }
 
     const apply = () => {
-      upsertGeoJsonSource(map, SOURCE, imported.geojson);
+      publish(map, SOURCE, imported.geojson);
       if (!map.getLayer(FILL)) {
         addLayerInSlot(
           map,
@@ -110,7 +114,7 @@ export function ImportedGeometryLayer() {
     // Re-add after a style/theme swap (which wipes all sources). The shared
     // subscription also retries once at idle when styledata fires mid-load.
     return subscribeStyleLoaded(map, apply);
-  }, [imported, mapReady, styleVersion, mapRef, fitBounds]);
+  }, [publish, imported, mapReady, styleVersion, mapRef, fitBounds]);
 
   return null;
 }

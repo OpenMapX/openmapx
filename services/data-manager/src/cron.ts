@@ -49,6 +49,7 @@ import {
   trafficEvidencePath as resolveTrafficEvidencePath,
 } from "./jobs/traffic/evidence.js";
 import { readTrafficGraphState } from "./jobs/traffic/graph-generation.js";
+import { createLiveTrafficWriter } from "./jobs/traffic/live-writer-client.js";
 import { fetchTrafficPolicy, type TrafficPolicy } from "./jobs/traffic/policy.js";
 import { buildTrafficReceipts, type TrafficApplicationSnapshot } from "./jobs/traffic/receipts.js";
 import {
@@ -67,11 +68,7 @@ import {
   type WayEdge,
   defaultOutputPath as waysToEdgesMapPath,
 } from "./jobs/traffic/ways-to-edges.js";
-import {
-  type WriteLiveTrafficDeps,
-  type WriteLiveTrafficResult,
-  writeLiveTraffic as writeLiveTrafficDefault,
-} from "./jobs/traffic/write-live.js";
+import type { WriteLiveTrafficDeps, WriteLiveTrafficResult } from "./jobs/traffic/write-live.js";
 import {
   type CatalogBumpCandidate,
   candidateMatchesLock,
@@ -312,6 +309,8 @@ export interface CronSetupOptions {
   roadConditionsMode?: "shadow" | "active";
   readTrafficGraphGeneration?: () => Promise<string>;
   readTrafficGraphState?: () => Promise<{ generation: string; engineBootId: string }>;
+  /** Fatal worker lifecycle notification; production exits for supervisor recovery. */
+  onTrafficWriterFailure?: (error: Error) => void;
   writeLiveTraffic?: (deps: WriteLiveTrafficDeps) => Promise<WriteLiveTrafficResult>;
   /** Override the predicted-traffic bake cron schedule (e.g. for tests). */
   trafficPredictedCronExpression?: string;
@@ -357,6 +356,8 @@ export interface CronHandles {
   autoBumpCron: Cron | null;
   /** Stop all cron jobs; awaitable shutdown lives on the caller. */
   stop: () => void;
+  /** Drain the owned live writer, then wait for thread exit. */
+  closeTrafficWriter: () => Promise<void>;
   /** Test seam: directly invoke the sync handler as if the cron fired. */
   runSyncNow: () => Promise<void>;
   /** Test seam: directly invoke the heartbeat as if the cron fired. */
@@ -1136,7 +1137,14 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     });
 
   const loadCoveredWaysToEdges = options.loadWaysToEdges ?? (() => loadWaysToEdgesDefault());
-  const writeLive = options.writeLiveTraffic ?? writeLiveTrafficDefault;
+  const trafficWriter = createLiveTrafficWriter({
+    onFailure: (error) => {
+      log.warn("traffic-live: writer terminated; owner restart required", { error });
+      options.onTrafficWriterFailure?.(error);
+    },
+  });
+  const writeLive = options.writeLiveTraffic ?? trafficWriter.write;
+  const closeTrafficWriter = () => trafficWriter.close();
   const roadConditionsMode =
     options.roadConditionsMode ??
     (envString("TRAFFIC_ROAD_CONDITIONS_MODE", "shadow") === "active" ? "active" : "shadow");
@@ -1607,6 +1615,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     });
 
   function stop(): void {
+    void closeTrafficWriter().catch((err) =>
+      log.warn("traffic-live: writer shutdown failed", { err }),
+    );
     syncCron?.stop();
     feedProxyReloadCron?.stop();
     stalenessCheckCron?.stop();
@@ -1629,6 +1640,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
     trafficPredictedCron,
     autoBumpCron,
     stop,
+    closeTrafficWriter,
     runSyncNow: runSync,
     runFeedProxyReloadNow: runFeedProxyReload,
     runStalenessCheckNow: runStalenessCheck,

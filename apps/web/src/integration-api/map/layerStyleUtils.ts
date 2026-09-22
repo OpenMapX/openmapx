@@ -163,6 +163,18 @@ export function upsertGeoJsonSource(
   return map.getSource(sourceId) as GeoJSONSource;
 }
 
+/** Opt-in per-owner publisher. Source identity fences style replacements. */
+export function createGeoJsonSourcePublisher(): typeof upsertGeoJsonSource {
+  const applied = new WeakMap<GeoJSONSource, GeoJsonSourceData>();
+  return (map, sourceId, data) => {
+    const existing = map.getSource(sourceId) as GeoJSONSource | undefined;
+    if (existing && applied.get(existing) === data) return existing;
+    const source = upsertGeoJsonSource(map, sourceId, data);
+    applied.set(source, data);
+    return source;
+  };
+}
+
 export interface VectorLineReference {
   source: string;
   sourceLayer: string;

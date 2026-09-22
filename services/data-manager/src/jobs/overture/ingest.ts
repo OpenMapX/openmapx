@@ -18,7 +18,11 @@ import { readOverturePullContract } from "./stac.js";
 export async function backfillDerivedColumns(schema: string): Promise<void> {
   assertValidOvertureSchema(schema);
 
+  // Bulk loading leaves no useful null/selectivity statistics. Without this,
+  // PostgreSQL can sort repeated full scans instead of using the primary key.
+  await sql.unsafe(`ANALYZE "${schema}".places`);
   const H3_BATCH = 5_000;
+  let cursor: string | undefined;
   while (true) {
     const h3Rows = await sql<{ gers_id: string; lat: number; lng: number }[]>`
       SELECT gers_id,
@@ -26,6 +30,8 @@ export async function backfillDerivedColumns(schema: string): Promise<void> {
              ST_X(geom) AS lng
       FROM ${sql(schema)}.places
       WHERE h3_r8 IS NULL
+      ${cursor === undefined ? sql`` : sql`AND gers_id > ${cursor}`}
+      ORDER BY gers_id
       LIMIT ${H3_BATCH}
     `;
     if (h3Rows.length === 0) break;
@@ -37,9 +43,10 @@ export async function backfillDerivedColumns(schema: string): Promise<void> {
       `UPDATE "${schema}".places AS p
        SET h3_r8 = v.h3
        FROM (SELECT UNNEST($1::TEXT[]) AS gers_id, UNNEST($2::TEXT[]) AS h3) AS v
-       WHERE p.gers_id = v.gers_id`,
+       WHERE p.gers_id = v.gers_id AND p.h3_r8 IS NULL`,
       [gersIds, h3Values],
     );
+    cursor = h3Rows[h3Rows.length - 1].gers_id;
   }
 }
 

@@ -145,42 +145,6 @@ export const wikidataSource: KnowledgeProvider = {
       result.description = desc.charAt(0).toUpperCase() + desc.slice(1);
     }
 
-    // Wikipedia URL + extract (longer summary for Info tab)
-    const wikiTitle = entity.sitelinks?.[`${effectiveLang}wiki`]?.title;
-    if (wikiTitle) {
-      const encodedTitle = encodeURIComponent(wikiTitle.replace(/ /g, "_"));
-      result.wikipediaUrl = `https://${effectiveLang}.wikipedia.org/wiki/${encodedTitle}`;
-
-      const wpData = await fetchJson<{ extract?: string }>(
-        `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
-        { timeoutMs: 3000, headers: { Accept: "application/json" }, nullOnError: true },
-      );
-      if (wpData?.extract) {
-        result.wikipediaExtract = wpData.extract;
-        result.wikipediaExtractSource = ["knowledge-wikidata", "knowledge-wikipedia"];
-      }
-    }
-
-    // Main image (P18) — fetch rich metadata from Commons
-    const p18 = bestClaim(entity.claims, "P18");
-    if (p18?.mainsnak.datavalue?.type === "string") {
-      const p18Filename = p18.mainsnak.datavalue.value as string;
-      const metadata = await fetchCommonsMetadata([p18Filename]);
-      const richPhoto = metadata.get(p18Filename.replace(/_/g, " "));
-      if (richPhoto) {
-        result.photos = [richPhoto];
-      } else {
-        // Fallback if metadata fetch fails
-        result.photos = [
-          {
-            url: commonsUrl(p18Filename),
-            source: "wikimedia",
-            pageUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(p18Filename.replace(/ /g, "_"))}`,
-          },
-        ];
-      }
-    }
-
     // External platform IDs — used downstream to build direct review links
     const EXTERNAL_ID_PROPS: Record<string, string> = {
       P3108: "yelp", // Yelp business ID
@@ -233,32 +197,76 @@ export const wikidataSource: KnowledgeProvider = {
       }
     }
 
-    // Batch-resolve item labels in a single extra API call
-    if (itemsToResolve.length > 0) {
-      const allIds = [...new Set(itemsToResolve.flatMap((i) => i.ids))];
-      const labelUrl = new URL("https://www.wikidata.org/w/api.php");
-      labelUrl.searchParams.set("action", "wbgetentities");
-      labelUrl.searchParams.set("ids", allIds.join("|"));
-      labelUrl.searchParams.set("props", "labels");
-      labelUrl.searchParams.set("languages", effectiveLang);
-      labelUrl.searchParams.set("format", "json");
+    // These requests depend only on the entity; resolve them together while
+    // retaining the synchronous-facts-first ordering and optional field fallbacks.
+    await Promise.all([
+      (async () => {
+        // Wikipedia URL + extract (longer summary for Info tab)
+        const wikiTitle = entity.sitelinks?.[`${effectiveLang}wiki`]?.title;
+        if (wikiTitle) {
+          const encodedTitle = encodeURIComponent(wikiTitle.replace(/ /g, "_"));
+          result.wikipediaUrl = `https://${effectiveLang}.wikipedia.org/wiki/${encodedTitle}`;
 
-      const labelData = await fetchJson<{
-        entities?: Record<string, { labels?: Record<string, { value: string }> }>;
-      }>(labelUrl.toString(), {
-        timeoutMs: 3000,
-        headers: { Accept: "application/json" },
-        nullOnError: true,
-      });
-      if (labelData) {
-        for (const { label, ids } of itemsToResolve) {
-          const resolved = ids
-            .map((id) => labelData.entities?.[id]?.labels?.[effectiveLang]?.value)
-            .filter(Boolean) as string[];
-          if (resolved.length) facts.push({ label, value: resolved.join(", ") });
+          const wpData = await fetchJson<{ extract?: string }>(
+            `https://${effectiveLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`,
+            { timeoutMs: 3000, headers: { Accept: "application/json" }, nullOnError: true },
+          );
+          if (wpData?.extract) {
+            result.wikipediaExtract = wpData.extract;
+            result.wikipediaExtractSource = ["knowledge-wikidata", "knowledge-wikipedia"];
+          }
         }
-      }
-    }
+      })(),
+      (async () => {
+        // Main image (P18) — fetch rich metadata from Commons
+        const p18 = bestClaim(entity.claims, "P18");
+        if (p18?.mainsnak.datavalue?.type === "string") {
+          const p18Filename = p18.mainsnak.datavalue.value as string;
+          const metadata = await fetchCommonsMetadata([p18Filename]);
+          const richPhoto = metadata.get(p18Filename.replace(/_/g, " "));
+          if (richPhoto) {
+            result.photos = [richPhoto];
+          } else {
+            // Fallback if metadata fetch fails
+            result.photos = [
+              {
+                url: commonsUrl(p18Filename),
+                source: "wikimedia",
+                pageUrl: `https://commons.wikimedia.org/wiki/File:${encodeURIComponent(p18Filename.replace(/ /g, "_"))}`,
+              },
+            ];
+          }
+        }
+      })(),
+      (async () => {
+        // Batch-resolve item labels in a single extra API call
+        if (itemsToResolve.length > 0) {
+          const allIds = [...new Set(itemsToResolve.flatMap((i) => i.ids))];
+          const labelUrl = new URL("https://www.wikidata.org/w/api.php");
+          labelUrl.searchParams.set("action", "wbgetentities");
+          labelUrl.searchParams.set("ids", allIds.join("|"));
+          labelUrl.searchParams.set("props", "labels");
+          labelUrl.searchParams.set("languages", effectiveLang);
+          labelUrl.searchParams.set("format", "json");
+
+          const labelData = await fetchJson<{
+            entities?: Record<string, { labels?: Record<string, { value: string }> }>;
+          }>(labelUrl.toString(), {
+            timeoutMs: 3000,
+            headers: { Accept: "application/json" },
+            nullOnError: true,
+          });
+          if (labelData) {
+            for (const { label, ids } of itemsToResolve) {
+              const resolved = ids
+                .map((id) => labelData.entities?.[id]?.labels?.[effectiveLang]?.value)
+                .filter(Boolean) as string[];
+              if (resolved.length) facts.push({ label, value: resolved.join(", ") });
+            }
+          }
+        }
+      })(),
+    ]);
 
     if (facts.length) result.facts = facts;
 

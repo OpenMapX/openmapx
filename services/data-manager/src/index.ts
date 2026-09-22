@@ -214,6 +214,15 @@ async function start(): Promise<void> {
         singleFlight,
         logger: app.log,
         openConditionsUrl,
+        onTrafficWriterFailure: (err) => {
+          app.log.error(
+            { err },
+            "traffic writer stopped; exiting for independent supervisor recovery",
+          );
+          // The thread has exited. Leave any uncertain journal/lock for the
+          // supervisor, which also owns expiry while this process restarts.
+          process.exit(1);
+        },
         getCoveredWayIds: openConditionsUrl
           ? () => fetchCoveredWayIds(openConditionsUrl)
           : undefined,
@@ -294,6 +303,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   } catch {
     // Closing an already-closed socket throws; ignore.
   }
+  await cronHandles?.closeTrafficWriter();
   const result = await awaitInflightSync(singleFlight, 30_000);
   if (result === "timeout") {
     app.log.warn("data-manager: in-flight Transitous sync did not finish within 30s; forcing exit");

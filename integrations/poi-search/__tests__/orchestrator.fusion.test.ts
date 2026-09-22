@@ -1,5 +1,5 @@
 import { MAX_POI_SEARCH_RESULTS, OverpassTimeoutError } from "@openmapx/core";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { createPoiSearchOrchestrator } from "../orchestrator";
 import type { PoiSearchProvider, PoiSearchResult } from "../types";
 
@@ -72,6 +72,40 @@ describe("(A) Overture absent — optionality guarantee", () => {
 });
 
 describe("(B) Both registered — fusion", () => {
+  it("starts augmentation with the base and looks up links before augmentation finishes", async () => {
+    const base = Promise.withResolvers<PoiSearchResult[]>();
+    const augment = Promise.withResolvers<PoiSearchResult[]>();
+    const searchBase = vi.fn(() => base.promise);
+    const searchAugment = vi.fn(() => augment.promise);
+    const execute = vi.fn(async () => []);
+    const orch = createPoiSearchOrchestrator(
+      makeCtx(
+        [
+          { ...overpassProvider, search: searchBase },
+          { ...overtureProvider, search: searchAugment },
+        ],
+        { execute },
+      ),
+    );
+
+    const pending = orch.search("cafes", BBOX);
+    try {
+      expect(searchBase).toHaveBeenCalledTimes(1);
+      expect(searchAugment).toHaveBeenCalledTimes(1);
+      expect(execute).not.toHaveBeenCalled();
+      base.resolve([OSM_RESULT_1, OSM_RESULT_2]);
+      await vi.waitFor(() => expect(execute).toHaveBeenCalledTimes(1));
+      augment.resolve([OVERTURE_MATCHED, OVERTURE_EXTRA]);
+      const result = await pending;
+      expect(result.results).toHaveLength(3);
+      expect(result.partial).toBe(false);
+    } finally {
+      base.resolve([]);
+      augment.resolve([]);
+      await pending;
+    }
+  });
+
   it("fused result carries gersId from the matched Overture entry", async () => {
     const orch = createPoiSearchOrchestrator(makeCtx([overpassProvider, overtureProvider]));
     const result = await orch.search("cafes", BBOX);
@@ -184,6 +218,26 @@ describe("(C) Category routing", () => {
 });
 
 describe("(C2) OverpassTimeoutError propagates from fused search", () => {
+  it("does not wait for an augment when the base exhausts timeout retries", async () => {
+    const augment = Promise.withResolvers<PoiSearchResult[]>();
+    const searchBase = vi.fn(async () => {
+      throw new OverpassTimeoutError("area_too_large");
+    });
+    const orch = createPoiSearchOrchestrator(
+      makeCtx([
+        { ...overpassProvider, search: searchBase },
+        { ...overtureProvider, search: () => augment.promise },
+      ]),
+    );
+    try {
+      await expect(orch.search("cafes", BBOX)).rejects.toBeInstanceOf(OverpassTimeoutError);
+      expect(searchBase).toHaveBeenCalledTimes(4);
+    } finally {
+      // A later optional failure is already handled, even after the request rejected.
+      augment.reject(new Error("augment unavailable"));
+    }
+  });
+
   it("search() rejects with OverpassTimeoutError when overpass throws it (not swallowed)", async () => {
     const timeoutOverpass: PoiSearchProvider = {
       id: "overpass",

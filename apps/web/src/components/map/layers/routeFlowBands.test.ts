@@ -338,3 +338,67 @@ describe("buildCurrentSpanFeatures", () => {
     expect(features).toHaveLength(2);
   });
 });
+
+describe("indexed route work", () => {
+  it("does not read geometry when no span is current", () => {
+    let reads = 0;
+    const geometry = [
+      [8, 50],
+      [8, 51],
+    ] as LngLat[];
+    Object.defineProperty(geometry, 0, {
+      get() {
+        reads++;
+        return [8, 50];
+      },
+    });
+    const route: BandRoute = { id: "r", geometry, variant: "active" };
+    for (const spans of [[], [span(1000, 2000)], [span(0, 100)]]) {
+      expect(buildCurrentSpanFeatures(route, spans, 500)).toEqual([]);
+    }
+    expect(reads).toBe(0);
+  });
+
+  it("only visits a short output window after preparing a 50,000 vertex route", () => {
+    let reads = 0;
+    const geometry = Array.from({ length: 50_000 }, (_, i) => [8, 40 + i * 0.00001] as LngLat);
+    for (let i = 0; i < geometry.length; i++) {
+      const point = geometry[i];
+      Object.defineProperty(geometry, i, {
+        get() {
+          reads++;
+          return point;
+        },
+      });
+    }
+    const route: BandRoute = { id: "long", geometry, variant: "active" };
+    const spans = [span(55_000, 55_500)];
+    expect(buildCurrentSpanFeatures(route, spans, 55_100)).toHaveLength(1);
+    reads = 0;
+    expect(buildCurrentSpanFeatures(route, spans, 55_200)).toHaveLength(1);
+    expect(reads).toBeLessThan(600);
+    const reroute = {
+      ...route,
+      geometry: [
+        [9, 40],
+        [9, 41],
+      ] as LngLat[],
+    };
+    const feature = buildCurrentSpanFeatures(reroute, spans, 55_200)[0];
+    expect((feature.geometry as GeoJSON.LineString).coordinates[0][0]).toBeCloseTo(9, 9);
+  });
+
+  it("preserves Turf slices across repeats, exact vertices and the dateline", () => {
+    const geometry: LngLat[] = [
+      [179.99, 50],
+      [179.99, 50],
+      [-179.99, 50.001],
+      [-179.98, 50.002],
+    ];
+    const route: BandRoute = { id: "date", geometry, variant: "active" };
+    const vertex = length(lineString(geometry.slice(0, 3))) * 1000;
+    for (const along of [0, 100, vertex, vertex + 30]) {
+      expectMatchesOracle(route, [span(-10, vertex), span(0, 10_000), span(500, 200)], along);
+    }
+  });
+});

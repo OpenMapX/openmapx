@@ -101,6 +101,50 @@ afterEach(() => {
 });
 
 describe("Wikidata knowledge provider", () => {
+  it("starts all independent enrichment requests before waiting and retains partial results", async () => {
+    const pending = new Map<string, ReturnType<typeof Promise.withResolvers<Response>>>();
+    mockFetch.mockImplementation(async (input: unknown) => {
+      const url = String(input);
+      if (url.includes("props=claims")) return Response.json(entityBody());
+      const key = url.includes("/page/summary/")
+        ? "summary"
+        : url.includes("titles=")
+          ? "image"
+          : "labels";
+      const deferred = Promise.withResolvers<Response>();
+      pending.set(key, deferred);
+      return deferred.promise;
+    });
+
+    const lookup = wikidataSource.lookup({ wikidata: "Q243" });
+    try {
+      await vi.waitFor(() =>
+        expect([...pending.keys()].sort()).toEqual(["image", "labels", "summary"]),
+      );
+      // Complete in the opposite order; optional summary failure must not discard facts/image.
+      pending.get("labels")?.resolve(
+        Response.json({
+          entities: { Q92608: { labels: { en: { value: "Gustave Eiffel" } } } },
+        }),
+      );
+      pending.get("image")?.resolve(Response.json({ query: { pages: {} } }));
+      pending.get("summary")?.reject(new Error("summary unavailable"));
+      const result = await lookup;
+      expect(result?.wikipediaExtract).toBeUndefined();
+      expect(result?.photos?.[0]?.url).toContain("Special:FilePath");
+      expect(result?.facts).toEqual([
+        { label: "Founded", value: "1889" },
+        { label: "Height", value: "330 m" },
+        { label: "Architect", value: "Gustave Eiffel" },
+      ]);
+    } finally {
+      mockFetch.mockResolvedValue(new Response(null, { status: 503 }));
+      for (const deferred of pending.values())
+        deferred.resolve(new Response(null, { status: 503 }));
+      await lookup;
+    }
+  });
+
   it("returns null when the wikidata tag is absent", async () => {
     expect(await wikidataSource.lookup({})).toBeNull();
   });

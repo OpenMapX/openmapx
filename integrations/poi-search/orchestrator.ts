@@ -230,9 +230,9 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
     const overpassIdx = matching.findIndex((p) => p.id === BASE_PROVIDER_ID);
     const augmentProviders = matching.filter((p) => p.id !== BASE_PROVIDER_ID);
 
-    const baseResult =
+    const basePromise =
       overpassIdx >= 0
-        ? await runWithShrink(
+        ? runWithShrink(
             (currentBbox) =>
               matching[overpassIdx].search(lookupCategory, currentBbox, {
                 lang: options?.lang,
@@ -243,9 +243,10 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
             if (err instanceof OverpassTimeoutError) throw err;
             return FAILED_RUN;
           })
-        : EMPTY_RUN;
+        : Promise.resolve(EMPTY_RUN);
 
-    const augmentSettled = await Promise.all(
+    // Augments need only the original inputs, not the authoritative base result.
+    const augmentPromise = Promise.all(
       augmentProviders.map((p) =>
         runWithShrink(
           (currentBbox) => p.search(lookupCategory, currentBbox, { lang: options?.lang, osmTags }),
@@ -254,10 +255,16 @@ export function createPoiSearchOrchestrator(ctx: IntegrationContext) {
       ),
     );
 
+    const [base, augmentSettled] = await Promise.all([
+      basePromise.then(async (baseResult) => ({
+        baseResult,
+        linkMap: await buildConflationLinkMap(ctx, baseResult.results),
+      })),
+      augmentPromise,
+    ]);
+    const { baseResult, linkMap } = base;
     const osmResults = baseResult.results;
     const augmentResults = augmentSettled.flatMap((s) => s.results);
-
-    const linkMap = await buildConflationLinkMap(ctx, osmResults);
 
     const fused = fusePoiResults(
       osmResults,
