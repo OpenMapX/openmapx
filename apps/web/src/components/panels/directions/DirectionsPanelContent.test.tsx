@@ -8,7 +8,10 @@ vi.mock("next-intl", async () =>
 const useDirectionsMock = vi.fn();
 const useScheduledDirectionsMock = vi.fn();
 const useTransitPlanMock = vi.fn();
+const useTransitChainPlanMock = vi.fn();
+const useEvDirectionsMock = vi.fn();
 const useAutocompleteMock = vi.fn();
+let capabilityServices: Record<string, { available: boolean }> = {};
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return {
@@ -16,8 +19,10 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useDirections: (...a: unknown[]) => useDirectionsMock(...a),
     useScheduledDirections: (...a: unknown[]) => useScheduledDirectionsMock(...a),
     useTransitPlan: (...a: unknown[]) => useTransitPlanMock(...a),
+    useTransitChainPlan: (...a: unknown[]) => useTransitChainPlanMock(...a),
+    useEvDirections: (...a: unknown[]) => useEvDirectionsMock(...a),
     useAutocomplete: (...a: unknown[]) => useAutocompleteMock(...a),
-    useCapabilities: () => ({ services: {} }),
+    useCapabilities: () => ({ services: capabilityServices }),
     useOptimizeRoute: () => ({ mutate: vi.fn(), isPending: false }),
     useRouteInGermany: () => ({ bothInGermany: false }),
   };
@@ -31,7 +36,7 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
   ),
 }));
 
-import { useDirectionsStore, useMapStore, useSidebarStore } from "@openmapx/core";
+import { useDirectionsStore, useMapStore, useSettingsStore, useSidebarStore } from "@openmapx/core";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { DirectionsPanelContent } from "./DirectionsPanelContent";
 
@@ -55,6 +60,7 @@ interface TransitCallArgs {
 }
 
 beforeEach(() => {
+  capabilityServices = {};
   useDirectionsMock
     .mockReset()
     .mockReturnValue({ data: undefined, isLoading: false, isError: false });
@@ -64,12 +70,19 @@ beforeEach(() => {
   useTransitPlanMock
     .mockReset()
     .mockReturnValue({ data: undefined, isLoading: false, isError: false });
+  useTransitChainPlanMock
+    .mockReset()
+    .mockReturnValue({ data: undefined, isLoading: false, isError: false });
+  useEvDirectionsMock
+    .mockReset()
+    .mockReturnValue({ data: undefined, isLoading: false, isError: false });
   useAutocompleteMock.mockReset().mockReturnValue({ data: [] });
   act(() => {
     useDirectionsStore.getState().close();
     useDirectionsStore.getState().setMode("driving");
     useSidebarStore.setState({ activeSidebarId: null });
     useMapStore.setState({ userLocation: null });
+    useSettingsStore.getState().setEvVehicleId(null);
   });
 });
 
@@ -356,23 +369,156 @@ describe("DirectionsPanelContent", () => {
     expect(screen.getByText("directions.arrivalInDestinationTime")).toBeInTheDocument();
   });
 
-  it("transit error state renders transitNotAvailable", () => {
+  it("transit request failure offers Retry for the active plan", () => {
     seedOriginDestination();
     act(() => {
       useDirectionsStore.getState().setMode("transit");
     });
-    useTransitPlanMock.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    const refetch = vi.fn();
+    useTransitPlanMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    });
 
-    renderPanel();
-    screen.getByText("directions.transitNotAvailable");
+    const view = renderPanel();
+    screen.getByText("directions.routeRequestFailed");
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(screen.queryByText("directions.noRoutesFound")).toBeNull();
+    useTransitPlanMock.mockReturnValue({
+      data: { itineraries: [], provider: "transit-motis-local" },
+      isLoading: false,
+      isError: false,
+    });
+    view.rerender(<DirectionsPanelContent />);
+    screen.getByText("directions.noRoutesFound");
+    expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
   });
 
-  it("road-mode error state renders noRoutesFound", () => {
+  it("road request failure retries without changing the endpoints", () => {
     seedOriginDestination();
-    useDirectionsMock.mockReturnValue({ data: undefined, isLoading: false, isError: true });
+    const refetch = vi.fn();
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    });
+
+    const view = renderPanel();
+    screen.getByText("directions.routeRequestFailed");
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(useDirectionsStore.getState().waypoints.map((wp) => wp.label)).toEqual([
+      "Berlin",
+      "Munich",
+    ]);
+    expect(lastArg<DirectionsCallArgs>(useDirectionsMock).waypoints).toEqual([
+      [13.3, 52.5],
+      [11.5, 48.1],
+    ]);
+    expect(screen.queryByText("directions.noRoutesFound")).toBeNull();
+    useDirectionsMock.mockReturnValue({
+      data: {
+        waypoints: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ],
+        routes: [{ mode: "driving", duration: 600, distance: 5000, legs: [] }],
+        activeRouteIndex: 0,
+      },
+      isLoading: false,
+      isError: false,
+    });
+    view.rerender(<DirectionsPanelContent />);
+    screen.getByRole("radiogroup", { name: "directions.routes" });
+    expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
+  });
+
+  it("successful empty road response offers input alternatives and supported modes", () => {
+    seedOriginDestination();
+    capabilityServices = { "routing-valhalla": { available: true } };
+    useDirectionsMock.mockReturnValue({
+      data: {
+        waypoints: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ],
+        routes: [],
+        activeRouteIndex: 0,
+      },
+      isLoading: false,
+      isError: false,
+    });
 
     renderPanel();
     screen.getByText("directions.noRoutesFound");
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "directions.changeDestination" }));
+    expect(document.activeElement).toBe(screen.getByDisplayValue("Munich"));
+    expect(useDirectionsStore.getState().waypoints[1].coords).toEqual([11.5, 48.1]);
+    const modeButtons = screen.getAllByRole("button", { name: "directions.tryMode" });
+    expect(modeButtons).toHaveLength(3);
+    fireEvent.click(modeButtons[0]);
+    expect(useDirectionsStore.getState().mode).toBe("walking");
+  });
+
+  it("does not advertise unverified or unavailable mode shortcuts", () => {
+    seedOriginDestination();
+    capabilityServices = {
+      "routing-osrm": { available: true },
+      "routing-valhalla": { available: false },
+    };
+    useDirectionsMock.mockReturnValue({
+      data: {
+        waypoints: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ],
+        routes: [],
+        activeRouteIndex: 0,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderPanel();
+    expect(screen.queryByRole("button", { name: "directions.tryMode" })).toBeNull();
+    screen.getByRole("button", { name: "directions.changeOrigin" });
+    screen.getByRole("button", { name: "directions.changeDestination" });
+  });
+
+  it("clearing a waypoint suppresses an old request failure", () => {
+    seedOriginDestination();
+    useDirectionsMock.mockImplementation((arg: unknown) => ({
+      data: undefined,
+      isLoading: false,
+      isError: (arg as DirectionsCallArgs).waypoints.length > 0,
+      refetch: vi.fn(),
+    }));
+    renderPanel();
+    screen.getByText("directions.routeRequestFailed");
+    fireEvent.change(screen.getByDisplayValue("Munich"), { target: { value: "" } });
+    expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+  });
+
+  it("keeps an active road request pending without reporting no route", () => {
+    seedOriginDestination();
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isPending: true,
+      isFetching: false,
+      isError: false,
+    });
+
+    renderPanel();
+    screen.getByRole("progressbar");
+    expect(screen.queryByText("directions.noRoutesFound")).toBeNull();
+    expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
   });
 
   it("EV mode hides the add-stop control and drops any existing intermediate waypoint", () => {
@@ -469,6 +615,57 @@ interface ScheduleCallArgs {
 }
 
 describe("scheduled trips", () => {
+  it("retries the scheduled request and ignores the disabled plain query's error", () => {
+    seedOriginDestination();
+    act(() => useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 }));
+    const scheduledRefetch = vi.fn();
+    const plainRefetch = vi.fn();
+    useScheduledDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: scheduledRefetch,
+    });
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: plainRefetch,
+    });
+
+    renderPanel();
+    screen.getByText("directions.routeRequestFailed");
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(scheduledRefetch).toHaveBeenCalledTimes(1);
+    expect(plainRefetch).not.toHaveBeenCalled();
+    expect(useDirectionsStore.getState().waypoints[1]).toMatchObject({
+      coords: [11.5, 48.1],
+      label: "Munich",
+      schedule: { dwellSeconds: 1800 },
+    });
+  });
+
+  it("treats a successful empty scheduled response as no route", () => {
+    seedOriginDestination();
+    act(() => useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 }));
+    useScheduledDirectionsMock.mockReturnValue({
+      data: {
+        waypoints: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ],
+        routes: [],
+        activeRouteIndex: 0,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderPanel();
+    screen.getByText("directions.noRoutesFound");
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+  });
+
   it("keeps using the plain directions query when nothing is constrained", () => {
     seedOriginDestination();
     renderPanel();
@@ -548,5 +745,149 @@ describe("scheduled trips", () => {
 
     const optimize = screen.getByRole("button", { name: /directions.optimizeStopOrder/ });
     expect(optimize.hasAttribute("disabled")).toBe(false);
+  });
+});
+
+describe("EV and chained transit recovery", () => {
+  it("keeps an active EV request pending without reporting no route", () => {
+    seedOriginDestination();
+    act(() => {
+      useSettingsStore.getState().setEvVehicleId("test-vehicle");
+      useDirectionsStore.getState().setEvMode(true);
+    });
+    useEvDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isPending: true,
+      isFetching: false,
+      isError: false,
+    });
+
+    renderPanel();
+    screen.getByRole("progressbar");
+    expect(screen.queryByText("directions.noRoutesFound")).toBeNull();
+    expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
+  });
+
+  it("keeps an active chained transit request pending without reporting no route", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().addWaypoint(0);
+      useDirectionsStore.getState().setWaypoint(1, [12.37, 51.34], "Leipzig");
+      useDirectionsStore.getState().setMode("transit");
+    });
+    useTransitChainPlanMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isPending: true,
+      isFetching: false,
+      isError: false,
+    });
+
+    renderPanel();
+    screen.getByRole("progressbar");
+    expect(screen.queryByText("directions.noRoutesFound")).toBeNull();
+    expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
+  });
+
+  it("retries the active EV request without changing vehicle or endpoints", () => {
+    seedOriginDestination();
+    act(() => {
+      useSettingsStore.getState().setEvVehicleId("test-vehicle");
+      useDirectionsStore.getState().setEvMode(true);
+    });
+    const refetch = vi.fn();
+    useEvDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    });
+
+    const view = renderPanel();
+    screen.getByText("directions.routeRequestFailed");
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(useSettingsStore.getState().evVehicleId).toBe("test-vehicle");
+    expect(useDirectionsStore.getState().waypoints.map((wp) => wp.label)).toEqual([
+      "Berlin",
+      "Munich",
+    ]);
+    useEvDirectionsMock.mockReturnValue({
+      data: {
+        waypoints: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ],
+        routes: [],
+        activeRouteIndex: 0,
+        stops: [],
+        totals: { driveSeconds: 0, chargeSeconds: 0, energyKwh: 0 },
+        warnings: [],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    view.rerender(<DirectionsPanelContent />);
+    screen.getByText("directions.noRoutesFound");
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+  });
+
+  it("shows chained transit failure and retries only that request", () => {
+    seedOriginDestination();
+    act(() => {
+      useDirectionsStore.getState().addWaypoint(0);
+      useDirectionsStore.getState().setWaypoint(1, [12.37, 51.34], "Leipzig");
+      useDirectionsStore.getState().setMode("transit");
+    });
+    const chainRefetch = vi.fn();
+    const planRefetch = vi.fn();
+    useTransitChainPlanMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: chainRefetch,
+    });
+    useTransitPlanMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch: planRefetch,
+    });
+
+    const view = renderPanel();
+    screen.getByText("directions.routeRequestFailed");
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(chainRefetch).toHaveBeenCalledTimes(1);
+    expect(planRefetch).not.toHaveBeenCalled();
+    expect(useDirectionsStore.getState().waypoints.map((wp) => wp.label)).toEqual([
+      "Berlin",
+      "Leipzig",
+      "Munich",
+    ]);
+    useTransitChainPlanMock.mockReturnValue({
+      data: {
+        segments: [],
+        schedule: {
+          stops: [],
+          legs: [],
+          departure: "2026-09-01T09:00:00+00:00",
+          arrival: "2026-09-01T09:00:00+00:00",
+          totalTravelSeconds: 0,
+          totalDwellSeconds: 0,
+          totalWaitSeconds: 0,
+          multiDay: false,
+          violations: [],
+        },
+        fidelity: "exact",
+        warnings: [{ kind: "no-connection", segmentIndex: 0 }],
+      },
+      isLoading: false,
+      isError: false,
+    });
+    view.rerender(<DirectionsPanelContent />);
+    screen.getByText("directions.noRoutesFound");
+    screen.getByText("directions.chainNoConnection");
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
   });
 });

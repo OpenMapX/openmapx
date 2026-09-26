@@ -61,7 +61,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DetailsView } from "@/components/panels/directions/DetailsView";
 import { EvPlanCard } from "@/components/panels/directions/EvPlanCard";
 import { EvVehiclePanel } from "@/components/panels/directions/EvVehiclePanel";
@@ -98,6 +98,54 @@ import { shareCurrentUrl } from "@/lib/deepLink";
 import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { useRouteImpacts } from "./useRouteImpacts";
+
+const GROUND_FALLBACK_MODES = ["walking", "cycling", "driving", "motorcycle"] as const;
+type GroundFallbackMode = (typeof GROUND_FALLBACK_MODES)[number];
+
+function RouteRecovery({
+  failed,
+  onRetry,
+  onEditOrigin,
+  onEditDestination,
+  modes = [],
+  onSelectMode,
+}: {
+  failed: boolean;
+  onRetry?: () => void;
+  onEditOrigin: () => void;
+  onEditDestination: () => void;
+  modes?: GroundFallbackMode[];
+  onSelectMode: (mode: GroundFallbackMode) => void;
+}) {
+  const t = useTranslations("directions");
+  const tc = useTranslations("common");
+  return (
+    <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
+      <Typography variant="body2" color={failed ? "error.main" : "text.secondary"}>
+        {t(failed ? "routeRequestFailed" : "noRoutesFound")}
+      </Typography>
+      {failed ? (
+        <Button size="small" onClick={onRetry} sx={{ mt: 1 }}>
+          {tc("retry")}
+        </Button>
+      ) : (
+        <Box sx={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: 1, mt: 1 }}>
+          <Button size="small" onClick={onEditOrigin}>
+            {t("changeOrigin")}
+          </Button>
+          <Button size="small" onClick={onEditDestination}>
+            {t("changeDestination")}
+          </Button>
+          {modes.map((mode) => (
+            <Button key={mode} size="small" onClick={() => onSelectMode(mode)}>
+              {t("tryMode", { mode: t(mode) })}
+            </Button>
+          ))}
+        </Box>
+      )}
+    </Box>
+  );
+}
 
 export function DirectionsPanelContent() {
   const t = useTranslations("directions");
@@ -224,6 +272,7 @@ export function DirectionsPanelContent() {
   const [transitPageDirection, setTransitPageDirection] = useState<"previous" | "next">("next");
   const [focusedField, setFocusedField] = useState<number | null>(null);
   const [snackbar, setSnackbar] = useState<string | null>(null);
+  const waypointListRef = useRef<HTMLDivElement>(null);
 
   const myLocationLabel = t("myLocation");
   const requestFix = useForegroundLocation();
@@ -344,9 +393,10 @@ export function DirectionsPanelContent() {
       locale,
     ],
   );
-  const { data: scheduledData } = useScheduledDirections(scheduleRequest);
+  const scheduledQuery = useScheduledDirections(scheduleRequest);
+  const { data: scheduledData } = scheduledQuery;
 
-  const { data, isLoading, isError } = useDirections({
+  const directionsQuery = useDirections({
     waypoints:
       isTransitMode || isFlightMode || isEvMode || scheduleRequest
         ? []
@@ -363,6 +413,7 @@ export function DirectionsPanelContent() {
     departAt: drivingDepartAtStr,
     arriveBy: drivingArriveByStr,
   });
+  const { data, isLoading, isError } = directionsQuery;
 
   const routesForImpact = scheduledData?.routes ?? data?.routes ?? [];
   const fastestRouteIndex = useMemo(() => {
@@ -444,7 +495,8 @@ export function DirectionsPanelContent() {
       locale,
     ],
   );
-  const { data: evData, isLoading: evLoading, isError: evIsError } = useEvDirections(evRequest);
+  const evQuery = useEvDirections(evRequest);
+  const { data: evData, isLoading: evLoading, isError: evIsError } = evQuery;
 
   // Transit plan query
   const debouncedDepartureTime = useDebounce(transitDepartureTime, 500);
@@ -565,7 +617,8 @@ export function DirectionsPanelContent() {
       activePlanningMetadata,
     ],
   );
-  const { data: transitChainData } = useTransitChainPlan(transitChainRequest);
+  const transitChainQuery = useTransitChainPlan(transitChainRequest);
+  const { data: transitChainData } = transitChainQuery;
 
   const transitPlanQuery = useTransitPlan({
     origin: isTransitMode && !transitIsChained ? origin : null,
@@ -755,6 +808,32 @@ export function DirectionsPanelContent() {
     },
     [addWaypoint],
   );
+
+  const focusWaypoint = (index: number) => {
+    waypointListRef.current?.querySelectorAll("input")[index]?.focus();
+  };
+  const valhallaAvailable = caps["routing-valhalla"]?.available === true;
+  const osrmAvailable =
+    caps["routing-osrm"]?.available === true &&
+    !avoidIncidents &&
+    !waypoints.some((wp) => wp.schedule !== undefined) &&
+    !(timeMode !== "now" && tripTime);
+  const fallbackModes = GROUND_FALLBACK_MODES.filter(
+    (candidate) =>
+      candidate !== mode &&
+      (candidate === "driving" ? valhallaAvailable || osrmAvailable : valhallaAvailable),
+  );
+  const selectFallbackMode = (nextMode: GroundFallbackMode) => {
+    setMode(nextMode);
+    setDetailsRouteIndex(null);
+    setTransitDetailsIndex(null);
+  };
+  const recoveryActions = {
+    onEditOrigin: () => focusWaypoint(0),
+    onEditDestination: () => focusWaypoint(waypoints.length - 1),
+    modes: fallbackModes,
+    onSelectMode: selectFallbackMode,
+  };
 
   const handleOptimize = useCallback(() => {
     if (routeWaypoints.length < 3) return;
@@ -1007,21 +1086,23 @@ export function DirectionsPanelContent() {
         </Box>
       )}
       {/* Waypoint list with drag-and-drop */}
-      <WaypointList
-        waypoints={waypoints}
-        inputValues={inputValues}
-        onInputChange={handleInputChange}
-        onFocus={handleWaypointFocus}
-        onBlur={handleWaypointBlur}
-        onReorder={reorderWaypoints}
-        onAdd={handleAdd}
-        onRemove={handleRemove}
-        onReverse={handleReverse}
-        onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
-        onEditSchedule={isEvMode || isFlightMode ? undefined : setScheduleEditIndex}
-        isEvMode={isEvMode}
-        t={t}
-      />
+      <Box ref={waypointListRef}>
+        <WaypointList
+          waypoints={waypoints}
+          inputValues={inputValues}
+          onInputChange={handleInputChange}
+          onFocus={handleWaypointFocus}
+          onBlur={handleWaypointBlur}
+          onReorder={reorderWaypoints}
+          onAdd={handleAdd}
+          onRemove={handleRemove}
+          onReverse={handleReverse}
+          onUseMyLocation={userLocation ? handleUseMyLocation : undefined}
+          onEditSchedule={isEvMode || isFlightMode ? undefined : setScheduleEditIndex}
+          isEvMode={isEvMode}
+          t={t}
+        />
+      </Box>
       {/* Divider + content below */}
       <Box sx={{ position: "relative" }}>
         <Divider />
@@ -1235,16 +1316,16 @@ export function DirectionsPanelContent() {
         ) : isEvMode ? (
           <>
             <EvVehiclePanel />
-            {!evVehicleId ? null : evLoading ? (
+            {!evRequest ? null : evLoading ||
+              (evIsError && evQuery.isFetching) ||
+              (!evData && !evIsError) ? (
               <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
                 <CircularProgress size={28} sx={{ color: BRAND }} />
               </Box>
             ) : evIsError ? (
-              <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-                <Typography variant="body2" sx={{ color: "error.main" }}>
-                  {t("noRoutesFound")}
-                </Typography>
-              </Box>
+              <RouteRecovery failed onRetry={() => void evQuery.refetch()} {...recoveryActions} />
+            ) : evData?.routes.length === 0 ? (
+              <RouteRecovery failed={false} {...recoveryActions} />
             ) : evData ? (
               <EvPlanCard
                 result={evData}
@@ -1252,38 +1333,47 @@ export function DirectionsPanelContent() {
               />
             ) : null}
           </>
-        ) : transitChainData ? (
-          <TransitChainView
-            plan={transitChainData}
-            waypointLabels={waypoints.map((wp) => wp.label)}
-          />
+        ) : transitIsChained ? (
+          transitChainQuery.isLoading ||
+          (transitChainQuery.isError && transitChainQuery.isFetching) ||
+          (!transitChainData && !transitChainQuery.isError) ? (
+            <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+              <CircularProgress size={28} sx={{ color: BRAND }} />
+            </Box>
+          ) : transitChainQuery.isError ? (
+            <RouteRecovery
+              failed
+              onRetry={() => void transitChainQuery.refetch()}
+              {...recoveryActions}
+            />
+          ) : transitChainData ? (
+            <>
+              {transitChainData.segments.length === 0 && (
+                <RouteRecovery failed={false} {...recoveryActions} />
+              )}
+              <TransitChainView
+                plan={transitChainData}
+                waypointLabels={waypoints.map((wp) => wp.label)}
+              />
+            </>
+          ) : null
         ) : isTransitMode ? (
-          transitLoading ? (
+          transitLoading ||
+          (transitError && transitPlanQuery.isFetching) ||
+          (!transitPlanData && !transitError) ? (
             <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
               <CircularProgress size={28} sx={{ color: BRAND }} />
             </Box>
           ) : transitError ? (
-            <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "error.main",
-                }}
-              >
-                {t("transitNotAvailable")}
-              </Typography>
-            </Box>
+            <RouteRecovery
+              failed
+              onRetry={() => void transitPlanQuery.refetch()}
+              {...recoveryActions}
+            />
+          ) : transitPlanData?.itineraries.length === 0 && !transitPageToken ? (
+            <RouteRecovery failed={false} {...recoveryActions} />
           ) : transitItineraries.length === 0 ? (
-            <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                {t("noRoutesFound")}
-              </Typography>
-            </Box>
+            <RouteRecovery failed={false} {...recoveryActions} />
           ) : (
             <>
               {transitItineraries.map((itin, i) => (
@@ -1354,22 +1444,35 @@ export function DirectionsPanelContent() {
               />
             </>
           )
-        ) : isLoading ? (
+        ) : scheduleRequest &&
+          (scheduledQuery.isLoading || (scheduledQuery.isError && scheduledQuery.isFetching)) ? (
           <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
             <CircularProgress size={28} sx={{ color: BRAND }} />
           </Box>
-        ) : isError ? (
-          <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "error.main",
-              }}
-            >
-              {t("noRoutesFound")}
-            </Typography>
+        ) : scheduleRequest && scheduledQuery.isError ? (
+          <RouteRecovery
+            failed
+            onRetry={() => void scheduledQuery.refetch()}
+            {...recoveryActions}
+          />
+        ) : scheduleRequest && scheduledData?.routes.length === 0 ? (
+          <RouteRecovery failed={false} {...recoveryActions} />
+        ) : scheduleRequest && !scheduledData ? (
+          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+            <CircularProgress size={28} sx={{ color: BRAND }} />
           </Box>
-        ) : hasMultipleStops && data?.routes[0] ? (
+        ) : !scheduleRequest &&
+          (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError)) ? (
+          <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+            <CircularProgress size={28} sx={{ color: BRAND }} />
+          </Box>
+        ) : !scheduleRequest && isError ? (
+          <RouteRecovery
+            failed
+            onRetry={() => void directionsQuery.refetch()}
+            {...recoveryActions}
+          />
+        ) : !scheduleRequest && hasMultipleStops && data?.routes[0] ? (
           // Multi-stop: single route with leg summary
           <>
             <Box>
@@ -1501,7 +1604,7 @@ export function DirectionsPanelContent() {
               label={tc("dataSources")}
             />
           </>
-        ) : data?.routes.length ? (
+        ) : !scheduleRequest && data?.routes.length ? (
           <>
             <Box role="radiogroup" aria-label={t("routes")}>
               {data.routes.map((route, i) => (
@@ -1536,6 +1639,8 @@ export function DirectionsPanelContent() {
               label={tc("dataSources")}
             />
           </>
+        ) : !scheduleRequest && data ? (
+          <RouteRecovery failed={false} {...recoveryActions} />
         ) : null}
 
         {/* Suggestions overlay */}
