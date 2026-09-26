@@ -1,12 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
-import { render } from "@/test";
+import { fireEvent, render, screen } from "@/test";
 
 const isMobileRef = { current: true };
+const sourcesRef: { current: Array<{ id: string; categoryChipLabel: string }> } = { current: [] };
 vi.mock("@mui/material/useMediaQuery", () => ({ default: () => isMobileRef.current }));
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
-  return { ...actual, useDataSources: () => ({ data: undefined }) };
+  return { ...actual, useDataSources: () => ({ data: { sources: sourcesRef.current } }) };
 });
 
 import {
@@ -53,6 +54,7 @@ describe("CategoryChips map obstruction", () => {
   beforeEach(() => {
     stubLayout();
     isMobileRef.current = true;
+    sourcesRef.current = [];
     // The store's default zoom is 2, which is below the chip row's own
     // visibility threshold.
     useMapStore.setState({ zoom: 12 });
@@ -89,5 +91,72 @@ describe("CategoryChips map obstruction", () => {
     useDirectionsStore.setState({ isOpen: true });
     render(<CategoryChips />);
     expect(getMapObstructionInsets().top).toBe(0);
+  });
+});
+
+describe("CategoryChips discovery order", () => {
+  beforeEach(() => {
+    isMobileRef.current = true;
+    useMapStore.setState({ zoom: 12 });
+    useDirectionsStore.setState({ isOpen: false });
+    useCategorySearchStore.setState({ activeCategory: null, mode: "category" });
+    useDataSourceStore.setState({ activeSource: null });
+  });
+
+  it("puts everyday places before transport sources regardless of source registration order", () => {
+    sourcesRef.current = [
+      { id: "webcam", categoryChipLabel: "Webcams" },
+      { id: "scooter-sharing", categoryChipLabel: "E-Scooters" },
+      { id: "parking", categoryChipLabel: "Parking" },
+      { id: "bike-sharing", categoryChipLabel: "Bike Sharing" },
+      { id: "car-sharing", categoryChipLabel: "Car Sharing" },
+      { id: "ev-charging", categoryChipLabel: "EV Charging" },
+      { id: "fuel", categoryChipLabel: "Gas Stations" },
+    ];
+
+    render(<CategoryChips />);
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Restaurants",
+      "Hotels",
+      "Transit",
+      "Activities",
+      "Bike Sharing",
+      "E-Scooters",
+      "Car Sharing",
+      "Parking",
+      "EV Charging",
+      "Gas Stations",
+      "Museums",
+      "Pharmacies",
+      "ATMs",
+      "Webcams",
+    ]);
+  });
+
+  it("skips unavailable sources and retains separate actions when a source shares a category id", () => {
+    sourcesRef.current = [
+      { id: "transit", categoryChipLabel: "Transit source" },
+      { id: "transit", categoryChipLabel: "Transit source" },
+    ];
+
+    const { unmount } = render(<CategoryChips />);
+    expect(screen.getAllByRole("button").map((button) => button.textContent)).toEqual([
+      "Restaurants",
+      "Hotels",
+      "Transit",
+      "Activities",
+      "Museums",
+      "Pharmacies",
+      "ATMs",
+      "Transit source",
+    ]);
+    fireEvent.click(screen.getByRole("button", { name: "Transit source" }));
+    expect(useDataSourceStore.getState().activeSource).toBe("transit");
+
+    unmount();
+    useDataSourceStore.setState({ activeSource: null });
+    render(<CategoryChips />);
+    fireEvent.click(screen.getByRole("button", { name: "Transit" }));
+    expect(useCategorySearchStore.getState().activeCategory).toBe("transit");
   });
 });

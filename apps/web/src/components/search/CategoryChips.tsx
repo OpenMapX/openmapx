@@ -4,7 +4,7 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import type { CategoryId } from "@openmapx/core";
+import type { CategoryDefinition, CategoryId } from "@openmapx/core";
 import {
   CATEGORY_DEFINITIONS,
   PANEL,
@@ -20,6 +20,54 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
+
+type SourceChip = { id: string; categoryChipLabel: string };
+type DiscoveryChip =
+  | { kind: "category"; category: CategoryDefinition }
+  | { kind: "source"; source: SourceChip };
+
+const FIRST_CATEGORY_IDS = ["restaurants", "hotels", "transit", "activities"] as const;
+const TRANSPORT_SOURCE_IDS = [
+  "bike-sharing",
+  "scooter-sharing",
+  "car-sharing",
+  "parking",
+  "ev-charging",
+  "fuel",
+] as const;
+
+function discoveryChips(sources: SourceChip[]): DiscoveryChip[] {
+  const categories = CATEGORY_DEFINITIONS.filter((category) => category.showInChipBar);
+  const categoryById = new Map(categories.map((category) => [category.id, category]));
+  const sourceById = new Map<string, SourceChip>();
+  for (const source of sources) {
+    const existing = sourceById.get(source.id);
+    if (!existing || source.categoryChipLabel.localeCompare(existing.categoryChipLabel) < 0) {
+      sourceById.set(source.id, source);
+    }
+  }
+
+  const ordered: DiscoveryChip[] = [];
+  for (const id of FIRST_CATEGORY_IDS) {
+    const category = categoryById.get(id);
+    if (category) ordered.push({ kind: "category", category });
+  }
+  for (const id of TRANSPORT_SOURCE_IDS) {
+    const source = sourceById.get(id);
+    if (source) ordered.push({ kind: "source", source });
+  }
+  for (const category of categories) {
+    if (!FIRST_CATEGORY_IDS.some((id) => id === category.id)) {
+      ordered.push({ kind: "category", category });
+    }
+  }
+  for (const source of [...sourceById.values()].sort((a, b) => a.id.localeCompare(b.id))) {
+    if (!TRANSPORT_SOURCE_IDS.some((id) => id === source.id)) {
+      ordered.push({ kind: "source", source });
+    }
+  }
+  return ordered;
+}
 
 function SvgIcon({ path, size = 16 }: { path: string; size?: number }) {
   return (
@@ -45,6 +93,7 @@ export function CategoryChips() {
   const { activeSource, toggleSource, setActiveSource } = useDataSourceStore();
   const { data: sourcesData } = useDataSources();
   const registry = useIntegrationRegistry();
+  const chips = discoveryChips(sourcesData?.sources ?? []);
 
   // Build icon path lookup from data source integration manifests
   const dataSourceIcons = useCallback(
@@ -163,28 +212,30 @@ export function CategoryChips() {
       }}
     >
       <Box sx={{ display: "flex", gap: 1, flexShrink: 0 }}>
-        {(sourcesData?.sources ?? []).map((source) => {
-          const isActive = activeSource === source.id;
+        {chips.map((chip) => {
+          if (chip.kind === "source") {
+            const { source } = chip;
+            const isActive = activeSource === source.id;
+            return (
+              <Chip
+                key={`source:${source.id}`}
+                icon={chipIcon(dataSourceIcons(source.id))}
+                label={source.categoryChipLabel}
+                onClick={() => handleSourceClick(source.id, source.categoryChipLabel, isActive)}
+                variant={isActive ? "filled" : "outlined"}
+                color={isActive ? "primary" : "default"}
+                sx={chipSx(isActive)}
+              />
+            );
+          }
+          const { category } = chip;
+          const isActive = activeCategory === category.id;
           return (
             <Chip
-              key={source.id}
-              icon={chipIcon(dataSourceIcons(source.id))}
-              label={source.categoryChipLabel}
-              onClick={() => handleSourceClick(source.id, source.categoryChipLabel, isActive)}
-              variant={isActive ? "filled" : "outlined"}
-              color={isActive ? "primary" : "default"}
-              sx={chipSx(isActive)}
-            />
-          );
-        })}
-        {CATEGORY_DEFINITIONS.filter((cat) => cat.showInChipBar).map((cat) => {
-          const isActive = activeCategory === cat.id;
-          return (
-            <Chip
-              key={cat.id}
-              label={cat.label}
-              icon={chipIcon(cat.iconPath)}
-              onClick={() => handleCategoryClick(cat.id, cat.label, isActive)}
+              key={`category:${category.id}`}
+              label={category.label}
+              icon={chipIcon(category.iconPath)}
+              onClick={() => handleCategoryClick(category.id, category.label, isActive)}
               variant={isActive ? "filled" : "outlined"}
               sx={chipSx(isActive)}
             />
