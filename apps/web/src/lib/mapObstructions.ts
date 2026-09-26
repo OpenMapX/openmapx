@@ -116,9 +116,11 @@ export function useMeasuredMapObstruction(
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(update);
     observer?.observe(element);
     window.addEventListener("resize", update);
+    element.addEventListener("transitionend", update);
     return () => {
       observer?.disconnect();
       window.removeEventListener("resize", update);
+      element.removeEventListener("transitionend", update);
       publishMapObstruction(id, edge, null);
     };
   }, [id, edge, element]);

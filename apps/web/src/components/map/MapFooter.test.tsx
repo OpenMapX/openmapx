@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 
 import { dataSourceToAttribution } from "@openmapx/integration-framework";
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useMapAttributionStore } from "@/integration-api/overlay/mapAttributionStore";
 import { attributionToHtml } from "@/integration-api/overlay/useMapAttributions";
+import { getMapObstructionInsets } from "@/lib/mapObstructions";
 import { MapFooter } from "./MapFooter";
 
 vi.mock("next-intl", () => ({
@@ -66,5 +67,25 @@ describe("MapFooter", () => {
   it("omits the credits bar entirely when nothing is registered", () => {
     render(<MapFooter />);
     expect(screen.queryByTestId("map-attributions")).toBeNull();
+  });
+
+  it("publishes its measured bottom extent so map controls clear wrapped credits", () => {
+    const rect = HTMLElement.prototype.getBoundingClientRect;
+    let clearance = 72;
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      return this.tagName === "FOOTER"
+        ? new DOMRect(0, window.innerHeight - clearance, 320, 72)
+        : rect.call(this);
+    });
+    const { container, unmount } = render(<MapFooter />);
+    expect(getMapObstructionInsets().bottom).toBe(72);
+    clearance = 168;
+    fireEvent.transitionEnd(container.querySelector("footer") as HTMLElement);
+    expect(getMapObstructionInsets().bottom).toBe(168);
+    unmount();
+    expect(getMapObstructionInsets().bottom).toBe(0);
+    vi.restoreAllMocks();
   });
 });

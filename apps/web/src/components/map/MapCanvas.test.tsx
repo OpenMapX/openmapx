@@ -86,6 +86,7 @@ vi.mock("@/lib/offlineAreas", () => ({
 
 vi.mock("maplibre-gl", () => {
   const instances: FakeMap[] = [];
+  const scales: FakeScaleControl[] = [];
   const options: Array<{ center: [number, number]; container: HTMLElement; zoom: number }> = [];
   const workerUrlsAtConstruction: string[] = [];
   let workerUrl = "";
@@ -94,6 +95,12 @@ vi.mock("maplibre-gl", () => {
   let onCallCount = 0;
   let initialStyleLoaded = true;
   let initialStyleDefinitionLoaded = true;
+  class FakeScaleControl {
+    setUnit = vi.fn();
+    constructor(readonly options: { maxWidth?: number; unit?: string }) {
+      scales.push(this);
+    }
+  }
   class FakeMap {
     jumpTo = vi.fn();
     style = { _loaded: initialStyleDefinitionLoaded };
@@ -125,6 +132,8 @@ vi.mock("maplibre-gl", () => {
       throw error;
     });
     once = vi.fn();
+    addControl = vi.fn();
+    removeControl = vi.fn();
     remove = vi.fn();
     emitError(error: Error, data: Record<string, unknown> = {}) {
       const listener = this.on.mock.calls.find(([event]: unknown[]) => event === "error")?.[1] as
@@ -135,6 +144,9 @@ vi.mock("maplibre-gl", () => {
     emitStyleLoad() {
       this.style._loaded = true;
       this.styleLoaded = true;
+      for (const [event, listener] of this.on.mock.calls) {
+        if (event === "style.load") (listener as () => void)();
+      }
       const listener = this.once.mock.calls.find(
         ([event]: unknown[]) => event === "style.load",
       )?.[1] as (() => void) | undefined;
@@ -144,6 +156,7 @@ vi.mock("maplibre-gl", () => {
   return {
     __test: {
       instances,
+      scales,
       options,
       workerUrlsAtConstruction,
       failSetup(error: Error, onCall = 1) {
@@ -160,6 +173,7 @@ vi.mock("maplibre-gl", () => {
       },
       reset() {
         instances.length = 0;
+        scales.length = 0;
         options.length = 0;
         workerUrlsAtConstruction.length = 0;
         workerUrl = "";
@@ -173,13 +187,14 @@ vi.mock("maplibre-gl", () => {
     getVersion: () => "6.1.0",
     getWorkerUrl: () => workerUrl,
     Map: FakeMap,
+    ScaleControl: FakeScaleControl,
     setWorkerUrl: (url: string) => {
       workerUrl = url;
     },
   };
 });
 
-import { useMapStore, useNavigationStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
 import * as mapStyle from "@/lib/map";
@@ -189,12 +204,18 @@ const maplibreTest = (
   maplibre as unknown as {
     __test: {
       instances: Array<{
+        addControl: ReturnType<typeof vi.fn>;
         cameraReads: number;
         emitError(error: Error, data?: Record<string, unknown>): void;
         emitStyleLoad(): void;
         jumpTo: ReturnType<typeof vi.fn>;
         on: ReturnType<typeof vi.fn>;
+        removeControl: ReturnType<typeof vi.fn>;
         remove: ReturnType<typeof vi.fn>;
+      }>;
+      scales: Array<{
+        options: { maxWidth?: number; unit?: string };
+        setUnit: ReturnType<typeof vi.fn>;
       }>;
       options: Array<{ center: [number, number]; zoom: number }>;
       workerUrlsAtConstruction: string[];
@@ -244,6 +265,33 @@ async function renderWithMoveEnd() {
 }
 
 describe("MapCanvas", () => {
+  it("keeps one scale per map through unit and style changes, then removes it", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    useSettingsStore.setState({ units: "metric" });
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+    const { unmount } = render(<MapCanvas />);
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+    const map = maplibreTest.instances[0];
+    const scale = maplibreTest.scales[0];
+    expect(maplibreTest.scales).toHaveLength(1);
+    expect(scale?.options).toMatchObject({ unit: "metric" });
+    expect(map?.addControl).toHaveBeenCalledWith(scale, "bottom-left");
+
+    act(() => useSettingsStore.setState({ units: "imperial" }));
+    expect(maplibreTest.instances).toHaveLength(1);
+    expect(scale?.setUnit).toHaveBeenCalledWith("imperial");
+    act(() => map?.emitStyleLoad());
+    expect(map?.addControl).toHaveBeenCalledTimes(1);
+    expect(maplibreTest.scales).toHaveLength(1);
+
+    unmount();
+    expect(map?.removeControl).toHaveBeenCalledWith(scale);
+    expect(map?.remove).toHaveBeenCalledTimes(1);
+    useSettingsStore.setState({ units: "metric" });
+  });
+
   it("renders the base map without waiting for a granted geolocation callback", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();
@@ -324,6 +372,7 @@ describe("MapCanvas", () => {
 
     expect(maplibreTest.instances).toHaveLength(1);
     expect(maplibreTest.instances[0]?.remove).toHaveBeenCalledTimes(1);
+    expect(maplibreTest.instances[0]?.removeControl).toHaveBeenCalledWith(maplibreTest.scales[0]);
     expect(mapContextTest.mapRef.current).toBeNull();
     expect(mapContextTest.notifyMapReady).not.toHaveBeenCalled();
     expect(screen.getByRole("alert")).toHaveTextContent("The map could not be loaded.");
@@ -332,7 +381,12 @@ describe("MapCanvas", () => {
     await waitFor(() => expect(maplibreTest.instances).toHaveLength(2));
     await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
     expect(maplibreTest.instances[0]?.remove).toHaveBeenCalledTimes(1);
+    expect(maplibreTest.instances[0]?.removeControl).toHaveBeenCalledWith(maplibreTest.scales[0]);
     expect(maplibreTest.instances[1]?.remove).not.toHaveBeenCalled();
+    expect(maplibreTest.instances[1]?.addControl).toHaveBeenCalledWith(
+      maplibreTest.scales[1],
+      "bottom-left",
+    );
     expect(mapContextTest.mapRef.current).toBe(maplibreTest.instances[1]);
     expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
   });

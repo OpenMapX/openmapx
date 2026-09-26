@@ -6,7 +6,7 @@ import CircularProgress from "@mui/material/CircularProgress";
 import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
-import { useMapStore, useNavigationStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
@@ -14,8 +14,10 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
+import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
+import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import {
   ensureOfflinePackageRuntime,
   OFFLINE_PACKAGE_CHANGED_EVENT,
@@ -69,10 +71,20 @@ export function MapCanvas() {
   const currentStyleRef = useRef({ mapStyle, variant });
   currentStyleRef.current = { mapStyle, variant };
   const styleRequestRef = useRef(0);
+  const units = useSettingsStore((s) => s.units);
+  const unitsRef = useRef(units);
+  unitsRef.current = units;
+  const scaleRef = useRef<{ map: maplibregl.Map; control: maplibregl.ScaleControl } | null>(null);
   const { setCenter, setZoom, setBearing, setPitch, setUserLocation } = useMapStore();
   const requestFix = useForegroundLocation();
   const { browserAuthority, permission: nativePermission } = useMobileRuntime();
   const locationAuthority = browserAuthority ? "browser" : "native";
+  const insets = useMapObstructionInsets();
+  const viewportHeight = useWindowHeight();
+  const sheetClearance = useMobilePanelClearance(viewportHeight);
+  const scaleLeft = Math.max(0, insets.left) + 12;
+  const scaleBottom = Math.max(102, insets.bottom + 12, sheetClearance + 12);
+  const scaleVisible = viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24;
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -93,6 +105,10 @@ export function MapCanvas() {
       cleanupConnectivity?.();
       cleanupConnectivity = undefined;
       if (activeMap) {
+        if (scaleRef.current?.map === activeMap) {
+          activeMap.removeControl(scaleRef.current.control);
+          scaleRef.current = null;
+        }
         if (mapRef.current === activeMap) mapRef.current = null;
         activeMap.remove();
         activeMap = undefined;
@@ -138,6 +154,9 @@ export function MapCanvas() {
         canvasContextAttributes: { antialias: true },
       });
       activeMap = map;
+      const scale = new maplibregl.ScaleControl({ maxWidth: 100, unit: unitsRef.current });
+      map.addControl(scale, "bottom-left");
+      scaleRef.current = { map, control: scale };
 
       const applyStyleForViewport = (reason: string) => {
         const request = ++styleRequestRef.current;
@@ -316,6 +335,12 @@ export function MapCanvas() {
     setZoom,
   ]);
 
+  // The persisted unit preference changes the existing control, not the map.
+  useEffect(() => {
+    const scale = scaleRef.current;
+    if (scale && mapRef.current === scale.map) scale.control.setUnit(units);
+  }, [mapRef, units]);
+
   const retry = () => {
     attemptRef.current++;
     setStatus("loading");
@@ -383,7 +408,24 @@ export function MapCanvas() {
   // doesn't clobber the inset, which only works on absolutely-positioned elements.
   return (
     <Box sx={{ position: "absolute", inset: 0 }}>
-      <Box ref={containerRef} sx={{ width: "100%", height: "100%" }} />
+      <Box
+        ref={containerRef}
+        sx={{
+          width: "100%",
+          height: "100%",
+          "& .maplibregl-ctrl-bottom-left > .maplibregl-ctrl-scale": {
+            display: scaleVisible ? "block" : "none",
+            marginLeft: `${scaleLeft}px`,
+            marginBottom: `${scaleBottom}px`,
+            pointerEvents: "none",
+            bgcolor: "background.paper",
+            color: "text.primary",
+            borderColor: "currentColor",
+            fontSize: 10,
+            transition: "margin-left 0.25s ease, margin-bottom 0.25s ease",
+          },
+        }}
+      />
       {status !== "ready" && (
         <Box
           sx={{

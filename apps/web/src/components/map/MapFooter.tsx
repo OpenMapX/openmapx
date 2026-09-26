@@ -5,9 +5,10 @@ import Link from "@mui/material/Link";
 import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import NextLink from "next/link";
 import { useTranslations } from "next-intl";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMapAttributionHtml } from "@/integration-api/overlay/mapAttributionStore";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
+import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { CREDITS_SEPARATOR, CREDITS_SX } from "./MapCredits";
 
 // Pixels to lift the footer while navigating, so it clears the navigation
@@ -43,6 +44,12 @@ export function MapFooter() {
   const creditsHtml = credits.join(CREDITS_SEPARATOR);
 
   const containerRef = useRef<HTMLElement>(null);
+  const [footerEl, setFooterEl] = useState<HTMLElement | null>(null);
+  const setFooterRef = useCallback((element: HTMLElement | null) => {
+    containerRef.current = element;
+    setFooterEl(element);
+  }, []);
+  useMeasuredMapObstruction("map-footer", "bottom", footerEl);
   const linksRef = useRef<HTMLDivElement>(null);
   const creditsRef = useRef<HTMLDivElement>(null);
   const [merged, setMerged] = useState(false);
@@ -87,7 +94,7 @@ export function MapFooter() {
   return (
     <Box
       component="footer"
-      ref={containerRef}
+      ref={setFooterRef}
       sx={{
         bgcolor: merged ? background : "transparent",
         position: "absolute",
