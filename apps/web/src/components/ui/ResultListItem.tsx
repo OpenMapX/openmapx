@@ -17,6 +17,7 @@ export function ResultListItem({
   onPointerLeave,
   selected,
   hoverBg,
+  bottomPadding,
   children,
 }: {
   onClick: () => void;
@@ -33,6 +34,8 @@ export function ResultListItem({
   selected?: boolean;
   /** Background color used on hover (and when `selected`). */
   hoverBg: string;
+  /** Optional bottom spacing in theme units; defaults to the normal row padding. */
+  bottomPadding?: number;
   children: React.ReactNode;
 }) {
   const sx: SxProps<Theme> = {
@@ -45,6 +48,7 @@ export function ResultListItem({
     cursor: "pointer",
     px: 2,
     py: 1.5,
+    ...(bottomPadding !== undefined ? { pb: bottomPadding } : {}),
     ...(selected !== undefined ? { bgcolor: selected ? hoverBg : "transparent" } : {}),
     "@media (hover: hover)": { "&:hover": { bgcolor: hoverBg } },
   };

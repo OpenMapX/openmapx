@@ -215,6 +215,7 @@ function CategoryPlaceCard({
         }}
         selected={isHovered}
         hoverBg="rgba(0,0,0,0.06)"
+        bottomPadding={showPhoto ? 0.25 : undefined}
       >
         {showPhoto && photoUrl && (
           <Box
