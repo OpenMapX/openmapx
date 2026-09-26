@@ -33,6 +33,28 @@
   --omx-safe-right: env(safe-area-inset-right, 0px);
 }
 
+.omx-route-map-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid;
+  border-radius: 999px;
+  box-shadow: 0 2px 8px rgb(0 0 0 / 22%);
+  font: 700 12px/1.2 "Plus Jakarta Sans Variable", sans-serif;
+  white-space: nowrap;
+}
+
+button.omx-route-map-pill {
+  cursor: pointer;
+}
+
+button.omx-route-map-pill:focus-visible {
+  outline: 3px solid #f59e0b;
+  outline-offset: 3px;
+}
+
 .dark {
   /* Same hue and saturation family as the light tokens, lifted for dark
    * surfaces: 9.4:1 on the page background, 6.1:1 for brand text on the tint. */

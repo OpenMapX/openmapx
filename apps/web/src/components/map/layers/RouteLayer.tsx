@@ -1,10 +1,12 @@
 "use client";
 
+import { useTheme } from "@mui/material/styles";
 import type { LngLat } from "@openmapx/core";
 import { useDataSources, useDirectionsStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type * as maplibregl from "maplibre-gl";
 import type { MapMouseEvent } from "maplibre-gl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
@@ -12,8 +14,10 @@ import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectio
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { attributionsForProviders } from "@/lib/attributionForProviders";
+import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
 import { ROUTE_ALT_OPACITY, ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
+import { routePillAnchors } from "./routePillAnchors";
 
 const SOURCE_ID = "route-source";
 const LAYER_ALT_CASING = "route-alt-casing";
@@ -31,8 +35,36 @@ const EV_STOPS_SOURCE_ID = "ev-stops-source";
 const EV_STOPS_LAYER_ID = "ev-stops-layer";
 const EMPTY_FC = { type: "FeatureCollection" as const, features: [] };
 
+function localizedDuration(seconds: number, locale: string): string {
+  if (seconds < 60) {
+    return new Intl.NumberFormat(locale, {
+      style: "unit",
+      unit: "second",
+      unitDisplay: "short",
+    }).format(Math.round(seconds));
+  }
+  const minutes = Math.round(seconds / 60);
+  const minuteFormat = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "minute",
+    unitDisplay: "short",
+  });
+  if (minutes < 60) return minuteFormat.format(minutes);
+  const hours = Math.floor(minutes / 60);
+  const remainder = minutes % 60;
+  const hourText = new Intl.NumberFormat(locale, {
+    style: "unit",
+    unit: "hour",
+    unitDisplay: "short",
+  }).format(hours);
+  return remainder === 0 ? hourText : `${hourText} ${minuteFormat.format(remainder)}`;
+}
+
 export function RouteLayer() {
-  const { mapRef, fitBounds } = useMap();
+  const { mapRef, mapReady, styleVersion, fitBounds } = useMap();
+  const locale = useLocale();
+  const t = useTranslations("directions");
+  const theme = useTheme();
   const { waypoints, setActiveRouteIndex } = useDirectionsStore();
   const { routes, activeRouteIndex, provider, mode, isEvMode, evStops, navigating } =
     useDrawnDirectionsRoutes();
@@ -132,6 +164,134 @@ export function RouteLayer() {
     [routeFeatures],
   );
   useMapLayerGroup(routeGroup);
+
+  // DOM pills are keyboard-focusable and remain on the map while a style swap
+  // reconstructs the line group. Their anchors are refreshed after camera moves
+  // and whenever panels or the mobile sheet change the usable viewport.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: styleVersion announces a replaced map instance even when mapRef identity is stable
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const activeDuration = routes[activeRouteIndex]?.duration;
+    const visible = hasWaypoints && !navigating && mode !== "transit" && mode !== "flying";
+    if (!visible || !Number.isFinite(activeDuration) || activeDuration < 0) return;
+
+    const pillData = routes.flatMap((route, index) => {
+      if (!Number.isFinite(route.duration) || route.duration < 0) return [];
+      const selected = index === activeRouteIndex;
+      const delta = route.duration - activeDuration;
+      const difference =
+        Math.round(Math.abs(delta)) === 0
+          ? t("mapRouteSameTime")
+          : `${delta > 0 ? "+" : "−"}${localizedDuration(Math.abs(delta), locale)}`;
+      const label = selected ? localizedDuration(route.duration, locale) : difference;
+      return [
+        {
+          index,
+          route,
+          selected,
+          label,
+          accessible: selected
+            ? t("mapRouteSelected", { duration: label })
+            : t("mapRouteSelect", { difference }),
+        },
+      ];
+    });
+    if (pillData.length === 0) return;
+
+    let cancelled = false;
+    const markers = new Map<number, maplibregl.Marker>();
+    const refresh = (Marker: typeof maplibregl.Marker) => {
+      if (cancelled) return;
+      const container = map.getContainer();
+      const anchors = routePillAnchors(
+        pillData.map(({ index, route, label }) => ({
+          routeIndex: index,
+          geometry: route.geometry,
+          width: Math.max(64, label.length * 9 + 28),
+        })),
+        activeRouteIndex,
+        (coordinate) => map.project(coordinate),
+        {
+          width: container.clientWidth,
+          height: container.clientHeight,
+          insets: getMapObstructionInsets(),
+        },
+      );
+      const shown = new Set(anchors.map((anchor) => anchor.routeIndex));
+      for (const [index, marker] of markers) {
+        if (shown.has(index)) continue;
+        marker.remove();
+        markers.delete(index);
+      }
+      for (const { routeIndex, coordinate } of anchors) {
+        const existing = markers.get(routeIndex);
+        if (existing) {
+          existing.setLngLat(coordinate);
+          continue;
+        }
+        const pill = pillData.find((entry) => entry.index === routeIndex);
+        if (!pill) continue;
+        const element = document.createElement(pill.selected ? "span" : "button");
+        element.className = "omx-route-map-pill";
+        element.textContent = pill.label;
+        element.setAttribute("aria-label", pill.accessible);
+        element.style.backgroundColor = pill.selected
+          ? theme.palette.primary.main
+          : theme.palette.background.paper;
+        element.style.color = pill.selected
+          ? theme.palette.primary.contrastText
+          : theme.palette.text.primary;
+        element.style.borderColor = pill.selected
+          ? theme.palette.primary.main
+          : theme.palette.divider;
+        if (element instanceof HTMLButtonElement) {
+          element.type = "button";
+          element.addEventListener("click", (event) => {
+            event.stopPropagation();
+            setActiveRouteIndex(routeIndex);
+          });
+        }
+        markers.set(
+          routeIndex,
+          new Marker({ element, anchor: "center" }).setLngLat(coordinate).addTo(map),
+        );
+      }
+    };
+    let refreshCurrent = () => {};
+    const update = () => refreshCurrent();
+    map.on("moveend", update);
+    map.on("resize", update);
+    const unsubscribeObstructions = subscribeMapObstructions(update);
+    void import("maplibre-gl")
+      .then(({ Marker }) => {
+        if (cancelled) return;
+        refreshCurrent = () => refresh(Marker);
+        refreshCurrent();
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+      map.off("moveend", update);
+      map.off("resize", update);
+      unsubscribeObstructions();
+      for (const marker of markers.values()) marker.remove();
+      markers.clear();
+    };
+  }, [
+    routes,
+    activeRouteIndex,
+    mode,
+    navigating,
+    hasWaypoints,
+    mapRef,
+    mapReady,
+    styleVersion,
+    locale,
+    t,
+    theme,
+    setActiveRouteIndex,
+  ]);
 
   // Delegated listeners live on the map, not the style, so they do not need a
   // style-change trigger.
