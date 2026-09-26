@@ -59,16 +59,15 @@ export function DetailShell({ children }: { children: ReactNode }) {
 }
 
 function DesktopDetail({ children }: { children: ReactNode }) {
+  const activeSidebarId = useSidebarStore((s) => s.activeSidebarId);
   const collapsed = useSidebarStore((s) => s.collapsed);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   useMobilePanelHeightTracker("detail", el);
-  // The card floats beside the rail, so what it takes from the map is the
-  // distance to its own right edge — which moves with the rail's collapse.
-  useMapObstruction(
-    "detail",
-    "left",
-    (collapsed ? CARD_GAP : PANEL_WIDTH + CARD_GAP) + DETAIL_CARD_WIDTH,
-  );
+  // A detail can open directly with no sidebar. Reserve the rail's width only
+  // while one is visible, and frame the map to the card's actual right edge.
+  const sidebarVisible = Boolean(activeSidebarId) && !collapsed;
+  const left = (sidebarVisible ? PANEL_WIDTH : 0) + CARD_GAP;
+  useMapObstruction("detail", "left", left + DETAIL_CARD_WIDTH);
 
   return (
     <Paper
@@ -77,7 +76,7 @@ function DesktopDetail({ children }: { children: ReactNode }) {
       sx={(theme) => ({
         position: "absolute",
         top: 66,
-        left: collapsed ? CARD_GAP : PANEL_WIDTH + CARD_GAP,
+        left,
         width: DETAIL_CARD_WIDTH,
         maxHeight: "calc(100dvh - 78px)",
         overflowY: "auto",
