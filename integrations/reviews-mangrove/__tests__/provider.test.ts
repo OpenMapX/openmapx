@@ -40,7 +40,7 @@ function wireReview(input: {
   osmId?: string;
   nickname?: string;
   opinion?: string;
-  rating?: number;
+  rating?: number | null;
   action?: "edit" | "delete" | "report_abuse" | "equivalence";
   originalSub?: string;
   images?: { src: string; label?: string }[];
@@ -49,7 +49,7 @@ function wireReview(input: {
   const payload: MangroveWirePayload = {
     sub: input.sub,
     iat: input.iat ?? 1_775_485_449,
-    rating: input.rating ?? 25,
+    rating: input.rating === null ? undefined : (input.rating ?? 25),
     opinion: input.opinion ?? "Fries, fries, fries.",
     action: input.action,
     images: input.images,
@@ -447,10 +447,44 @@ describe("mangroveProvider place matching", () => {
 
     expect(aggregate).toMatchObject({
       count: 2,
+      ratedCount: 2,
       opinionCount: 2,
       positiveCount: 2,
       quality: 80,
       stars: 4,
     });
+  });
+
+  it("separates the rated sample from opinion-only reviews", async () => {
+    mockedGetReviews.mockResolvedValue({
+      reviews: [
+        wireReview({
+          signature: "rated",
+          sub: "geo:50.7750682,6.0877905?q=Frittenwerk&u=50",
+          rating: 80,
+        }),
+        wireReview({
+          signature: "opinion-a",
+          kid: OTHER_KID,
+          sub: "geo:50.7750682,6.0877905?q=Frittenwerk&u=50",
+          rating: null,
+          opinion: "First opinion",
+        }),
+        wireReview({
+          signature: "opinion-b",
+          kid: "third-author",
+          sub: "geo:50.7750682,6.0877905?q=Frittenwerk&u=50",
+          rating: null,
+          opinion: "Second opinion",
+        }),
+      ],
+    });
+    const aggregate = await mangroveProvider.getAggregate({
+      lat: 50.7750682,
+      lng: 6.0877905,
+      name: "Frittenwerk",
+      osmId: "node/4506022549",
+    });
+    expect(aggregate).toMatchObject({ count: 3, ratedCount: 1, opinionCount: 3, stars: 4 });
   });
 });

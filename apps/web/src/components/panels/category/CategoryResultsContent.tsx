@@ -79,6 +79,18 @@ const PHOTO_TAG_KEYS = [
   "wikidata",
   "wikipedia",
 ] as const;
+const WIKIPEDIA_LANGUAGE_RE = /^[a-z]{2,12}(?:-[a-z0-9]{1,12})*$/i;
+
+function validWikipediaTag(tag: string): boolean {
+  const colon = tag.indexOf(":");
+  if (colon < 0) return true;
+  const language = tag.slice(0, colon);
+  return (
+    language.length <= 32 &&
+    WIKIPEDIA_LANGUAGE_RE.test(language) &&
+    Boolean(tag.slice(colon + 1).trim())
+  );
+}
 
 function validCardImageTag(value: string): boolean {
   if (value.startsWith("File:")) return Boolean(value.slice(5).trim());
@@ -100,6 +112,7 @@ function cardInput(place: CategoryPlace): CardInput {
     if (key.startsWith("image") && !validCardImageTag(value)) continue;
     if (key === "wikidata" && !/^Q[1-9]\d*$/.test(value)) continue;
     if (key === "wikimedia_commons" && !/^(?:File|Category):\S/.test(value)) continue;
+    if (key === "wikipedia" && !validWikipediaTag(value)) continue;
     photoTags[key] = value;
   }
   return { id: place.id, name: place.name, coordinates: place.coordinates, photoTags };
@@ -279,7 +292,7 @@ function CategoryPlaceCard({
             sx={{ color: "text.secondary", display: "block", mb: 0.25 }}
           >
             ★ {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rating.stars)} ·{" "}
-            {rating.count} {tp("reviews")} ·{" "}
+            {rating.count} {tp("ratedReviews")} ·{" "}
             {registry.findDataSource(rating.source)?.name ?? rating.source}
           </Typography>
         )}

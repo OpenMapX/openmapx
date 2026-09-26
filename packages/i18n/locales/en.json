@@ -1061,6 +1061,7 @@
   "place": {
     "overview": "Overview",
     "reviews": "Reviews",
+    "ratedReviews": "rated reviews",
     "info": "Info",
     "directions": "Directions",
     "savePlace": "Save",

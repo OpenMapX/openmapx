@@ -12,6 +12,8 @@ export interface ReviewSubject {
 export interface ReviewAggregate {
   /** Total number of reviews (including opinion-only and edits). */
   count: number;
+  /** Reviews with a numeric rating; absent when a provider cannot report this sample size. */
+  ratedCount?: number;
   /** How many reviews include opinion text. */
   opinionCount: number;
   /** Reviews with rating >= 50 (recommend). */

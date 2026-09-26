@@ -322,6 +322,7 @@ function aggregateFromReviews(reviews: Review[]): ReviewAggregate {
   const quality = ratingCount > 0 ? ratingSum / ratingCount : 0;
   return {
     count: reviews.length,
+    ratedCount: ratingCount,
     opinionCount,
     positiveCount,
     // Confirmation count needs maresi-subject join we don't fetch here; the
@@ -372,6 +373,7 @@ export const mangroveProvider: ReviewProvider = {
     } catch {
       return {
         count: 0,
+        ratedCount: 0,
         opinionCount: 0,
         positiveCount: 0,
         confirmedCount: 0,

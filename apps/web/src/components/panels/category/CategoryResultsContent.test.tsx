@@ -610,7 +610,7 @@ describe("visible category card enrichment", () => {
         id: "osm:node/8",
         name: "Bad image tag",
         coordinates: [6.08, 50.77],
-        osmTags: { image: "https://" },
+        osmTags: { image: "https://", wikipedia: "localhost/:Article" },
       },
       {
         id: "osm:node/9",
@@ -793,6 +793,7 @@ describe("visible category card enrichment", () => {
       const row = screen.getByRole("button", { name: /Aachener Dom/ });
       expect(row).toHaveTextContent("4.3");
       expect(row).toHaveTextContent("12");
+      expect(row).toHaveTextContent("ratedReviews");
       expect(row).toHaveTextContent("mangrove");
       expect(row.contains(credit)).toBe(false);
       const image = container.querySelector('img[src*="image-proxy"]') as HTMLImageElement;

@@ -8,6 +8,10 @@ import {
 const HEADERS = {
   Accept: "application/json",
 };
+// A Wikipedia language subdomain must be a single DNS label. OSM tags and
+// fallback locales are untrusted, including when this provider is called
+// outside the card-enrichment route.
+const WIKIPEDIA_LANGUAGE_RE = /^[a-z]{2,12}(?:-[a-z0-9]{1,12})*$/i;
 
 export const wikipediaSource: KnowledgeProvider = {
   name: "wikipedia",
@@ -20,9 +24,16 @@ export const wikipediaSource: KnowledgeProvider = {
     const colonIdx = wiki.indexOf(":");
     const tagLang = colonIdx > 0 ? wiki.slice(0, colonIdx) : (lang ?? "en");
     const title = colonIdx > 0 ? wiki.slice(colonIdx + 1) : wiki;
+    if (
+      tagLang.length > 32 ||
+      !WIKIPEDIA_LANGUAGE_RE.test(tagLang) ||
+      !title.trim() ||
+      colonIdx === 0
+    )
+      return null;
 
     const encodedTitle = encodeURIComponent(title.replace(/ /g, "_"));
-    const url = `https://${tagLang}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`;
+    const url = `https://${tagLang.toLowerCase()}.wikipedia.org/api/rest_v1/page/summary/${encodedTitle}`;
 
     const data = await fetchJson<{
       description?: string;

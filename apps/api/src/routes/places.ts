@@ -57,6 +57,18 @@ const CARD_PHOTO_TAGS = new Set([
   "wikidata",
   "wikipedia",
 ]);
+const WIKIPEDIA_LANGUAGE_RE = /^[a-z]{2,12}(?:-[a-z0-9]{1,12})*$/i;
+
+function validWikipediaTag(tag: string): boolean {
+  const colon = tag.indexOf(":");
+  if (colon < 0) return true;
+  const language = tag.slice(0, colon);
+  return (
+    language.length <= 32 &&
+    WIKIPEDIA_LANGUAGE_RE.test(language) &&
+    Boolean(tag.slice(colon + 1).trim())
+  );
+}
 
 type CardInput = CategoryCardEnrichmentRequest["places"][number];
 type CardResult = CategoryCardEnrichmentResponse["results"][number];
@@ -66,7 +78,12 @@ function normalizeCardRequest(value: unknown): CategoryCardEnrichmentRequest | n
   const body = value as Record<string, unknown>;
   if (Object.keys(body).some((key) => key !== "places" && key !== "lang")) return null;
   if (!Array.isArray(body.places) || body.places.length < 1 || body.places.length > 8) return null;
-  if (body.lang !== undefined && (typeof body.lang !== "string" || body.lang.length > 12))
+  if (
+    body.lang !== undefined &&
+    (typeof body.lang !== "string" ||
+      body.lang.length > 12 ||
+      !WIKIPEDIA_LANGUAGE_RE.test(body.lang))
+  )
     return null;
   const seen = new Set<string>();
   const places: CardInput[] = [];
@@ -115,6 +132,7 @@ function normalizeCardRequest(value: unknown): CategoryCardEnrichmentRequest | n
           if (tag.startsWith("File:") ? !tag.slice(5).trim() : !validHttpUrl(tag)) return null;
         } else if (key === "wikidata" && !/^Q[1-9]\d*$/.test(tag)) return null;
         else if (key === "wikimedia_commons" && !/^(?:File|Category):\S/.test(tag)) return null;
+        else if (key === "wikipedia" && !validWikipediaTag(tag)) return null;
         photoTags[key as keyof NonNullable<CardInput["photoTags"]>] = tag;
       }
     }
@@ -194,18 +212,22 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
           timer = setTimeout(() => resolve(null), 1500);
         }),
       ]);
+      const ratedCount = aggregate?.ratedCount;
       if (
         !aggregate ||
         !Number.isFinite(aggregate.stars) ||
         aggregate.stars <= 0 ||
         aggregate.stars > 5 ||
+        typeof ratedCount !== "number" ||
+        !Number.isInteger(ratedCount) ||
+        ratedCount < 3 ||
         !Number.isInteger(aggregate.count) ||
-        aggregate.count < 3 ||
+        ratedCount > aggregate.count ||
         !aggregate.source
       )
         return { rating: null };
       return {
-        rating: { stars: aggregate.stars, count: aggregate.count, source: aggregate.source },
+        rating: { stars: aggregate.stars, count: ratedCount, source: aggregate.source },
       };
     } catch {
       return { rating: null };

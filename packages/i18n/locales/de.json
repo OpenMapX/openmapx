@@ -1061,6 +1061,7 @@
   "place": {
     "overview": "Übersicht",
     "reviews": "Bewertungen",
+    "ratedReviews": "Bewertungen mit Sternen",
     "info": "Info",
     "directions": "Route",
     "savePlace": "Speichern",

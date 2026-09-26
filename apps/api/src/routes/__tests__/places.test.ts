@@ -166,7 +166,12 @@ describe("POST /places/card-enrichment", () => {
       pageUrl: "https://commons.wikimedia.org/wiki/File:Around_Aachener_Dom.JPG",
     };
     mockSearchHeroPhotos.mockResolvedValueOnce([photo]);
-    mockFetchAggregate.mockResolvedValueOnce({ stars: 4.25, count: 12, source: "mangrove" });
+    mockFetchAggregate.mockResolvedValueOnce({
+      stars: 4.25,
+      count: 14,
+      ratedCount: 12,
+      source: "mangrove",
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -188,7 +193,12 @@ describe("POST /places/card-enrichment", () => {
     };
     mockSearchHeroPhotos.mockResolvedValueOnce([photo]);
     mockGetPlaceKnowledge.mockRejectedValueOnce(new Error("knowledge unavailable"));
-    mockFetchAggregate.mockResolvedValueOnce({ stars: 4, count: 4, source: "mangrove" });
+    mockFetchAggregate.mockResolvedValueOnce({
+      stars: 4,
+      count: 6,
+      ratedCount: 4,
+      source: "mangrove",
+    });
 
     const response = await app.inject({
       method: "POST",
@@ -229,11 +239,35 @@ describe("POST /places/card-enrichment", () => {
     { places: [{ ...place, photoTags: { image: "javascript:alert(1)" } }] },
     { places: [{ ...place, photoTags: { image: "File:" } }] },
     { places: [{ ...place, photoTags: { ...place.photoTags, "image:2": "File:Other.jpg" } }] },
+    { places: [{ ...place, photoTags: { wikipedia: "localhost/:Article" } }] },
+    { places: [{ ...place, photoTags: { wikipedia: "de:" } }] },
+    { places: [{ ...place, photoTags: { wikipedia: "Article" } }], lang: "localhost/" },
   ])("rejects oversized or invalid input before provider work: %j", async (payload) => {
     const response = await app.inject({ method: "POST", url: "/places/card-enrichment", payload });
     expect(response.statusCode).toBe(400);
     expect(mockSearchHeroPhotos).not.toHaveBeenCalled();
+    expect(mockGetPlaceKnowledge).not.toHaveBeenCalled();
     expect(mockFetchAggregate).not.toHaveBeenCalled();
+  });
+
+  it("requires at least three rated reviews and a known rated sample size", async () => {
+    mockFetchAggregate
+      .mockResolvedValueOnce({ stars: 4, count: 3, ratedCount: 1, source: "mangrove" })
+      .mockResolvedValueOnce({ stars: 4, count: 6, source: "other-provider" })
+      .mockResolvedValueOnce({ stars: 4, count: 5, ratedCount: 3, source: "mangrove" });
+    const requests = ["One", "Unknown", "Three"].map((name, index) =>
+      app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, id: `osm:node/${index + 1}`, name, photoTags: {} }] },
+      }),
+    );
+    const responses = await Promise.all(requests);
+    expect(responses.map((response) => response.json().results[0])).toEqual([
+      { id: "osm:node/1" },
+      { id: "osm:node/2" },
+      { id: "osm:node/3", rating: { stars: 4, count: 3, source: "mangrove" } },
+    ]);
   });
 
   it("omits unsupported images and unqualified ratings without placeholder fields", async () => {

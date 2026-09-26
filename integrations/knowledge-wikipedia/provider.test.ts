@@ -54,6 +54,15 @@ describe("Wikipedia knowledge provider", () => {
     expect(await wikipediaSource.lookup({})).toBeNull();
   });
 
+  it.each([
+    [{ wikipedia: "localhost/:Article" }, undefined],
+    [{ wikipedia: "Article" }, "localhost/"],
+    [{ wikipedia: "de:" }, undefined],
+  ])("rejects malformed language or title without a fetch", async (tags, lang) => {
+    expect(await wikipediaSource.lookup(tags, lang)).toBeNull();
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
   it("splits an 'en:Title' tag and maps the summary into a KnowledgeResult", async () => {
     routes = {
       "/page/summary/": summaryBody(),
