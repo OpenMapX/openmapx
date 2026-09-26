@@ -297,6 +297,8 @@
     "noThanks": "No thanks"
   },
   "map": {
+    "loading": "Loading map…",
+    "loadError": "The map could not be loaded.",
     "myLocation": "My location",
     "goToMyLocationAriaLabel": "Go to my location",
     "zoomIn": "Zoom in",

@@ -1,12 +1,15 @@
 "use client";
 
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import { useColorScheme } from "@mui/material/styles";
+import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
 import { useMapStore, useNavigationStore } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
-import { useLocale } from "next-intl";
-import { useEffect, useRef } from "react";
+import { useLocale, useTranslations } from "next-intl";
+import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
@@ -54,6 +57,11 @@ export function MapCanvas() {
   const { mapRef, mapReady, notifyMapReady, notifyStyleReload } = useMap();
   const env = useEnv();
   const locale = useLocale();
+  const t = useTranslations("map");
+  const tCommon = useTranslations("common");
+  const [status, setStatus] = useState<"loading" | "ready" | "error">("loading");
+  const [retryKey, setRetryKey] = useState(0);
+  const attemptRef = useRef(0);
   const { mode, systemMode } = useColorScheme();
   const resolvedMode = mode === "system" ? systemMode : mode;
   const mapStyle = resolvedMode === "dark" ? "streets-v2-dark" : "bright-v2";
@@ -74,35 +82,42 @@ export function MapCanvas() {
     // be destroyed and re-created every time the user pans or zooms.
     const { center, zoom, bearing, pitch } = useMapStore.getState();
 
+    const attempt = retryKey;
     let destroyed = false;
+    let attemptFailed = false;
+    let activeMap: maplibregl.Map | undefined;
     let cleanupConnectivity: (() => void) | undefined;
+    const isActive = () => !destroyed && attempt === attemptRef.current;
+    const dispose = () => {
+      styleRequestRef.current++;
+      cleanupConnectivity?.();
+      cleanupConnectivity = undefined;
+      if (activeMap) {
+        if (mapRef.current === activeMap) mapRef.current = null;
+        activeMap.remove();
+        activeMap = undefined;
+      }
+      setOfflinePackageActive(false);
+    };
+    setStatus("loading");
 
     const initMap = async (initialCenter: LngLat, initialZoom: number) => {
       setCenter(initialCenter);
       setZoom(initialZoom);
       // Keep the dynamically loaded module as a namespace: MapLibre 6 no longer
       // exposes a synthetic default export.
-      let maplibreRuntime: unknown;
-      let viewportStyle: Awaited<ReturnType<typeof loadStyleForViewport>> | undefined;
-      try {
-        maplibreRuntime = await loadMapLibreRuntime();
-        if (destroyed || !containerRef.current) return;
-        const maplibregl = maplibreRuntime as unknown as MapLibreRuntime;
-        const currentStyle = currentStyleRef.current;
-        viewportStyle = await loadStyleForViewport(
-          env,
-          currentStyle.variant,
-          currentStyle.mapStyle,
-          maplibregl,
-        );
-      } catch (err) {
-        console.error("Failed to initialize map", err);
-        return;
-      }
-      if (!maplibreRuntime || !viewportStyle) return;
+      const maplibreRuntime = await loadMapLibreRuntime();
+      if (!isActive() || !containerRef.current) return;
+      const currentStyle = currentStyleRef.current;
+      const viewportStyle = await loadStyleForViewport(
+        env,
+        currentStyle.variant,
+        currentStyle.mapStyle,
+        maplibreRuntime as MapLibreRuntime,
+      );
       const maplibregl = maplibreRuntime as unknown as typeof import("maplibre-gl");
 
-      if (destroyed || !containerRef.current) return;
+      if (!isActive() || !containerRef.current) return;
       setOfflinePackageActive(viewportStyle.offline);
 
       // MapLibre's built-in AttributionControl is disabled: it collapses to a
@@ -122,98 +137,132 @@ export function MapCanvas() {
         attributionControl: false,
         canvasContextAttributes: { antialias: true },
       });
+      activeMap = map;
 
-      try {
-        const applyStyleForViewport = (reason: string) => {
-          const request = ++styleRequestRef.current;
-          const currentStyle = currentStyleRef.current;
-          void loadStyleForViewport(env, currentStyle.variant, currentStyle.mapStyle, maplibregl)
-            .then((next) => {
-              if (destroyed || request !== styleRequestRef.current) return;
-              setOfflinePackageActive(next.offline);
-              map.setStyle(next.style as maplibregl.StyleSpecification);
-            })
-            .catch((err) => {
-              console.warn(`Unable to switch map style for ${reason}`, err);
-            });
-        };
-
-        map.on("moveend", (e) => {
-          // The navigation follow camera drives the map with a programmatic
-          // jumpTo every animation frame; skip those so we don't write to the
-          // store 60×/s while navigating. Bail before reading the camera at all:
-          // getCenter() allocates, and this is the hottest listener on the map
-          // during a trip. User gestures and other programmatic moves (flyTo,
-          // deep links) still persist as before.
-          if (
-            (e as { programmatic?: boolean })?.programmatic &&
-            useNavigationStore.getState().status !== "idle"
-          ) {
-            return;
-          }
-          const c = map.getCenter();
-          const center: LngLat = [c.lng, c.lat];
-          setCenter(center);
-          setZoom(map.getZoom());
-          setBearing(map.getBearing());
-          setPitch(map.getPitch());
-        });
-
-        mapRef.current = map;
-
-        // Every later style load — a dark/light swap, a basemap switch — bumps the
-        // counter layers rebuild on. Registering it once here rather than per swap
-        // is what makes that unconditional: a `once` attached after `setStyle` is
-        // called can miss a style that resolves from cache, and the counter then
-        // never moves for the rest of the session.
-        map.on("style.load", () => {
-          if (!destroyed) notifyStyleReload();
-        });
-
-        const reloadForConnectivity = () => {
-          if (destroyed) return;
-          applyStyleForViewport("connectivity change");
-        };
-        const reloadForPackages = () => {
-          void ensureOfflinePackageRuntime().then(async (resolver) => {
-            await resolver?.refresh();
-            reloadForConnectivity();
+      const applyStyleForViewport = (reason: string) => {
+        const request = ++styleRequestRef.current;
+        const currentStyle = currentStyleRef.current;
+        void loadStyleForViewport(env, currentStyle.variant, currentStyle.mapStyle, maplibregl)
+          .then((next) => {
+            if (!isActive() || request !== styleRequestRef.current) return;
+            setOfflinePackageActive(next.offline);
+            map.setStyle(next.style as maplibregl.StyleSpecification);
+          })
+          .catch((err) => {
+            if (!isActive() || request !== styleRequestRef.current) return;
+            console.warn(`Unable to switch map style for ${reason}`, err);
           });
-        };
-        window.addEventListener("online", reloadForConnectivity);
-        window.addEventListener("offline", reloadForConnectivity);
-        window.addEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, reloadForPackages);
-        cleanupConnectivity = () => {
-          window.removeEventListener("online", reloadForConnectivity);
-          window.removeEventListener("offline", reloadForConnectivity);
-          window.removeEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, reloadForPackages);
-        };
+      };
 
-        // Publish readiness only after every synchronous setup step succeeds.
-        // Otherwise a later setup exception can leave consumers observing a
-        // "ready" context whose map has already been removed.
-        if (map.isStyleLoaded()) {
-          notifyMapReady();
-        } else {
-          map.once("style.load", () => {
-            if (!destroyed) notifyMapReady();
-          });
+      map.on("moveend", (e) => {
+        if (!isActive() || attemptFailed) return;
+        // The navigation follow camera drives the map with a programmatic
+        // jumpTo every animation frame; skip those so we don't write to the
+        // store 60×/s while navigating. Bail before reading the camera at all:
+        // getCenter() allocates, and this is the hottest listener on the map
+        // during a trip. User gestures and other programmatic moves (flyTo,
+        // deep links) still persist as before.
+        if (
+          (e as { programmatic?: boolean })?.programmatic &&
+          useNavigationStore.getState().status !== "idle"
+        ) {
+          return;
         }
-        return map;
-      } catch (error) {
-        cleanupConnectivity?.();
-        cleanupConnectivity = undefined;
-        if (mapRef.current === map) mapRef.current = null;
-        map.remove();
-        throw error;
+        const c = map.getCenter();
+        const center: LngLat = [c.lng, c.lat];
+        setCenter(center);
+        setZoom(map.getZoom());
+        setBearing(map.getBearing());
+        setPitch(map.getPitch());
+      });
+
+      mapRef.current = map;
+
+      // Every later style load — a dark/light swap, a basemap switch — bumps the
+      // counter layers rebuild on. Registering it once here rather than per swap
+      // is what makes that unconditional: a `once` attached after `setStyle` is
+      // called can miss a style that resolves from cache, and the counter then
+      // never moves for the rest of the session.
+      map.on("style.load", () => {
+        if (isActive()) notifyStyleReload();
+      });
+
+      const reloadForConnectivity = () => {
+        if (!isActive()) return;
+        applyStyleForViewport("connectivity change");
+      };
+      const reloadForPackages = () => {
+        void ensureOfflinePackageRuntime().then(async (resolver) => {
+          await resolver?.refresh();
+          reloadForConnectivity();
+        });
+      };
+      window.addEventListener("online", reloadForConnectivity);
+      window.addEventListener("offline", reloadForConnectivity);
+      window.addEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, reloadForPackages);
+      cleanupConnectivity = () => {
+        window.removeEventListener("online", reloadForConnectivity);
+        window.removeEventListener("offline", reloadForConnectivity);
+        window.removeEventListener(OFFLINE_PACKAGE_CHANGED_EVENT, reloadForPackages);
+      };
+
+      // Publish readiness only after every synchronous setup step succeeds.
+      // Otherwise a later setup exception can leave consumers observing a
+      // "ready" context whose map has already been removed.
+      let initialStyleFailed = false;
+      const handleInitialStyleError = (event: maplibregl.ErrorEvent) => {
+        if (!isActive() || initialStyleFailed) return;
+        const eventStyle = (event as maplibregl.ErrorEvent & { style?: maplibregl.Style }).style;
+        // MapLibre sets Style._loaded only after root-style validation succeeds.
+        // Source/tile errors happen later and must not dispose a usable map.
+        if (
+          eventStyle !== map.style ||
+          map.style._loaded ||
+          "sourceId" in event ||
+          "tile" in event
+        ) {
+          console.error(event.error);
+          return;
+        }
+        attemptFailed = true;
+        initialStyleFailed = true;
+        map.off("error", handleInitialStyleError);
+        // MapLibre may still be dispatching the validation event. Dispose after
+        // that dispatch finishes, so it cannot continue into a removed style.
+        queueMicrotask(() => {
+          if (!isActive()) return;
+          dispose();
+          containerRef.current?.replaceChildren();
+          console.error("Failed to initialize map", event.error);
+          setStatus("error");
+        });
+      };
+      const markReady = () => {
+        if (!isActive() || initialStyleFailed || mapRef.current !== map) return;
+        map.off("error", handleInitialStyleError);
+        notifyMapReady();
+        setStatus("ready");
+      };
+      if (map.isStyleLoaded()) {
+        markReady();
+      } else {
+        map.on("error", handleInitialStyleError);
+        map.once("style.load", markReady);
       }
+      return map;
     };
 
     // Render the saved viewport immediately. A granted geolocation permission
     // must not become a startup dependency: browsers are allowed to leave
     // getCurrentPosition pending indefinitely while a provider is unavailable.
     const mapInitialization = initMap(center, zoom).catch((err) => {
+      if (!isActive()) return undefined;
+      attemptFailed = true;
+      dispose();
+      // A constructor may append DOM before throwing without returning an instance.
+      containerRef.current?.replaceChildren();
       console.error("Failed to initialize map", err);
+      setStatus("error");
       return undefined;
     });
 
@@ -222,14 +271,14 @@ export function MapCanvas() {
     // the map is not a moment to spend somebody's one permission prompt.
     const recenter = (lngLat: LngLat) =>
       void mapInitialization.then((map) => {
-        if (destroyed || !map) return;
+        if (!isActive() || attemptFailed || !map || mapRef.current !== map) return;
         setUserLocation(lngLat);
         map.jumpTo({ center: lngLat, zoom: 14 }, { programmatic: true });
       });
 
     const takeFix = () =>
       void requestFix().then((result) => {
-        if (destroyed || result.status !== "ok") return;
+        if (!isActive() || attemptFailed || result.status !== "ok") return;
         recenter([result.fix.lng, result.fix.lat]);
       });
 
@@ -241,7 +290,7 @@ export function MapCanvas() {
       navigator.permissions
         .query({ name: "geolocation" })
         .then((result) => {
-          if (destroyed) return;
+          if (!isActive() || attemptFailed) return;
           if (result.state === "granted") takeFix();
         })
         .catch(() => undefined);
@@ -249,11 +298,7 @@ export function MapCanvas() {
 
     return () => {
       destroyed = true;
-      styleRequestRef.current++;
-      setOfflinePackageActive(false);
-      cleanupConnectivity?.();
-      mapRef.current?.remove();
-      mapRef.current = null;
+      dispose();
     };
   }, [
     env,
@@ -263,12 +308,19 @@ export function MapCanvas() {
     notifyMapReady,
     notifyStyleReload,
     requestFix,
+    retryKey,
     setBearing,
     setCenter,
     setPitch,
     setUserLocation,
     setZoom,
   ]);
+
+  const retry = () => {
+    attemptRef.current++;
+    setStatus("loading");
+    setRetryKey((key) => key + 1);
+  };
 
   // Swap map tile style when dark/light mode changes
   const initialStyleRef = useRef(mapStyle);
@@ -332,6 +384,48 @@ export function MapCanvas() {
   return (
     <Box sx={{ position: "absolute", inset: 0 }}>
       <Box ref={containerRef} sx={{ width: "100%", height: "100%" }} />
+      {status !== "ready" && (
+        <Box
+          sx={{
+            position: "absolute",
+            inset: 0,
+            display: "grid",
+            placeItems: "center",
+            pointerEvents: "none",
+          }}
+        >
+          <Box
+            role={status === "error" ? "alert" : "status"}
+            sx={{
+              display: "flex",
+              alignItems: "center",
+              gap: 1.5,
+              maxWidth: "min(320px, calc(100% - 32px))",
+              p: 2,
+              borderRadius: 2,
+              bgcolor: "background.paper",
+              boxShadow: 3,
+              pointerEvents: "auto",
+            }}
+          >
+            {status === "loading" ? (
+              <>
+                <CircularProgress size={20} aria-hidden="true" />
+                <Typography variant="body2">{t("loading")}</Typography>
+              </>
+            ) : (
+              <Box>
+                <Typography variant="body2" sx={{ mb: 1 }}>
+                  {t("loadError")}
+                </Typography>
+                <Button variant="contained" size="small" onClick={retry}>
+                  {tCommon("retry")}
+                </Button>
+              </Box>
+            )}
+          </Box>
+        </Box>
+      )}
     </Box>
   );
 }

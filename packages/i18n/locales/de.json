@@ -297,6 +297,8 @@
     "noThanks": "Nein danke"
   },
   "map": {
+    "loading": "Karte wird geladen …",
+    "loadError": "Die Karte konnte nicht geladen werden.",
     "myLocation": "Mein Standort",
     "goToMyLocationAriaLabel": "Zu meinem Standort",
     "zoomIn": "Vergrößern",

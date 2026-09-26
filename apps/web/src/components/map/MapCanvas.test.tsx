@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, render, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 const originalConsoleError = console.error;
@@ -13,6 +13,14 @@ vi.mock("@mui/material/styles", async (importOriginal) => ({
 vi.mock("next-intl", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next-intl")>()),
   useLocale: () => "en",
+  useTranslations: (namespace: string) => (key: string) =>
+    (
+      ({
+        "map.loading": "Loading map…",
+        "map.loadError": "The map could not be loaded.",
+        "common.retry": "Retry",
+      }) as Record<string, string>
+    )[`${namespace}.${key}`],
 }));
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => {
@@ -51,6 +59,12 @@ vi.mock("@/lib/map", () => {
       });
       return resolve;
     },
+    failStyleOnce(error: Error) {
+      stylePromise = Promise.reject(error);
+      return () => {
+        stylePromise = Promise.resolve(style);
+      };
+    },
     reset() {
       stylePromise = Promise.resolve(style);
     },
@@ -78,8 +92,12 @@ vi.mock("maplibre-gl", () => {
   let setupError: Error | undefined;
   let setupErrorOnCall = 1;
   let onCallCount = 0;
+  let initialStyleLoaded = true;
+  let initialStyleDefinitionLoaded = true;
   class FakeMap {
     jumpTo = vi.fn();
+    style = { _loaded: initialStyleDefinitionLoaded };
+    styleLoaded = initialStyleLoaded;
     /** Counts camera reads so a test can prove a guarded path never took one. */
     cameraReads = 0;
 
@@ -97,7 +115,7 @@ vi.mock("maplibre-gl", () => {
     getZoom = () => 12;
     getBearing = () => 33;
     getPitch = () => 44;
-    isStyleLoaded = () => true;
+    isStyleLoaded = () => this.styleLoaded;
     off = vi.fn();
     on = vi.fn(() => {
       onCallCount += 1;
@@ -108,6 +126,20 @@ vi.mock("maplibre-gl", () => {
     });
     once = vi.fn();
     remove = vi.fn();
+    emitError(error: Error, data: Record<string, unknown> = {}) {
+      const listener = this.on.mock.calls.find(([event]: unknown[]) => event === "error")?.[1] as
+        | ((event: unknown) => void)
+        | undefined;
+      listener?.({ error, style: this.style, ...data });
+    }
+    emitStyleLoad() {
+      this.style._loaded = true;
+      this.styleLoaded = true;
+      const listener = this.once.mock.calls.find(
+        ([event]: unknown[]) => event === "style.load",
+      )?.[1] as (() => void) | undefined;
+      listener?.();
+    }
   }
   return {
     __test: {
@@ -118,6 +150,14 @@ vi.mock("maplibre-gl", () => {
         setupError = error;
         setupErrorOnCall = onCall;
       },
+      deferInitialStyle(definitionLoaded: boolean) {
+        initialStyleLoaded = false;
+        initialStyleDefinitionLoaded = definitionLoaded;
+      },
+      loadInitialStyleOnConstruction() {
+        initialStyleLoaded = true;
+        initialStyleDefinitionLoaded = true;
+      },
       reset() {
         instances.length = 0;
         options.length = 0;
@@ -126,6 +166,8 @@ vi.mock("maplibre-gl", () => {
         setupError = undefined;
         setupErrorOnCall = 1;
         onCallCount = 0;
+        initialStyleLoaded = true;
+        initialStyleDefinitionLoaded = true;
       },
     },
     getVersion: () => "6.1.0",
@@ -148,6 +190,8 @@ const maplibreTest = (
     __test: {
       instances: Array<{
         cameraReads: number;
+        emitError(error: Error, data?: Record<string, unknown>): void;
+        emitStyleLoad(): void;
         jumpTo: ReturnType<typeof vi.fn>;
         on: ReturnType<typeof vi.fn>;
         remove: ReturnType<typeof vi.fn>;
@@ -155,13 +199,15 @@ const maplibreTest = (
       options: Array<{ center: [number, number]; zoom: number }>;
       workerUrlsAtConstruction: string[];
       failSetup(error: Error, onCall?: number): void;
+      deferInitialStyle(definitionLoaded: boolean): void;
+      loadInitialStyleOnConstruction(): void;
       reset(): void;
     };
   }
 ).__test;
 const mapStyleTest = (
   mapStyle as unknown as {
-    __test: { deferStyle(): () => void; reset(): void };
+    __test: { deferStyle(): () => void; failStyleOnce(error: Error): () => void; reset(): void };
   }
 ).__test;
 const mapContextTest = (
@@ -280,6 +326,147 @@ describe("MapCanvas", () => {
     expect(maplibreTest.instances[0]?.remove).toHaveBeenCalledTimes(1);
     expect(mapContextTest.mapRef.current).toBeNull();
     expect(mapContextTest.notifyMapReady).not.toHaveBeenCalled();
+    expect(screen.getByRole("alert")).toHaveTextContent("The map could not be loaded.");
+
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(2));
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    expect(maplibreTest.instances[0]?.remove).toHaveBeenCalledTimes(1);
+    expect(maplibreTest.instances[1]?.remove).not.toHaveBeenCalled();
+    expect(mapContextTest.mapRef.current).toBe(maplibreTest.instances[1]);
+    expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("recovers from an initial style load rejection without leaving a stale error", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    const allowStyle = mapStyleTest.failStyleOnce(new Error("Style unavailable"));
+    const consoleError = vi.fn();
+    console.error = consoleError;
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+    render(<MapCanvas />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading map…");
+    await screen.findByRole("alert");
+    expect(maplibreTest.instances).toHaveLength(0);
+
+    allowStyle();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(mapContextTest.mapRef.current).toBe(maplibreTest.instances[0]);
+    expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not construct a map when an initial style resolves after unmount", async () => {
+    maplibreTest.reset();
+    const resolveStyle = mapStyleTest.deferStyle();
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+    const { unmount } = render(<MapCanvas />);
+    expect(screen.getByRole("status")).toHaveTextContent("Loading map…");
+    unmount();
+    await act(async () => resolveStyle());
+
+    expect(maplibreTest.instances).toHaveLength(0);
+    expect(mapContextTest.notifyMapReady).not.toHaveBeenCalled();
+    expect(mapContextTest.mapRef.current).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("offers retry when MapLibre rejects the initial style before readiness", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    maplibreTest.deferInitialStyle(false);
+    console.error = vi.fn();
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+    render(<MapCanvas />);
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+    expect(screen.getByRole("status")).toHaveTextContent("Loading map…");
+
+    act(() => maplibreTest.instances[0]?.emitError(new Error("Invalid initial style")));
+    await screen.findByRole("alert");
+    expect(maplibreTest.instances[0]?.remove).toHaveBeenCalledTimes(1);
+    expect(mapContextTest.mapRef.current).toBeNull();
+    expect(mapContextTest.notifyMapReady).not.toHaveBeenCalled();
+    act(() => maplibreTest.instances[0]?.emitStyleLoad());
+    expect(mapContextTest.notifyMapReady).not.toHaveBeenCalled();
+
+    maplibreTest.loadInitialStyleOnConstruction();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(2));
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(maplibreTest.instances[1]?.remove).not.toHaveBeenCalled();
+    expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the initial map usable when a tile fails before style readiness", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    maplibreTest.deferInitialStyle(true);
+    console.error = vi.fn();
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+    render(<MapCanvas />);
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+    const map = maplibreTest.instances[0];
+    act(() =>
+      map?.emitError(new Error("Tile unavailable"), { sourceId: "openmaptiles", tile: {} }),
+    );
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(map?.remove).not.toHaveBeenCalled();
+    act(() => map?.emitStyleLoad());
+    await waitFor(() => expect(screen.queryByRole("status")).toBeNull());
+    expect(mapContextTest.notifyMapReady).toHaveBeenCalledTimes(1);
+  });
+
+  it("ignores a granted location that arrives after the initial map has failed", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    maplibreTest.deferInitialStyle(false);
+    useMapStore.setState({ center: [11, 22], userLocation: null, zoom: 7 });
+    console.error = vi.fn();
+    let positionSuccess: PositionCallback | undefined;
+    vi.stubGlobal("navigator", {
+      ...navigator,
+      geolocation: {
+        getCurrentPosition: vi.fn((...args: unknown[]) => {
+          positionSuccess = args[0] as PositionCallback;
+        }),
+      },
+      permissions: { query: vi.fn().mockResolvedValue({ state: "granted" }) },
+    });
+
+    render(<MapCanvas />);
+    await waitFor(() => expect(positionSuccess).toBeDefined());
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+    const failedMap = maplibreTest.instances[0];
+    failedMap?.jumpTo.mockImplementation(() => {
+      const moveEnd = failedMap.on.mock.calls.find(
+        ([event]: unknown[]) => event === "moveend",
+      )?.[1] as ((event: unknown) => void) | undefined;
+      moveEnd?.({ programmatic: true });
+    });
+
+    act(() => failedMap?.emitError(new Error("Invalid initial style")));
+    await screen.findByRole("alert");
+    await act(async () => {
+      positionSuccess?.({ coords: { latitude: 52.5, longitude: 13.4 } } as GeolocationPosition);
+    });
+
+    expect(failedMap?.jumpTo).not.toHaveBeenCalled();
+    expect(useMapStore.getState()).toMatchObject({
+      center: [11, 22],
+      userLocation: null,
+      zoom: 7,
+    });
+
+    maplibreTest.loadInitialStyleOnConstruction();
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(maplibreTest.instances).toHaveLength(2));
+    expect(maplibreTest.options[1]).toMatchObject({ center: [11, 22], zoom: 7 });
   });
 
   it("persists the viewport for a user-originated move", async () => {
