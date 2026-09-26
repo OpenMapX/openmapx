@@ -86,27 +86,90 @@ describe("PlaceDetailContent per detent", () => {
     expect(screen.getByText("Test Place")).toBeDefined();
   });
 
-  it("drops the secondary meta rows at peek", () => {
-    renderAtDetent("peek");
-    expect(screen.queryByTestId("place-meta-rows")).toBeNull();
+  it("drops the rating row at peek", () => {
+    renderAtDetent("peek", { ...place, rating: 4.5, reviewCount: 12 } as Place);
+    expect(screen.queryByTestId("place-rating-row")).toBeNull();
   });
 
-  it("restores them at mid", () => {
-    renderAtDetent("mid");
-    expect(screen.getByTestId("place-meta-rows")).toBeDefined();
+  it("keeps one category and known opening summary before actions at peek", () => {
+    const { container } = renderAtDetent("peek", {
+      ...place,
+      name: "A very long restaurant name that must leave room for the close button",
+      category: "A very long restaurant category that needs truncation",
+      openingHoursInfo: {
+        status: {
+          isOpen: true,
+          nextChange: { kind: "closes", at: "19:00", weekday: 6, day: "today" },
+        },
+      },
+    } as Place);
+    const peek = container.querySelector("[data-omx-peek]") as HTMLElement;
+    const summary = within(peek).getByTestId("place-peek-summary");
+    expect(summary.textContent).toBe(
+      "A very long restaurant category that needs truncation · open · closesAt",
+    );
+    expect(within(peek).getAllByTestId("place-peek-summary")).toHaveLength(1);
+    expect(
+      summary.compareDocumentPosition(within(peek).getByText("directions")) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(
+      within(peek).getByText(
+        "A very long restaurant name that must leave room for the close button",
+      ),
+    ).toBeVisible();
+    expect(within(peek).getByText("savePlace")).toBeVisible();
+    expect(within(peek).getByText("share")).toBeVisible();
+  });
+
+  it("keeps unknown hours neutral and absent hours without a verdict at peek", () => {
+    const unknown = renderAtDetent("peek", {
+      ...place,
+      category: "Cafe",
+      isOpen: false,
+      openingHoursInfo: { status: { isOpen: false, isUnknown: true, text: "by appointment" } },
+    } as Place);
+    expect(screen.getByTestId("place-peek-summary").textContent).toBe("Cafe · unconfirmed");
+    unknown.unmount();
+
+    renderAtDetent("peek", { ...place, category: "Cafe", isOpen: false } as Place);
+    expect(screen.getByTestId("place-peek-summary").textContent).toBe("Cafe");
+  });
+
+  it("keeps the compact line out of the expanded view", () => {
+    renderAtDetent("mid", {
+      ...place,
+      category: "Restaurant",
+      openingHoursInfo: { status: { isOpen: true } },
+    } as Place);
+    expect(screen.queryByTestId("place-peek-summary")).toBeNull();
+    expect(screen.getByText("Restaurant")).toBeVisible();
+  });
+
+  it("restores the rating row at mid", () => {
+    renderAtDetent("mid", { ...place, rating: 4.5, reviewCount: 12 } as Place);
+    expect(within(screen.getByTestId("place-rating-row")).getByText("4.5")).toBeVisible();
   });
 
   it("shows a known opening state beside category below the title and before actions", () => {
     renderAtDetent("mid", {
       ...place,
       category: "Restaurant",
+      rating: 4.5,
+      reviewCount: 12,
       openingHoursInfo: { status: { isOpen: true } },
     } as Place);
-    const meta = screen.getByTestId("place-meta-rows");
-    expect(within(meta).getByText("Restaurant")).toBeVisible();
-    expect(within(meta).getByText("open")).toBeVisible();
+    const meta = screen.getByTestId("place-rating-row");
+    const category = screen.getByText("Restaurant");
+    expect(category).toBeVisible();
+    expect(
+      within(document.querySelector("[data-omx-peek]") as HTMLElement).getByText("open"),
+    ).toBeVisible();
+    expect(meta.contains(category)).toBe(false);
     const actions = screen.getByText("directions");
-    expect(meta.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(
+      category.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
   });
 
   it("keeps unknown hours neutral and omits a verdict when status is absent", () => {
@@ -116,8 +179,9 @@ describe("PlaceDetailContent per detent", () => {
       isOpen: false,
       openingHoursInfo: { status: { isOpen: false, isUnknown: true, text: "by appointment" } },
     } as Place);
-    expect(within(screen.getByTestId("place-meta-rows")).getByText("unconfirmed")).toBeVisible();
-    expect(within(screen.getByTestId("place-meta-rows")).queryByText("closed")).toBeNull();
+    const peek = document.querySelector("[data-omx-peek]") as HTMLElement;
+    expect(within(peek).getByText("unconfirmed")).toBeVisible();
+    expect(within(peek).queryByText("closed")).toBeNull();
     rerender(
       <QueryClientProvider client={new QueryClient()}>
         <MobileSheetContext.Provider
@@ -130,8 +194,8 @@ describe("PlaceDetailContent per detent", () => {
         </MobileSheetContext.Provider>
       </QueryClientProvider>,
     );
-    expect(within(screen.getByTestId("place-meta-rows")).queryByText("closed")).toBeNull();
-    expect(within(screen.getByTestId("place-meta-rows")).queryByText("unconfirmed")).toBeNull();
+    expect(within(peek).queryByText("closed")).toBeNull();
+    expect(within(peek).queryByText("unconfirmed")).toBeNull();
   });
 });
 

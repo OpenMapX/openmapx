@@ -439,34 +439,32 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
                 {place.name}
               </Typography>
             )}
-            {/* data-omx-peek-hidden: these rows are gone at peek, so the sheet
-                must not count them when it works out the collapsed height. */}
-            {detent !== "peek" && (
-              <Box data-omx-peek-hidden data-testid="place-meta-rows">
-                {headerReviewStats && (
-                  <Box sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 600,
-                      }}
-                    >
-                      {headerReviewStats.rating.toFixed(1)}
-                    </Typography>
-                    <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: "text.secondary",
-                      }}
-                    >
-                      ({headerReviewStats.count.toLocaleString(locale)})
-                    </Typography>
-                  </Box>
-                )}
-                <PlaceVisitSummary place={place} />
+            {/* Only the rating disappears at peek. Keep the visit summary in
+                the measured subtree at every detent so its line is already
+                counted before the sheet collapses. */}
+            {detent !== "peek" && headerReviewStats && (
+              <Box
+                data-omx-peek-hidden
+                data-testid="place-rating-row"
+                sx={{ display: "flex", alignItems: "center", gap: 0.5, mb: 0.75 }}
+              >
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {headerReviewStats.rating.toFixed(1)}
+                </Typography>
+                <StarIcon sx={{ fontSize: 16, color: "#FBBC04" }} />
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  ({headerReviewStats.count.toLocaleString(locale)})
+                </Typography>
               </Box>
             )}
+            <Box
+              sx={{
+                minWidth: 0,
+                pr: inSheet && detent === "peek" && onClose && !showHeaderWeather ? 4 : 0,
+              }}
+            >
+              <PlaceVisitSummary place={place} compact={inSheet && detent === "peek"} />
+            </Box>
           </Box>
           {showHeaderWeather && (
             // Shift down past the absolute close button when the hero isn't
