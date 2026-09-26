@@ -845,6 +845,8 @@
     "earlierConnections": "Frühere Verbindungen",
     "laterConnections": "Spätere Verbindungen",
     "journeyCancelled": "Fällt aus",
+    "cancelledServices": "{count, plural, one {1 Fahrt fällt aus} other {# Fahrten fallen aus}}",
+    "wheelchairRestrictedLegs": "{count, plural, one {1 Abschnitt nicht rollstuhlgerecht} other {# Abschnitte nicht rollstuhlgerecht}}",
     "realtimeSupported": "Echtzeit",
     "bikesSupported": "Fahrradmitnahme möglich",
     "bikesNotSupported": "Keine Fahrradmitnahme",

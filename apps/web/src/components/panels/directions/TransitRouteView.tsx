@@ -271,6 +271,10 @@ export function TransitItineraryCard({
   const refreshMutation = useRefreshTransitItinerary();
   const fareSummary = extractFareSummary(itinerary.fare);
   const occupancy = worstOccupancy(itinerary);
+  const cancelledLegs = itinerary.legs.filter((leg) => leg.cancelled === true).length;
+  const wheelchairRestrictedLegs = itinerary.legs.filter(
+    (leg) => leg.wheelchairAccessible === false,
+  ).length;
   // Plan-time robustness cue: a very short scheduled transfer buffer.
   const tightTransfer = itineraryTransferRisk(itinerary.legs) !== null;
   // Resolve each offset label before formatting the time it gates: unlike
@@ -409,6 +413,42 @@ export function TransitItineraryCard({
         >
           {metaBits.join(" · ")}
         </Typography>
+      )}
+      {(cancelledLegs > 0 || wheelchairRestrictedLegs > 0) && (
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75, mt: 0.75 }}>
+          {cancelledLegs > 0 && (
+            <Typography
+              variant="caption"
+              data-testid="transit-cancelled-summary"
+              sx={{
+                px: 0.75,
+                py: 0.25,
+                borderRadius: 99,
+                bgcolor: "error.main",
+                color: "error.contrastText",
+                fontWeight: 600,
+              }}
+            >
+              {t("cancelledServices", { count: cancelledLegs })}
+            </Typography>
+          )}
+          {wheelchairRestrictedLegs > 0 && (
+            <Typography
+              variant="caption"
+              data-testid="transit-accessibility-summary"
+              sx={{
+                px: 0.75,
+                py: 0.25,
+                borderRadius: 99,
+                bgcolor: "warning.main",
+                color: "warning.contrastText",
+                fontWeight: 600,
+              }}
+            >
+              {t("wheelchairRestrictedLegs", { count: wheelchairRestrictedLegs })}
+            </Typography>
+          )}
+        </Box>
       )}
       {tightTransfer && (
         <Box

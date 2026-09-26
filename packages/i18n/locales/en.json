@@ -845,6 +845,8 @@
     "earlierConnections": "Earlier connections",
     "laterConnections": "Later connections",
     "journeyCancelled": "Cancelled",
+    "cancelledServices": "{count, plural, one {1 service cancelled} other {# services cancelled}}",
+    "wheelchairRestrictedLegs": "{count, plural, one {1 leg not wheelchair accessible} other {# legs not wheelchair accessible}}",
     "realtimeSupported": "Realtime",
     "bikesSupported": "Bicycles allowed",
     "bikesNotSupported": "Bicycles not allowed",

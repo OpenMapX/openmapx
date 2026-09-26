@@ -1,5 +1,7 @@
+import type { TripItinerary } from "@openmapx/mobility-core/transit";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { TransitItineraryCard } from "./TransitRouteView";
 import { SAMPLE_TRANSIT_ITINERARY } from "./TransitRouteView.fixtures";
 
@@ -21,11 +23,28 @@ vi.mock("next-intl", () => ({
     }
     if (namespace === "directions" && key === "lowestCo2") return "Lowest CO2";
     if (namespace === "directions" && key === "co2Emissions") return "CO2";
+    if (namespace === "directions" && key === "cancelledServices") {
+      const count = Number(values?.count ?? 0);
+      return `${count} ${count === 1 ? "service" : "services"} cancelled`;
+    }
+    if (namespace === "directions" && key === "wheelchairRestrictedLegs") {
+      const count = Number(values?.count ?? 0);
+      return `${count} ${count === 1 ? "leg" : "legs"} not wheelchair accessible`;
+    }
     if (namespace === "common" && key === "details") return "Details";
     return key;
   },
   useLocale: () => "en",
 }));
+
+afterEach(cleanup);
+
+const itineraryWith = (legs: TripItinerary["legs"]): TripItinerary => ({
+  ...SAMPLE_TRANSIT_ITINERARY,
+  legs,
+});
+
+const railLeg = SAMPLE_TRANSIT_ITINERARY.legs[0];
 
 vi.mock("@openmapx/core", () => ({
   formatDistance: (distance: number) => `${distance} m`,
@@ -79,5 +98,105 @@ describe("TransitItineraryCard", () => {
     expect(markup).toContain("250 m walk");
     expect(markup).toContain("Lowest CO2");
     expect(markup).toContain("43 g CO2");
+    expect(markup).not.toContain("cancelled");
+    expect(markup).not.toContain("not wheelchair accessible");
+  });
+
+  it("counts confirmed cancellations across multiple legs", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itineraryWith([
+          { ...railLeg, cancelled: true },
+          { ...railLeg, cancelled: false },
+          { ...railLeg, cancelled: true },
+        ])}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+    expect(markup).toContain("2 services cancelled");
+    expect(markup).not.toContain("not wheelchair accessible");
+  });
+
+  it("summarizes only confirmed wheelchair restrictions", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itineraryWith([
+          { ...railLeg, wheelchairAccessible: true },
+          { ...railLeg, wheelchairAccessible: false },
+          { ...railLeg },
+        ])}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+    expect(markup).toContain("1 leg not wheelchair accessible");
+    expect(markup).not.toContain("services cancelled");
+  });
+
+  it("shows both confirmed conditions without treating unknown legs as clear", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itineraryWith([
+          { ...railLeg, cancelled: true },
+          { ...railLeg, wheelchairAccessible: false },
+          { ...railLeg },
+        ])}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+    expect(markup).toContain("1 service cancelled");
+    expect(markup).toContain("1 leg not wheelchair accessible");
+    expect(markup).not.toContain("Wheelchair accessible");
+  });
+
+  it("does not infer cancellation from a severe alert or unknown accessibility", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itineraryWith([
+          {
+            ...railLeg,
+            alerts: [
+              {
+                id: "maintenance",
+                providers: ["test"],
+                severity: "severe",
+                title: "Service disruption",
+                affectedRouteIds: [],
+                affectedStopIds: [],
+                activePeriods: [],
+              },
+            ],
+          },
+        ])}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+    expect(markup).not.toContain("services cancelled");
+    expect(markup).not.toContain("not wheelchair accessible");
+  });
+
+  it("keeps itinerary selection and Details separate when a warning is present", () => {
+    const onSelect = vi.fn();
+    const onDetails = vi.fn();
+    const view = render(
+      <TransitItineraryCard
+        itinerary={itineraryWith([{ ...railLeg, cancelled: true }])}
+        active
+        onSelect={onSelect}
+        onDetails={onDetails}
+      />,
+    );
+    fireEvent.click(view.container.querySelector('[role="button"]') as Element);
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    fireEvent.click(screen.getByText("Details"));
+    expect(onDetails).toHaveBeenCalledTimes(1);
+    expect(onSelect).toHaveBeenCalledTimes(1);
   });
 });
