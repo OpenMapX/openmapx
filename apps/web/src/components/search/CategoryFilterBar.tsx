@@ -1,6 +1,5 @@
 "use client";
 
-import AccessibleIcon from "@mui/icons-material/Accessible";
 import AccessTimeIcon from "@mui/icons-material/AccessTime";
 import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import TuneIcon from "@mui/icons-material/Tune";
@@ -20,11 +19,11 @@ import type { OpeningHoursFilter } from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
   brandOptions,
+  CATEGORY_FACETS,
   facetsForCategory,
   cuisineOptions as getCuisineOptions,
   HOURS_FILTER_CATEGORY_IDS,
   removeFilterPredicate,
-  useBrandLogos,
   useCategoryFacetStore,
   useCategorySearchStore,
   useDataSourceStore,
@@ -36,13 +35,9 @@ import { useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
-import { BrandLogo } from "./BrandLogo";
 import { CategoryFiltersPanel } from "./CategoryFiltersPanel";
 import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 import { NlpUnmappedNotice } from "./NlpFilterChips";
-
-/** Chip row cap — most common brands first, everything past this stays reachable by narrowing the map/search instead. */
-const MAX_BRAND_CHIPS = 6;
 
 // Recognized OSM attribute keys (base form). A small model sometimes echoes
 // these into `unmapped_attributes` instead of leaving them out — they aren't
@@ -202,59 +197,57 @@ export function CategoryFilterBar() {
   // restaurants), so a text search shows the same filters as that category.
   const effectiveCategory = activeCategory ?? dominantCategory;
 
-  const panelFacets = useMemo(
-    () => facetsForCategory(effectiveCategory).filter((f) => f.placement === "panel"),
-    [effectiveCategory],
-  );
   const cuisineOpts = useMemo(() => getCuisineOptions(rawResults ?? []), [rawResults]);
-  const activePanelCount = panelFacets.filter(
+  const brandOpts = useMemo(() => brandOptions(rawResults ?? []), [rawResults]);
+  const panelFacets = useMemo(() => {
+    const applicable = new Set(facetsForCategory(effectiveCategory).map((facet) => facet.id));
+    return CATEGORY_FACETS.filter(
+      (facet) =>
+        facet.placement === "panel" &&
+        (applicable.has(facet.id) ||
+          (facetSelections[facet.id]?.length ?? 0) > 0 ||
+          (facet.allCategories && brandOpts.length >= 2)) &&
+        (facet.id !== "brand" || brandOpts.length >= 2 || (facetSelections.brand?.length ?? 0) > 0),
+    );
+  }, [effectiveCategory, brandOpts.length, facetSelections]);
+  const activeFacetCount = panelFacets.filter(
     (f) => (facetSelections[f.id]?.length ?? 0) > 0,
   ).length;
-  const wheelchairOn = (facetSelections.wheelchairAccessible?.length ?? 0) > 0;
-
-  // Brand facet: a group-by over results already in the client, so it's
-  // offered under every category rather than gated by `facetsForCategory`.
-  // A single brand narrows nothing, so the row only renders at 2+.
-  const brandOpts = useMemo(() => brandOptions(rawResults ?? []), [rawResults]);
-  const topBrandOpts = useMemo(() => brandOpts.slice(0, MAX_BRAND_CHIPS), [brandOpts]);
-  const brandLogos = useBrandLogos(useMemo(() => topBrandOpts.map((b) => b.qid), [topBrandOpts]));
-  const selectedBrandQids = facetSelections.brand ?? [];
-  const showBrandChips = brandOpts.length >= 2;
-  const toggleBrand = (qid: string) =>
-    setMultiFacet(
-      "brand",
-      selectedBrandQids.includes(qid)
-        ? selectedBrandQids.filter((v) => v !== qid)
-        : [...selectedBrandQids, qid],
-    );
-  const brandChips = showBrandChips
-    ? topBrandOpts.map((b) => {
-        const selected = selectedBrandQids.includes(b.qid);
-        return (
-          <Chip
-            key={b.qid}
-            icon={
-              <BrandLogo
-                brand={{
-                  qid: b.qid,
-                  name: b.name,
-                  logoFile: brandLogos.get(b.qid),
-                  kind: ["brand"],
-                }}
-                size={16}
-              />
-            }
-            label={`${b.name} · ${b.count}`}
-            onClick={() => toggleBrand(b.qid)}
-            variant={selected ? "filled" : "outlined"}
-            sx={toggleChipSx(selected)}
-          />
-        );
-      })
-    : null;
+  const cuisineFacet = panelFacets.find((f) => f.id === "cuisine");
+  const activeFacetChips = panelFacets.flatMap((facet) => {
+    const values = facetSelections[facet.id] ?? [];
+    return values.map((value) => {
+      const name =
+        facet.id === "brand"
+          ? (brandOpts.find((option) => option.qid === value)?.name ?? value)
+          : facet.id === "cuisine"
+            ? value.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
+            : t(facet.id);
+      const chipText = facet.type === "multi" ? `${t(facet.id)}: ${name}` : name;
+      const remove = () => {
+        if (facet.type === "toggle") toggleFacet(facet.id);
+        else
+          setMultiFacet(
+            facet.id,
+            values.filter((selected) => selected !== value),
+          );
+      };
+      return (
+        <Chip
+          key={`${facet.id}-${value}`}
+          label={chipText}
+          onClick={remove}
+          onDelete={remove}
+          variant="filled"
+          sx={{ ...floatingChipSx(true, "toggle"), flexShrink: 0 }}
+        />
+      );
+    });
+  });
 
   const [anchorEl, setAnchorEl] = useState<HTMLElement | null>(null);
   const [panelAnchorEl, setPanelAnchorEl] = useState<HTMLElement | null>(null);
+  const [cuisineAnchorEl, setCuisineAnchorEl] = useState<HTMLElement | null>(null);
   const [barEl, setBarEl] = useState<HTMLDivElement | null>(null);
   // Pending state — committed only on Apply
   const [pendingMode, setPendingMode] = useState<OpeningHoursFilter>(openingHoursFilter);
@@ -340,21 +333,8 @@ export function CategoryFilterBar() {
     );
   }
 
-  // No opening-times toolbar for this category, but the brand chips (any
-  // category) or an NLP unmapped-attributes notice may still apply.
-  if (!effectiveCategory || !HOURS_FILTER_CATEGORY_IDS.has(effectiveCategory)) {
-    if (!unmappedNotice && !showBrandChips) return null;
-    return (
-      <Box
-        ref={setBarEl}
-        sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}
-      >
-        {brandChips}
-        {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
-      </Box>
-    );
-  }
-
+  const hasHours = !!effectiveCategory && HOURS_FILTER_CATEGORY_IDS.has(effectiveCategory);
+  if (!hasHours && panelFacets.length === 0 && !unmappedNotice) return null;
   const isFiltered = openingHoursFilter !== "any";
   const label = chipLabel(openingHoursFilter, openAtDay, openAtHour, t);
 
@@ -380,194 +360,18 @@ export function CategoryFilterBar() {
   return (
     <Box
       ref={setBarEl}
-      sx={{ ...floatingToolbarSx, gap: 1, flexWrap: "wrap", pointerEvents: "none" }}
+      role="group"
+      aria-label={t("filters")}
+      sx={{
+        ...floatingToolbarSx,
+        gap: 1,
+        flexWrap: "nowrap",
+        overflowX: "auto",
+        scrollbarWidth: "none",
+        pointerEvents: "none",
+        "&::-webkit-scrollbar": { display: "none" },
+      }}
     >
-      <Chip
-        icon={
-          <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
-            <AccessTimeIcon sx={{ fontSize: 16 }} />
-          </Box>
-        }
-        label={
-          <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
-            {label}
-            <ExpandMoreIcon
-              sx={{
-                fontSize: 16,
-                transition: "transform 0.15s",
-                transform: anchorEl ? "rotate(180deg)" : "none",
-              }}
-            />
-          </Box>
-        }
-        onClick={(e) => {
-          setPendingMode(openingHoursFilter);
-          setPendingDay(openAtDay);
-          setPendingHour(openAtHour);
-          setAnchorEl(e.currentTarget);
-        }}
-        variant={isFiltered ? "filled" : "outlined"}
-        sx={toggleChipSx(isFiltered)}
-      />
-      <Popover
-        open={Boolean(anchorEl)}
-        anchorEl={anchorEl}
-        onClose={() => setAnchorEl(null)}
-        anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
-        transformOrigin={{ vertical: "top", horizontal: "left" }}
-        sx={{ mt: 0.5 }}
-      >
-        <Paper elevation={3} sx={{ width: 340, display: "flex", flexDirection: "column" }}>
-          {/* Top radio group */}
-          <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
-            {(
-              [
-                { value: "any", label: t("anyTime") },
-                { value: "open_now", label: t("openNow") },
-                { value: "open_24h", label: t("open24h") },
-              ] as { value: OpeningHoursFilter; label: string }[]
-            ).map((opt) => (
-              <Box
-                key={opt.value}
-                component="label"
-                sx={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 1,
-                  py: 0.75,
-                  cursor: "pointer",
-                }}
-              >
-                <Radio
-                  checked={pendingMode === opt.value}
-                  onChange={() => setPendingMode(opt.value)}
-                  size="small"
-                  sx={radioSx}
-                />
-                <Typography
-                  variant="body2"
-                  sx={{
-                    fontSize: 15,
-                  }}
-                >
-                  {opt.label}
-                </Typography>
-              </Box>
-            ))}
-          </Box>
-
-          <Divider />
-
-          {/* "Open at" option with day + time pickers */}
-          <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
-            <Box
-              component="label"
-              sx={{ display: "flex", alignItems: "center", gap: 1, py: 0.75, cursor: "pointer" }}
-            >
-              <Radio
-                checked={pendingMode === "open_at"}
-                onChange={() => setPendingMode("open_at")}
-                size="small"
-                sx={radioSx}
-              />
-              <Typography
-                variant="body2"
-                sx={{
-                  fontSize: 15,
-                }}
-              >
-                {t("openAt")}
-              </Typography>
-            </Box>
-
-            {/* Day + Time grid — always visible but dims when mode isn't open_at */}
-            <Box
-              sx={{
-                display: "flex",
-                gap: 1,
-                mt: 1,
-                mb: 1,
-                opacity: pendingMode === "open_at" ? 1 : 0.35,
-                pointerEvents: pendingMode === "open_at" ? "auto" : "none",
-              }}
-            >
-              {/* Days column */}
-              <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, width: 130 }}>
-                {DAYS.map((d) => (
-                  <PickerButton
-                    key={d.idx}
-                    label={t(d.key)}
-                    selected={pendingDay === d.idx}
-                    onClick={() => setPendingDay(pendingDay === d.idx ? null : d.idx)}
-                  />
-                ))}
-              </Box>
-
-              {/* Divider */}
-              <Divider orientation="vertical" flexItem />
-
-              {/* Time column — scrollable */}
-              <Box
-                sx={{
-                  flex: 1,
-                  display: "flex",
-                  flexDirection: "column",
-                  gap: 0.75,
-                  maxHeight: 280,
-                  overflowY: "auto",
-                  pr: 0.5,
-                  scrollbarWidth: "thin",
-                }}
-              >
-                {HOUR_OPTIONS.map((h) => (
-                  <PickerButton
-                    key={h.value ?? "any"}
-                    label={
-                      h.value === null ? t("anyTime") : `${String(h.value).padStart(2, "0")}:00`
-                    }
-                    selected={pendingHour === h.value}
-                    onClick={() => setPendingHour(pendingHour === h.value ? null : h.value)}
-                  />
-                ))}
-              </Box>
-            </Box>
-          </Box>
-
-          <Divider />
-
-          {/* Footer */}
-          <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, px: 2, py: 1 }}>
-            <Button
-              variant="text"
-              size="small"
-              onClick={handleClear}
-              sx={{ textTransform: "none", color: "text.secondary" }}
-            >
-              {tc("clear")}
-            </Button>
-            <Button
-              variant="text"
-              size="small"
-              onClick={handleApply}
-              sx={{ textTransform: "none", color: BRAND, fontWeight: 600 }}
-            >
-              {tc("apply")}
-            </Button>
-          </Box>
-        </Paper>
-      </Popover>
-      <Chip
-        icon={
-          <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
-            <AccessibleIcon sx={{ fontSize: 16 }} />
-          </Box>
-        }
-        label={t("wheelchairAccessible")}
-        onClick={() => toggleFacet("wheelchairAccessible")}
-        variant={wheelchairOn ? "filled" : "outlined"}
-        sx={toggleChipSx(wheelchairOn)}
-      />
-      {brandChips}
       {panelFacets.length > 0 && (
         <>
           <Chip
@@ -578,7 +382,7 @@ export function CategoryFilterBar() {
             }
             label={
               <Badge
-                badgeContent={activePanelCount}
+                badgeContent={activeFacetCount}
                 color="primary"
                 sx={{ "& .MuiBadge-badge": { right: -10, top: 2, bgcolor: BRAND } }}
               >
@@ -586,19 +390,221 @@ export function CategoryFilterBar() {
               </Badge>
             }
             onClick={(e) => setPanelAnchorEl(e.currentTarget)}
-            variant={activePanelCount > 0 ? "filled" : "outlined"}
-            sx={toggleChipSx(activePanelCount > 0)}
+            variant={activeFacetCount > 0 ? "filled" : "outlined"}
+            sx={{ ...toggleChipSx(activeFacetCount > 0), flexShrink: 0 }}
           />
           <CategoryFiltersPanel
             anchorEl={panelAnchorEl}
             onClose={() => setPanelAnchorEl(null)}
             facets={panelFacets}
             cuisineOptions={cuisineOpts}
+            brandOptions={brandOpts}
           />
         </>
       )}
-      {/* Unmapped NLP attributes drop to their own line below the chip row. */}
-      {unmappedNotice && <Box sx={{ flexBasis: "100%" }}>{unmappedNotice}</Box>}
+      {hasHours && (
+        <>
+          <Chip
+            icon={
+              <Box sx={{ display: "flex", alignItems: "center", color: "inherit !important" }}>
+                <AccessTimeIcon sx={{ fontSize: 16 }} />
+              </Box>
+            }
+            label={
+              <Box sx={{ display: "flex", alignItems: "center", gap: 0.5 }}>
+                {label}
+                <ExpandMoreIcon
+                  sx={{
+                    fontSize: 16,
+                    transition: "transform 0.15s",
+                    transform: anchorEl ? "rotate(180deg)" : "none",
+                  }}
+                />
+              </Box>
+            }
+            onClick={(e) => {
+              setPendingMode(openingHoursFilter);
+              setPendingDay(openAtDay);
+              setPendingHour(openAtHour);
+              setAnchorEl(e.currentTarget);
+            }}
+            variant={isFiltered ? "filled" : "outlined"}
+            sx={{ ...toggleChipSx(isFiltered), flexShrink: 0 }}
+          />
+          <Popover
+            open={Boolean(anchorEl)}
+            anchorEl={anchorEl}
+            onClose={() => setAnchorEl(null)}
+            anchorOrigin={{ vertical: "bottom", horizontal: "left" }}
+            transformOrigin={{ vertical: "top", horizontal: "left" }}
+            sx={{ mt: 0.5 }}
+          >
+            <Paper elevation={3} sx={{ width: 340, display: "flex", flexDirection: "column" }}>
+              {/* Top radio group */}
+              <Box sx={{ px: 2, pt: 1.5, pb: 1 }}>
+                {(
+                  [
+                    { value: "any", label: t("anyTime") },
+                    { value: "open_now", label: t("openNow") },
+                    { value: "open_24h", label: t("open24h") },
+                  ] as { value: OpeningHoursFilter; label: string }[]
+                ).map((opt) => (
+                  <Box
+                    key={opt.value}
+                    component="label"
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 1,
+                      py: 0.75,
+                      cursor: "pointer",
+                    }}
+                  >
+                    <Radio
+                      checked={pendingMode === opt.value}
+                      onChange={() => setPendingMode(opt.value)}
+                      size="small"
+                      sx={radioSx}
+                    />
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontSize: 15,
+                      }}
+                    >
+                      {opt.label}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+
+              <Divider />
+
+              {/* "Open at" option with day + time pickers */}
+              <Box sx={{ px: 2, pt: 1, pb: 0.5 }}>
+                <Box
+                  component="label"
+                  sx={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 1,
+                    py: 0.75,
+                    cursor: "pointer",
+                  }}
+                >
+                  <Radio
+                    checked={pendingMode === "open_at"}
+                    onChange={() => setPendingMode("open_at")}
+                    size="small"
+                    sx={radioSx}
+                  />
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontSize: 15,
+                    }}
+                  >
+                    {t("openAt")}
+                  </Typography>
+                </Box>
+
+                {/* Day + Time grid — always visible but dims when mode isn't open_at */}
+                <Box
+                  sx={{
+                    display: "flex",
+                    gap: 1,
+                    mt: 1,
+                    mb: 1,
+                    opacity: pendingMode === "open_at" ? 1 : 0.35,
+                    pointerEvents: pendingMode === "open_at" ? "auto" : "none",
+                  }}
+                >
+                  {/* Days column */}
+                  <Box sx={{ display: "flex", flexDirection: "column", gap: 0.75, width: 130 }}>
+                    {DAYS.map((d) => (
+                      <PickerButton
+                        key={d.idx}
+                        label={t(d.key)}
+                        selected={pendingDay === d.idx}
+                        onClick={() => setPendingDay(pendingDay === d.idx ? null : d.idx)}
+                      />
+                    ))}
+                  </Box>
+
+                  {/* Divider */}
+                  <Divider orientation="vertical" flexItem />
+
+                  {/* Time column — scrollable */}
+                  <Box
+                    sx={{
+                      flex: 1,
+                      display: "flex",
+                      flexDirection: "column",
+                      gap: 0.75,
+                      maxHeight: 280,
+                      overflowY: "auto",
+                      pr: 0.5,
+                      scrollbarWidth: "thin",
+                    }}
+                  >
+                    {HOUR_OPTIONS.map((h) => (
+                      <PickerButton
+                        key={h.value ?? "any"}
+                        label={
+                          h.value === null ? t("anyTime") : `${String(h.value).padStart(2, "0")}:00`
+                        }
+                        selected={pendingHour === h.value}
+                        onClick={() => setPendingHour(pendingHour === h.value ? null : h.value)}
+                      />
+                    ))}
+                  </Box>
+                </Box>
+              </Box>
+
+              <Divider />
+
+              {/* Footer */}
+              <Box sx={{ display: "flex", justifyContent: "flex-end", gap: 1, px: 2, py: 1 }}>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={handleClear}
+                  sx={{ textTransform: "none", color: "text.secondary" }}
+                >
+                  {tc("clear")}
+                </Button>
+                <Button
+                  variant="text"
+                  size="small"
+                  onClick={handleApply}
+                  sx={{ textTransform: "none", color: BRAND, fontWeight: 600 }}
+                >
+                  {tc("apply")}
+                </Button>
+              </Box>
+            </Paper>
+          </Popover>
+        </>
+      )}
+      {cuisineFacet && (
+        <>
+          <Chip
+            label={t("cuisine")}
+            onClick={(e) => setCuisineAnchorEl(e.currentTarget)}
+            variant={(facetSelections.cuisine?.length ?? 0) > 0 ? "filled" : "outlined"}
+            sx={{ ...toggleChipSx((facetSelections.cuisine?.length ?? 0) > 0), flexShrink: 0 }}
+          />
+          <CategoryFiltersPanel
+            anchorEl={cuisineAnchorEl}
+            onClose={() => setCuisineAnchorEl(null)}
+            facets={[cuisineFacet]}
+            cuisineOptions={cuisineOpts}
+            brandOptions={[]}
+          />
+        </>
+      )}
+      {activeFacetChips}
+      {unmappedNotice}
     </Box>
   );
 }

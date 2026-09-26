@@ -25,9 +25,17 @@ interface Props {
   facets: CategoryFacet[];
   /** Distinct cuisine values present in the current results (for the cuisine facet). */
   cuisineOptions: string[];
+  /** Brands present in the current results; selected QIDs are retained after panning. */
+  brandOptions: { qid: string; name: string; count: number }[];
 }
 
-export function CategoryFiltersPanel({ anchorEl, onClose, facets, cuisineOptions }: Props) {
+export function CategoryFiltersPanel({
+  anchorEl,
+  onClose,
+  facets,
+  cuisineOptions,
+  brandOptions,
+}: Props) {
   const t = useTranslations("category");
   const tc = useTranslations("common");
   const selections = useCategoryFacetStore((s) => s.selections);
@@ -41,6 +49,14 @@ export function CategoryFiltersPanel({ anchorEl, onClose, facets, cuisineOptions
   const groupOrder = [...new Set(groupedToggles.map((f) => f.group as string))];
   const cuisineFacet = facets.find((f) => f.id === "cuisine");
   const selectedCuisines = cuisineFacet ? (selections.cuisine ?? []) : [];
+  const brandFacet = facets.find((f) => f.id === "brand");
+  const selectedBrands = brandFacet ? (selections.brand ?? []) : [];
+  const displayedBrands = [
+    ...brandOptions,
+    ...selectedBrands
+      .filter((qid) => !brandOptions.some((option) => option.qid === qid))
+      .map((qid) => ({ qid, name: qid, count: 0 })),
+  ];
   // Show the cuisines present in the current results plus any still-selected
   // ones, so a selection stays visible (and removable) after panning away.
   const displayedCuisines = [...new Set([...cuisineOptions, ...selectedCuisines])].sort();
@@ -50,6 +66,14 @@ export function CategoryFiltersPanel({ anchorEl, onClose, facets, cuisineOptions
       ? selectedCuisines.filter((v) => v !== value)
       : [...selectedCuisines, value];
     setMultiFacet("cuisine", next);
+  };
+  const toggleBrand = (qid: string) => {
+    setMultiFacet(
+      "brand",
+      selectedBrands.includes(qid)
+        ? selectedBrands.filter((value) => value !== qid)
+        : [...selectedBrands, qid],
+    );
   };
 
   const renderToggle = (facet: CategoryFacet) => (
@@ -77,7 +101,17 @@ export function CategoryFiltersPanel({ anchorEl, onClose, facets, cuisineOptions
       transformOrigin={{ vertical: "top", horizontal: "left" }}
       sx={{ mt: 0.5 }}
     >
-      <Paper elevation={3} sx={{ width: 320, display: "flex", flexDirection: "column" }}>
+      <Paper
+        elevation={3}
+        sx={{
+          width: 320,
+          maxWidth: "calc(100vw - 24px)",
+          maxHeight: "70vh",
+          overflowY: "auto",
+          display: "flex",
+          flexDirection: "column",
+        }}
+      >
         {ungroupedToggles.length > 0 && (
           <Box sx={{ px: 2, pt: 1.5, pb: 1, display: "flex", flexDirection: "column" }}>
             {ungroupedToggles.map(renderToggle)}
@@ -121,6 +155,40 @@ export function CategoryFiltersPanel({ anchorEl, onClose, facets, cuisineOptions
                         color: selected ? "#fff" : "text.primary",
                         borderColor: selected ? BRAND : "var(--omx-border)",
                         "&&:hover": { bgcolor: selected ? "var(--omx-brand-hover)" : "grey.200" },
+                      }}
+                    />
+                  );
+                })}
+              </Box>
+            </Box>
+          </>
+        )}
+
+        {brandFacet && displayedBrands.length > 0 && (
+          <>
+            <Divider />
+            <Box sx={{ px: 2, pt: 1.25, pb: 1 }}>
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+                {t("brand")}
+              </Typography>
+              <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.75 }}>
+                {displayedBrands.map(({ qid, name, count }) => {
+                  const selected = selectedBrands.includes(qid);
+                  return (
+                    <Chip
+                      key={qid}
+                      label={count > 0 ? `${name} · ${count}` : name}
+                      size="small"
+                      onClick={() => toggleBrand(qid)}
+                      variant={selected ? "filled" : "outlined"}
+                      sx={{
+                        fontSize: 12,
+                        bgcolor: selected ? BRAND : "transparent",
+                        color: selected ? "#fff" : "text.primary",
+                        borderColor: selected ? BRAND : "var(--omx-border)",
+                        "&&:hover": {
+                          bgcolor: selected ? "var(--omx-brand-hover)" : "var(--omx-chip-hover)",
+                        },
                       }}
                     />
                   );

@@ -47,7 +47,7 @@ export const CATEGORY_FACETS: readonly CategoryFacet[] = [
   {
     id: "wheelchairAccessible",
     type: "toggle",
-    placement: "inline",
+    placement: "panel",
     tag: "wheelchair",
     categoryIds: HOURS_FILTER_CATEGORY_IDS,
     matchValues: ["yes", "designated", "limited"],
@@ -139,7 +139,7 @@ export const CATEGORY_FACETS: readonly CategoryFacet[] = [
   {
     id: "brand",
     type: "multi",
-    placement: "inline",
+    placement: "panel",
     tag: "brand:wikidata",
     // A chip can be generated from a network: or operator: identity (see
     // firstBrandIdentity/brandOptions below), not just brand:wikidata, so
@@ -147,8 +147,8 @@ export const CATEGORY_FACETS: readonly CategoryFacet[] = [
     // filter against a tag the place never carried and return nothing.
     tags: BRAND_QID_KEYS,
     // A chain can appear under any category, so this facet isn't scoped by
-    // categoryIds — the chip row only renders when the current result set
-    // actually holds more than one brand (see brandOptions/CategoryFilterBar).
+    // categoryIds. The panel offers it when there are multiple current brands
+    // or a selection must remain removable after panning.
     categoryIds: new Set<string>(),
     allCategories: true,
   },
