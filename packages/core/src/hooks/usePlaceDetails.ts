@@ -5,6 +5,7 @@ import { buildPlaceDetailsRequest } from "../api/placeDetails";
 import { apiQueryRequestOptions, DETAIL_QUERY_POLICY } from "../api/queryPolicy";
 import type { LngLat } from "../types/geometry";
 import type { Place } from "../types/place";
+import { isDisplayablePhoto } from "../utils/commons-metadata";
 
 export function usePlaceDetails(
   placeId: string | null,
@@ -30,5 +31,7 @@ export function usePlaceDetails(
     enabled: request !== null,
     staleTime: 300_000,
     gcTime: DETAIL_QUERY_POLICY.gcTime,
+    select: (data) =>
+      data.photos ? { ...data, photos: data.photos.filter(isDisplayablePhoto) } : data,
   });
 }

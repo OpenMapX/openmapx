@@ -99,6 +99,8 @@ describe("Wikipedia knowledge provider", () => {
                 {
                   url: "https://upload.wikimedia.org/wikipedia/commons/8/85/Tour_Eiffel.jpg",
                   thumburl: "https://upload.wikimedia.org/thumb/8/85/Tour_Eiffel.jpg/800px.jpg",
+                  mime: "image/jpeg",
+                  mediatype: "BITMAP",
                   extmetadata: {
                     Artist: { value: "Benh LIEU SONG" },
                     LicenseShortName: { value: "CC BY-SA 3.0" },

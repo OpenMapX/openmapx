@@ -31,6 +31,7 @@ export { AVERAGE_CAR_CO2_GRAMS_PER_KM, estimateDrivingCo2Grams } from "./co2";
 export {
   type CommonsPage,
   fetchCommonsMetadata,
+  isDisplayablePhoto,
   parseCommonsPage,
 } from "./commons-metadata";
 export { haversineDistance } from "./coordinates";

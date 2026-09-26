@@ -2,6 +2,7 @@ import {
   type CommonsPage,
   fetchCommonsMetadata,
   fetchJson,
+  isDisplayablePhoto,
   type PlacePhoto,
   parseCommonsPage,
 } from "@openmapx/core";
@@ -44,7 +45,11 @@ async function searchByTags(
     const filename = tag.slice(5);
     const metadata = await fetchCommonsMetadata([filename]);
     const richPhoto = metadata.get(filename.replace(/_/g, " "));
-    if (richPhoto) return [richPhoto];
+    if (richPhoto) return isDisplayablePhoto(richPhoto) ? [richPhoto] : [];
+
+    // With no trustworthy metadata, only fall back for common image formats.
+    // Otherwise an audio/video file becomes a PNG file-type icon again.
+    if (!/\.(?:jpe?g|png|gif|webp|avif|heic|heif|svg|bmp|tiff?)$/i.test(filename)) return [];
 
     const encoded = encodeURIComponent(filename.replace(/ /g, "_"));
     return [
@@ -67,7 +72,7 @@ async function searchByTags(
   url.searchParams.set("gcmnamespace", "6");
   url.searchParams.set("gcmlimit", String(maxPhotos));
   url.searchParams.set("prop", "imageinfo|coordinates");
-  url.searchParams.set("iiprop", "url|extmetadata|size");
+  url.searchParams.set("iiprop", "url|extmetadata|size|mime|mediatype");
   url.searchParams.set("iiurlwidth", "800");
   url.searchParams.set("format", "json");
 
@@ -97,7 +102,7 @@ async function searchByGeo(query: PhotoQuery): Promise<PlacePhoto[]> {
   url.searchParams.set("ggsradius", "500");
   url.searchParams.set("ggslimit", String(limit));
   url.searchParams.set("prop", "imageinfo|coordinates");
-  url.searchParams.set("iiprop", "url|extmetadata|size");
+  url.searchParams.set("iiprop", "url|extmetadata|size|mime|mediatype");
   url.searchParams.set("iiurlwidth", "800");
   url.searchParams.set("format", "json");
 

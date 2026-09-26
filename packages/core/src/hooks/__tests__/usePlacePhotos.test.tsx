@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
-import { createQueryWrapper } from "../../test/queryWrapper";
+import { createQueryWrapper, createTestQueryClient } from "../../test/queryWrapper";
 import { usePlacePhotos } from "../usePlacePhotos";
 
 describe("usePlacePhotos", () => {
@@ -39,6 +39,26 @@ describe("usePlacePhotos", () => {
       { lat: "52.5", lng: "13.4" },
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
+  });
+
+  it("hides a Commons file icon in a persisted gallery query without refetching", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(["placePhotos", 52.5, 13.4, undefined, undefined, undefined], {
+      photos: [
+        {
+          url: "https://commons.wikimedia.org/w/resources/assets/file-type-icons/fileicon-ogg.png",
+        },
+      ],
+    });
+    const spy = vi.spyOn(apiClient, "get").mockResolvedValue({ photos: [] } as never);
+
+    const { result } = renderHook(() => usePlacePhotos(52.5, 13.4), {
+      wrapper: createQueryWrapper(client),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy).not.toHaveBeenCalled();
+    expect(result.current.data).toEqual([]);
   });
 
   it("does not fire when coordinates are missing", () => {

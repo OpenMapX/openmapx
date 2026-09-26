@@ -11,6 +11,7 @@ import {
 import { fetchAggregate, getReviewProviders } from "@integrations/reviews/orchestrator";
 import {
   buildPlaceDetailsRequest,
+  isDisplayablePhoto,
   type Place,
   type PlaceIds,
   parseId,
@@ -462,7 +463,9 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
           return enrichLimit(() => enrichPlace(place, placeRequest.identity.lang ?? undefined));
         });
         reply.header("Cache-Control", "public, max-age=86400");
-        return result;
+        return result.photos
+          ? { ...result, photos: result.photos.filter(isDisplayablePhoto) }
+          : result;
       } catch (err) {
         const e = err as CacheableError;
         const statusCode = e.statusCode ?? 500;

@@ -13,6 +13,7 @@ const ALLOWED_HOSTS = [
   // Wikimedia Commons
   "upload.wikimedia.org",
   "commons.wikimedia.org",
+  "thumb.wikimedia.org",
   // Mapillary (CDN uses regional subdomains like scontent-fra5-2.xx.fbcdn.net)
   "images.mapillary.com",
   // Mapillary's own CDN host, used as the thumbnail fallback when the API

@@ -18,6 +18,8 @@ function commonsPage(overrides: Record<string, unknown> = {}) {
         size: 2_000_000,
         width: 4000,
         height: 3000,
+        mime: "image/jpeg",
+        mediatype: "BITMAP",
         extmetadata: {
           Artist: { value: '<a href="/wiki/User:Jane">Jane Doe</a>' },
           LicenseShortName: { value: "CC BY-SA 4.0" },
@@ -61,6 +63,34 @@ afterEach(() => {
 });
 
 describe("Wikimedia photo provider — File: tag", () => {
+  it("does not turn an audio file's PNG icon into a photo", async () => {
+    routes = {
+      "titles=": {
+        query: {
+          pages: {
+            "1": commonsPage({
+              title: "File:De-Aachen.ogg",
+              imageinfo: [
+                {
+                  ...commonsPage().imageinfo[0],
+                  mime: "application/ogg",
+                  mediatype: "AUDIO",
+                  url: "https://upload.wikimedia.org/wikipedia/commons/2/23/De-Aachen.ogg",
+                  thumburl:
+                    "https://commons.wikimedia.org/w/resources/assets/file-type-icons/fileicon-ogg.png",
+                },
+              ],
+            }),
+          },
+        },
+      },
+      "generator=geosearch": { query: { pages: {} } },
+    };
+
+    expect(
+      await wikimediaProvider.searchByTags({ wikimedia_commons: "File:De-Aachen.ogg" }),
+    ).toEqual([]);
+  });
   it("returns the rich PlacePhoto parsed from Commons extmetadata", async () => {
     // `titles=` is unique to the fetchCommonsMetadata call.
     routes = {
@@ -109,6 +139,41 @@ describe("Wikimedia photo provider — File: tag", () => {
 });
 
 describe("Wikimedia photo provider — Category tag", () => {
+  it("excludes Commons audio and video icons while preserving JPEG attribution", async () => {
+    routes = {
+      "generator=categorymembers": {
+        query: {
+          pages: {
+            "1": commonsPage({
+              title: "File:De-Aachen.ogg",
+              imageinfo: [
+                {
+                  ...commonsPage().imageinfo[0],
+                  mime: "application/ogg",
+                  mediatype: "AUDIO",
+                  thumburl:
+                    "https://commons.wikimedia.org/w/resources/assets/file-type-icons/fileicon-ogg.png",
+                },
+              ],
+            }),
+            "2": commonsPage({
+              title: "File:Aachen.webm",
+              imageinfo: [
+                { ...commonsPage().imageinfo[0], mime: "video/webm", mediatype: "VIDEO" },
+              ],
+            }),
+            "3": commonsPage(),
+          },
+        },
+      },
+    };
+
+    const photos = await wikimediaProvider.searchByTags({ wikimedia_commons: "Category:Aachen" });
+
+    expect(photos).toHaveLength(1);
+    expect(photos[0]).toMatchObject({ author: "Jane Doe", license: "CC BY-SA 4.0" });
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain("mime%7Cmediatype");
+  });
   it("requests categorymembers and parses each returned page", async () => {
     routes = {
       "generator=categorymembers": { query: { pages: { "10": commonsPage() } } },

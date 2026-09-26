@@ -1,3 +1,4 @@
+import { isDisplayablePhoto } from "@openmapx/core";
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { getPhotoProviders, resolveOsmTags, searchPhotos } from "./orchestrator.js";
 
@@ -35,7 +36,7 @@ export function setup(ctx: IntegrationContext): void {
       });
 
       reply.header("Cache-Control", "public, max-age=3600");
-      reply.send({ photos });
+      reply.send({ photos: photos.filter(isDisplayablePhoto) });
     } catch (err) {
       ctx.log.error("Photo search failed", err);
       reply.status(500).send({ error: "Photo search failed" });

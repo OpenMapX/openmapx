@@ -3,6 +3,7 @@ import { apiClient } from "../api/client";
 import { API_ENDPOINTS } from "../api/endpoints";
 import { apiQueryRequestOptions, DETAIL_QUERY_POLICY } from "../api/queryPolicy";
 import type { PlacePhoto } from "../types/place";
+import { isDisplayablePhoto } from "../utils/commons-metadata";
 
 interface PhotosResponse {
   photos: PlacePhoto[];
@@ -32,6 +33,6 @@ export function usePlacePhotos(
     enabled: (options?.enabled ?? true) && lat !== undefined && lng !== undefined,
     staleTime: 600_000,
     gcTime: DETAIL_QUERY_POLICY.gcTime,
-    select: (data) => data.photos,
+    select: (data) => data.photos.filter(isDisplayablePhoto),
   });
 }

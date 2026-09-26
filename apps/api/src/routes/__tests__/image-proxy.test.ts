@@ -33,6 +33,7 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
   it.each([
     "upload.wikimedia.org",
     "commons.wikimedia.org",
+    "thumb.wikimedia.org",
     "images.mapillary.com",
     "live.staticflickr.com",
     "api.entur.io",
@@ -74,6 +75,8 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
   it.each([
     "upload.wikimedia.org.attacker.com", // suffix-spoof
     "xupload.wikimedia.org", // prefix without a label boundary
+    "xthumb.wikimedia.org",
+    "thumb.wikimedia.org.attacker.com",
     "wikimedia.org", // parent of an allowlisted subdomain, not itself listed
     "attacker.com",
     "fbcdn.net", // deliberately NOT allowlisted wholesale

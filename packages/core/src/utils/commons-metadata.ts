@@ -15,6 +15,8 @@ export interface CommonsPage {
     size?: number;
     width?: number;
     height?: number;
+    mime?: string;
+    mediatype?: string;
     extmetadata?: {
       Artist?: { value: string };
       LicenseShortName?: { value: string };
@@ -32,6 +34,10 @@ export interface CommonsPage {
 export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
   const info = page.imageinfo?.[0];
   if (!info) return undefined;
+  // MediaWiki also supplies a PNG file-type icon as `thumburl` for audio and
+  // video. Classify the original file, never the thumbnail's HTTP MIME type.
+  if (!info.mime?.startsWith("image/") || info.mediatype === "AUDIO" || info.mediatype === "VIDEO")
+    return undefined;
 
   const imageUrl = info.thumburl ?? info.url;
   if (!imageUrl) return undefined;
@@ -49,7 +55,7 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
     ? [geoCoord.lon, geoCoord.lat]
     : undefined;
 
-  return {
+  const photo: PlacePhoto = {
     url: imageUrl,
     thumbnailUrl: info.thumburl ?? undefined,
     source: "wikimedia",
@@ -63,6 +69,32 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
     capturedAt,
     coordinates,
   };
+  return isDisplayablePhoto(photo) ? photo : undefined;
+}
+
+/** Reject known Commons file icons from responses cached before MIME filtering. */
+export function isDisplayablePhoto(photo: PlacePhoto): boolean {
+  try {
+    const image = new URL(photo.url);
+    if (
+      image.hostname === "commons.wikimedia.org" &&
+      image.pathname.startsWith("/w/resources/assets/file-type-icons/")
+    )
+      return false;
+    if (photo.pageUrl) {
+      const page = new URL(photo.pageUrl);
+      if (
+        page.hostname === "commons.wikimedia.org" &&
+        /^\/wiki\/File:.*\.(?:ogg|oga|ogv|opus|mp3|wav|flac|m4a|aac|mid|midi|webm|mp4|m4v|mov|avi|mpeg|mpg|pdf|djvu|xcf|stl)$/i.test(
+          decodeURIComponent(page.pathname),
+        )
+      )
+        return false;
+    }
+  } catch {
+    // Other providers' URLs retain their existing validation downstream.
+  }
+  return true;
 }
 
 /**
@@ -79,7 +111,7 @@ export async function fetchCommonsMetadata(filenames: string[]): Promise<Map<str
   url.searchParams.set("action", "query");
   url.searchParams.set("titles", titles);
   url.searchParams.set("prop", "imageinfo|coordinates");
-  url.searchParams.set("iiprop", "url|extmetadata|size");
+  url.searchParams.set("iiprop", "url|extmetadata|size|mime|mediatype");
   url.searchParams.set("iiurlwidth", "800");
   url.searchParams.set("format", "json");
 

@@ -154,6 +154,30 @@ function qs(params: Record<string, string>): string {
 // Tests
 
 describe("GET /places/:id", () => {
+  it("removes a cached Commons audio icon while retaining real photo credits", async () => {
+    const realPhoto = {
+      url: "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Aachen.jpg/800px-Aachen.jpg",
+      source: "wikimedia",
+      author: "CEphoto, Uwe Aranas",
+      license: "CC BY-SA 3.0",
+    };
+    mockWithCache.mockResolvedValueOnce({
+      ...MOCK_PLACE,
+      photos: [
+        {
+          url: "https://commons.wikimedia.org/w/resources/assets/file-type-icons/fileicon-ogg.png",
+          source: "wikimedia",
+          pageUrl: "https://commons.wikimedia.org/wiki/File:De-Aachen.ogg",
+        },
+        realPhoto,
+      ],
+    });
+
+    const res = await app.inject({ method: "GET", url: "/places/osm%3Anode%2F12345" });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().photos).toEqual([realPhoto]);
+  });
   it("returns place with knowledge data for OSM ref", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue(MOCK_ENRICHMENT);

@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
-import { createQueryWrapper } from "../../test/queryWrapper";
+import { createQueryWrapper, createTestQueryClient } from "../../test/queryWrapper";
 import type { LngLat } from "../../types/geometry";
 import { usePlaceDetails } from "../usePlaceDetails";
 
@@ -42,6 +42,32 @@ describe("usePlaceDetails", () => {
       {},
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 20_000 }),
     );
+  });
+
+  it("hides a Commons file icon in a persisted place query without refetching", async () => {
+    const client = createTestQueryClient();
+    client.setQueryData(
+      ["place", { id: "p1", lng: null, lat: null, name: null, lang: null, hasAddress: false }],
+      {
+        name: "Aachen",
+        photos: [
+          {
+            url: "https://commons.wikimedia.org/w/resources/assets/file-type-icons/fileicon-ogg.png",
+          },
+        ],
+      },
+    );
+    const spy = vi
+      .spyOn(apiClient, "get")
+      .mockResolvedValue({ name: "Aachen", photos: [] } as never);
+
+    const { result } = renderHook(() => usePlaceDetails("p1"), {
+      wrapper: createQueryWrapper(client),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy).not.toHaveBeenCalled();
+    expect(result.current.data?.photos).toEqual([]);
   });
 
   it("does not fire when the place id is null", () => {
