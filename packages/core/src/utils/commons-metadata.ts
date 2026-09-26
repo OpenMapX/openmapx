@@ -83,18 +83,25 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
 export function isDisplayablePhoto(photo: PlacePhoto): boolean {
   try {
     const image = new URL(photo.url);
+    const nonImageFile =
+      /\.(?:ogg|oga|ogv|opus|mp3|wav|flac|m4a|aac|mid|midi|webm|mp4|m4v|mov|avi|mpeg|mpg|pdf|djvu|xcf|stl)$/i;
     if (
       image.hostname === "commons.wikimedia.org" &&
       image.pathname.startsWith("/w/resources/assets/file-type-icons/")
+    )
+      return false;
+    if (
+      image.hostname === "commons.wikimedia.org" &&
+      image.pathname.startsWith("/wiki/Special:FilePath/") &&
+      nonImageFile.test(decodeURIComponent(image.pathname))
     )
       return false;
     if (photo.pageUrl) {
       const page = new URL(photo.pageUrl);
       if (
         page.hostname === "commons.wikimedia.org" &&
-        /^\/wiki\/File:.*\.(?:ogg|oga|ogv|opus|mp3|wav|flac|m4a|aac|mid|midi|webm|mp4|m4v|mov|avi|mpeg|mpg|pdf|djvu|xcf|stl)$/i.test(
-          decodeURIComponent(page.pathname),
-        )
+        page.pathname.startsWith("/wiki/File:") &&
+        nonImageFile.test(decodeURIComponent(page.pathname))
       )
         return false;
     }
@@ -122,6 +129,7 @@ export async function fetchCommonsMetadata(
   const url = new URL("https://commons.wikimedia.org/w/api.php");
   url.searchParams.set("action", "query");
   url.searchParams.set("titles", titles);
+  url.searchParams.set("redirects", "1");
   url.searchParams.set("prop", "imageinfo|coordinates");
   url.searchParams.set("iiprop", "url|extmetadata|size|mime|mediatype");
   url.searchParams.set("iiurlwidth", "800");
@@ -138,7 +146,13 @@ export async function fetchCommonsMetadata(
   }
   if (!res.ok) return result;
 
-  const data = (await res.json()) as { query?: { pages?: Record<string, CommonsPage> } };
+  const data = (await res.json()) as {
+    query?: {
+      pages?: Record<string, CommonsPage>;
+      normalized?: Array<{ from: string; to: string }>;
+      redirects?: Array<{ from: string; to: string }>;
+    };
+  };
   const pages = data.query?.pages;
   if (!pages) return result;
 
@@ -150,6 +164,27 @@ export async function fetchCommonsMetadata(
     const photo = parseCommonsPage(page);
     if (!photo) continue;
     result.set(filename, photo);
+  }
+
+  // MediaWiki can capitalize/normalize the queried title or resolve a file
+  // redirect. Its explicit alias records are safe to use; lowercasing every
+  // filename would conflate distinct Commons files.
+  const aliases = [...(data.query?.normalized ?? []), ...(data.query?.redirects ?? [])];
+  const byTitle = new Map(aliases.map(({ from, to }) => [from, to]));
+  for (const { from } of aliases) {
+    const seen = new Set<string>();
+    let target = from;
+    while (byTitle.has(target) && !seen.has(target)) {
+      seen.add(target);
+      target = byTitle.get(target) as string;
+    }
+    const targetFilename = target.replace(/^File:/, "").replace(/_/g, " ");
+    const aliasFilename = from.replace(/^File:/, "").replace(/_/g, " ");
+    const photo = result.get(targetFilename);
+    if (photo) result.set(aliasFilename, photo);
+    if (options?.rejectedNonImageFiles?.has(targetFilename.toLowerCase())) {
+      options.rejectedNonImageFiles.add(aliasFilename.toLowerCase());
+    }
   }
 
   return result;

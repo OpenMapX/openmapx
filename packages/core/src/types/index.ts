@@ -1,5 +1,7 @@
 export type { BrandDetail, BrandKind, BrandSuggestResponse, BrandSummary } from "./brand";
 export type {
+  CategoryCardEnrichmentRequest,
+  CategoryCardEnrichmentResponse,
   CategoryDefinition,
   CategoryId,
   CategoryPlace,

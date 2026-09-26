@@ -31,6 +31,14 @@ describe("isDisplayablePhoto for legacy Commons entries", () => {
       visible: false,
     },
     {
+      name: "audio OSM FilePath without a Commons page",
+      photo: {
+        url: "https://commons.wikimedia.org/wiki/Special:FilePath/De-Aachen.ogg?width=1200",
+        source: "osm",
+      },
+      visible: false,
+    },
+    {
       name: "real JPEG File page",
       photo: {
         url: "https://thumb.wikimedia.org/wikipedia/commons/thumb/a/ab/Photo.jpg/800px-Photo.jpg",

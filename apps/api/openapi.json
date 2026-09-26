@@ -6550,6 +6550,20 @@
         "x-openmapx-auth": "session"
       }
     },
+    "/api/places/card-enrichment": {
+      "post": {
+        "operationId": "postApiPlacesCardEnrichment",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "places"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
     "/api/places/{id}": {
       "get": {
         "operationId": "getApiPlacesId",

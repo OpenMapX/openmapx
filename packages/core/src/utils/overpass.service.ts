@@ -128,6 +128,12 @@ const FILTERABLE_TAG_KEYS = [
   "brand:wikidata",
   "operator:wikidata",
   "network:wikidata",
+  "image",
+  "image:0",
+  "image:1",
+  "wikimedia_commons",
+  "wikidata",
+  "wikipedia",
 ] as const;
 
 function pickFilterableTags(tags: Record<string, string>): Record<string, string> | undefined {

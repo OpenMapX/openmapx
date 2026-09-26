@@ -11,9 +11,13 @@ import {
 import { fetchAggregate, getReviewProviders } from "@integrations/reviews/orchestrator";
 import {
   buildPlaceDetailsRequest,
+  type CategoryCardEnrichmentRequest,
+  type CategoryCardEnrichmentResponse,
+  categoryPlaceToPlace,
   isDisplayablePhoto,
   type Place,
   type PlaceIds,
+  type PlacePhoto,
   parseId,
   type ReviewProvider,
 } from "@openmapx/core";
@@ -35,6 +39,7 @@ import { buildReviewLinks } from "../services/review-links";
 import { hashKey, TTL, withCache } from "../utils/cache.js";
 import { createLimiter } from "../utils/concurrency.js";
 import { declareRouteAuth } from "../utils/route-auth.js";
+import { isAllowedHost } from "./image-hosts.js";
 
 // Bound concurrent place enrichments. Each enrichPlace runs a heavy fan-out
 // (knowledge sources, photo + review providers, and sometimes multi-MB OSM
@@ -43,6 +48,181 @@ import { declareRouteAuth } from "../utils/route-auth.js";
 // withCache, so this caps only the distinct ones. Tunable for high-memory hosts.
 const ENRICH_CONCURRENCY = Math.trunc(Number(process.env.OPENMAPX_PLACE_ENRICH_CONCURRENCY)) || 8;
 const enrichLimit = createLimiter(Math.max(1, ENRICH_CONCURRENCY));
+const cardEnrichLimit = createLimiter(4);
+const CARD_PHOTO_TAGS = new Set([
+  "image",
+  "image:0",
+  "image:1",
+  "wikimedia_commons",
+  "wikidata",
+  "wikipedia",
+]);
+
+type CardInput = CategoryCardEnrichmentRequest["places"][number];
+type CardResult = CategoryCardEnrichmentResponse["results"][number];
+
+function normalizeCardRequest(value: unknown): CategoryCardEnrichmentRequest | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const body = value as Record<string, unknown>;
+  if (Object.keys(body).some((key) => key !== "places" && key !== "lang")) return null;
+  if (!Array.isArray(body.places) || body.places.length < 1 || body.places.length > 8) return null;
+  if (body.lang !== undefined && (typeof body.lang !== "string" || body.lang.length > 12))
+    return null;
+  const seen = new Set<string>();
+  const places: CardInput[] = [];
+  for (const raw of body.places) {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    const row = raw as Record<string, unknown>;
+    if (
+      Object.keys(row).some(
+        (key) => key !== "id" && key !== "name" && key !== "coordinates" && key !== "photoTags",
+      ) ||
+      typeof row.id !== "string" ||
+      !row.id.trim() ||
+      row.id.length > 200 ||
+      typeof row.name !== "string" ||
+      !row.name.trim() ||
+      row.name.length > 200 ||
+      !Array.isArray(row.coordinates) ||
+      row.coordinates.length !== 2
+    )
+      return null;
+    const [lng, lat] = row.coordinates;
+    if (
+      typeof lng !== "number" ||
+      typeof lat !== "number" ||
+      !Number.isFinite(lng) ||
+      !Number.isFinite(lat) ||
+      Math.abs(lng) > 180 ||
+      Math.abs(lat) > 90
+    )
+      return null;
+    const id = row.id.trim();
+    if (seen.has(id)) return null;
+    seen.add(id);
+    let photoTags: CardInput["photoTags"];
+    if (row.photoTags !== undefined) {
+      if (!row.photoTags || typeof row.photoTags !== "object" || Array.isArray(row.photoTags))
+        return null;
+      const entries = Object.entries(row.photoTags);
+      if (entries.length > 6) return null;
+      photoTags = {};
+      for (const [key, rawTag] of entries) {
+        if (!CARD_PHOTO_TAGS.has(key) || typeof rawTag !== "string" || !rawTag.trim()) return null;
+        const tag = rawTag.trim();
+        if (tag.length > (key.startsWith("image") ? 4096 : 512)) return null;
+        if (key.startsWith("image")) {
+          if (tag.startsWith("File:") ? !tag.slice(5).trim() : !validHttpUrl(tag)) return null;
+        } else if (key === "wikidata" && !/^Q[1-9]\d*$/.test(tag)) return null;
+        else if (key === "wikimedia_commons" && !/^(?:File|Category):\S/.test(tag)) return null;
+        photoTags[key as keyof NonNullable<CardInput["photoTags"]>] = tag;
+      }
+    }
+    places.push({ id, name: row.name.trim(), coordinates: [lng, lat], photoTags });
+  }
+  return { places, lang: body.lang as string | undefined };
+}
+
+function validHttpUrl(raw: string): boolean {
+  try {
+    const url = new URL(raw);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+function proxyablePhoto(photo: PlacePhoto): boolean {
+  const urls = [photo.url, photo.thumbnailUrl].filter((url): url is string => Boolean(url));
+  return (
+    Boolean(photo.source) &&
+    isDisplayablePhoto(photo) &&
+    urls.every((raw) => {
+      if (!validHttpUrl(raw)) return false;
+      return isAllowedHost(new URL(raw).hostname);
+    })
+  );
+}
+
+async function cardPhoto(input: CardInput, lang: string | undefined): Promise<PlacePhoto | null> {
+  const tags = Object.fromEntries(
+    Object.entries(input.photoTags ?? {}).sort(([left], [right]) => left.localeCompare(right)),
+  ) as Record<string, string>;
+  if (Object.keys(tags).length === 0) return null;
+  const key = hashKey("cache:card-photo", {
+    id: input.id,
+    coordinates: input.coordinates,
+    name: input.name,
+    lang,
+    tags,
+  });
+  const { photo } = await withCache(key, TTL.photos, async () => {
+    const [heroResult, knowledgeResult] = await Promise.allSettled([
+      searchHeroPhotos(tags, getPhotoProviders(getAllIntegrations())),
+      tags.wikidata || tags.wikipedia
+        ? getPlaceKnowledge(categoryPlaceToPlace({ ...input, osmTags: tags }), lang)
+        : Promise.resolve({ photos: [] }),
+    ]);
+    const heroes = heroResult.status === "fulfilled" ? heroResult.value : [];
+    const knowledgePhotos =
+      knowledgeResult.status === "fulfilled" ? (knowledgeResult.value.photos ?? []) : [];
+    return {
+      photo: deduplicatePhotos([...heroes, ...knowledgePhotos]).find(proxyablePhoto) ?? null,
+    };
+  });
+  return photo;
+}
+
+async function cardRating(input: CardInput): Promise<CardResult["rating"] | null> {
+  const [lng, lat] = input.coordinates;
+  const match = /^osm:(node|way|relation)\/(\d+)$/.exec(input.id);
+  const subject = {
+    lat,
+    lng,
+    name: input.name,
+    osmId: match ? `${match[1]}/${match[2]}` : undefined,
+  };
+  const key = hashKey("cache:card-rating", subject);
+  const { rating } = await withCache(key, 600, async () => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const aggregate = await Promise.race([
+        fetchAggregate(subject, getReviewProviders(getAllIntegrations())),
+        new Promise<null>((resolve) => {
+          timer = setTimeout(() => resolve(null), 1500);
+        }),
+      ]);
+      if (
+        !aggregate ||
+        !Number.isFinite(aggregate.stars) ||
+        aggregate.stars <= 0 ||
+        aggregate.stars > 5 ||
+        !Number.isInteger(aggregate.count) ||
+        aggregate.count < 3 ||
+        !aggregate.source
+      )
+        return { rating: null };
+      return {
+        rating: { stars: aggregate.stars, count: aggregate.count, source: aggregate.source },
+      };
+    } catch {
+      return { rating: null };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  });
+  return rating;
+}
+
+async function enrichCard(input: CardInput, lang: string | undefined): Promise<CardResult> {
+  const [photo, rating] = await Promise.all([
+    cardPhoto(input, lang).catch(() => null),
+    cardRating(input).catch(() => null),
+  ]);
+  return { id: input.id, ...(photo ? { photo } : {}), ...(rating ? { rating } : {}) };
+}
 
 /**
  * Merge external identifiers (Wikidata-sourced Yelp / Tripadvisor / Google
@@ -327,6 +507,18 @@ interface CacheableError {
 
 export const placesRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "public");
+
+  fastify.post<{ Body: unknown }>("/places/card-enrichment", {
+    bodyLimit: 128 * 1024,
+    handler: async (req, reply) => {
+      const body = normalizeCardRequest(req.body);
+      if (!body) return reply.status(400).send({ error: "Invalid card enrichment request" });
+      const results = await Promise.all(
+        body.places.map((place) => cardEnrichLimit(() => enrichCard(place, body.lang))),
+      );
+      return { results } satisfies CategoryCardEnrichmentResponse;
+    },
+  });
 
   fastify.get<{
     Params: { id: string };

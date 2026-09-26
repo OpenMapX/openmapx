@@ -13,13 +13,21 @@ import Switch from "@mui/material/Switch";
 import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
-import type { CategoryPlace, DistanceReference, TagPredicate } from "@openmapx/core";
+import type {
+  CategoryCardEnrichmentRequest,
+  CategoryCardEnrichmentResponse,
+  CategoryPlace,
+  DistanceReference,
+  TagPredicate,
+} from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
+  apiClient,
   categoryPlaceToPlace,
   formatMeasurementDistance,
   isAreaTooLarge,
   PANEL,
+  proxyImageUrl,
   resolveStopAsPlace,
   resultDistanceMetres,
   sortResultsByIntent,
@@ -35,9 +43,10 @@ import {
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { distinctBrandQids, placeBrandIdentity } from "@/components/map/CategoryResultMarkers";
+import { PhotoAttribution } from "@/components/panels/place/PhotoAttribution";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
@@ -56,6 +65,58 @@ const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   tram: TramIcon,
   bus: DirectionsBusIcon,
 };
+
+type CardInput = CategoryCardEnrichmentRequest["places"][number];
+type CardSummary = CategoryCardEnrichmentResponse["results"][number];
+type CachedCardSummary = { summary: CardSummary; expiresAt: number };
+const CARD_CACHE_TTL_MS = 600_000;
+const MAX_CACHED_CARDS = 256;
+const PHOTO_TAG_KEYS = [
+  "image",
+  "image:0",
+  "image:1",
+  "wikimedia_commons",
+  "wikidata",
+  "wikipedia",
+] as const;
+
+function validCardImageTag(value: string): boolean {
+  if (value.startsWith("File:")) return Boolean(value.slice(5).trim());
+  try {
+    const url = new URL(value);
+    return (
+      (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password
+    );
+  } catch {
+    return false;
+  }
+}
+
+function cardInput(place: CategoryPlace): CardInput {
+  const photoTags: NonNullable<CardInput["photoTags"]> = {};
+  for (const key of PHOTO_TAG_KEYS) {
+    const value = place.osmTags?.[key]?.trim();
+    if (!value || value.length > (key.startsWith("image") ? 4096 : 512)) continue;
+    if (key.startsWith("image") && !validCardImageTag(value)) continue;
+    if (key === "wikidata" && !/^Q[1-9]\d*$/.test(value)) continue;
+    if (key === "wikimedia_commons" && !/^(?:File|Category):\S/.test(value)) continue;
+    photoTags[key] = value;
+  }
+  return { id: place.id, name: place.name, coordinates: place.coordinates, photoTags };
+}
+
+function cardIdentity(place: CategoryPlace, lang: string): string {
+  return JSON.stringify([cardInput(place), lang]);
+}
+
+function cachedSummary(
+  cache: Map<string, CachedCardSummary>,
+  place: CategoryPlace,
+  lang: string,
+): CardSummary | undefined {
+  const entry = cache.get(cardIdentity(place, lang));
+  return entry && entry.expiresAt > Date.now() ? entry.summary : undefined;
+}
 
 // Human-readable label for a dropped `require` predicate, for the relaxation
 // notice. Prefers the meaningful term: the value for things like `cuisine~thai`,
@@ -91,6 +152,7 @@ function TransitStopCard({
 
 function CategoryPlaceCard({
   place,
+  summary,
   isHovered,
   onSelect,
   onHover,
@@ -99,6 +161,7 @@ function CategoryPlaceCard({
   distanceReference,
 }: {
   place: CategoryPlace;
+  summary?: CardSummary;
   isHovered: boolean;
   onSelect: (place: CategoryPlace) => void;
   onHover: (id: string) => void;
@@ -108,6 +171,8 @@ function CategoryPlaceCard({
   distanceReference: DistanceReference | null;
 }) {
   const tp = useTranslations("place");
+  const locale = useLocale();
+  const registry = useIntegrationRegistry();
   const tc = useTranslations("common");
   const tcat = useTranslations("category");
   const units = useSettingsStore((s) => s.units);
@@ -118,139 +183,184 @@ function CategoryPlaceCard({
     ? place.category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : undefined;
   const brandIdentity = placeBrandIdentity(place);
+  const photo = summary?.photo;
+  const photoUrl = photo?.thumbnailUrl ?? photo?.url;
+  const [failedPhotoUrl, setFailedPhotoUrl] = useState<string | null>(null);
+  const showPhoto = Boolean(photoUrl && failedPhotoUrl !== photoUrl);
+  const rating = summary?.rating;
 
   return (
-    <ResultListItem
-      onClick={() => onSelect(place)}
-      onMouseEnter={() => onHover(place.id)}
-      onMouseLeave={onHoverEnd}
-      selected={isHovered}
-      hoverBg="rgba(0,0,0,0.06)"
-    >
-      {brandIdentity ? (
-        <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
-          <BrandLogo
-            brand={{
-              qid: brandIdentity.qid,
-              name: place.brand?.name ?? place.name,
-              logoFile: brandLogos.get(brandIdentity.qid),
-              kind: [brandIdentity.kind],
+    <>
+      <ResultListItem
+        onClick={() => onSelect(place)}
+        onPointerEnter={(event) => {
+          if (event.pointerType === "mouse") onHover(place.id);
+        }}
+        onPointerLeave={(event) => {
+          if (event.pointerType === "mouse") onHoverEnd();
+        }}
+        selected={isHovered}
+        hoverBg="rgba(0,0,0,0.06)"
+      >
+        {showPhoto && photoUrl && (
+          <Box
+            component="img"
+            src={proxyImageUrl(photoUrl)}
+            alt=""
+            loading="lazy"
+            onError={() => setFailedPhotoUrl(photoUrl)}
+            sx={{
+              width: 72,
+              height: 72,
+              objectFit: "cover",
+              borderRadius: 1,
+              float: "right",
+              ml: 1,
+              mb: 0.5,
             }}
-            size={20}
           />
-          {/* minWidth: 0 lets the name shrink/wrap inside the row instead of
+        )}
+        {brandIdentity ? (
+          <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+            <BrandLogo
+              brand={{
+                qid: brandIdentity.qid,
+                name: place.brand?.name ?? place.name,
+                logoFile: brandLogos.get(brandIdentity.qid),
+                kind: [brandIdentity.kind],
+              }}
+              size={20}
+            />
+            {/* minWidth: 0 lets the name shrink/wrap inside the row instead of
               pushing the fixed-size logo out or overflowing the list item. */}
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <ResultItemName>{place.name}</ResultItemName>
+            <Box sx={{ minWidth: 0, flex: 1 }}>
+              <ResultItemName>{place.name}</ResultItemName>
+            </Box>
           </Box>
-        </Box>
-      ) : (
-        <ResultItemName>{place.name}</ResultItemName>
-      )}
-      <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
-        {tagLabel && (
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            {tagLabel}
-          </Typography>
+        ) : (
+          <ResultItemName>{place.name}</ResultItemName>
         )}
-        {tagLabel && place.address && (
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-            }}
-          >
-            ·
-          </Typography>
-        )}
-        {place.address && (
-          <Typography
-            variant="caption"
-            sx={{
-              color: "text.secondary",
-              overflowWrap: "anywhere",
-            }}
-          >
-            {place.address}
-          </Typography>
-        )}
-      </Box>
-      {(distanceMetres !== null || attributes.length > 0) && (
-        <Box
-          sx={{
-            display: "flex",
-            flexWrap: "wrap",
-            gap: 0.75,
-            alignItems: "center",
-            minWidth: 0,
-            mb: 0.25,
-          }}
-        >
-          {distanceMetres !== null && (
-            <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
-              {formatMeasurementDistance(distanceMetres, units)}
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, alignItems: "center", mb: 0.25 }}>
+          {tagLabel && (
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+              }}
+            >
+              {tagLabel}
             </Typography>
           )}
-          {attributes.map((attribute) => (
+          {tagLabel && place.address && (
             <Typography
-              key={attribute.kind}
               variant="caption"
-              sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
+              sx={{
+                color: "text.secondary",
+              }}
             >
-              {attribute.kind === "cuisine"
-                ? `${tcat("cuisine")}: ${attribute.value}`
-                : attribute.kind === "outdoor_seating"
-                  ? tp("outdoorSeating")
-                  : attribute.kind === "wheelchair_yes"
-                    ? tp("wheelchairYes")
-                    : attribute.kind === "wheelchair_designated"
-                      ? tp("wheelchairDesignated")
-                      : tp("wheelchairLimited")}
+              ·
             </Typography>
-          ))}
+          )}
+          {place.address && (
+            <Typography
+              variant="caption"
+              sx={{
+                color: "text.secondary",
+                overflowWrap: "anywhere",
+              }}
+            >
+              {place.address}
+            </Typography>
+          )}
         </Box>
-      )}
-      {(() => {
-        const hours = place.openingHoursInfo?.status ?? null;
-        if (hours) {
-          if (hours.isUnknown) {
-            return (
+        {rating && (
+          <Typography
+            variant="caption"
+            sx={{ color: "text.secondary", display: "block", mb: 0.25 }}
+          >
+            ★ {new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(rating.stars)} ·{" "}
+            {rating.count} {tp("reviews")} ·{" "}
+            {registry.findDataSource(rating.source)?.name ?? rating.source}
+          </Typography>
+        )}
+        {(distanceMetres !== null || attributes.length > 0) && (
+          <Box
+            sx={{
+              display: "flex",
+              flexWrap: "wrap",
+              gap: 0.75,
+              alignItems: "center",
+              minWidth: 0,
+              mb: 0.25,
+            }}
+          >
+            {distanceMetres !== null && (
+              <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
+                {formatMeasurementDistance(distanceMetres, units)}
+              </Typography>
+            )}
+            {attributes.map((attribute) => (
               <Typography
+                key={attribute.kind}
                 variant="caption"
-                sx={{
-                  color: "text.secondary",
-                }}
+                sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
               >
-                {ohText.state(hours)}
+                {attribute.kind === "cuisine"
+                  ? `${tcat("cuisine")}: ${attribute.value}`
+                  : attribute.kind === "outdoor_seating"
+                    ? tp("outdoorSeating")
+                    : attribute.kind === "wheelchair_yes"
+                      ? tp("wheelchairYes")
+                      : attribute.kind === "wheelchair_designated"
+                        ? tp("wheelchairDesignated")
+                        : tp("wheelchairLimited")}
+              </Typography>
+            ))}
+          </Box>
+        )}
+        {(() => {
+          const hours = place.openingHoursInfo?.status ?? null;
+          if (hours) {
+            if (hours.isUnknown) {
+              return (
+                <Typography
+                  variant="caption"
+                  sx={{
+                    color: "text.secondary",
+                  }}
+                >
+                  {ohText.state(hours)}
+                </Typography>
+              );
+            }
+            const detail = ohText.detail(hours);
+            return (
+              <Typography variant="caption" color={hours.isOpen ? "success.main" : "error.main"}>
+                {hours.isOpen ? tp("openDetail", { detail }) : tp("closedDetail", { detail })}
               </Typography>
             );
           }
-          const detail = ohText.detail(hours);
-          return (
-            <Typography variant="caption" color={hours.isOpen ? "success.main" : "error.main"}>
-              {hours.isOpen ? tp("openDetail", { detail }) : tp("closedDetail", { detail })}
-            </Typography>
-          );
-        }
-        if (place.isOpen !== undefined) {
-          return (
-            <Typography variant="caption" color={place.isOpen ? "success.main" : "error.main"}>
-              {place.isOpen ? tc("open") : tc("closed")}
-            </Typography>
-          );
-        }
-        return null;
-      })()}
-    </ResultListItem>
+          if (place.isOpen !== undefined) {
+            return (
+              <Typography variant="caption" color={place.isOpen ? "success.main" : "error.main"}>
+                {place.isOpen ? tc("open") : tc("closed")}
+              </Typography>
+            );
+          }
+          return null;
+        })()}
+      </ResultListItem>
+      {showPhoto && photo && (
+        <Box sx={{ px: 2, pb: 0.75, color: "text.secondary", fontSize: "0.65rem" }}>
+          <PhotoAttribution photo={photo} color="currentColor" />
+        </Box>
+      )}
+    </>
   );
 }
 
 export function CategoryResultsContent() {
+  const locale = useLocale();
   const ts = useTranslations("search");
   const tc = useTranslations("common");
   const tm = useTranslations("map");
@@ -340,9 +450,125 @@ export function CategoryResultsContent() {
       distanceReference?.coordinates ?? null,
     );
   }, [chosenSort, distanceReference, filtered, providerFiltered]);
+  const scrollRef = useRef<HTMLDivElement | null>(null);
+  const cardCache = useRef(new Map<string, CachedCardSummary>());
+  const [cardSummaries, setCardSummaries] = useState<Map<string, CachedCardSummary>>(
+    () => new Map(),
+  );
+
+  useEffect(() => {
+    const root = scrollRef.current;
+    if (
+      !root ||
+      isTransitCategory ||
+      !results?.length ||
+      typeof IntersectionObserver === "undefined"
+    )
+      return;
+    const byId = new Map(results.map((place) => [place.id, place]));
+    const visible = new Set<string>();
+    const pending = new Set<string>();
+    const attempted = new Set<string>();
+    const controller = new AbortController();
+    let alive = true;
+    let loading = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    const flush = async () => {
+      if (!alive || loading) return;
+      const ids = [...pending].filter((id) => visible.has(id)).slice(0, 8);
+      for (const id of ids) pending.delete(id);
+      const places = ids
+        .map((id) => byId.get(id))
+        .filter((place): place is CategoryPlace => Boolean(place));
+      if (places.length === 0) return;
+      for (const place of places) attempted.add(cardIdentity(place, locale));
+      loading = true;
+      try {
+        const response = await apiClient.post<CategoryCardEnrichmentResponse>(
+          "/api/places/card-enrichment",
+          { places: places.map(cardInput), lang: locale } satisfies CategoryCardEnrichmentRequest,
+          { signal: controller.signal },
+        );
+        if (!alive || useCategorySearchStore.getState().searchRevision !== searchRevision) return;
+        const returned = new Map(response.results.map((summary) => [summary.id, summary]));
+        for (const place of places) {
+          const key = cardIdentity(place, locale);
+          cardCache.current.delete(key);
+          cardCache.current.set(key, {
+            summary: returned.get(place.id) ?? { id: place.id },
+            expiresAt: Date.now() + CARD_CACHE_TTL_MS,
+          });
+          while (cardCache.current.size > MAX_CACHED_CARDS) {
+            const oldest = cardCache.current.keys().next().value;
+            if (oldest === undefined) break;
+            cardCache.current.delete(oldest);
+          }
+        }
+        setCardSummaries(new Map(cardCache.current));
+      } catch {
+        // Optional enrichment never blocks the base result row.
+      } finally {
+        loading = false;
+        if (alive && pending.size > 0) schedule();
+      }
+    };
+    const schedule = () => {
+      if (timer !== null) return;
+      timer = setTimeout(() => {
+        timer = null;
+        void flush();
+      }, 40);
+    };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          const id = (entry.target as HTMLElement).dataset.cardId;
+          const place = id ? byId.get(id) : undefined;
+          if (!place) continue;
+          const bounds = entry.boundingClientRect ?? entry.target.getBoundingClientRect();
+          const nearViewport =
+            bounds.bottom >= -120 &&
+            bounds.top <= window.innerHeight + 120 &&
+            bounds.right >= -120 &&
+            bounds.left <= window.innerWidth + 120;
+          if (entry.isIntersecting && nearViewport) {
+            visible.add(id as string);
+            const identity = cardIdentity(place, locale);
+            const cached = cardCache.current.get(identity);
+            if (cached && cached.expiresAt <= Date.now()) {
+              cardCache.current.delete(identity);
+              attempted.delete(identity);
+            }
+            if (!cardCache.current.has(identity) && !attempted.has(identity))
+              pending.add(id as string);
+          } else {
+            visible.delete(id as string);
+            pending.delete(id as string);
+          }
+        }
+        if (pending.size > 0) schedule();
+      },
+      { root: null, rootMargin: "120px 0px" },
+    );
+    root.querySelectorAll<HTMLElement>("[data-card-id]").forEach((row) => {
+      observer.observe(row);
+    });
+    return () => {
+      alive = false;
+      controller.abort();
+      observer.disconnect();
+      if (timer !== null) clearTimeout(timer);
+    };
+  }, [results, searchRevision, isTransitCategory, locale]);
   const poiAttributions = attributionsForSources(
     registry,
-    results?.flatMap((place) => place.provenance?.map((source) => source.sourceId) ?? []) ?? [],
+    results?.flatMap((place) => [
+      ...(place.provenance?.map((source) => source.sourceId) ?? []),
+      ...(cachedSummary(cardSummaries, place, locale)?.rating?.source
+        ? [cachedSummary(cardSummaries, place, locale)?.rating?.source]
+        : []),
+    ]) ?? [],
   );
   // Resolved once here (not per row — see useBrandLogos) so hook count stays
   // fixed no matter how many rows carry a brand identity.
@@ -431,6 +657,7 @@ export function CategoryResultsContent() {
     // Tapping the collapsed sheet opens it to mid — at peek height only the
     // top of the results list is visible, so any tap should reveal the rest.
     <Box
+      ref={scrollRef}
       onClick={expandOnBackgroundTap}
       sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}
     >
@@ -686,15 +913,18 @@ export function CategoryResultsContent() {
             items={results}
             getKey={(place) => place.id}
             renderItem={(place) => (
-              <CategoryPlaceCard
-                place={place}
-                isHovered={hoveredCategoryPlaceId === place.id}
-                onSelect={handleSelectPlace}
-                onHover={setHoveredCategoryPlaceId}
-                onHoverEnd={() => setHoveredCategoryPlaceId(null)}
-                brandLogos={brandLogos}
-                distanceReference={distanceReference}
-              />
+              <Box data-card-id={place.id}>
+                <CategoryPlaceCard
+                  place={place}
+                  summary={cachedSummary(cardSummaries, place, locale)}
+                  isHovered={hoveredCategoryPlaceId === place.id}
+                  onSelect={handleSelectPlace}
+                  onHover={setHoveredCategoryPlaceId}
+                  onHoverEnd={() => setHoveredCategoryPlaceId(null)}
+                  brandLogos={brandLogos}
+                  distanceReference={distanceReference}
+                />
+              </Box>
             )}
           />
         </>

@@ -366,7 +366,7 @@ function sharedHostsForFile(
 
 /** Image hosts the API image-proxy will fetch on the browser's behalf. */
 function imageProxyAllowedHosts(): Set<string> {
-  const file = join(REPO_ROOT, "apps/api/src/routes/image-proxy.ts");
+  const file = join(REPO_ROOT, "apps/api/src/routes/image-hosts.ts");
   const set = new Set<string>();
   if (!existsSync(file)) return set;
   const content = readFileSync(file, "utf8");

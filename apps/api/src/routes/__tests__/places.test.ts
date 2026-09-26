@@ -78,7 +78,7 @@ const mockHashKey = vi.fn((prefix: string, data: unknown) => `${prefix}:${JSON.s
 vi.mock("../../utils/cache.js", () => ({
   hashKey: mockHashKey,
   withCache: mockWithCache,
-  TTL: { places: { detail: 86400 } },
+  TTL: { places: { detail: 86400 }, photos: 3600 },
 }));
 
 // App setup
@@ -146,6 +146,259 @@ const MOCK_DB_STATION = {
   address: "Berlin Hbf",
   coordinates: [13.369, 52.525] as [number, number],
 };
+
+describe("POST /places/card-enrichment", () => {
+  const place = {
+    id: "osm:way/20470246",
+    name: "Aachener Dom",
+    coordinates: [6.0839593, 50.7747522],
+    photoTags: { wikimedia_commons: "File:Around_Aachener_Dom.JPG" },
+  };
+
+  it("returns a tagged photo with its credit and a qualifying provider-sourced rating", async () => {
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Around_Aachener_Dom.JPG",
+      thumbnailUrl:
+        "https://upload.wikimedia.org/wikipedia/commons/thumb/a/ab/Around_Aachener_Dom.JPG/800px.jpg",
+      source: "wikimedia",
+      author: "Draupnir3",
+      license: "CC BY-SA 3.0",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Around_Aachener_Dom.JPG",
+    };
+    mockSearchHeroPhotos.mockResolvedValueOnce([photo]);
+    mockFetchAggregate.mockResolvedValueOnce({ stars: 4.25, count: 12, source: "mangrove" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: { places: [place] },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      results: [{ id: place.id, photo, rating: { stars: 4.25, count: 12, source: "mangrove" } }],
+    });
+  });
+
+  it("keeps a hero photo and rating when knowledge lookup fails", async () => {
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom.jpg",
+      source: "wikimedia",
+      author: "Aachen photographer",
+    };
+    mockSearchHeroPhotos.mockResolvedValueOnce([photo]);
+    mockGetPlaceKnowledge.mockRejectedValueOnce(new Error("knowledge unavailable"));
+    mockFetchAggregate.mockResolvedValueOnce({ stars: 4, count: 4, source: "mangrove" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: { places: [{ ...place, photoTags: { ...place.photoTags, wikidata: "Q123" } }] },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().results[0]).toEqual({
+      id: place.id,
+      photo,
+      rating: { stars: 4, count: 4, source: "mangrove" },
+    });
+  });
+
+  it("uses a place-level Wikidata knowledge photo when no hero tag returns one", async () => {
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom-P18.jpg",
+      source: "wikidata",
+      author: "Commons contributor",
+      license: "CC BY-SA 4.0",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Dom-P18.jpg",
+    };
+    mockSearchHeroPhotos.mockResolvedValueOnce([]);
+    mockGetPlaceKnowledge.mockResolvedValueOnce({ photos: [photo] });
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: { places: [{ ...place, photoTags: { wikidata: "Q5908" } }] },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ results: [{ id: place.id, photo }] });
+  });
+
+  it.each([
+    { places: Array.from({ length: 9 }, (_, index) => ({ ...place, id: `osm:node/${index}` })) },
+    { places: [place, place] },
+    { places: [{ ...place, coordinates: [181, 50] }] },
+    { places: [{ ...place, photoTags: { image: "javascript:alert(1)" } }] },
+    { places: [{ ...place, photoTags: { image: "File:" } }] },
+    { places: [{ ...place, photoTags: { ...place.photoTags, "image:2": "File:Other.jpg" } }] },
+  ])("rejects oversized or invalid input before provider work: %j", async (payload) => {
+    const response = await app.inject({ method: "POST", url: "/places/card-enrichment", payload });
+    expect(response.statusCode).toBe(400);
+    expect(mockSearchHeroPhotos).not.toHaveBeenCalled();
+    expect(mockFetchAggregate).not.toHaveBeenCalled();
+  });
+
+  it("omits unsupported images and unqualified ratings without placeholder fields", async () => {
+    mockSearchHeroPhotos.mockResolvedValueOnce([
+      { url: "https://evil.example/unsafe.jpg", source: "osm" },
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/De-Aachen.ogg",
+        source: "wikimedia",
+        pageUrl: "https://commons.wikimedia.org/wiki/File:De-Aachen.ogg",
+      },
+    ]);
+    mockFetchAggregate.mockResolvedValueOnce({ stars: 4.5, count: 2, source: "mangrove" });
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: { places: [place] },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ results: [{ id: place.id }] });
+  });
+
+  it("isolates cached photo results by every tag used for the lookup", async () => {
+    const cache = new Map<string, Promise<unknown>>();
+    mockWithCache.mockImplementation((key: string, _ttl: number, fn: () => unknown) => {
+      if (!cache.has(key)) cache.set(key, Promise.resolve().then(fn));
+      return cache.get(key);
+    });
+    mockSearchHeroPhotos.mockImplementation(async (tags: Record<string, string>) => [
+      {
+        url:
+          tags.image === "File:First.jpg"
+            ? "https://upload.wikimedia.org/wikipedia/commons/a/aa/First.jpg"
+            : "https://upload.wikimedia.org/wikipedia/commons/b/bb/Second.jpg",
+        source: "osm",
+      },
+    ]);
+    try {
+      const first = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, photoTags: { image: "File:First.jpg" } }] },
+      });
+      const second = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, photoTags: { image: "File:Second.jpg" } }] },
+      });
+      expect(first.json().results[0].photo.url).toContain("First.jpg");
+      expect(second.json().results[0].photo.url).toContain("Second.jpg");
+      expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(2);
+    } finally {
+      mockWithCache.mockImplementation((_key: string, _ttl: number, fn: () => unknown) => fn());
+    }
+  });
+
+  it("shares in-flight results for identical places and uses source-specific cache lifetimes", async () => {
+    const cache = new Map<string, Promise<unknown>>();
+    mockWithCache.mockImplementation((key: string, _ttl: number, fn: () => unknown) => {
+      if (!cache.has(key)) cache.set(key, Promise.resolve().then(fn));
+      return cache.get(key);
+    });
+    mockSearchHeroPhotos.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10));
+      return [];
+    });
+    try {
+      const request = {
+        method: "POST" as const,
+        url: "/places/card-enrichment",
+        payload: { places: [place] },
+      };
+      const [first, second] = await Promise.all([app.inject(request), app.inject(request)]);
+      expect(first.statusCode).toBe(200);
+      expect(second.statusCode).toBe(200);
+      expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
+      expect(mockFetchAggregate).toHaveBeenCalledTimes(1);
+      expect(mockWithCache.mock.calls).toEqual(
+        expect.arrayContaining([
+          expect.arrayContaining([expect.stringMatching(/^cache:card-photo:/), 3600]),
+          expect.arrayContaining([expect.stringMatching(/^cache:card-rating:/), 600]),
+        ]),
+      );
+    } finally {
+      mockWithCache.mockImplementation((_key: string, _ttl: number, fn: () => unknown) => fn());
+    }
+  });
+
+  it("caches empty photo and rating summaries across repeat requests", async () => {
+    const cache = new Map<string, unknown>();
+    mockWithCache.mockImplementation(async (key: string, _ttl: number, fn: () => unknown) => {
+      const cached = cache.get(key);
+      if (cached !== undefined && cached !== null) return cached;
+      const value = await fn();
+      cache.set(key, value);
+      return value;
+    });
+    mockSearchHeroPhotos.mockResolvedValue([]);
+    mockFetchAggregate.mockResolvedValue({ stars: 0, count: 0 });
+    try {
+      const request = {
+        method: "POST" as const,
+        url: "/places/card-enrichment",
+        payload: { places: [place] },
+      };
+      const first = await app.inject(request);
+      const second = await app.inject(request);
+      expect(first.json()).toEqual({ results: [{ id: place.id }] });
+      expect(second.json()).toEqual(first.json());
+      expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
+      expect(mockFetchAggregate).toHaveBeenCalledTimes(1);
+    } finally {
+      mockWithCache.mockImplementation((_key: string, _ttl: number, fn: () => unknown) => fn());
+    }
+  });
+
+  it("skips an invalid thumbnail and retains the next usable tagged photo", async () => {
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/b/bb/Good.jpg",
+      source: "wikimedia",
+      author: "Author",
+    };
+    mockSearchHeroPhotos.mockResolvedValueOnce([
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Bad.jpg",
+        thumbnailUrl: "https://evil.example/Bad.jpg",
+        source: "wikimedia",
+      },
+      photo,
+    ]);
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: { places: [place] },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json().results[0].photo).toEqual(photo);
+  });
+
+  it("caps photo work at four jobs across simultaneous batches", async () => {
+    let active = 0;
+    let maximum = 0;
+    mockSearchHeroPhotos.mockImplementation(async () => {
+      active++;
+      maximum = Math.max(maximum, active);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      active--;
+      return [];
+    });
+    const makeBatch = (start: number) => ({
+      places: Array.from({ length: 8 }, (_, index) => ({
+        ...place,
+        id: `osm:node/${start + index}`,
+      })),
+    });
+    const [first, second] = await Promise.all([
+      app.inject({ method: "POST", url: "/places/card-enrichment", payload: makeBatch(100) }),
+      app.inject({ method: "POST", url: "/places/card-enrichment", payload: makeBatch(200) }),
+    ]);
+    expect(first.statusCode).toBe(200);
+    expect(second.statusCode).toBe(200);
+    expect(maximum).toBeLessThanOrEqual(4);
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(16);
+  });
+});
 
 function qs(params: Record<string, string>): string {
   return new URLSearchParams(params).toString();

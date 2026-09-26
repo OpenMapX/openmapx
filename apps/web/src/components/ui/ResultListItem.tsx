@@ -13,6 +13,8 @@ export function ResultListItem({
   onClick,
   onMouseEnter,
   onMouseLeave,
+  onPointerEnter,
+  onPointerLeave,
   selected,
   hoverBg,
   children,
@@ -20,6 +22,8 @@ export function ResultListItem({
   onClick: () => void;
   onMouseEnter?: () => void;
   onMouseLeave?: () => void;
+  onPointerEnter?: React.PointerEventHandler<HTMLButtonElement>;
+  onPointerLeave?: React.PointerEventHandler<HTMLButtonElement>;
   /**
    * Resting selected state. When provided, the resting background is
    * `selected ? hoverBg : "transparent"`. When omitted, no resting `bgcolor`
@@ -42,7 +46,7 @@ export function ResultListItem({
     px: 2,
     py: 1.5,
     ...(selected !== undefined ? { bgcolor: selected ? hoverBg : "transparent" } : {}),
-    "&:hover": { bgcolor: hoverBg },
+    "@media (hover: hover)": { "&:hover": { bgcolor: hoverBg } },
   };
 
   return (
@@ -52,6 +56,8 @@ export function ResultListItem({
       onClick={onClick}
       onMouseEnter={onMouseEnter}
       onMouseLeave={onMouseLeave}
+      onPointerEnter={onPointerEnter}
+      onPointerLeave={onPointerLeave}
       sx={sx}
     >
       {children}

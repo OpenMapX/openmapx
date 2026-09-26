@@ -543,6 +543,374 @@ describe("category place hours", () => {
   });
 });
 
+describe("category result activation", () => {
+  it("keeps touch hover inert and selects on the first native click", () => {
+    const place = {
+      id: "osm:node/91",
+      name: "Touch cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    act(() => useCategorySearchStore.setState({ activeCategory: "cafes" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [place],
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+    });
+    renderPanel(vi.fn());
+    const row = screen.getByRole("button", { name: /Touch cafe/ });
+    fireEvent.pointerEnter(row, { pointerType: "touch" });
+    fireEvent.mouseEnter(row);
+    expect(useCategorySearchStore.getState().hoveredCategoryPlaceId).toBeNull();
+    fireEvent.click(row);
+    expect(usePlaceStore.getState().selectedPlace?.name).toBe("Touch cafe");
+  });
+
+  it("still synchronizes real mouse hover with the map", () => {
+    const place = {
+      id: "osm:node/92",
+      name: "Mouse cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    act(() => useCategorySearchStore.setState({ activeCategory: "cafes" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [place],
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+    });
+    renderPanel(vi.fn());
+    const row = screen.getByRole("button", { name: /Mouse cafe/ });
+    fireEvent.pointerEnter(row, { pointerType: "mouse" });
+    expect(useCategorySearchStore.getState().hoveredCategoryPlaceId).toBe(place.id);
+    fireEvent.pointerLeave(row, { pointerType: "mouse" });
+    expect(useCategorySearchStore.getState().hoveredCategoryPlaceId).toBeNull();
+  });
+});
+
+describe("visible category card enrichment", () => {
+  it("drops malformed image tags so one bad row does not reject its visible batch", async () => {
+    let notifyIntersection: IntersectionObserverCallback = () => {};
+    const observed: Element[] = [];
+    class Observer {
+      constructor(callback: IntersectionObserverCallback) {
+        notifyIntersection = callback;
+      }
+      observe(element: Element) {
+        observed.push(element);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", Observer);
+    const places = [
+      {
+        id: "osm:node/8",
+        name: "Bad image tag",
+        coordinates: [6.08, 50.77],
+        osmTags: { image: "https://" },
+      },
+      {
+        id: "osm:node/9",
+        name: "Good image tag",
+        coordinates: [6.09, 50.77],
+        osmTags: { image: "File:Good.jpg" },
+      },
+    ] as CategoryPlace[];
+    const post = vi
+      .spyOn(apiClient, "post")
+      .mockResolvedValue({ results: places.map(({ id }) => ({ id })) } as never);
+    act(() => useCategorySearchStore.setState({ activeCategory: "museums" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: places,
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+    });
+    try {
+      renderPanel(vi.fn());
+      act(() =>
+        notifyIntersection(
+          observed.map((target) => ({
+            target,
+            isIntersecting: true,
+          })) as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+      expect(
+        (
+          post.mock.calls[0]?.[1] as { places: Array<{ photoTags?: Record<string, string> }> }
+        ).places.map((place) => place.photoTags),
+      ).toEqual([{}, { image: "File:Good.jpg" }]);
+    } finally {
+      vi.unstubAllGlobals();
+      post.mockRestore();
+    }
+  });
+  it("loads only intersecting rows and reuses their summaries on repeat visibility", async () => {
+    let notifyIntersection: IntersectionObserverCallback = () => {};
+    const observed: Element[] = [];
+    class Observer {
+      constructor(callback: IntersectionObserverCallback) {
+        notifyIntersection = callback;
+      }
+      observe(element: Element) {
+        observed.push(element);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", Observer);
+    const post = vi.spyOn(apiClient, "post").mockImplementation(
+      async (_path, body) =>
+        ({
+          results: (body as { places: CategoryPlace[] }).places.map((place) => ({ id: place.id })),
+        }) as never,
+    );
+    const places = Array.from({ length: 200 }, (_, index) => ({
+      id: `osm:node/${index + 1}`,
+      name: `Museum ${index + 1}`,
+      coordinates: [6.08 + index * 0.00001, 50.77],
+      osmTags: { wikidata: `Q${index + 1}` },
+    })) as CategoryPlace[];
+    act(() => useCategorySearchStore.setState({ activeCategory: "museums" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: places,
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+    });
+    try {
+      renderPanel(vi.fn());
+      expect(post).not.toHaveBeenCalled();
+      const first = observed.find((node) => node.getAttribute("data-card-id") === places[0].id);
+      const second = observed.find((node) => node.getAttribute("data-card-id") === places[1].id);
+      const offscreen = observed.find(
+        (node) => node.getAttribute("data-card-id") === places[199].id,
+      );
+      expect(first).toBeDefined();
+      expect(second).toBeDefined();
+      expect(offscreen).toBeDefined();
+      act(() =>
+        notifyIntersection(
+          [
+            { target: first, isIntersecting: true },
+            { target: second, isIntersecting: true },
+            {
+              target: offscreen,
+              isIntersecting: true,
+              boundingClientRect: { top: 1400, bottom: 1500, left: 0, right: 200 },
+            },
+          ] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+      expect(
+        (post.mock.calls[0]?.[1] as { places: CategoryPlace[] }).places.map((place) => place.id),
+      ).toEqual([places[0].id, places[1].id]);
+      act(() =>
+        notifyIntersection(
+          [
+            { target: first, isIntersecting: true },
+            { target: second, isIntersecting: true },
+          ] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+      await new Promise((resolve) => setTimeout(resolve, 75));
+      expect(post).toHaveBeenCalledTimes(1);
+      const later = Date.now() + 600_001;
+      vi.spyOn(Date, "now").mockReturnValue(later);
+      act(() =>
+        notifyIntersection(
+          [{ target: first, isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+    } finally {
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+      post.mockRestore();
+    }
+  });
+
+  it("shows credited photo and sourced rating outside an independent attribution link", async () => {
+    let notifyIntersection: IntersectionObserverCallback = () => {};
+    let observed: Element | undefined;
+    class Observer {
+      constructor(callback: IntersectionObserverCallback) {
+        notifyIntersection = callback;
+      }
+      observe(element: Element) {
+        observed = element;
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", Observer);
+    const place = {
+      id: "osm:way/20470246",
+      name: "Aachener Dom",
+      coordinates: [6.08, 50.77],
+      osmTags: { wikimedia_commons: "File:Dom.jpg" },
+    } as CategoryPlace;
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Dom.jpg",
+      source: "wikimedia",
+      author: "Draupnir3",
+      authorUrl: "https://commons.wikimedia.org/wiki/User:Draupnir3",
+      license: "CC BY-SA 3.0",
+      pageUrl: "https://commons.wikimedia.org/wiki/File:Dom.jpg",
+    };
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({
+      results: [{ id: place.id, photo, rating: { stars: 4.3, count: 12, source: "mangrove" } }],
+    } as never);
+    act(() => useCategorySearchStore.setState({ activeCategory: "museums" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [place],
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+    });
+    try {
+      const { container } = renderPanel(vi.fn());
+      act(() =>
+        notifyIntersection(
+          [{ target: observed, isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+      const credit = await screen.findByRole("link", { name: "Draupnir3" });
+      const row = screen.getByRole("button", { name: /Aachener Dom/ });
+      expect(row).toHaveTextContent("4.3");
+      expect(row).toHaveTextContent("12");
+      expect(row).toHaveTextContent("mangrove");
+      expect(row.contains(credit)).toBe(false);
+      const image = container.querySelector('img[src*="image-proxy"]') as HTMLImageElement;
+      expect(image).toBeInTheDocument();
+      fireEvent.click(credit);
+      expect(usePlaceStore.getState().selectedPlace?.name).not.toBe(place.name);
+      fireEvent.error(image);
+      expect(container.querySelector('img[src*="image-proxy"]')).toBeNull();
+      expect(screen.queryByRole("link", { name: "Draupnir3" })).toBeNull();
+      expect(row).toHaveTextContent("4.3");
+    } finally {
+      vi.unstubAllGlobals();
+      post.mockRestore();
+    }
+  });
+
+  it("refetches changed photo tags and ignores a late result from the old search", async () => {
+    const observers: Array<{ callback: IntersectionObserverCallback; targets: Element[] }> = [];
+    class Observer {
+      private current: { callback: IntersectionObserverCallback; targets: Element[] };
+      constructor(callback: IntersectionObserverCallback) {
+        this.current = { callback, targets: [] };
+        observers.push(this.current);
+      }
+      observe(element: Element) {
+        this.current.targets.push(element);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", Observer);
+    const first = {
+      id: "osm:way/1",
+      name: "Changed place",
+      coordinates: [6.08, 50.77],
+      osmTags: { image: "File:Old.jpg" },
+    } as CategoryPlace;
+    const second = { ...first, osmTags: { image: "File:New.jpg" } };
+    let releaseOld: (value: unknown) => void = () => {};
+    let calls = 0;
+    const post = vi.spyOn(apiClient, "post").mockImplementation(() => {
+      calls++;
+      if (calls === 1)
+        return new Promise((resolve) => {
+          releaseOld = resolve;
+        }) as never;
+      return Promise.resolve({
+        results: [
+          { id: first.id, photo: { url: "https://upload.wikimedia.org/New.jpg", source: "osm" } },
+        ],
+      }) as never;
+    });
+    act(() => useCategorySearchStore.setState({ activeCategory: "museums" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [first],
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+    });
+    try {
+      renderPanel(vi.fn());
+      const old = observers.at(-1);
+      if (!old) throw new Error("Expected observer for original search");
+      act(() =>
+        old.callback(
+          [{ target: old.targets[0], isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(1));
+      mockUseExploreReachResults.mockReturnValue({
+        filtered: [second],
+        isLoading: false,
+        isError: false,
+        partial: false,
+        isTransitCategory: false,
+      });
+      act(() =>
+        useCategorySearchStore.setState({
+          searchRevision: useCategorySearchStore.getState().searchRevision + 1,
+        }),
+      );
+      const current = observers.at(-1);
+      if (!current) throw new Error("Expected observer for revised search");
+      act(() =>
+        current.callback(
+          [{ target: current.targets[0], isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+      await waitFor(() => expect(post).toHaveBeenCalledTimes(2));
+      releaseOld({
+        results: [
+          { id: first.id, photo: { url: "https://upload.wikimedia.org/Old.jpg", source: "osm" } },
+        ],
+      });
+      await waitFor(() =>
+        expect(
+          screen
+            .getByRole("button", { name: /Changed place/ })
+            .querySelector("img")
+            ?.getAttribute("src"),
+        ).toContain("New.jpg"),
+      );
+      expect(
+        screen
+          .getByRole("button", { name: /Changed place/ })
+          .querySelector("img")
+          ?.getAttribute("src"),
+      ).not.toContain("Old.jpg");
+    } finally {
+      vi.unstubAllGlobals();
+      post.mockRestore();
+    }
+  });
+});
+
 describe("category result details", () => {
   const place = {
     id: "cafe",

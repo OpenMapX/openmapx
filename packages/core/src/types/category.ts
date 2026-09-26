@@ -1,6 +1,6 @@
 import type { LngLat } from "./geometry";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
-import type { Place, PlaceProvenance } from "./place";
+import type { Place, PlacePhoto, PlaceProvenance } from "./place";
 import { createPlace, idsFromPrimaryOrCoords } from "./placeIds";
 
 export type CategoryId =
@@ -492,6 +492,30 @@ export interface CategorySearchResponse {
   /** How many matches the bbox holds in total. Only present when that number is
    *  exact — it is omitted once an upstream ceiling made it a lower bound. */
   total?: number;
+}
+
+/** Inputs for optional, place-specific card enrichment. The API accepts at most eight. */
+export interface CategoryCardEnrichmentRequest {
+  places: Array<{
+    id: string;
+    name: string;
+    coordinates: LngLat;
+    photoTags?: Partial<
+      Record<
+        "image" | "image:0" | "image:1" | "wikimedia_commons" | "wikidata" | "wikipedia",
+        string
+      >
+    >;
+  }>;
+  lang?: string;
+}
+
+export interface CategoryCardEnrichmentResponse {
+  results: Array<{
+    id: string;
+    photo?: PlacePhoto;
+    rating?: { stars: number; count: number; source: string };
+  }>;
 }
 
 /** Set of category IDs that support the opening hours filter chip, derived from CATEGORY_DEFINITIONS. */

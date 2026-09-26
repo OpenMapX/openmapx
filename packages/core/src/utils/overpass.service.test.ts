@@ -45,4 +45,40 @@ describe("searchByOsmTags", () => {
     const query = mockOverpassQuery.mock.calls[0][0] as string;
     expect(query).toContain("(52.5,13.4,52.6,13.5)");
   });
+
+  it("carries place photo identity tags but not unbounded image sequences", async () => {
+    mockOverpassQuery.mockResolvedValue({
+      elements: [
+        {
+          type: "node",
+          id: 7,
+          lat: 52.5,
+          lon: 13.4,
+          tags: {
+            name: "Museum",
+            tourism: "museum",
+            image: "File:Museum.jpg",
+            "image:0": "File:Front.jpg",
+            "image:1": "File:Back.jpg",
+            "image:2": "File:Unbounded.jpg",
+            wikimedia_commons: "Category:Museum",
+            wikidata: "Q123",
+            wikipedia: "de:Museum",
+            "brand:wikidata": "Q999",
+          },
+        },
+      ],
+    });
+
+    const result = await searchByOsmTags({ tourism: "museum" }, bbox);
+    expect(result.results[0]?.osmTags).toMatchObject({
+      image: "File:Museum.jpg",
+      "image:0": "File:Front.jpg",
+      "image:1": "File:Back.jpg",
+      wikimedia_commons: "Category:Museum",
+      wikidata: "Q123",
+      wikipedia: "de:Museum",
+    });
+    expect(result.results[0]?.osmTags).not.toHaveProperty("image:2");
+  });
 });

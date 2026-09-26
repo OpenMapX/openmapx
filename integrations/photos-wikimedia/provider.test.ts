@@ -63,6 +63,63 @@ afterEach(() => {
 });
 
 describe("Wikimedia photo provider — File: tag", () => {
+  it("preserves rich credit when Commons normalizes an explicitly tagged title", async () => {
+    routes = {
+      "titles=": {
+        query: {
+          normalized: [{ from: "File:eiffel_Tower.jpg", to: "File:Eiffel Tower.jpg" }],
+          pages: { "1": commonsPage() },
+        },
+      },
+    };
+
+    const photos = await wikimediaProvider.searchByTags({
+      wikimedia_commons: "File:eiffel_Tower.jpg",
+    });
+    expect(photos).toHaveLength(1);
+    expect(photos[0]).toMatchObject({
+      author: "Jane Doe",
+      license: "CC BY-SA 4.0",
+      source: "wikimedia",
+    });
+  });
+  it("preserves rich credit through an explicit Commons redirect", async () => {
+    routes = {
+      "titles=": {
+        query: {
+          normalized: [{ from: "File:old_photo.jpg", to: "File:Old photo.jpg" }],
+          redirects: [{ from: "File:Old photo.jpg", to: "File:Eiffel Tower.jpg" }],
+          pages: { "1": commonsPage() },
+        },
+      },
+    };
+
+    const photos = await wikimediaProvider.searchByTags({
+      wikimedia_commons: "File:old_photo.jpg",
+    });
+    expect(photos[0]).toMatchObject({ author: "Jane Doe", license: "CC BY-SA 4.0" });
+    expect(String(mockFetch.mock.calls[0]?.[0])).toContain("redirects=1");
+  });
+  it("does not fall back from an image-named alias redirected to audio", async () => {
+    routes = {
+      "titles=": {
+        query: {
+          redirects: [{ from: "File:Misleading.jpg", to: "File:Actual.ogg" }],
+          pages: {
+            "1": commonsPage({
+              title: "File:Actual.ogg",
+              imageinfo: [
+                { ...commonsPage().imageinfo[0], mime: "application/ogg", mediatype: "AUDIO" },
+              ],
+            }),
+          },
+        },
+      },
+    };
+    expect(
+      await wikimediaProvider.searchByTags({ wikimedia_commons: "File:Misleading.jpg" }),
+    ).toEqual([]);
+  });
   it.each(["Misleading.jpg", "misleading.jpg"])(
     "does not fall back when image-named File %s has explicit audio MIME",
     async (filename) => {
