@@ -1,10 +1,12 @@
 "use client";
 
+import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
 import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
+import Button from "@mui/material/Button";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Skeleton from "@mui/material/Skeleton";
 import Switch from "@mui/material/Switch";
@@ -17,7 +19,9 @@ import {
   PANEL,
   resolveStopAsPlace,
   useBrandLogos,
+  useCategoryFacetStore,
   useCategorySearchStore,
+  useOpeningHoursStore,
   usePlaceStore,
   useSidebarStore,
   useTransitStops,
@@ -200,6 +204,7 @@ function CategoryPlaceCard({
 export function CategoryResultsContent() {
   const ts = useTranslations("search");
   const tc = useTranslations("common");
+  const tm = useTranslations("map");
   const {
     activeCategory,
     searchBbox,
@@ -211,14 +216,21 @@ export function CategoryResultsContent() {
   const anchor = useCategorySearchStore((s) => s.anchor);
   const adHocLabel = useCategorySearchStore((s) => s.adHocLabel);
   const activeBrand = useCategorySearchStore((s) => s.activeBrand);
+  const adHocFilter = useCategorySearchStore((s) => s.adHocFilter);
+  const setAdHocFilter = useCategorySearchStore((s) => s.setAdHocFilter);
   const mode = useCategorySearchStore((s) => s.mode);
   const autoRefresh = useCategorySearchStore((s) => s.autoRefresh);
   const setAutoRefresh = useCategorySearchStore((s) => s.setAutoRefresh);
+  const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
+  const facetSelections = useCategoryFacetStore((s) => s.selections);
+  const reachActive = useTravelTimeStore(
+    (s) => s.isActive && s.anchored && s.origin !== null && s.onlyWithinReach,
+  );
   // Viewport text search (top search bar, no anchor) behaves like a category:
   // panning offers "search this area" + the auto-refresh toggle.
   const isViewportText = mode === "text" && anchor === null;
   const { setSelectedPlace } = usePlaceStore();
-  const { flyTo, mapRef, mapReady } = useMap();
+  const { flyTo, mapRef, mapReady, zoomIn, zoomOut } = useMap();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
   const registry = useIntegrationRegistry();
 
@@ -232,11 +244,32 @@ export function CategoryResultsContent() {
     total,
     relaxed,
     isTransitCategory,
+    refetch,
   } = useExploreReachResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
   const { data: transitStops, isPending: transitPending } = transitStopsQuery;
   const transitAttributions = useAttributionFromHooks(transitStopsQuery);
   const transitLoading = isTransitCategory && transitPending;
+  const transitAreaTooLarge = isAreaTooLarge(transitStopsQuery.error);
+  const hasAdHocPredicates =
+    (adHocFilter?.require?.length ?? 0) > 0 || (adHocFilter?.exclude?.length ?? 0) > 0;
+  const hasAppliedFilters =
+    !isTransitCategory &&
+    (openingHoursFilter !== "any" ||
+      (activeCategory !== AD_HOC_CATEGORY_ID &&
+        Object.values(facetSelections).some((values) => values.length > 0)) ||
+      reachActive ||
+      hasAdHocPredicates);
+
+  const clearAppliedFilters = () => {
+    useOpeningHoursStore.getState().reset();
+    useCategoryFacetStore.getState().reset();
+    if (reachActive) useTravelTimeStore.getState().setOnlyWithinReach(false);
+    if (adHocFilter && hasAdHocPredicates) {
+      const { require: _require, exclude: _exclude, ...baseFilter } = adHocFilter;
+      setAdHocFilter(baseFilter, "");
+    }
+  };
 
   const prevCategoryRef = useRef<string | null>(null);
 
@@ -367,6 +400,14 @@ export function CategoryResultsContent() {
           <Alert severity={isAreaTooLarge(error) ? "info" : "error"} variant="outlined">
             {isAreaTooLarge(error) ? ts("zoomInToSearch") : ts("failedToLoad")}
           </Alert>
+          <Button
+            size="small"
+            variant="outlined"
+            sx={{ mt: 1 }}
+            onClick={isAreaTooLarge(error) ? zoomIn : () => void refetch()}
+          >
+            {isAreaTooLarge(error) ? tm("zoomIn") : tc("retry")}
+          </Button>
         </Box>
       )}
       {!isTransitCategory && !isError && partial && (
@@ -398,42 +439,71 @@ export function CategoryResultsContent() {
         </Box>
       )}
       {/* Transit: empty state */}
-      {isTransitCategory && !transitLoading && transitStops && transitStops.length === 0 && (
-        <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
-          <Typography
-            sx={{
-              color: "text.secondary",
-            }}
+      {isTransitCategory && transitStopsQuery.isError && (
+        <Box sx={{ px: 2, py: 2 }}>
+          <Alert severity={transitAreaTooLarge ? "info" : "error"} variant="outlined">
+            {transitAreaTooLarge ? ts("zoomInToSearch") : ts("failedToLoad")}
+          </Alert>
+          <Button
+            size="small"
+            variant="outlined"
+            sx={{ mt: 1 }}
+            onClick={transitAreaTooLarge ? zoomIn : () => void transitStopsQuery.refetch()}
           >
-            {ts("noStopsFound")}
-          </Typography>
+            {transitAreaTooLarge ? tm("zoomIn") : tc("retry")}
+          </Button>
         </Box>
       )}
-      {/* Transit: results list */}
-      {isTransitCategory && !transitLoading && transitStops && transitStops.length > 0 && (
-        <>
-          <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
+      {isTransitCategory &&
+        !transitLoading &&
+        !transitStopsQuery.isError &&
+        transitStops &&
+        transitStops.length === 0 && (
+          <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
             <Typography
-              variant="body2"
               sx={{
                 color: "text.secondary",
               }}
             >
-              {tc("stopsCount", { count: transitStops.length })}
+              {ts("noStopsFound")}
             </Typography>
+            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+              {ts("moveMapToSearch")}
+            </Typography>
+            <Button size="small" variant="outlined" sx={{ mt: 1.5 }} onClick={zoomOut}>
+              {tm("zoomOut")}
+            </Button>
           </Box>
-          <AttributionStrip
-            attributions={transitAttributions}
-            variant="inline"
-            label={tc("dataSources")}
-          />
-          <ResultList
-            items={transitStops}
-            getKey={(stop) => stop.id}
-            renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
-          />
-        </>
-      )}
+        )}
+      {/* Transit: results list */}
+      {isTransitCategory &&
+        !transitLoading &&
+        !transitStopsQuery.isError &&
+        transitStops &&
+        transitStops.length > 0 && (
+          <>
+            <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
+              <Typography
+                variant="body2"
+                sx={{
+                  color: "text.secondary",
+                }}
+              >
+                {tc("stopsCount", { count: transitStops.length })}
+              </Typography>
+            </Box>
+            <AttributionStrip
+              attributions={transitAttributions}
+              variant="inline"
+              label={tc("dataSources")}
+            />
+            <ResultList
+              items={transitStops}
+              getKey={(stop) => stop.id}
+              renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
+            />
+          </>
+        )}
       {/* Non-transit: empty state */}
       {!isTransitCategory && !isLoading && !isError && results && results.length === 0 && (
         <Box sx={{ px: 2, py: 4, textAlign: "center" }}>
@@ -446,12 +516,25 @@ export function CategoryResultsContent() {
               ? ts("noBrandLocationsInView", { brand: activeBrand.name })
               : ts("noResultsFound")}
           </Typography>
+          {!hasAppliedFilters && (
+            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
+              {ts("moveMapToSearch")}
+            </Typography>
+          )}
+          <Button
+            size="small"
+            variant="outlined"
+            sx={{ mt: 1.5 }}
+            onClick={hasAppliedFilters ? clearAppliedFilters : zoomOut}
+          >
+            {hasAppliedFilters ? ts("clearFilters") : tm("zoomOut")}
+          </Button>
         </Box>
       )}
       {/* Non-transit: results list */}
-      {!isTransitCategory && !isLoading && results && results.length > 0 && (
+      {!isTransitCategory && !isLoading && !isError && results && results.length > 0 && (
         <>
-          {activeCategory === AD_HOC_CATEGORY_ID && (adHocLabel ?? null) !== null && (
+          {activeCategory === AD_HOC_CATEGORY_ID && adHocLabel && (
             <Box sx={{ px: 2, pt: 1.5, pb: 0 }}>
               <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
                 {adHocLabel}

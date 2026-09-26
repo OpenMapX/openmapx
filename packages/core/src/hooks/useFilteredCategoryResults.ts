@@ -30,6 +30,7 @@ export function useFilteredCategoryResults() {
     isLoading: categoryLoading,
     isError: categoryIsError,
     error: categoryError,
+    refetch: refetchCategory,
   } = useCategorySearch(isAdHoc || isTransitCategory ? null : activeCategory, searchBbox);
 
   const {
@@ -37,6 +38,7 @@ export function useFilteredCategoryResults() {
     isLoading: filterLoading,
     isError: filterIsError,
     error: filterError,
+    refetch: refetchFilter,
   } = useFilterSearch(isAdHoc ? adHocFilter : null, searchBbox);
 
   const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
@@ -63,6 +65,7 @@ export function useFilteredCategoryResults() {
       isLoading: filterLoading,
       isError: filterIsError,
       error: filterError,
+      refetch: refetchFilter,
       partial: adHocPartial,
       truncated: filterResponse?.truncated ?? false,
       total: filterResponse?.total,
@@ -77,6 +80,7 @@ export function useFilteredCategoryResults() {
     isLoading: categoryLoading,
     isError: categoryIsError,
     error: categoryError,
+    refetch: refetchCategory,
     partial: categoryPartial,
     truncated: categoryResponse?.truncated ?? false,
     total: categoryResponse?.total,

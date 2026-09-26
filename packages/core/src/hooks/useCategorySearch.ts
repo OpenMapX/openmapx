@@ -28,7 +28,7 @@ export function useCategorySearch(
     enabled: category !== null && bbox !== null,
     staleTime: 30_000,
     gcTime: MAP_QUERY_POLICY.gcTime,
-    retry: (_count, error) => !isAreaTooLarge(error),
+    retry: (failureCount, error) => failureCount < 2 && !isAreaTooLarge(error),
   });
 }
 

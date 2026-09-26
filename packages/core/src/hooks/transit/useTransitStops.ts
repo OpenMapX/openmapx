@@ -5,6 +5,7 @@ import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { apiQueryRequestOptions, MAP_QUERY_POLICY } from "../../api/queryPolicy";
 import type { BoundingBox } from "../../types/geometry";
+import { isAreaTooLarge } from "../useCategorySearch";
 import { type MobilityEnvelopeQueryResult, wrapMobilityEnvelope } from "./useMobilityEnvelope";
 
 export function useTransitStops(
@@ -30,6 +31,7 @@ export function useTransitStops(
     enabled: bbox !== null,
     staleTime: 300_000,
     gcTime: MAP_QUERY_POLICY.gcTime,
+    retry: (failureCount, error) => failureCount < 1 && !isAreaTooLarge(error),
   });
   return wrapMobilityEnvelope(query);
 }

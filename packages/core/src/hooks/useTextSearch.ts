@@ -21,7 +21,7 @@ export function useTextSearchResults(lang?: string) {
 
   const enabled = mode === "text" && textQuery.trim().length >= 2 && searchBbox !== null;
 
-  const { data, isLoading, isError, error } = useQuery({
+  const { data, isLoading, isError, error, refetch } = useQuery({
     queryKey: ["text-search", textQuery, searchBbox, lang],
     queryFn: ({ signal }) => {
       const bbox = searchBbox;
@@ -58,6 +58,7 @@ export function useTextSearchResults(lang?: string) {
     isLoading,
     isError,
     error,
+    refetch,
     partial,
     truncated: data?.truncated ?? false,
     total: data?.total,

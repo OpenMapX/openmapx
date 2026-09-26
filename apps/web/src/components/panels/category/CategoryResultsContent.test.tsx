@@ -1,9 +1,16 @@
+import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import type { CategoryPlace } from "@openmapx/core";
-import { useCategorySearchStore, usePlaceStore } from "@openmapx/core";
+import {
+  apiClient,
+  useCategoryFacetStore,
+  useCategorySearchStore,
+  useOpeningHoursStore,
+  usePlaceStore,
+} from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
-import { MapProvider } from "@/integration-api/map/MapContext";
-import { act, fireEvent, render, screen } from "@/test";
+import { MapProvider, useMap } from "@/integration-api/map/MapContext";
+import { act, fireEvent, render, screen, waitFor } from "@/test";
 import { createQueryWrapper } from "@/test/query";
 import { CategoryResultsContent } from "./CategoryResultsContent";
 
@@ -21,6 +28,8 @@ vi.mock("@/lib/useExploreReachResults", () => ({
 beforeEach(() => {
   act(() => {
     useCategorySearchStore.getState().clearCategory();
+    useCategoryFacetStore.getState().reset();
+    useTravelTimeStore.getState().deactivate();
   });
   mockUseExploreReachResults.mockReturnValue({
     filtered: undefined,
@@ -32,17 +41,27 @@ beforeEach(() => {
     total: undefined,
     relaxed: [],
     isTransitCategory: false,
+    refetch: vi.fn(),
   });
 });
 
 // No active category/text query means every underlying search hook stays
 // disabled — the panel mounts idle, which is all the tap-to-expand wiring
 // under test needs.
-function renderPanel(snapTo: (detent: "peek" | "mid" | "full") => void) {
+function MapProbe({ map }: { map: { zoomIn: () => void; zoomOut: () => void } }) {
+  useMap().mapRef.current = map as never;
+  return null;
+}
+
+function renderPanel(
+  snapTo: (detent: "peek" | "mid" | "full") => void,
+  map?: { zoomIn: () => void; zoomOut: () => void },
+) {
   const Wrapper = createQueryWrapper();
   return render(
     <Wrapper>
       <MapProvider>
+        {map && <MapProbe map={map} />}
         <MobileSheetContext.Provider
           value={{ detent: "peek", inSheet: true, isExpanded: false, snapTo }}
         >
@@ -81,6 +100,271 @@ describe("CategoryResultsContent mobile sheet interactions", () => {
     fireEvent.click(container.firstElementChild as Element);
 
     expect(snapTo).not.toHaveBeenCalled();
+  });
+});
+
+describe("CategoryResultsContent recovery", () => {
+  const bbox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
+
+  it("offers retry for a failed request and does not call it for a valid empty result", () => {
+    const refetch = vi.fn();
+    const stalePlace = {
+      id: "stale-place",
+      name: "Cached cafe",
+      coordinates: [13.4, 52.5],
+    } as CategoryPlace;
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [stalePlace],
+      isLoading: false,
+      isError: true,
+      error: new Error("offline"),
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch,
+    });
+    const view = renderPanel(vi.fn());
+    expect(screen.getByText("search.failedToLoad")).toBeInTheDocument();
+    expect(screen.queryByText("search.noResultsFound")).toBeNull();
+    expect(screen.queryByText("Cached cafe")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch,
+    });
+    view.unmount();
+    renderPanel(vi.fn());
+    expect(screen.getByText("search.noResultsFound")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+  });
+
+  it("offers zoom in for an oversized area without blindly retrying", () => {
+    const refetch = vi.fn();
+    const zoomIn = vi.fn();
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [],
+      isLoading: false,
+      isError: true,
+      error: new Error("area_too_large"),
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch,
+    });
+    renderPanel(vi.fn(), { zoomIn, zoomOut: vi.fn() });
+    expect(screen.getByText("search.zoomInToSearch")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "map.zoomIn" }));
+    expect(zoomIn).toHaveBeenCalledTimes(1);
+    expect(refetch).not.toHaveBeenCalled();
+  });
+
+  it("clears hours, every facet and reachability while preserving the search area", () => {
+    act(() => {
+      useCategorySearchStore.getState().setActiveCategory("restaurants");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+      useOpeningHoursStore.getState().setOpenAtFilter(2, 14);
+      useCategoryFacetStore.getState().toggleFacet("outdoorSeating");
+      useCategoryFacetStore.getState().toggleFacet("wheelchairAccessible");
+      useCategoryFacetStore.getState().setMultiFacet("cuisine", ["italian"]);
+      useCategoryFacetStore.getState().setMultiFacet("brand", ["Q123"]);
+      useTravelTimeStore.getState().activateAnchored([13.4, 52.5]);
+      useTravelTimeStore.getState().setOnlyWithinReach(true);
+    });
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch: vi.fn(),
+    });
+    renderPanel(vi.fn());
+    fireEvent.click(screen.getByRole("button", { name: "search.clearFilters" }));
+
+    expect(useOpeningHoursStore.getState()).toMatchObject({
+      openingHoursFilter: "any",
+      openAtDay: null,
+      openAtHour: null,
+    });
+    expect(useCategoryFacetStore.getState().selections).toEqual({});
+    expect(useTravelTimeStore.getState()).toMatchObject({
+      isActive: true,
+      anchored: true,
+      onlyWithinReach: false,
+      origin: [13.4, 52.5],
+    });
+    expect(useCategorySearchStore.getState()).toMatchObject({
+      activeCategory: "restaurants",
+      searchBbox: bbox,
+    });
+  });
+
+  it("clears ad-hoc require and exclude predicates while retaining the selector and bounds", () => {
+    const filter = {
+      selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "cafe" }] }],
+      require: [{ key: "outdoor_seating", op: "=" as const, value: "yes" }],
+      exclude: [{ key: "smoking", op: "=" as const, value: "yes" }],
+    };
+    act(() => {
+      useCategorySearchStore.getState().setAdHocFilter(filter, "Outdoor cafes");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+    });
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch: vi.fn(),
+    });
+    renderPanel(vi.fn());
+    fireEvent.click(screen.getByRole("button", { name: "search.clearFilters" }));
+
+    expect(useCategorySearchStore.getState()).toMatchObject({
+      activeCategory: "nlp:filter",
+      searchBbox: bbox,
+      adHocLabel: "",
+      adHocFilter: { selectors: filter.selectors },
+    });
+    expect(useCategorySearchStore.getState().adHocFilter?.require).toBeUndefined();
+    expect(useCategorySearchStore.getState().adHocFilter?.exclude).toBeUndefined();
+  });
+
+  it("clears text-result facets without changing the text query or bounds", () => {
+    act(() => {
+      useCategorySearchStore.getState().setExploreText("coffee shops");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+      useCategoryFacetStore.getState().toggleFacet("outdoorSeating");
+    });
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch: vi.fn(),
+    });
+    renderPanel(vi.fn());
+    fireEvent.click(screen.getByRole("button", { name: "search.clearFilters" }));
+
+    expect(useCategoryFacetStore.getState().selections).toEqual({});
+    expect(useCategorySearchStore.getState()).toMatchObject({
+      mode: "text",
+      textQuery: "coffee shops",
+      searchBbox: bbox,
+    });
+  });
+
+  it("shows a transit request failure instead of an empty-stop message and retries its query", async () => {
+    const get = vi
+      .spyOn(apiClient, "get")
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue({ data: [], attributions: [], freshness: undefined } as never);
+    act(() => {
+      useCategorySearchStore.getState().setActiveCategory("transit");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+    });
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: true,
+      refetch: vi.fn(),
+    });
+    renderPanel(vi.fn());
+    await waitFor(() => expect(screen.getByText("search.failedToLoad")).toBeInTheDocument(), {
+      timeout: 3_000,
+    });
+    expect(screen.queryByText("search.noStopsFound")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    await waitFor(() => expect(screen.getByText("search.noStopsFound")).toBeInTheDocument());
+    expect(get).toHaveBeenCalledTimes(3);
+  });
+
+  it("offers zoom in for an oversized transit stop area instead of retry", async () => {
+    const get = vi.spyOn(apiClient, "get").mockRejectedValue(new Error("area_too_large"));
+    const zoomIn = vi.fn();
+    act(() => {
+      useCategorySearchStore.getState().setActiveCategory("transit");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+    });
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: true,
+      refetch: vi.fn(),
+    });
+    renderPanel(vi.fn(), { zoomIn, zoomOut: vi.fn() });
+    await waitFor(() => expect(screen.getByText("search.zoomInToSearch")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "map.zoomIn" }));
+    expect(zoomIn).toHaveBeenCalledTimes(1);
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("offers an explicit map action for an unconstrained empty search", () => {
+    const zoomOut = vi.fn();
+    act(() => {
+      useCategorySearchStore.getState().setActiveCategory("restaurants");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+    });
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch: vi.fn(),
+    });
+    renderPanel(vi.fn(), { zoomIn: vi.fn(), zoomOut });
+    expect(screen.getByText("search.moveMapToSearch")).toBeInTheDocument();
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(bbox);
+    fireEvent.click(screen.getByRole("button", { name: "map.zoomOut" }));
+    expect(zoomOut).toHaveBeenCalledTimes(1);
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(bbox);
   });
 });
 
