@@ -73,20 +73,31 @@ const getServerSnapshot = () => 0;
 const getCapSnapshot = () => cachedCap;
 const getServerCapSnapshot = (): number | null => null;
 
-function subscribeWindowHeight(listener: () => void) {
+function subscribeWindowResize(listener: () => void) {
   window.addEventListener("resize", listener);
   return () => window.removeEventListener("resize", listener);
 }
 
 const getWindowHeightSnapshot = () => window.innerHeight;
 const getServerWindowHeightSnapshot = () => 0;
+const getWindowWidthSnapshot = () => window.innerWidth;
+const getServerWindowWidthSnapshot = () => 0;
 
 /** Hydration-safe live height of the browser's layout viewport. */
 export function useWindowHeight(): number {
   return useSyncExternalStore(
-    subscribeWindowHeight,
+    subscribeWindowResize,
     getWindowHeightSnapshot,
     getServerWindowHeightSnapshot,
+  );
+}
+
+/** Hydration-safe live width of the browser's layout viewport. */
+export function useWindowWidth(): number {
+  return useSyncExternalStore(
+    subscribeWindowResize,
+    getWindowWidthSnapshot,
+    getServerWindowWidthSnapshot,
   );
 }
 

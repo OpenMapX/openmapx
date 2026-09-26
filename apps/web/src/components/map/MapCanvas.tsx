@@ -17,7 +17,7 @@ import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime
 import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
 import { useMobileRuntime } from "@/lib/mobile/useMobileRuntime";
-import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
+import { useMobilePanelClearance, useWindowHeight, useWindowWidth } from "@/lib/mobilePanelHeight";
 import {
   ensureOfflinePackageRuntime,
   OFFLINE_PACKAGE_CHANGED_EVENT,
@@ -81,10 +81,13 @@ export function MapCanvas() {
   const locationAuthority = browserAuthority ? "browser" : "native";
   const insets = useMapObstructionInsets();
   const viewportHeight = useWindowHeight();
+  const viewportWidth = useWindowWidth();
   const sheetClearance = useMobilePanelClearance(viewportHeight);
   const scaleLeft = Math.max(0, insets.left) + 12;
   const scaleBottom = Math.max(102, insets.bottom + 12, sheetClearance + 12);
-  const scaleVisible = viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24;
+  const scaleVisible =
+    (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
+    (viewportWidth === 0 || viewportWidth - scaleLeft - Math.max(0, insets.right) - 12 >= 100);
 
   useEffect(() => {
     if (!containerRef.current) return;

@@ -102,6 +102,7 @@ vi.mock("maplibre-gl", () => {
     }
   }
   class FakeMap {
+    container: HTMLElement;
     jumpTo = vi.fn();
     style = { _loaded: initialStyleDefinitionLoaded };
     styleLoaded = initialStyleLoaded;
@@ -109,6 +110,7 @@ vi.mock("maplibre-gl", () => {
     cameraReads = 0;
 
     constructor(mapOptions: { center: [number, number]; container: HTMLElement; zoom: number }) {
+      this.container = mapOptions.container;
       instances.push(this);
       options.push(mapOptions);
       workerUrlsAtConstruction.push(workerUrl);
@@ -132,8 +134,17 @@ vi.mock("maplibre-gl", () => {
       throw error;
     });
     once = vi.fn();
-    addControl = vi.fn();
-    removeControl = vi.fn();
+    addControl = vi.fn(() => {
+      const corner = document.createElement("div");
+      corner.className = "maplibregl-ctrl-bottom-left";
+      const scale = document.createElement("div");
+      scale.className = "maplibregl-ctrl maplibregl-ctrl-scale";
+      corner.append(scale);
+      this.container.append(corner);
+    });
+    removeControl = vi.fn(() => {
+      this.container.querySelector(".maplibregl-ctrl-bottom-left")?.remove();
+    });
     remove = vi.fn();
     emitError(error: Error, data: Record<string, unknown> = {}) {
       const listener = this.on.mock.calls.find(([event]: unknown[]) => event === "error")?.[1] as
@@ -198,6 +209,7 @@ import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/cor
 import * as maplibre from "maplibre-gl";
 import * as mapContext from "@/integration-api/map/MapContext";
 import * as mapStyle from "@/lib/map";
+import { publishMapObstruction } from "@/lib/mapObstructions";
 import { MapCanvas } from "./MapCanvas";
 
 const maplibreTest = (
@@ -290,6 +302,36 @@ describe("MapCanvas", () => {
     expect(map?.removeControl).toHaveBeenCalledWith(scale);
     expect(map?.remove).toHaveBeenCalledTimes(1);
     useSettingsStore.setState({ units: "metric" });
+  });
+
+  it("hides the scale when two panels leave less than its width", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    const previousWidth = window.innerWidth;
+    Object.defineProperty(window, "innerWidth", { configurable: true, value: 900 });
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+    const view = render(<MapCanvas />);
+    try {
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
+      expect(scale).not.toBeNull();
+      act(() => publishMapObstruction("scale-test-left", "left", 800));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
+
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 950 });
+      act(() => window.dispatchEvent(new Event("resize")));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+      act(() => publishMapObstruction("scale-test-right", "right", 30));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: 960 });
+      act(() => window.dispatchEvent(new Event("resize")));
+      expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
+    } finally {
+      view.unmount();
+      act(() => publishMapObstruction("scale-test-left", "left", null));
+      act(() => publishMapObstruction("scale-test-right", "right", null));
+      Object.defineProperty(window, "innerWidth", { configurable: true, value: previousWidth });
+    }
   });
 
   it("renders the base map without waiting for a granted geolocation callback", async () => {
