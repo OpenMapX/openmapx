@@ -1,24 +1,26 @@
-import { useMapStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore } from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { announceAlign, clearAlignAnnouncement } from "@/lib/alignAnnouncement";
+import { publishMapObstruction } from "@/lib/mapObstructions";
 import type { StreetGridAlignment } from "@/lib/streetGrid";
-import { act, createFakeMap, fireEvent, render, screen } from "@/test";
+import { act, createFakeMap, fireEvent, render, screen, waitFor } from "@/test";
 
 type AlignStatus = StreetGridAlignment["status"];
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+const controls = vi.hoisted(() => ({ reportEnabled: false }));
 vi.mock("@openmapx/integration-framework/react", () => ({
-  useIntegrationRegistry: () => ({ get: () => undefined }),
+  useIntegrationRegistry: () => ({ get: () => (controls.reportEnabled ? {} : undefined) }),
 }));
 vi.mock("@/lib/mobile/useNavigationMutations", () => ({
   useNavigationMutations: () => ({ toggleVoice: vi.fn() }),
 }));
 vi.mock("@/components/command-palette/useMyLocation", () => ({ useMyLocation: () => vi.fn() }));
-vi.mock("./Pegman", () => ({ Pegman: () => null }));
+vi.mock("./Pegman", () => ({ Pegman: () => <button type="button" aria-label="Pegman" /> }));
 vi.mock("./crowdReportsLazy", () => ({
   CrowdApproachPromptLazy: () => null,
   ReportDialogLazy: () => null,
-  ReportFabLazy: () => null,
+  ReportFabLazy: () => <button type="button" aria-label="Report" />,
 }));
 // The real alignment hook runs here, with only the grid computation stubbed:
 // the path from a click to the words on screen now crosses two modules, and a
@@ -51,6 +53,9 @@ function renderControls(status: AlignStatus = "ok") {
 
 describe("MapControls align to streets", () => {
   afterEach(() => {
+    controls.reportEnabled = false;
+    publishMapObstruction("controls-test-filter", "top", null);
+    useNavigationStore.setState({ status: "idle", kind: "ground", cameraMode: "follow" });
     compute.mockReset();
     clearAlignAnnouncement();
     useMapStore.setState({ zoom: 2, bearing: 0 });
@@ -143,5 +148,85 @@ describe("MapControls align to streets", () => {
     act(() => useMapStore.setState({ bearing: 45 }));
     expect(screen.getByLabelText("map.resetBearingAriaLabel")).toBeTruthy();
     expect(screen.getByLabelText(ALIGN_LABEL)).toBeTruthy();
+  });
+
+  it("keeps conditional actions mounted while switching between a measured grid and column", async () => {
+    const originalHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    let safeBottom = 0;
+    const rect = vi
+      .spyOn(HTMLElement.prototype, "getBoundingClientRect")
+      .mockImplementation(function (this: HTMLElement) {
+        const height = this.matches("[data-map-safe-area-probe]")
+          ? safeBottom
+          : this.matches("button, [role='button']")
+            ? 44
+            : 0;
+        return DOMRect.fromRect({ width: 44, height });
+      });
+    try {
+      controls.reportEnabled = true;
+      act(() => {
+        publishMapObstruction("controls-test-filter", "top", 400);
+        useMapStore.setState({ bearing: 45 });
+      });
+      const view = renderControls();
+
+      expect(screen.getByRole("button", { name: "Report" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "Pegman" })).toBeTruthy();
+      expect(screen.getByLabelText(ALIGN_LABEL)).toBeTruthy();
+      expect(screen.getByLabelText("map.resetBearingAriaLabel")).toBeTruthy();
+      expect(screen.getByLabelText("map.zoomInAriaLabel")).toBeTruthy();
+      expect(screen.getByLabelText("map.zoomOutAriaLabel")).toBeTruthy();
+      await waitFor(() => {
+        expect(
+          document
+            .querySelector("[data-map-controls-columns]")
+            ?.getAttribute("data-map-controls-columns"),
+        ).toBe("2");
+      });
+
+      act(() => {
+        controls.reportEnabled = false;
+        useMapStore.setState({ bearing: 0 });
+      });
+      // The registry mock is intentionally nonreactive; rerender for the changed integration set.
+      view.rerender(<MapControls />);
+      await waitFor(() => {
+        expect(
+          document
+            .querySelector("[data-map-controls-columns]")
+            ?.getAttribute("data-map-controls-columns"),
+        ).toBe("1");
+      });
+      expect(screen.getByRole("button", { name: "Pegman" })).toBeTruthy();
+      expect(screen.getByLabelText(ALIGN_LABEL)).toBeTruthy();
+
+      // The shorter column only crosses the filter when CSS adds safe-area space.
+      act(() => publishMapObstruction("controls-test-filter", "top", 460));
+      expect(
+        document
+          .querySelector("[data-map-controls-columns]")
+          ?.getAttribute("data-map-controls-columns"),
+      ).toBe("1");
+      safeBottom = 44;
+      act(() => window.dispatchEvent(new Event("resize")));
+      await waitFor(() => {
+        expect(
+          document
+            .querySelector("[data-map-controls-columns]")
+            ?.getAttribute("data-map-controls-columns"),
+        ).toBe("2");
+      });
+
+      act(() => useNavigationStore.setState({ status: "navigating", cameraMode: "overview" }));
+      expect(screen.getByRole("button", { name: "navigation.muteVoice" })).toBeTruthy();
+      expect(screen.getByRole("button", { name: "navigation.recenter" })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Pegman" })).toBeNull();
+      expect(screen.getByLabelText("map.zoomInAriaLabel")).toBeTruthy();
+    } finally {
+      rect.mockRestore();
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalHeight });
+    }
   });
 });

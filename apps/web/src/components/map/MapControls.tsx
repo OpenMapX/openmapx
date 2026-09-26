@@ -74,11 +74,19 @@ export function MapControls() {
   // them off the top of the visible map area.
   const followHeight = useMobilePanelClearance(vh);
   const stackRef = useRef<HTMLDivElement>(null);
-  const [heights, setHeights] = useState({ column: 0, grid: 0 });
+  const safeAreaRef = useRef<HTMLDivElement>(null);
+  const [heights, setHeights] = useState({ column: 0, grid: 0, safeBottom: 0 });
   const desiredBottom = followHeight > 0 ? followHeight + PANEL_GAP : BASE_BOTTOM;
   const placement =
     vh > 0 && heights.column > 0
-      ? resolveControlPlacement(vh, topInset, desiredBottom, heights.column, heights.grid)
+      ? resolveControlPlacement(
+          vh,
+          topInset,
+          desiredBottom,
+          heights.column,
+          heights.grid,
+          heights.safeBottom,
+        )
       : { columns: 1 as const, bottom: desiredBottom };
 
   useEffect(() => {
@@ -94,8 +102,11 @@ export function MapControls() {
         grid += Math.max(sizes[i], sizes[i + 1] ?? 0);
         if (i > 0) grid += 8;
       }
+      const safeBottom = safeAreaRef.current?.getBoundingClientRect().height ?? 0;
       setHeights((previous) =>
-        previous.column === column && previous.grid === grid ? previous : { column, grid },
+        previous.column === column && previous.grid === grid && previous.safeBottom === safeBottom
+          ? previous
+          : { column, grid, safeBottom },
       );
     };
     const resizeObserver =
@@ -103,6 +114,7 @@ export function MapControls() {
     const observeActions = () => {
       resizeObserver?.disconnect();
       resizeObserver?.observe(stack);
+      if (safeAreaRef.current) resizeObserver?.observe(safeAreaRef.current);
       for (const action of stack.querySelectorAll<HTMLElement>("button, [role='button']")) {
         resizeObserver?.observe(action);
       }
@@ -136,10 +148,7 @@ export function MapControls() {
           // swipe sheet) register their live height in the shared registry, so
           // the controls always sit just above the tallest one — no hard-coded
           // per-context clearance.
-          bottom: {
-            xs: `calc(${placement.bottom}px + var(--omx-safe-bottom))`,
-            sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
-          },
+          bottom: `calc(${placement.bottom}px + var(--omx-safe-bottom))`,
           right: "calc(12px + var(--omx-safe-right))",
           display: placement.columns === 2 ? "grid" : "flex",
           flexDirection: "column",
@@ -158,6 +167,17 @@ export function MapControls() {
           },
         }}
       >
+        <Box
+          ref={safeAreaRef}
+          data-map-safe-area-probe
+          aria-hidden="true"
+          sx={{
+            position: "absolute",
+            width: 0,
+            height: "var(--omx-safe-bottom)",
+            pointerEvents: "none",
+          }}
+        />
         {/* Voice guidance toggle (ground navigation only) — top of the stack. */}
         {showVoiceButton && (
           <Tooltip title={tNav(voiceEnabled ? "muteVoice" : "unmuteVoice")} placement="left">
