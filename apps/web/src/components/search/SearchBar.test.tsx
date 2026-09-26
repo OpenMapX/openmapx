@@ -214,6 +214,59 @@ describe("SearchBar", () => {
     expect(useSearchStore.getState().isFocused).toBe(false);
   });
 
+  it("keeps keyboard selection aligned across category, brand, and place suggestions", async () => {
+    const brand = {
+      qid: "Q123",
+      name: "Cafe Chain",
+      description: "Coffee shops",
+      kind: ["brand" as const],
+      matchedOn: "name" as const,
+    };
+    useBrandSuggestMock.mockReturnValue({ data: { matches: [brand] } });
+    useAutocompleteMock.mockReturnValue({
+      data: [
+        {
+          id: "osm:node/42",
+          label: "Cafe Central",
+          sublabel: "Cafe Central, Market Street, Aachen, Germany",
+          coordinates: [6.08, 50.78],
+          type: "poi",
+        },
+      ],
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "caf" } });
+
+    const categoryRow = (await screen.findByText("Cafes")).closest('[role="button"]');
+    const brandRow = screen.getByText("Cafe Chain").closest('[role="button"]');
+    const placeRow = screen.getByText("Cafe Central").closest('[role="button"]');
+    expect(categoryRow).not.toBeNull();
+    expect(brandRow).not.toBeNull();
+    expect(placeRow).not.toBeNull();
+    const rows = screen.getAllByRole("button");
+    expect(rows.indexOf(categoryRow as HTMLElement)).toBeLessThan(
+      rows.indexOf(brandRow as HTMLElement),
+    );
+    expect(rows.indexOf(brandRow as HTMLElement)).toBeLessThan(
+      rows.indexOf(placeRow as HTMLElement),
+    );
+
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(categoryRow?.className).toContain("Mui-selected");
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(brandRow?.className).toContain("Mui-selected");
+    expect(placeRow?.className).not.toContain("Mui-selected");
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    expect(useCategorySearchStore.getState().activeBrand?.qid).toBe("Q123");
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+  });
+
   it("shows one authoritative airport ahead of its geocoder duplicate", async () => {
     const airport = aggregateSuggestion({
       id: "oa:EDDF",

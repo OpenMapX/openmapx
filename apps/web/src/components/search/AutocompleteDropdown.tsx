@@ -85,6 +85,45 @@ function getResultIcon(s: AutocompleteResult): React.ReactNode {
   return iconByType[s.type];
 }
 
+// Provider sublabels are display strings, not structured addresses. Only
+// remove complete, repeated comma-separated parts; keep every other part so
+// equal names in different places still have their locality visible.
+function conciseAddress(label: string, sublabel?: string): string | undefined {
+  if (!sublabel) return undefined;
+  const parts = sublabel.split(",").map((part) => part.trim());
+  if (parts.length < 2 || parts.some((part) => !part)) return sublabel;
+
+  const same = (a: string, b: string) => a.toLocaleLowerCase() === b.toLocaleLowerCase();
+  const remaining = same(parts[0], label.trim()) ? parts.slice(1) : parts;
+  const distinct = remaining.filter(
+    (part, index) => index === 0 || !same(part, remaining[index - 1]),
+  );
+  if (remaining.length === parts.length && distinct.length === remaining.length) return sublabel;
+  return distinct.join(", ") || undefined;
+}
+
+function resultDescription(s: AutocompleteResult, t: (key: string) => string): string | undefined {
+  if (s.type === "category") return s.sublabel ?? t("searchCategory");
+  if (s.type === "brand") {
+    const action = t("searchBrand");
+    return s.sublabel && s.sublabel !== action ? `${action} · ${s.sublabel}` : action;
+  }
+
+  const typeKeys: Partial<Record<AutocompleteResult["type"], string>> = {
+    address: "resultTypeAddress",
+    poi: "resultTypePlace",
+    street: "resultTypeStreet",
+    region: "resultTypeArea",
+    transit_stop: "resultTypeStop",
+  };
+  const typeKey =
+    s.rawCategory && isTransitRawCategory(s.rawCategory) ? "resultTypeStop" : typeKeys[s.type];
+  if (!typeKey) return s.sublabel;
+
+  const address = conciseAddress(s.label, s.sublabel);
+  return address ? `${t(typeKey)} · ${address}` : t(typeKey);
+}
+
 export function AutocompleteDropdown({
   suggestions,
   onSelect,
@@ -143,7 +182,7 @@ export function AutocompleteDropdown({
                     )}
                   </Box>
                 }
-                secondary={s.sublabel}
+                secondary={resultDescription(s, t)}
                 slotProps={{
                   primary: { sx: { fontSize: 14, fontWeight: 400 } },
                   secondary: { sx: { fontSize: 12 } },

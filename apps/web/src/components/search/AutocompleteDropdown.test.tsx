@@ -29,8 +29,150 @@ describe("AutocompleteDropdown", () => {
 
     expect(screen.queryByText("Berlin")).not.toBe(null);
     expect(screen.queryByText("Hamburg")).not.toBe(null);
-    expect(screen.getAllByText("Germany").length).toBe(2);
+    expect(screen.getAllByText("search.resultTypeArea · Germany").length).toBe(2);
     expect(screen.getAllByRole("button").length).toBe(2);
+  });
+
+  it("removes repeated names and address parts from the displayed place description", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({
+            label: "Aachen Hauptbahnhof",
+            sublabel: "Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Aachen, Germany",
+            type: "poi",
+          }),
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    screen.getByText("search.resultTypePlace · Lagerhausstrasse, Aachen, Germany");
+    expect(screen.queryByText(/Aachen Hauptbahnhof, Lagerhausstrasse/)).toBeNull();
+  });
+
+  it("shows a transit type when a place has an authoritative transit category", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({
+            id: "station",
+            label: "Aachen Hauptbahnhof",
+            sublabel: "Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Germany",
+            type: "poi",
+            rawCategory: "railway/station",
+          }),
+          makeResult({
+            id: "office",
+            label: "Airport Center",
+            sublabel: "Airport Center, Main Street, Frankfurt, Germany",
+            type: "poi",
+            rawCategory: "office",
+          }),
+          makeResult({
+            id: "bus-stop",
+            label: "Aachen Hauptbahnhof Bus",
+            sublabel: "Aachen Hauptbahnhof Bus, Aachen, Germany",
+            type: "street",
+            rawCategory: "highway/bus_stop",
+          }),
+          makeResult({
+            id: "signal-box",
+            label: "Aachen Hbf ESTW-A",
+            sublabel: "Aachen Hbf ESTW-A, Aachen, Germany",
+            type: "poi",
+            rawCategory: "railway/signal_box",
+          }),
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    screen.getByText("search.resultTypeStop · Lagerhausstrasse, Aachen, Germany");
+    screen.getByText("search.resultTypePlace · Main Street, Frankfurt, Germany");
+    screen.getByText("search.resultTypeStop · Aachen, Germany");
+    screen.getByText("search.resultTypePlace · Aachen, Germany");
+  });
+
+  it("keeps different localities visible for places with the same name", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({ id: "one", label: "Springfield", sublabel: "Springfield, Illinois, USA" }),
+          makeResult({ id: "two", label: "Springfield", sublabel: "Springfield, Missouri, USA" }),
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    screen.getByText("search.resultTypeAddress · Illinois, USA");
+    screen.getByText("search.resultTypeAddress · Missouri, USA");
+  });
+
+  it("shows the place type without an address and preserves unfamiliar address formats", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({ id: "one", label: "Riverside", sublabel: undefined, type: "street" }),
+          makeResult({
+            id: "two",
+            label: "Old Mill",
+            sublabel: "Near the old bridge,  upstairs",
+            type: "poi",
+          }),
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    screen.getByText("search.resultTypeStreet");
+    expect(screen.getAllByRole("button")[1].querySelector("p")?.textContent).toBe(
+      "search.resultTypePlace · Near the old bridge,  upstairs",
+    );
+  });
+
+  it("distinguishes category and brand actions from concrete places", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({
+            id: "category",
+            label: "Coffee",
+            type: "category",
+            sublabel: "search.searchCategory",
+          }),
+          makeResult({ id: "brand", label: "Coffee Co", type: "brand", sublabel: "Coffee shops" }),
+          makeResult({
+            id: "place",
+            label: "Coffee Co",
+            type: "poi",
+            sublabel: "Main Street, Aachen",
+          }),
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    screen.getByText("search.searchCategory");
+    screen.getByText("search.searchBrand · Coffee shops");
+    screen.getByText("search.resultTypePlace · Main Street, Aachen");
+  });
+
+  it("selects the original suggestion object and full address after display shortening", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const suggestion = makeResult({
+      label: "Aachen Hauptbahnhof",
+      sublabel: "Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Germany",
+      type: "poi",
+    });
+    render(<AutocompleteDropdown suggestions={[suggestion]} onSelect={onSelect} />);
+
+    await user.click(screen.getByRole("button", { name: /Aachen Hauptbahnhof/ }));
+
+    expect(onSelect).toHaveBeenCalledWith(suggestion);
+    expect(onSelect.mock.calls[0]?.[0]).toBe(suggestion);
+    expect(suggestion.sublabel).toBe("Aachen Hauptbahnhof, Lagerhausstrasse, Aachen, Germany");
   });
 
   it("invokes onSelect with the clicked suggestion", async () => {
