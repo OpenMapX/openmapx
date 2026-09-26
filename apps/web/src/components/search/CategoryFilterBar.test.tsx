@@ -1,15 +1,33 @@
-import type { CategoryPlace } from "@openmapx/core";
+import type { CategoryPlace, OverpassFilter } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
 import { cleanup, createQueryWrapper, render, screen, userEvent } from "@/test";
 
 const isMobileRef = { current: true };
+const localeRef = vi.hoisted(() => ({ current: "mock" }));
 const resultsRef = vi.hoisted(() => ({
   current: [] as CategoryPlace[],
   dominantCategory: null as string | null,
 }));
 vi.mock("@mui/material/useMediaQuery", () => ({ default: () => isMobileRef.current }));
-vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("next-intl", async () => {
+  const [{ default: en }, { default: de }, { mockNextIntl }] = await Promise.all([
+    import("../../../../../packages/i18n/locales/en.json"),
+    import("../../../../../packages/i18n/locales/de.json"),
+    import("@/test/intl"),
+  ]);
+  return mockNextIntl({
+    useTranslations: (namespace: string) => (key: string, values?: Record<string, string>) => {
+      if (localeRef.current === "mock") return `${namespace}.${key}`;
+      const catalog = localeRef.current === "de" ? de : en;
+      const messages = catalog[namespace as keyof typeof catalog] as Record<string, string>;
+      return (messages[key] ?? `${namespace}.${key}`).replace(
+        /\{(\w+)\}/g,
+        (_, name: string) => values?.[name] ?? "",
+      );
+    },
+  });
+});
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
   useExploreResults: () => ({
@@ -22,6 +40,7 @@ import {
   useCategoryFacetStore,
   useCategorySearchStore,
   useDataSourceStore,
+  useNlpSearchStore,
   useOpeningHoursStore,
 } from "@openmapx/core";
 import { CategoryFilterBar } from "./CategoryFilterBar";
@@ -180,5 +199,169 @@ describe("CategoryFilterBar facet discovery", () => {
     await user.click(screen.getByText("category.filters"));
     await user.click(screen.getByText("Brand 8 · 1"));
     expect(useCategoryFacetStore.getState().selections.brand).toBeUndefined();
+  });
+});
+
+const baseAdHocFilter: OverpassFilter = {
+  selectors: [{ tags: [{ key: "amenity", value: "restaurant" }] }],
+};
+
+function showAdHocFilter(filter: OverpassFilter, unmapped: string[] = []) {
+  useCategorySearchStore.getState().setAdHocFilter(filter, "Restaurants");
+  useNlpSearchStore.setState({
+    isNlpActive: true,
+    intent: {
+      filter,
+      spatial_constraint: null,
+      time_constraint: null,
+      sort_by: "relevance",
+      unmapped_attributes: unmapped,
+      confidence: 1,
+      explanation: "",
+    },
+  });
+}
+
+describe("CategoryFilterBar natural language predicates", () => {
+  beforeEach(() => {
+    stubLayout();
+    localeRef.current = "en";
+    useDataSourceStore.setState({ activeSource: null });
+    resultsRef.current = [];
+    resultsRef.dominantCategory = null;
+    useNlpSearchStore.getState().clear();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+    localeRef.current = "mock";
+    useNlpSearchStore.getState().clear();
+    useCategorySearchStore.getState().clearCategory();
+    publishMapObstruction("category-filter-bar", "top", null);
+  });
+
+  it("names a known positive facet without changing its exact predicate", () => {
+    const filter = {
+      ...baseAdHocFilter,
+      require: [{ key: "outdoor_seating", op: "=" as const, value: "yes" }],
+    };
+    showAdHocFilter(filter);
+    renderBar();
+    expect(screen.getByText("Outdoor seating")).toBeInTheDocument();
+    expect(useCategorySearchStore.getState().adHocFilter).toEqual(filter);
+  });
+
+  it("distinguishes an excluded facet from a positive one", () => {
+    const filter = {
+      ...baseAdHocFilter,
+      exclude: [{ key: "outdoor_seating", op: "=" as const, value: "yes" }],
+    };
+    showAdHocFilter(filter);
+    renderBar();
+    expect(screen.getByText("Exclude: Outdoor seating")).toBeInTheDocument();
+    expect(useCategorySearchStore.getState().adHocFilter).toEqual(filter);
+  });
+
+  it("keeps the exact value when excluding one of several values in a facet", () => {
+    const filter = {
+      ...baseAdHocFilter,
+      exclude: [
+        { key: "wheelchair", op: "=" as const, value: "designated" },
+        { key: "diet:vegan", op: "=" as const, value: "yes" },
+      ],
+    };
+    showAdHocFilter(filter);
+    renderBar();
+    expect(
+      screen.getByText("Exclude: Wheelchair: designated (wheelchair!=designated)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Exclude: Vegan: yes (diet:vegan!=yes)")).toBeInTheDocument();
+    expect(useCategorySearchStore.getState().adHocFilter).toEqual(filter);
+  });
+
+  it("states whether an existence predicate requires a present or absent tag", () => {
+    const filter = {
+      ...baseAdHocFilter,
+      require: [{ key: "wheelchair", op: "exists" as const }],
+      exclude: [{ key: "internet_access", op: "exists" as const }],
+    };
+    showAdHocFilter(filter);
+    renderBar();
+    expect(screen.getByText("Wheelchair tag present")).toBeInTheDocument();
+    expect(screen.getByText("Internet access tag absent")).toBeInTheDocument();
+    expect(useCategorySearchStore.getState().adHocFilter).toEqual(filter);
+  });
+
+  it("shows regex and unsupported exact values with their technical predicates", () => {
+    const filter = {
+      ...baseAdHocFilter,
+      require: [
+        { key: "cuisine", op: "~" as const, value: "italian|pizza" },
+        { key: "unknown_feature", op: "=" as const, value: "maybe" },
+        { key: "wheelchair", op: "=" as const, value: "some_new_value" },
+      ],
+      exclude: [{ key: "cuisine", op: "~" as const, value: "sushi|thai" }],
+    };
+    showAdHocFilter(filter);
+    renderBar();
+    expect(
+      screen.getByText("Cuisine matches pattern “italian|pizza” (cuisine~italian|pizza)"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Cuisine does not match pattern “sushi|thai” (cuisine!~sushi|thai)"),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Unknown feature: maybe (unknown_feature=maybe)")).toBeInTheDocument();
+    expect(
+      screen.getByText("Wheelchair: some_new_value (wheelchair=some_new_value)"),
+    ).toBeInTheDocument();
+  });
+
+  it("does not call wired internet Wi-Fi or limited access fully accessible", () => {
+    const filter = {
+      ...baseAdHocFilter,
+      require: [
+        { key: "internet_access", value: "wired" },
+        { key: "wheelchair", value: "limited" },
+      ],
+    };
+    showAdHocFilter(filter);
+    renderBar();
+    expect(screen.getByText("Internet access: wired (internet_access=wired)")).toBeInTheDocument();
+    expect(screen.getByText("Wheelchair: limited (wheelchair=limited)")).toBeInTheDocument();
+  });
+
+  it("uses German facet labels and removes the selected duplicate-looking predicate by index", async () => {
+    localeRef.current = "de";
+    const user = userEvent.setup();
+    const filter = {
+      ...baseAdHocFilter,
+      require: [
+        { key: "wheelchair", op: "=" as const, value: "yes" },
+        { key: "wheelchair", op: "=" as const, value: "designated" },
+      ],
+    };
+    showAdHocFilter(filter);
+    renderBar();
+    const chips = screen.getAllByText("Barrierefrei");
+    expect(chips).toHaveLength(2);
+    await user.click(chips[1].closest(".MuiChip-root")?.querySelector("svg") as SVGElement);
+    expect(useCategorySearchStore.getState().adHocFilter?.require).toEqual([filter.require[0]]);
+  });
+
+  it("keeps an unmapped notice when no predicate chips remain", async () => {
+    const user = userEvent.setup();
+    const filter = { ...baseAdHocFilter, require: [{ key: "outdoor_seating", value: "yes" }] };
+    showAdHocFilter(filter, ["cozy"]);
+    renderBar();
+    expect(screen.getByText(/Could not filter by: cozy/)).toBeInTheDocument();
+    await user.click(
+      screen
+        .getByText("Outdoor seating")
+        .closest(".MuiChip-root")
+        ?.querySelector("svg") as SVGElement,
+    );
+    expect(useCategorySearchStore.getState().adHocFilter?.require).toBeUndefined();
+    expect(screen.getByText(/Could not filter by: cozy/)).toBeInTheDocument();
   });
 });

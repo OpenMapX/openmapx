@@ -101,17 +101,91 @@ const HOUR_OPTIONS: { value: number | null }[] = [
 // carries a dropdown affordance.
 const toggleChipSx = (active: boolean): SxProps<Theme> => floatingChipSx(active, "toggle");
 
+function predicateAttributeLabel(
+  key: string,
+  t: (key: string, values?: Record<string, string>) => string,
+): string | null {
+  switch (key) {
+    case "wheelchair":
+      return t("predicateWheelchair");
+    case "internet_access":
+      return t("predicateInternetAccess");
+    case "diet":
+      return t("predicateDiet");
+    case "drive_through":
+      return t("predicateDriveThrough");
+    case "smoking":
+      return t("predicateSmoking");
+    case "dog":
+      return t("predicateDogs");
+    case "fee":
+      return t("predicateFee");
+    case "payment":
+      return t("predicatePayment");
+    case "live_music":
+      return t("predicateLiveMusic");
+    case "organic":
+      return t("predicateOrganic");
+    case "distance":
+      return t("predicateDistance");
+    default: {
+      const facet = CATEGORY_FACETS.find((candidate) => candidate.tag === key);
+      return facet ? t(facet.id) : null;
+    }
+  }
+}
+
 function predicateChipLabel(
   pred: { key: string; op?: string; value?: string },
   exclude: boolean,
+  t: (key: string, values?: Record<string, string>) => string,
 ): string {
-  if (exclude) {
-    if (pred.op === "exists") return `no ${pred.key}`;
-    return `${pred.key}≠${pred.value ?? ""}`;
+  const facet = CATEGORY_FACETS.find((candidate) => candidate.tag === pred.key);
+  const namedAttribute = predicateAttributeLabel(pred.key, t);
+  const attribute = namedAttribute
+    ? namedAttribute
+    : pred.key
+        .replaceAll("_", " ")
+        .replaceAll(":", " ")
+        .replace(/^./, (c) => c.toUpperCase());
+
+  if (pred.op === "exists") {
+    const summary = exclude
+      ? t("predicateTagAbsent", { label: attribute })
+      : t("predicateTagPresent", { label: attribute });
+    return namedAttribute
+      ? summary
+      : t("predicateTechnical", { summary, detail: `${pred.key}${exclude ? " !" : " "}exists` });
   }
-  if (pred.op === "exists") return pred.key;
-  if (pred.op === "~") return `${pred.key}: ${pred.value ?? ""}`;
-  return `${pred.key}=${pred.value ?? ""}`;
+
+  const value = pred.value ?? "";
+  if (pred.op === "~") {
+    const summary = exclude
+      ? t("predicateNotMatches", { label: attribute, value })
+      : t("predicateMatches", { label: attribute, value });
+    return t("predicateTechnical", {
+      summary,
+      detail: `${pred.key}${exclude ? "!~" : "~"}${value}`,
+    });
+  }
+
+  const describesFacet =
+    facet?.type === "toggle" &&
+    facet.matchValues?.includes(value) &&
+    (facet.id !== "wifi" || value === "wlan") &&
+    (facet.id !== "wheelchairAccessible" || value !== "limited");
+  if (describesFacet && (!exclude || facet.matchValues?.length === 1)) {
+    const label = t(facet.id);
+    return exclude ? t("predicateExcludeFacet", { label }) : label;
+  }
+
+  const summary = exclude
+    ? t("predicateExcludeValue", { label: attribute, value })
+    : t("predicateValue", { label: attribute, value });
+  return t("predicateTechnical", {
+    summary,
+    detail: `${pred.key}${exclude ? "!=" : "="}${value}`,
+  });
 }
 
 function PickerButton({
@@ -293,8 +367,8 @@ export function CategoryFilterBar() {
   if (isAdHocMode && adHocFilter) {
     const requireChips = (adHocFilter.require ?? []).map((pred, i) => (
       <Chip
-        key={`require-${pred.key}-${pred.value ?? ""}`}
-        label={predicateChipLabel(pred, false)}
+        key={`require-${pred.key}-${pred.op ?? "="}-${pred.value ?? ""}`}
+        label={predicateChipLabel(pred, false, t)}
         onDelete={() =>
           setAdHocFilter(removeFilterPredicate(adHocFilter, "require", i), adHocLabel ?? "")
         }
@@ -304,8 +378,8 @@ export function CategoryFilterBar() {
     ));
     const excludeChips = (adHocFilter.exclude ?? []).map((pred, i) => (
       <Chip
-        key={`exclude-${pred.key}-${pred.value ?? ""}`}
-        label={predicateChipLabel(pred, true)}
+        key={`exclude-${pred.key}-${pred.op ?? "="}-${pred.value ?? ""}`}
+        label={predicateChipLabel(pred, true, t)}
         onDelete={() =>
           setAdHocFilter(removeFilterPredicate(adHocFilter, "exclude", i), adHocLabel ?? "")
         }
