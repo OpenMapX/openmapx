@@ -1292,16 +1292,32 @@ export function DirectionsPanelContent() {
         {isFlightMode ? (
           <FlightPanel />
         ) : isRideMode ? (
-          <RidePanel
-            route={
-              data?.routes[0]
-                ? {
-                    distanceMeters: data.routes[0].distance,
-                    durationSeconds: data.routes[0].duration,
-                  }
-                : undefined
-            }
-          />
+          <>
+            {allWaypointsFilled &&
+              (isLoading || (isError && directionsQuery.isFetching) || (!data && !isError) ? (
+                <Box sx={{ display: "flex", justifyContent: "center", py: 4 }}>
+                  <CircularProgress size={28} sx={{ color: BRAND }} />
+                </Box>
+              ) : isError ? (
+                <RouteRecovery
+                  failed
+                  onRetry={() => void directionsQuery.refetch()}
+                  {...recoveryActions}
+                />
+              ) : data?.routes.length === 0 ? (
+                <RouteRecovery failed={false} {...recoveryActions} />
+              ) : null)}
+            <RidePanel
+              route={
+                !isError && data?.routes[0]
+                  ? {
+                      distanceMeters: data.routes[0].distance,
+                      durationSeconds: data.routes[0].duration,
+                    }
+                  : undefined
+              }
+            />
+          </>
         ) : !allWaypointsFilled ? (
           <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
             <Typography

@@ -22,6 +22,26 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useTransitChainPlan: (...a: unknown[]) => useTransitChainPlanMock(...a),
     useEvDirections: (...a: unknown[]) => useEvDirectionsMock(...a),
     useAutocomplete: (...a: unknown[]) => useAutocompleteMock(...a),
+    useRideProviders: () => ({
+      data: {
+        providers: [
+          {
+            id: "uber",
+            name: "Uber",
+            homepage: "https://www.uber.com/",
+            capabilities: { deepLink: true, quote: false, booking: false, tracking: false },
+            permitsComparison: false,
+            availability: { available: true, coverageChecked: false, products: [] },
+            handoffCarriesCoordinates: true,
+            isDefault: true,
+          },
+        ],
+        defaultProvider: "uber",
+        comparison: { allowed: false, comparableProviderIds: [] },
+      },
+      isLoading: false,
+    }),
+    useRideQuotes: () => ({ results: [], expiresAt: null, refetch: vi.fn() }),
     useCapabilities: () => ({ services: capabilityServices }),
     useOptimizeRoute: () => ({ mutate: vi.fn(), isPending: false }),
     useRouteInGermany: () => ({ bothInGermany: false }),
@@ -519,6 +539,73 @@ describe("DirectionsPanelContent", () => {
     screen.getByRole("progressbar");
     expect(screen.queryByText("directions.noRoutesFound")).toBeNull();
     expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
+  });
+
+  it("ride mode keeps its provider handoff and retries a failed driving route", async () => {
+    seedOriginDestination();
+    act(() => useDirectionsStore.getState().setMode("ride"));
+    const refetch = vi.fn();
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+    });
+
+    renderPanel();
+    screen.getByText("directions.routeRequestFailed");
+    screen.getByText("directions.rideDisclaimer");
+    await screen.findByRole("button", { name: "directions.rideOpenIn" });
+    fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(useDirectionsStore.getState().mode).toBe("ride");
+    expect(useDirectionsStore.getState().waypoints.map((wp) => wp.label)).toEqual([
+      "Berlin",
+      "Munich",
+    ]);
+  });
+
+  it("ride mode keeps its provider handoff alongside a successful empty route", async () => {
+    seedOriginDestination();
+    act(() => useDirectionsStore.getState().setMode("ride"));
+    useDirectionsMock.mockReturnValue({
+      data: {
+        waypoints: [
+          [13.3, 52.5],
+          [11.5, 48.1],
+        ],
+        routes: [],
+        activeRouteIndex: 0,
+      },
+      isLoading: false,
+      isError: false,
+    });
+
+    renderPanel();
+    screen.getByText("directions.noRoutesFound");
+    screen.getByText("directions.rideDisclaimer");
+    await screen.findByRole("button", { name: "directions.rideOpenIn" });
+    screen.getByRole("button", { name: "directions.changeOrigin" });
+    screen.getByRole("button", { name: "directions.changeDestination" });
+    expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
+  });
+
+  it("ride mode shows a pending route without hiding its provider handoff", () => {
+    seedOriginDestination();
+    act(() => useDirectionsStore.getState().setMode("ride"));
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: false,
+      isPending: true,
+      isFetching: false,
+    });
+
+    renderPanel();
+    screen.getByRole("progressbar");
+    screen.getByText("directions.rideDisclaimer");
+    expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
+    expect(screen.queryByText("directions.noRoutesFound")).toBeNull();
   });
 
   it("EV mode hides the add-stop control and drops any existing intermediate waypoint", () => {
