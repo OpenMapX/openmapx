@@ -143,6 +143,89 @@ describe("valhallaService", () => {
       expect(route.elevationInterval).toBe(30);
     });
 
+    it("normalizes imperial route, leg, step, and elevation values into metric contracts", async () => {
+      const trip = makeTrip({
+        units: "miles",
+        summary: { length: 1, time: 900 },
+        legs: [
+          makeLeg({
+            summary: { length: 1, time: 900 },
+            maneuvers: [
+              makeManeuver({ length: 0.25 }),
+              makeManeuver({ length: 0.75, instruction: "Turn right after 0.75 miles." }),
+            ],
+            elevation: [328.084, 360.8924, 393.7008],
+            elevation_interval: 98.4252,
+          }),
+        ],
+      });
+      mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse({ trip })));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const route = (await valhallaService.getRoute(waypoints, "walking", { units: "imperial" }))
+        .routes[0];
+
+      expect(route.distance).toBeCloseTo(1609.344, 3);
+      expect(route.legs[0].distance).toBeCloseTo(1609.344, 3);
+      expect(route.steps[0].distance).toBeCloseTo(402.336, 3);
+      expect(route.legs[0].steps[1].distance).toBeCloseTo(1207.008, 3);
+      expect(route.elevation?.[0]).toBeCloseTo(100, 3);
+      expect(route.elevation?.[1]).toBeCloseTo(110, 3);
+      expect(route.elevation?.[2]).toBeCloseTo(120, 3);
+      expect(route.elevationInterval).toBeCloseTo(30, 3);
+      expect(route.steps[1].instruction).toBe("Turn right after 0.75 miles.");
+    });
+
+    it("uses the requested unit and 30 m sampling fallback when response metadata is absent", async () => {
+      const trip = makeTrip({
+        summary: { length: 1, time: 900 },
+        legs: [makeLeg({ elevation: [328.084, 360.8924] })],
+      });
+      mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse({ trip })));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const route = (await valhallaService.getRoute(waypoints, "cycling", { units: "imperial" }))
+        .routes[0];
+
+      expect(route.distance).toBeCloseTo(1609.344, 3);
+      expect(route.elevation?.[0]).toBeCloseTo(100, 3);
+      expect(route.elevation?.[1]).toBeCloseTo(110, 3);
+      expect(route.elevationInterval).toBe(30);
+    });
+
+    it("normalizes alternate routes when their response omits unit metadata", async () => {
+      mockFetch.mockResolvedValueOnce(
+        mockOk(
+          makeValhallaResponse({
+            trip: makeTrip({ units: "miles", summary: { length: 1, time: 900 } }),
+            alternates: [{ trip: makeTrip({ summary: { length: 2, time: 1200 } }) }],
+          }),
+        ),
+      );
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const result = await valhallaService.getRoute(waypoints, "walking", { units: "imperial" });
+
+      expect(result.routes[0].distance).toBeCloseTo(1609.344, 3);
+      expect(result.routes[1].distance).toBeCloseTo(3218.688, 3);
+    });
+
+    it("uses a returned metric elevation interval without converting it", async () => {
+      const trip = makeTrip({
+        units: "kilometers",
+        legs: [makeLeg({ elevation: [100, 110], elevation_interval: 45 })],
+      });
+      mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse({ trip })));
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const route = (await valhallaService.getRoute(waypoints, "walking", { units: "metric" }))
+        .routes[0];
+
+      expect(route.distance).toBe(1200);
+      expect(route.elevation).toEqual([100, 110]);
+      expect(route.elevationInterval).toBe(45);
+    });
+
     it("returns undefined elevation when no leg has elevation data", async () => {
       mockFetch.mockResolvedValueOnce(mockOk(makeValhallaResponse()));
 
@@ -499,6 +582,35 @@ describe("valhallaService", () => {
 
       expect(result?.routes).toHaveLength(1);
       expect(result?.routes[0].mode).toBe("walking");
+    });
+
+    it("normalizes imperial optimized-route distances and elevation", async () => {
+      mockFetch.mockResolvedValueOnce(
+        mockOk(
+          makeOptimizeResponse({
+            units: "miles",
+            summary: { length: 1, time: 900 },
+            legs: [
+              makeLeg({
+                summary: { length: 1, time: 900 },
+                elevation: [328.084, 360.8924],
+                elevation_interval: 98.4252,
+              }),
+            ],
+          }),
+        ),
+      );
+
+      const { valhallaService } = await import("@integrations/routing-valhalla/provider.js");
+      const result = await valhallaService.optimizeRoute?.(fourWaypoints, "walking", {
+        units: "imperial",
+      });
+
+      expect(result?.routes[0].distance).toBeCloseTo(1609.344, 3);
+      expect(result?.routes[0].legs[0].distance).toBeCloseTo(1609.344, 3);
+      expect(result?.routes[0].elevation?.[0]).toBeCloseTo(100, 3);
+      expect(result?.routes[0].elevation?.[1]).toBeCloseTo(110, 3);
+      expect(result?.routes[0].elevationInterval).toBeCloseTo(30, 3);
     });
 
     it("uses correct costing for driving mode", async () => {

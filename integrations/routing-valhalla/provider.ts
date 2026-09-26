@@ -104,7 +104,7 @@ interface ValhallaSign {
 interface ValhallaManeuver {
   type: number;
   instruction: string;
-  length: number; // km
+  length: number; // requested miles or kilometers
   time: number; // seconds
   begin_shape_index: number;
   end_shape_index: number;
@@ -129,6 +129,7 @@ interface ValhallaLeg {
   summary: { length: number; time: number };
   maneuvers: ValhallaManeuver[];
   elevation?: number[];
+  elevation_interval?: number;
 }
 
 interface ValhallaLocation {
@@ -144,6 +145,7 @@ interface ValhallaTrip {
    */
   summary: { length: number; time: number; time_baseline?: number | null };
   legs: ValhallaLeg[];
+  units?: "miles" | "mi" | "kilometers" | "km";
   locations?: ValhallaLocation[];
 }
 
@@ -328,11 +330,11 @@ export function valhallaSign(sign: ValhallaSign | undefined): ManeuverSign | und
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-function transformLeg(leg: ValhallaLeg): RouteLeg {
+function transformLeg(leg: ValhallaLeg, distanceMetresPerUnit: number): RouteLeg {
   const coords = decodePolyline(leg.shape, 6);
   const steps: RouteStep[] = leg.maneuvers.map((m) => ({
     instruction: m.instruction,
-    distance: m.length * 1000, // km -> metres
+    distance: m.length * distanceMetresPerUnit,
     duration: m.time,
     coordinates: coords.slice(m.begin_shape_index, m.end_shape_index + 1),
     roadNames: m.street_names?.length ? m.street_names : undefined,
@@ -353,7 +355,7 @@ function transformLeg(leg: ValhallaLeg): RouteLeg {
   const summary = firstNamed?.street_names?.[0] ? `via ${firstNamed.street_names[0]}` : undefined;
 
   return {
-    distance: leg.summary.length * 1000, // km -> metres
+    distance: leg.summary.length * distanceMetresPerUnit,
     duration: leg.summary.time,
     geometry: coords,
     steps,
@@ -361,8 +363,22 @@ function transformLeg(leg: ValhallaLeg): RouteLeg {
   };
 }
 
-export function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
-  const legs = trip.legs.map(transformLeg);
+export function transformTrip(
+  trip: ValhallaTrip,
+  mode: TravelMode,
+  requestedUnits: RoutingOptions["units"] = "metric",
+): Route {
+  // Valhalla narrates in the requested units. Normalize only numeric fields
+  // before exposing them through Route's metre-based contract.
+  const miles =
+    trip.units === "miles" || trip.units === "mi"
+      ? true
+      : trip.units === "kilometers" || trip.units === "km"
+        ? false
+        : requestedUnits === "imperial";
+  const distanceMetresPerUnit = miles ? 1609.344 : 1000;
+  const elevationMetresPerUnit = miles ? 0.3048 : 1;
+  const legs = trip.legs.map((leg) => transformLeg(leg, distanceMetresPerUnit));
 
   const allCoords = legs.flatMap((leg) => leg.geometry);
   const steps: RouteStep[] = legs.flatMap((leg) => leg.steps);
@@ -375,11 +391,23 @@ export function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
 
   // Concatenate elevation arrays from all legs (if present)
   const hasElevation = trip.legs.some((leg) => leg.elevation && leg.elevation.length > 0);
-  const elevation = hasElevation ? trip.legs.flatMap((leg) => leg.elevation ?? []) : undefined;
+  const elevation = hasElevation
+    ? trip.legs.flatMap((leg) =>
+        (leg.elevation ?? []).map((value) => value * elevationMetresPerUnit),
+      )
+    : undefined;
+  // The request interval is metres, but Valhalla echoes it in feet for miles.
+  const returnedInterval = trip.legs.find((leg) => leg.elevation?.length)?.elevation_interval;
+  const elevationInterval =
+    typeof returnedInterval === "number" &&
+    Number.isFinite(returnedInterval) &&
+    returnedInterval > 0
+      ? returnedInterval * elevationMetresPerUnit
+      : ELEVATION_INTERVAL;
   const baselineDuration = trip.summary.time_baseline;
 
   return {
-    distance: trip.summary.length * 1000, // km -> metres
+    distance: trip.summary.length * distanceMetresPerUnit,
     duration: trip.summary.time,
     ...(typeof baselineDuration === "number" &&
       Number.isFinite(baselineDuration) &&
@@ -391,7 +419,7 @@ export function transformTrip(trip: ValhallaTrip, mode: TravelMode): Route {
     steps,
     mode,
     summary,
-    ...(elevation && { elevation, elevationInterval: ELEVATION_INTERVAL }),
+    ...(elevation && { elevation, elevationInterval }),
   };
 }
 
@@ -730,10 +758,10 @@ export const valhallaService: RoutingProvider = {
           )
         : undefined;
 
-    const routes: Route[] = [transformTrip(data.trip, travelMode)];
+    const routes: Route[] = [transformTrip(data.trip, travelMode, options.units)];
     if (data.alternates) {
       for (const alt of data.alternates) {
-        routes.push(transformTrip(alt.trip, travelMode));
+        routes.push(transformTrip(alt.trip, travelMode, options.units));
       }
     }
 
@@ -795,7 +823,7 @@ export const valhallaService: RoutingProvider = {
           )
         : undefined;
 
-    const routes: Route[] = [transformTrip(data.trip, travelMode)];
+    const routes: Route[] = [transformTrip(data.trip, travelMode, options.units)];
 
     // Extract optimized order from trip.locations[].original_index
     const optimizedOrder =
