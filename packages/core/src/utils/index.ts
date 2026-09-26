@@ -263,6 +263,7 @@ export {
   type TwilightBandProperties,
   twilightBands,
 } from "./solar";
+export { sortResultsByIntent } from "./sortResults";
 export {
   clusterSpatialItems,
   type SpatialClusteringOptions,

@@ -8,6 +8,7 @@ describe("result distance reference", () => {
     expect(
       resolveDistanceReference({
         anchor: { name: "Station", coordinates: [13.35, 52.45] },
+        userLocation: [13.45, 52.55],
         searchBbox: bbox,
       }),
     ).toEqual({
@@ -15,6 +16,30 @@ describe("result distance reference", () => {
       coordinates: [13.35, 52.45],
       name: "Station",
     });
+  });
+
+  it("uses a valid known user location ahead of the captured area", () => {
+    expect(
+      resolveDistanceReference({ anchor: null, userLocation: [13.45, 52.55], searchBbox: bbox }),
+    ).toEqual({ kind: "user_location", coordinates: [13.45, 52.55] });
+    expect(
+      resolveDistanceReference({
+        anchor: null,
+        userLocation: [Number.NaN, 52.55],
+        searchBbox: bbox,
+      }),
+    ).toEqual({ kind: "search_area_center", coordinates: [13.4, 52.5] });
+  });
+
+  it("uses an NLP coordinate origin ahead of a known user location", () => {
+    expect(
+      resolveDistanceReference({
+        anchor: null,
+        searchOrigin: { coordinates: [13.35, 52.45] },
+        userLocation: [13.45, 52.55],
+        searchBbox: bbox,
+      }),
+    ).toEqual({ kind: "search_origin", coordinates: [13.35, 52.45] });
   });
 
   it("uses only the captured search box, which changes on a new search", () => {

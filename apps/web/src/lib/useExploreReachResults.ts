@@ -38,6 +38,15 @@ export function applyExactTransitReachability<T extends ReachablePlace>(
   return places.filter(({ id }) => reachable.has(id));
 }
 
+/** Keep only the returned reachable IDs, in the provider's original rank. */
+export function restoreProviderOrder<T extends { id: string }>(
+  providerResults: readonly T[],
+  returnedResults: readonly T[],
+): T[] {
+  const returnedIds = new Set(returnedResults.map(({ id }) => id));
+  return providerResults.filter(({ id }) => returnedIds.has(id));
+}
+
 /**
  * Explore results with guarded travel-time filtering. Transit filtering uses
  * exact local MOTIS point checks only; every POI remains visible while the
@@ -156,5 +165,13 @@ export function useExploreReachResults(lang?: string) {
     );
   }, [base.filtered, exactFiltered, filterRequested, isTransit, isochroneData]);
 
-  return { ...base, filtered, filterState: transitFilterState };
+  const providerFiltered = useMemo(
+    () =>
+      base.providerFiltered && filtered
+        ? restoreProviderOrder(base.providerFiltered, filtered)
+        : base.providerFiltered,
+    [base.providerFiltered, filtered],
+  );
+
+  return { ...base, filtered, providerFiltered, filterState: transitFilterState };
 }

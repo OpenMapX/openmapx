@@ -1,32 +1,20 @@
 import type { BoundingBox, LngLat } from "../types/geometry";
 import { haversineDistance } from "./coordinates";
-import { bboxCenter } from "./sortResults";
+import { bboxCenter, validResultCoordinates } from "./sortResults";
+
+export { validResultCoordinates } from "./sortResults";
 
 export type DistanceReference = {
   coordinates: LngLat;
-  kind: "search_origin" | "search_area_center";
+  kind: "search_origin" | "user_location" | "search_area_center";
   name?: string;
 };
-
-export function validResultCoordinates(
-  coordinates: LngLat | null | undefined,
-): coordinates is LngLat {
-  return (
-    Array.isArray(coordinates) &&
-    coordinates.length === 2 &&
-    Number.isFinite(coordinates[0]) &&
-    Number.isFinite(coordinates[1]) &&
-    coordinates[0] >= -180 &&
-    coordinates[0] <= 180 &&
-    coordinates[1] >= -90 &&
-    coordinates[1] <= 90
-  );
-}
 
 export function resolveDistanceReference(input: {
   anchor: { name: string; coordinates: LngLat } | null;
   searchBbox: BoundingBox | null;
   searchOrigin?: { coordinates: LngLat; name?: string } | null;
+  userLocation?: LngLat | null;
 }): DistanceReference | null {
   const origin = input.searchOrigin ?? input.anchor;
   if (origin && validResultCoordinates(origin.coordinates)) {
@@ -35,6 +23,9 @@ export function resolveDistanceReference(input: {
       coordinates: origin.coordinates,
       ...(origin.name ? { name: origin.name } : {}),
     };
+  }
+  if (validResultCoordinates(input.userLocation)) {
+    return { kind: "user_location", coordinates: input.userLocation };
   }
   const bbox = input.searchBbox;
   if (

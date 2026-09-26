@@ -53,6 +53,29 @@ describe("sortResultsByIntent", () => {
     expect(sortResultsByIntent(input, "distance", null)).toBe(input);
   });
 
+  it("keeps equal-distance results in their returned order", () => {
+    const first = { id: "first", coordinates: [0, 1] as LngLat };
+    const second = { id: "second", coordinates: [0, -1] as LngLat };
+    expect(
+      sortResultsByIntent([FAR, first, second], "distance", REFERENCE)?.map((p) => p.id),
+    ).toEqual(["first", "second", "far"]);
+  });
+
+  it("puts missing and invalid coordinates last without changing their relative order", () => {
+    const missing = { id: "missing", coordinates: undefined as unknown as LngLat };
+    const invalid = { id: "invalid", coordinates: [181, 0] as LngLat };
+    const nan = { id: "nan", coordinates: [Number.NaN, 0] as LngLat };
+    const input = [missing, FAR, invalid, NEAR, nan];
+    expect(sortResultsByIntent(input, "distance", REFERENCE)?.map((p) => p.id)).toEqual([
+      "near",
+      "far",
+      "missing",
+      "invalid",
+      "nan",
+    ]);
+    expect(input.map((p) => p.id)).toEqual(["missing", "far", "invalid", "near", "nan"]);
+  });
+
   it("is a no-op for rating when no result carries a rating", () => {
     const input = [FAR, NEAR, MID];
     expect(sortResultsByIntent(input, "rating", REFERENCE)).toBe(input);

@@ -1,6 +1,6 @@
 import type { TransitReachabilityCheckResult } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import { applyExactTransitReachability } from "./useExploreReachResults";
+import { applyExactTransitReachability, restoreProviderOrder } from "./useExploreReachResults";
 
 const places = [
   { id: "a", coordinates: [13.4, 52.5] as const },
@@ -61,5 +61,15 @@ describe("exact Explore transit mask", () => {
         ]),
       ),
     ).toBeNull();
+  });
+});
+
+describe("provider order after reach filtering", () => {
+  it("restores original rank within the returned reachable subset", () => {
+    const provider = [{ id: "far" }, { id: "outside" }, { id: "near" }, { id: "capped-out" }];
+    expect(restoreProviderOrder(provider, [provider[2], provider[0]])).toEqual([
+      provider[0],
+      provider[2],
+    ]);
   });
 });

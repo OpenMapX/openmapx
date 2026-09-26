@@ -94,6 +94,47 @@ describe("useCategorySearchStore — ad-hoc filter", () => {
   });
 });
 
+describe("search ordering identity", () => {
+  beforeEach(() => useCategorySearchStore.getState().clearCategory());
+
+  it("keeps identity for facet edits and map movement, but changes it for a new query or captured box", () => {
+    const store = useCategorySearchStore.getState();
+    store.setAdHocFilter(validFilter, "Cafes", { source: "nlp" });
+    const initial = useCategorySearchStore.getState().searchRevision;
+    expect(useCategorySearchStore.getState().nlpSearchRevision).toBe(initial);
+
+    store.setAdHocFilter({ ...validFilter, require: [] }, "Cafes", { preserveSearch: true });
+    store.setMapMoved(true);
+    expect(useCategorySearchStore.getState().searchRevision).toBe(initial);
+    expect(useCategorySearchStore.getState().nlpSearchRevision).toBe(initial);
+
+    store.setSearchBbox({ west: 1, east: 2, south: 3, north: 4 });
+    const afterBox = useCategorySearchStore.getState().searchRevision;
+    expect(afterBox).toBeGreaterThan(initial);
+    expect(useCategorySearchStore.getState().nlpSearchRevision).toBe(afterBox);
+    store.setSearchBbox({ west: 1, east: 2, south: 3, north: 4 });
+    expect(useCategorySearchStore.getState().searchRevision).toBe(afterBox);
+
+    store.setExploreText("coffee");
+    const afterQuery = useCategorySearchStore.getState().searchRevision;
+    expect(afterQuery).toBeGreaterThan(afterBox);
+    expect(useCategorySearchStore.getState().nlpSearchRevision).toBeNull();
+
+    store.setAnchor({
+      id: "test:station",
+      primaryScheme: "test",
+      ids: { test: "station" },
+      name: "Station",
+      address: "",
+      coordinates: [1, 1],
+    });
+    const afterAnchor = useCategorySearchStore.getState().searchRevision;
+    expect(afterAnchor).toBeGreaterThan(afterQuery);
+    store.setActiveCategory("restaurants");
+    expect(useCategorySearchStore.getState().searchRevision).toBeGreaterThan(afterAnchor);
+  });
+});
+
 describe("useCategorySearchStore — brand facet lifecycle", () => {
   // Regression coverage for a stale `brand:wikidata` facet selection (written by
   // nlpSearchStore.applyFacets whenever an NLP query resolves a chain name)

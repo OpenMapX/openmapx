@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "../stores/categorySearchStore";
+import { useMapStore } from "../stores/mapStore";
 import { useNlpSearchStore } from "../stores/nlpSearchStore";
 import type { TagPredicate } from "../utils/overpassFilter";
 import { resolveDistanceReference } from "../utils/resultReference";
@@ -17,7 +18,8 @@ import { useTextSearchResults } from "./useTextSearch";
  * category of the text results.
  *
  * The captured search origin/area is shared by displayed distances and intent
- * sorting. An NLP intent only applies while its exact filter remains active.
+ * sorting. An NLP intent applies only while it belongs to the current search;
+ * predicate edits retain that ownership.
  */
 export function useExploreResults(lang?: string) {
   const mode = useCategorySearchStore((s) => s.mode);
@@ -26,6 +28,9 @@ export function useExploreResults(lang?: string) {
   const searchBbox = useCategorySearchStore((s) => s.searchBbox);
   const adHocFilter = useCategorySearchStore((s) => s.adHocFilter);
   const activeBrand = useCategorySearchStore((s) => s.activeBrand);
+  const searchRevision = useCategorySearchStore((s) => s.searchRevision);
+  const nlpSearchRevision = useCategorySearchStore((s) => s.nlpSearchRevision);
+  const userLocation = useMapStore((s) => s.userLocation);
 
   const nlpIntent = useNlpSearchStore((s) => s.intent);
   const isNlpActive = useNlpSearchStore((s) => s.isNlpActive);
@@ -35,7 +40,7 @@ export function useExploreResults(lang?: string) {
     activeCategory === AD_HOC_CATEGORY_ID &&
     !activeBrand &&
     adHocFilter !== null &&
-    adHocFilter === nlpIntent?.filter
+    nlpSearchRevision === searchRevision
       ? nlpIntent
       : null;
   const distanceReference = useMemo(() => {
@@ -48,8 +53,9 @@ export function useExploreResults(lang?: string) {
       anchor: currentNlpIntent ? null : anchor,
       searchBbox,
       searchOrigin,
+      userLocation,
     });
-  }, [anchor, currentNlpIntent, searchBbox]);
+  }, [anchor, currentNlpIntent, searchBbox, userLocation]);
 
   const category = useFilteredCategoryResults();
   const text = useTextSearchResults(lang);
@@ -73,5 +79,11 @@ export function useExploreResults(lang?: string) {
     );
   }, [base.filtered, currentNlpIntent, distanceReference]);
 
-  return { ...base, filtered, distanceReference };
+  return {
+    ...base,
+    filtered,
+    providerFiltered: base.filtered,
+    defaultSort: currentNlpIntent?.sort_by,
+    distanceReference,
+  };
 }

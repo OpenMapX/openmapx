@@ -22,9 +22,10 @@ describe("useExploreResults retry", () => {
     useCategorySearchStore.getState().clearCategory();
     useCategoryFacetStore.getState().reset();
     useOpeningHoursStore.getState().reset();
+    useMapStore.getState().setUserLocation(null);
   });
 
-  it("keeps the captured area reference while location changes and updates on a new search box", () => {
+  it("uses a live location fix ahead of area center without following ordinary map movement", () => {
     useCategorySearchStore.getState().setActiveCategory("restaurants");
     useCategorySearchStore.getState().setSearchBbox(bbox);
     vi.spyOn(apiClient, "get").mockResolvedValue(success);
@@ -35,12 +36,20 @@ describe("useExploreResults retry", () => {
     });
 
     act(() => {
-      useMapStore.setState({ userLocation: [1, 1] });
       useCategorySearchStore.getState().setMapMoved(true);
     });
     expect(result.current.distanceReference?.coordinates).toEqual([13.4, 52.5]);
 
+    act(() => useMapStore.getState().setUserLocation([13.41, 52.51]));
+    expect(result.current.distanceReference).toEqual({
+      kind: "user_location",
+      coordinates: [13.41, 52.51],
+    });
+
     act(() => useCategorySearchStore.getState().setSearchBbox({ ...bbox, east: 13.7 }));
+    expect(result.current.distanceReference?.coordinates).toEqual([13.41, 52.51]);
+
+    act(() => useMapStore.getState().setUserLocation(null));
     expect(result.current.distanceReference?.coordinates).toEqual([13.5, 52.5]);
   });
 
@@ -61,7 +70,7 @@ describe("useExploreResults retry", () => {
       bbox,
       "test",
     );
-    useCategorySearchStore.getState().setAdHocFilter(nlpFilter, "cafes");
+    useCategorySearchStore.getState().setAdHocFilter(nlpFilter, "cafes", { source: "nlp" });
     useCategorySearchStore.getState().setActiveCategory("restaurants");
     useCategorySearchStore.getState().setSearchBbox(bbox);
     vi.spyOn(apiClient, "get").mockResolvedValue({
@@ -98,7 +107,7 @@ describe("useExploreResults retry", () => {
       bbox,
       "test",
     );
-    useCategorySearchStore.getState().setAdHocFilter(nlpFilter, "cafes");
+    useCategorySearchStore.getState().setAdHocFilter(nlpFilter, "cafes", { source: "nlp" });
     useCategorySearchStore.getState().setSearchBbox(bbox);
     vi.spyOn(apiClient, "post").mockResolvedValue({
       results: [
@@ -115,6 +124,28 @@ describe("useExploreResults retry", () => {
       coordinates: [13.45, 52.55],
     });
     expect(result.current.filtered?.map((place) => place.id)).toEqual(["near", "far"]);
+    expect(result.current.providerFiltered?.map((place) => place.id)).toEqual(["far", "near"]);
+
+    act(() => {
+      useCategorySearchStore
+        .getState()
+        .setAdHocFilter({ ...nlpFilter, require: [] }, "cafes", { preserveSearch: true });
+      useMapStore.getState().setUserLocation([13.3, 52.4]);
+    });
+    expect(result.current.distanceReference).toEqual({
+      kind: "search_origin",
+      coordinates: [13.45, 52.55],
+    });
+    expect(result.current.defaultSort).toBe("distance");
+
+    act(() => useCategorySearchStore.getState().setAdHocFilter({ ...nlpFilter }, "ordinary"));
+    await waitFor(() => expect(result.current.filtered?.length).toBe(2));
+    expect(result.current.defaultSort).toBeUndefined();
+    expect(result.current.distanceReference).toEqual({
+      kind: "user_location",
+      coordinates: [13.3, 52.4],
+    });
+    expect(result.current.filtered?.map((place) => place.id)).toEqual(["far", "near"]);
   });
 
   it("exposes an ordinary category failure, then retries the same category and bounds", async () => {

@@ -4,6 +4,7 @@ import {
   apiClient,
   useCategoryFacetStore,
   useCategorySearchStore,
+  useMapStore,
   useOpeningHoursStore,
   usePlaceStore,
   useSettingsStore,
@@ -31,6 +32,7 @@ beforeEach(() => {
     useCategorySearchStore.getState().clearCategory();
     useCategoryFacetStore.getState().reset();
     useTravelTimeStore.getState().deactivate();
+    useMapStore.getState().setUserLocation(null);
   });
   mockUseExploreReachResults.mockReturnValue({
     filtered: undefined,
@@ -443,6 +445,109 @@ describe("category result details", () => {
     expect(screen.getByRole("button", { name: /Café/ })).toHaveTextContent("3648 ft");
     expect(screen.getByRole("button", { name: /Bad/ })).not.toHaveTextContent(/mi|ft/);
     expect(screen.getByText("search.distanceFromAreaCenter")).toBeInTheDocument();
+  });
+});
+
+describe("category result ordering", () => {
+  const far = { id: "far", name: "Far", coordinates: [0, 2] } as CategoryPlace;
+  const near = { id: "near", name: "Near", coordinates: [0, 0.1] } as CategoryPlace;
+  const bbox = { west: -1, east: 1, south: -1, north: 1 };
+
+  function shownOrder() {
+    const farButton = screen.getByRole("button", { name: /Far/ });
+    const nearButton = screen.getByRole("button", { name: /Near/ });
+    return farButton.compareDocumentPosition(nearButton) & Node.DOCUMENT_POSITION_FOLLOWING
+      ? ["far", "near"]
+      : ["near", "far"];
+  }
+
+  beforeEach(() => {
+    act(() => {
+      useCategorySearchStore.getState().setActiveCategory("cafes");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+    });
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [far, near],
+      providerFiltered: [far, near],
+      defaultSort: undefined,
+      isLoading: false,
+      isError: false,
+      partial: false,
+      truncated: true,
+      total: 300,
+      isTransitCategory: false,
+      distanceReference: { kind: "search_area_center", coordinates: [0, 0] },
+    });
+  });
+
+  it("keeps provider order by default and sorts only shown rows after a distance choice", () => {
+    renderPanel(vi.fn());
+    expect(shownOrder()).toEqual(["far", "near"]);
+    expect(screen.getByText("search.sortShownResults")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "search.sortDistance" }));
+    expect(shownOrder()).toEqual(["near", "far"]);
+    fireEvent.click(screen.getByRole("button", { name: "search.sortRelevance" }));
+    expect(shownOrder()).toEqual(["far", "near"]);
+  });
+
+  it("restores provider rank from an NLP distance default when Relevance is chosen", () => {
+    mockUseExploreReachResults.mockReturnValue({
+      ...(mockUseExploreReachResults() as Record<string, unknown>),
+      filtered: [near, far],
+      providerFiltered: [far, near],
+      defaultSort: "distance",
+    });
+    renderPanel(vi.fn());
+    expect(shownOrder()).toEqual(["near", "far"]);
+    fireEvent.click(screen.getByRole("button", { name: "search.sortRelevance" }));
+    expect(shownOrder()).toEqual(["far", "near"]);
+  });
+
+  it("preserves choice for filters and map movement, then resets on a new captured search area", () => {
+    renderPanel(vi.fn());
+    fireEvent.click(screen.getByRole("button", { name: "search.sortDistance" }));
+    act(() => {
+      useOpeningHoursStore.getState().setOpeningHoursFilter("open_now");
+      useCategoryFacetStore.getState().toggleFacet("outdoorSeating");
+      useCategorySearchStore.getState().setMapMoved(true);
+    });
+    expect(shownOrder()).toEqual(["near", "far"]);
+    act(() => useCategorySearchStore.getState().setSearchBbox({ ...bbox, east: 2 }));
+    expect(shownOrder()).toEqual(["far", "near"]);
+  });
+
+  it("disables Distance when the search has no usable origin", () => {
+    mockUseExploreReachResults.mockReturnValue({
+      ...(mockUseExploreReachResults() as Record<string, unknown>),
+      distanceReference: null,
+    });
+    renderPanel(vi.fn());
+    expect(screen.getByRole("button", { name: "search.sortDistance" })).toBeDisabled();
+  });
+
+  it("keeps Distance selected while a live location fix changes the shared reference", () => {
+    act(() => useMapStore.getState().setUserLocation([0, 0]));
+    const base = mockUseExploreReachResults() as Record<string, unknown>;
+    mockUseExploreReachResults.mockImplementation(() => {
+      const userLocation = useMapStore((s) => s.userLocation);
+      return {
+        ...base,
+        distanceReference: userLocation && {
+          kind: "user_location",
+          coordinates: userLocation,
+        },
+      };
+    });
+    renderPanel(vi.fn());
+    fireEvent.click(screen.getByRole("button", { name: "search.sortDistance" }));
+    expect(shownOrder()).toEqual(["near", "far"]);
+    expect(screen.getByText("search.distanceFromUserLocation")).toBeInTheDocument();
+    act(() => useMapStore.getState().setUserLocation([0, 3]));
+    expect(shownOrder()).toEqual(["far", "near"]);
+    expect(screen.getByRole("button", { name: "search.sortDistance" })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
   });
 });
 

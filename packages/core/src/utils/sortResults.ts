@@ -10,7 +10,7 @@ export type ResultSort = "relevance" | "distance" | "rating";
  * the unchanged order rather than failing to compile.
  */
 interface SortablePlace {
-  coordinates: LngLat;
+  coordinates: LngLat | null | undefined;
   rating?: number;
 }
 
@@ -19,10 +19,25 @@ export function bboxCenter(bbox: BoundingBox): LngLat {
   return [(bbox.west + bbox.east) / 2, (bbox.south + bbox.north) / 2];
 }
 
+export function validResultCoordinates(
+  coordinates: LngLat | null | undefined,
+): coordinates is LngLat {
+  return (
+    Array.isArray(coordinates) &&
+    coordinates.length === 2 &&
+    Number.isFinite(coordinates[0]) &&
+    Number.isFinite(coordinates[1]) &&
+    coordinates[0] >= -180 &&
+    coordinates[0] <= 180 &&
+    coordinates[1] >= -90 &&
+    coordinates[1] <= 90
+  );
+}
+
 /**
  * Reorder explore results to honour an NL search `sort_by`:
- * - `distance` — ascending great-circle distance from `reference` (the centre of
- *   the searched area). No-op when `reference` is null.
+ * - `distance` — ascending great-circle distance from the supplied reference,
+ *   with unknown coordinates last. No-op when the reference is invalid.
  * - `rating` — descending rating, with unrated places sinking to the end. No-op
  *   when no result carries a rating (the current `CategoryPlace` shape has none;
  *   kept generic so a future rating enrichment is honoured automatically).
@@ -39,11 +54,17 @@ export function sortResultsByIntent<T extends SortablePlace>(
   if (!results || !sortBy || sortBy === "relevance") return results;
 
   if (sortBy === "distance") {
-    if (!reference) return results;
-    return [...results].sort(
-      (a, b) =>
-        haversineDistance(reference, a.coordinates) - haversineDistance(reference, b.coordinates),
-    );
+    if (!validResultCoordinates(reference)) return results;
+    return results
+      .map((place, index) => ({
+        place,
+        index,
+        distance: validResultCoordinates(place.coordinates)
+          ? haversineDistance(reference, place.coordinates)
+          : Infinity,
+      }))
+      .sort((a, b) => a.distance - b.distance || a.index - b.index)
+      .map(({ place }) => place);
   }
 
   if (sortBy === "rating") {

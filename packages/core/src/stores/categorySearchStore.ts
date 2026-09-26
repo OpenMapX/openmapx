@@ -38,6 +38,10 @@ interface CategorySearchState {
   /** The catalogued chain behind the current ad-hoc filter, when the filter came
    *  from a brand pick rather than an NLP parse. Drives the header card. */
   activeBrand: BrandSummary | null;
+  /** Advances only when the requested search changes, not when display filters change. */
+  searchRevision: number;
+  /** Associates an NLP intent with the active ad-hoc search across predicate edits. */
+  nlpSearchRevision: number | null;
   setActiveCategory: (id: CategoryId | null) => void;
   setSearchBbox: (bbox: BoundingBox) => void;
   setMapMoved: (moved: boolean) => void;
@@ -47,7 +51,11 @@ interface CategorySearchState {
   closeExploreBox: () => void;
   setExploreText: (query: string) => void;
   setAutoRefresh: (autoRefresh: boolean) => void;
-  setAdHocFilter: (filter: OverpassFilter, label: string) => void;
+  setAdHocFilter: (
+    filter: OverpassFilter,
+    label: string,
+    options?: { source?: "nlp"; preserveSearch?: boolean },
+  ) => void;
   setBrandFilter: (brand: BrandSummary, filter: OverpassFilter) => void;
   clearCategory: () => void;
 }
@@ -65,6 +73,8 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
   adHocFilter: null,
   adHocLabel: null,
   activeBrand: null,
+  searchRevision: 0,
+  nlpSearchRevision: null,
   setActiveCategory: (activeCategory) => {
     clearBrandFacet();
     set({
@@ -74,12 +84,31 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       adHocFilter: null,
       adHocLabel: null,
       activeBrand: null,
+      searchRevision: useCategorySearchStore.getState().searchRevision + 1,
+      nlpSearchRevision: null,
     });
   },
-  setSearchBbox: (searchBbox) => set({ searchBbox }),
+  setSearchBbox: (searchBbox) =>
+    set((state) => {
+      const previous = state.searchBbox;
+      if (
+        previous &&
+        previous.west === searchBbox.west &&
+        previous.east === searchBbox.east &&
+        previous.south === searchBbox.south &&
+        previous.north === searchBbox.north
+      )
+        return state;
+      const nextRevision = state.searchRevision + 1;
+      return {
+        searchBbox,
+        searchRevision: nextRevision,
+        nlpSearchRevision: state.nlpSearchRevision === state.searchRevision ? nextRevision : null,
+      };
+    }),
   setMapMoved: (mapMoved) => set({ mapMoved }),
   setHoveredCategoryPlaceId: (hoveredCategoryPlaceId) => set({ hoveredCategoryPlaceId }),
-  setAnchor: (anchor) => set({ anchor }),
+  setAnchor: (anchor) => set((state) => ({ anchor, searchRevision: state.searchRevision + 1 })),
   openExploreBox: (anchor) => set({ anchor, exploreBoxOpen: true }),
   closeExploreBox: () => set({ exploreBoxOpen: false }),
   setExploreText: (textQuery) => {
@@ -91,19 +120,27 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       adHocFilter: null,
       adHocLabel: null,
       activeBrand: null,
+      searchRevision: useCategorySearchStore.getState().searchRevision + 1,
+      nlpSearchRevision: null,
     });
   },
   setAutoRefresh: (autoRefresh) => set({ autoRefresh }),
-  setAdHocFilter: (adHocFilter, adHocLabel) => {
+  setAdHocFilter: (adHocFilter, adHocLabel, options) => {
     clearBrandFacet();
-    set({
+    set((state) => ({
       adHocFilter,
       adHocLabel,
       activeCategory: AD_HOC_CATEGORY_ID,
       mode: "category",
       textQuery: "",
       activeBrand: null,
-    });
+      searchRevision: state.searchRevision + (options?.preserveSearch ? 0 : 1),
+      nlpSearchRevision: options?.preserveSearch
+        ? state.nlpSearchRevision
+        : options?.source === "nlp"
+          ? state.searchRevision + 1
+          : null,
+    }));
   },
   setBrandFilter: (brand, adHocFilter) => {
     clearBrandFacet();
@@ -114,6 +151,8 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       mode: "category",
       activeCategory: AD_HOC_CATEGORY_ID,
       textQuery: "",
+      searchRevision: useCategorySearchStore.getState().searchRevision + 1,
+      nlpSearchRevision: null,
     });
   },
   clearCategory: () => {
@@ -132,6 +171,8 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       adHocFilter: null,
       adHocLabel: null,
       activeBrand: null,
+      searchRevision: useCategorySearchStore.getState().searchRevision + 1,
+      nlpSearchRevision: null,
     });
   },
 }));

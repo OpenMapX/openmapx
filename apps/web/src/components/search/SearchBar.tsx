@@ -547,7 +547,9 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     const { intent, resolvedBbox, provider } = nlpData;
     if (intent.filter.selectors.length === 0) return;
     useNlpSearchStore.getState().activate(intent, resolvedBbox, provider);
-    useCategorySearchStore.getState().setAdHocFilter(intent.filter, intent.explanation);
+    useCategorySearchStore
+      .getState()
+      .setAdHocFilter(intent.filter, intent.explanation, { source: "nlp" });
     useCategorySearchStore.getState().setSearchBbox(resolvedBbox);
     useSidebarStore.getState().openSidebar(PANEL.CATEGORY);
     setIsFocused(false);

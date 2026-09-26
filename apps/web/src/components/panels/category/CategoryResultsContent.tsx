@@ -10,6 +10,8 @@ import Button from "@mui/material/Button";
 import FormControlLabel from "@mui/material/FormControlLabel";
 import Skeleton from "@mui/material/Skeleton";
 import Switch from "@mui/material/Switch";
+import ToggleButton from "@mui/material/ToggleButton";
+import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import type { CategoryPlace, DistanceReference, TagPredicate } from "@openmapx/core";
 import {
@@ -20,6 +22,7 @@ import {
   PANEL,
   resolveStopAsPlace,
   resultDistanceMetres,
+  sortResultsByIntent,
   useBrandLogos,
   useCategoryFacetStore,
   useCategorySearchStore,
@@ -33,7 +36,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { distinctBrandQids, placeBrandIdentity } from "@/components/map/CategoryResultMarkers";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
@@ -265,6 +268,7 @@ export function CategoryResultsContent() {
   const adHocFilter = useCategorySearchStore((s) => s.adHocFilter);
   const setAdHocFilter = useCategorySearchStore((s) => s.setAdHocFilter);
   const mode = useCategorySearchStore((s) => s.mode);
+  const searchRevision = useCategorySearchStore((s) => s.searchRevision);
   const autoRefresh = useCategorySearchStore((s) => s.autoRefresh);
   const setAutoRefresh = useCategorySearchStore((s) => s.setAutoRefresh);
   const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
@@ -282,6 +286,8 @@ export function CategoryResultsContent() {
 
   const {
     filtered,
+    providerFiltered,
+    defaultSort,
     isLoading,
     isError,
     error,
@@ -314,13 +320,26 @@ export function CategoryResultsContent() {
     if (reachActive) useTravelTimeStore.getState().setOnlyWithinReach(false);
     if (adHocFilter && hasAdHocPredicates) {
       const { require: _require, exclude: _exclude, ...baseFilter } = adHocFilter;
-      setAdHocFilter(baseFilter, "");
+      setAdHocFilter(baseFilter, "", { preserveSearch: true });
     }
   };
 
   const prevCategoryRef = useRef<string | null>(null);
 
-  const results = filtered;
+  const [sortChoice, setSortChoice] = useState<{
+    revision: number;
+    value: "relevance" | "distance";
+  } | null>(null);
+  const chosenSort = sortChoice?.revision === searchRevision ? sortChoice.value : null;
+  const results = useMemo(() => {
+    if (!chosenSort) return filtered;
+    if (chosenSort === "relevance") return providerFiltered ?? filtered;
+    return sortResultsByIntent(
+      providerFiltered ?? filtered,
+      "distance",
+      distanceReference?.coordinates ?? null,
+    );
+  }, [chosenSort, distanceReference, filtered, providerFiltered]);
   const poiAttributions = attributionsForSources(
     registry,
     results?.flatMap((place) => place.provenance?.map((source) => source.sourceId) ?? []) ?? [],
@@ -599,16 +618,50 @@ export function CategoryResultsContent() {
               {tc("resultsCount", { count: results.length })}
             </Typography>
           </Box>
+          <Box
+            sx={{
+              px: 2,
+              pb: 0.5,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+              gap: 0.75,
+            }}
+          >
+            <Typography variant="caption" sx={{ color: "text.secondary" }}>
+              {ts("sortShownResults")}
+            </Typography>
+            <ToggleButtonGroup
+              exclusive
+              size="small"
+              aria-label={ts("sortShownResults")}
+              value={
+                chosenSort ??
+                (defaultSort === "distance" && distanceReference ? "distance" : "relevance")
+              }
+              onChange={(_event, value: "relevance" | "distance" | null) => {
+                if (value) setSortChoice({ revision: searchRevision, value });
+              }}
+            >
+              <ToggleButton value="relevance">{ts("sortRelevance")}</ToggleButton>
+              <ToggleButton value="distance" disabled={!distanceReference}>
+                {ts("sortDistance")}
+              </ToggleButton>
+            </ToggleButtonGroup>
+          </Box>
           {distanceReference && (
             <Typography
               variant="caption"
               sx={{ display: "block", px: 2, pb: 0.5, color: "text.secondary" }}
             >
-              {distanceReference.kind === "search_area_center"
-                ? ts("distanceFromAreaCenter")
-                : distanceReference.name
-                  ? ts("distanceFromOrigin", { name: distanceReference.name })
-                  : ts("distanceFromSearchLocation")}
+              {distanceReference.kind === "user_location"
+                ? ts("distanceFromUserLocation")
+                : distanceReference.kind === "search_area_center"
+                  ? ts("distanceFromAreaCenter")
+                  : distanceReference.name
+                    ? ts("distanceFromOrigin", { name: distanceReference.name })
+                    : ts("distanceFromSearchLocation")}
             </Typography>
           )}
           <Box sx={{ px: 2 }}>

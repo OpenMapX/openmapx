@@ -372,7 +372,9 @@ export function CategoryFilterBar() {
         key={`require-${pred.key}-${pred.op ?? "="}-${pred.value ?? ""}`}
         label={predicateChipLabel(pred, false, t)}
         onDelete={() =>
-          setAdHocFilter(removeFilterPredicate(adHocFilter, "require", i), adHocLabel ?? "")
+          setAdHocFilter(removeFilterPredicate(adHocFilter, "require", i), adHocLabel ?? "", {
+            preserveSearch: true,
+          })
         }
         variant="filled"
         sx={floatingChipSx(true, "toggle")}
@@ -383,7 +385,9 @@ export function CategoryFilterBar() {
         key={`exclude-${pred.key}-${pred.op ?? "="}-${pred.value ?? ""}`}
         label={predicateChipLabel(pred, true, t)}
         onDelete={() =>
-          setAdHocFilter(removeFilterPredicate(adHocFilter, "exclude", i), adHocLabel ?? "")
+          setAdHocFilter(removeFilterPredicate(adHocFilter, "exclude", i), adHocLabel ?? "", {
+            preserveSearch: true,
+          })
         }
         variant="filled"
         sx={floatingChipSx(true, "toggle")}
