@@ -368,7 +368,7 @@ export function CategoryFilterBar() {
         flexWrap: "nowrap",
         overflowX: "auto",
         scrollbarWidth: "none",
-        pointerEvents: "none",
+        pointerEvents: "auto",
         "&::-webkit-scrollbar": { display: "none" },
       }}
     >
