@@ -76,6 +76,7 @@ describe("image-proxy isAllowedHost (SSRF allowlist)", () => {
     "upload.wikimedia.org.attacker.com", // suffix-spoof
     "xupload.wikimedia.org", // prefix without a label boundary
     "xthumb.wikimedia.org",
+    "anything.thumb.wikimedia.org",
     "thumb.wikimedia.org.attacker.com",
     "wikimedia.org", // parent of an allowlisted subdomain, not itself listed
     "attacker.com",
@@ -178,6 +179,10 @@ describe("image-proxy route", () => {
       validateRedirectUrl: (url: URL) => boolean;
     };
     expect(opts.validateRedirectUrl(new URL("https://upload.wikimedia.org/next"))).toBe(true);
+    expect(opts.validateRedirectUrl(new URL("https://thumb.wikimedia.org/next"))).toBe(true);
+    expect(opts.validateRedirectUrl(new URL("https://anything.thumb.wikimedia.org/next"))).toBe(
+      false,
+    );
     expect(opts.validateRedirectUrl(new URL("https://evil.attacker.com/next"))).toBe(false);
   });
 

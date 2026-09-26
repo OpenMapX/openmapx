@@ -64,7 +64,9 @@ describe("wikimediaProvider.searchByTags", () => {
       wikimedia_commons: "File:Sunset.jpg",
     });
 
-    expect(mockFetchCommonsMetadata).toHaveBeenCalledWith(["Sunset.jpg"]);
+    expect(mockFetchCommonsMetadata).toHaveBeenCalledWith(["Sunset.jpg"], {
+      rejectedNonImageFiles: expect.any(Set),
+    });
     expect(result).toEqual([richPhoto]);
     // Should NOT call the category API
     expect(mockFetch).not.toHaveBeenCalled();
@@ -207,7 +209,9 @@ describe("wikimediaProvider.searchByTags", () => {
     const result = await searchByTags({
       wikimedia_commons: "  File:Test.jpg  ",
     });
-    expect(mockFetchCommonsMetadata).toHaveBeenCalledWith(["Test.jpg"]);
+    expect(mockFetchCommonsMetadata).toHaveBeenCalledWith(["Test.jpg"], {
+      rejectedNonImageFiles: expect.any(Set),
+    });
     expect(result).toHaveLength(1);
   });
 });

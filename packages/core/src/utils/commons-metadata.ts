@@ -27,6 +27,14 @@ export interface CommonsPage {
   coordinates?: Array<{ lat: number; lon: number }>;
 }
 
+function isExplicitNonImage(info: { mime?: string; mediatype?: string }): boolean {
+  return (
+    (info.mime !== undefined && !info.mime.startsWith("image/")) ||
+    info.mediatype === "AUDIO" ||
+    info.mediatype === "VIDEO"
+  );
+}
+
 /**
  * Parse a single Commons API page into a PlacePhoto with rich metadata.
  * Returns undefined if the page has no usable image.
@@ -36,8 +44,7 @@ export function parseCommonsPage(page: CommonsPage): PlacePhoto | undefined {
   if (!info) return undefined;
   // MediaWiki also supplies a PNG file-type icon as `thumburl` for audio and
   // video. Classify the original file, never the thumbnail's HTTP MIME type.
-  if (!info.mime?.startsWith("image/") || info.mediatype === "AUDIO" || info.mediatype === "VIDEO")
-    return undefined;
+  if (!info.mime?.startsWith("image/") || isExplicitNonImage(info)) return undefined;
 
   const imageUrl = info.thumburl ?? info.url;
   if (!imageUrl) return undefined;
@@ -99,9 +106,14 @@ export function isDisplayablePhoto(photo: PlacePhoto): boolean {
 
 /**
  * Fetches rich metadata for one or more Commons files in a single API call.
- * Returns a map from normalized filename (spaces, lowercase) to PlacePhoto.
+ * Returns a map from normalized filename (underscores replaced with spaces) to
+ * PlacePhoto. Callers can opt into a lowercase rejection set to distinguish an
+ * explicit non-image MIME/media type from unavailable metadata.
  */
-export async function fetchCommonsMetadata(filenames: string[]): Promise<Map<string, PlacePhoto>> {
+export async function fetchCommonsMetadata(
+  filenames: string[],
+  options?: { rejectedNonImageFiles?: Set<string> },
+): Promise<Map<string, PlacePhoto>> {
   const result = new Map<string, PlacePhoto>();
   if (filenames.length === 0) return result;
 
@@ -131,10 +143,13 @@ export async function fetchCommonsMetadata(filenames: string[]): Promise<Map<str
   if (!pages) return result;
 
   for (const page of Object.values(pages)) {
+    const filename = page.title?.replace(/^File:/, "")?.replace(/_/g, " ") ?? "";
+    const info = page.imageinfo?.[0];
+    if (info && isExplicitNonImage(info))
+      options?.rejectedNonImageFiles?.add(filename.toLowerCase());
     const photo = parseCommonsPage(page);
     if (!photo) continue;
-    const filename = page.title?.replace(/^File:/, "") ?? "";
-    result.set(filename.replace(/_/g, " "), photo);
+    result.set(filename, photo);
   }
 
   return result;

@@ -43,9 +43,12 @@ async function searchByTags(
 
   if (tag.startsWith("File:")) {
     const filename = tag.slice(5);
-    const metadata = await fetchCommonsMetadata([filename]);
-    const richPhoto = metadata.get(filename.replace(/_/g, " "));
+    const rejectedNonImageFiles = new Set<string>();
+    const metadata = await fetchCommonsMetadata([filename], { rejectedNonImageFiles });
+    const normalizedFilename = filename.replace(/_/g, " ");
+    const richPhoto = metadata.get(normalizedFilename);
     if (richPhoto) return isDisplayablePhoto(richPhoto) ? [richPhoto] : [];
+    if (rejectedNonImageFiles.has(normalizedFilename.toLowerCase())) return [];
 
     // With no trustworthy metadata, only fall back for common image formats.
     // Otherwise an audio/video file becomes a PNG file-type icon again.

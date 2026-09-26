@@ -63,6 +63,36 @@ afterEach(() => {
 });
 
 describe("Wikimedia photo provider — File: tag", () => {
+  it.each(["Misleading.jpg", "misleading.jpg"])(
+    "does not fall back when image-named File %s has explicit audio MIME",
+    async (filename) => {
+      routes = {
+        "titles=": {
+          query: {
+            pages: {
+              "1": commonsPage({
+                title: "File:Misleading.jpg",
+                imageinfo: [
+                  {
+                    ...commonsPage().imageinfo[0],
+                    mime: "application/ogg",
+                    mediatype: "AUDIO",
+                    url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Misleading.jpg",
+                    thumburl:
+                      "https://commons.wikimedia.org/w/resources/assets/file-type-icons/fileicon-ogg.png",
+                  },
+                ],
+              }),
+            },
+          },
+        },
+      };
+
+      expect(
+        await wikimediaProvider.searchByTags({ wikimedia_commons: `File:${filename}` }),
+      ).toEqual([]);
+    },
+  );
   it("does not turn an audio file's PNG icon into a photo", async () => {
     routes = {
       "titles=": {

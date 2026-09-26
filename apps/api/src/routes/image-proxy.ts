@@ -13,7 +13,6 @@ const ALLOWED_HOSTS = [
   // Wikimedia Commons
   "upload.wikimedia.org",
   "commons.wikimedia.org",
-  "thumb.wikimedia.org",
   // Mapillary (CDN uses regional subdomains like scontent-fra5-2.xx.fbcdn.net)
   "images.mapillary.com",
   // Mapillary's own CDN host, used as the thumbnail fallback when the API
@@ -86,6 +85,8 @@ const ALLOWED_HOSTS = [
  * rejected). Exported for direct SSRF-allowlist testing.
  */
 export function isAllowedHost(hostname: string): boolean {
+  // Commons image thumbnails use this one host. Do not admit its subdomains.
+  if (hostname === "thumb.wikimedia.org") return true;
   // OpenStreetMap serves uploaded user avatars from a dedicated S3 bucket. The
   // Active Storage redirect URL we store (on `www.openstreetmap.org`, already
   // allowlisted) 302s to a virtual-hosted bucket URL whose region/dualstack
