@@ -105,10 +105,12 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
       <Typography
         variant="caption"
         sx={{
-          fontWeight: 600,
+          fontWeight: 500,
           color: isEcoChoice ? "success.main" : "text.secondary",
-          fontSize: "0.8125rem",
-          lineHeight: 1,
+          fontSize: "0.75rem",
+          lineHeight: 1.3,
+          minWidth: 0,
+          overflowWrap: "anywhere",
         }}
         data-testid="impact-summary-text"
       >
@@ -122,6 +124,7 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
       sx={{
         display: "inline-flex",
         alignItems: "center",
+        maxWidth: "100%",
       }}
     >
       {onClick ? (
@@ -135,9 +138,12 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
             minWidth: 48,
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "flex-start",
             gap: 0.75,
-            px: 1.5,
-            py: 0.75,
+            flexWrap: "wrap",
+            maxWidth: "100%",
+            px: 1,
+            py: 0.5,
             borderRadius: 999,
             bgcolor: (theme) =>
               theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
@@ -164,9 +170,12 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
             minWidth: 48,
             display: "inline-flex",
             alignItems: "center",
+            justifyContent: "flex-start",
             gap: 0.75,
-            px: 1.5,
-            py: 0.75,
+            flexWrap: "wrap",
+            maxWidth: "100%",
+            px: 1,
+            py: 0.5,
             borderRadius: 999,
             bgcolor: (theme) =>
               theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",

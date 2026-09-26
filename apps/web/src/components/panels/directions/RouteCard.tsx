@@ -169,41 +169,37 @@ export function RouteCard({
   const selectionLabel = `${route.summary ?? t("bestRoute")}, ${formatDuration(route.duration)}, ${dist}`;
   const summaryContent = (
     <>
-      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-        <Typography
-          variant="body2"
-          noWrap
-          sx={{ fontWeight: 600, color: "text.primary", flex: 1, mr: 1 }}
-        >
+      <Typography
+        variant="h6"
+        color={active ? BRAND : "text.primary"}
+        sx={{ fontWeight: 700, lineHeight: 1.25, fontVariantNumeric: "tabular-nums" }}
+      >
+        {formatDuration(route.duration)}
+      </Typography>
+      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mt: 0.25, minWidth: 0 }}>
+        <Typography variant="body2" noWrap sx={{ color: "text.secondary", flex: 1, minWidth: 0 }}>
           {route.summary ?? t("bestRoute")}
         </Typography>
-        <Typography
-          variant="body2"
-          color={active ? BRAND : "text.primary"}
-          sx={{ fontWeight: 600, flexShrink: 0 }}
-        >
-          {formatDuration(route.duration)}
+        <Typography variant="body2" sx={{ color: "text.secondary", flexShrink: 0 }}>
+          {dist}
         </Typography>
       </Box>
       {trafficDelay && (
         <Typography
           variant="caption"
           data-testid="traffic-delay"
-          sx={{ color: TRAFFIC_TEXT_COLOR[trafficDelay.band], display: "block", fontWeight: 600 }}
+          sx={{ color: TRAFFIC_TEXT_COLOR[trafficDelay.band], display: "block", mt: 0.25 }}
         >
           {t("trafficDelay", { delay: formatDuration(trafficDelay.delaySeconds) })}
           {" · "}
           {t("trafficDelayNormally", { baseline: formatDuration(trafficDelay.baseline) })}
         </Typography>
       )}
-      <Typography variant="caption" sx={{ color: "text.secondary" }}>
-        {dist}
-      </Typography>
       {roadConditionImpact && (
         <Typography
           variant="caption"
           data-testid="road-condition-route-status"
-          sx={{ color: "text.secondary", display: "block" }}
+          sx={{ color: "text.secondary", display: "block", mt: 0.25 }}
         >
           {t(`roadConditionImpact.${roadConditionImpact.availability}`)}
         </Typography>
@@ -260,7 +256,7 @@ export function RouteCard({
             {summaryContent}
           </Box>
         ) : (
-          <Box component="label" sx={selectionSx}>
+          <Box component="label" sx={{ ...selectionSx, position: "relative" }}>
             <Box
               component="input"
               type="radio"
@@ -274,7 +270,7 @@ export function RouteCard({
               onKeyDown={(event) => {
                 if (event.key === "Enter") onSelect();
               }}
-              sx={{ position: "absolute", opacity: 0, width: 1, height: 1, m: 0 }}
+              sx={{ position: "absolute", opacity: 0, width: "1px", height: "1px", m: 0 }}
             />
             {summaryContent}
           </Box>
