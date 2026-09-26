@@ -29,7 +29,8 @@
     }
   },
   "section": {
-    "fuelPrices": "Fuel Prices"
+    "fuelPrices": "Fuel Prices",
+    "latestGradeUpdate": "Latest reported update among fuel types"
   },
   "column": {
     "fuelType": "Fuel Type",

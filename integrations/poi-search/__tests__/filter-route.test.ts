@@ -1,6 +1,6 @@
 import { OverpassTimeoutError } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
 
 type RouteHandler = (
@@ -70,6 +70,64 @@ function getHandler(ctx: IntegrationContext & { routes: Map<string, RouteHandler
 }
 
 describe("POST /filter route", () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("re-evaluates a cached PH result at the response boundary", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-26T14:00:00Z"));
+    const ctx = makeRouteCtx();
+    let cached: unknown;
+    ctx.cache.withCache = vi.fn(async (_key, _ttl, fn) => {
+      cached ??= await fn();
+      return cached;
+    }) as typeof ctx.cache.withCache;
+    (ctx as unknown as Record<string, unknown>).getIntegrationsByDomain = () => [
+      {
+        providers: new Map([
+          [
+            "poi-search",
+            [
+              {
+                id: "fake-overpass",
+                categories: [],
+                search: vi.fn(),
+                searchByFilter: vi.fn(async () => [
+                  {
+                    id: "osm:way/210081990",
+                    name: "Centre Charlemagne",
+                    coordinates: [6.0830154, 50.775736],
+                    openingHours: "Tu-Su,PH 10:00-18:00",
+                  },
+                ]),
+              },
+            ],
+          ],
+        ]),
+      },
+    ];
+    setup(ctx);
+    const handler = getHandler(ctx);
+    const request = { query: {}, params: {}, body: { filter: VALID_FILTER, ...VALID_BBOX } };
+    const open = makeReply();
+    await handler(request, open);
+    expect(
+      (open.payload as { results: Array<{ openingHoursInfo: { status: { isOpen: boolean } } }> })
+        .results[0].openingHoursInfo.status.isOpen,
+    ).toBe(true);
+    vi.setSystemTime(new Date("2026-09-26T18:00:00Z"));
+    const closed = makeReply();
+    await handler(request, closed);
+    const info = (
+      closed.payload as {
+        results: Array<{ openingHoursInfo: { status: { isOpen: boolean; isUnknown?: boolean } } }>;
+      }
+    ).results[0].openingHoursInfo;
+    expect(info.status).toMatchObject({ isOpen: false });
+    expect(info.status.isUnknown).toBeFalsy();
+    expect(
+      (cached as { results: Array<{ openingHoursInfo?: unknown }> }).results[0].openingHoursInfo,
+    ).toBeUndefined();
+  });
   it("200 with { results, partial } for a valid filter + bbox", async () => {
     const fakeResults = [{ id: "osm:node/1", name: "Test Cafe", coordinates: [2.35, 48.86] }];
 
@@ -261,6 +319,6 @@ describe("POST /filter route", () => {
     );
 
     expect(reply.statusCode).toBe(200);
-    expect(headers["Cache-Control"]).toBe("public, max-age=300");
+    expect(headers["Cache-Control"]).toBe("no-store");
   });
 });

@@ -61,8 +61,8 @@ export interface EvseAvailability {
   available: number;
   /** Total number of EVSEs the live feed reports for this station. */
   total: number;
-  /** ISO timestamp the live snapshot was produced. */
-  updatedAt: string;
+  /** Upstream observation time, when supplied; never a local fetch timestamp. */
+  updatedAt?: string;
 }
 
 export interface EvChargingAddress {

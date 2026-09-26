@@ -34,6 +34,7 @@ export function useFilterSearch(
       ),
     enabled: filter !== null && filter.selectors.length > 0 && bbox !== null,
     staleTime: 30_000,
+    refetchInterval: 60_000,
     gcTime: MAP_QUERY_POLICY.gcTime,
     retry: (failureCount, error) => failureCount < 2 && !isAreaTooLarge(error),
   });

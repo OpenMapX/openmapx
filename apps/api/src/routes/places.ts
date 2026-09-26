@@ -15,13 +15,14 @@ import {
   type CategoryCardEnrichmentResponse,
   categoryPlaceToPlace,
   isDisplayablePhoto,
+  openingHoursSourceFromOsm,
   type Place,
   type PlaceIds,
   type PlacePhoto,
   parseId,
   type ReviewProvider,
 } from "@openmapx/core";
-import { buildOpeningHoursInfo } from "@openmapx/core/server";
+import { currentOpeningHoursInfo } from "@openmapx/core/server";
 import {
   buildFacebookUrl,
   buildFoursquareUrl,
@@ -446,13 +447,6 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
   } = await getPlaceKnowledge(place, lang);
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
 
-  if (enriched.openingHours && !enriched.openingHoursInfo) {
-    enriched.openingHoursInfo = buildOpeningHoursInfo(enriched.openingHours, {
-      lat: enriched.coordinates[1],
-      lon: enriched.coordinates[0],
-      countryCode: enriched.countryCode,
-    });
-  }
   const allIntegrations = getAllIntegrations();
   const photoProviders = getPhotoProviders(allIntegrations);
   const reviewProviders = getReviewProviders(allIntegrations);
@@ -676,10 +670,19 @@ export const placesRoute: FastifyPluginAsync = async (fastify) => {
 
           return enrichLimit(() => enrichPlace(place, placeRequest.identity.lang ?? undefined));
         });
-        reply.header("Cache-Control", "public, max-age=86400");
-        return result.photos
-          ? { ...result, photos: result.photos.filter(isDisplayablePhoto) }
-          : result;
+        const openingHoursInfo = await currentOpeningHoursInfo(result.openingHours, {
+          lat: result.coordinates[1],
+          lon: result.coordinates[0],
+          countryCode: result.countryCode,
+        });
+        reply.header("Cache-Control", "no-store");
+        const openingHoursSource = result.openingHours
+          ? (result.openingHoursSource ?? openingHoursSourceFromOsm(result.id, result.osmTags))
+          : undefined;
+        const current = { ...result, openingHoursInfo, openingHoursSource };
+        return current.photos
+          ? { ...current, photos: current.photos.filter(isDisplayablePhoto) }
+          : current;
       } catch (err) {
         const e = err as CacheableError;
         const statusCode = e.statusCode ?? 500;

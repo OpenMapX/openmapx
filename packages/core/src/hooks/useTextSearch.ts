@@ -40,7 +40,8 @@ export function useTextSearchResults(lang?: string) {
       );
     },
     enabled,
-    staleTime: 60_000,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
     gcTime: MAP_QUERY_POLICY.gcTime,
   });
 

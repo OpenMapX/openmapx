@@ -5,6 +5,7 @@ import {
   type DataSourceResult,
   gapFillBranding,
   type OsmIdentity,
+  validObservedAt,
 } from "@openmapx/core";
 import { type I18nToken, type Translatable, token } from "@openmapx/integration-framework/strings";
 import type { FuelStation } from "@openmapx/mobility-core/fuel";
@@ -84,7 +85,7 @@ export function mapFuelStationToResult(station: FuelStation): DataSourceResult {
     summary: formatPriceSummary(station),
     operator: station.brand,
     sortValues: buildSortValues(station),
-    observedAt: station.fuelPricesUpdatedAt,
+    observedAt: validObservedAt(station.fuelPricesUpdatedAt),
     currency: station.currency,
   };
 }
@@ -100,9 +101,13 @@ function buildFuelPricesTable(station: FuelStation): DataSourceDetailSection | n
   }
 
   if (rows.length === 0) return null;
+  const observedAt = validObservedAt(station.fuelPricesUpdatedAt);
 
   return {
     title: token("section.fuelPrices"),
+    ...(observedAt
+      ? { caption: token("section.latestGradeUpdate"), captionTimestamp: observedAt }
+      : {}),
     type: "table",
     columns: [token("column.fuelType"), token("column.price")],
     rows,

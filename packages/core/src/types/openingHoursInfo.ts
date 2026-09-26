@@ -74,6 +74,8 @@ export interface LocationContext {
  * `../utils/openingHours.ts`.
  */
 export interface OpeningHoursInfo {
+  /** Calculation expiry only; never an upstream observation or check date. */
+  validUntil?: string;
   /** Current status as structured data. Null when there is no raw value. */
   status: OpeningHoursStatus | null;
   /** True iff the place is open 24/7 (no upcoming state change). */

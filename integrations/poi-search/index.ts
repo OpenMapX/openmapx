@@ -7,9 +7,27 @@ import {
   OverpassTimeoutError,
   validateOverpassFilter,
 } from "@openmapx/core";
+import { currentOpeningHoursInfo } from "@openmapx/core/server";
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { getChipTranslations, suggestPresets } from "@openmapx/presets";
-import { createPoiSearchOrchestrator } from "./orchestrator.js";
+import { createPoiSearchOrchestrator, type PoiSearchResponse } from "./orchestrator.js";
+
+/** Re-evaluate the final fused schedule after reading the stable-result cache. */
+async function withCurrentHours(result: PoiSearchResponse): Promise<PoiSearchResponse> {
+  return {
+    ...result,
+    results: await Promise.all(
+      result.results.map(async (place) => ({
+        ...place,
+        openingHoursInfo: await currentOpeningHoursInfo(place.openingHours, {
+          lat: place.coordinates[1],
+          lon: place.coordinates[0],
+          countryCode: place.countryCode,
+        }),
+      })),
+    ),
+  };
+}
 
 export function setup(ctx: IntegrationContext): void {
   const orchestrator = createPoiSearchOrchestrator(ctx);
@@ -47,8 +65,8 @@ export function setup(ctx: IntegrationContext): void {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
         orchestrator.search(category, bbox, { lang }),
       );
-      reply.header("Cache-Control", "public, max-age=300");
-      reply.send(result);
+      reply.header("Cache-Control", "no-store");
+      reply.send(await withCurrentHours(result));
     } catch (err) {
       if (err instanceof OverpassTimeoutError) {
         reply.status(422).send({ error: "area_too_large" });
@@ -90,8 +108,8 @@ export function setup(ctx: IntegrationContext): void {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
         orchestrator.searchText(q, bbox, { lang }),
       );
-      reply.header("Cache-Control", "public, max-age=300");
-      reply.send(result);
+      reply.header("Cache-Control", "no-store");
+      reply.send(await withCurrentHours(result));
     } catch (err) {
       if (err instanceof OverpassTimeoutError) {
         reply.status(422).send({ error: "area_too_large" });
@@ -167,8 +185,8 @@ export function setup(ctx: IntegrationContext): void {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
         orchestrator.searchFiltered(category, attributes, bbox, { lang }),
       );
-      reply.header("Cache-Control", "public, max-age=300");
-      reply.send(result);
+      reply.header("Cache-Control", "no-store");
+      reply.send(await withCurrentHours(result));
     } catch (err) {
       if (err instanceof OverpassTimeoutError) {
         reply.status(422).send({ error: "area_too_large" });
@@ -346,8 +364,8 @@ export function setup(ctx: IntegrationContext): void {
       const result = await ctx.cache.withCache(cacheKey, 300, () =>
         orchestrator.searchByFilter(v.filter, bbox, { lang }),
       );
-      reply.header("Cache-Control", "public, max-age=300");
-      reply.send(result);
+      reply.header("Cache-Control", "no-store");
+      reply.send(await withCurrentHours(result));
     } catch (err) {
       if (err instanceof OverpassTimeoutError) {
         reply.status(422).send({ error: "area_too_large" });

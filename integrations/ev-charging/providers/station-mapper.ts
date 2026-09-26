@@ -5,6 +5,7 @@ import {
   type DataSourceResult,
   gapFillBranding,
   type OsmIdentity,
+  validObservedAt,
 } from "@openmapx/core";
 import {
   type I18nToken,
@@ -370,24 +371,26 @@ function connectorRows(
 }
 
 /**
- * Distinct (altText, sourceUrl) pairs collected across a station's tariffs,
- * for rendering an OCPI `tariff_alt_text`/`tariff_alt_url` blurb+link beneath
- * the Pricing section. `url` is omitted when a tariff carries descriptive
- * text but no link target; entries with neither are skipped entirely.
+ * Distinct tariff source records, with optional OCPI terms links. The tariff's
+ * own source is used, since a merged station can carry multiple price feeds.
  */
 function tariffLinks(
   station: EvChargingStation,
+  resolveSourceName: (id: string) => string,
 ): { label: Translatable; url?: string }[] | undefined {
   const seen = new Set<string>();
   const links: { label: Translatable; url?: string }[] = [];
   for (const tariff of station.tariffs ?? []) {
     const altText = cleanString(tariff.altText);
     const url = isSafeHttpUrl(tariff.sourceUrl) ? tariff.sourceUrl : undefined;
-    if (!altText && !url) continue;
-    const key = `${altText ?? ""}|${url ?? ""}`;
+    const source = resolveSourceName(tariff.source) || tariff.source;
+    const key = `${source}|${altText ?? ""}|${url ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
-    links.push({ label: altText ?? token("tariffDetails"), url });
+    links.push({
+      label: altText ? `${source}: ${altText}` : source || token("tariffDetails"),
+      url,
+    });
   }
   return links.length > 0 ? links : undefined;
 }
@@ -409,7 +412,7 @@ export function mapStationToDetail(
               available: station.availability.available,
               total: station.availability.total,
             }),
-            captionTimestamp: station.availability.updatedAt,
+            captionTimestamp: validObservedAt(station.availability.updatedAt),
           }
         : {}),
       type: "table",
@@ -454,7 +457,7 @@ export function mapStationToDetail(
   }
 
   if (structuredTariffRows.length > 0) {
-    const links = tariffLinks(station);
+    const links = tariffLinks(station, resolveSourceName);
     sections.push({
       title: sharedT.section.pricing,
       caption: pricingCaption(station),

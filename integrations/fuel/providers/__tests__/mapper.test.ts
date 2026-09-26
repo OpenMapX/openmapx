@@ -85,6 +85,20 @@ describe("fuel mapper", () => {
     expect(result.currency).toBe("EUR");
   });
 
+  it("shows only a real latest-grade timestamp on the detail price section", () => {
+    const valid = mapFuelStationToDetail(
+      makeStation({ fuelPricesUpdatedAt: "2026-09-03T12:34:56Z" }),
+    ).sections[0];
+    expect(valid?.caption).toEqual({ $t: "section.latestGradeUpdate" });
+    expect(valid?.captionTimestamp).toBe("2026-09-03T12:34:56Z");
+    for (const value of ["bad", "2999-01-01T00:00:00Z"]) {
+      const invalid = mapFuelStationToDetail(makeStation({ fuelPricesUpdatedAt: value }))
+        .sections[0];
+      expect(invalid?.captionTimestamp).toBeUndefined();
+    }
+    expect(mapFuelStationToDetail(makeStation()).sections[0]?.captionTimestamp).toBeUndefined();
+  });
+
   it("preserves the station currency instead of assuming euros", () => {
     const station = makeStation({ currency: "CHF", fuelPrices: { diesel: 1.73 } });
     const result = mapFuelStationToResult(station);

@@ -7,7 +7,6 @@ import {
   removeFilterPredicate,
   toPoiSearchOutcome,
 } from "@openmapx/core";
-import { buildOpeningHoursInfo } from "@openmapx/core/server";
 import { httpError, type IntegrationContext } from "@openmapx/integration-framework";
 import { getPresetById } from "@openmapx/presets";
 import type { PoiSearchProvider, PoiSearchResult, PoiSearchReturn } from "./types.js";
@@ -131,14 +130,6 @@ async function runWithShrink(
   for (let attempt = 0; ; attempt++) {
     try {
       const outcome = toPoiSearchOutcome(await fn(currentBbox));
-      for (const r of outcome.results) {
-        if (r.openingHours && !r.openingHoursInfo) {
-          r.openingHoursInfo = buildOpeningHoursInfo(r.openingHours, {
-            lat: r.coordinates[1],
-            lon: r.coordinates[0],
-          });
-        }
-      }
       return {
         results: outcome.results,
         partial: attempt > 0,

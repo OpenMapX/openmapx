@@ -4,6 +4,7 @@ import Box from "@mui/material/Box";
 import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
+import { openingHoursTone } from "@/lib/openingHoursTone";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 
 type SummaryPlace = Pick<Place, "category" | "openingHoursInfo">;
@@ -45,7 +46,14 @@ export function PlaceVisitSummary({
         {status && (
           <Box
             component="span"
-            sx={{ minWidth: 0, flexShrink: 0, overflow: "hidden", textOverflow: "ellipsis" }}
+            sx={{
+              minWidth: 0,
+              flexShrink: 0,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              color: openingHoursTone(status),
+              fontWeight: status.isUnknown ? 500 : 700,
+            }}
           >
             {hoursText.state(status)}
           </Box>
@@ -85,10 +93,7 @@ export function PlaceVisitSummary({
           variant="body2"
           component="span"
           noWrap
-          color={
-            status.isUnknown ? "text.secondary" : status.isOpen ? "success.main" : "error.main"
-          }
-          sx={{ fontWeight: 500, flexShrink: 0 }}
+          sx={{ color: openingHoursTone(status), fontWeight: 700, flexShrink: 0 }}
         >
           {hoursText.state(status)}
         </Typography>

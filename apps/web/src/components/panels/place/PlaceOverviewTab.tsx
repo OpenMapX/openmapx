@@ -52,12 +52,13 @@ import {
   useUpdateLabel,
 } from "@openmapx/core";
 import type { MergedDeparture, MergedRoute, TransportMode } from "@openmapx/mobility-core/transit";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { resolveListIcon } from "@/lib/listIcon";
+import { openingHoursTone } from "@/lib/openingHoursTone";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { useMobileSheet } from "../sheet/sheetState";
 import { PlaceTransitSection } from "../transit/PlaceTransitSection";
@@ -214,6 +215,7 @@ function ExpandableDetailRow({
         onClick={onToggle}
         sx={{
           width: "100%",
+          boxSizing: "border-box",
           display: "flex",
           gap: 2,
           alignItems: "center",
@@ -258,6 +260,7 @@ export function PlaceOverviewTab({
   const t = useTranslations("place");
   const tc = useTranslations("common");
   const tHours = useTranslations("openingHours");
+  const locale = useLocale();
   const tSaved = useTranslations("saved");
   const tWeather = useTranslations("weather");
   const tSun = useTranslations("sunTimes");
@@ -270,6 +273,29 @@ export function PlaceOverviewTab({
   const promotePracticalDetails =
     !isCity && !isExplicitOutdoorPlace(place) && isVisitBusiness(place);
   const hours = place.openingHoursInfo?.status ?? null;
+  const hoursSource = place.openingHours ? place.openingHoursSource : undefined;
+  const sourceUrl =
+    hoursSource?.url && /^https?:\/\//i.test(hoursSource.url)
+      ? safeHref(hoursSource.url)
+      : undefined;
+  const hoursSourceContext = hoursSource ? (
+    <Typography variant="caption" sx={{ display: "block", color: "text.secondary", mt: 0.75 }}>
+      {tHours("source")}:{" "}
+      {sourceUrl ? (
+        <Link href={sourceUrl} target="_blank" rel="noopener noreferrer">
+          {hoursSource.name}
+        </Link>
+      ) : (
+        hoursSource.name
+      )}
+      {hoursSource.checkedAt &&
+        ` · ${tHours("checkedOn", {
+          date: new Intl.DateTimeFormat(locale, { dateStyle: "medium", timeZone: "UTC" }).format(
+            new Date(`${hoursSource.checkedAt}T12:00:00Z`),
+          ),
+        })}`}
+    </Typography>
+  ) : null;
   const plusCode = computePlusCode(place.coordinates);
   const shortCode = shortenPlusCode(plusCode);
   const city = place.city ?? null;
@@ -522,6 +548,7 @@ export function PlaceOverviewTab({
                     <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
                       {place.openingHours || hours.text || hours.comment}
                     </Typography>
+                    {hoursSourceContext}
                   </Box>
                 </ExpandableDetailRow>
               ) : (
@@ -541,9 +568,9 @@ export function PlaceOverviewTab({
                     <Typography
                       variant="body2"
                       component="span"
-                      color={hours.isOpen ? "success.main" : "error.main"}
                       sx={{
-                        fontWeight: 500,
+                        color: openingHoursTone(hours),
+                        fontWeight: 700,
                       }}
                     >
                       {ohText.state(hours)}
@@ -589,15 +616,16 @@ export function PlaceOverviewTab({
                     </Box>
                   ))}
                 </Box>
+                {hoursSourceContext}
               </ExpandableDetailRow>
             ) : (
               <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
                 <Typography
                   variant="body2"
                   component="span"
-                  color={hours.isOpen ? "success.main" : "error.main"}
                   sx={{
-                    fontWeight: 500,
+                    color: openingHoursTone(hours),
+                    fontWeight: 700,
                   }}
                 >
                   {ohText.state(hours)}

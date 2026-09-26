@@ -461,6 +461,29 @@ function makePoi(
 }
 
 describe("fusePoiResults", () => {
+  it("keeps hours-specific source metadata with the schedule chosen by fusion", () => {
+    const osm = makePoi("osm:node/1", "Cafe", 52.52, 13.4, {
+      openingHours: "Mo-Fr 09:00-17:00",
+      openingHoursSource: { name: "OpenStreetMap", checkedAt: "2026-09-01" },
+    });
+    const overture = makePoi("overture:gers-1", "Cafe", 52.52, 13.4, {
+      gersId: "gers-1",
+      openingHours: "24/7",
+      openingHoursSource: { name: "Overture" },
+    });
+    const link = new Map([["node/1", "gers-1"]]);
+    const fused = fusePoiResults([osm], [overture], DEFAULT_CONFLATION_THRESHOLDS, link)[0];
+    expect(fused.openingHours).toBe("Mo-Fr 09:00-17:00");
+    expect(fused.openingHoursSource).toEqual(osm.openingHoursSource);
+    const filled = fusePoiResults(
+      [{ ...osm, openingHours: undefined, openingHoursSource: undefined }],
+      [overture],
+      DEFAULT_CONFLATION_THRESHOLDS,
+      link,
+    )[0];
+    expect(filled.openingHours).toBe("24/7");
+    expect(filled.openingHoursSource).toEqual(overture.openingHoursSource);
+  });
   it("returns OSM array deep-equal unchanged when overture is empty (optionality invariant)", () => {
     const osm: PoiSearchResult[] = [
       makePoi("osm:node/1", "Starbucks", 52.52, 13.4, { category: "cafes" }),

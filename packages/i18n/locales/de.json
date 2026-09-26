@@ -1048,6 +1048,8 @@
     "avoidsConsumption": "Vermeidet verbrauchsintensive Streckenabschnitte"
   },
   "openingHours": {
+    "source": "Quelle",
+    "checkedOn": "Öffnungszeiten geprüft am {date}",
     "unconfirmed": "Öffnungszeiten unbestätigt",
     "reportedHours": "Angegebene Öffnungszeiten",
     "open24Hours": "24 Stunden geöffnet",
@@ -1110,6 +1112,7 @@
     "seeAllPrices": "Alle Preise anzeigen",
     "hotelNote": "Öffnet die Buchungsseite mit diesem Hotel und deinen Daten. Preise und Verfügbarkeit werden dort angezeigt.",
     "priceFrom": "ab",
+    "rateSource": "Preis von {source}",
     "perNight": "/ Nacht",
     "currency": "Währung",
     "guestNationality": "Nationalität",

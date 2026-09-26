@@ -54,6 +54,7 @@ import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/Resu
 import { useMap } from "@/integration-api/map/MapContext";
 import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { attributionsForSources } from "@/lib/attributionForProviders";
+import { openingHoursTone } from "@/lib/openingHoursTone";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { BrandHeaderCard } from "./BrandHeaderCard";
@@ -348,14 +349,20 @@ function CategoryPlaceCard({
             }
             const detail = ohText.detail(hours);
             return (
-              <Typography variant="caption" color={hours.isOpen ? "success.main" : "error.main"}>
-                {hours.isOpen ? tp("openDetail", { detail }) : tp("closedDetail", { detail })}
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                <Box component="span" sx={{ color: openingHoursTone(hours), fontWeight: 700 }}>
+                  {ohText.state(hours)}
+                </Box>
+                {detail && <> · {detail}</>}
               </Typography>
             );
           }
           if (place.isOpen !== undefined) {
             return (
-              <Typography variant="caption" color={place.isOpen ? "success.main" : "error.main"}>
+              <Typography
+                variant="body2"
+                sx={{ color: place.isOpen ? "success.main" : "error.main", fontWeight: 700 }}
+              >
                 {place.isOpen ? tc("open") : tc("closed")}
               </Typography>
             );

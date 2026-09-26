@@ -2,10 +2,12 @@ import { useMemo } from "react";
 import { useCategorySearchStore } from "../stores/categorySearchStore";
 import { useOpeningHoursStore } from "../stores/openingHoursStore";
 import { applyHoursFilter } from "../utils/categoryFilter";
+import { presentCategoryOpeningHours } from "../utils/openingHoursClient";
 import type { TagPredicate } from "../utils/overpassFilter";
 import { useCategorySearch } from "./useCategorySearch";
 import { useExploreFilters } from "./useExploreFilters";
 import { useFilterSearch } from "./useFilterSearch";
+import { useOpeningHoursClock } from "./useOpeningHoursClock";
 
 /**
  * Returns category search results filtered by the active opening-hours filter.
@@ -44,6 +46,7 @@ export function useFilteredCategoryResults() {
   const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
   const openAtDay = useOpeningHoursStore((s) => s.openAtDay);
   const openAtHour = useOpeningHoursStore((s) => s.openAtHour);
+  const now = useOpeningHoursClock();
 
   const adHocRaw = filterResponse?.results;
   const adHocPartial = filterResponse?.partial ?? false;
@@ -51,8 +54,9 @@ export function useFilteredCategoryResults() {
 
   const adHocFiltered = useMemo(() => {
     if (!adHocRaw) return adHocRaw;
-    return applyHoursFilter(adHocRaw, openingHoursFilter, openAtDay, openAtHour);
-  }, [adHocRaw, openingHoursFilter, openAtDay, openAtHour]);
+    const current = presentCategoryOpeningHours(adHocRaw, now);
+    return applyHoursFilter(current, openingHoursFilter, openAtDay, openAtHour);
+  }, [adHocRaw, openingHoursFilter, openAtDay, openAtHour, now]);
 
   const categoryRaw = categoryResponse?.results;
   const categoryPartial = categoryResponse?.partial ?? false;

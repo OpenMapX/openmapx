@@ -1,3 +1,4 @@
+import type { OpeningHoursSource } from "../utils/openingHoursSource";
 import type { LngLat } from "./geometry";
 import type { OpeningHoursInfo } from "./openingHoursInfo";
 import type { Place, PlacePhoto, PlaceProvenance } from "./place";
@@ -476,6 +477,8 @@ export interface CategoryPlace {
   names?: Record<string, string>;
   provenance?: PlaceProvenance[];
   openingHours?: string;
+  openingHoursSource?: OpeningHoursSource;
+  countryCode?: string;
   isOpen?: boolean;
   /** Server-precomputed status/bitmap; absent when `openingHours` is missing. */
   openingHoursInfo?: OpeningHoursInfo;
@@ -559,6 +562,8 @@ export function categoryPlaceToPlace(place: CategoryPlace, categoryId?: string):
     names: place.names,
     provenance: place.provenance,
     openingHours: place.openingHours,
+    openingHoursSource: place.openingHoursSource,
+    countryCode: place.countryCode,
     isOpen: place.isOpen,
     openingHoursInfo: place.openingHoursInfo,
     osmTags: place.osmTags,
@@ -581,9 +586,11 @@ export interface PoiSearchResult {
   names?: Record<string, string>;
   provenance?: PlaceProvenance[];
   openingHours?: string;
+  openingHoursSource?: OpeningHoursSource;
+  countryCode?: string;
   isOpen?: boolean;
   osmTags?: Record<string, string>;
-  /** Set by the orchestrator after the provider returns results. */
+  /** Re-evaluated from the final schedule after reading the search cache. */
   openingHoursInfo?: OpeningHoursInfo;
 }
 

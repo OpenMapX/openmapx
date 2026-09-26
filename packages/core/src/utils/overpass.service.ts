@@ -1,6 +1,7 @@
 import type { PoiSearchOutcome } from "../types/category";
 import type { BoundingBox } from "../types/geometry";
 import type { PlaceProvenance } from "../types/place";
+import { openingHoursSourceFromOsm } from "./openingHoursSource";
 import type { OsmFilter } from "./osmCategoryFilters";
 import { overpassQuery } from "./overpass";
 import type { OverpassElement } from "./overpass/types";
@@ -36,6 +37,8 @@ export interface CategoryPlaceResult {
   phone?: string;
   website?: string;
   openingHours?: string;
+  openingHoursSource?: import("./openingHoursSource").OpeningHoursSource;
+  countryCode?: string;
   isOpen?: boolean;
   provenance?: PlaceProvenance[];
   /** Curated subset of OSM tags surfaced for client-side facet filters (see FILTERABLE_TAG_KEYS). */
@@ -211,6 +214,10 @@ export function mapOverpassElements(elements: readonly OverpassElement[]): Categ
       phone: tags.phone ?? tags["contact:phone"] ?? undefined,
       website: tags.website ?? tags["contact:website"] ?? undefined,
       openingHours: tags.opening_hours ?? undefined,
+      openingHoursSource: tags.opening_hours
+        ? openingHoursSourceFromOsm(`osm:${el.type}/${el.id}`, tags)
+        : undefined,
+      countryCode: tags["addr:country"] ?? undefined,
       osmTags: pickFilterableTags(tags),
       provenance: [{ sourceId: "overpass", dataset: "OpenStreetMap" }],
     });

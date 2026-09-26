@@ -29,7 +29,8 @@
     }
   },
   "section": {
-    "fuelPrices": "Kraftstoffpreise"
+    "fuelPrices": "Kraftstoffpreise",
+    "latestGradeUpdate": "Letzte gemeldete Aktualisierung einer Kraftstoffart"
   },
   "column": {
     "fuelType": "Kraftstoffart",

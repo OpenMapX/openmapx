@@ -268,11 +268,14 @@ async function fetchLiveStatusByStation(
     const existing = byStation.get(stationId) ?? {
       available: 0,
       total: 0,
-      updatedAt: status.LastUpdateTime ?? new Date().toISOString(),
+      updatedAt: status.LastUpdateTime ?? undefined,
     };
     existing.total += 1;
     if (status.ConnectorStatus === 1) existing.available += 1;
-    if (status.LastUpdateTime && status.LastUpdateTime > existing.updatedAt) {
+    if (
+      status.LastUpdateTime &&
+      (!existing.updatedAt || status.LastUpdateTime > existing.updatedAt)
+    ) {
       existing.updatedAt = status.LastUpdateTime;
     }
     byStation.set(stationId, existing);

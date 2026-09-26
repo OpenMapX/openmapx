@@ -174,6 +174,16 @@ describe("ev-charging station mapper", () => {
     expect(connectors?.captionTimestamp).toBe("2026-07-20T10:00:00Z");
   });
 
+  it("keeps unverified or future availability snapshots undated", () => {
+    for (const updatedAt of [undefined, "not-a-date", "2999-01-01T00:00:00Z"]) {
+      const station = makeStation({
+        availability: { available: 3, total: 6, updatedAt },
+      });
+      const connectors = mapStationToDetail(station).sections.find((s) => s.sectionIcon === "bolt");
+      expect(connectors?.captionTimestamp).toBeUndefined();
+    }
+  });
+
   it("omits captionTimestamp for static stations", () => {
     const station = makeStation({ isLive: undefined, availability: undefined });
     const detail = mapStationToDetail(station);
@@ -727,12 +737,12 @@ describe("mapStationToDetail pricing section", () => {
     const detail = mapStationToDetail(station);
     const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
     expect(pricing?.links).toEqual([
-      { label: "Night rate applies 00:00-07:00", url: "https://example.org/tariffs/1" },
-      { label: { $t: "tariffDetails" }, url: "https://example.org/tariffs/2" },
+      { label: "nl-dotnl: Night rate applies 00:00-07:00", url: "https://example.org/tariffs/1" },
+      { label: "nl-dotnl", url: "https://example.org/tariffs/2" },
     ]);
   });
 
-  it("omits links when no tariff has altText or sourceUrl", () => {
+  it("shows the tariff source even when no terms URL or observation date exists", () => {
     const station = makeStation({
       tariffs: [
         {
@@ -745,6 +755,7 @@ describe("mapStationToDetail pricing section", () => {
     });
     const detail = mapStationToDetail(station);
     const pricing = detail.sections.find((s) => s.sectionIcon === "payments" && s.caption);
-    expect(pricing?.links).toBeUndefined();
+    expect(pricing?.links).toEqual([{ label: "ocm", url: undefined }]);
+    expect(pricing?.captionTimestamp).toBeUndefined();
   });
 });

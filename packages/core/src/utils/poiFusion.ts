@@ -31,6 +31,8 @@ function fuseOsmOverturePair(osmR: PoiSearchResult, overtR: PoiSearchResult): Po
     name: osmR.name ?? overtR.name,
     coordinates: osmR.coordinates,
     openingHours: osmR.openingHours ?? overtR.openingHours,
+    openingHoursSource: osmR.openingHours ? osmR.openingHoursSource : overtR.openingHoursSource,
+    countryCode: osmR.countryCode ?? overtR.countryCode,
     phone: osmR.phone ?? overtR.phone,
     email: osmR.email ?? overtR.email,
     website: osmR.website ?? overtR.website,

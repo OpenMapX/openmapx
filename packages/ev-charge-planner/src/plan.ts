@@ -69,10 +69,10 @@ function availabilityPenaltySec(
   nowMs: number,
 ): number {
   const a = station.availability;
-  if (!a || a.total <= 0) return 0;
+  if (!a || a.total <= 0 || !a.updatedAt) return 0;
   if (etaToChargerSec > AVAILABILITY_HORIZON_SEC) return 0;
   const ageMs = nowMs - Date.parse(a.updatedAt);
-  if (!Number.isFinite(ageMs) || ageMs > AVAILABILITY_STALE_SEC * 1000) return 0;
+  if (!Number.isFinite(ageMs) || ageMs < 0 || ageMs > AVAILABILITY_STALE_SEC * 1000) return 0;
   const occupancy = 1 - Math.max(0, Math.min(1, a.available / a.total)); // 0 all-free … 1 full
   const proximity = 1 - etaToChargerSec / AVAILABILITY_HORIZON_SEC; // 1 now … 0 at horizon
   return OCCUPANCY_PENALTY_SEC * occupancy * proximity;

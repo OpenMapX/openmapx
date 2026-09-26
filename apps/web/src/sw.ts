@@ -267,16 +267,26 @@ const serwist = new Serwist({
         },
       },
 
-      // API geodata — StaleWhileRevalidate
-      // Covers: /api/integrations/geocoding/geocode, /api/integrations/routing/directions, /api/places/:id
-      // Excludes: /api/places/search (category search embeds live fuel prices)
+      // API geodata without time-dependent place status.
       {
         matcher: ({ url }: { url: URL }) =>
-          /\/api\/integrations\/(geocoding\/geocode|routing\/directions)/.test(url.pathname) ||
-          (/\/api\/places\//.test(url.pathname) && !url.pathname.includes("/places/search")),
+          /\/api\/integrations\/(geocoding\/geocode|routing\/directions)/.test(url.pathname),
         handler: withRecentMapDataCache(
           new StaleWhileRevalidate({
             cacheName: "api-geodata",
+            plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
+          }),
+        ),
+      },
+
+      // Prefer current calculated status online; retain place details offline.
+      {
+        matcher: ({ url }: { url: URL }) =>
+          /\/api\/places\//.test(url.pathname) && !url.pathname.includes("/places/search"),
+        handler: withRecentMapDataCache(
+          new NetworkFirst({
+            cacheName: "api-geodata",
+            networkTimeoutSeconds: 5,
             plugins: [new ExpirationPlugin({ maxEntries: 500, maxAgeSeconds: 24 * 60 * 60 })],
           }),
         ),

@@ -5,7 +5,8 @@
 // not import the LGPL-3 `opening_hours` library, so they are safe to bundle
 // into the browser.
 
-import type { OpeningHoursInfo } from "./openingHours";
+import type { OpeningHoursInfo } from "../types/openingHoursInfo";
+import type { OpeningHoursSource } from "./openingHoursSource";
 
 /**
  * Returns whether the precomputed weekly bitmap shows the place as open at
@@ -44,4 +45,60 @@ export function isOpenAtSlot(
   const dayIdx = day ?? now.getDay();
   const hourIdx = hour ?? now.getHours();
   return isOpenAtBitmap(info.weekBitmap, dayIdx, hourIdx);
+}
+/** A stale calculated verdict is neutral even when raw hours remain cached. */
+export function presentOpeningHoursInfo(
+  info: OpeningHoursInfo | undefined,
+  raw: string | undefined,
+  now = Date.now(),
+): OpeningHoursInfo | undefined {
+  if (!raw) return undefined;
+  const expiry = info?.validUntil ? Date.parse(info.validUntil) : Number.NaN;
+  if (info && Number.isFinite(expiry) && expiry > now) return info;
+  return {
+    status: { isOpen: false, isUnknown: true, text: raw },
+    isAlwaysOpen: false,
+    weekBitmap: "",
+  };
+}
+
+/** Pair the chosen raw schedule with only matching status and source records. */
+export function matchingOpeningHours(
+  raw: string | undefined,
+  candidates: ReadonlyArray<
+    | {
+        openingHours?: string;
+        openingHoursInfo?: OpeningHoursInfo;
+        openingHoursSource?: OpeningHoursSource;
+      }
+    | null
+    | undefined
+  >,
+  now = Date.now(),
+): { info?: OpeningHoursInfo; source?: OpeningHoursSource } {
+  const info = candidates.find(
+    (candidate) => candidate?.openingHours === raw && candidate?.openingHoursInfo,
+  )?.openingHoursInfo;
+  const source = candidates.find(
+    (candidate) => candidate?.openingHours === raw && candidate?.openingHoursSource,
+  )?.openingHoursSource;
+  return { info: presentOpeningHoursInfo(info, raw, now), source };
+}
+
+/** Project active list results before hours filters and presentation. */
+export function presentCategoryOpeningHours<
+  T extends { openingHours?: string; openingHoursInfo?: OpeningHoursInfo },
+>(results: T[], now = Date.now()): T[] {
+  return results.map((place) =>
+    place.openingHours
+      ? {
+          ...place,
+          openingHoursInfo: presentOpeningHoursInfo(
+            place.openingHoursInfo,
+            place.openingHours,
+            now,
+          ),
+        }
+      : place,
+  );
 }

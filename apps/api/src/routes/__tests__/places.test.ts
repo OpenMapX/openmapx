@@ -112,6 +112,7 @@ afterAll(async () => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.clearAllMocks();
 });
 
@@ -441,6 +442,31 @@ function qs(params: Record<string, string>): string {
 // Tests
 
 describe("GET /places/:id", () => {
+  it("recomputes a reused cached schedule and keeps only its field check date", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const cached = {
+      ...MOCK_PLACE,
+      openingHours: "Mo-Su 10:00-18:00",
+      openingHoursInfo: { status: { isOpen: true }, isAlwaysOpen: false, weekBitmap: "" },
+      osmTags: {
+        ...MOCK_PLACE.osmTags,
+        "source:opening_hours": "survey",
+        "check_date:opening_hours": "2026-09-01",
+      },
+      provenance: [{ sourceId: "overture", dataset: "Overture", updatedAt: "2026-09-25" }],
+    };
+    mockWithCache.mockResolvedValueOnce(cached).mockResolvedValueOnce(cached);
+    const url = `/places/${encodeURIComponent("osm:node/12345")}`;
+    vi.setSystemTime(new Date("2026-09-26T15:59:00Z")); // Berlin 17:59
+    const before = await app.inject({ method: "GET", url });
+    expect(before.json().openingHoursInfo.status.isOpen).toBe(true);
+    vi.setSystemTime(new Date("2026-09-26T16:01:00Z")); // Berlin 18:01
+    const after = await app.inject({ method: "GET", url });
+    expect(after.json().openingHoursInfo.status.isOpen).toBe(false);
+    expect(after.json().openingHoursSource).toEqual({ name: "survey", checkedAt: "2026-09-01" });
+    expect(cached.openingHoursInfo.status.isOpen).toBe(true);
+    expect(after.headers["cache-control"]).toBe("no-store");
+  });
   it("removes a cached Commons audio icon while retaining real photo credits", async () => {
     const realPhoto = {
       url: "https://thumb.wikimedia.org/wikipedia/commons/thumb/b/be/Aachen.jpg/800px-Aachen.jpg",
@@ -490,7 +516,7 @@ describe("GET /places/:id", () => {
     expect(mockBuildReviewLinks).toHaveBeenCalledWith(
       expect.objectContaining({ id: "osm:node/12345" }),
     );
-    expect(res.headers["cache-control"]).toBe("public, max-age=86400");
+    expect(res.headers["cache-control"]).toBe("no-store");
   });
 
   it("gap-fills address, email, brand, and social contacts from Overture knowledge", async () => {
@@ -812,7 +838,7 @@ describe("GET /places/:id", () => {
     expect(body.error).toContain("No OSM match found");
   });
 
-  it("sets Cache-Control: public, max-age=86400 on success", async () => {
+  it("prevents HTTP reuse of a calculated hours verdict", async () => {
     mockLookupByOsmRef.mockResolvedValue(MOCK_PLACE);
     mockGetPlaceKnowledge.mockResolvedValue({ externalIds: {} });
     mockBuildReviewLinks.mockReturnValue([]);
@@ -822,7 +848,7 @@ describe("GET /places/:id", () => {
       url: `/places/${encodeURIComponent("osm:node/12345")}`,
     });
 
-    expect(res.headers["cache-control"]).toBe("public, max-age=86400");
+    expect(res.headers["cache-control"]).toBe("no-store");
   });
 
   it("does not collide when a colon-bearing lang shifts the cache-key separator", async () => {

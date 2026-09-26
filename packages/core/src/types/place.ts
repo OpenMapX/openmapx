@@ -1,3 +1,4 @@
+import type { OpeningHoursSource } from "../utils/openingHoursSource";
 import type { DataSourceDetail } from "./dataSource";
 import type { AreaGeometry, BBox, LngLat } from "./geometry";
 import type { Identified, Ids } from "./identified";
@@ -128,6 +129,7 @@ export interface Place extends Identified {
   website?: string;
   socials?: string[];
   openingHours?: string;
+  openingHoursSource?: OpeningHoursSource;
   rating?: number;
   reviewCount?: number;
   osmTags?: Record<string, string>;

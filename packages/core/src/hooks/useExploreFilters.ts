@@ -4,6 +4,8 @@ import { useOpeningHoursStore } from "../stores/openingHoursStore";
 import type { CategoryPlace } from "../types/category";
 import { applyFacetFilters } from "../utils/categoryFacets";
 import { applyHoursFilter } from "../utils/categoryFilter";
+import { presentCategoryOpeningHours } from "../utils/openingHoursClient";
+import { useOpeningHoursClock } from "./useOpeningHoursClock";
 
 /**
  * Applies the active opening-hours + facet filters to raw explore results.
@@ -17,10 +19,12 @@ export function useExploreFilters(
   const openAtDay = useOpeningHoursStore((s) => s.openAtDay);
   const openAtHour = useOpeningHoursStore((s) => s.openAtHour);
   const facetSelections = useCategoryFacetStore((s) => s.selections);
+  const now = useOpeningHoursClock();
 
   return useMemo(() => {
     if (!rawResults) return rawResults;
-    const byHours = applyHoursFilter(rawResults, openingHoursFilter, openAtDay, openAtHour);
+    const current = presentCategoryOpeningHours(rawResults, now);
+    const byHours = applyHoursFilter(current, openingHoursFilter, openAtDay, openAtHour);
     return applyFacetFilters(byHours, facetSelections);
-  }, [rawResults, openingHoursFilter, openAtDay, openAtHour, facetSelections]);
+  }, [rawResults, openingHoursFilter, openAtDay, openAtHour, facetSelections, now]);
 }

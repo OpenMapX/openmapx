@@ -24,7 +24,7 @@ export function HotelPriceBadge({ offer }: { offer: HotelOffer }) {
     }
   };
   return (
-    <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.5 }}>
+    <Box sx={{ display: "flex", alignItems: "baseline", gap: 0.5, flexWrap: "wrap" }}>
       <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t("priceFrom")}
       </Typography>
@@ -34,6 +34,11 @@ export function HotelPriceBadge({ offer }: { offer: HotelOffer }) {
       <Typography variant="caption" sx={{ color: "text.secondary" }}>
         {t("perNight")}
       </Typography>
+      {offer.source && (
+        <Typography variant="caption" sx={{ color: "text.secondary" }}>
+          · {t("rateSource", { source: offer.source === "liteapi" ? "LiteAPI" : offer.source })}
+        </Typography>
+      )}
     </Box>
   );
 }

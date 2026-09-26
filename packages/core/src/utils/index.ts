@@ -138,7 +138,15 @@ export { formatAddress, legalConfig } from "./legalConfig";
 export { isLodging } from "./lodgingPlace";
 export { normalizeConnector } from "./normalize-connector";
 export { matchesAnyOperator, normalizeOperator, operatorKeyMatches } from "./normalize-operator";
-export { isOpenAtBitmap, isOpenAtSlot } from "./openingHoursClient";
+export { validObservedAt } from "./observationTime";
+export {
+  isOpenAtBitmap,
+  isOpenAtSlot,
+  matchingOpeningHours,
+  presentCategoryOpeningHours,
+  presentOpeningHoursInfo,
+} from "./openingHoursClient";
+export { type OpeningHoursSource, openingHoursSourceFromOsm } from "./openingHoursSource";
 export { otpMode } from "./otp";
 export {
   buildNodeMap,

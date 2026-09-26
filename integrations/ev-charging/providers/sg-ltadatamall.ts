@@ -115,7 +115,7 @@ function stationAvailability(station: SgLtaStation): EvseAvailability | undefine
   const evIds = collectEvIds(station);
   if (evIds.length === 0) return undefined;
   const available = evIds.filter((evId) => String(evId.status ?? "").trim() === "1").length;
-  return { available, total: evIds.length, updatedAt: new Date().toISOString() };
+  return { available, total: evIds.length };
 }
 
 function stationOperator(station: SgLtaStation): string | undefined {
@@ -184,7 +184,6 @@ function stationToCanonical(station: SgLtaStation): EvChargingStation | null {
     usageCost: usageCostSummary(station),
     openingHours: cleanString(station.chargingPoints?.[0]?.operationHours),
     connectors: buildConnectors(station),
-    updatedAt: new Date().toISOString(),
     sourceUrl: DATASET_URL,
   };
 }

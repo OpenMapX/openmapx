@@ -50,7 +50,7 @@ function filterWithRequire(require: TagPredicate[]): OverpassFilter {
 }
 
 describe("orchestrator searchByFilter", () => {
-  it("dispatches to provider.searchByFilter, enriches openingHoursInfo, and returns partial=false", async () => {
+  it("returns raw hours for post-cache evaluation and partial=false", async () => {
     const provider: PoiSearchProvider = {
       id: "fake-overpass",
       categories: [],
@@ -68,7 +68,7 @@ describe("orchestrator searchByFilter", () => {
     const result = await orch.searchByFilter(validFilter, bbox);
     expect(provider.searchByFilter).toHaveBeenCalledWith(validFilter, bbox, { lang: undefined });
     expect(result.results).toHaveLength(1);
-    expect(result.results[0].openingHoursInfo).toBeDefined();
+    expect(result.results[0].openingHoursInfo).toBeUndefined();
     expect(result.partial).toBe(false);
   });
 

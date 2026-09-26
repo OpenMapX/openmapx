@@ -149,6 +149,36 @@ describe("OSM contribution entry placement", () => {
 });
 
 describe("uncertain opening hours", () => {
+  it("shows a field-specific source and check date only inside expanded hours", async () => {
+    const user = userEvent.setup();
+    renderOverview({
+      ...ENRICHED,
+      openingHours: "Mo-Fr 09:00-17:00",
+      openingHoursInfo: { status: { isOpen: false, isUnknown: true, text: "Mo-Fr 09:00-17:00" } },
+      openingHoursSource: { name: "survey", checkedAt: "2026-09-01", url: "javascript:alert(1)" },
+    } as unknown as Place);
+    expect(screen.queryByText("survey")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "unconfirmed" }));
+    expect(screen.getByText(/survey/)).toBeVisible();
+    expect(screen.queryByRole("link", { name: "survey" })).not.toBeInTheDocument();
+    expect(screen.getByText(/checkedOn/)).toBeVisible();
+  });
+
+  it("shows an HTTP source link without manufacturing a check date", async () => {
+    const user = userEvent.setup();
+    renderOverview({
+      ...ENRICHED,
+      openingHours: "Mo-Fr 09:00-17:00",
+      openingHoursInfo: { status: { isOpen: false, isUnknown: true, text: "Mo-Fr 09:00-17:00" } },
+      openingHoursSource: { name: "OpenStreetMap", url: "https://www.openstreetmap.org/node/1" },
+    } as unknown as Place);
+    await user.click(screen.getByRole("button", { name: "unconfirmed" }));
+    expect(screen.getByRole("link", { name: "OpenStreetMap" })).toHaveAttribute(
+      "href",
+      "https://www.openstreetmap.org/node/1",
+    );
+    expect(screen.queryByText(/checkedOn/)).not.toBeInTheDocument();
+  });
   it("shows a neutral disclosure and keeps the reported value and comment reachable", async () => {
     const user = userEvent.setup();
     renderOverview({

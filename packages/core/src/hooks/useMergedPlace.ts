@@ -2,7 +2,9 @@ import { useDataSourceStore } from "../stores/dataSourceStore";
 import type { DataSourceDetail } from "../types/dataSource";
 import type { ReverseGeocodingResult } from "../types/geocoding";
 import type { Place } from "../types/place";
+import { matchingOpeningHours } from "../utils/openingHoursClient";
 import { useDataSourceMatch } from "./useDataSourceMatch";
+import { useOpeningHoursClock } from "./useOpeningHoursClock";
 import { usePlaceDetails } from "./usePlaceDetails";
 import { useReverseGeocoding } from "./useReverseGeocoding";
 
@@ -122,6 +124,7 @@ export function useMergedPlace(selectedPlace: Place | null): {
   place: Place | null;
   isLoading: boolean;
 } {
+  const now = useOpeningHoursClock();
   const isCoordinatePlace = selectedPlace?.primaryScheme === "coordinate";
 
   // A place is a data-source place when the selection store's sourceId is
@@ -181,6 +184,16 @@ export function useMergedPlace(selectedPlace: Place | null): {
     matchedDetail,
     isDataSourcePlace,
   );
+
+  // Keep the computed verdict with the exact raw schedule that won merging.
+  // A matched data source may supply different hours without a computed status;
+  // in that case show the schedule neutrally until its source can evaluate it.
+  const matchingCandidates = [
+    ...(isDataSourcePlace ? [selectedPlace, nominatimDetails] : [nominatimDetails, selectedPlace]),
+  ];
+  const chosenHours = matchingOpeningHours(place.openingHours, matchingCandidates, now);
+  place.openingHoursInfo = chosenHours.info;
+  place.openingHoursSource = chosenHours.source;
 
   return { place, isLoading: nominatimLoading && !nominatimDetails };
 }

@@ -248,6 +248,39 @@ describe("planCharges", () => {
     expect(plan.stops[0]?.station.id).toBe("free");
   });
 
+  it("does not treat undated availability as current occupancy", async () => {
+    const full = {
+      ...charger("full", 1.35),
+      availability: { available: 0, total: 8 },
+    };
+    const free = {
+      ...charger("free", 1.36),
+      availability: { available: 6, total: 8, updatedAt: new Date(NOW - 60_000).toISOString() },
+    };
+    const cb = {
+      requestCorridorChargers: vi.fn().mockResolvedValue([full, free]),
+      requestMatrix: vi
+        .fn()
+        .mockImplementation(async (s: LngLat[], t: LngLat[]) =>
+          s.map(() => t.map(() => ({ seconds: 120, km: 2 }))),
+        ),
+    };
+    const plan = await planCharges(
+      {
+        route: longRoute(),
+        vehicle,
+        socStartKwh: 18,
+        socArrivalMinKwh: 6,
+        socTargetKwh: 48,
+        ambientTempC: 20,
+        hasElevation: false,
+        nowMs: NOW,
+      },
+      cb,
+    );
+    expect(plan.stops[0]?.station.id).toBe("full");
+  });
+
   it("ignores occupancy for a far-future stop (state would be stale on arrival)", async () => {
     const fresh = new Date(NOW - 60_000).toISOString();
     const full = {

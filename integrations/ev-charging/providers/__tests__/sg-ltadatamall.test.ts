@@ -110,5 +110,7 @@ describe("fetchSgLtaDatamallChargingDetail", () => {
 
     expect(result?.id).toBe("sg-ltadatamall:851959123456");
     expect(result?.address?.postcode).toBe("123456");
+    expect(result?.availability?.updatedAt).toBeUndefined();
+    expect(result?.updatedAt).toBeUndefined();
   });
 });

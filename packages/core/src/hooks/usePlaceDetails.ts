@@ -29,7 +29,8 @@ export function usePlaceDetails(
       );
     },
     enabled: request !== null,
-    staleTime: 300_000,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
     gcTime: DETAIL_QUERY_POLICY.gcTime,
     select: (data) =>
       data.photos ? { ...data, photos: data.photos.filter(isDisplayablePhoto) } : data,
