@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { join } from "node:path";
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { render, renderHook } from "@testing-library/react";
@@ -77,6 +79,80 @@ describe("useLayerSelectorConfig previews", () => {
 });
 
 describe("purpose-based layer groups", () => {
+  it("assigns every current catalog detail to one purpose group", () => {
+    const catalogDir = join(process.cwd(), "integrations");
+    const integrations = readdirSync(catalogDir)
+      .map((name) => join(catalogDir, name, "manifest.json"))
+      .filter(existsSync)
+      .map(
+        (path) =>
+          JSON.parse(readFileSync(path, "utf8")) as {
+            id: string;
+            domains: string[];
+            frontend?: {
+              layerSelector?: {
+                group: "map-details" | "map-tools" | "map-types";
+                labelKey: string;
+              };
+            };
+          },
+      )
+      .flatMap((manifest) => {
+        const layerSelector = manifest.frontend?.layerSelector;
+        if (layerSelector?.group !== "map-details") return [];
+        return [
+          {
+            id: manifest.id,
+            name: manifest.id,
+            enabled: true,
+            domains: manifest.domains,
+            isBuiltIn: false,
+            frontend: { layerSelector },
+          },
+        ];
+      });
+    const registry = new IntegrationRegistry(integrations);
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <IntegrationRegistryContext.Provider value={registry}>
+        {children}
+      </IntegrationRegistryContext.Provider>
+    );
+
+    const { result } = renderHook(() => useLayerSelectorConfig(), { wrapper });
+    expect(
+      Object.fromEntries(
+        result.current.detailGroups.map(({ id, entries }) => [
+          id,
+          entries.map((entry) => entry.overlayId).sort(),
+        ]),
+      ),
+    ).toEqual({
+      transport: [
+        "cycling",
+        "live-transit",
+        "nautical",
+        "ourairports",
+        "road-conditions",
+        "schematic-transit",
+        "traffic",
+        "traffic-flow",
+        "transit",
+      ],
+      outdoors: ["3d-buildings", "hiking", "satellite", "street-level-imagery", "winter-sports"],
+      weatherEnvironment: [
+        "air-quality",
+        "earthquakes",
+        "environment",
+        "natural-events",
+        "sun-time",
+        "weather",
+        "weather-alerts",
+        "wildfires",
+      ],
+    });
+    expect(result.current.mapDetails).toHaveLength(22);
+  });
+
   it("keeps each selectable detail once and exposes unknown integrations", () => {
     const ids = [
       "overlay-traffic-flow",

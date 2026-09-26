@@ -6,10 +6,12 @@ import { useLayerStore } from "@openmapx/core";
 import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+const capabilities = vi.hoisted(() => ({ unavailable: new Set<string>() }));
+
 vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
-  useCapabilities: () => ({ isAvailable: () => true }),
+  useCapabilities: () => ({ isAvailable: (id: string) => !capabilities.unavailable.has(id) }),
 }));
 vi.mock("@/integration-api/overlay/overlayZoomGate", () => ({
   useOverlayZoomGate: () => ({ minZoom: 0, belowMinZoom: false }),
@@ -44,9 +46,12 @@ import { DesktopMorePanel } from "./DesktopMorePanel";
 import { MobileLayerPanel } from "./MobileLayerPanel";
 
 afterEach(() => {
-  useMeasurementStore.getState().deactivate();
-  useTravelTimeStore.getState().deactivate();
-  useLayerStore.getState().setActiveLayer("default");
+  capabilities.unavailable.clear();
+  act(() => {
+    useMeasurementStore.getState().deactivate();
+    useTravelTimeStore.getState().deactivate();
+    useLayerStore.getState().setActiveLayer("default");
+  });
 });
 
 describe("layer panels", () => {
@@ -82,5 +87,22 @@ describe("layer panels", () => {
     expect(
       within(screen.getByRole("button", { name: "satellite" })).getByText("satellite"),
     ).toBeTruthy();
+  });
+
+  it.each([
+    ["desktop", <DesktopMorePanel key="desktop" onClose={() => undefined} />],
+    ["mobile", <MobileLayerPanel key="mobile" />],
+  ])("keeps travel time usable on %s when its Valhalla health check fails", (_name, panel) => {
+    capabilities.unavailable.add("travel-time");
+    capabilities.unavailable.add("traffic-flow");
+    render(panel);
+
+    expect(screen.getAllByText("travel-time")).toHaveLength(1);
+    expect(screen.queryByText("traffic-flow")).toBeNull();
+    const control = screen.getByRole(_name === "desktop" ? "button" : "switch", {
+      name: "travel-time",
+    });
+    act(() => fireEvent.click(control));
+    expect(useTravelTimeStore.getState().isActive).toBe(true);
   });
 });

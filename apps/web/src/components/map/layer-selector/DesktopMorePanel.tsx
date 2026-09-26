@@ -136,44 +136,42 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           rowGap: 0.4,
         }}
       >
-        {mapTools
-          .filter((item) => isAvailable(item.serviceId))
-          .map((item) => {
-            const toolState: Record<string, { active: boolean; toggle: () => void }> = {
-              measurement: {
-                active: measureActive,
-                toggle: () => {
-                  const s = useMeasurementStore.getState();
-                  if (s.isActive) s.deactivate();
-                  else s.activate();
-                },
+        {mapTools.map((item) => {
+          const toolState: Record<string, { active: boolean; toggle: () => void }> = {
+            measurement: {
+              active: measureActive,
+              toggle: () => {
+                const s = useMeasurementStore.getState();
+                if (s.isActive) s.deactivate();
+                else s.activate();
               },
-              "travel-time": {
-                active: travelTimeActive,
-                toggle: () => {
-                  const s = useTravelTimeStore.getState();
-                  if (s.isActive) s.deactivate();
-                  else s.activate();
-                },
+            },
+            "travel-time": {
+              active: travelTimeActive,
+              toggle: () => {
+                const s = useTravelTimeStore.getState();
+                if (s.isActive) s.deactivate();
+                else s.activate();
               },
-            };
-            const tool = toolState[item.id];
-            return (
-              <DesktopMoreTile
-                key={item.id}
-                item={{ ...item, selected: tool?.active }}
-                label={t(item.labelKey)}
-                labelWidth={96}
-                onClick={
-                  tool
-                    ? () => {
-                        tool.toggle();
-                      }
-                    : undefined
-                }
-              />
-            );
-          })}
+            },
+          };
+          const tool = toolState[item.id];
+          return (
+            <DesktopMoreTile
+              key={item.id}
+              item={{ ...item, selected: tool?.active }}
+              label={t(item.labelKey)}
+              labelWidth={96}
+              onClick={
+                tool
+                  ? () => {
+                      tool.toggle();
+                    }
+                  : undefined
+              }
+            />
+          );
+        })}
         <DesktopMoreTile
           item={{ preview: globePreview, selected: globeView }}
           label={t("globeView")}

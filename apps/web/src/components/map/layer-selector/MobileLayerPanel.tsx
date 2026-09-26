@@ -184,29 +184,27 @@ export function MobileLayerPanel() {
       <Typography sx={{ fontSize: 13, color: "text.secondary", fontWeight: 600, mb: 0.5 }}>
         {t("mapTools")}
       </Typography>
-      {mapTools
-        .filter((entry) => isAvailable(entry.serviceId))
-        .map((entry) => {
-          const tool =
-            entry.id === "measurement"
-              ? { active: measureActive, store: useMeasurementStore }
-              : entry.id === "travel-time"
-                ? { active: travelTimeActive, store: useTravelTimeStore }
-                : null;
-          if (!tool) return null;
-          return (
-            <ToolSwitchRow
-              key={entry.id}
-              entry={entry}
-              active={tool.active}
-              onToggle={() => {
-                const state = tool.store.getState();
-                if (state.isActive) state.deactivate();
-                else state.activate();
-              }}
-            />
-          );
-        })}
+      {mapTools.map((entry) => {
+        const tool =
+          entry.id === "measurement"
+            ? { active: measureActive, store: useMeasurementStore }
+            : entry.id === "travel-time"
+              ? { active: travelTimeActive, store: useTravelTimeStore }
+              : null;
+        if (!tool) return null;
+        return (
+          <ToolSwitchRow
+            key={entry.id}
+            entry={entry}
+            active={tool.active}
+            onToggle={() => {
+              const state = tool.store.getState();
+              if (state.isActive) state.deactivate();
+              else state.activate();
+            }}
+          />
+        );
+      })}
       <GlobeSwitchRow />
     </Box>
   );
