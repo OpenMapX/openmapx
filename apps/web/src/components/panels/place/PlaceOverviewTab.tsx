@@ -152,7 +152,16 @@ function DetailRow({
               px: 2,
               "&:hover": { bgcolor: "action.hover" },
               "& .copy-btn": { opacity: 0 },
-              "&:hover .copy-btn": { opacity: 1 },
+              "&:hover .copy-btn, &:focus-within .copy-btn": { opacity: 1 },
+              "& .copy-btn:focus-visible": {
+                opacity: 1,
+                outline: "2px solid",
+                outlineColor: "primary.main",
+                outlineOffset: 2,
+              },
+              "@media (hover: none), (pointer: coarse)": {
+                "& .copy-btn": { opacity: 1 },
+              },
             }
           : {}),
       }}

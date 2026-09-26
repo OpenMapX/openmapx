@@ -280,3 +280,22 @@ describe("visit order", () => {
     ).toHaveLength(0);
   });
 });
+
+describe("detail copy actions", () => {
+  it("copies the address from the keyboard and announces success", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderOverview(ENRICHED);
+
+    const copyAddress = screen.getByRole("button", { name: "copyAddress" });
+    copyAddress.focus();
+    await user.keyboard("{Enter}");
+
+    expect(writeText).toHaveBeenCalledWith("Enriched Street 9, 10115 Berlin");
+    expect(screen.getByRole("button", { name: "copied" })).toBe(copyAddress);
+  });
+});
