@@ -1,18 +1,23 @@
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
-import type { CategoryPlace } from "@openmapx/core";
+import type { CategoryPlace, SearchIntent } from "@openmapx/core";
 import {
+  API_ENDPOINTS,
   apiClient,
   useCategoryFacetStore,
   useCategorySearchStore,
+  useFilterSearch,
   useMapStore,
+  useNlpSearchStore,
   useOpeningHoursStore,
   usePlaceStore,
   useSettingsStore,
 } from "@openmapx/core";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useEffect } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { MapProvider, useMap } from "@/integration-api/map/MapContext";
-import { act, fireEvent, render, screen, waitFor } from "@/test";
+import { act, createFakeMap, type FakeMap, fireEvent, render, screen, waitFor } from "@/test";
 import { createQueryWrapper } from "@/test/query";
 import { CategoryResultsContent } from "./CategoryResultsContent";
 
@@ -74,6 +79,140 @@ function renderPanel(
     </Wrapper>,
   );
 }
+
+function ReadyMapProbe({ fake }: { fake: FakeMap }) {
+  const { mapRef, notifyMapReady } = useMap();
+  useEffect(() => {
+    mapRef.current = fake.map;
+    notifyMapReady();
+  }, [fake, mapRef, notifyMapReady]);
+  return null;
+}
+
+function ActiveFilterQueryProbe() {
+  const filter = useCategorySearchStore((s) => s.adHocFilter);
+  const bbox = useCategorySearchStore((s) => s.searchBbox);
+  useFilterSearch(filter, bbox);
+  return null;
+}
+
+function renderReadyPanel(fake: FakeMap, queryProbe = false, searchChip = false) {
+  const Wrapper = createQueryWrapper();
+  return render(
+    <Wrapper>
+      <MapProvider>
+        <ReadyMapProbe fake={fake} />
+        {queryProbe && <ActiveFilterQueryProbe />}
+        {searchChip && <SearchInAreaChip />}
+        <MobileSheetContext.Provider
+          value={{ detent: "peek", inSheet: true, isExpanded: false, snapTo: vi.fn() }}
+        >
+          <CategoryResultsContent />
+        </MobileSheetContext.Provider>
+      </MapProvider>
+    </Wrapper>,
+  );
+}
+
+describe("category activation search area", () => {
+  const resolved = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
+  const viewport = { west: 7, south: 49, east: 9, north: 51 };
+  const later = { west: 10, south: 50, east: 12, north: 52 };
+  const filter: SearchIntent["filter"] = {
+    selectors: [{ tags: [{ key: "amenity", op: "=", value: "cafe" }] }],
+  };
+  const intent: SearchIntent = {
+    filter,
+    spatial_constraint: { type: "near_place", place_name: "Berlin" },
+    time_constraint: null,
+    sort_by: "relevance",
+    unmapped_attributes: [],
+    confidence: 1,
+    explanation: "cafes near Berlin",
+  };
+
+  beforeEach(() => useNlpSearchStore.getState().clear());
+  afterEach(() => {
+    useNlpSearchStore.getState().clear();
+    vi.restoreAllMocks();
+  });
+
+  function activateNlp() {
+    act(() => {
+      useNlpSearchStore.getState().activate(intent, resolved, "test");
+      useCategorySearchStore
+        .getState()
+        .setAdHocFilter(filter, intent.explanation, { source: "nlp" });
+      useCategorySearchStore.getState().setSearchBbox(resolved);
+      useCategorySearchStore.getState().setMapMoved(true);
+    });
+  }
+
+  it("keeps resolved NLP bounds as the filter query area when the ready map shows elsewhere", async () => {
+    activateNlp();
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({ results: [], partial: false });
+    renderReadyPanel(createFakeMap({ bounds: viewport }), true);
+
+    await waitFor(() => expect(useCategorySearchStore.getState().mapMoved).toBe(false));
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(resolved);
+    await waitFor(() =>
+      expect(post).toHaveBeenCalledWith(
+        API_ENDPOINTS.poiFilter,
+        expect.objectContaining(resolved),
+        expect.any(Object),
+      ),
+    );
+    expect(
+      post.mock.calls.every(([, body]) => (body as { west: number }).west === resolved.west),
+    ).toBe(true);
+  });
+
+  it.each(["category", "brand"] as const)(
+    "captures current map bounds for an ordinary %s activation",
+    async (kind) => {
+      act(() => {
+        useCategorySearchStore.getState().setSearchBbox(resolved);
+        if (kind === "category") useCategorySearchStore.getState().setActiveCategory("restaurants");
+        else
+          useCategorySearchStore
+            .getState()
+            .setBrandFilter({ qid: "Q1", name: "Example", kind: ["brand"] }, filter);
+      });
+      renderReadyPanel(createFakeMap({ bounds: viewport }));
+      await waitFor(() => expect(useCategorySearchStore.getState().searchBbox).toEqual(viewport));
+    },
+  );
+
+  it("allows an intentional later auto-refresh to replace the resolved NLP area", async () => {
+    activateNlp();
+    const mapOptions = { bounds: viewport };
+    const fake = createFakeMap(mapOptions);
+    act(() => useCategorySearchStore.getState().setAutoRefresh(true));
+    renderReadyPanel(fake);
+    await waitFor(() => expect(useCategorySearchStore.getState().mapMoved).toBe(false));
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(resolved);
+
+    mapOptions.bounds = later;
+    act(() => fake.emit("moveend", {}));
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(later);
+  });
+
+  it("allows Search this area after a pan to replace the resolved NLP area", async () => {
+    activateNlp();
+    vi.spyOn(apiClient, "get").mockResolvedValue({ sources: [] });
+    const mapOptions = { bounds: viewport };
+    const fake = createFakeMap(mapOptions);
+    renderReadyPanel(fake, false, true);
+    await waitFor(() => expect(useCategorySearchStore.getState().mapMoved).toBe(false));
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(resolved);
+
+    mapOptions.bounds = later;
+    act(() => fake.emit("moveend", {}));
+    expect(useCategorySearchStore.getState().mapMoved).toBe(true);
+    fireEvent.click(screen.getByText("search.searchInArea"));
+    expect(useCategorySearchStore.getState().searchBbox).toEqual(later);
+  });
+});
 
 describe("CategoryResultsContent mobile sheet interactions", () => {
   it("tapping the collapsed results list expands the sheet to mid", () => {

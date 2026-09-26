@@ -356,6 +356,16 @@ export function CategoryResultsContent() {
     if (activeCategory === prevCategoryRef.current) return;
     prevCategoryRef.current = activeCategory;
 
+    const search = useCategorySearchStore.getState();
+    if (
+      activeCategory === AD_HOC_CATEGORY_ID &&
+      search.searchBbox !== null &&
+      search.nlpSearchRevision === search.searchRevision
+    ) {
+      setMapMoved(false);
+      return;
+    }
+
     const bounds = mapRef.current.getBounds();
     setSearchBbox({
       west: bounds.getWest(),
