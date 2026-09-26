@@ -25,7 +25,7 @@ vi.mock("./useLayerSelectorConfig", () => {
     icon: null,
     serviceId: id,
   });
-  const traffic = detail("traffic-flow");
+  const traffic = { ...detail("traffic-flow"), descriptionKey: "trafficFlowDescription" };
   const hiking = detail("hiking");
   const weather = detail("weather");
   return {
@@ -68,6 +68,15 @@ describe("layer panels", () => {
     }
     expect(screen.getAllByText("measurement")).toHaveLength(1);
     expect(screen.getAllByText("travel-time")).toHaveLength(1);
+  });
+
+  it.each([
+    ["desktop", <DesktopMorePanel key="desktop" onClose={() => undefined} />],
+    ["mobile", <MobileLayerPanel key="mobile" />],
+  ])("keeps the traffic choice without a visible description on %s", (_name, panel) => {
+    render(panel);
+    expect(screen.getByText("traffic-flow")).toBeTruthy();
+    expect(screen.queryByText("trafficFlowDescription")).toBeNull();
   });
 
   it("lets mobile users operate both tools and select one basemap", () => {

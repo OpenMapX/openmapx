@@ -12,7 +12,6 @@ export interface GeneratedLayerEntry {
   preview: ReactNode;
   icon: ReactNode;
   serviceId?: string;
-  descriptionKey?: string;
 }
 
 export type DetailGroupId = "transport" | "outdoors" | "weatherEnvironment" | "otherDetails";
@@ -54,12 +53,6 @@ const DETAIL_PURPOSE: Record<string, DetailGroupId> = {
   "sun-time": "weatherEnvironment",
 };
 
-const DETAIL_DESCRIPTIONS: Record<string, string> = {
-  "traffic-flow": "trafficFlowDescription",
-  traffic: "trafficTomtomDescription",
-  "road-conditions": "trafficIncidentsDescription",
-};
-
 /** Overlay ID mapping: integration IDs like "overlay-earthquakes" → overlay IDs like "earthquakes" */
 function integrationIdToOverlayId(integrationId: string): string {
   if (integrationId === "overlay-traffic-tomtom") return "traffic";
@@ -96,7 +89,6 @@ export function useLayerSelectorConfig() {
         labelKey: ls.labelKey,
         overlayId,
         serviceId: integration.id,
-        descriptionKey: DETAIL_DESCRIPTIONS[overlayId],
         preview:
           typeof ls.preview === "string" && ls.preview.length > 0
             ? createElement(IntegrationLayerPreview, {

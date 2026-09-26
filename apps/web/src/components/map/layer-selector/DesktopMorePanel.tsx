@@ -48,10 +48,6 @@ function OverlayDetailTile({ item, label }: { item: GeneratedLayerEntry; label: 
         <Typography sx={{ mt: 0.2, fontSize: 9, color: "text.secondary" }}>
           {t("zoomInHint", { minZoom })}
         </Typography>
-      ) : item.descriptionKey ? (
-        <Typography sx={{ mt: 0.2, fontSize: 10, color: "text.secondary", textAlign: "center" }}>
-          {t(item.descriptionKey)}
-        </Typography>
       ) : null}
     </DesktopMoreTile>
   );

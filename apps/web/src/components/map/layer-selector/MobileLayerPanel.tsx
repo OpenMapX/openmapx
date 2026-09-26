@@ -48,11 +48,6 @@ function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
           </Box>
           <Box>
             <Typography sx={{ fontSize: 13.5 }}>{t(entry.labelKey)}</Typography>
-            {entry.descriptionKey && !belowMinZoom ? (
-              <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
-                {t(entry.descriptionKey)}
-              </Typography>
-            ) : null}
           </Box>
           {belowMinZoom ? (
             <Typography sx={{ fontSize: 11, color: "text.secondary" }}>

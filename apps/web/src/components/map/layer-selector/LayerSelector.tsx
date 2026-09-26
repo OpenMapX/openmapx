@@ -335,8 +335,9 @@ export function LayerSelector() {
               // synchronized horizontal transition from being replaced.
               transition: desktopDock ? PANEL_POPOVER_TRANSITION : undefined,
               borderRadius: desktopDock ? "22px" : "16px",
-              width: desktopDock ? "auto" : 346,
+              width: desktopDock ? 336 : 346,
               minWidth: desktopDock ? 0 : undefined,
+              maxWidth: "calc(100vw - 24px)",
               maxHeight: desktopDock ? "min(76vh, 700px)" : "min(70dvh, 560px)",
               boxShadow: "0 4px 20px var(--omx-shadow-soft), 0 1px 6px var(--omx-shadow-soft)",
               bgcolor: "background.paper",
