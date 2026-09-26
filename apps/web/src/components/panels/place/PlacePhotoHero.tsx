@@ -33,7 +33,9 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
   const isValid = photo.url.startsWith("https://") || photo.url.startsWith("http://");
   if (!isValid) return null;
 
-  const totalCount = photos.length;
+  const knownCount = photos.filter(
+    ({ url }) => url.startsWith("https://") || url.startsWith("http://"),
+  ).length;
 
   return (
     <Box
@@ -43,14 +45,25 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
         position: "relative",
         flexShrink: 0,
         overflow: "hidden",
-        // Show "View photos" pill only on hover
-        "&:hover .view-photos-pill": { opacity: 1 },
+        "&:hover .view-photos-pill, &:focus-within .view-photos-pill": { opacity: 1 },
+        "@media (hover: none), (pointer: coarse)": {
+          "& .view-photos-pill": { opacity: 1 },
+        },
       }}
     >
       <ButtonBase
         onClick={onViewPhotos}
-        sx={{ width: "100%", height: "100%", display: "block" }}
-        aria-label={`View ${totalCount} photos of ${placeName}`}
+        sx={{
+          width: "100%",
+          height: "100%",
+          display: "block",
+          "&:focus-visible": {
+            outline: "3px solid",
+            outlineColor: "primary.main",
+            outlineOffset: -3,
+          },
+        }}
+        aria-label={tp("viewPhotosAccessible", { placeName, count: knownCount })}
       >
         <Box
           component="img"
@@ -60,19 +73,19 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
           sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
 
-        {/* "View photos" pill — hover-only, semi-transparent black */}
-        {totalCount > 0 && (
+        {knownCount > 0 && (
           <Box
             className="view-photos-pill"
             sx={{
               position: "absolute",
-              bottom: 12,
+              top: 12,
               left: 12,
+              maxWidth: "calc(100% - 76px)",
               display: "flex",
               alignItems: "center",
               gap: 0.75,
               color: "#fff",
-              bgcolor: "rgba(0,0,0,0.6)",
+              bgcolor: "rgba(0,0,0,0.72)",
               borderRadius: 2,
               px: 1.5,
               py: 0.75,
@@ -81,14 +94,16 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
               pointerEvents: "none",
             }}
           >
-            <CollectionsIcon sx={{ fontSize: 18 }} />
+            <CollectionsIcon sx={{ fontSize: 18, flexShrink: 0 }} />
             <Typography
               variant="body2"
+              noWrap
               sx={{
                 fontWeight: 500,
+                minWidth: 0,
               }}
             >
-              {tp("viewPhotos")}
+              {tp("viewPhotos")} · {knownCount}+
             </Typography>
           </Box>
         )}
@@ -100,17 +115,17 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
           position: "absolute",
           bottom: 4,
           right: 6,
-          bgcolor: "rgba(0,0,0,0.35)",
+          bgcolor: "rgba(0,0,0,0.72)",
           borderRadius: 0.5,
           px: 0.75,
           py: 0.25,
           fontSize: 10,
-          color: "rgba(255,255,255,0.85)",
+          color: "#fff",
           lineHeight: 1,
           "& a": { fontSize: "inherit" },
         }}
       >
-        <PhotoAttribution photo={photo} color="rgba(255,255,255,0.85)" />
+        <PhotoAttribution photo={photo} color="#fff" />
       </Box>
       {/* Close button */}
       {onClose && (

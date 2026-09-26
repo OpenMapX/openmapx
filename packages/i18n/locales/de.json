@@ -2269,7 +2269,8 @@
     "nextPhoto": "Nächstes Foto",
     "viewOriginal": "Original anzeigen",
     "noPhotos": "Keine Fotos verfügbar",
-    "viewPhotos": "Fotos ansehen"
+    "viewPhotos": "Fotos ansehen",
+    "viewPhotosAccessible": "Fotos von {placeName} ansehen, mindestens {count} verfügbar"
   },
   "sidebar": {
     "showSidebar": "Seitenleiste einblenden",

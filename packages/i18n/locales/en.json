@@ -2269,7 +2269,8 @@
     "nextPhoto": "Next photo",
     "viewOriginal": "View original",
     "noPhotos": "No photos available",
-    "viewPhotos": "View photos"
+    "viewPhotos": "View photos",
+    "viewPhotosAccessible": "View photos of {placeName}, at least {count} available"
   },
   "sidebar": {
     "showSidebar": "Show sidebar",
