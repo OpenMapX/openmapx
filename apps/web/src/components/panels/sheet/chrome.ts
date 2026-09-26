@@ -74,6 +74,13 @@ export function SHEET_PART_STYLES(theme: Theme) {
       scrollbarWidth: "none",
     },
     "&::part(content)::-webkit-scrollbar": { display: "none" },
+    // The host can rest one pixel short of its scroll timeline's end while the
+    // library already reports "expanded". Its overflow toggle then remains at
+    // the hidden keyframe, so unlock the content from that published state.
+    "&[data-sheet-state='expanded']::part(content)": {
+      animation: "none",
+      overflowY: "auto",
+    },
     "&::part(footer)": { paddingBottom: "var(--omx-safe-bottom)" },
     "&::part(handle)": { width: 32, height: 4 },
     // Separates the sheet from the map behind it, matching the elevation the
