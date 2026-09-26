@@ -6,7 +6,7 @@ import { useMemo } from "react";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 export interface OpeningHoursText {
-  /** Translated "Open" / "Closed" for the coloured state word. */
+  /** Translated open, closed, or neutral unconfirmed state. */
   state: (status: OpeningHoursStatus) => string;
   /** e.g. "Closes at 17:00", "Opens Mon at 09:00", "Open 24 hours". */
   detail: (status: OpeningHoursStatus) => string;
@@ -72,13 +72,14 @@ export function useOpeningHoursText(): OpeningHoursText {
     };
 
     const detail = (status: OpeningHoursStatus) => {
-      if (status.isUnknown) return status.text ?? "";
+      if (status.isUnknown) return "";
       const text = changeText(status);
       return status.comment ? `${text} (${status.comment})` : text;
     };
 
     return {
-      state: (status) => (status.isOpen ? tc("open") : tc("closed")),
+      state: (status) =>
+        status.isUnknown ? t("unconfirmed") : status.isOpen ? tc("open") : tc("closed"),
       detail,
       weekday: longName,
       dayHours: (day) => {

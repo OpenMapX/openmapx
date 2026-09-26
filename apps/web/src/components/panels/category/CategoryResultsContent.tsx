@@ -173,7 +173,7 @@ function CategoryPlaceCard({
                   color: "text.secondary",
                 }}
               >
-                {hours.text}
+                {ohText.state(hours)}
               </Typography>
             );
           }

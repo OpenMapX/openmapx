@@ -219,6 +219,7 @@ export function PlaceOverviewTab({
 }: Props) {
   const t = useTranslations("place");
   const tc = useTranslations("common");
+  const tHours = useTranslations("openingHours");
   const tSaved = useTranslations("saved");
   const tWeather = useTranslations("weather");
   const tSun = useTranslations("sunTimes");
@@ -492,7 +493,35 @@ export function PlaceOverviewTab({
             </DetailRow>
           ) : (
             hours &&
-            (hours.weekSchedule ? (
+            (hours.isUnknown ? (
+              place.openingHours || hours.text || hours.comment ? (
+                <ExpandableDetailRow
+                  icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}
+                  expanded={hoursExpanded}
+                  onToggle={() => setHoursExpanded((v) => !v)}
+                  label={
+                    <Typography variant="body2" color="text.secondary" sx={{ fontWeight: 500 }}>
+                      {ohText.state(hours)}
+                    </Typography>
+                  }
+                >
+                  <Box sx={{ mt: 1, mb: 1 }}>
+                    <Typography variant="caption" color="text.secondary">
+                      {tHours("reportedHours")}
+                    </Typography>
+                    <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                      {place.openingHours || hours.text || hours.comment}
+                    </Typography>
+                  </Box>
+                </ExpandableDetailRow>
+              ) : (
+                <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
+                  <Typography variant="body2" color="text.secondary">
+                    {ohText.state(hours)}
+                  </Typography>
+                </DetailRow>
+              )
+            ) : hours.weekSchedule ? (
               <ExpandableDetailRow
                 icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}
                 expanded={hoursExpanded}
@@ -553,7 +582,17 @@ export function PlaceOverviewTab({
               </ExpandableDetailRow>
             ) : (
               <DetailRow icon={<AccessTimeIcon sx={{ fontSize: 22 }} />}>
-                {hours.isUnknown ? (
+                <Typography
+                  variant="body2"
+                  component="span"
+                  color={hours.isOpen ? "success.main" : "error.main"}
+                  sx={{
+                    fontWeight: 500,
+                  }}
+                >
+                  {ohText.state(hours)}
+                </Typography>
+                {ohText.detail(hours) && (
                   <Typography
                     variant="body2"
                     component="span"
@@ -561,33 +600,9 @@ export function PlaceOverviewTab({
                       color: "text.secondary",
                     }}
                   >
-                    {hours.text}
+                    {" · "}
+                    {ohText.detail(hours)}
                   </Typography>
-                ) : (
-                  <>
-                    <Typography
-                      variant="body2"
-                      component="span"
-                      color={hours.isOpen ? "success.main" : "error.main"}
-                      sx={{
-                        fontWeight: 500,
-                      }}
-                    >
-                      {ohText.state(hours)}
-                    </Typography>
-                    {ohText.detail(hours) && (
-                      <Typography
-                        variant="body2"
-                        component="span"
-                        sx={{
-                          color: "text.secondary",
-                        }}
-                      >
-                        {" · "}
-                        {ohText.detail(hours)}
-                      </Typography>
-                    )}
-                  </>
                 )}
               </DetailRow>
             ))

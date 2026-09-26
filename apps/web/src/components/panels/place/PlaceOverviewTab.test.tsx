@@ -147,3 +147,39 @@ describe("OSM contribution entry placement", () => {
     expect(screen.getByTestId("place-air-quality")).toBeVisible();
   });
 });
+
+describe("uncertain opening hours", () => {
+  it("shows a neutral disclosure and keeps the reported value and comment reachable", async () => {
+    const user = userEvent.setup();
+    renderOverview({
+      ...ENRICHED,
+      openingHours: 'Mo-Fr 09:00-17:00 "by appointment"',
+      openingHoursInfo: {
+        status: {
+          isOpen: false,
+          isUnknown: true,
+          text: "by appointment",
+          comment: "by appointment",
+        },
+      },
+    } as unknown as Place);
+
+    const disclosure = screen.getByRole("button", { name: "unconfirmed" });
+    expect(disclosure).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByText('Mo-Fr 09:00-17:00 "by appointment"')).not.toBeInTheDocument();
+    await user.click(disclosure);
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByText('Mo-Fr 09:00-17:00 "by appointment"')).toBeVisible();
+  });
+
+  it("does not suggest an hours verdict when no hours were reported", () => {
+    renderOverview({
+      ...ENRICHED,
+      openingHours: undefined,
+      openingHoursInfo: undefined,
+    } as unknown as Place);
+
+    expect(screen.queryByText("unconfirmed")).not.toBeInTheDocument();
+    expect(screen.queryByText("reportedHours")).not.toBeInTheDocument();
+  });
+});

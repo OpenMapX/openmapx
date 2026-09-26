@@ -1,4 +1,5 @@
-import { useCategorySearchStore } from "@openmapx/core";
+import type { CategoryPlace } from "@openmapx/core";
+import { useCategorySearchStore, usePlaceStore } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { MapProvider } from "@/integration-api/map/MapContext";
@@ -80,6 +81,39 @@ describe("CategoryResultsContent mobile sheet interactions", () => {
     fireEvent.click(container.firstElementChild as Element);
 
     expect(snapTo).not.toHaveBeenCalled();
+  });
+});
+
+describe("category place hours", () => {
+  it("keeps uncertain syntax off the result button while allowing selection", () => {
+    const place = {
+      id: "unknown-hours",
+      name: "Café Maybe",
+      coordinates: [13.4, 52.5],
+      openingHours: "Mo-Fr 09:00-17:00; PH off",
+      openingHoursInfo: {
+        status: { isOpen: false, isUnknown: true, text: "Mo-Fr 09:00-17:00; PH off" },
+      },
+    } as CategoryPlace;
+    act(() => useCategorySearchStore.setState({ activeCategory: "cafes" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [place],
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: 1,
+      relaxed: [],
+      isTransitCategory: false,
+    });
+
+    renderPanel(vi.fn());
+    const result = screen.getByRole("button", { name: /Café Maybe/ });
+    expect(result).toHaveTextContent("openingHours.unconfirmed");
+    expect(result).not.toHaveTextContent("Mo-Fr 09:00-17:00; PH off");
+    fireEvent.click(result);
+    expect(usePlaceStore.getState().selectedPlace?.openingHours).toBe(place.openingHours);
   });
 });
 

@@ -1034,6 +1034,8 @@
     "avoidsConsumption": "Avoids higher-consumption segments"
   },
   "openingHours": {
+    "unconfirmed": "Opening hours unconfirmed",
+    "reportedHours": "Reported hours",
     "open24Hours": "Open 24 hours",
     "closesAt": "Closes at {time}",
     "closesTomorrowAt": "Closes tomorrow at {time}",

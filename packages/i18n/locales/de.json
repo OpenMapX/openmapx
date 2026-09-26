@@ -1034,6 +1034,8 @@
     "avoidsConsumption": "Vermeidet verbrauchsintensive Streckenabschnitte"
   },
   "openingHours": {
+    "unconfirmed": "Öffnungszeiten unbestätigt",
+    "reportedHours": "Angegebene Öffnungszeiten",
     "open24Hours": "24 Stunden geöffnet",
     "closesAt": "Schließt um {time}",
     "closesTomorrowAt": "Schließt morgen um {time}",

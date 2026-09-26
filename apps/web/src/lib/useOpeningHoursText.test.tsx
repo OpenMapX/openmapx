@@ -71,9 +71,14 @@ describe("useOpeningHoursText — status detail", () => {
     expect(textFor("de").detail(later)).toBe("Öffnet Mo um 09:00");
   });
 
-  it("shows the raw value verbatim when the hours can't be evaluated", () => {
+  it("does not turn unevaluable hours into a closed verdict or primary raw syntax", () => {
     const status = { isOpen: false, isUnknown: true, text: "Mo-Su, PH 00:00-24:00" };
-    expect(textFor("de").detail(status)).toBe("Mo-Su, PH 00:00-24:00");
+    expect(textFor("en").state(status)).toBe("Opening hours unconfirmed");
+    expect(textFor("de").state(status)).toBe("Öffnungszeiten unbestätigt");
+    expect(textFor("de").detail(status)).toBe("");
+    expect(textFor("de").state({ isOpen: false, isUnknown: true })).toBe(
+      "Öffnungszeiten unbestätigt",
+    );
   });
 
   it("appends the opening_hours comment", () => {
