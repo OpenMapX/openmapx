@@ -1,7 +1,7 @@
 import type { PersonalVehicle, RoadConditionRouteImpact, Route, RouteImpact } from "@openmapx/core";
 import { setNavigationAuthority, useDirectionsStore, useNavigationStore } from "@openmapx/core";
 import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
-import { en } from "@openmapx/i18n";
+import { de, en } from "@openmapx/i18n";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
@@ -40,6 +40,86 @@ const renderCard = (route: Route) =>
       />
     </NextIntlClientProvider>,
   );
+
+describe("RouteCard road-condition context", () => {
+  const statuses: Array<{
+    availability: RoadConditionRouteImpact["availability"];
+    en: string;
+    de: string;
+  }> = [
+    {
+      availability: "current",
+      en: "Available road conditions included",
+      de: "Verfügbare Straßenbedingungen berücksichtigt",
+    },
+    {
+      availability: "limited",
+      en: "Some road conditions may be missing",
+      de: "Einige Straßenbedingungen fehlen möglicherweise",
+    },
+    {
+      availability: "unsupported",
+      en: "Road conditions cannot be applied to this route",
+      de: "Straßenbedingungen können für diese Route nicht berücksichtigt werden",
+    },
+    {
+      availability: "unavailable",
+      en: "Road conditions unavailable for this route",
+      de: "Straßenbedingungen für diese Route nicht verfügbar",
+    },
+    {
+      availability: "expired",
+      en: "Road condition information is out of date",
+      de: "Informationen zu Straßenbedingungen sind veraltet",
+    },
+  ];
+
+  it.each(statuses)(
+    "explains $availability without implying another state",
+    ({ availability, en: english, de: german }) => {
+      const impact: RoadConditionRouteImpact = {
+        availability,
+        evaluatedAt: "2026-09-12T12:00:00Z",
+        validUntil: null,
+        reasons: [],
+      };
+      const view = render(
+        <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+          <RouteCard
+            route={baseRoute}
+            index={0}
+            active
+            onSelect={() => {}}
+            onDetails={() => {}}
+            units="metric"
+            roadConditionImpact={impact}
+          />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.getByTestId("road-condition-route-status")).toHaveTextContent(english);
+      view.unmount();
+      render(
+        <NextIntlClientProvider locale="de" messages={de} timeZone="Europe/Berlin">
+          <RouteCard
+            route={baseRoute}
+            index={0}
+            active
+            onSelect={() => {}}
+            onDetails={() => {}}
+            units="metric"
+            roadConditionImpact={impact}
+          />
+        </NextIntlClientProvider>,
+      );
+      expect(screen.getByTestId("road-condition-route-status")).toHaveTextContent(german);
+    },
+  );
+
+  it("does not imply a road-condition check when no assessment exists", () => {
+    renderCard(baseRoute);
+    expect(screen.queryByTestId("road-condition-route-status")).toBeNull();
+  });
+});
 
 describe("RouteCard keyboard actions", () => {
   it("selects an alternative route with its radio without nesting secondary actions", async () => {
@@ -384,7 +464,7 @@ describe("RouteCard Start under browser authority", () => {
     );
 
     expect(screen.getByTestId("road-condition-route-status").textContent).toContain(
-      "Limited road-condition protection",
+      "Some road conditions may be missing",
     );
     fireEvent.click(view.getByRole("button", { name: "Start" }));
 

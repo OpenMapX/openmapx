@@ -19,13 +19,19 @@ export interface ImpactCostLabels {
   tollAmountUnknown: string;
   fareUnavailable: string;
   costUnavailable: string;
+  totalCost?: string;
+  knownCostSubtotal?: string;
+  additionalCostUnknown?: string;
 }
 
 const DEFAULT_COST_LABELS: ImpactCostLabels = {
-  tollCoverageUnknown: "Toll cost unknown",
+  tollCoverageUnknown: "Tolls may apply; cost unknown",
   tollAmountUnknown: "Tolls apply; amount unknown",
   fareUnavailable: "Fare unavailable",
   costUnavailable: "Cost unavailable",
+  totalCost: "Total cost",
+  knownCostSubtotal: "Known subtotal",
+  additionalCostUnknown: "Additional costs unknown",
 };
 
 export function formatImpactCost(
@@ -50,14 +56,18 @@ export function formatImpactCost(
     return labels.fareUnavailable;
   }
 
-  if (cost.totalCost !== null) {
-    return `~${formatter.format(cost.totalCost)}`;
+  if (cost.costCompleteness === "complete" && cost.totalCost !== null) {
+    return `${labels.totalCost ?? DEFAULT_COST_LABELS.totalCost} ~${formatter.format(cost.totalCost)}`;
   }
 
-  if (cost.knownCost !== null) {
+  if (cost.costCompleteness === "partial" && cost.knownCost !== null) {
     const unknownLabel =
-      cost.tollStatus === "tolls_unknown" ? labels.tollAmountUnknown : labels.tollCoverageUnknown;
-    return `~${formatter.format(cost.knownCost)} · ${unknownLabel}`;
+      cost.tollStatus === "tolls_unknown"
+        ? labels.tollAmountUnknown
+        : cost.tollStatus === "unknown"
+          ? labels.tollCoverageUnknown
+          : (labels.additionalCostUnknown ?? DEFAULT_COST_LABELS.additionalCostUnknown);
+    return `${labels.knownCostSubtotal ?? DEFAULT_COST_LABELS.knownCostSubtotal} ~${formatter.format(cost.knownCost)} · ${unknownLabel}`;
   }
 
   return labels.costUnavailable;
@@ -72,6 +82,9 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
     tollAmountUnknown: t("tollsUnknown"),
     fareUnavailable: t("fareUnavailable"),
     costUnavailable: t("costUnavailable"),
+    totalCost: t("totalCost"),
+    knownCostSubtotal: t("knownCostSubtotal"),
+    additionalCostUnknown: t("additionalCostUnknown"),
   });
   const formattedCo2 = formatCo2Emission(impact.emissions.totalGrams, locale);
 

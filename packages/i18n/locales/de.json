@@ -802,11 +802,11 @@
     "fastestRoute": "Schnellste Route",
     "co2Estimate": "≈ {co2} (geschätzt)",
     "roadConditionImpact": {
-      "current": "Aktuelle Straßenbedingungen berücksichtigt",
-      "limited": "Straßenbedingungen nur eingeschränkt berücksichtigt",
-      "unsupported": "Straßenbedingungen werden nicht unterstützt",
-      "unavailable": "Straßenbedingungen nicht verfügbar",
-      "expired": "Bewertung der Straßenbedingungen abgelaufen"
+      "current": "Verfügbare Straßenbedingungen berücksichtigt",
+      "limited": "Einige Straßenbedingungen fehlen möglicherweise",
+      "unsupported": "Straßenbedingungen können für diese Route nicht berücksichtigt werden",
+      "unavailable": "Straßenbedingungen für diese Route nicht verfügbar",
+      "expired": "Informationen zu Straßenbedingungen sind veraltet"
     },
     "trafficDelay": "+{delay} Verkehr",
     "trafficDelayNormally": "normalerweise {baseline}",
@@ -1004,9 +1004,10 @@
     "electricityCost": "Stromkosten",
     "tollsIncluded": "Inkl. Maut",
     "tollsUnknown": "Mautpflichtig (Betrag unbekannt)",
-    "tollCostUnknown": "Mautkosten unbekannt",
+    "tollCostUnknown": "Maut möglich; Kosten unbekannt",
     "fareUnavailable": "Fahrpreis nicht verfügbar",
     "costUnavailable": "Kosten nicht verfügbar",
+    "additionalCostUnknown": "Weitere Kosten unbekannt",
     "noTolls": "Keine Maut",
     "occupancy": "Besetzung",
     "occupancyCount": "{count, plural, =1 {1 Person} other {# Personen}}",

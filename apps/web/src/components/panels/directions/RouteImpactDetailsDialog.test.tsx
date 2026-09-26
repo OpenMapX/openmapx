@@ -224,7 +224,9 @@ describe("RouteImpactDetailsDialog", () => {
     it("displays a known subtotal with unknown toll coverage", () => {
       renderDialog({ impact: mockDieselImpact });
       expect(screen.getByTestId("energy-cost-value").textContent).toContain("6.80");
-      expect(screen.getByTestId("tolls-cost-value").textContent).toContain("Toll cost unknown");
+      expect(screen.getByTestId("tolls-cost-value").textContent).toContain(
+        "Tolls may apply; cost unknown",
+      );
       expect(screen.getByTestId("total-cost-value").textContent).toContain("6.80");
       expect(screen.getByText("Known subtotal")).toBeInTheDocument();
     });

@@ -802,11 +802,11 @@
     "fastestRoute": "Fastest route",
     "co2Estimate": "≈ {co2} (est.)",
     "roadConditionImpact": {
-      "current": "Current road conditions applied",
-      "limited": "Limited road-condition protection",
-      "unsupported": "Road-condition protection unsupported",
-      "unavailable": "Road-condition protection unavailable",
-      "expired": "Road-condition assessment expired"
+      "current": "Available road conditions included",
+      "limited": "Some road conditions may be missing",
+      "unsupported": "Road conditions cannot be applied to this route",
+      "unavailable": "Road conditions unavailable for this route",
+      "expired": "Road condition information is out of date"
     },
     "trafficDelay": "+{delay} traffic",
     "trafficDelayNormally": "normally {baseline}",
@@ -1004,9 +1004,10 @@
     "electricityCost": "Electricity cost",
     "tollsIncluded": "Tolls included",
     "tollsUnknown": "Tolls apply (amount unknown)",
-    "tollCostUnknown": "Toll cost unknown",
+    "tollCostUnknown": "Tolls may apply; cost unknown",
     "fareUnavailable": "Fare unavailable",
     "costUnavailable": "Cost unavailable",
+    "additionalCostUnknown": "Additional costs unknown",
     "noTolls": "No tolls",
     "occupancy": "Occupancy",
     "occupancyCount": "{count, plural, =1 {1 person} other {# people}}",
