@@ -105,8 +105,8 @@ export function BackupsPage() {
     onSuccess: ({ jobId }) => {
       showToast(`Backup create queued (${jobId})`);
       setCreateName("");
-      qc.invalidateQueries({ queryKey: ["admin", "services", "backups"] });
-      qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "services", "backups"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
     },
     onError: (err) =>
       showToast(err instanceof Error ? err.message : "Backup create failed", "error"),
@@ -137,7 +137,7 @@ export function BackupsPage() {
       setRestoreTarget(null);
       setRestoreServiceIds("");
       setRestoreStopRunning(false);
-      qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
     },
     onError: (err) => showToast(err instanceof Error ? err.message : "Restore failed", "error"),
   });
@@ -157,8 +157,8 @@ export function BackupsPage() {
     onSuccess: ({ jobId }, name) => {
       showToast(`Delete queued for ${name} (${jobId})`);
       setDeleteTarget(null);
-      qc.invalidateQueries({ queryKey: ["admin", "services", "backups"] });
-      qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "services", "backups"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "jobs"] });
     },
     onError: (err) => showToast(err instanceof Error ? err.message : "Delete failed", "error"),
   });

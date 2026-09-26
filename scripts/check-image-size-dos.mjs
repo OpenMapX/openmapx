@@ -225,12 +225,12 @@ function probesFor(packageRoot, version) {
 
   for (const fixture of fixtures) {
     for (const moduleKind of ["cjs", "esm"]) {
-      const extension = moduleKind === "cjs" ? "cjs" : "mjs";
-      add(`dist/fromFile.${extension}`, moduleKind, "from-file", fixture);
-      add(`dist/index.${extension}`, moduleKind, "root", fixture);
-      add(`dist/lookup.${extension}`, moduleKind, "lookup", fixture);
-      add(`dist/types/index.${extension}`, moduleKind, "types-index", fixture);
-      add(`dist/types/${fixture}.${extension}`, moduleKind, "type", fixture);
+      const distribution = moduleKind === "cjs" ? "cjs" : "esm";
+      add(`dist/${distribution}/fromFile.js`, moduleKind, "from-file", fixture);
+      add(`dist/${distribution}/index.js`, moduleKind, "root", fixture);
+      add(`dist/${distribution}/lookup.js`, moduleKind, "lookup", fixture);
+      add(`dist/${distribution}/types/index.js`, moduleKind, "types-index", fixture);
+      add(`dist/${distribution}/types/${fixture}.js`, moduleKind, "type", fixture);
     }
   }
   return probes;
@@ -240,9 +240,9 @@ async function main() {
   const docsPackage = packageDirectory(
     join(REPOSITORY_ROOT, "docs/node_modules/.pnpm"),
     join(REPOSITORY_ROOT, "docs/pnpm-lock.yaml"),
-    "2.0.2",
+    "2.0.4",
   );
-  const probes = probesFor(docsPackage, "2.0.2");
+  const probes = probesFor(docsPackage, "2.0.4");
 
   for (const probe of probes) {
     await runProbe(probe);

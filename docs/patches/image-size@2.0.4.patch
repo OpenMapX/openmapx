@@ -1,0 +1,434 @@
+diff --git a/dist/cjs/types/heif.js b/dist/cjs/types/heif.js
+index 97f58978b0bd0de9416301fb1e176319a4b3ac21..944db5facc2e281fde2f5123cfa70a411e79507f 100644
+--- a/dist/cjs/types/heif.js
++++ b/dist/cjs/types/heif.js
+@@ -16,24 +16,27 @@ exports.HEIF = {
+         const boxType = (0, utils_1.toUTF8String)(input, 4, 8);
+         if (boxType !== 'ftyp')
+             return false;
+-        const ftypBox = (0, utils_1.findBox)(input, 'ftyp', 0);
++        const ftypBox = (0, utils_1.findBox)(input, 'ftyp', 0, input.length);
+         if (!ftypBox)
+             return false;
+         const brand = (0, utils_1.toUTF8String)(input, ftypBox.offset + 8, ftypBox.offset + 12);
+         return brand in brandMap;
+     },
+     calculate(input) {
+-        const metaBox = (0, utils_1.findBox)(input, 'meta', 0);
+-        const iprpBox = metaBox && (0, utils_1.findBox)(input, 'iprp', metaBox.offset + 12);
+-        const ipcoBox = iprpBox && (0, utils_1.findBox)(input, 'ipco', iprpBox.offset + 8);
++        const metaBox = (0, utils_1.findBox)(input, 'meta', 0, input.length);
++        const metaEnd = metaBox && metaBox.offset + metaBox.size;
++        const iprpBox = metaBox && (0, utils_1.findBox)(input, 'iprp', metaBox.offset + 12, metaEnd);
++        const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++        const ipcoBox = iprpBox && (0, utils_1.findBox)(input, 'ipco', iprpBox.offset + 8, iprpEnd);
+         if (!ipcoBox) {
+             throw new TypeError('Invalid HEIF, no ipco box found');
+         }
+         const type = (0, utils_1.toUTF8String)(input, 8, 12);
+         const images = [];
++        const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+         let currentOffset = ipcoBox.offset + 8;
+-        while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-            const ispeBox = (0, utils_1.findBox)(input, 'ispe', currentOffset);
++        while (currentOffset < ipcoEnd) {
++            const ispeBox = (0, utils_1.findBox)(input, 'ispe', currentOffset, ipcoEnd);
+             if (!ispeBox)
+                 break;
+             if (ispeBox.size < 20) {
+@@ -41,12 +44,12 @@ exports.HEIF = {
+             }
+             const rawWidth = (0, utils_1.readUInt32BE)(input, ispeBox.offset + 12);
+             const rawHeight = (0, utils_1.readUInt32BE)(input, ispeBox.offset + 16);
+-            const clapBox = (0, utils_1.findBox)(input, 'clap', currentOffset);
++            const clapBox = (0, utils_1.findBox)(input, 'clap', currentOffset, ipcoEnd);
+             let width = rawWidth;
+             const height = rawHeight;
+             if (clapBox &&
+                 clapBox.size >= 16 &&
+-                clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++                clapBox.offset < ipcoEnd) {
+                 const cropRight = (0, utils_1.readUInt32BE)(input, clapBox.offset + 12);
+                 width = rawWidth - cropRight;
+             }
+diff --git a/dist/cjs/types/icns.js b/dist/cjs/types/icns.js
+index a24c817a91b732e5c38366f72209c8ab322aed84..08b7ae62c03bdbb138965a41eb9f0097e928905a 100644
+--- a/dist/cjs/types/icns.js
++++ b/dist/cjs/types/icns.js
+@@ -56,18 +56,32 @@ exports.ICNS = {
+     validate: (input) => (0, utils_1.toUTF8String)(input, 0, 4) === 'icns',
+     calculate(input) {
+         const inputLength = input.length;
++        if (inputLength < SIZE_HEADER) {
++            throw new TypeError('Invalid ICNS, truncated header');
++        }
+         const fileLength = (0, utils_1.readUInt32BE)(input, FILE_LENGTH_OFFSET);
++        if (fileLength < SIZE_HEADER || fileLength > inputLength) {
++            throw new TypeError('Invalid ICNS, invalid file length');
++        }
+         let imageOffset = SIZE_HEADER;
+         const images = [];
+-        while (imageOffset < fileLength && imageOffset < inputLength) {
++        while (imageOffset < fileLength) {
++            const remaining = Math.min(fileLength, inputLength) - imageOffset;
++            if (remaining < 8) {
++                throw new TypeError('Invalid ICNS, truncated entry header');
++            }
+             const imageHeader = readImageHeader(input, imageOffset);
+             const entryLength = imageHeader[1];
+-            if (entryLength < 8) {
+-                throw new TypeError('Invalid ICNS');
++            if (entryLength < 8 || entryLength > remaining) {
++                throw new TypeError('Invalid ICNS, invalid entry length');
++            }
++            const nextOffset = imageOffset + entryLength;
++            if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++                throw new TypeError('Invalid ICNS, non-advancing entry');
+             }
+             const imageSize = getImageSize(imageHeader[0]);
+             images.push(imageSize);
+-            imageOffset += entryLength;
++            imageOffset = nextOffset;
+         }
+         if (images.length === 0) {
+             throw new TypeError('Invalid ICNS, no sizes found');
+diff --git a/dist/cjs/types/jp2.js b/dist/cjs/types/jp2.js
+index 8af3f77cb51aabc112203ed6cf2d5339caaf65a7..2002c01696faf984aac8067c4dd2d44b28af3263 100644
+--- a/dist/cjs/types/jp2.js
++++ b/dist/cjs/types/jp2.js
+@@ -7,15 +7,16 @@ exports.JP2 = {
+         const boxType = (0, utils_1.toUTF8String)(input, 4, 8);
+         if (boxType !== 'jP  ')
+             return false;
+-        const ftypBox = (0, utils_1.findBox)(input, 'ftyp', 0);
++        const ftypBox = (0, utils_1.findBox)(input, 'ftyp', 0, input.length);
+         if (!ftypBox)
+             return false;
+         const brand = (0, utils_1.toUTF8String)(input, ftypBox.offset + 8, ftypBox.offset + 12);
+         return brand === 'jp2 ';
+     },
+     calculate(input) {
+-        const jp2hBox = (0, utils_1.findBox)(input, 'jp2h', 0);
+-        const ihdrBox = jp2hBox && (0, utils_1.findBox)(input, 'ihdr', jp2hBox.offset + 8);
++        const jp2hBox = (0, utils_1.findBox)(input, 'jp2h', 0, input.length);
++        const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++        const ihdrBox = jp2hBox && (0, utils_1.findBox)(input, 'ihdr', jp2hBox.offset + 8, jp2hEnd);
+         if (ihdrBox) {
+             return {
+                 height: (0, utils_1.readUInt32BE)(input, ihdrBox.offset + 8),
+diff --git a/dist/cjs/types/jxl.js b/dist/cjs/types/jxl.js
+index eb81c4c0f20644182de0ed42a04ba48ca247cef8..15e0011dc453cfae8a74a89cb8e19376a6ca5291 100644
+--- a/dist/cjs/types/jxl.js
++++ b/dist/cjs/types/jxl.js
+@@ -4,7 +4,7 @@ exports.JXL = void 0;
+ const jxl_stream_1 = require("./jxl-stream");
+ const utils_1 = require("./utils");
+ function extractCodestream(input) {
+-    const jxlcBox = (0, utils_1.findBox)(input, 'jxlc', 0);
++    const jxlcBox = (0, utils_1.findBox)(input, 'jxlc', 0, input.length);
+     if (jxlcBox) {
+         return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+     }
+@@ -18,14 +18,18 @@ function extractPartialStreams(input) {
+     const partialStreams = [];
+     let offset = 0;
+     while (offset < input.length) {
+-        const jxlpBox = (0, utils_1.findBox)(input, 'jxlp', offset);
++        const jxlpBox = (0, utils_1.findBox)(input, 'jxlp', offset, input.length);
+         if (!jxlpBox)
+             break;
+         if (jxlpBox.size < 12) {
+             throw new TypeError('Invalid JXL');
+         }
+         partialStreams.push(input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size));
+-        offset = jxlpBox.offset + jxlpBox.size;
++        const nextOffset = jxlpBox.offset + jxlpBox.size;
++        if (nextOffset <= offset) {
++            throw new TypeError('Invalid JXL, non-advancing box');
++        }
++        offset = nextOffset;
+     }
+     return partialStreams;
+ }
+@@ -44,7 +48,7 @@ exports.JXL = {
+         const boxType = (0, utils_1.toUTF8String)(input, 4, 8);
+         if (boxType !== 'JXL ')
+             return false;
+-        const ftypBox = (0, utils_1.findBox)(input, 'ftyp', 0);
++        const ftypBox = (0, utils_1.findBox)(input, 'ftyp', 0, input.length);
+         if (!ftypBox)
+             return false;
+         const brand = (0, utils_1.toUTF8String)(input, ftypBox.offset + 8, ftypBox.offset + 12);
+diff --git a/dist/cjs/types/utils.js b/dist/cjs/types/utils.js
+index 5399751d87686830b4a902a45b2890e7346b764f..5cce6e7bd479ff69bb092ad32a99e387fb3fb681 100644
+--- a/dist/cjs/types/utils.js
++++ b/dist/cjs/types/utils.js
+@@ -42,34 +42,36 @@ function readUInt(input, bits, offset = 0, isBigEndian = false) {
+     return methods[methodName](input, offset);
+ }
+ const BOX_HEADER_SIZE = 8;
+-function readBox(input, offset) {
+-    if (input.length - offset < BOX_HEADER_SIZE)
++function readBox(input, offset, parentEnd = input.length) {
++    const end = Math.min(parentEnd, input.length);
++    if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < BOX_HEADER_SIZE)
+         return undefined;
+     const boxSize = (0, exports.readUInt32BE)(input, offset);
+-    if (input.length - offset < boxSize)
++    if (boxSize === 1)
++        return undefined;
++    const size = boxSize === 0 ? end - offset : boxSize;
++    const nextOffset = offset + size;
++    if (size < BOX_HEADER_SIZE || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end)
+         return undefined;
+     return {
+         name: (0, exports.toUTF8String)(input, 4 + offset, 8 + offset),
+         offset,
+-        size: boxSize,
++        size,
+     };
+ }
+-function findBox(input, boxName, startOffset) {
++function findBox(input, boxName, startOffset, parentEnd = input.length) {
++    const end = Math.min(parentEnd, input.length);
+     let currentOffset = startOffset;
+-    while (currentOffset < input.length) {
+-        if (input.length - currentOffset < 4)
+-            break;
+-        const boxSize = (0, exports.readUInt32BE)(input, currentOffset);
+-        if (boxSize < BOX_HEADER_SIZE) {
+-            currentOffset += BOX_HEADER_SIZE;
+-            continue;
+-        }
+-        const box = readBox(input, currentOffset);
++    while (currentOffset < end) {
++        const box = readBox(input, currentOffset, end);
+         if (!box)
+             break;
+         if (box.name === boxName)
+             return box;
+-        currentOffset += box.size;
++        const nextOffset = box.offset + box.size;
++        if (nextOffset <= currentOffset)
++            break;
++        currentOffset = nextOffset;
+     }
+     return undefined;
+ }
+diff --git a/dist/esm/types/heif.js b/dist/esm/types/heif.js
+index 3d9be117341281152cc94608539242f2d4f63128..c33e595623197f1072f037b1f5d8b390a65fce04 100644
+--- a/dist/esm/types/heif.js
++++ b/dist/esm/types/heif.js
+@@ -13,24 +13,27 @@ export const HEIF = {
+         const boxType = toUTF8String(input, 4, 8);
+         if (boxType !== 'ftyp')
+             return false;
+-        const ftypBox = findBox(input, 'ftyp', 0);
++        const ftypBox = findBox(input, 'ftyp', 0, input.length);
+         if (!ftypBox)
+             return false;
+         const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+         return brand in brandMap;
+     },
+     calculate(input) {
+-        const metaBox = findBox(input, 'meta', 0);
+-        const iprpBox = metaBox && findBox(input, 'iprp', metaBox.offset + 12);
+-        const ipcoBox = iprpBox && findBox(input, 'ipco', iprpBox.offset + 8);
++        const metaBox = findBox(input, 'meta', 0, input.length);
++        const metaEnd = metaBox && metaBox.offset + metaBox.size;
++        const iprpBox = metaBox && findBox(input, 'iprp', metaBox.offset + 12, metaEnd);
++        const iprpEnd = iprpBox && iprpBox.offset + iprpBox.size;
++        const ipcoBox = iprpBox && findBox(input, 'ipco', iprpBox.offset + 8, iprpEnd);
+         if (!ipcoBox) {
+             throw new TypeError('Invalid HEIF, no ipco box found');
+         }
+         const type = toUTF8String(input, 8, 12);
+         const images = [];
++        const ipcoEnd = ipcoBox.offset + ipcoBox.size;
+         let currentOffset = ipcoBox.offset + 8;
+-        while (currentOffset < ipcoBox.offset + ipcoBox.size) {
+-            const ispeBox = findBox(input, 'ispe', currentOffset);
++        while (currentOffset < ipcoEnd) {
++            const ispeBox = findBox(input, 'ispe', currentOffset, ipcoEnd);
+             if (!ispeBox)
+                 break;
+             if (ispeBox.size < 20) {
+@@ -38,12 +41,12 @@ export const HEIF = {
+             }
+             const rawWidth = readUInt32BE(input, ispeBox.offset + 12);
+             const rawHeight = readUInt32BE(input, ispeBox.offset + 16);
+-            const clapBox = findBox(input, 'clap', currentOffset);
++            const clapBox = findBox(input, 'clap', currentOffset, ipcoEnd);
+             let width = rawWidth;
+             const height = rawHeight;
+             if (clapBox &&
+                 clapBox.size >= 16 &&
+-                clapBox.offset < ipcoBox.offset + ipcoBox.size) {
++                clapBox.offset < ipcoEnd) {
+                 const cropRight = readUInt32BE(input, clapBox.offset + 12);
+                 width = rawWidth - cropRight;
+             }
+diff --git a/dist/esm/types/icns.js b/dist/esm/types/icns.js
+index 70b5f3f7863fb476b5db5f088649a352b6ac679b..acf736eb382e744aba82abb33e490f855b916df0 100644
+--- a/dist/esm/types/icns.js
++++ b/dist/esm/types/icns.js
+@@ -53,18 +53,32 @@ export const ICNS = {
+     validate: (input) => toUTF8String(input, 0, 4) === 'icns',
+     calculate(input) {
+         const inputLength = input.length;
++        if (inputLength < SIZE_HEADER) {
++            throw new TypeError('Invalid ICNS, truncated header');
++        }
+         const fileLength = readUInt32BE(input, FILE_LENGTH_OFFSET);
++        if (fileLength < SIZE_HEADER || fileLength > inputLength) {
++            throw new TypeError('Invalid ICNS, invalid file length');
++        }
+         let imageOffset = SIZE_HEADER;
+         const images = [];
+-        while (imageOffset < fileLength && imageOffset < inputLength) {
++        while (imageOffset < fileLength) {
++            const remaining = Math.min(fileLength, inputLength) - imageOffset;
++            if (remaining < 8) {
++                throw new TypeError('Invalid ICNS, truncated entry header');
++            }
+             const imageHeader = readImageHeader(input, imageOffset);
+             const entryLength = imageHeader[1];
+-            if (entryLength < 8) {
+-                throw new TypeError('Invalid ICNS');
++            if (entryLength < 8 || entryLength > remaining) {
++                throw new TypeError('Invalid ICNS, invalid entry length');
++            }
++            const nextOffset = imageOffset + entryLength;
++            if (!Number.isSafeInteger(nextOffset) || nextOffset <= imageOffset) {
++                throw new TypeError('Invalid ICNS, non-advancing entry');
+             }
+             const imageSize = getImageSize(imageHeader[0]);
+             images.push(imageSize);
+-            imageOffset += entryLength;
++            imageOffset = nextOffset;
+         }
+         if (images.length === 0) {
+             throw new TypeError('Invalid ICNS, no sizes found');
+diff --git a/dist/esm/types/jp2.js b/dist/esm/types/jp2.js
+index 634f764df249f0a1504161938243bea639bbab62..fe75550f7a795971312407b78e4368986c3f1ba5 100644
+--- a/dist/esm/types/jp2.js
++++ b/dist/esm/types/jp2.js
+@@ -4,15 +4,16 @@ export const JP2 = {
+         const boxType = toUTF8String(input, 4, 8);
+         if (boxType !== 'jP  ')
+             return false;
+-        const ftypBox = findBox(input, 'ftyp', 0);
++        const ftypBox = findBox(input, 'ftyp', 0, input.length);
+         if (!ftypBox)
+             return false;
+         const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+         return brand === 'jp2 ';
+     },
+     calculate(input) {
+-        const jp2hBox = findBox(input, 'jp2h', 0);
+-        const ihdrBox = jp2hBox && findBox(input, 'ihdr', jp2hBox.offset + 8);
++        const jp2hBox = findBox(input, 'jp2h', 0, input.length);
++        const jp2hEnd = jp2hBox && jp2hBox.offset + jp2hBox.size;
++        const ihdrBox = jp2hBox && findBox(input, 'ihdr', jp2hBox.offset + 8, jp2hEnd);
+         if (ihdrBox) {
+             return {
+                 height: readUInt32BE(input, ihdrBox.offset + 8),
+diff --git a/dist/esm/types/jxl.js b/dist/esm/types/jxl.js
+index 25d7d8edfb6c558f58f014cdebfb584e7ae78959..0fad0934c4e68039e78cd11c2d06d64fafdf6f4d 100644
+--- a/dist/esm/types/jxl.js
++++ b/dist/esm/types/jxl.js
+@@ -1,7 +1,7 @@
+ import { JXLStream } from './jxl-stream.js';
+ import { findBox, toUTF8String } from './utils.js';
+ function extractCodestream(input) {
+-    const jxlcBox = findBox(input, 'jxlc', 0);
++    const jxlcBox = findBox(input, 'jxlc', 0, input.length);
+     if (jxlcBox) {
+         return input.slice(jxlcBox.offset + 8, jxlcBox.offset + jxlcBox.size);
+     }
+@@ -15,14 +15,18 @@ function extractPartialStreams(input) {
+     const partialStreams = [];
+     let offset = 0;
+     while (offset < input.length) {
+-        const jxlpBox = findBox(input, 'jxlp', offset);
++        const jxlpBox = findBox(input, 'jxlp', offset, input.length);
+         if (!jxlpBox)
+             break;
+         if (jxlpBox.size < 12) {
+             throw new TypeError('Invalid JXL');
+         }
+         partialStreams.push(input.slice(jxlpBox.offset + 12, jxlpBox.offset + jxlpBox.size));
+-        offset = jxlpBox.offset + jxlpBox.size;
++        const nextOffset = jxlpBox.offset + jxlpBox.size;
++        if (nextOffset <= offset) {
++            throw new TypeError('Invalid JXL, non-advancing box');
++        }
++        offset = nextOffset;
+     }
+     return partialStreams;
+ }
+@@ -41,7 +45,7 @@ export const JXL = {
+         const boxType = toUTF8String(input, 4, 8);
+         if (boxType !== 'JXL ')
+             return false;
+-        const ftypBox = findBox(input, 'ftyp', 0);
++        const ftypBox = findBox(input, 'ftyp', 0, input.length);
+         if (!ftypBox)
+             return false;
+         const brand = toUTF8String(input, ftypBox.offset + 8, ftypBox.offset + 12);
+diff --git a/dist/esm/types/utils.js b/dist/esm/types/utils.js
+index 524e00b529bc55c8206e9eacead1a6c9f2057dd4..9767783f4f7bb1954309092071765a8becf275cb 100644
+--- a/dist/esm/types/utils.js
++++ b/dist/esm/types/utils.js
+@@ -27,34 +27,36 @@ export function readUInt(input, bits, offset = 0, isBigEndian = false) {
+     return methods[methodName](input, offset);
+ }
+ const BOX_HEADER_SIZE = 8;
+-function readBox(input, offset) {
+-    if (input.length - offset < BOX_HEADER_SIZE)
++function readBox(input, offset, parentEnd = input.length) {
++    const end = Math.min(parentEnd, input.length);
++    if (!Number.isSafeInteger(offset) || offset < 0 || end - offset < BOX_HEADER_SIZE)
+         return undefined;
+     const boxSize = readUInt32BE(input, offset);
+-    if (input.length - offset < boxSize)
++    if (boxSize === 1)
++        return undefined;
++    const size = boxSize === 0 ? end - offset : boxSize;
++    const nextOffset = offset + size;
++    if (size < BOX_HEADER_SIZE || !Number.isSafeInteger(nextOffset) || nextOffset <= offset || nextOffset > end)
+         return undefined;
+     return {
+         name: toUTF8String(input, 4 + offset, 8 + offset),
+         offset,
+-        size: boxSize,
++        size,
+     };
+ }
+-export function findBox(input, boxName, startOffset) {
++export function findBox(input, boxName, startOffset, parentEnd = input.length) {
++    const end = Math.min(parentEnd, input.length);
+     let currentOffset = startOffset;
+-    while (currentOffset < input.length) {
+-        if (input.length - currentOffset < 4)
+-            break;
+-        const boxSize = readUInt32BE(input, currentOffset);
+-        if (boxSize < BOX_HEADER_SIZE) {
+-            currentOffset += BOX_HEADER_SIZE;
+-            continue;
+-        }
+-        const box = readBox(input, currentOffset);
++    while (currentOffset < end) {
++        const box = readBox(input, currentOffset, end);
+         if (!box)
+             break;
+         if (box.name === boxName)
+             return box;
+-        currentOffset += box.size;
++        const nextOffset = box.offset + box.size;
++        if (nextOffset <= currentOffset)
++            break;
++        currentOffset = nextOffset;
+     }
+     return undefined;
+ }

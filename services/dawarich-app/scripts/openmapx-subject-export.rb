@@ -80,7 +80,20 @@ module OpenMapxSubjectExport
     # Claim tickets are bearer credentials used to resume an import. They are
     # intentionally omitted even though the schema contract still checks that
     # the column exists.
-    "PendingImport" => %w[id claimed_at claimed_by_user_id origin original_filename source_hint expires_at created_at updated_at]
+    "PendingImport" => %w[id claimed_at claimed_by_user_id origin original_filename source_hint expires_at created_at updated_at],
+    "AchievementProgress" => %w[id achievement_key state sharing_enabled created_at updated_at],
+    "AchievementUnlockEvent" => %w[id key kind seen_at claimed_at created_at updated_at],
+    "UserAchievement" => %w[id achievement_key earned_at metadata created_at updated_at],
+    "RouteVideo" => %w[id name settings status expired_at created_at updated_at],
+    "ServiceSetting" => %w[id service provider active config created_at updated_at],
+    "TripSource" => %w[id provider base_url status importing last_error last_synced_at created_at updated_at],
+    "PlannedDay" => %w[id trip_id date title notes position created_at updated_at],
+    "PlannedDayNote" => %w[id planned_day_id body noted_at position created_at updated_at],
+    "PlannedReservation" => %w[id trip_id planned_day_id reservation_type title location starts_at ends_at status notes created_at updated_at],
+    "PlannedStop" => %w[id planned_day_id name address latitude longitude starts_at ends_at duration_minutes position category notes transport_mode created_at updated_at],
+    "PlannedAccommodation" => %w[id trip_id name address latitude longitude starts_on ends_on check_in_at check_out_at notes created_at updated_at],
+    "PlannedTraveller" => %w[id trip_id name owner created_at updated_at],
+    "PlannedUnplannedPlace" => %w[id trip_id name address latitude longitude starts_at ends_at duration_minutes position category notes transport_mode created_at updated_at]
   }.freeze
 
   MODEL_ENTRIES = {
@@ -90,17 +103,27 @@ module OpenMapxSubjectExport
     "stats" => "Stat", "tracks" => "Track", "track-segments" => "TrackSegment",
     "digests" => "Digest", "raw-archives" => "RawDataArchive", "flights" => "Flight",
     "notes" => "Note", "posters" => "Poster", "shared-links" => "SharedLink",
+    "achievement-progress" => "AchievementProgress",
+    "achievement-unlock-events" => "AchievementUnlockEvent",
+    "user-achievements" => "UserAchievement", "route-videos" => "RouteVideo",
+    "service-settings" => "ServiceSetting", "trip-sources" => "TripSource",
+    "planned-days" => "PlannedDay", "planned-day-notes" => "PlannedDayNote",
+    "planned-reservations" => "PlannedReservation", "planned-stops" => "PlannedStop",
+    "planned-accommodations" => "PlannedAccommodation",
+    "planned-travellers" => "PlannedTraveller",
+    "planned-unplanned-places" => "PlannedUnplannedPlace",
     "family" => "Family"
   }.freeze
 
   RELATION_FINGERPRINT_VERSION = "dawarich-relations-v2"
   MAX_RECORDS_PER_ENTRY = 10_000_000
+  MAX_SOURCE_ENTRIES = 256
   MAX_FAMILY_ROWS = 100_000
   MAX_NESTING = 8
   SECRET_KEY = /(password|token|secret|api[_-]?key|credential|private|otp|bearer|cookie|authorization|encrypted|assertion|signature)/i.freeze
   # Archive containers are excluded: a subject export must never smuggle a
   # nested archive or executable payload into the passive artifact.
-  SAFE_EXTENSIONS = %w[bin csv fit gpx json jsonl jpg jpeg kml pdf png tcx txt].freeze
+  SAFE_EXTENSIONS = %w[bin csv fit gpx json jsonl jpg jpeg kml mp4 pdf png tcx txt].freeze
   SAFE_SETTING_KEYS = %w[
     fog_of_war_meters fog_of_war_threshold fog_of_war_mode meters_between_routes
     preferred_map_layer speed_colored_routes points_rendering_mode minutes_between_routes
@@ -206,7 +229,9 @@ module OpenMapxSubjectExport
       "FamilyMembership" => "Family::Membership",
       "FamilyInvitation" => "Family::Invitation",
       "FamilyLocationRequest" => "Family::LocationRequest",
-      "RichText" => "ActionText::RichText"
+      "RichText" => "ActionText::RichText",
+      "AchievementProgress" => "Achievements::Progress",
+      "AchievementUnlockEvent" => "Achievements::UnlockEvent"
     }.fetch(model_name, model_name)
     model = constant.split("::").reduce(Object) { |scope, part| scope.const_get(part, false) }
     return nil unless model.respond_to?(:where) && model.respond_to?(:column_names)
@@ -235,6 +260,13 @@ module OpenMapxSubjectExport
     when "track-segments"
       track_ids = model_for("Track")&.where(user_id: user.id)&.select(:id)
       model.where(track_id: track_ids)
+    when "planned-days", "planned-reservations", "planned-accommodations", "planned-travellers", "planned-unplanned-places"
+      trip_ids = model_for("Trip")&.where(user_id: user.id)&.select(:id)
+      model.where(trip_id: trip_ids)
+    when "planned-day-notes", "planned-stops"
+      trip_ids = model_for("Trip")&.where(user_id: user.id)&.select(:id)
+      day_ids = model_for("PlannedDay")&.where(trip_id: trip_ids)&.select(:id)
+      model.where(planned_day_id: day_ids)
     when "family-memberships"
       model.where(user_id: user.id)
     else
@@ -376,7 +408,7 @@ module OpenMapxSubjectExport
       records: records,
       sha256: expected_digest,
       article15: true,
-      portability: portability.nil? ? (%w[places points raw-archives imports flights notes].include?(entry_id) || entry_id.start_with?("points-")) : portability,
+      portability: portability.nil? ? (%w[places points raw-archives imports flights notes route-videos planned-days planned-day-notes planned-reservations planned-stops planned-accommodations planned-travellers planned-unplanned-places].include?(entry_id) || entry_id.start_with?("points-")) : portability,
       redaction_codes: entry_id == "notes" ? ["dawarich-rights-of-others-review"] : [],
       write: lambda do |io|
         actual_digest = Digest::SHA256.new
@@ -489,7 +521,7 @@ module OpenMapxSubjectExport
     type_extension = {
       "application/json" => "json", "application/jsonl" => "jsonl", "text/csv" => "csv",
       "application/gpx+xml" => "gpx", "application/pdf" => "pdf", "image/jpeg" => "jpg",
-      "image/png" => "png", "text/plain" => "txt"
+      "image/png" => "png", "text/plain" => "txt", "video/mp4" => "mp4"
     }[content_type.to_s]
     type_extension || "bin"
   end
@@ -551,7 +583,8 @@ module OpenMapxSubjectExport
     targets = [
       ["Import", model_for("Import"), :user_id, "import"],
       ["PendingImport", model_for("PendingImport"), :claimed_by_user_id, "import"],
-      ["Points::RawDataArchive", model_for("RawDataArchive"), :user_id, "raw"]
+      ["Points::RawDataArchive", model_for("RawDataArchive"), :user_id, "raw"],
+      ["RouteVideo", model_for("RouteVideo"), :user_id, "route-video"]
     ]
     metadata = []
     binaries = []
@@ -821,11 +854,7 @@ module OpenMapxSubjectExport
         next if %w[family points].include?(id)
         model = model_for(model_name)
         next unless model
-        scope = if id == "taggings"
-                  relation_scope(id, model, user, cutoff)
-                elsif id == "track-segments"
-                  relation_scope(id, model, user, cutoff)
-                end
+        scope = relation_scope(id, model, user, cutoff)
         descriptor = relation_descriptor(id, model_name, user, cutoff, scope: scope)
         source_entries << descriptor if descriptor
       end
@@ -873,7 +902,7 @@ module OpenMapxSubjectExport
         "warnings" => ["derived_duplicate_unsafe_archive", "family-and-third-party-review-required"]
       }
       manifest_entry = static_entry("source-manifest", JSON.generate(normalize_value(manifest)), article15: true, portability: false)
-      fail_code("limit_exceeded") if source_entries.length + 1 > 64
+      fail_code("limit_exceeded") if source_entries.length + 1 > MAX_SOURCE_ENTRIES
       fail_code("limit_exceeded") if source_entries.sum { |item| item[:bytes] } + manifest_entry[:bytes] > MAX_TOTAL_BYTES
       # The manifest is last so its declarations are complete before it is
       # written. The API parser accepts only the fixed paths and validates all

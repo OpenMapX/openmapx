@@ -54,7 +54,6 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
       await database.insert(account).values([
         {
           id: `account-${suffix}`,
-          issuer: "test",
           accountId: `subject-${suffix}`,
           providerId: "credential",
           userId: subjectId,
@@ -64,7 +63,6 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
         },
         {
           id: `late-account-${suffix}`,
-          issuer: "test",
           accountId: `late-${suffix}`,
           providerId: "credential",
           userId: subjectId,
@@ -156,6 +154,9 @@ describe.skipIf(!enabled)("primary OpenMapX streaming snapshot", () => {
         hasAccessToken: true,
         createdAt: before.toISOString(),
       });
+      expect(auth.find((row) => row.registrationId === "auth-accounts")).not.toHaveProperty(
+        "issuer",
+      );
       expect(authBytes.toString()).not.toContain("FORBIDDEN-PRIMARY-ACCESS-TOKEN");
       expect(authentication).toMatchObject({
         bytes: authBytes.byteLength,

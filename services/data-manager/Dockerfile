@@ -17,16 +17,16 @@
 # The GitHub Actions workflow at .github/workflows/docker.yml builds this
 # image with `context: .` for the same reason.
 
-FROM docker.io/golang:1.27@sha256:4013ae0f9e7994f8535c58c811f8f863fbed38b72e0d51e6592156f758d66146 AS build-gtfsclean
+FROM docker.io/golang:1.27@sha256:3680233e3204827fbdc66088528ae6d4b3d034f51d03a99d454f6de034888244 AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
 RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
-    GOPROXY=direct go get github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 && \
+    GOPROXY=direct go get github.com/public-transport/gtfsclean@013af793337b759e782c3f8919e0b535cb702944 && \
     GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
     GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
-FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS base
+FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS base
 
 # Read the pnpm version directly from the repo root package.json to ensure
 # lockfile resolution stays reproducible across local and CI Docker builds.
@@ -109,7 +109,7 @@ COPY services/data-manager/ services/data-manager/
 WORKDIR /app/services/data-manager
 RUN pnpm build
 
-FROM node:24-slim@sha256:6f7b03f7c2c8e2e784dcf9295400527b9b1270fd37b7e9a7285cf83b6951452d AS runner
+FROM node:24-slim@sha256:0e0ff40c39bc087845bfb27465a0df4ea419520094bc35842ff83dd8cbe6f9b6 AS runner
 WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 

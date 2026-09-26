@@ -1,24 +1,24 @@
-FROM docker.io/golang:1.27@sha256:4013ae0f9e7994f8535c58c811f8f863fbed38b72e0d51e6592156f758d66146 AS build-gtfsclean
+FROM docker.io/golang:1.27@sha256:3680233e3204827fbdc66088528ae6d4b3d034f51d03a99d454f6de034888244 AS build-gtfsclean
 # Pin gtfsclean to a commit (the project only publishes rolling snapshot-N tags)
 # instead of @latest so the build is reproducible and can't silently pull new code.
 WORKDIR /tmp/gtfsclean-build
 RUN GOPROXY=direct go mod init openmapx.local/gtfsclean-build && \
-    GOPROXY=direct go get github.com/public-transport/gtfsclean@bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0 && \
+    GOPROXY=direct go get github.com/public-transport/gtfsclean@013af793337b759e782c3f8919e0b535cb702944 && \
     GOPROXY=direct go get golang.org/x/text@v0.39.0 && \
     GOPROXY=direct go build -trimpath -o /usr/local/bin/gtfsclean github.com/public-transport/gtfsclean
 
-FROM docker.io/debian:bookworm-slim@sha256:7b140f374b289a7c2befc338f42ebe6441b7ea838a042bbd5acbfca6ec875818
+FROM docker.io/debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Pin the MOTIS release we install. Override with `--build-arg MOTIS_VERSION=vX.Y.Z`.
 # Keep this aligned with the `ghcr.io/motis-project/motis` image tag the
 # `motis`/`motis-staging` services run and the `@motis-project/motis-client`
 # version in package.json.
-ARG MOTIS_VERSION=v2.11.2
+ARG MOTIS_VERSION=v2.11.3
 # Reviewed per-architecture SHA256 values for the corresponding release assets.
 # A MOTIS bump must update both values; an unchecked build is never permitted.
-ARG MOTIS_SHA256_AMD64=653213464b224034a995fed6303f0c0a336a81c8d9398816b26c4db1eb940a31
-ARG MOTIS_SHA256_ARM64=236175665bda3714481aa26879b5ebd9078e29950b8bc35bdd07d9d49cfcb3da
+ARG MOTIS_SHA256_AMD64=0ffc7fc0633049edbcf88170ac037d2665ceaf1f0884a00b15f6c2b81313c825
+ARG MOTIS_SHA256_ARM64=eda48ad1744e7be9bdd1cb515e7229e9c7ecdc3cf82c6621a64670505b3d485b
 # `TARGETARCH` is auto-populated by BuildKit when building with buildx
 # (including for multi-platform manifests). Declaring it here makes it
 # available inside the RUN below.

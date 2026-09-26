@@ -14,7 +14,7 @@
   "container": {
     "image": "pelias/placeholder",
     "tag": "latest",
-    "digest": "sha256:42546b12463df3c7460923aef08eb507fd383e8700a9fda152b1f4c59671fd6e",
+    "digest": "sha256:cb70a797474bc5ddff5359821873cdf609ef0951ee9b4389fa70a19925a5be08",
     "expose": [4100],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped"

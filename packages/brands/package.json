@@ -21,9 +21,9 @@
     "@openmapx/core": "workspace:^"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
-    "name-suggestion-index": "^8.0.20260729",
+    "@types/node": "^26.6.2",
+    "name-suggestion-index": "^8.0.20260918",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }

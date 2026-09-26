@@ -6,7 +6,7 @@ Run from the OpenMapX repository root (Docker and the installed workspace are re
 
 ```sh
 probe_dir=$(mktemp -d /tmp/openmapx-traffic-probe.XXXXXX)
-probe_image=ghcr.io/valhalla/valhalla-scripted@sha256:84a16139deb6c94db9bf9cc66b8a79d4ced6fd31417f54c0c3ed2fdb6a699e2a
+probe_image=ghcr.io/valhalla/valhalla-scripted@sha256:f9f12c3f835750fc657d1d030a392f7a548699c1c2a961d083ed761e0db8bc14
 cp services/data-manager/src/__tests__/fixtures/traffic-engine/roads.osm.pbf "$probe_dir/roads.osm.pbf"
 docker run --rm --entrypoint valhalla_build_config "$probe_image" --mjolnir-tile-dir /probe/tiles --mjolnir-tile-extract /probe/tiles.tar --mjolnir-traffic-extract /probe/traffic.tar > "$probe_dir/valhalla.json"
 docker run --rm -v "$probe_dir:/probe" --entrypoint valhalla_build_tiles "$probe_image" -c /probe/valhalla.json -j 2 /probe/roads.osm.pbf

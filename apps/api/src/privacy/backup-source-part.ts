@@ -10,7 +10,7 @@ import type { CollectorSourcePartEntry } from "./collectors.js";
 import { EncryptedSourceSpool } from "./encrypted-source-spool.js";
 
 const BLOCK = 512;
-const MAX_ENTRIES = 96;
+const MAX_ENTRIES = 256;
 const MAX_ENTRY_BYTES = 256 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 256 * 1024;

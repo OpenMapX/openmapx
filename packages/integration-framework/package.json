@@ -54,19 +54,19 @@
     "@openmapx/mobility-core": "workspace:^",
     "@openmapx/place-ids": "workspace:^",
     "@openmapx/poi-source-registry": "workspace:^",
-    "impit": "^0.14.4",
-    "intl-messageformat": "^11.2.14",
-    "zod": "^4.5.4"
+    "impit": "^0.14.5",
+    "intl-messageformat": "^12.1.2",
+    "zod": "^4.6.5"
   },
   "peerDependencies": {
     "react": ">=19"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "@types/node": "^26.4.1",
-    "@types/react": "^19.2.18",
+    "@types/node": "^26.6.2",
+    "@types/react": "^19.3.0",
     "react": "19.3.0",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }

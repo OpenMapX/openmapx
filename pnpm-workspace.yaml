@@ -33,6 +33,10 @@ blockExoticSubdeps: true
 minimumReleaseAge: 1440
 minimumReleaseAgeStrict: true
 minimumReleaseAgeIgnoreMissingTime: false
+# One-version exception for jsdom's 30.1.1 focus-regression fix. Later jsdom
+# releases remain subject to the normal 24-hour quarantine.
+minimumReleaseAgeExclude:
+  - "jsdom@30.1.1"
 trustPolicy: no-downgrade
 
 # TypeScript 7 has no compiler API yet; keep this workspace's direct compiler
@@ -51,6 +55,12 @@ overrides:
   "@xmldom/xmldom@0.9": "^0.9.12"
   "esbuild": ">=0.28.1"
   "postcss": ">=8.5.10"
+  # Force every 7.x consumer onto the security-fixed request stack. Scalar's
+  # parser still declares an older compatible 7.x range.
+  "undici@7": ">=7.29.1"
+  # Serwist pins 4.28.6 directly; 4.28.7+ fixes its unbounded query cache and
+  # custom-stats prototype write. Keep the workspace on the current 4.x line.
+  "browserslist": ">=4.29.0"
   # Keep ajv's fast-uri dependency off the vulnerable 4.1.1 release.
   "fast-uri": ">=4.1.2"
   # js-yaml 5.2.x is a dual CJS/ESM package that addresses the merge-key DoS
@@ -101,7 +111,17 @@ overrides:
   # runtime drives a Jest 29 module mocker. The preset only subclasses the
   # environment's exported `TestEnvironment`, which is unchanged in 30.
   "@react-native/jest-preset>jest-environment-node": "^30.4.1"
+  # jest-expo 57 still pins jest-watch-typeahead 2 even though this workspace
+  # runs Jest 30. The plugin's 3.x line is the Jest 30-compatible successor.
+  "jest-expo>jest-watch-typeahead": "^3.0.1"
   # Expo SDK 57 is coupled to React Native 0.86.3. Without this workspace-wide
   # constraint, drizzle-orm's optional expo-sqlite peer in server workspaces
   # auto-installs the newer 0.87.x line and leaves duplicate native modules.
   "react-native": "0.86.3"
+
+peerDependencyRules:
+  # @emoji-mart/react is unchanged since 2022 and its React peer range stops at
+  # 18, but its hook-based adapter remains compatible with this workspace's
+  # React 19 and is covered by the web build/tests.
+  allowedVersions:
+    react: "^19"

@@ -47,7 +47,7 @@ function fixture(options: { wrongFamily?: boolean } = {}): Buffer {
   const dawarichManifest = Buffer.from(
     JSON.stringify({
       version: 1,
-      image: "freikin/dawarich:1.10.3",
+      image: "freikin/dawarich:1.15.2",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: digest(Buffer.from("subject-1")),

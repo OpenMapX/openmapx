@@ -761,7 +761,7 @@ function HealthTab({
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations", integrationId] });
       showToast("Health check completed");
     },
     onError: () => showToast("Health check failed", "error"),
@@ -1124,7 +1124,7 @@ export function IntegrationDetail({ id }: IntegrationDetailProps) {
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations", id] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations", id] });
       showToast("Reload job queued — check Activity for status");
     },
     onError: () => showToast("Failed to queue reload job", "error"),

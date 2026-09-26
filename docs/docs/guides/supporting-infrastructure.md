@@ -57,7 +57,7 @@ human-readable `18-3.6` tag is mutable; its reviewed provenance lives beside the
 service manifest in `services/postgis/image-provenance.json`.
 
 On 2026-08-09, the reviewed OCI index was
-`sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6`.
+`sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8`.
 Its platform manifests were:
 
 - linux/amd64:
@@ -154,7 +154,7 @@ wire protocol exactly, so `app-api` connects with an ordinary Redis client at
 
 | Property         | Value                                       |
 | ---------------- | ------------------------------------------- |
-| Image            | `valkey/valkey:8-alpine`                    |
+| Image            | `valkey/valkey:9.1.2-alpine`                |
 | Memory limit     | `512m`                                      |
 | Volume           | `openmapx-redisdata` at `/data` (backed up) |
 | Internal address | `redis:6379`                                |

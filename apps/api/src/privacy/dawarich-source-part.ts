@@ -12,7 +12,7 @@ import {
 import type { CollectorSourcePartEntry } from "./collectors.js";
 import { EncryptedSourceSpool } from "./encrypted-source-spool.js";
 
-export const DAWARICH_MAX_ENTRIES = 64;
+export const DAWARICH_MAX_ENTRIES = 256;
 export const DAWARICH_MAX_ENTRY_BYTES = 256 * 1024 * 1024;
 export const DAWARICH_MAX_TOTAL_BYTES = 2 * 1024 * 1024 * 1024;
 export const DAWARICH_MAX_MANIFEST_BYTES = 256 * 1024;

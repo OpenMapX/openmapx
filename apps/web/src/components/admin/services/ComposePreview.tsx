@@ -37,9 +37,9 @@ export function ComposePreview() {
     onSuccess: () => {
       composeUpIntent.current = null;
       showToast("Compose up completed");
-      queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "compose-preview"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "compose-preview"] });
     },
     onError: (err) => showToast(err instanceof Error ? err.message : "Compose up failed", "error"),
   });
@@ -55,9 +55,9 @@ export function ComposePreview() {
     },
     onSuccess: () => {
       showToast("Compose down completed");
-      queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "compose-preview"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "compose-preview"] });
     },
     onError: (err) =>
       showToast(err instanceof Error ? err.message : "Compose down failed", "error"),

@@ -29,14 +29,14 @@ export const TRANSITOUS_DOWNLOADS_DIR = ".transitous-downloads";
  * the `@motis-project/motis-client` deps must all match it — enforced by
  * `pnpm check-toolchain-pins`.
  */
-export const MOTIS_VERSION = "2.11.2";
+export const MOTIS_VERSION = "2.11.3";
 
 /**
  * Pinned `gtfsclean` build (the GTFS post-processor fetch.py runs). Single
  * source of truth for the commit baked into both the transitous-tools and
  * data-manager images — enforced by `pnpm check-toolchain-pins`.
  */
-export const GTFSCLEAN_COMMIT = "bb3ea74f66ef9bc07dc1bd038c3f653e10f0ade0";
+export const GTFSCLEAN_COMMIT = "013af793337b759e782c3f8919e0b535cb702944";
 
 /**
  * Base URL of Transitous's published, already-processed output (mirror mode):

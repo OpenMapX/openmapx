@@ -214,7 +214,7 @@ export function useServiceConfigSave(id: string) {
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "services", id, "config"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "services", id, "config"] });
     },
   });
 }
@@ -239,8 +239,8 @@ export function useServiceAction(id: string) {
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "services"] });
-      qc.invalidateQueries({ queryKey: ["admin", "services", id] });
+      void qc.invalidateQueries({ queryKey: ["admin", "services"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "services", id] });
     },
   });
 }
@@ -308,7 +308,7 @@ export function useSetServiceCredential(id: string) {
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "services", id, "credentials"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "services", id, "credentials"] });
     },
   });
 }
@@ -330,7 +330,7 @@ export function useDeleteServiceCredential(id: string) {
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "services", id, "credentials"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "services", id, "credentials"] });
     },
   });
 }

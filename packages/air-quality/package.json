@@ -27,15 +27,15 @@
   },
   "dependencies": {
     "@turf/boolean-point-in-polygon": "^7.4.0",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "devDependencies": {
     "@types/geojson": "^7946.0.16",
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.6.2",
     "esbuild": "^0.28.2",
     "shapefile": "0.6.6",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }

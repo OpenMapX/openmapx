@@ -14,8 +14,8 @@
   },
   "container": {
     "image": "valkey/valkey",
-    "tag": "8-alpine",
-    "digest": "sha256:e0eb7c480958d32bdc4357a74bdd70653ae15f2f9b4c93c4a5a9fad1dc471c84",
+    "tag": "9.1.2-alpine",
+    "digest": "sha256:48332870af354a799964c0012ae1194a0bf2bf894eb508f945810596dc2d8d11",
     "expose": [6379],
     "command": ["--aclfile", "/etc/valkey/users.acl"],
     "memory": "512m",

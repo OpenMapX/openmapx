@@ -17,11 +17,11 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
-    "canonicalize": "4.0.0"
+    "canonicalize": "5.1.0"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.6.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }

@@ -8,13 +8,13 @@
     "@openmapx/air-quality": "workspace:^",
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
-    "zod": "^4.5.4"
+    "zod": "^4.6.5"
   },
   "peerDependencies": {
     "react": ">=19"
   },
   "devDependencies": {
-    "@types/react": "^19.2.18",
+    "@types/react": "^19.3.0",
     "react": "19.3.0"
   }
 }

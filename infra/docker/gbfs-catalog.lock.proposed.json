@@ -1,0 +1,10 @@
+{
+  "$schema": "./gbfs-catalog.lock.schema.json",
+  "schemaVersion": 1,
+  "source": "mobilitydata-gbfs",
+  "commit": "31c4cecced4e3d9db09d25e46d5618830e963e92",
+  "url": "https://raw.githubusercontent.com/MobilityData/gbfs/31c4cecced4e3d9db09d25e46d5618830e963e92/systems.csv",
+  "sha256": "9e082f0bdfeb5ac46f19c41f6f60d56dd32bddf92dfb701d9117ce0ed867c938",
+  "lockedAt": "2026-09-22T09:28:51.772Z",
+  "lockedBy": "dev@fwcr.de"
+}

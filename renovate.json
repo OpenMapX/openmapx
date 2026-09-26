@@ -6,6 +6,26 @@
   "timezone": "Europe/Berlin",
   "labels": ["dependencies", "docker"],
   "automerge": false,
+  "packageRules": [
+    {
+      "description": "Dawarich is coupled to the audited privacy-export schema and ownership graph",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["freikin/dawarich"],
+      "allowedVersions": "1.15.2"
+    },
+    {
+      "description": "Pelias requires the Elasticsearch 7.17 compatibility line",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["elasticsearch"],
+      "allowedVersions": "/^7\\.17\\./"
+    },
+    {
+      "description": "Managed Dawarich follows its upstream Redis 7.4 deployment contract",
+      "matchManagers": ["custom.regex"],
+      "matchPackageNames": ["redis"],
+      "allowedVersions": "/^7\\.4(?:[.-]|$)/"
+    }
+  ],
   "customManagers": [
     {
       "customType": "regex",

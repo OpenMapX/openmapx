@@ -138,7 +138,7 @@ function ActionsMenu({
     mutationFn: () => authClient.admin.unbanUser({ userId: user.id }),
     onSuccess: () => {
       setAnchor(null);
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       showToast(`${user.name} unbanned`);
     },
     onError: () => showToast("Failed to unban user", "error"),
@@ -162,7 +162,7 @@ function ActionsMenu({
     onSuccess: () => {
       setConfirmDelete(false);
       setAnchor(null);
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       showToast(`${user.name} deleted`);
     },
     onError: () => showToast("Failed to delete user", "error"),

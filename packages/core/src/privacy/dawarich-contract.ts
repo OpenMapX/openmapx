@@ -1,17 +1,17 @@
 import z from "zod/v4";
 
 /** The only managed Dawarich runtime accepted by the controller. */
-export const DAWARICH_SUPPORTED_IMAGE = "freikin/dawarich:1.10.3" as const;
+export const DAWARICH_SUPPORTED_IMAGE = "freikin/dawarich:1.15.2" as const;
 export const DAWARICH_SUPPORTED_IMAGE_DIGEST =
-  "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b" as const;
-export const DAWARICH_SUPPORTED_COMMIT = "da551a0e32f67b4d8ac6d50132c26634d6ad29a4" as const;
+  "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d" as const;
+export const DAWARICH_SUPPORTED_COMMIT = "d81abc4fc467e119f542c56602c78488fbab86fb" as const;
 export const DAWARICH_PROTOCOL_VERSION = 1 as const;
 export const DAWARICH_TAR_MEDIA_TYPE = "application/vnd.openmapx.dawarich-subject-tar.v1" as const;
-/** SHA-256 of the reviewed 1.10.3 ownership/schema projection.  The Ruby
+/** SHA-256 of the reviewed 1.15.2 ownership/schema projection.  The Ruby
  * collector emits this value only after validating the live Rails schema;
  * accepting a different digest would make a changed source look complete. */
 export const DAWARICH_EXPECTED_SCHEMA_FINGERPRINT =
-  "cddd7f3971bf07ffdcc51909714d90c0d476644e414c68aa9613a601cf4bc8f1" as const;
+  "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09" as const;
 
 const subjectId = z
   .string()
@@ -78,6 +78,19 @@ export const DAWARICH_SOURCE_ENTRY_IDS = [
   "notes",
   "posters",
   "shared-links",
+  "achievement-progress",
+  "achievement-unlock-events",
+  "user-achievements",
+  "route-videos",
+  "service-settings",
+  "trip-sources",
+  "planned-days",
+  "planned-day-notes",
+  "planned-reservations",
+  "planned-stops",
+  "planned-accommodations",
+  "planned-travellers",
+  "planned-unplanned-places",
   "attachments",
   "rich-text",
   "family",
@@ -91,6 +104,7 @@ export type DawarichFixedSourceEntryId = (typeof DAWARICH_SOURCE_ENTRY_IDS)[numb
 export type DawarichDynamicSourceEntryId =
   | `import-file-${string}.${string}`
   | `raw-file-${string}.${string}`
+  | `route-video-file-${string}.${string}`
   | `points-${string}-${string}`;
 export type DawarichSourceEntryId = DawarichFixedSourceEntryId | DawarichDynamicSourceEntryId;
 
@@ -118,6 +132,19 @@ export const DAWARICH_SOURCE_PATHS: Readonly<Record<DawarichSourceEntryId, strin
     notes: "dawarich/notes.jsonl",
     posters: "dawarich/posters.jsonl",
     "shared-links": "dawarich/shared-links.jsonl",
+    "achievement-progress": "dawarich/achievement-progress.jsonl",
+    "achievement-unlock-events": "dawarich/achievement-unlock-events.jsonl",
+    "user-achievements": "dawarich/user-achievements.jsonl",
+    "route-videos": "dawarich/route-videos.jsonl",
+    "service-settings": "dawarich/service-settings.jsonl",
+    "trip-sources": "dawarich/trip-sources.jsonl",
+    "planned-days": "dawarich/planned-days.jsonl",
+    "planned-day-notes": "dawarich/planned-day-notes.jsonl",
+    "planned-reservations": "dawarich/planned-reservations.jsonl",
+    "planned-stops": "dawarich/planned-stops.jsonl",
+    "planned-accommodations": "dawarich/planned-accommodations.jsonl",
+    "planned-travellers": "dawarich/planned-travellers.jsonl",
+    "planned-unplanned-places": "dawarich/planned-unplanned-places.jsonl",
     attachments: "dawarich/attachments.jsonl",
     "rich-text": "dawarich/rich-text.jsonl",
     family: "dawarich/family.jsonl",
@@ -130,6 +157,7 @@ export const dawarichSourceManifestEntrySchema = z
       z.enum(DAWARICH_SOURCE_ENTRY_IDS),
       z.string().regex(/^import-file-[a-f0-9]{64}\.[a-z0-9]{1,16}$/),
       z.string().regex(/^raw-file-[a-f0-9]{64}\.[a-z0-9]{1,16}$/),
+      z.string().regex(/^route-video-file-[a-f0-9]{64}\.[a-z0-9]{1,16}$/),
       z.string().regex(/^points-\d{4}-(0[1-9]|1[0-2])$/),
     ]),
     bytes: z
@@ -170,7 +198,7 @@ export const dawarichSourceManifestV1Schema = z
       )
       .max(64)
       .optional(),
-    entries: z.array(dawarichSourceManifestEntrySchema).max(64),
+    entries: z.array(dawarichSourceManifestEntrySchema).max(256),
     warnings: z.array(z.string().regex(/^[a-z0-9][a-z0-9._-]{0,127}$/)).max(64),
   })
   .strict()
@@ -218,6 +246,7 @@ export const dawarichErrorResponseSchema = z
 
 const DYNAMIC_IMPORT_PATH = /^dawarich\/import-files\/([a-f0-9]{64})\.([a-z0-9]{1,16})$/;
 const DYNAMIC_RAW_PATH = /^dawarich\/raw-files\/([a-f0-9]{64})\.([a-z0-9]{1,16})$/;
+const DYNAMIC_ROUTE_VIDEO_PATH = /^dawarich\/route-video-files\/([a-f0-9]{64})\.([a-z0-9]{1,16})$/;
 const DYNAMIC_POINTS_PATH = /^dawarich\/points\/(\d{4})\/(0[1-9]|1[0-2])\.jsonl$/;
 
 export function dawarichEntryIdForPath(path: string): DawarichSourceEntryId | null {
@@ -226,6 +255,8 @@ export function dawarichEntryIdForPath(path: string): DawarichSourceEntryId | nu
   if (importMatch) return `import-file-${importMatch[1]}.${importMatch[2]}`;
   const rawMatch = DYNAMIC_RAW_PATH.exec(path);
   if (rawMatch) return `raw-file-${rawMatch[1]}.${rawMatch[2]}`;
+  const routeVideoMatch = DYNAMIC_ROUTE_VIDEO_PATH.exec(path);
+  if (routeVideoMatch) return `route-video-file-${routeVideoMatch[1]}.${routeVideoMatch[2]}`;
   const pointsMatch = DYNAMIC_POINTS_PATH.exec(path);
   if (pointsMatch) return `points-${pointsMatch[1]}-${pointsMatch[2]}`;
   return null;
@@ -237,6 +268,9 @@ export function dawarichSourcePathForEntryId(id: DawarichSourceEntryId): string 
   if (importMatch) return `dawarich/import-files/${importMatch[1]}.${importMatch[2]}`;
   const rawMatch = /^raw-file-([a-f0-9]{64})\.([a-z0-9]{1,16})$/.exec(id);
   if (rawMatch) return `dawarich/raw-files/${rawMatch[1]}.${rawMatch[2]}`;
+  const routeVideoMatch = /^route-video-file-([a-f0-9]{64})\.([a-z0-9]{1,16})$/.exec(id);
+  if (routeVideoMatch)
+    return `dawarich/route-video-files/${routeVideoMatch[1]}.${routeVideoMatch[2]}`;
   const pointsMatch = /^points-(\d{4})-(0[1-9]|1[0-2])$/.exec(id);
   if (pointsMatch) return `dawarich/points/${pointsMatch[1]}/${pointsMatch[2]}.jsonl`;
   return null;
@@ -255,8 +289,11 @@ export function isDawarichPortableEntryId(id: DawarichSourceEntryId): boolean {
     id === "raw-archives" ||
     id === "flights" ||
     id === "notes" ||
+    id === "route-videos" ||
+    id.startsWith("planned-") ||
     /^import-file-[a-f0-9]{64}\.[a-z0-9]{1,16}$/.test(id) ||
     /^raw-file-[a-f0-9]{64}\.[a-z0-9]{1,16}$/.test(id) ||
+    /^route-video-file-[a-f0-9]{64}\.[a-z0-9]{1,16}$/.test(id) ||
     /^points-\d{4}-(0[1-9]|1[0-2])$/.test(id)
   );
 }

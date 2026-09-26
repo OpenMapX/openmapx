@@ -8,6 +8,6 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/integration-framework": "workspace:^",
     "@openmapx/mobility-core": "workspace:^",
-    "db-vendo-client": "^6.11.2"
+    "db-vendo-client": "^6.11.3"
   }
 }

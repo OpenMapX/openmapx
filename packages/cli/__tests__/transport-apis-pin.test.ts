@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import {
+  applyPinToManifest,
   applyPinToSource,
   decodeTransportApisLock,
   resolveTransportApisCandidate,
@@ -45,6 +46,34 @@ export const TRANSPORT_APIS_LOCKED_AT = "old-time";
     expect(updated).toContain('TRANSPORT_APIS_REF = "v1"');
     expect(updated).toContain(`TRANSPORT_APIS_COMMIT = "${"a".repeat(40)}"`);
     expect(updated).toContain('TRANSPORT_APIS_LOCKED_AT = "2026-08-03T12:00:00.000Z"');
+  });
+
+  it("accepts a pin literal that is already at the requested value", () => {
+    const source = `
+export const TRANSPORT_APIS_REF = "v1";
+export const TRANSPORT_APIS_COMMIT = "${"b".repeat(40)}";
+export const TRANSPORT_APIS_LOCKED_AT = "old-time";
+`;
+
+    expect(() => applyPinToSource(source, LOCK)).not.toThrow();
+  });
+
+  it("rewrites both manifest health checks to the immutable commit", () => {
+    const oldCommit = "b".repeat(40);
+    const source = JSON.stringify({
+      healthCheck: [
+        {
+          url: `https://data.jsdelivr.com/v1/packages/gh/public-transport/transport-apis@${oldCommit}`,
+        },
+        {
+          url: `https://api.github.com/repos/public-transport/transport-apis/git/trees/${oldCommit}?recursive=1`,
+        },
+      ],
+    });
+
+    const updated = applyPinToManifest(source, LOCK);
+    expect(updated).not.toContain(oldCommit);
+    expect(updated.match(new RegExp(LOCK.commit, "g"))).toHaveLength(2);
   });
 
   it("writes the lock atomically at the repository path", () => {

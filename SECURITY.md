@@ -50,13 +50,13 @@ tagged release receive security fixes. Older releases are not patched.
 
 - **Advisories:** GHSA-w3rx-r6r6-pgpr and GHSA-5p2g-fcmc-qvqq.
 - **Exact versions:** `image-size@1.2.1` in the root lockfile and
-  `image-size@2.0.2` in the standalone docs lockfile.
+  `image-size@2.0.4` in the standalone docs lockfile.
 - **Reachability:** build/development tooling only. Metro reaches 1.2.1 during
-  mobile work, and Docusaurus reaches 2.0.2 during docs work; neither package is
+  mobile work, and Docusaurus reaches 2.0.4 during docs work; neither package is
   part of the API runtime.
 - **Mitigation:** pnpm applies
   `patches/image-size@1.2.1.patch` and
-  `docs/patches/image-size@2.0.2.patch`. The patches reject malformed ICNS and
+  `docs/patches/image-size@2.0.4.patch`. The patches reject malformed ICNS and
   ISO-BMFF/JXL/HEIF box traversal, and
   `scripts/check-image-size-dos.mjs` probes every installed vulnerable public
   entry under isolated child-process deadlines.

@@ -14,8 +14,8 @@
   },
   "container": {
     "image": "nginx",
-    "tag": "1.27-alpine",
-    "digest": "sha256:65645c7bb6a0661892a8b03b89d0743208a18dd2f3f17a54ef4b76fb8e2f2a10",
+    "tag": "1.31.6-alpine",
+    "digest": "sha256:adad2ae9204d0fd7a34f40299bc838c3782be1293b10005eac4315ff5a1abf4e",
     "containerName": "motis-feed-proxy",
     "expose": [80],
     "networkAliases": ["rt.openmapx.local"],

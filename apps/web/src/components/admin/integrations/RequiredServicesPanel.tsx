@@ -59,7 +59,7 @@ function useSetBinding(integrationId: string, apiUrl: string) {
       }
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["capability-bindings", integrationId] });
+      void qc.invalidateQueries({ queryKey: ["capability-bindings", integrationId] });
     },
   });
 }

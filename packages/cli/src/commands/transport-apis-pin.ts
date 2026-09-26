@@ -110,11 +110,10 @@ export function writeTransportApisLock(repoRoot: string, lock: TransportApisLock
 
 function applyPinLiteral(source: string, name: string, value: string): string {
   const pattern = new RegExp(`(${name}\\s*=\\s*")[^"]*(")`);
-  const updated = source.replace(pattern, (_match, prefix: string, suffix: string) => {
+  if (!pattern.test(source)) throw new Error(`Could not update ${name} in pin.ts`);
+  return source.replace(pattern, (_match, prefix: string, suffix: string) => {
     return `${prefix}${value}${suffix}`;
   });
-  if (updated === source) throw new Error(`Could not update ${name} in pin.ts`);
-  return updated;
 }
 
 export function applyPinToSource(source: string, lock: TransportApisLock): string {
@@ -122,6 +121,28 @@ export function applyPinToSource(source: string, lock: TransportApisLock): strin
   let updated = applyPinLiteral(source, "TRANSPORT_APIS_REF", decoded.ref);
   updated = applyPinLiteral(updated, "TRANSPORT_APIS_COMMIT", decoded.commit);
   updated = applyPinLiteral(updated, "TRANSPORT_APIS_LOCKED_AT", decoded.lockedAt);
+  return updated;
+}
+
+export function applyPinToManifest(source: string, lock: TransportApisLock): string {
+  const { commit } = decodeTransportApisLock(lock);
+  const replacements: Array<[RegExp, string, string]> = [
+    [
+      /https:\/\/data\.jsdelivr\.com\/v1\/packages\/gh\/public-transport\/transport-apis@[0-9a-f]{40}/,
+      `https://data.jsdelivr.com/v1/packages/gh/${TRANSPORT_APIS_REPO}@${commit}`,
+      "JSDelivr health check",
+    ],
+    [
+      /https:\/\/api\.github\.com\/repos\/public-transport\/transport-apis\/git\/trees\/[0-9a-f]{40}\?recursive=1/,
+      `${TRANSPORT_APIS_API}/git/trees/${commit}?recursive=1`,
+      "GitHub health check",
+    ],
+  ];
+  let updated = source;
+  for (const [pattern, replacement, label] of replacements) {
+    if (!pattern.test(updated)) throw new Error(`Could not update ${label} in manifest.json`);
+    updated = updated.replace(pattern, replacement);
+  }
   return updated;
 }
 
@@ -369,26 +390,38 @@ function readExistingLock(repoRoot: string): TransportApisLock | null {
 function writePinAndLock(repoRoot: string, lock: TransportApisLock): void {
   const lockPath = join(repoRoot, "infra", "docker", "transport-apis.lock.json");
   const pinPath = join(repoRoot, "integrations", "transit-dynamic-registry", "pin.ts");
+  const manifestPath = join(repoRoot, "integrations", "transit-dynamic-registry", "manifest.json");
   const stagedLock = `${lockPath}.tmp-${process.pid}`;
   const stagedPin = `${pinPath}.tmp-${process.pid}`;
+  const stagedManifest = `${manifestPath}.tmp-${process.pid}`;
   const previousLock = existsSync(lockPath) ? readFileSync(lockPath) : null;
   const previousPin = readFileSync(pinPath);
+  const previousManifest = readFileSync(manifestPath);
   let pinReplaced = false;
+  let manifestReplaced = false;
   let lockReplaced = false;
   try {
     writeFileSync(stagedLock, transportApisLockJson(lock), "utf-8");
     writeFileSync(stagedPin, applyPinToSource(previousPin.toString("utf-8"), lock), "utf-8");
+    writeFileSync(
+      stagedManifest,
+      applyPinToManifest(previousManifest.toString("utf-8"), lock),
+      "utf-8",
+    );
     renameSync(stagedPin, pinPath);
     pinReplaced = true;
+    renameSync(stagedManifest, manifestPath);
+    manifestReplaced = true;
     renameSync(stagedLock, lockPath);
     lockReplaced = true;
   } catch (error) {
     if (pinReplaced) writeFileSync(pinPath, previousPin);
+    if (manifestReplaced) writeFileSync(manifestPath, previousManifest);
     if (lockReplaced) {
       if (previousLock) writeFileSync(lockPath, previousLock);
       else if (existsSync(lockPath)) unlinkSync(lockPath);
     }
-    for (const path of [stagedPin, stagedLock]) {
+    for (const path of [stagedPin, stagedManifest, stagedLock]) {
       if (existsSync(path)) unlinkSync(path);
     }
     throw new Error(

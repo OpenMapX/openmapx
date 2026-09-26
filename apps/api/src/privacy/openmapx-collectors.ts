@@ -297,7 +297,6 @@ export async function* streamOpenMapxRegistrationRecords(
         database
           .select({
             id: account.id,
-            issuer: account.issuer,
             accountId: account.accountId,
             providerId: account.providerId,
             scope: account.scope,

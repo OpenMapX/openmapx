@@ -186,7 +186,7 @@ export function AreaPickerMap({ initialCenter, initialZoom, onChange, fitBbox, b
         { padding: 24, duration: 600 },
       );
     if (map.isStyleLoaded()) fit();
-    else map.once("load", fit);
+    else void map.once("load", fit);
   }, [fitBbox]);
 
   // Sync the highlighted boundary outline whenever it changes.

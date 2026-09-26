@@ -15,7 +15,7 @@
   "container": {
     "image": "pelias/api",
     "tag": "latest",
-    "digest": "sha256:831766a9c0f9ded0d6f1d8bfb2121eb0b6778e80eda5c16636515da1b53aadf8",
+    "digest": "sha256:12640b4db5740259313ebae3e033b0b3944a8a2c6293ba4152192b6cd78fa88e",
     "expose": [4000],
     "environment": { "PELIAS_CONFIG": "/code/pelias.json" },
     "restart": "unless-stopped",

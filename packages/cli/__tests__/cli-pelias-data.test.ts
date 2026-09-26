@@ -53,7 +53,7 @@ describe("buildPeliasData", () => {
     const result = await buildPeliasData({
       rootDir: tmp,
       region: "europe/germany",
-      elasticsearchImage: "elasticsearch:7.17.18",
+      elasticsearchImage: "elasticsearch:7.17.28",
       placeholderImage: "pelias/placeholder:latest",
       runner,
       elasticsearchReadyDelayMs: 0,
@@ -242,7 +242,7 @@ describe("buildPeliasData", () => {
     await expect(
       buildPeliasData({
         rootDir: tmp,
-        elasticsearchImage: "elasticsearch:7.17.18",
+        elasticsearchImage: "elasticsearch:7.17.28",
         placeholderImage: "pelias/placeholder:latest",
         runner: async () => {},
       }),
@@ -280,7 +280,7 @@ describe("buildPeliasData", () => {
       buildPeliasData({
         rootDir: tmp,
         region: "europe/germany",
-        elasticsearchImage: "elasticsearch:7.17.18",
+        elasticsearchImage: "elasticsearch:7.17.28",
         placeholderImage: "pelias/placeholder:latest",
         runner,
         elasticsearchReadyDelayMs: 0,

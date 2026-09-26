@@ -733,7 +733,7 @@ describe("discoverBackupableServices", () => {
     expect(targets).toEqual([
       {
         id: "dawarich-app",
-        version: "1.10.3",
+        version: "1.15.2",
         volumes: [
           {
             serviceId: "dawarich-app",
@@ -754,7 +754,7 @@ describe("discoverBackupableServices", () => {
       },
       {
         id: "dawarich-postgis",
-        version: "17-3.5",
+        version: "18-3.6",
         postgresUser: "postgres",
         postgresDb: "dawarich_production",
         volumes: [

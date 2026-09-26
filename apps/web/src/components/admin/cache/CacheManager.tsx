@@ -67,7 +67,7 @@ export function CacheManager() {
     },
     onSuccess: (result) => {
       showToast(`Cleared ${result.deleted} cache ${result.deleted === 1 ? "key" : "keys"}`);
-      qc.invalidateQueries({ queryKey: CACHE_QUERY_KEY });
+      void qc.invalidateQueries({ queryKey: CACHE_QUERY_KEY });
     },
     onError: () => showToast("Failed to clear cache", "error"),
     onSettled: () => setTarget(null),

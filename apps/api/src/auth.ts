@@ -294,11 +294,9 @@ const authOptions = {
         {
           providerId: "openstreetmap",
           discoveryUrl: getOsmConfig().discoveryUrl,
-          // Keep the account namespace and core OAuth endpoints available
-          // when OSM discovery is temporarily unreachable. These values come
-          // from the same deployment-validated OSM origin; profile identity is
-          // still proven by the access token against OSM's user-details API.
-          accountIssuer: new URL(getOsmConfig().webBase).origin,
+          // Keep the core OAuth endpoints available when OSM discovery is
+          // temporarily unreachable. Profile identity is still proven by the
+          // access token against OSM's user-details API.
           authorizationUrl: getOsmConfig().webUrl("oauth2/authorize"),
           tokenUrl: getOsmConfig().webUrl("oauth2/token"),
           // The profile comes from OSM's authenticated user-details endpoint,

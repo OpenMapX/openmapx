@@ -80,7 +80,7 @@ export function useDawarichProvisioning() {
       ),
     onSuccess: (status) => {
       queryClient.setQueryData(queryKey, status);
-      queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
     },
   });
 

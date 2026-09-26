@@ -19,7 +19,7 @@ export function useCreateShare() {
     mutationFn: (input: CreateShareInput) =>
       apiClient.post<{ id: string; token: string; share: OwnerShare }>(API_ENDPOINTS.shares, input),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["shares"] });
+      void queryClient.invalidateQueries({ queryKey: ["shares"] });
     },
   });
 }
@@ -30,7 +30,7 @@ export function useRotateShare() {
     mutationFn: (id: string) =>
       apiClient.post<{ token: string }>(`${API_ENDPOINTS.shares}/${id}/rotate`, {}),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["shares"] });
+      void queryClient.invalidateQueries({ queryKey: ["shares"] });
     },
   });
 }
@@ -40,7 +40,7 @@ export function useRevokeShare() {
   return useMutation({
     mutationFn: (id: string) => apiClient.delete(`${API_ENDPOINTS.shares}/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["shares"] });
+      void queryClient.invalidateQueries({ queryKey: ["shares"] });
     },
   });
 }

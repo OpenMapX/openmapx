@@ -15,7 +15,7 @@
   "container": {
     "image": "opentripplanner/opentripplanner",
     "tag": "latest",
-    "digest": "sha256:b31fadf172c83dce094d28e41706e2fe3af19030bd512324723f815fefae5b99",
+    "digest": "sha256:43812f9961854c2c84b0d6ebcda80a68f278ce13d242105787ba9e58ae1eb32d",
     "expose": [8080],
     "command": ["--load", "--serve"],
     "environment": { "JAVA_TOOL_OPTIONS": "-Xmx12g" },

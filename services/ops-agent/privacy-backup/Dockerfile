@@ -1,7 +1,7 @@
 # syntax=docker/dockerfile:1.7
 
 # Keep the restore engine aligned with the deployment's reviewed PostgreSQL/PostGIS image.
-FROM ghcr.io/baosystems/postgis:18-3.6@sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6
+FROM ghcr.io/baosystems/postgis:18-3.6@sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8
 
 # Apply distribution security fixes; this non-root entrypoint does not use gosu.
 RUN apt-get update && apt-get upgrade -y && \

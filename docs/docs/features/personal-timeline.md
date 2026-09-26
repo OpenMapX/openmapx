@@ -51,7 +51,7 @@ The two credentials have different jobs:
   email. Dawarich maintains a separate browser session; signing out of OpenMapX
   is not single logout.
 - The personal Dawarich API key authorizes OpenMapX's server-side, read-only API
-  calls. Dawarich 1.10.3 does not let the OIDC browser session or Better Auth
+  calls. Dawarich 1.15.2 does not let the OIDC browser session or Better Auth
   token replace this key.
 
 If a pre-existing Dawarich account has the same email, Dawarich requires its

@@ -43,15 +43,21 @@ overrides:
   "serialize-javascript": "^7.0.5"
   "uuid@8.3.2": "^11.1.1"
   "joi": "^18.2.1"
-  # fast-uri 3.1.5 fixes the current host-confusion advisories in the
+  # fast-uri 3.1.6 fixes the current host-confusion advisories in the
   # Docusaurus/AJV dependency tree.
-  "fast-uri": "^3.1.5"
+  "fast-uri": "^3.1.6"
   # Security-patched transitive dependencies in the Docusaurus toolchain.
   "dompurify": "^3.4.13"
   "mermaid": "^11.16.1"
   "nanoid@3": "^3.3.18"
   "colord": "^2.9.4"
   "js-yaml@4": "^4.3.2"
+  # Docusaurus 3.10.2 still depends on webpack-dev-server 5, whose compatible
+  # middleware range stops at 7.x. webpack-dev-middleware 7.4.6 dropped the
+  # trusted-publisher evidence present on 7.4.5, while the attested 8.x line
+  # requires webpack-dev-server 6. Keep the newest trusted compatible 7.x
+  # release until Docusaurus adopts webpack-dev-server 6.
+  "webpack-dev-middleware@7": "7.4.5"
 
 patchedDependencies:
-  image-size@2.0.2: patches/image-size@2.0.2.patch
+  image-size@2.0.4: patches/image-size@2.0.4.patch

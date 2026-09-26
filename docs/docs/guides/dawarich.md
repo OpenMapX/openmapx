@@ -91,16 +91,16 @@ timeline viewer on the map and personal visit history badges in place panels.
 OpenMapX ships with a production-ready, four-container Dawarich bundle:
 
 1. **`dawarich-app`**: The Dawarich web server running Puma on Ruby on Rails
-   (`freikin/dawarich:1.10.3`). Exposes port `3000` internally and is routed by
+   (`freikin/dawarich:1.15.2`). Exposes port `3000` internally and is routed by
    Traefik at `timeline.<DOMAIN>`.
 2. **`dawarich-sidekiq`**: The asynchronous background worker running Sidekiq.
    It processes incoming GPS point batches, groups points into stays and visits,
    performs reverse geocoding, imports background files, and manages data
    retention.
-3. **`dawarich-postgis`**: A dedicated PostgreSQL 17 database with PostGIS 3.5
-   (`ghcr.io/baosystems/postgis:17-3.5`). Database name: `dawarich_production`.
+3. **`dawarich-postgis`**: A dedicated PostgreSQL 18 database with PostGIS 3.6
+   (`ghcr.io/baosystems/postgis:18-3.6`). Database name: `dawarich_production`.
    Data lives in the `openmapx-dawarich-db-data` volume.
-4. **`dawarich-redis`**: A dedicated Valkey 8 instance (`valkey/valkey:8.1.5-alpine`)
+4. **`dawarich-redis`**: A dedicated Redis 7.4 instance (`redis:7.4-alpine`)
    providing Sidekiq job queues and transient caching. Data lives in the
    `openmapx-dawarich-redis-data` volume.
 

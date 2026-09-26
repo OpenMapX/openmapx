@@ -182,7 +182,7 @@ export function IntegrationList() {
       return res.json();
     },
     onSuccess: (data) => {
-      qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "integrations"] });
       showToast(`Health checks completed: ${data.count} checked`);
     },
     onError: () => showToast("Health checks failed", "error"),

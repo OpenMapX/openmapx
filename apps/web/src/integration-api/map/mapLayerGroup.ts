@@ -118,7 +118,7 @@ export function applyGroup(
     } else if (data !== undefined && data !== applied.sourceData.get(id)) {
       const source = map.getSource(id);
       if (source?.type === "geojson") {
-        (source as maplibregl.GeoJSONSource).setData(
+        void (source as maplibregl.GeoJSONSource).setData(
           data as Parameters<maplibregl.GeoJSONSource["setData"]>[0],
         );
       }

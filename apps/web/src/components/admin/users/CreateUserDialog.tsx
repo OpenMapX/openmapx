@@ -42,7 +42,7 @@ export function CreateUserDialog({ open, onClose }: CreateUserDialogProps) {
         data: { sendWelcomeEmail: sendWelcome },
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       showToast("User created successfully");
       onClose();
       setName("");

@@ -532,7 +532,7 @@ const managedDawarichState = () => {
           managed.manifest.subjectData?.strategy === "collector" &&
           managed.manifest.subjectData.registrationIds?.includes("managed-dawarich") &&
           managed.manifest.container.image === DAWARICH_SUPPORTED_IMAGE.split(":")[0] &&
-          managed.manifest.container.tag === "1.10.3" &&
+          managed.manifest.container.tag === "1.15.2" &&
           managed.manifest.container.digest === DAWARICH_SUPPORTED_IMAGE_DIGEST &&
           managed.manifest.container.environment?.OPENMAPX_DAWARICH_COMMIT ===
             DAWARICH_SUPPORTED_COMMIT,

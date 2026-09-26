@@ -19,7 +19,7 @@ function readyClient(overrides: Partial<ManagedOAuthClient> = {}): ManagedOAuthC
     client_name: "OpenMapX Managed Dawarich",
     client_uri: "https://timeline.example.test",
     software_id: DAWARICH_SOFTWARE_ID,
-    software_version: "1.10.3",
+    software_version: "1.15.2",
     reference_id: MANAGED_REFERENCE_ID,
     redirect_uris: ["https://timeline.example.test/users/auth/openid_connect/callback"],
     token_endpoint_auth_method: "client_secret_basic",

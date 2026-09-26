@@ -84,11 +84,11 @@ export interface BackupManifest {
   services: BackupServiceEntry[];
   privacySourceProvenance?: {
     managedDawarich?: {
-      version: "1.10.3";
+      version: "1.15.2";
       image: "freikin/dawarich";
       imageDigest: string;
       upstreamCommit: string;
-      schemaContract: "dawarich-1.10.3";
+      schemaContract: "dawarich-1.15.2";
     };
   };
 }
@@ -231,11 +231,11 @@ export function readBackupManifest(filePath: string): BackupManifest {
   const managed = raw.privacySourceProvenance?.managedDawarich;
   if (
     managed &&
-    (managed.version !== "1.10.3" ||
+    (managed.version !== "1.15.2" ||
       managed.image !== "freikin/dawarich" ||
       !/^sha256:[a-f0-9]{64}$/.test(managed.imageDigest) ||
       !/^[a-f0-9]{40}$/.test(managed.upstreamCommit) ||
-      managed.schemaContract !== "dawarich-1.10.3")
+      managed.schemaContract !== "dawarich-1.15.2")
   )
     throw new Error(`Malformed Dawarich privacy provenance in ${filePath}`);
   if (!isValidBackupName(raw.name)) {
@@ -649,12 +649,12 @@ export async function createBackup(opts: CreateBackupOptions = {}): Promise<Crea
       ? {
           privacySourceProvenance: {
             managedDawarich: {
-              version: "1.10.3",
+              version: "1.15.2",
               image: "freikin/dawarich",
               imageDigest:
-                "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b",
-              upstreamCommit: "da551a0e32f67b4d8ac6d50132c26634d6ad29a4",
-              schemaContract: "dawarich-1.10.3",
+                "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
+              upstreamCommit: "d81abc4fc467e119f542c56602c78488fbab86fb",
+              schemaContract: "dawarich-1.15.2",
             },
           },
         }

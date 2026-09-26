@@ -153,7 +153,7 @@ const MOCK_SERVICE_RUNNING = {
   manifest: {
     id: "motis",
     name: "MOTIS",
-    version: "2.11.2",
+    version: "2.11.3",
     description: "Transit routing engine",
     quality: "stable",
     provides: [],
@@ -563,7 +563,7 @@ describe("service credentials", () => {
       manifest: {
         id: serviceId,
         name: serviceId,
-        version: "1.10.3",
+        version: "1.15.2",
         quality: "built-in",
         configSchema: {
           properties: {

@@ -106,7 +106,7 @@ describe("typed MOTIS functional probes", () => {
           lon: 2,
           zoom: 3,
           serverConfig: {
-            motisVersion: "2.11.2",
+            motisVersion: "2.11.3",
             hasStreetRouting: true,
             maxOneToManySize: 128,
             maxOneToAllTravelTimeLimit: 90,
@@ -123,7 +123,7 @@ describe("typed MOTIS functional probes", () => {
     const report = await runFunctionalProbes("http://motis", manifest(), Date.now() + 10_000);
     expect(report.ok).toBe(true);
     expect(report.reachability).toMatchObject({
-      motisVersion: "2.11.2",
+      motisVersion: "2.11.3",
       hasStreetRouting: true,
       maxOneToManySize: 128,
       oneToManyIntermodalVerified: true,

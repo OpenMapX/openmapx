@@ -7,7 +7,7 @@ export const DAWARICH_APP_SERVICE_ID = "dawarich-app";
 export const DAWARICH_WORKER_SERVICE_ID = "dawarich-sidekiq";
 export const DAWARICH_POSTGIS_SERVICE_ID = "dawarich-postgis";
 export const DAWARICH_REDIS_SERVICE_ID = "dawarich-redis";
-export const DAWARICH_VERSION = "1.10.3";
+export const DAWARICH_VERSION = "1.15.2";
 export const DAWARICH_PROVISIONING_GENERATION_KEY = "OPENMAPX_PROVISIONING_GENERATION";
 export const DAWARICH_OIDC_RECOVERY_REQUIRED_KEY = "OPENMAPX_OIDC_RECOVERY_REQUIRED";
 

@@ -14,7 +14,7 @@ export interface PostgisFixture {
 // same reviewed PostGIS release and immutable manifest as production.
 export async function startPostgis(): Promise<PostgisFixture> {
   const container = await new PostgreSqlContainer(
-    "ghcr.io/baosystems/postgis:18-3.6@sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6",
+    "ghcr.io/baosystems/postgis:18-3.6@sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8",
   )
     .withDatabase("openmapx_test")
     .withUsername("postgres")

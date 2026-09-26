@@ -14,8 +14,8 @@
   },
   "container": {
     "image": "ghcr.io/motis-project/motis",
-    "tag": "2.11.2",
-    "digest": "sha256:6055f51eec43eeed28524037ca0161b96efe9cd05728eaa9ac04c20c2826d330",
+    "tag": "2.11.3",
+    "digest": "sha256:7126a80f8d1537426655a14a121e395e9d56451c36144f3a1ce5c3e4deb38f64",
     "containerName": "motis",
     "expose": [8080],
     "user": "${UID:-1000}:${GID:-1000}",

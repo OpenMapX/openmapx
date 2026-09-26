@@ -119,10 +119,13 @@ updates:
     directories:
       - "/infra/docker"
       - "/apps/api"
+      - "/apps/ops-agent"
+      - "/apps/transitous-runner"
       - "/apps/web"
       - "/docs"
       - "/services/data-manager"
       - "/services/motis/tools/transitous"
+      - "/services/ops-agent/privacy-backup"
     schedule:
       interval: weekly
       day: monday

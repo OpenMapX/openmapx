@@ -51,7 +51,7 @@ export function useCreateList() {
     mutationFn: (data: { name: string; icon?: string; isPrivate?: boolean }) =>
       apiClient.post<SavedList>(API_ENDPOINTS.savedLists, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
     },
   });
 }
@@ -69,7 +69,7 @@ export function useUpdateList() {
       isPrivate?: boolean;
     }) => apiClient.patch<SavedList>(`${API_ENDPOINTS.savedLists}/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
     },
   });
 }
@@ -79,7 +79,7 @@ export function useDeleteList() {
   return useMutation({
     mutationFn: (id: string) => apiClient.delete(`${API_ENDPOINTS.savedLists}/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
     },
   });
 }
@@ -100,9 +100,9 @@ export function useSavePlace() {
       note?: string | null;
     }) => apiClient.post<SavedPlace>(`${API_ENDPOINTS.savedLists}/${listId}/places`, data),
     onSuccess: (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ["savedLists"] });
-      queryClient.invalidateQueries({ queryKey: ["savedListPlaces", vars.listId] });
-      queryClient.invalidateQueries({ queryKey: ["savedCheck"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedListPlaces", vars.listId] });
+      void queryClient.invalidateQueries({ queryKey: ["savedCheck"] });
     },
   });
 }
@@ -112,9 +112,9 @@ export function useRemovePlace() {
   return useMutation({
     mutationFn: (id: string) => apiClient.delete(`${API_ENDPOINTS.savedPlaces}/${id}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["savedLists"] });
-      queryClient.invalidateQueries({ queryKey: ["savedListPlaces"] });
-      queryClient.invalidateQueries({ queryKey: ["savedCheck"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedListPlaces"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedCheck"] });
     },
   });
 }
@@ -125,7 +125,7 @@ export function useUpdatePlace() {
     mutationFn: ({ id, ...data }: { id: string; note?: string | null; sortOrder?: number }) =>
       apiClient.patch<SavedPlace>(`${API_ENDPOINTS.savedPlaces}/${id}`, data),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["savedListPlaces"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedListPlaces"] });
     },
   });
 }
@@ -150,7 +150,7 @@ export function useUpdateLabel() {
         data,
       ),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["labeledPlaces"] });
+      void queryClient.invalidateQueries({ queryKey: ["labeledPlaces"] });
     },
   });
 }
@@ -161,7 +161,7 @@ export function useDeleteLabel() {
     mutationFn: (label: string) =>
       apiClient.delete(`${API_ENDPOINTS.savedLabels}/${encodeURIComponent(label)}`),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["labeledPlaces"] });
+      void queryClient.invalidateQueries({ queryKey: ["labeledPlaces"] });
     },
   });
 }

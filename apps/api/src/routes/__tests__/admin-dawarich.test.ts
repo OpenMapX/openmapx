@@ -19,8 +19,8 @@ const bundle = new Map([
     {
       manifest: {
         id: "dawarich-app",
-        version: "1.10.3",
-        container: { image: "freikin/dawarich", tag: "1.10.3" },
+        version: "1.15.2",
+        container: { image: "freikin/dawarich", tag: "1.15.2" },
       },
     },
   ],
@@ -29,8 +29,8 @@ const bundle = new Map([
     {
       manifest: {
         id: "dawarich-sidekiq",
-        version: "1.10.3",
-        container: { image: "freikin/dawarich", tag: "1.10.3" },
+        version: "1.15.2",
+        container: { image: "freikin/dawarich", tag: "1.15.2" },
       },
     },
   ],
@@ -39,8 +39,8 @@ const bundle = new Map([
     {
       manifest: {
         id: "dawarich-postgis",
-        version: "17-3.5",
-        container: { image: "ghcr.io/baosystems/postgis", tag: "17-3.5" },
+        version: "18-3.6",
+        container: { image: "ghcr.io/baosystems/postgis", tag: "18-3.6" },
       },
     },
   ],

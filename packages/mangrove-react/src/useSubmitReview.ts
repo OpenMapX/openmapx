@@ -83,10 +83,10 @@ export function useSubmitReview() {
       });
     },
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({
+      void qc.invalidateQueries({
         queryKey: ["placeReviews", vars.subject.lat, vars.subject.lng, vars.subject.name],
       });
-      qc.invalidateQueries({
+      void qc.invalidateQueries({
         queryKey: ["placeReviewAggregate", vars.subject.lat, vars.subject.lng, vars.subject.name],
       });
     },

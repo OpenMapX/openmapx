@@ -21,7 +21,7 @@ describe("Changesets release configuration", () => {
     const workflow = read(".github/workflows/release.yml");
 
     expect(workflow).toContain(
-      "changesets/action@8488615a623b1b9c987934bb89eae8af6a946ac1 # v2.1.1",
+      "changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2",
     );
     expect(workflow).toContain("github-token: $" + "{{ secrets.GITHUB_TOKEN }}");
     expect(workflow).toContain("version-script: pnpm exec changeset version");

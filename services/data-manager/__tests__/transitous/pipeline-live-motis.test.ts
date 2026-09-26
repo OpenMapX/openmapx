@@ -17,7 +17,7 @@
  *     so the default `pnpm test` invocation never spins up Docker. The pinned
  *     image canary remains a required weekly and manual release workflow.
  *   - `OPENMAPX_E9_LIVE_MOTIS=true` + Docker daemon reachable + the
- *     `ghcr.io/motis-project/motis:2.11.2` image already cached locally:
+ *     `ghcr.io/motis-project/motis:2.11.3` image already cached locally:
  *     the suite runs. If the image is missing we additionally `it.skip(...)`
  *     the actual probes with a clear log so a local run surfaces the missing
  *     prerequisite. The required workflow pre-pulls both images, so a missing
@@ -133,7 +133,7 @@ const STUB_SCRIPTS_DIR = resolve(HERE, "fixtures", "stub-catalog-scripts");
 const LIVE = process.env.OPENMAPX_E9_LIVE_MOTIS === "true";
 const describeLive = LIVE ? describe : describe.skip;
 
-const MOTIS_IMAGE = "ghcr.io/motis-project/motis:2.11.2";
+const MOTIS_IMAGE = "ghcr.io/motis-project/motis:2.11.3";
 const STAGING_SERVICE = "motis-staging";
 const STAGING_PORT = 8082;
 // The promote stage restarts the primary `motis` container (`docker restart
@@ -239,7 +239,7 @@ function writeStagingCompose(
     ...motisService(STAGING_SERVICE, STAGING_PORT, stagingDataDir),
     ...motisService(PRIMARY_SERVICE, PRIMARY_PORT, motisDataDir),
     `  ${FEED_PROXY_SERVICE}:`,
-    "    image: nginx:1.27-alpine",
+    "    image: nginx:1.31.6-alpine",
     `    container_name: ${FEED_PROXY_SERVICE}`,
     "    volumes:",
     `      - ${join(dataDir, "motis-feed-proxy", "conf")}:/etc/nginx/conf.d`,
@@ -247,7 +247,7 @@ function writeStagingCompose(
     '      - "rt.triptix.tech:127.0.0.1"',
     '    restart: "no"',
     `  ${GBFS_FIXTURE_SERVICE}:`,
-    "    image: nginx:1.27-alpine",
+    "    image: nginx:1.31.6-alpine",
     `    container_name: ${GBFS_FIXTURE_SERVICE}`,
     "    ports:",
     `      - "${GBFS_FIXTURE_PORT}:80"`,

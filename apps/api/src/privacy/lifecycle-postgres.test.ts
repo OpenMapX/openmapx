@@ -123,7 +123,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       const sentinel = `CREDENTIAL-${randomUUID()}`;
       await db.insert(account).values({
         id: randomUUID(),
-        issuer: "fixture",
         accountId: id,
         providerId: "credential",
         userId: id,

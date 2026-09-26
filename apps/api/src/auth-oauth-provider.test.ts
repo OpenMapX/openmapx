@@ -52,7 +52,7 @@ afterAll(() => {
 });
 
 describe("managed OAuth provider policy", () => {
-  it("pins every runtime Better Auth package and the schema CLI to 1.7.2", () => {
+  it("pins every runtime Better Auth package and the schema CLI to 1.7.5", () => {
     const apiManifest = JSON.parse(
       readFileSync(new URL("../package.json", import.meta.url), "utf8"),
     ) as { dependencies: Record<string, string>; scripts: Record<string, string> };
@@ -83,40 +83,36 @@ describe("managed OAuth provider policy", () => {
     const webPackages = ["@better-auth/core", "@better-auth/passkey", "better-auth"];
 
     for (const packageName of apiPackages) {
-      expect(apiManifest.dependencies[packageName]).toBe("1.7.2");
+      expect(apiManifest.dependencies[packageName]).toBe("1.7.5");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.7.2`);
+      expect(apiLock).toContain(`${lockName}:\n        specifier: 1.7.5`);
     }
     for (const packageName of corePackages) {
-      expect(coreManifest.dependencies[packageName]).toBe("1.7.2");
+      expect(coreManifest.dependencies[packageName]).toBe("1.7.5");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.7.2`);
+      expect(coreLock).toContain(`${lockName}:\n        specifier: 1.7.5`);
     }
     for (const packageName of webPackages) {
-      expect(webManifest.dependencies[packageName]).toBe("1.7.2");
+      expect(webManifest.dependencies[packageName]).toBe("1.7.5");
       const lockName = packageName.startsWith("@") ? `'${packageName}'` : packageName;
-      expect(webLock).toContain(`${lockName}:\n        specifier: 1.7.2`);
+      expect(webLock).toContain(`${lockName}:\n        specifier: 1.7.5`);
     }
-    expect(apiManifest.scripts["auth:generate"]).toContain("auth@1.7.2 generate");
+    expect(apiManifest.scripts["auth:generate"]).toContain("auth@1.7.5 generate");
     for (const importer of [apiLock, coreLock, webLock]) {
       expect(importer).not.toContain("specifier: 1.6.");
     }
   });
 
-  it("scopes account identity by required issuer and provider account ID", async () => {
+  it("uses Better Auth's restored account schema without the reverted issuer field", async () => {
     const { account } = await import("./db/schema");
     const columns = getTableColumns(account);
     const config = getTableConfig(account);
 
-    expect(columns.issuer).toMatchObject({ notNull: true });
-    expect(
-      config.indexes.some(
-        (index) =>
-          index.config.unique &&
-          index.config.columns.map((column) => ("name" in column ? column.name : "")).join(",") ===
-            "issuer,account_id",
-      ),
-    ).toBe(true);
+    expect(columns).not.toHaveProperty("issuer");
+    expect(columns.providerId).toMatchObject({ notNull: true });
+    expect(config.indexes.map((index) => index.config.name)).not.toContain(
+      "account_issuer_accountId_uidx",
+    );
   });
 
   it("exposes every provider table through the application Drizzle schema", async () => {

@@ -107,7 +107,7 @@ function ProfileTab({ user, isSelf }: { user: AdminUser; isSelf: boolean }) {
   const deleteUser = useMutation({
     mutationFn: () => authClient.admin.removeUser({ userId: user.id }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       router.push("/admin/users");
     },
   });

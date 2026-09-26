@@ -126,7 +126,7 @@ describe("createAiSdkNlpProvider", () => {
     });
   });
 
-  it("converts the portable schema into Gemini's union-free OpenAPI subset", async () => {
+  it("preserves the portable schema through Gemini's JSON Schema request field", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
         JSON.stringify({
@@ -162,11 +162,11 @@ describe("createAiSdkNlpProvider", () => {
     });
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     const body = JSON.parse(String(request.body));
-    const responseSchema = body.generationConfig.responseSchema;
+    const responseSchema = body.generationConfig.responseJsonSchema;
     expect(responseSchema).toBeDefined();
+    expect(body.generationConfig.responseSchema).toBeUndefined();
     expect(JSON.stringify(responseSchema)).not.toContain('"oneOf"');
-    expect(JSON.stringify(responseSchema)).not.toContain('"anyOf"');
-    expect(responseSchema.properties.spatial_constraint.nullable).toBe(true);
+    expect(responseSchema.properties.spatial_constraint.anyOf).toContainEqual({ type: "null" });
   });
 });
 

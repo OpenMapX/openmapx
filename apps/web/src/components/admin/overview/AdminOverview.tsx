@@ -199,7 +199,7 @@ export function AdminOverview() {
     },
     onSuccess: () => {
       showToast("Health checks complete");
-      qc.invalidateQueries({ queryKey: ["admin", "overview"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
     },
     onError: () => showToast("Health check sweep failed", "error"),
   });
@@ -215,7 +215,7 @@ export function AdminOverview() {
     },
     onSuccess: () => {
       showToast("Reload job queued");
-      qc.invalidateQueries({ queryKey: ["admin", "overview"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "overview"] });
     },
     onError: () => showToast("Reload failed", "error"),
   });

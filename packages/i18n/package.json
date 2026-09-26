@@ -6,9 +6,9 @@
   "main": "./index.ts",
   "types": "./index.ts",
   "devDependencies": {
-    "tsx": "4.23.13"
+    "tsx": "4.23.15"
   },
   "dependencies": {
-    "intl-messageformat": "^11.2.14"
+    "intl-messageformat": "^12.1.2"
   }
 }

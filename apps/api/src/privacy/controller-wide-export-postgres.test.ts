@@ -91,7 +91,7 @@ function dawarichTar(subjectId: string, cutoff: string): Buffer {
   const manifest = Buffer.from(
     JSON.stringify({
       version: 1,
-      image: "freikin/dawarich:1.10.3",
+      image: "freikin/dawarich:1.15.2",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: sha256(Buffer.from(subjectId)),
@@ -125,7 +125,7 @@ function backupTar(subjectId: string, cutoff: string): Buffer {
   const dawarichManifest = Buffer.from(
     JSON.stringify({
       version: 1,
-      image: "freikin/dawarich:1.10.3",
+      image: "freikin/dawarich:1.15.2",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: sha256(Buffer.from(subjectId)),
@@ -237,7 +237,6 @@ async function runFixture() {
   await db.insert(account).values([
     {
       id: randomUUID(),
-      issuer: "fixture",
       accountId: "subject-account",
       providerId: "credential",
       userId: SUBJECT_ID,
@@ -248,7 +247,6 @@ async function runFixture() {
     },
     {
       id: randomUUID(),
-      issuer: "fixture",
       accountId: "foreign-account",
       providerId: "credential",
       userId: FOREIGN_ID,

@@ -29,7 +29,7 @@ export function BanUserDialog({ user, onClose }: BanUserDialogProps) {
         banReason: reason.trim() || undefined,
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "users"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "users"] });
       showToast(`${user.name} has been banned`);
       onClose();
     },

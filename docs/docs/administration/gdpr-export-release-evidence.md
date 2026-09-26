@@ -22,10 +22,10 @@ revision and generated evidence version before recording an approval:
 | Repository revision                 | the immutable release commit                                                                        |
 | Privacy migration range             | `0020`–`0036` (receipt snapshots, assisted identity, email challenges and delivery leases included) |
 | Catalogue version                   | the `version` field of every registration in `apps/api/src/privacy/catalogue.ts`                    |
-| Managed Dawarich image              | `freikin/dawarich:1.10.3`                                                                           |
-| Managed Dawarich application commit | `da551a0e32f67b4d8ac6d50132c26634d6ad29a4`                                                          |
-| Managed Dawarich image digest       | `sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b`                           |
-| Managed Dawarich schema fingerprint | `cddd7f3971bf07ffdcc51909714d90c0d476644e414c68aa9613a601cf4bc8f1`                                  |
+| Managed Dawarich image              | `freikin/dawarich:1.15.2`                                                                           |
+| Managed Dawarich application commit | `d81abc4fc467e119f542c56602c78488fbab86fb`                                                          |
+| Managed Dawarich image digest       | `sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d`                           |
+| Managed Dawarich schema fingerprint | `4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09`                                  |
 | Backup manifest contract            | format `2`, regular files, size and lowercase SHA-256 verified immediately before extraction        |
 
 An image, application commit, schema relation, collector contract, catalogue
@@ -225,13 +225,21 @@ while retained versions can decrypt authorized old material. Readiness compares
 the on-disk ring with the running ring and reports only version numbers.
 
 The backup collector now lives under `services/ops-agent/privacy-backup` so it
-does not masquerade as a runtime service. Its fixture restores actual OpenMapX
-migrations through `0036` and pinned Dawarich 1.10.3, validates physical PostGIS
-coordinates and paths, computes the full 25-relation column/FK fingerprint,
-and rejects both column and ownership-graph drift. The exact retained tar is
-then consumed by the controller-wide PostgreSQL fixture for two clean semantic
-runs. All 30 applicable catalogue registrations have exactly one outcome.
-The managed live collector also passes its separate pinned-image fixture.
+does not masquerade as a runtime service. At this checkpoint its fixture
+restored the then-current OpenMapX migrations and pinned Dawarich image,
+validated physical PostGIS coordinates and paths, computed the complete
+column/FK fingerprint, and rejected both column and ownership-graph drift. The
+exact retained tar was then consumed by the controller-wide PostgreSQL fixture
+for two clean semantic runs. All 30 applicable catalogue registrations had
+exactly one outcome. The managed live collector also passed its separate
+pinned-image fixture.
+
+The 2026-09-26 compatibility refresh advances that gate to Dawarich 1.15.2 on
+PostgreSQL 18/PostGIS 3.6. Both exact-image fixtures build the fresh upstream
+schema, validate its 39 reviewed relation projections and complete FK graph,
+and cover the added achievement, route-video, service-setting, trip-source,
+planned-itinerary, and point-dimension surfaces. Credential, API-key, claim-token,
+and selection-token sentinels remain excluded.
 
 The CI database job runs those Docker fixtures and passes the verified tar to
 the serial database suite. Tests that intentionally run concurrent operations

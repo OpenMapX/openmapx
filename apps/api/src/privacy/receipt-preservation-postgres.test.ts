@@ -86,7 +86,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
       await db.insert(account).values([
         {
           id: randomUUID(),
-          issuer: "fixture",
           accountId: "receipt-account",
           providerId: "credential",
           userId: subjectId,
@@ -96,7 +95,6 @@ describe.skipIf(process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1")(
         },
         {
           id: randomUUID(),
-          issuer: "fixture",
           accountId: "foreign-account",
           providerId: "credential",
           userId: foreignId,

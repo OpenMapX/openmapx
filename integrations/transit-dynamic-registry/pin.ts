@@ -12,10 +12,10 @@ export const TRANSPORT_APIS_REPO = "public-transport/transport-apis";
 export const TRANSPORT_APIS_REF = "v1";
 
 /** 40-hex commit SHA. Never hand-edit; use the bump command. */
-export const TRANSPORT_APIS_COMMIT = "58aec5b1b7c876f133c9d1336739d0f61211b74e";
+export const TRANSPORT_APIS_COMMIT = "d8b236c002c516092ca33ef27ff6ec05dd447a74";
 
 /** ISO-8601 timestamp of the last bump, surfaced in startup logs. */
-export const TRANSPORT_APIS_LOCKED_AT = "2026-08-02T22:14:09.534Z";
+export const TRANSPORT_APIS_LOCKED_AT = "2026-09-22T09:38:51.745Z";
 
 export const TRANSPORT_APIS_JSDELIVR_PKG_URL = `https://data.jsdelivr.com/v1/packages/gh/${TRANSPORT_APIS_REPO}@${TRANSPORT_APIS_COMMIT}`;
 export const TRANSPORT_APIS_JSDELIVR_CDN_BASE = `https://cdn.jsdelivr.net/gh/${TRANSPORT_APIS_REPO}@${TRANSPORT_APIS_COMMIT}`;

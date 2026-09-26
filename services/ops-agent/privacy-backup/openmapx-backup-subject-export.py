@@ -16,13 +16,13 @@ import tempfile
 MAX_INPUT = 64 * 1024
 MAX_ENTRY = 256 * 1024 * 1024
 MAX_TOTAL = 2 * 1024 * 1024 * 1024
-MAX_ENTRIES = 96
-DAWARICH_IMAGE = "freikin/dawarich:1.10.3"
-DAWARICH_IMAGE_DIGEST = "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b"
-DAWARICH_COMMIT = "da551a0e32f67b4d8ac6d50132c26634d6ad29a4"
-DAWARICH_SCHEMA_FINGERPRINT = "cddd7f3971bf07ffdcc51909714d90c0d476644e414c68aa9613a601cf4bc8f1"
+MAX_ENTRIES = 256
+DAWARICH_IMAGE = "freikin/dawarich:1.15.2"
+DAWARICH_IMAGE_DIGEST = "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d"
+DAWARICH_COMMIT = "d81abc4fc467e119f542c56602c78488fbab86fb"
+DAWARICH_SCHEMA_FINGERPRINT = "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09"
 DAWARICH_RELATION_FINGERPRINT_VERSION = "dawarich-relations-v2"
-SAFE_EXTENSIONS = {"bin", "csv", "fit", "gpx", "json", "jsonl", "jpg", "jpeg", "kml", "pdf", "png", "tcx", "txt"}
+SAFE_EXTENSIONS = {"bin", "csv", "fit", "gpx", "json", "jsonl", "jpg", "jpeg", "kml", "mp4", "pdf", "png", "tcx", "txt"}
 
 # Keep the order and names identical to the audited Rails collector.  The
 # restored database still supplies every observed column and FK at runtime;
@@ -53,9 +53,24 @@ DAWARICH_SCHEMA_MODELS = [
     ("FamilyInvitation", "family_invitations", ["id", "family_id", "invited_by_id", "email", "token", "status", "expires_at", "created_at", "updated_at"], ["family_id", "invited_by_id"]),
     ("FamilyLocationRequest", "family_location_requests", ["id", "family_id", "requester_id", "target_user_id", "status", "expires_at", "created_at", "updated_at"], ["family_id", "requester_id", "target_user_id"]),
     ("PendingImport", "pending_imports", ["id", "claimed_by_user_id", "original_filename", "origin", "expires_at", "created_at", "updated_at"], []),
+    ("AchievementProgress", "achievement_progresses", ["id", "user_id", "achievement_key", "state", "sharing_enabled", "sharing_uuid", "created_at", "updated_at"], ["user_id"]),
+    ("AchievementUnlockEvent", "achievement_unlock_events", ["id", "user_id", "key", "kind", "seen_at", "claim_token", "claimed_at", "created_at", "updated_at"], ["user_id"]),
+    ("UserAchievement", "user_achievements", ["id", "user_id", "achievement_key", "earned_at", "metadata", "created_at", "updated_at"], ["user_id"]),
+    ("RouteVideo", "route_videos", ["id", "user_id", "name", "settings", "status", "expired_at", "created_at", "updated_at"], ["user_id"]),
+    ("ServiceSetting", "service_settings", ["id", "user_id", "service", "provider", "active", "config", "credentials", "created_at", "updated_at"], ["user_id"]),
+    ("TripSource", "trip_sources", ["id", "user_id", "provider", "base_url", "status", "importing", "last_error", "last_synced_at", "selection_token", "api_key", "created_at", "updated_at"], ["user_id"]),
+    ("PlannedDay", "planned_days", ["id", "trip_id", "date", "title", "notes", "position", "created_at", "updated_at"], ["trip_id"]),
+    ("PlannedDayNote", "planned_day_notes", ["id", "planned_day_id", "body", "noted_at", "position", "created_at", "updated_at"], ["planned_day_id"]),
+    ("PlannedReservation", "planned_reservations", ["id", "trip_id", "planned_day_id", "reservation_type", "title", "location", "starts_at", "ends_at", "status", "notes", "created_at", "updated_at"], ["planned_day_id", "trip_id"]),
+    ("PlannedStop", "planned_stops", ["id", "planned_day_id", "name", "address", "latitude", "longitude", "starts_at", "ends_at", "duration_minutes", "position", "category", "notes", "transport_mode", "created_at", "updated_at"], ["planned_day_id"]),
+    ("PlannedAccommodation", "planned_accommodations", ["id", "trip_id", "name", "address", "latitude", "longitude", "starts_on", "ends_on", "check_in_at", "check_out_at", "notes", "created_at", "updated_at"], ["trip_id"]),
+    ("PlannedTraveller", "planned_travellers", ["id", "trip_id", "name", "owner", "created_at", "updated_at"], ["trip_id"]),
+    ("PlannedUnplannedPlace", "planned_unplanned_places", ["id", "trip_id", "name", "address", "latitude", "longitude", "starts_at", "ends_at", "duration_minutes", "position", "category", "notes", "transport_mode", "created_at", "updated_at"], ["trip_id"]),
+    ("PointSource", "point_sources", ["id", "digest", "tracker_id", "topic", "ssid", "bssid", "connection", "trigger", "battery_status", "inrids", "in_regions", "created_at", "updated_at"], []),
 ]
 
 DAWARICH_EXPECTED_FOREIGN_KEYS = sorted([
+    "achievement_progresses.user_id->users.id", "achievement_unlock_events.user_id->users.id",
     "active_storage_attachments.blob_id->active_storage_blobs.id",
     "active_storage_variant_records.blob_id->active_storage_blobs.id",
     "areas.user_id->users.id", "digests.user_id->users.id", "families.creator_id->users.id",
@@ -65,11 +80,17 @@ DAWARICH_EXPECTED_FOREIGN_KEYS = sorted([
     "family_memberships.user_id->users.id", "flights.user_id->users.id", "notes.user_id->users.id",
     "notifications.user_id->users.id", "pending_imports.claimed_by_user_id->users.id",
     "place_visits.place_id->places.id", "place_visits.visit_id->visits.id",
+    "planned_accommodations.trip_id->trips.id", "planned_day_notes.planned_day_id->planned_days.id",
+    "planned_days.trip_id->trips.id", "planned_reservations.planned_day_id->planned_days.id",
+    "planned_reservations.trip_id->trips.id", "planned_stops.planned_day_id->planned_days.id",
+    "planned_travellers.trip_id->trips.id", "planned_unplanned_places.trip_id->trips.id",
     "points.raw_data_archive_id->points_raw_data_archives.id", "points.user_id->users.id",
-    "points.visit_id->visits.id", "points_raw_data_archives.user_id->users.id",
-    "posters.user_id->users.id", "shared_links.user_id->users.id", "stats.user_id->users.id",
+    "points.track_id->tracks.id", "points.visit_id->visits.id", "points_raw_data_archives.user_id->users.id",
+    "posters.user_id->users.id", "route_videos.user_id->users.id", "service_settings.user_id->users.id",
+    "shared_links.user_id->users.id", "stats.user_id->users.id",
     "taggings.tag_id->tags.id", "tags.user_id->users.id", "track_segments.track_id->tracks.id",
-    "tracks.user_id->users.id", "trips.user_id->users.id", "visits.area_id->areas.id",
+    "tracks.user_id->users.id", "trip_sources.user_id->users.id", "trips.trip_source_id->trip_sources.id",
+    "trips.user_id->users.id", "user_achievements.user_id->users.id", "visits.area_id->areas.id",
     "visits.place_id->places.id", "visits.user_id->users.id",
 ])
 
@@ -127,8 +148,8 @@ def verified_sources(request):
     declared = {(service.get("id"), volume.get("file")): volume for service in manifest.get("services", []) for volume in service.get("volumes", [])}
     contracts = {
         "openmapx-v1": ("openmapx", "postgis", "pg_dump"),
-        "dawarich-1.10.3": ("dawarich", "dawarich-postgis", "pg_dump"),
-        "dawarich-storage-1.10.3": ("dawarich-storage", "dawarich-app", "tar"),
+        "dawarich-1.15.2": ("dawarich", "dawarich-postgis", "pg_dump"),
+        "dawarich-storage-1.15.2": ("dawarich-storage", "dawarich-app", "tar"),
     }
     result = []
     seen = set()
@@ -140,7 +161,7 @@ def verified_sources(request):
         volume = declared.get((source.get("serviceId"), source.get("file")))
         if contract in seen or source.get("family") != family or source.get("serviceId") != service_id or not volume or volume.get("mode") != mode:
             fail("unsupported_schema")
-        if contract == "dawarich-storage-1.10.3" and volume.get("name") != "openmapx-dawarich-storage":
+        if contract == "dawarich-storage-1.15.2" and volume.get("name") != "openmapx-dawarich-storage":
             fail("unsupported_schema")
         path = root / source["file"]
         if path.parent != root or path.is_symlink() or not path.is_file():
@@ -150,11 +171,11 @@ def verified_sources(request):
             fail("backup_digest_changed")
         seen.add(contract)
         result.append({**source, "path": path})
-    if "dawarich-1.10.3" in seen:
+    if "dawarich-1.15.2" in seen:
         managed = manifest.get("privacySourceProvenance", {}).get("managedDawarich")
-        if managed != {"version": "1.10.3", "image": "freikin/dawarich", "imageDigest": DAWARICH_IMAGE_DIGEST, "upstreamCommit": DAWARICH_COMMIT, "schemaContract": "dawarich-1.10.3"}:
+        if managed != {"version": "1.15.2", "image": "freikin/dawarich", "imageDigest": DAWARICH_IMAGE_DIGEST, "upstreamCommit": DAWARICH_COMMIT, "schemaContract": "dawarich-1.15.2"}:
             fail("unsupported_schema")
-    if "dawarich-storage-1.10.3" in seen and "dawarich-1.10.3" not in seen:
+    if "dawarich-storage-1.15.2" in seen and "dawarich-1.15.2" not in seen:
         fail("unsupported_schema")
     return result, manifest
 
@@ -468,6 +489,22 @@ DAWARICH = {
     "notes": ("notes", "user_id", ["id", "title", "body", "noted_at", "latitude", "longitude", "attachable_id", "attachable_type", "created_at", "updated_at"]),
     "posters": ("posters", "user_id", ["id", "name", "status", "created_at", "updated_at"]),
     "shared-links": ("shared_links", "user_id", ["id", "name", "resource_id", "resource_type", "expires_at", "revoked_at", "last_accessed_at", "view_count", "created_at", "updated_at"]),
+    "achievement-progress": ("achievement_progresses", "user_id", ["id", "achievement_key", "state", "sharing_enabled", "created_at", "updated_at"]),
+    "achievement-unlock-events": ("achievement_unlock_events", "user_id", ["id", "key", "kind", "seen_at", "claimed_at", "created_at", "updated_at"]),
+    "user-achievements": ("user_achievements", "user_id", ["id", "achievement_key", "earned_at", "metadata", "created_at", "updated_at"]),
+    "route-videos": ("route_videos", "user_id", ["id", "name", "settings", "status", "expired_at", "created_at", "updated_at"]),
+    "service-settings": ("service_settings", "user_id", ["id", "service", "provider", "active", "config", "created_at", "updated_at"]),
+    "trip-sources": ("trip_sources", "user_id", ["id", "provider", "base_url", "status", "importing", "last_error", "last_synced_at", "created_at", "updated_at"]),
+}
+
+DAWARICH_PLANNED = {
+    "planned-days": ("planned_days", "trip_id", ["id", "trip_id", "date", "title", "notes", "position", "created_at", "updated_at"]),
+    "planned-day-notes": ("planned_day_notes", "planned_day_id", ["id", "planned_day_id", "body", "noted_at", "position", "created_at", "updated_at"]),
+    "planned-reservations": ("planned_reservations", "trip_id", ["id", "trip_id", "planned_day_id", "reservation_type", "title", "location", "starts_at", "ends_at", "status", "notes", "created_at", "updated_at"]),
+    "planned-stops": ("planned_stops", "planned_day_id", ["id", "planned_day_id", "name", "address", "latitude", "longitude", "starts_at", "ends_at", "duration_minutes", "position", "category", "notes", "transport_mode", "created_at", "updated_at"]),
+    "planned-accommodations": ("planned_accommodations", "trip_id", ["id", "trip_id", "name", "address", "latitude", "longitude", "starts_on", "ends_on", "check_in_at", "check_out_at", "notes", "created_at", "updated_at"]),
+    "planned-travellers": ("planned_travellers", "trip_id", ["id", "trip_id", "name", "owner", "created_at", "updated_at"]),
+    "planned-unplanned-places": ("planned_unplanned_places", "trip_id", ["id", "trip_id", "name", "address", "latitude", "longitude", "starts_at", "ends_at", "duration_minutes", "position", "category", "notes", "transport_mode", "created_at", "updated_at"]),
 }
 
 
@@ -504,7 +541,15 @@ def project_dawarich(socket):
                 ("longitude", "CASE WHEN t.lonlat IS NULL THEN NULL ELSE ST_X(t.lonlat::geometry) END"),
             ])
         select = f"SELECT {projection('t', fields, extras)} FROM {table} t WHERE t.{owner}={user_id} AND t.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY t.id"
-        entries.append(query_descriptor(socket, f"dawarich/{entry_id}.jsonl", select, entry_id in {"places", "imports", "raw-archives", "flights", "notes"}, ["dawarich-rights-of-others-review"] if entry_id == "notes" else []))
+        entries.append(query_descriptor(socket, f"dawarich/{entry_id}.jsonl", select, entry_id in {"places", "imports", "raw-archives", "flights", "notes", "route-videos"}, ["dawarich-rights-of-others-review"] if entry_id == "notes" else []))
+    for entry_id, (table, owner, fields) in DAWARICH_PLANNED.items():
+        require(socket, table, ["id", owner, "created_at", "updated_at"])
+        if owner == "trip_id":
+            ownership = f"t.trip_id IN (SELECT id FROM trips WHERE user_id={user_id})"
+        else:
+            ownership = f"t.planned_day_id IN (SELECT id FROM planned_days WHERE trip_id IN (SELECT id FROM trips WHERE user_id={user_id}))"
+        select = f"SELECT {projection('t', fields)} FROM {table} t WHERE {ownership} AND t.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY t.id"
+        entries.append(query_descriptor(socket, f"dawarich/{entry_id}.jsonl", select, True))
     require(socket, "taggings", ["id", "tag_id", "taggable_id", "taggable_type", "created_at", "updated_at"])
     tagging_fields = ["id", "tag_id", "taggable_id", "taggable_type", "created_at", "updated_at"]
     taggings = f"SELECT {projection('t', tagging_fields)} FROM taggings t WHERE (t.tag_id IN (SELECT id FROM tags WHERE user_id={user_id}) OR (t.taggable_type='Place' AND t.taggable_id IN (SELECT id FROM places WHERE user_id={user_id}))) AND t.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY t.id"
@@ -524,8 +569,12 @@ def project_dawarich(socket):
             ("lat", "ST_Y(p.lonlat::geometry)"),
             ("altitude", "COALESCE(p.altitude_decimal, p.altitude)"),
             ("recorded_at", "to_timestamp(p.timestamp)"),
+            ("battery_status", "CASE WHEN p.source_id IS NULL THEN p.battery_status ELSE ps.battery_status END"),
+            ("connection", "CASE WHEN p.source_id IS NULL THEN p.connection ELSE ps.connection END"),
+            ("tracker_id", "CASE WHEN p.source_id IS NULL THEN p.tracker_id ELSE ps.tracker_id END"),
+            ("trigger", "CASE WHEN p.source_id IS NULL THEN p.trigger ELSE ps.trigger END"),
         ]
-        select = f"SELECT {projection('p', point_fields, point_extras)} FROM points p WHERE p.user_id={user_id} AND to_timestamp(p.timestamp)>={literal(start)}::timestamptz AND to_timestamp(p.timestamp)<({literal(start)}::timestamptz+interval '1 month') AND p.timestamp<=EXTRACT(EPOCH FROM {literal(REQUEST['cutoff'])}::timestamptz) ORDER BY p.id"
+        select = f"SELECT {projection('p', point_fields, point_extras)} FROM points p LEFT JOIN point_sources ps ON ps.id=p.source_id WHERE p.user_id={user_id} AND to_timestamp(p.timestamp)>={literal(start)}::timestamptz AND to_timestamp(p.timestamp)<({literal(start)}::timestamptz+interval '1 month') AND p.timestamp<=EXTRACT(EPOCH FROM {literal(REQUEST['cutoff'])}::timestamptz) ORDER BY p.id"
         entries.append(query_descriptor(socket, f"dawarich/points/{month[:4]}/{month[5:]}.jsonl", select, True))
     if columns(socket, "action_text_rich_texts"):
         rich = f"SELECT jsonb_build_object('id',r.id,'name',r.name,'record_type',r.record_type,'record_id',r.record_id,'bodyText',regexp_replace(regexp_replace(r.body::text,'<[^>]*>',' ','g'),'\\s+',' ','g'),'created_at',r.created_at,'updated_at',r.updated_at,'redactionCodes',jsonb_build_array('dawarich-rich-text-markup-stripped')) FROM action_text_rich_texts r WHERE r.record_type='Trip' AND r.record_id IN (SELECT id FROM trips WHERE user_id={user_id}) AND r.created_at<={literal(REQUEST['cutoff'])}::timestamptz ORDER BY r.id"
@@ -591,19 +640,20 @@ def attachment_entries(socket, storage, user_id):
         pending_clause = "FALSE"
     else:
         pending_clause = f"a.record_type='PendingImport' AND a.record_id IN (SELECT id FROM pending_imports WHERE claimed_by_user_id={user_id})"
-    select = f"SELECT COALESCE(json_agg(row ORDER BY id),'[]'::json) FROM (SELECT a.id,a.record_type,a.record_id,a.name,b.id blob_id,b.key,b.filename,b.content_type,b.byte_size FROM active_storage_attachments a JOIN active_storage_blobs b ON b.id=a.blob_id WHERE ((a.record_type='Import' AND a.record_id IN (SELECT id FROM imports WHERE user_id={user_id})) OR ({pending_clause}) OR (a.record_type='Points::RawDataArchive' AND a.record_id IN (SELECT id FROM points_raw_data_archives WHERE user_id={user_id}))) AND a.created_at<={literal(REQUEST['cutoff'])}::timestamptz LIMIT 65) row;"
+    select = f"SELECT COALESCE(json_agg(row ORDER BY id),'[]'::json) FROM (SELECT a.id,a.record_type,a.record_id,a.name,b.id blob_id,b.key,b.filename,b.content_type,b.byte_size FROM active_storage_attachments a JOIN active_storage_blobs b ON b.id=a.blob_id WHERE ((a.record_type='Import' AND a.record_id IN (SELECT id FROM imports WHERE user_id={user_id})) OR ({pending_clause}) OR (a.record_type='Points::RawDataArchive' AND a.record_id IN (SELECT id FROM points_raw_data_archives WHERE user_id={user_id})) OR (a.record_type='RouteVideo' AND a.record_id IN (SELECT id FROM route_videos WHERE user_id={user_id}))) AND a.created_at<={literal(REQUEST['cutoff'])}::timestamptz LIMIT 65) row;"
     rows = json.loads(psql(socket, select) or b"[]")
     if len(rows) > 64:
         fail("limit_exceeded")
     metadata, binaries, warnings = [], [], []
     for row in rows:
-        kind = "raw" if row["record_type"] == "Points::RawDataArchive" else "import"
+        kind = "raw" if row["record_type"] == "Points::RawDataArchive" else ("route-video" if row["record_type"] == "RouteVideo" else "import")
         filename = str(row.get("filename") or "")
         extension = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
         if extension not in SAFE_EXTENSIONS:
             extension = "bin"
         opaque = hashlib.sha256(f"openmapx/dawarich/attachment/v1\0{kind}\0{row['id']}\0{row['blob_id']}".encode()).hexdigest()
-        output_path = f"dawarich/{'raw-files' if kind == 'raw' else 'import-files'}/{opaque}.{extension}"
+        directory = {"raw": "raw-files", "route-video": "route-video-files"}.get(kind, "import-files")
+        output_path = f"dawarich/{directory}/{opaque}.{extension}"
         key = str(row["key"])
         storage_path = f"{key[:2]}/{key[2:4]}/{key}"
         measured = {}
@@ -666,7 +716,7 @@ def restore(source, data, socket, storage):
 
 
 def dawarich_id(path):
-    fixed = {name: name.removesuffix(".jsonl").removesuffix(".json") for name in ["account.json", "settings.json", "areas.jsonl", "places.jsonl", "tags.jsonl", "taggings.jsonl", "imports.jsonl", "trips.jsonl", "notifications.jsonl", "visits.jsonl", "stats.jsonl", "tracks.jsonl", "digests.jsonl", "flights.jsonl", "notes.jsonl", "posters.jsonl", "attachments.jsonl", "rich-text.jsonl", "family.jsonl"]}
+    fixed = {name: name.removesuffix(".jsonl").removesuffix(".json") for name in ["account.json", "settings.json", "areas.jsonl", "places.jsonl", "tags.jsonl", "taggings.jsonl", "imports.jsonl", "trips.jsonl", "notifications.jsonl", "visits.jsonl", "stats.jsonl", "tracks.jsonl", "digests.jsonl", "flights.jsonl", "notes.jsonl", "posters.jsonl", "attachments.jsonl", "rich-text.jsonl", "family.jsonl", "achievement-progress.jsonl", "achievement-unlock-events.jsonl", "user-achievements.jsonl", "route-videos.jsonl", "service-settings.jsonl", "trip-sources.jsonl", "planned-days.jsonl", "planned-day-notes.jsonl", "planned-reservations.jsonl", "planned-stops.jsonl", "planned-accommodations.jsonl", "planned-travellers.jsonl", "planned-unplanned-places.jsonl"]}
     fixed.update({"export-records.jsonl": "export-records", "track-segments.jsonl": "track-segments", "raw-archives.jsonl": "raw-archives", "shared-links.jsonl": "shared-links"})
     relative = path.removeprefix("dawarich/")
     if relative in fixed:
@@ -674,7 +724,7 @@ def dawarich_id(path):
     match = re.fullmatch(r"points/(\d{4})/(0[1-9]|1[0-2])\.jsonl", relative)
     if match:
         return f"points-{match.group(1)}-{match.group(2)}"
-    match = re.fullmatch(r"(import|raw)-files/([a-f0-9]{64})\.([a-z0-9]{1,16})", relative)
+    match = re.fullmatch(r"(import|raw|route-video)-files/([a-f0-9]{64})\.([a-z0-9]{1,16})", relative)
     if match:
         return f"{match.group(1)}-file-{match.group(2)}.{match.group(3)}"
     fail("unsupported_schema")
@@ -714,8 +764,8 @@ WORK = Path(tempfile.mkdtemp(prefix="restore-", dir="/scratch"))
 try:
     OUTPUT, WARNINGS, DAWARICH_SCHEMA = [], [], None
     ACTIVE_DATABASES = []
-    STORAGE = next((source for source in SOURCES if source["schemaContract"] == "dawarich-storage-1.10.3"), None)
-    databases = [source for source in SOURCES if source["schemaContract"] != "dawarich-storage-1.10.3"]
+    STORAGE = next((source for source in SOURCES if source["schemaContract"] == "dawarich-storage-1.15.2"), None)
+    databases = [source for source in SOURCES if source["schemaContract"] != "dawarich-storage-1.15.2"]
     for index, source in enumerate(databases):
         data = WORK / f"pg-{index}"
         socket = WORK / f"socket-{index}"

@@ -1,7 +1,7 @@
 {
   "id": "dawarich-app",
   "name": "Dawarich Timeline",
-  "version": "1.10.3",
+  "version": "1.15.2",
   "description": "Managed multi-user Dawarich web application with OpenMapX OIDC sign-in.",
   "license": "AGPL-3.0",
   "quality": "built-in",
@@ -15,8 +15,8 @@
   },
   "container": {
     "image": "freikin/dawarich",
-    "tag": "1.10.3",
-    "digest": "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b",
+    "tag": "1.15.2",
+    "digest": "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
     "expose": [3000],
     "entrypoint": ["/usr/local/bin/openmapx-entrypoint.sh"],
     "command": ["bin/rails", "server", "-p", "3000", "-b", "::"],
@@ -44,7 +44,7 @@
       "OIDC_PROVIDER_NAME": "OpenMapX",
       "OIDC_AUTO_REGISTER": "true",
       "OIDC_PKCE_ENABLED": "true",
-      "OPENMAPX_DAWARICH_COMMIT": "da551a0e32f67b4d8ac6d50132c26634d6ad29a4",
+      "OPENMAPX_DAWARICH_COMMIT": "d81abc4fc467e119f542c56602c78488fbab86fb",
       "ALLOW_EMAIL_PASSWORD_REGISTRATION": "true",
       "ALLOW_EMAIL_PASSWORD_LOGIN": "true"
     },

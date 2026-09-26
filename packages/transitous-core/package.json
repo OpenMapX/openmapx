@@ -9,14 +9,14 @@
   "sideEffects": false,
   "dependencies": {
     "@openmapx/mobility-formats": "workspace:^",
-    "js-yaml": "^5.4.1"
+    "js-yaml": "^5.4.2"
   },
   "scripts": {
     "check-types": "tsc --noEmit"
   },
   "devDependencies": {
-    "@types/node": "^26.4.1",
+    "@types/node": "^26.6.2",
     "typescript": "^6.0.3",
-    "vitest": "^4.1.11"
+    "vitest": "^5.0.1"
   }
 }

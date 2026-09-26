@@ -244,8 +244,8 @@ export function ServiceCatalog() {
     },
     onSuccess: (result) => {
       showToast(`Checked ${result.statuses.length} service(s)`);
-      queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
     },
     onError: (err) => showToast(err instanceof Error ? err.message : "Check failed", "error"),
   });
@@ -266,8 +266,8 @@ export function ServiceCatalog() {
     },
     onSuccess: () => {
       showToast("Service selection saved");
-      queryClient.invalidateQueries({ queryKey: ["admin", "services", "selection"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "services", "selection"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
     },
     onError: (err) => showToast(err instanceof Error ? err.message : "Save failed", "error"),
   });
@@ -294,9 +294,9 @@ export function ServiceCatalog() {
     },
     onSuccess: (result, payload) => {
       showToast(`Queued ${payload.action} (${result.jobId})`);
-      queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
-      queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "services"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "overview"] });
     },
     onError: (err) => showToast(err instanceof Error ? err.message : "Bulk action failed", "error"),
   });

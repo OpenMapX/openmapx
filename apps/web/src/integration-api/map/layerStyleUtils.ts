@@ -96,9 +96,9 @@ export function createGeoJsonSourceDataBridge(): GeoJsonSourceDataBridge {
             entry.update &&
             typeof geoJsonSource.updateData === "function"
           ) {
-            geoJsonSource.updateData(entry.update);
+            void geoJsonSource.updateData(entry.update);
           } else {
-            geoJsonSource.setData(entry.data);
+            void geoJsonSource.setData(entry.data);
           }
         }
         applied.set(sourceId, { source: geoJsonSource, data: entry.data });
@@ -156,7 +156,7 @@ export function upsertGeoJsonSource(
 ): GeoJSONSource {
   const existing = map.getSource(sourceId) as GeoJSONSource | undefined;
   if (existing) {
-    existing.setData(data);
+    void existing.setData(data);
     return existing;
   }
   map.addSource(sourceId, { type: "geojson", data });

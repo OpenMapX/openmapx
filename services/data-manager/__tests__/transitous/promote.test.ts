@@ -169,7 +169,7 @@ function setupFixture(opts: FixtureOptions): {
         schemaVersion: 1,
         testedAt: "2026-05-01T00:00:00.000Z",
         epoch: manifest.epoch,
-        pins: { motis: "2.11.2", transitous: "test" },
+        pins: { motis: "2.11.3", transitous: "test" },
         artifacts: manifest.artifacts,
         expectations: manifest.expectations,
         health: { rt: true },

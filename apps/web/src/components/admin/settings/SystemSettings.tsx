@@ -460,7 +460,7 @@ function SettingsGroupPanel({
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["admin", "settings"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "settings"] });
       onSaved(text.saved(group.label));
     },
   });
@@ -687,7 +687,7 @@ function ExportImportSection({
       });
       if (!res.ok) throw new Error();
       const data = (await res.json()) as { imported: number };
-      qc.invalidateQueries({ queryKey: ["admin", "settings"] });
+      void qc.invalidateQueries({ queryKey: ["admin", "settings"] });
       onMsg(`Imported ${data.imported} setting(s)`);
     } catch {
       onMsg("Import failed — check the file format", "error");

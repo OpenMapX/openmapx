@@ -1,0 +1,10 @@
+{
+  "$schema": "./transitous.lock.schema.json",
+  "ref": "main@79f46a363d6688b629426633774a850b7bbbe725",
+  "submodules": {
+    "transitland-atlas": "23de937dcbcc35d4afe7dc19a6bfd8286cc275e8"
+  },
+  "lockedAt": "2026-09-22T09:28:53.764Z",
+  "lockedBy": "dev@fwcr.de",
+  "comment": "Pinned commit of public-transport/transitous consumed by services/data-manager. Bump via `pnpm openmapx transitous bump`."
+}

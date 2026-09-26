@@ -19,9 +19,9 @@ const root = mkdtempSync(join(tmpdir(), "openmapx-privacy-backup-fixture-"));
 chmodSync(root, 0o755);
 const databaseContainer = `openmapx-privacy-backup-${randomBytes(8).toString("hex")}`;
 const databaseImage =
-  "ghcr.io/baosystems/postgis:18-3.6@sha256:7de6306fe0718b72eebea405f2ff2ed9a3581a002ee1251978eba7b5e51c16b6";
+  "ghcr.io/baosystems/postgis:18-3.6@sha256:4117c8beae9081e76a23a1577c64d05260a61fb0a3c212f37596054ef4c190d8";
 const dawarichImage =
-  "freikin/dawarich@sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b";
+  "freikin/dawarich@sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d";
 const databasePassword = "isolated-backup-fixture";
 const outputFlag = process.argv.indexOf("--output");
 const retainedOutput = outputFlag >= 0 ? process.argv[outputFlag + 1] : undefined;
@@ -90,7 +90,7 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
       services: [
         {
           id: "dawarich-postgis",
-          version: "1.10.3",
+          version: "1.15.2",
           volumes: [
             {
               name: "database",
@@ -104,11 +104,11 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
       ],
       privacySourceProvenance: {
         managedDawarich: {
-          version: "1.10.3",
+          version: "1.15.2",
           image: "freikin/dawarich",
-          imageDigest: "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b",
-          upstreamCommit: "da551a0e32f67b4d8ac6d50132c26634d6ad29a4",
-          schemaContract: "dawarich-1.10.3",
+          imageDigest: "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
+          upstreamCommit: "d81abc4fc467e119f542c56602c78488fbab86fb",
+          schemaContract: "dawarich-1.15.2",
         },
       },
     }),
@@ -128,7 +128,7 @@ function dawarichDriftRequest(directory, dump, dumpName, backupId) {
           family: "dawarich",
           serviceId: "dawarich-postgis",
           file: dumpName,
-          schemaContract: "dawarich-1.10.3",
+          schemaContract: "dawarich-1.15.2",
         },
       ],
     })}\n`,
@@ -176,8 +176,8 @@ VALUES ('subject-1',E'Quote " slash \\\\ newline\\nGrüße','fixture@example.tes
        ('other','Other','other@example.test',true,now(),now());
 INSERT INTO saved_list (id,user_id,name) VALUES ('l1','subject-1','Mine');
 INSERT INTO saved_place (id,list_id,name,lat,lng) VALUES ('p1','l1','Place',1,2);
-INSERT INTO account (id,user_id,account_id,provider_id,issuer,scope,access_token,refresh_token,id_token,password,access_token_expires_at,refresh_token_expires_at,created_at,updated_at)
-VALUES ('a1','subject-1','external-account','oidc','https://issuer.example.test','openid','ACCESS_TOKEN_SENTINEL','REFRESH_TOKEN_SENTINEL','ID_TOKEN_SENTINEL','PASSWORD_SENTINEL','2026-09-04','2026-09-04','2026-09-04','2026-09-04');
+INSERT INTO account (id,user_id,account_id,provider_id,scope,access_token,refresh_token,id_token,password,access_token_expires_at,refresh_token_expires_at,created_at,updated_at)
+VALUES ('a1','subject-1','external-account','oidc','openid','ACCESS_TOKEN_SENTINEL','REFRESH_TOKEN_SENTINEL','ID_TOKEN_SENTINEL','PASSWORD_SENTINEL','2026-09-04','2026-09-04','2026-09-04','2026-09-04');
 INSERT INTO passkey (id,user_id,name,public_key,credential_id,counter,device_type,backed_up,transports,created_at,aaguid)
 VALUES ('pk1','subject-1','Security key','PUBLIC_KEY_METADATA','credential-metadata',1,'singleDevice',false,'internal','2026-09-04','aaguid');
 `,
@@ -199,6 +199,8 @@ VALUES ('pk1','subject-1','Security key','PUBLIC_KEY_METADATA','credential-metad
   const sha256 = createHash("sha256").update(dump).digest("hex");
   const attachmentBytes = Buffer.from("subject attachment bytes\n");
   const attachmentKey = "abcdfixturekey";
+  const routeVideoBytes = Buffer.from("subject route video backup bytes\n");
+  const routeVideoKey = "routevideofixturekey";
   docker([
     "run",
     "--rm",
@@ -255,14 +257,46 @@ VALUES (1,7,1767225600,ST_SetSRID(ST_MakePoint(13.4,52.5),4326)::geography,'{"au
        (2,8,1767225600,ST_SetSRID(ST_MakePoint(1,2),4326)::geography,'{"label":"FOREIGN_POINT_SENTINEL"}','2026-01-01','2026-01-01');
 INSERT INTO trips (id,user_id,name,started_at,ended_at,path,created_at,updated_at)
 VALUES (1,7,'Subject trip','2026-01-01','2026-01-01',ST_GeomFromText('LINESTRING(13.4 52.5,13.5 52.6)',4326),'2026-01-01','2026-01-01');
+INSERT INTO achievement_progresses (id,user_id,achievement_key,state,created_at,updated_at)
+VALUES (1,7,'subject-progress','{"visited":3}','2026-01-01','2026-01-01');
+INSERT INTO achievement_unlock_events (id,user_id,kind,key,claim_token,created_at,updated_at)
+VALUES (1,7,'geography','SUBJECT_UNLOCK','ACHIEVEMENT_CLAIM_SECRET','2026-01-01','2026-01-01');
+INSERT INTO user_achievements (id,user_id,achievement_key,earned_at,metadata,created_at,updated_at)
+VALUES (1,7,'subject-earned','2026-01-01','{"label":"Subject achievement"}','2026-01-01','2026-01-01');
+INSERT INTO route_videos (id,user_id,name,settings,created_at,updated_at)
+VALUES (1,7,'Subject route video','{"theme":"subject-video"}','2026-01-01','2026-01-01');
+INSERT INTO service_settings (id,user_id,service,provider,active,config,credentials,created_at,updated_at)
+VALUES (1,7,0,'subject-geocoder',true,'{"host":"subject-geocoder.test"}','SERVICE_CREDENTIAL_SECRET','2026-01-01','2026-01-01');
+INSERT INTO trip_sources (id,user_id,provider,base_url,api_key,selection_token,created_at,updated_at)
+VALUES (1,7,'trek','https://subject-trek.test','TRIP_API_KEY_SECRET','TRIP_SELECTION_SECRET','2026-01-01','2026-01-01');
+UPDATE trips SET trip_source_id=1, source_identifier='subject-source-trip' WHERE id=1;
+INSERT INTO planned_days (id,trip_id,date,position,title,created_at,updated_at)
+VALUES (1,1,'2026-01-01',1,'Subject planned day','2026-01-01','2026-01-01');
+INSERT INTO planned_day_notes (id,planned_day_id,position,body,created_at,updated_at)
+VALUES (1,1,1,'Subject planned day note','2026-01-01','2026-01-01');
+INSERT INTO planned_stops (id,planned_day_id,position,name,created_at,updated_at)
+VALUES (1,1,1,'Subject planned stop','2026-01-01','2026-01-01');
+INSERT INTO planned_reservations (id,trip_id,planned_day_id,title,created_at,updated_at)
+VALUES (1,1,1,'Subject reservation','2026-01-01','2026-01-01');
+INSERT INTO planned_accommodations (id,trip_id,name,created_at,updated_at)
+VALUES (1,1,'Subject accommodation','2026-01-01','2026-01-01');
+INSERT INTO planned_travellers (id,trip_id,name,owner,created_at,updated_at)
+VALUES (1,1,'Subject traveller',true,'2026-01-01','2026-01-01');
+INSERT INTO planned_unplanned_places (id,trip_id,position,name,created_at,updated_at)
+VALUES (1,1,1,'Subject unplanned place','2026-01-01','2026-01-01');
+INSERT INTO point_sources (id,digest,tracker_id,created_at,updated_at)
+VALUES (1,'subject-source-digest','subject-dimension-device','2026-01-01','2026-01-01');
+UPDATE points SET source_id=1,tracker_id=NULL WHERE id=1;
 INSERT INTO tracks (id,user_id,start_at,end_at,original_path,distance,duration,avg_speed,created_at,updated_at)
 VALUES (1,7,'2026-01-01','2026-01-01',ST_GeomFromText('LINESTRING(13.4 52.5,13.5 52.6)',4326),100,60,6,'2026-01-01','2026-01-01');
 INSERT INTO notes (id,user_id,title,body,noted_at,lonlat,created_at,updated_at)
 VALUES (1,7,'Subject note','Subject note body','2026-01-01',ST_SetSRID(ST_MakePoint(13.45,52.55),4326)::geography,'2026-01-01','2026-01-01');
 INSERT INTO active_storage_blobs (id,key,filename,content_type,byte_size,checksum,service_name,created_at)
-VALUES (1,'${attachmentKey}','subject.txt','text/plain',${attachmentBytes.length},'fixture','local','2026-01-01');
+VALUES (1,'${attachmentKey}','subject.txt','text/plain',${attachmentBytes.length},'fixture','local','2026-01-01'),
+       (2,'${routeVideoKey}','subject.mp4','video/mp4',${routeVideoBytes.length},'fixture','local','2026-01-01');
 INSERT INTO active_storage_attachments (id,record_type,record_id,name,blob_id,created_at)
-VALUES (1,'Import',1,'source',1,'2026-01-01');
+VALUES (1,'Import',1,'source',1,'2026-01-01'),
+       (2,'RouteVideo',1,'file',2,'2026-01-01');
 `,
   );
   const dawarichDump = gzipSync(
@@ -283,6 +317,13 @@ VALUES (1,'Import',1,'source',1,'2026-01-01');
   const storagePath = join(storageRoot, attachmentKey.slice(0, 2), attachmentKey.slice(2, 4));
   mkdirSync(storagePath, { recursive: true });
   writeFileSync(join(storagePath, attachmentKey), attachmentBytes);
+  const routeVideoStoragePath = join(
+    storageRoot,
+    routeVideoKey.slice(0, 2),
+    routeVideoKey.slice(2, 4),
+  );
+  mkdirSync(routeVideoStoragePath, { recursive: true });
+  writeFileSync(join(routeVideoStoragePath, routeVideoKey), routeVideoBytes);
   const storageFile = "dawarich-app__openmapx-dawarich-storage.tar.gz";
   const storageTar = spawnSync("tar", ["-czf", join(root, storageFile), "-C", storageRoot, "."]);
   if (storageTar.status !== 0) throw new Error("storage fixture creation failed");
@@ -301,7 +342,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01');
         },
         {
           id: "dawarich-postgis",
-          version: "1.10.3",
+          version: "1.15.2",
           volumes: [
             {
               name: "database",
@@ -314,7 +355,7 @@ VALUES (1,'Import',1,'source',1,'2026-01-01');
         },
         {
           id: "dawarich-app",
-          version: "1.10.3",
+          version: "1.15.2",
           volumes: [
             {
               name: "openmapx-dawarich-storage",
@@ -328,11 +369,11 @@ VALUES (1,'Import',1,'source',1,'2026-01-01');
       ],
       privacySourceProvenance: {
         managedDawarich: {
-          version: "1.10.3",
+          version: "1.15.2",
           image: "freikin/dawarich",
-          imageDigest: "sha256:d7457e7b27a9992f2fdd367fe22a515b1b44fc6e0cfb7a68f3c69c439c465a6b",
-          upstreamCommit: "da551a0e32f67b4d8ac6d50132c26634d6ad29a4",
-          schemaContract: "dawarich-1.10.3",
+          imageDigest: "sha256:e58334ca56976feb4c885a8bd34b251ec2e3f45ffeabd4fd4371b5d2108fc70d",
+          upstreamCommit: "d81abc4fc467e119f542c56602c78488fbab86fb",
+          schemaContract: "dawarich-1.15.2",
         },
       },
     }),
@@ -353,13 +394,13 @@ VALUES (1,'Import',1,'source',1,'2026-01-01');
           family: "dawarich",
           serviceId: "dawarich-postgis",
           file: dawarichFile,
-          schemaContract: "dawarich-1.10.3",
+          schemaContract: "dawarich-1.15.2",
         },
         {
           family: "dawarich-storage",
           serviceId: "dawarich-app",
           file: storageFile,
-          schemaContract: "dawarich-storage-1.10.3",
+          schemaContract: "dawarich-storage-1.15.2",
         },
       ],
     })}\n`,
@@ -389,7 +430,8 @@ VALUES (1,'Import',1,'source',1,'2026-01-01');
   const listing = spawnSync("tar", ["-tf", tar], { encoding: "utf8" });
   if (
     !listing.stdout.includes("dawarich/areas.jsonl") ||
-    !listing.stdout.includes("dawarich/import-files/")
+    !listing.stdout.includes("dawarich/import-files/") ||
+    !listing.stdout.includes("dawarich/route-video-files/")
   )
     throw new Error("collector omitted Dawarich projection or attachment");
   const authRow = JSON.parse(
@@ -438,14 +480,21 @@ VALUES (1,'Import',1,'source',1,'2026-01-01');
     JSON.stringify(trip.path) !== JSON.stringify(expectedPath)
   )
     throw new Error("collector corrupted PostGIS line coordinates");
+  const plannedStop = JSON.parse(
+    spawnSync("tar", ["-xOf", tar, "dawarich/planned-stops.jsonl"]).stdout.toString(),
+  );
+  if (plannedStop.name !== "Subject planned stop")
+    throw new Error("collector omitted the Dawarich planned-itinerary graph");
+  if (!run.stdout.includes(routeVideoBytes))
+    throw new Error("collector omitted the Dawarich route-video attachment");
   const dawarichManifest = JSON.parse(
     spawnSync("tar", ["-xOf", tar, "dawarich/source-manifest.json"]).stdout.toString(),
   );
   const pointRelation = dawarichManifest.schemaRelations?.find((row) => row.entry === "Point");
   if (
     dawarichManifest.schemaFingerprint !==
-      "cddd7f3971bf07ffdcc51909714d90c0d476644e414c68aa9613a601cf4bc8f1" ||
-    dawarichManifest.schemaRelations?.length !== 25 ||
+      "4ae830ea67dc4894d814d4e2e2d19cb92571c30f2df1df017417f671e26a1e09" ||
+    dawarichManifest.schemaRelations?.length !== 39 ||
     !pointRelation?.columns.includes("lonlat") ||
     pointRelation.columns.includes("lon")
   )
@@ -461,6 +510,10 @@ VALUES (1,'Import',1,'source',1,'2026-01-01');
     "NESTED_SECRET_SENTINEL",
     "NESTED_POINT_SECRET",
     "SHARE_CAPABILITY_SENTINEL",
+    "ACHIEVEMENT_CLAIM_SECRET",
+    "SERVICE_CREDENTIAL_SECRET",
+    "TRIP_API_KEY_SECRET",
+    "TRIP_SELECTION_SECRET",
   ]) {
     if (run.stdout.includes(Buffer.from(sentinel))) throw new Error(`collector leaked ${sentinel}`);
   }

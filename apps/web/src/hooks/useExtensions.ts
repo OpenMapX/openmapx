@@ -115,8 +115,8 @@ export function useExtensionSources() {
 function useInvalidate() {
   const qc = useQueryClient();
   return () => {
-    qc.invalidateQueries({ queryKey: CATALOG_KEY });
-    qc.invalidateQueries({ queryKey: INSTALLED_KEY });
+    void qc.invalidateQueries({ queryKey: CATALOG_KEY });
+    void qc.invalidateQueries({ queryKey: INSTALLED_KEY });
   };
 }
 
@@ -205,8 +205,8 @@ export function useAddExtensionSource() {
       return data;
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SOURCES_KEY });
-      qc.invalidateQueries({ queryKey: CATALOG_KEY });
+      void qc.invalidateQueries({ queryKey: SOURCES_KEY });
+      void qc.invalidateQueries({ queryKey: CATALOG_KEY });
     },
   });
 }
@@ -226,8 +226,8 @@ export function useRemoveExtensionSource() {
       return await res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: SOURCES_KEY });
-      qc.invalidateQueries({ queryKey: CATALOG_KEY });
+      void qc.invalidateQueries({ queryKey: SOURCES_KEY });
+      void qc.invalidateQueries({ queryKey: CATALOG_KEY });
     },
   });
 }

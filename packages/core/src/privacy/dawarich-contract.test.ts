@@ -40,14 +40,23 @@ describe("managed Dawarich contract", () => {
     );
     expect(dawarichEntryIdForPath("dawarich/points/2026/13.jsonl")).toBeNull();
     expect(dawarichEntryIdForPath("dawarich/points/2026/09.jsonl")).toBe("points-2026-09");
+    const routeVideoId = `route-video-file-${"b".repeat(64)}.bin` as const;
+    expect(dawarichEntryIdForPath(`dawarich/route-video-files/${"b".repeat(64)}.bin`)).toBe(
+      routeVideoId,
+    );
+    expect(dawarichSourcePathForEntryId(routeVideoId)).toBe(
+      `dawarich/route-video-files/${"b".repeat(64)}.bin`,
+    );
     expect(isDawarichPortableEntryId(importId)).toBe(true);
+    expect(isDawarichPortableEntryId("planned-stops")).toBe(true);
+    expect(isDawarichPortableEntryId(routeVideoId)).toBe(true);
     expect(isDawarichPortableEntryId("source-manifest")).toBe(false);
   });
 
   it("rejects compatibility drift", () => {
     const base = {
       version: 1,
-      image: "freikin/dawarich:1.10.3",
+      image: "freikin/dawarich:1.15.2",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: "a".repeat(64),
@@ -87,7 +96,7 @@ describe("managed Dawarich contract", () => {
   it("accepts only content-addressed dynamic members", () => {
     const base = {
       version: 1 as const,
-      image: "freikin/dawarich:1.10.3",
+      image: "freikin/dawarich:1.15.2",
       imageDigest: DAWARICH_SUPPORTED_IMAGE_DIGEST,
       upstreamCommit: DAWARICH_SUPPORTED_COMMIT,
       subjectUserIdDigest: "a".repeat(64),

@@ -3,9 +3,10 @@
 # The build context is `docs/` only — this package is a self-contained pnpm
 # workspace (its own pnpm-workspace.yaml + pnpm-lock.yaml), fully decoupled from
 # the monorepo workspace and the app build.
-FROM node:24-alpine@sha256:a0b9bf06e4e6193cf7a0f58816cc935ff8c2a908f81e6f1a95432d679c54fbfd AS build
+FROM node:24-alpine@sha256:ebfe2f90462722a7a4de65e91990e97fe0d401c70e0e762c5b53302f905ec1c1 AS build
 WORKDIR /app
-RUN npm install -g pnpm@11.1.2
+COPY package.json /tmp/package.json
+RUN corepack enable && corepack prepare "$(node -e "console.log(require('/tmp/package.json').packageManager)")" --activate
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # The lockfile references patched dependencies by file hash, so `pnpm install`
 # cannot resolve without the patch itself.
@@ -14,7 +15,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm build
 
-FROM nginx:alpine@sha256:db35bfc6b2951e7f8a72db5db120288c127ffaeeb4a6d4b95a26fead017d5913
+FROM nginx:alpine@sha256:62ff2089abf5a9ed33bd232895bef5e22f7bb4b200675cec49a5ebc48e3d4ac8
 # The current official image predates Alpine's OpenSSL fix for CVE-2026-14456
 # and later libexpat and util-linux fixes. Upgrade only the affected runtime
 # libraries.

@@ -167,8 +167,8 @@ function DataOperationsSection({ apiUrl }: { apiUrl: string }) {
   const handleQueued = (jobId: string, operation: AdminOperationContract) => {
     setLastJobId(jobId);
     showToast(`Queued ${operation.title} (${jobId})`);
-    queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
-    queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin-services-data"] });
   };
 
   return (

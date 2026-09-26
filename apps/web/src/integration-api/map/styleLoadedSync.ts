@@ -22,7 +22,7 @@ export function subscribeStyleLoaded(map: MapLibreMap, apply: () => void): () =>
     if (!map.isStyleLoaded()) {
       if (!idleRetryScheduled) {
         idleRetryScheduled = true;
-        map.once("idle", onIdle);
+        void map.once("idle", onIdle);
       }
       return;
     }
