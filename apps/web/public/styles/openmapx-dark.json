@@ -2496,7 +2496,26 @@
         ["any", ["!has", "level"], ["==", "level", 0]]
       ],
       "layout": {
-        "icon-image": "{class}_11",
+        "icon-image": [
+          "coalesce",
+          ["image", ["concat", ["get", "class"], "_11"]],
+          [
+            "image",
+            [
+              "match",
+              ["get", "class"],
+              "parking",
+              "car_11",
+              "atm",
+              "bank_11",
+              "toilets",
+              "toilet_11",
+              "office",
+              "marker_11",
+              "marker_11"
+            ]
+          ]
+        ],
         "text-anchor": "top",
         "text-field": "{name:latin}\n{name:nonlatin}",
         "text-font": ["Noto Sans Regular"],
@@ -2527,7 +2546,26 @@
         ["any", ["!has", "level"], ["==", "level", 0]]
       ],
       "layout": {
-        "icon-image": "{class}_11",
+        "icon-image": [
+          "coalesce",
+          ["image", ["concat", ["get", "class"], "_11"]],
+          [
+            "image",
+            [
+              "match",
+              ["get", "class"],
+              "parking",
+              "car_11",
+              "atm",
+              "bank_11",
+              "toilets",
+              "toilet_11",
+              "office",
+              "marker_11",
+              "marker_11"
+            ]
+          ]
+        ],
         "text-anchor": "top",
         "text-field": "{name:latin}\n{name:nonlatin}",
         "text-font": ["Noto Sans Regular"],
@@ -2558,7 +2596,26 @@
         ["any", ["!has", "level"], ["==", "level", 0]]
       ],
       "layout": {
-        "icon-image": "{class}_11",
+        "icon-image": [
+          "coalesce",
+          ["image", ["concat", ["get", "class"], "_11"]],
+          [
+            "image",
+            [
+              "match",
+              ["get", "class"],
+              "parking",
+              "car_11",
+              "atm",
+              "bank_11",
+              "toilets",
+              "toilet_11",
+              "office",
+              "marker_11",
+              "marker_11"
+            ]
+          ]
+        ],
         "text-anchor": "top",
         "text-field": "{name:latin}\n{name:nonlatin}",
         "text-font": ["Noto Sans Regular"],
