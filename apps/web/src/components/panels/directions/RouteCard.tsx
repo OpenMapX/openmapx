@@ -17,6 +17,7 @@ import type {
 } from "@openmapx/core";
 import {
   bandForDelayRatio,
+  buildElevationProfile,
   estimateDrivingCo2Grams,
   formatDistance,
   formatDuration,
@@ -24,7 +25,7 @@ import {
   useSettingsStore,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { RouteImpactBadge } from "@/components/panels/directions/RouteImpactBadge";
 import {
   type RouteImpactAssumptions,
@@ -142,6 +143,29 @@ export function RouteCard({
       ? `${(route.distance / 1609.34).toFixed(1)} mi`
       : formatDistance(route.distance);
 
+  const ascentMeters = useMemo(() => {
+    if (
+      (route.mode !== "walking" && route.mode !== "cycling") ||
+      route.geometry.length < 2 ||
+      !route.elevation ||
+      route.elevation.length < 2 ||
+      !route.elevation.every(Number.isFinite)
+    ) {
+      return null;
+    }
+    return buildElevationProfile(route.geometry, route.elevation, route.elevationInterval ?? 30)
+      .stats.totalAscent;
+  }, [route]);
+  const ascentLabel =
+    ascentMeters === null
+      ? null
+      : t("routeAscent", {
+          height:
+            units === "imperial"
+              ? `${Math.round(ascentMeters * 3.28084)} ft`
+              : `${Math.round(ascentMeters)} m`,
+        });
+
   const modeIcon =
     route.mode === "driving" ? (
       <DirectionsCarIcon sx={{ fontSize: 22, color: active ? BRAND : "text.disabled" }} />
@@ -166,7 +190,7 @@ export function RouteCard({
     return { band, delaySeconds, baseline };
   })();
 
-  const selectionLabel = `${route.summary ?? t("bestRoute")}, ${formatDuration(route.duration)}, ${dist}`;
+  const selectionLabel = `${route.summary ?? t("bestRoute")}, ${formatDuration(route.duration)}, ${dist}${ascentLabel ? `, ${ascentLabel}` : ""}`;
   const summaryContent = (
     <>
       <Typography
@@ -184,6 +208,15 @@ export function RouteCard({
           {dist}
         </Typography>
       </Box>
+      {ascentLabel && (
+        <Typography
+          variant="caption"
+          data-testid="route-ascent"
+          sx={{ color: "text.secondary", display: "block", mt: 0.25 }}
+        >
+          {ascentLabel}
+        </Typography>
+      )}
       {trafficDelay && (
         <Typography
           variant="caption"

@@ -853,6 +853,7 @@
     "returnAnyStation": "Return at a station",
     "returnSameStation": "Return to the pickup station",
     "ascent": "{meters} m ascent",
+    "routeAscent": "Ascent +{height}",
     "routeInstructions": "Access and transfer instructions",
     "routeStep": "{instruction} {street} for {distance}",
     "levelChange": "level {level}",

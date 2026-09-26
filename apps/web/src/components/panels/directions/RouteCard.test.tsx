@@ -27,19 +27,71 @@ const baseRoute: Route = {
   summary: "via A46",
 };
 
-const renderCard = (route: Route) =>
+const renderCard = (
+  route: Route,
+  units: "metric" | "imperial" = "metric",
+  locale: "en" | "de" = "en",
+) =>
   render(
-    <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+    <NextIntlClientProvider
+      locale={locale}
+      messages={locale === "de" ? de : en}
+      timeZone="Europe/Berlin"
+    >
       <RouteCard
         route={route}
         index={0}
         active
         onSelect={() => {}}
         onDetails={() => {}}
-        units="metric"
+        units={units}
       />
     </NextIntlClientProvider>,
   );
+
+describe("RouteCard ascent", () => {
+  const uphill = { ...baseRoute, elevation: [100, 110, 120, 130], elevationInterval: 30 };
+
+  it.each(["walking", "cycling"] as const)("shows smoothed inline ascent on a %s route", (mode) => {
+    renderCard({ ...uphill, mode });
+    expect(screen.getByTestId("route-ascent")).toHaveTextContent("Ascent +20 m");
+    expect(screen.getByRole("radio", { name: /Ascent \+20 m/ })).toBeInTheDocument();
+  });
+
+  it("converts ascent to feet in imperial units", () => {
+    renderCard({ ...uphill, mode: "cycling" }, "imperial");
+    expect(screen.getByTestId("route-ascent")).toHaveTextContent("Ascent +66 ft");
+  });
+
+  it("localizes the ascent label in German", () => {
+    renderCard({ ...uphill, mode: "walking" }, "metric", "de");
+    expect(screen.getByTestId("route-ascent")).toHaveTextContent("Anstieg +20 m");
+  });
+
+  it("shows known zero ascent for a flat sampled route", () => {
+    renderCard({ ...uphill, mode: "walking", elevation: [100, 100, 100] });
+    expect(screen.getByTestId("route-ascent")).toHaveTextContent("Ascent +0 m");
+  });
+
+  const unusableProfiles: Array<{ name: string; elevation: number[] | undefined }> = [
+    { name: "missing", elevation: undefined },
+    { name: "empty", elevation: [] },
+    { name: "single-sample", elevation: [100] },
+  ];
+
+  it.each(unusableProfiles)("omits ascent for a $name profile", ({ elevation }) => {
+    renderCard({ ...uphill, mode: "walking", elevation });
+    expect(screen.queryByTestId("route-ascent")).toBeNull();
+  });
+
+  it.each(["driving", "motorcycle"] as const)(
+    "does not show inline ascent for %s routes",
+    (mode) => {
+      renderCard({ ...uphill, mode });
+      expect(screen.queryByTestId("route-ascent")).toBeNull();
+    },
+  );
+});
 
 describe("RouteCard road-condition context", () => {
   const statuses: Array<{

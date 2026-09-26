@@ -853,6 +853,7 @@
     "returnAnyStation": "Rückgabe an einer Station",
     "returnSameStation": "Rückgabe an der Abholstation",
     "ascent": "{meters} m Anstieg",
+    "routeAscent": "Anstieg +{height}",
     "routeInstructions": "Zugangs- und Umstiegsanweisungen",
     "routeStep": "{instruction} {street} für {distance}",
     "levelChange": "Ebene {level}",
