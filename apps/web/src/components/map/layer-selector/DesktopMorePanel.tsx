@@ -48,6 +48,10 @@ function OverlayDetailTile({ item, label }: { item: GeneratedLayerEntry; label: 
         <Typography sx={{ mt: 0.2, fontSize: 9, color: "text.secondary" }}>
           {t("zoomInHint", { minZoom })}
         </Typography>
+      ) : item.descriptionKey ? (
+        <Typography sx={{ mt: 0.2, fontSize: 10, color: "text.secondary", textAlign: "center" }}>
+          {t(item.descriptionKey)}
+        </Typography>
       ) : null}
     </DesktopMoreTile>
   );
@@ -62,7 +66,7 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
   const measureActive = useMeasurementStore((s) => s.isActive);
   const travelTimeActive = useTravelTimeStore((s) => s.isActive);
   const { isAvailable } = useCapabilities();
-  const { mapDetails, mapTools } = useLayerSelectorConfig();
+  const { detailGroups, mapTools } = useLayerSelectorConfig();
 
   return (
     <Box
@@ -91,21 +95,30 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
         </IconButton>
       </Box>
 
-      <Box
-        sx={{
-          display: "grid",
-          gridTemplateColumns: "repeat(3, minmax(0,1fr))",
-          justifyItems: "center",
-          columnGap: 0.5,
-          rowGap: 0.4,
-        }}
-      >
-        {mapDetails
-          .filter((item) => isAvailable(item.serviceId))
-          .map((item) => (
-            <OverlayDetailTile key={item.id} item={item} label={t(item.labelKey)} />
-          ))}
-      </Box>
+      {detailGroups.map((group) => {
+        const entries = group.entries.filter((item) => isAvailable(item.serviceId));
+        if (entries.length === 0) return null;
+        return (
+          <Box key={group.id} sx={{ mb: 1 }}>
+            <Typography sx={{ fontSize: 13, fontWeight: 600, color: "text.secondary", mb: 0.5 }}>
+              {t(group.id)}
+            </Typography>
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: "repeat(3, minmax(0,1fr))",
+                justifyItems: "center",
+                columnGap: 0.5,
+                rowGap: 0.5,
+              }}
+            >
+              {entries.map((item) => (
+                <OverlayDetailTile key={item.id} item={item} label={t(item.labelKey)} />
+              ))}
+            </Box>
+          </Box>
+        );
+      })}
 
       <Divider sx={{ my: 0.8 }} />
 
@@ -123,42 +136,44 @@ export function DesktopMorePanel({ onClose }: DesktopMorePanelProps) {
           rowGap: 0.4,
         }}
       >
-        {mapTools.map((item) => {
-          const toolState: Record<string, { active: boolean; toggle: () => void }> = {
-            measurement: {
-              active: measureActive,
-              toggle: () => {
-                const s = useMeasurementStore.getState();
-                if (s.isActive) s.deactivate();
-                else s.activate();
+        {mapTools
+          .filter((item) => isAvailable(item.serviceId))
+          .map((item) => {
+            const toolState: Record<string, { active: boolean; toggle: () => void }> = {
+              measurement: {
+                active: measureActive,
+                toggle: () => {
+                  const s = useMeasurementStore.getState();
+                  if (s.isActive) s.deactivate();
+                  else s.activate();
+                },
               },
-            },
-            "travel-time": {
-              active: travelTimeActive,
-              toggle: () => {
-                const s = useTravelTimeStore.getState();
-                if (s.isActive) s.deactivate();
-                else s.activate();
+              "travel-time": {
+                active: travelTimeActive,
+                toggle: () => {
+                  const s = useTravelTimeStore.getState();
+                  if (s.isActive) s.deactivate();
+                  else s.activate();
+                },
               },
-            },
-          };
-          const tool = toolState[item.id];
-          return (
-            <DesktopMoreTile
-              key={item.id}
-              item={{ ...item, selected: tool?.active }}
-              label={t(item.labelKey)}
-              labelWidth={96}
-              onClick={
-                tool
-                  ? () => {
-                      tool.toggle();
-                    }
-                  : undefined
-              }
-            />
-          );
-        })}
+            };
+            const tool = toolState[item.id];
+            return (
+              <DesktopMoreTile
+                key={item.id}
+                item={{ ...item, selected: tool?.active }}
+                label={t(item.labelKey)}
+                labelWidth={96}
+                onClick={
+                  tool
+                    ? () => {
+                        tool.toggle();
+                      }
+                    : undefined
+                }
+              />
+            );
+          })}
         <DesktopMoreTile
           item={{ preview: globePreview, selected: globeView }}
           label={t("globeView")}

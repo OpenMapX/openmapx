@@ -12,7 +12,53 @@ export interface GeneratedLayerEntry {
   preview: ReactNode;
   icon: ReactNode;
   serviceId?: string;
+  descriptionKey?: string;
 }
+
+export type DetailGroupId = "transport" | "outdoors" | "weatherEnvironment" | "otherDetails";
+
+export interface DetailGroup {
+  id: DetailGroupId;
+  entries: GeneratedLayerEntry[];
+}
+
+const DETAIL_GROUPS: readonly DetailGroupId[] = [
+  "transport",
+  "outdoors",
+  "weatherEnvironment",
+  "otherDetails",
+];
+
+const DETAIL_PURPOSE: Record<string, DetailGroupId> = {
+  "traffic-flow": "transport",
+  traffic: "transport",
+  "road-conditions": "transport",
+  transit: "transport",
+  "live-transit": "transport",
+  "schematic-transit": "transport",
+  cycling: "transport",
+  ourairports: "transport",
+  nautical: "transport",
+  hiking: "outdoors",
+  "winter-sports": "outdoors",
+  "street-level-imagery": "outdoors",
+  satellite: "outdoors",
+  "3d-buildings": "outdoors",
+  "air-quality": "weatherEnvironment",
+  environment: "weatherEnvironment",
+  weather: "weatherEnvironment",
+  "weather-alerts": "weatherEnvironment",
+  wildfires: "weatherEnvironment",
+  earthquakes: "weatherEnvironment",
+  "natural-events": "weatherEnvironment",
+  "sun-time": "weatherEnvironment",
+};
+
+const DETAIL_DESCRIPTIONS: Record<string, string> = {
+  "traffic-flow": "trafficFlowDescription",
+  traffic: "trafficTomtomDescription",
+  "road-conditions": "trafficIncidentsDescription",
+};
 
 /** Overlay ID mapping: integration IDs like "overlay-earthquakes" → overlay IDs like "earthquakes" */
 function integrationIdToOverlayId(integrationId: string): string {
@@ -50,6 +96,7 @@ export function useLayerSelectorConfig() {
         labelKey: ls.labelKey,
         overlayId,
         serviceId: integration.id,
+        descriptionKey: DETAIL_DESCRIPTIONS[overlayId],
         preview:
           typeof ls.preview === "string" && ls.preview.length > 0
             ? createElement(IntegrationLayerPreview, {
@@ -72,6 +119,13 @@ export function useLayerSelectorConfig() {
       }
     }
 
-    return { mapDetails, mapTools, quickDetails };
+    const detailGroups: DetailGroup[] = DETAIL_GROUPS.map((id) => ({
+      id,
+      entries: mapDetails.filter(
+        (entry) => (DETAIL_PURPOSE[entry.overlayId] ?? "otherDetails") === id,
+      ),
+    })).filter((group) => group.entries.length > 0);
+
+    return { mapDetails, mapTools, quickDetails, detailGroups };
   }, [registry]);
 }

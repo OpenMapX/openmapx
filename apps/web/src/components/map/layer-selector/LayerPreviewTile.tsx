@@ -93,6 +93,7 @@ export function LayerPreviewTile({
     <ButtonBase
       onClick={onClick}
       disabled={disabled}
+      aria-pressed={selected}
       sx={{
         borderRadius: `${Math.round(size * 0.22)}px`,
         cursor: disabled ? "not-allowed" : "pointer",

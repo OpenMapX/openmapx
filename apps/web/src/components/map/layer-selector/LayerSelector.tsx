@@ -337,10 +337,10 @@ export function LayerSelector() {
               borderRadius: desktopDock ? "22px" : "16px",
               width: desktopDock ? "auto" : 346,
               minWidth: desktopDock ? 0 : undefined,
-              maxHeight: desktopDock ? "min(76vh, 700px)" : "none",
+              maxHeight: desktopDock ? "min(76vh, 700px)" : "min(70dvh, 560px)",
               boxShadow: "0 4px 20px var(--omx-shadow-soft), 0 1px 6px var(--omx-shadow-soft)",
               bgcolor: "background.paper",
-              overflowY: desktopDock ? "auto" : "visible",
+              overflowY: "auto",
             },
           },
         }}

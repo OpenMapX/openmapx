@@ -75,3 +75,51 @@ describe("useLayerSelectorConfig previews", () => {
     expect(container.querySelector("svg")).not.toBeNull();
   });
 });
+
+describe("purpose-based layer groups", () => {
+  it("keeps each selectable detail once and exposes unknown integrations", () => {
+    const ids = [
+      "overlay-traffic-flow",
+      "overlay-hiking",
+      "overlay-weather",
+      "street-level-imagery-mapillary",
+      "street-level-imagery-panoramax",
+      "overlay-new-detail",
+    ];
+    const registry = new IntegrationRegistry(
+      ids.map((id) => ({
+        id,
+        name: id,
+        enabled: true,
+        domains: ["map-overlay"],
+        isBuiltIn: false,
+        frontend: { layerSelector: { group: "map-details" as const, labelKey: id } },
+      })),
+    );
+    const wrapper = ({ children }: { children: ReactNode }) => (
+      <IntegrationRegistryContext.Provider value={registry}>
+        {children}
+      </IntegrationRegistryContext.Provider>
+    );
+
+    const { result } = renderHook(() => useLayerSelectorConfig(), { wrapper });
+    expect(
+      result.current.detailGroups.map(({ id, entries }) => [
+        id,
+        entries.map((entry) => entry.overlayId),
+      ]),
+    ).toEqual([
+      ["transport", ["traffic-flow"]],
+      ["outdoors", ["hiking", "street-level-imagery"]],
+      ["weatherEnvironment", ["weather"]],
+      ["otherDetails", ["new-detail"]],
+    ]);
+    expect(result.current.mapDetails.map((entry) => entry.overlayId)).toEqual([
+      "traffic-flow",
+      "hiking",
+      "weather",
+      "street-level-imagery",
+      "new-detail",
+    ]);
+  });
+});

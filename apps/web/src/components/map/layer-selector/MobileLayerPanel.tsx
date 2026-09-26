@@ -1,5 +1,7 @@
 "use client";
 
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import PublicIcon from "@mui/icons-material/Public";
 import Box from "@mui/material/Box";
 import Divider from "@mui/material/Divider";
@@ -44,7 +46,14 @@ function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
           >
             {entry.icon}
           </Box>
-          <Typography sx={{ fontSize: 13.5 }}>{t(entry.labelKey)}</Typography>
+          <Box>
+            <Typography sx={{ fontSize: 13.5 }}>{t(entry.labelKey)}</Typography>
+            {entry.descriptionKey && !belowMinZoom ? (
+              <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
+                {t(entry.descriptionKey)}
+              </Typography>
+            ) : null}
+          </Box>
           {belowMinZoom ? (
             <Typography sx={{ fontSize: 11, color: "text.secondary" }}>
               {t("zoomInHint", { minZoom })}
@@ -60,6 +69,32 @@ function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
           }}
           slotProps={{ input: { "aria-label": t("toggleOverlay", { layer: t(entry.labelKey) }) } }}
           size="small"
+        />
+      }
+    />
+  );
+}
+
+function ToolSwitchRow({
+  entry,
+  active,
+  onToggle,
+}: {
+  entry: GeneratedLayerEntry;
+  active: boolean;
+  onToggle: () => void;
+}) {
+  const t = useTranslations("layers");
+  return (
+    <FormControlLabel
+      sx={{ mr: 0, ml: 0.25 }}
+      label={<Typography sx={{ fontSize: 13.5 }}>{t(entry.labelKey)}</Typography>}
+      control={
+        <Switch
+          checked={active}
+          onChange={onToggle}
+          size="small"
+          slotProps={{ input: { "aria-label": t(entry.labelKey) } }}
         />
       }
     />
@@ -97,7 +132,9 @@ export function MobileLayerPanel() {
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const setActiveLayer = useLayerStore((s) => s.setActiveLayer);
   const { isAvailable } = useCapabilities();
-  const { mapDetails } = useLayerSelectorConfig();
+  const { detailGroups, mapTools } = useLayerSelectorConfig();
+  const measureActive = useMeasurementStore((s) => s.isActive);
+  const travelTimeActive = useTravelTimeStore((s) => s.isActive);
 
   return (
     <Box sx={{ p: 1.5 }}>
@@ -128,11 +165,48 @@ export function MobileLayerPanel() {
         {t("mapDetails")}
       </Typography>
 
-      {mapDetails
+      {detailGroups.map((group) => {
+        const entries = group.entries.filter((entry) => isAvailable(entry.serviceId));
+        if (entries.length === 0) return null;
+        return (
+          <Box key={group.id} sx={{ mb: 1 }}>
+            <Typography sx={{ fontSize: 12, color: "text.secondary", fontWeight: 600, mb: 0.25 }}>
+              {t(group.id)}
+            </Typography>
+            {entries.map((entry) => (
+              <OverlaySwitchRow key={entry.id} entry={entry} />
+            ))}
+          </Box>
+        );
+      })}
+
+      <Divider sx={{ my: 1.5 }} />
+      <Typography sx={{ fontSize: 13, color: "text.secondary", fontWeight: 600, mb: 0.5 }}>
+        {t("mapTools")}
+      </Typography>
+      {mapTools
         .filter((entry) => isAvailable(entry.serviceId))
-        .map((entry) => (
-          <OverlaySwitchRow key={entry.id} entry={entry} />
-        ))}
+        .map((entry) => {
+          const tool =
+            entry.id === "measurement"
+              ? { active: measureActive, store: useMeasurementStore }
+              : entry.id === "travel-time"
+                ? { active: travelTimeActive, store: useTravelTimeStore }
+                : null;
+          if (!tool) return null;
+          return (
+            <ToolSwitchRow
+              key={entry.id}
+              entry={entry}
+              active={tool.active}
+              onToggle={() => {
+                const state = tool.store.getState();
+                if (state.isActive) state.deactivate();
+                else state.activate();
+              }}
+            />
+          );
+        })}
       <GlobeSwitchRow />
     </Box>
   );
