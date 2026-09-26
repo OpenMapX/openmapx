@@ -30,6 +30,8 @@ const MODES: { mode: TravelMode; icon: ReactNode; labelKey: string; disabled?: b
 ];
 
 function ModeButton({
+  mode,
+  name,
   icon,
   label,
   time,
@@ -38,6 +40,8 @@ function ModeButton({
   loading,
   onClick,
 }: {
+  mode: TravelMode;
+  name: string;
   icon: ReactNode;
   label: string;
   time?: string;
@@ -47,9 +51,9 @@ function ModeButton({
   onClick: () => void;
 }) {
   return (
-    <Tooltip title={label} placement="bottom" arrow>
+    <Tooltip title={label} placement="bottom" arrow describeChild>
       <Box
-        onClick={disabled ? undefined : onClick}
+        component="label"
         sx={{
           display: "flex",
           flexDirection: "column",
@@ -65,8 +69,28 @@ function ModeButton({
           // horizontally-scrollable mode row.
           minWidth: 44,
           flexShrink: 0,
+          position: "relative",
+          "&:focus-within": {
+            outline: "2px solid",
+            outlineColor: "primary.main",
+            outlineOffset: -2,
+          },
         }}
       >
+        <Box
+          component="input"
+          type="radio"
+          name={name}
+          value={mode}
+          aria-label={label}
+          checked={active}
+          disabled={disabled}
+          onChange={onClick}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" && !disabled) onClick();
+          }}
+          sx={{ position: "absolute", opacity: 0, width: 1, height: 1, m: 0 }}
+        />
         {/* Icon inside pill */}
         <Box
           sx={{

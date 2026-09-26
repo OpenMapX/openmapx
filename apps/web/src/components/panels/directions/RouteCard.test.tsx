@@ -3,6 +3,7 @@ import { setNavigationAuthority, useDirectionsStore, useNavigationStore } from "
 import { MOBILE_PROTOCOL_MAX, MOBILE_PROTOCOL_MIN } from "@openmapx/core/navigation";
 import { en } from "@openmapx/i18n";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { NextIntlClientProvider } from "next-intl";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileRuntimeProvider } from "@/lib/mobile/MobileRuntimeProvider";
@@ -39,6 +40,86 @@ const renderCard = (route: Route) =>
       />
     </NextIntlClientProvider>,
   );
+
+describe("RouteCard keyboard actions", () => {
+  it("selects an alternative route with its radio without nesting secondary actions", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onDetails = vi.fn();
+    const view = render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={1}
+          active={false}
+          onSelect={onSelect}
+          onDetails={onDetails}
+          units="metric"
+          impact={mockDieselImpact}
+        />
+      </NextIntlClientProvider>,
+    );
+    const radio = screen.getByRole("radio", { name: /via A46/ });
+    expect((radio as HTMLInputElement).checked).toBe(false);
+    radio.focus();
+    await user.keyboard(" ");
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    await user.click(screen.getByText("via A46"));
+    expect(onSelect).toHaveBeenCalledTimes(2);
+    expect(view.container.querySelector("button button, button input, label button")).toBeNull();
+  });
+
+  it("keeps Details and Impact independent of route selection", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const onDetails = vi.fn();
+    const view = render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={onSelect}
+          onDetails={onDetails}
+          units="metric"
+          impact={mockDieselImpact}
+        />
+      </NextIntlClientProvider>,
+    );
+    const details = screen.getByRole("button", { name: "Details" });
+    details.focus();
+    await user.keyboard("{Enter}");
+    await user.keyboard(" ");
+    expect(onDetails).toHaveBeenCalledTimes(2);
+    await user.click(screen.getByTestId("route-impact-badge"));
+    expect(screen.getByRole("dialog")).toBeDefined();
+    expect(onSelect).not.toHaveBeenCalled();
+    expect(view.container.querySelector("button button, button input, label button")).toBeNull();
+  });
+
+  it("uses a button to peek at a scheduled route", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          selectionKind="peek"
+          onSelect={onSelect}
+          onDetails={() => {}}
+          units="metric"
+        />
+      </NextIntlClientProvider>,
+    );
+    const peek = screen.getByRole("button", { name: /via A46/ });
+    peek.focus();
+    await user.keyboard("{Enter}");
+    expect(onSelect).toHaveBeenCalledTimes(1);
+    expect(screen.queryByRole("radio")).toBeNull();
+  });
+});
 
 describe("RouteCard traffic delta", () => {
   it("shows nothing when there is no baseline duration", () => {
@@ -81,7 +162,10 @@ describe("RouteCard traffic delta", () => {
  * The provider is the real one — the point of these tests is what actually
  * crosses the bridge, so faking it would test the fake.
  */
-function renderInShell(reply: (type: string) => unknown | Promise<unknown>) {
+function renderInShell(
+  reply: (type: string) => unknown | Promise<unknown>,
+  onSelect: () => void = () => {},
+) {
   const sent: { type: string; payload: unknown }[] = [];
   const handlers = new Map<string, (event: Event) => void>();
   const NONCE = "nonce-abc";
@@ -122,7 +206,7 @@ function renderInShell(reply: (type: string) => unknown | Promise<unknown>) {
           route={baseRoute}
           index={0}
           active
-          onSelect={() => {}}
+          onSelect={onSelect}
           onDetails={() => {}}
           units="metric"
         />
@@ -208,7 +292,8 @@ describe("RouteCard Start under native authority", () => {
   };
 
   it("prepares and starts natively without writing the browser session", async () => {
-    const { sent, start } = renderInShell(compatibleShell);
+    const onSelect = vi.fn();
+    const { sent, start } = renderInShell(compatibleShell, onSelect);
     await negotiated(sent);
 
     fireEvent.click(start());
@@ -217,6 +302,7 @@ describe("RouteCard Start under native authority", () => {
     // The authoritative snapshot is what makes a session visible, so there is no
     // half-started UI to undo if any of this fails.
     expect(useNavigationStore.getState().status).toBe("idle");
+    expect(onSelect).not.toHaveBeenCalled();
   });
 
   it("sends the route inside the start package", async () => {

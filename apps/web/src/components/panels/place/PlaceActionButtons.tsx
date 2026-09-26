@@ -36,6 +36,8 @@ interface ActionButtonProps {
 function ActionButton({ icon, label, filled = false, onClick }: ActionButtonProps) {
   return (
     <Box
+      component="button"
+      type="button"
       sx={{
         display: "flex",
         flexDirection: "column",
@@ -43,6 +45,16 @@ function ActionButton({ icon, label, filled = false, onClick }: ActionButtonProp
         gap: 0.75,
         cursor: "pointer",
         minWidth: 40,
+        border: 0,
+        p: 0,
+        bgcolor: "transparent",
+        font: "inherit",
+        "&:focus-visible": {
+          outline: "2px solid",
+          outlineColor: "primary.main",
+          outlineOffset: 3,
+          borderRadius: 1,
+        },
       }}
       onClick={onClick}
     >

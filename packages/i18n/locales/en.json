@@ -737,6 +737,7 @@
     "attribution": "Fire data"
   },
   "directions": {
+    "travelMode": "Travel mode",
     "driving": "Driving",
     "transit": "Transit",
     "walking": "Walking",

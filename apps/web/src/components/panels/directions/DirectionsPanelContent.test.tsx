@@ -232,6 +232,20 @@ describe("DirectionsPanelContent", () => {
     expect(transitArg.destination).toEqual([11.5, 48.1]);
   });
 
+  it("exposes one selected travel mode and changes it with keyboard selection", () => {
+    seedOriginDestination();
+    renderPanel();
+    const group = screen.getByRole("radiogroup", { name: "directions.travelMode" });
+    const driving = screen.getByRole("radio", { name: "directions.driving" });
+    const walking = screen.getByRole("radio", { name: "directions.walking" });
+    expect(group.contains(driving)).toBe(true);
+    expect((driving as HTMLInputElement).checked).toBe(true);
+    walking.focus();
+    fireEvent.keyDown(walking, { key: "Enter" });
+    expect(useDirectionsStore.getState().mode).toBe("walking");
+    expect((walking as HTMLInputElement).checked).toBe(true);
+  });
+
   it("driving depart/arrive time feeds the request after the debounce", async () => {
     seedOriginDestination();
     renderPanel();

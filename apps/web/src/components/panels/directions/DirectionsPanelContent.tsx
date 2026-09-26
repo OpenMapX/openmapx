@@ -911,6 +911,8 @@ export function DirectionsPanelContent() {
         </IconButton>
 
         <Box
+          role="radiogroup"
+          aria-label={t("travelMode")}
           sx={{
             display: "flex",
             flex: 1,
@@ -946,6 +948,8 @@ export function DirectionsPanelContent() {
             return (
               <ModeButton
                 key={m}
+                mode={m}
+                name="travel-mode"
                 icon={icon}
                 label={t(labelKey)}
                 time={timeStr}
@@ -1470,6 +1474,7 @@ export function DirectionsPanelContent() {
                   route={route}
                   index={i}
                   active
+                  selectionKind="peek"
                   isFastest={i === fastestRouteIndex}
                   onSelect={() => snapTo("peek")}
                   onDetails={() => setDetailsRouteIndex(i)}
@@ -1498,31 +1503,33 @@ export function DirectionsPanelContent() {
           </>
         ) : data?.routes.length ? (
           <>
-            {data.routes.map((route, i) => (
-              // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
-              <Box key={i}>
-                <RouteCard
-                  route={route}
-                  index={i}
-                  active={i === activeRouteIndex}
-                  isFastest={i === fastestRouteIndex}
-                  onSelect={() => {
-                    setActiveRouteIndex(i);
-                    snapTo("peek");
-                  }}
-                  onDetails={() => setDetailsRouteIndex(i)}
-                  units={units}
-                  alternatives={data.routes.filter((_, idx) => idx !== i)}
-                  provider={data.provider}
-                  roadConditionImpact={data.roadConditionImpact}
-                  impact={routeImpacts[i]}
-                  impactUnavailableReason={routeImpactUnavailableReason}
-                  vehicles={impactVehicles}
-                  onUpdateAssumptions={handleUpdateAssumptions}
-                />
-                {i < data.routes.length - 1 && <Divider />}
-              </Box>
-            ))}
+            <Box role="radiogroup" aria-label={t("routes")}>
+              {data.routes.map((route, i) => (
+                // biome-ignore lint/suspicious/noArrayIndexKey: routes have no stable id
+                <Box key={i}>
+                  <RouteCard
+                    route={route}
+                    index={i}
+                    active={i === activeRouteIndex}
+                    isFastest={i === fastestRouteIndex}
+                    onSelect={() => {
+                      setActiveRouteIndex(i);
+                      snapTo("peek");
+                    }}
+                    onDetails={() => setDetailsRouteIndex(i)}
+                    units={units}
+                    alternatives={data.routes.filter((_, idx) => idx !== i)}
+                    provider={data.provider}
+                    roadConditionImpact={data.roadConditionImpact}
+                    impact={routeImpacts[i]}
+                    impactUnavailableReason={routeImpactUnavailableReason}
+                    vehicles={impactVehicles}
+                    onUpdateAssumptions={handleUpdateAssumptions}
+                  />
+                  {i < data.routes.length - 1 && <Divider />}
+                </Box>
+              ))}
+            </Box>
             <AttributionStrip
               attributions={routingAttributions}
               variant="panel-header"

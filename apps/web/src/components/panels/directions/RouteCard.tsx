@@ -45,6 +45,8 @@ export interface RouteCardProps {
   route: Route;
   index: number;
   active: boolean;
+  /** Scheduled cards only peek at the sheet; ordinary cards select one alternative. */
+  selectionKind?: "route" | "peek";
   /** Whether this route has the shortest provider-reported duration. */
   isFastest?: boolean;
   onSelect: () => void;
@@ -65,6 +67,7 @@ export function RouteCard({
   route,
   index,
   active,
+  selectionKind = "route",
   isFastest = false,
   onSelect,
   onDetails,
@@ -163,10 +166,75 @@ export function RouteCard({
     return { band, delaySeconds, baseline };
   })();
 
+  const selectionLabel = `${route.summary ?? t("bestRoute")}, ${formatDuration(route.duration)}, ${dist}`;
+  const summaryContent = (
+    <>
+      <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+        <Typography
+          variant="body2"
+          noWrap
+          sx={{ fontWeight: 600, color: "text.primary", flex: 1, mr: 1 }}
+        >
+          {route.summary ?? t("bestRoute")}
+        </Typography>
+        <Typography
+          variant="body2"
+          color={active ? BRAND : "text.primary"}
+          sx={{ fontWeight: 600, flexShrink: 0 }}
+        >
+          {formatDuration(route.duration)}
+        </Typography>
+      </Box>
+      {trafficDelay && (
+        <Typography
+          variant="caption"
+          data-testid="traffic-delay"
+          sx={{ color: TRAFFIC_TEXT_COLOR[trafficDelay.band], display: "block", fontWeight: 600 }}
+        >
+          {t("trafficDelay", { delay: formatDuration(trafficDelay.delaySeconds) })}
+          {" · "}
+          {t("trafficDelayNormally", { baseline: formatDuration(trafficDelay.baseline) })}
+        </Typography>
+      )}
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+        {dist}
+      </Typography>
+      {roadConditionImpact && (
+        <Typography
+          variant="caption"
+          data-testid="road-condition-route-status"
+          sx={{ color: "text.secondary", display: "block" }}
+        >
+          {t(`roadConditionImpact.${roadConditionImpact.availability}`)}
+        </Typography>
+      )}
+    </>
+  );
+
+  const selectionSx = {
+    display: "block",
+    width: "100%",
+    p: 0,
+    border: 0,
+    bgcolor: "transparent",
+    color: "inherit",
+    font: "inherit",
+    textAlign: "left" as const,
+    cursor: "pointer",
+    borderRadius: 1,
+    "&:focus-visible, &:focus-within": {
+      outline: "2px solid",
+      outlineColor: "primary.main",
+      outlineOffset: 2,
+    },
+  };
+
   return (
     <Box
-      onClick={onSelect}
-      role="button"
+      onClick={(event) => {
+        if (!(event.target as Element).closest("button, input, label, a, [role='button']"))
+          onSelect();
+      }}
       sx={{
         display: "flex",
         gap: 1.5,
@@ -181,61 +249,35 @@ export function RouteCard({
     >
       <Box sx={{ flexShrink: 0, mt: 0.25 }}>{modeIcon}</Box>
       <Box sx={{ flex: 1, minWidth: 0 }}>
-        <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-          <Typography
-            variant="body2"
-            noWrap
-            sx={{
-              fontWeight: 600,
-              color: "text.primary",
-              flex: 1,
-              mr: 1,
-            }}
+        {selectionKind === "peek" ? (
+          <Box
+            component="button"
+            type="button"
+            aria-label={selectionLabel}
+            onClick={onSelect}
+            sx={selectionSx}
           >
-            {route.summary ?? t("bestRoute")}
-          </Typography>
-          <Typography
-            variant="body2"
-            color={active ? BRAND : "text.primary"}
-            sx={{
-              fontWeight: 600,
-              flexShrink: 0,
-            }}
-          >
-            {formatDuration(route.duration)}
-          </Typography>
-        </Box>
-        {trafficDelay && (
-          <Typography
-            variant="caption"
-            data-testid="traffic-delay"
-            sx={{
-              color: TRAFFIC_TEXT_COLOR[trafficDelay.band],
-              display: "block",
-              fontWeight: 600,
-            }}
-          >
-            {t("trafficDelay", { delay: formatDuration(trafficDelay.delaySeconds) })}
-            {" · "}
-            {t("trafficDelayNormally", { baseline: formatDuration(trafficDelay.baseline) })}
-          </Typography>
-        )}
-        <Typography
-          variant="caption"
-          sx={{
-            color: "text.secondary",
-          }}
-        >
-          {dist}
-        </Typography>
-        {roadConditionImpact && (
-          <Typography
-            variant="caption"
-            data-testid="road-condition-route-status"
-            sx={{ color: "text.secondary", display: "block" }}
-          >
-            {t(`roadConditionImpact.${roadConditionImpact.availability}`)}
-          </Typography>
+            {summaryContent}
+          </Box>
+        ) : (
+          <Box component="label" sx={selectionSx}>
+            <Box
+              component="input"
+              type="radio"
+              name="alternative-route"
+              aria-label={selectionLabel}
+              checked={active}
+              onChange={onSelect}
+              onClick={() => {
+                if (active) onSelect();
+              }}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") onSelect();
+              }}
+              sx={{ position: "absolute", opacity: 0, width: 1, height: 1, m: 0 }}
+            />
+            {summaryContent}
+          </Box>
         )}
         {impact ? (
           <Box
@@ -278,7 +320,8 @@ export function RouteCard({
         {active && (
           <Box sx={{ mt: 0.5, ml: -1.5, display: "flex", alignItems: "center", gap: 0.5 }}>
             <Typography
-              component="span"
+              component="button"
+              type="button"
               variant="caption"
               sx={{
                 color: BRAND,
@@ -287,7 +330,14 @@ export function RouteCard({
                 px: 1.5,
                 py: 0.75,
                 borderRadius: 99,
+                border: 0,
+                bgcolor: "transparent",
                 "&:hover": { bgcolor: `${BRAND}18` },
+                "&:focus-visible": {
+                  outline: "2px solid",
+                  outlineColor: "primary.main",
+                  outlineOffset: 2,
+                },
                 transition: "background-color 0.15s",
               }}
               onClick={(e) => {
