@@ -228,6 +228,8 @@ export function CategoryFilterBar() {
   const t = useTranslations("category");
   const tc = useTranslations("common");
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+  const mode = useCategorySearchStore((s) => s.mode);
+  const textQuery = useCategorySearchStore((s) => s.textQuery);
   const { openingHoursFilter, openAtDay, openAtHour, setOpeningHoursFilter, setOpenAtFilter } =
     useOpeningHoursStore();
   const facetSelections = useCategoryFacetStore((s) => s.selections);
@@ -406,6 +408,10 @@ export function CategoryFilterBar() {
       </Box>
     );
   }
+
+  // Facet selections persist across searches, but they should not render a
+  // filter row when no category or usable text query is active.
+  if (!activeCategory && !(mode === "text" && textQuery.trim().length >= 2)) return null;
 
   const hasHours = !!effectiveCategory && HOURS_FILTER_CATEGORY_IDS.has(effectiveCategory);
   if (!hasHours && panelFacets.length === 0 && !unmappedNotice) return null;

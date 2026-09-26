@@ -1,7 +1,7 @@
 import type { CategoryPlace, OverpassFilter } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
-import { cleanup, createQueryWrapper, render, screen, userEvent } from "@/test";
+import { act, cleanup, createQueryWrapper, render, screen, userEvent } from "@/test";
 
 const isMobileRef = { current: true };
 const localeRef = vi.hoisted(() => ({ current: "mock" }));
@@ -189,9 +189,22 @@ describe("CategoryFilterBar facet discovery", () => {
     expect(useOpeningHoursStore.getState().openingHoursFilter).toBe("open_now");
   });
 
+  it("hides retained facets after closing the category search", () => {
+    useCategoryFacetStore.getState().toggleFacet("outdoorSeating");
+    renderBar();
+    expect(screen.getByText("category.filters")).toBeInTheDocument();
+
+    act(() => useCategorySearchStore.getState().clearCategory());
+
+    expect(useCategoryFacetStore.getState().selections.outdoorSeating).toEqual(["on"]);
+    expect(screen.queryByText("category.filters")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /category.outdoorSeating/i })).toBeNull();
+    expect(getMapObstructionInsets().top).toBe(0);
+  });
+
   it("keeps brand selection available in text results without a dominant category", async () => {
     const user = userEvent.setup();
-    useCategorySearchStore.setState({ activeCategory: null, mode: "text" });
+    useCategorySearchStore.getState().setExploreText("coffee shops");
     resultsRef.dominantCategory = null;
     useCategoryFacetStore.getState().setMultiFacet("brand", ["Q8"]);
     renderBar();
