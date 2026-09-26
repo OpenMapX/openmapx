@@ -1,10 +1,9 @@
 import { useMemo } from "react";
-import { useCategorySearchStore } from "../stores/categorySearchStore";
-import { useMapStore } from "../stores/mapStore";
+import { AD_HOC_CATEGORY_ID, useCategorySearchStore } from "../stores/categorySearchStore";
 import { useNlpSearchStore } from "../stores/nlpSearchStore";
-import type { LngLat } from "../types/geometry";
 import type { TagPredicate } from "../utils/overpassFilter";
-import { bboxCenter, sortResultsByIntent } from "../utils/sortResults";
+import { resolveDistanceReference } from "../utils/resultReference";
+import { sortResultsByIntent } from "../utils/sortResults";
 import { useFilteredCategoryResults } from "./useFilteredCategoryResults";
 import { useTextSearchResults } from "./useTextSearch";
 
@@ -17,19 +16,40 @@ import { useTextSearchResults } from "./useTextSearch";
  * apply — the active category in category mode, or the inferred majority
  * category of the text results.
  *
- * When an NL search is active its `sort_by` reorders the filtered list: the
- * distance reference is the centre of the resolved search bbox (stable for the
- * lifetime of the search) rather than the live map centre, so panning the map
- * does not re-sort the results. Non-NL searches carry no intent, so the list
- * keeps the backend's relevance order.
+ * The captured search origin/area is shared by displayed distances and intent
+ * sorting. An NLP intent only applies while its exact filter remains active.
  */
 export function useExploreResults(lang?: string) {
   const mode = useCategorySearchStore((s) => s.mode);
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+  const anchor = useCategorySearchStore((s) => s.anchor);
+  const searchBbox = useCategorySearchStore((s) => s.searchBbox);
+  const adHocFilter = useCategorySearchStore((s) => s.adHocFilter);
+  const activeBrand = useCategorySearchStore((s) => s.activeBrand);
 
-  const sortBy = useNlpSearchStore((s) => s.intent?.sort_by);
-  const resolvedBbox = useNlpSearchStore((s) => s.resolvedBbox);
-  const userLocation = useMapStore((s) => s.userLocation);
+  const nlpIntent = useNlpSearchStore((s) => s.intent);
+  const isNlpActive = useNlpSearchStore((s) => s.isNlpActive);
+  const currentNlpIntent =
+    isNlpActive &&
+    mode === "category" &&
+    activeCategory === AD_HOC_CATEGORY_ID &&
+    !activeBrand &&
+    adHocFilter !== null &&
+    adHocFilter === nlpIntent?.filter
+      ? nlpIntent
+      : null;
+  const distanceReference = useMemo(() => {
+    const spatial = currentNlpIntent?.spatial_constraint;
+    const searchOrigin =
+      spatial?.type === "near_coordinates"
+        ? { coordinates: [spatial.lng, spatial.lat] as [number, number] }
+        : null;
+    return resolveDistanceReference({
+      anchor: currentNlpIntent ? null : anchor,
+      searchBbox,
+      searchOrigin,
+    });
+  }, [anchor, currentNlpIntent, searchBbox]);
 
   const category = useFilteredCategoryResults();
   const text = useTextSearchResults(lang);
@@ -46,9 +66,12 @@ export function useExploreResults(lang?: string) {
       : { ...category, mode, dominantCategory: activeCategory as string | null };
 
   const filtered = useMemo(() => {
-    const reference: LngLat | null = resolvedBbox ? bboxCenter(resolvedBbox) : userLocation;
-    return sortResultsByIntent(base.filtered, sortBy, reference);
-  }, [base.filtered, sortBy, resolvedBbox, userLocation]);
+    return sortResultsByIntent(
+      base.filtered,
+      currentNlpIntent?.sort_by,
+      distanceReference?.coordinates ?? null,
+    );
+  }, [base.filtered, currentNlpIntent, distanceReference]);
 
-  return { ...base, filtered };
+  return { ...base, filtered, distanceReference };
 }

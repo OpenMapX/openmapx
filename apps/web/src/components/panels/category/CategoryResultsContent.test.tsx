@@ -6,6 +6,7 @@ import {
   useCategorySearchStore,
   useOpeningHoursStore,
   usePlaceStore,
+  useSettingsStore,
 } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
@@ -398,6 +399,50 @@ describe("category place hours", () => {
     expect(result).not.toHaveTextContent("Mo-Fr 09:00-17:00; PH off");
     fireEvent.click(result);
     expect(usePlaceStore.getState().selectedPlace?.openingHours).toBe(place.openingHours);
+  });
+});
+
+describe("category result details", () => {
+  const place = {
+    id: "cafe",
+    name: "Café",
+    coordinates: [0, 0.01],
+    osmTags: { cuisine: "italian", outdoor_seating: "yes", wheelchair: "limited" },
+  } as CategoryPlace;
+
+  it("shows at most two known attributes and metric distance from the shared search reference", () => {
+    act(() => useSettingsStore.setState({ units: "metric" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [place],
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+      distanceReference: { kind: "search_origin", coordinates: [0, 0], name: "Station" },
+    });
+    renderPanel(vi.fn());
+    const row = screen.getByRole("button", { name: /Café/ });
+    expect(row).toHaveTextContent("1.1 km");
+    expect(row).toHaveTextContent("Italian");
+    expect(row).toHaveTextContent("place.outdoorSeating");
+    expect(row).not.toHaveTextContent("place.wheelchairLimited");
+    expect(screen.getByText("search.distanceFromOrigin")).toBeInTheDocument();
+  });
+
+  it("uses imperial units and omits distance for bad coordinates", () => {
+    act(() => useSettingsStore.setState({ units: "imperial" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [place, { ...place, id: "bad", name: "Bad", coordinates: [Number.NaN, 0] }],
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+      distanceReference: { kind: "search_area_center", coordinates: [0, 0] },
+    });
+    renderPanel(vi.fn());
+    expect(screen.getByRole("button", { name: /Café/ })).toHaveTextContent("3648 ft");
+    expect(screen.getByRole("button", { name: /Bad/ })).not.toHaveTextContent(/mi|ft/);
+    expect(screen.getByText("search.distanceFromAreaCenter")).toBeInTheDocument();
   });
 });
 

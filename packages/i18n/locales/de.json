@@ -252,6 +252,9 @@
     "detailsPanelAriaLabel": "Ortsdetails"
   },
   "search": {
+    "distanceFromOrigin": "Entfernungen ab {name}",
+    "distanceFromSearchLocation": "Entfernungen ab dem gesuchten Ort",
+    "distanceFromAreaCenter": "Entfernungen ab der Mitte des Suchgebiets",
     "placeholder": "OpenMapX durchsuchen",
     "ariaLabel": "Suche",
     "menuAriaLabel": "Menü",

@@ -33,6 +33,8 @@ export function ResultListItem({
 }) {
   const sx: SxProps<Theme> = {
     width: "100%",
+    boxSizing: "border-box",
+    minWidth: 0,
     textAlign: "left",
     background: "none",
     border: "none",
@@ -60,7 +62,7 @@ export function ResultListItem({
 /** Shared name line for a result-list row. */
 export function ResultItemName({ children }: { children: React.ReactNode }) {
   return (
-    <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.25 }}>
+    <Typography variant="body1" sx={{ fontWeight: 600, mb: 0.25, overflowWrap: "anywhere" }}>
       {children}
     </Typography>
   );

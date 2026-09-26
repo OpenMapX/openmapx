@@ -226,6 +226,12 @@ export { pointInIsochroneGeometry } from "./pointInPolygon";
 export type { RankedPoiResults } from "./poiRanking";
 export { MAX_POI_SEARCH_RESULTS, rankAndLimitPoiResults, rankPoiResults } from "./poiRanking";
 export { decodePolyline, encodePolyline } from "./polyline";
+export {
+  type DistanceReference,
+  resolveDistanceReference,
+  resultDistanceMetres,
+  validResultCoordinates,
+} from "./resultReference";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export {
   getRoadConditionRoutingDecision,

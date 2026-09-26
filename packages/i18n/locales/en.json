@@ -252,6 +252,9 @@
     "detailsPanelAriaLabel": "Place details"
   },
   "search": {
+    "distanceFromOrigin": "Distances from {name}",
+    "distanceFromSearchLocation": "Distances from the searched location",
+    "distanceFromAreaCenter": "Distances from the center of the searched area",
     "placeholder": "Search OpenMapX",
     "ariaLabel": "search",
     "menuAriaLabel": "Menu",

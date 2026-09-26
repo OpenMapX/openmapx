@@ -11,18 +11,21 @@ import FormControlLabel from "@mui/material/FormControlLabel";
 import Skeleton from "@mui/material/Skeleton";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import type { CategoryPlace, TagPredicate } from "@openmapx/core";
+import type { CategoryPlace, DistanceReference, TagPredicate } from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
   categoryPlaceToPlace,
+  formatMeasurementDistance,
   isAreaTooLarge,
   PANEL,
   resolveStopAsPlace,
+  resultDistanceMetres,
   useBrandLogos,
   useCategoryFacetStore,
   useCategorySearchStore,
   useOpeningHoursStore,
   usePlaceStore,
+  useSettingsStore,
   useSidebarStore,
   useTransitStops,
 } from "@openmapx/core";
@@ -43,6 +46,7 @@ import { useExploreReachResults } from "@/lib/useExploreReachResults";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { BrandHeaderCard } from "./BrandHeaderCard";
 import { ExploreTravelTimeControl } from "./ExploreTravelTimeControl";
+import { selectResultAttributes } from "./resultAttributes";
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   rail: TrainIcon,
@@ -89,6 +93,7 @@ function CategoryPlaceCard({
   onHover,
   onHoverEnd,
   brandLogos,
+  distanceReference,
 }: {
   place: CategoryPlace;
   isHovered: boolean;
@@ -97,10 +102,15 @@ function CategoryPlaceCard({
   onHoverEnd: () => void;
   /** QID -> Commons logo filename, resolved once for the whole result list. */
   brandLogos: Map<string, string | undefined>;
+  distanceReference: DistanceReference | null;
 }) {
   const tp = useTranslations("place");
   const tc = useTranslations("common");
+  const tcat = useTranslations("category");
+  const units = useSettingsStore((s) => s.units);
   const ohText = useOpeningHoursText();
+  const distanceMetres = resultDistanceMetres(distanceReference, place.coordinates);
+  const attributes = selectResultAttributes(place.osmTags);
   const tagLabel = place.category
     ? place.category.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase())
     : undefined;
@@ -160,12 +170,48 @@ function CategoryPlaceCard({
             variant="caption"
             sx={{
               color: "text.secondary",
+              overflowWrap: "anywhere",
             }}
           >
             {place.address}
           </Typography>
         )}
       </Box>
+      {(distanceMetres !== null || attributes.length > 0) && (
+        <Box
+          sx={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 0.75,
+            alignItems: "center",
+            minWidth: 0,
+            mb: 0.25,
+          }}
+        >
+          {distanceMetres !== null && (
+            <Typography variant="caption" sx={{ color: "text.secondary", fontWeight: 600 }}>
+              {formatMeasurementDistance(distanceMetres, units)}
+            </Typography>
+          )}
+          {attributes.map((attribute) => (
+            <Typography
+              key={attribute.kind}
+              variant="caption"
+              sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
+            >
+              {attribute.kind === "cuisine"
+                ? `${tcat("cuisine")}: ${attribute.value}`
+                : attribute.kind === "outdoor_seating"
+                  ? tp("outdoorSeating")
+                  : attribute.kind === "wheelchair_yes"
+                    ? tp("wheelchairYes")
+                    : attribute.kind === "wheelchair_designated"
+                      ? tp("wheelchairDesignated")
+                      : tp("wheelchairLimited")}
+            </Typography>
+          ))}
+        </Box>
+      )}
       {(() => {
         const hours = place.openingHoursInfo?.status ?? null;
         if (hours) {
@@ -245,6 +291,7 @@ export function CategoryResultsContent() {
     relaxed,
     isTransitCategory,
     refetch,
+    distanceReference,
   } = useExploreReachResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
   const { data: transitStops, isPending: transitPending } = transitStopsQuery;
@@ -552,6 +599,18 @@ export function CategoryResultsContent() {
               {tc("resultsCount", { count: results.length })}
             </Typography>
           </Box>
+          {distanceReference && (
+            <Typography
+              variant="caption"
+              sx={{ display: "block", px: 2, pb: 0.5, color: "text.secondary" }}
+            >
+              {distanceReference.kind === "search_area_center"
+                ? ts("distanceFromAreaCenter")
+                : distanceReference.name
+                  ? ts("distanceFromOrigin", { name: distanceReference.name })
+                  : ts("distanceFromSearchLocation")}
+            </Typography>
+          )}
           <Box sx={{ px: 2 }}>
             <AttributionStrip
               attributions={poiAttributions}
@@ -571,6 +630,7 @@ export function CategoryResultsContent() {
                 onHover={setHoveredCategoryPlaceId}
                 onHoverEnd={() => setHoveredCategoryPlaceId(null)}
                 brandLogos={brandLogos}
+                distanceReference={distanceReference}
               />
             )}
           />

@@ -4,6 +4,8 @@ import { ApiClientError, apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { useCategoryFacetStore } from "../../stores/categoryFacetStore";
 import { useCategorySearchStore } from "../../stores/categorySearchStore";
+import { useMapStore } from "../../stores/mapStore";
+import { useNlpSearchStore } from "../../stores/nlpSearchStore";
 import { useOpeningHoursStore } from "../../stores/openingHoursStore";
 import { createQueryWrapper } from "../../test/queryWrapper";
 import { useExploreResults } from "../useExploreResults";
@@ -16,9 +18,103 @@ const areaError = new ApiClientError(422, { error: "area_too_large" }, null);
 describe("useExploreResults retry", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    useNlpSearchStore.getState().clear();
     useCategorySearchStore.getState().clearCategory();
     useCategoryFacetStore.getState().reset();
     useOpeningHoursStore.getState().reset();
+  });
+
+  it("keeps the captured area reference while location changes and updates on a new search box", () => {
+    useCategorySearchStore.getState().setActiveCategory("restaurants");
+    useCategorySearchStore.getState().setSearchBbox(bbox);
+    vi.spyOn(apiClient, "get").mockResolvedValue(success);
+    const { result } = renderHook(() => useExploreResults(), { wrapper: createQueryWrapper() });
+    expect(result.current.distanceReference).toEqual({
+      kind: "search_area_center",
+      coordinates: [13.4, 52.5],
+    });
+
+    act(() => {
+      useMapStore.setState({ userLocation: [1, 1] });
+      useCategorySearchStore.getState().setMapMoved(true);
+    });
+    expect(result.current.distanceReference?.coordinates).toEqual([13.4, 52.5]);
+
+    act(() => useCategorySearchStore.getState().setSearchBbox({ ...bbox, east: 13.7 }));
+    expect(result.current.distanceReference?.coordinates).toEqual([13.5, 52.5]);
+  });
+
+  it("ignores a retained NLP distance intent after starting an ordinary category search", async () => {
+    const nlpFilter = {
+      selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "cafe" }] }],
+    };
+    useNlpSearchStore.getState().activate(
+      {
+        filter: nlpFilter,
+        spatial_constraint: { type: "near_coordinates", lng: 0, lat: 0 },
+        time_constraint: null,
+        sort_by: "distance",
+        unmapped_attributes: [],
+        confidence: 1,
+        explanation: "cafes",
+      },
+      bbox,
+      "test",
+    );
+    useCategorySearchStore.getState().setAdHocFilter(nlpFilter, "cafes");
+    useCategorySearchStore.getState().setActiveCategory("restaurants");
+    useCategorySearchStore.getState().setSearchBbox(bbox);
+    vi.spyOn(apiClient, "get").mockResolvedValue({
+      results: [
+        { id: "first", name: "First", coordinates: [13.45, 52.55] },
+        { id: "second", name: "Second", coordinates: [13.4, 52.5] },
+      ],
+      partial: false,
+    });
+
+    const { result } = renderHook(() => useExploreResults(), { wrapper: createQueryWrapper() });
+    await waitFor(() => expect(result.current.filtered?.length).toBe(2));
+    expect(result.current.filtered?.map((place) => place.id)).toEqual(["first", "second"]);
+    expect(result.current.distanceReference).toEqual({
+      kind: "search_area_center",
+      coordinates: [13.4, 52.5],
+    });
+  });
+
+  it("uses an active NLP coordinate origin for its requested distance order", async () => {
+    const nlpFilter = {
+      selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "cafe" }] }],
+    };
+    useNlpSearchStore.getState().activate(
+      {
+        filter: nlpFilter,
+        spatial_constraint: { type: "near_coordinates", lng: 13.45, lat: 52.55 },
+        time_constraint: null,
+        sort_by: "distance",
+        unmapped_attributes: [],
+        confidence: 1,
+        explanation: "cafes",
+      },
+      bbox,
+      "test",
+    );
+    useCategorySearchStore.getState().setAdHocFilter(nlpFilter, "cafes");
+    useCategorySearchStore.getState().setSearchBbox(bbox);
+    vi.spyOn(apiClient, "post").mockResolvedValue({
+      results: [
+        { id: "far", name: "Far", coordinates: [13.3, 52.4] },
+        { id: "near", name: "Near", coordinates: [13.45, 52.55] },
+      ],
+      partial: false,
+    });
+
+    const { result } = renderHook(() => useExploreResults(), { wrapper: createQueryWrapper() });
+    await waitFor(() => expect(result.current.filtered?.length).toBe(2));
+    expect(result.current.distanceReference).toEqual({
+      kind: "search_origin",
+      coordinates: [13.45, 52.55],
+    });
+    expect(result.current.filtered?.map((place) => place.id)).toEqual(["near", "far"]);
   });
 
   it("exposes an ordinary category failure, then retries the same category and bounds", async () => {
