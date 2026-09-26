@@ -258,18 +258,34 @@ export function RouteLayer() {
         );
       }
     };
-    let refreshCurrent = () => {};
-    const update = () => refreshCurrent();
+    let markerClass: typeof maplibregl.Marker | null = null;
+    let loading = false;
+    const update = () => {
+      if (cancelled) return;
+      if (markerClass) {
+        refresh(markerClass);
+        return;
+      }
+      if (loading) return;
+      loading = true;
+      void import("maplibre-gl")
+        .then(({ Marker }) => {
+          if (cancelled) return;
+          refresh(Marker);
+          markerClass = Marker;
+        })
+        .catch((error: unknown) => {
+          if (!cancelled)
+            console.error("[map] route pills could not load; retrying on map movement", error);
+        })
+        .finally(() => {
+          loading = false;
+        });
+    };
     map.on("moveend", update);
     map.on("resize", update);
     const unsubscribeObstructions = subscribeMapObstructions(update);
-    void import("maplibre-gl")
-      .then(({ Marker }) => {
-        if (cancelled) return;
-        refreshCurrent = () => refresh(Marker);
-        refreshCurrent();
-      })
-      .catch(() => undefined);
+    update();
     return () => {
       cancelled = true;
       map.off("moveend", update);

@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { createFakeMap, expectStyleSwapIsLossless } from "@/test";
+import { routePillAnchors } from "./routePillAnchors";
 
 const fake = createFakeMap({
   styleLoaded: true,
@@ -137,6 +138,10 @@ describe("RouteLayer map pills", () => {
     expect(screen.getByRole("button", { name: "Select route, −5 min" })).toBeInTheDocument();
     expectStyleSwapIsLossless(fake);
     expect(screen.getAllByText("25 min")).toHaveLength(1);
+    const survivingAlternative = screen.getByRole("button", { name: "Select route, −5 min" });
+    fireEvent.click(survivingAlternative);
+    expect(selectRoute).toHaveBeenCalledTimes(2);
+    expect(selectRoute).toHaveBeenLastCalledWith(0);
   });
 
   it("clears pills during navigation and when the planning mode changes", async () => {
@@ -212,6 +217,44 @@ describe("RouteLayer map pills", () => {
     expect(screen.queryByRole("button", { name: /Select route/ })).not.toBeInTheDocument();
   });
 
+  it("suppresses a near-overlapping alternative while keeping a distinct one selectable", async () => {
+    drawn.routes = [
+      {
+        geometry: [
+          [0.4, 0],
+          [0.6, 0.2],
+          [1, 0.2],
+        ],
+        distance: 2000,
+        duration: 1200,
+      },
+      {
+        geometry: [
+          [0.4, 0.01],
+          [0.6, 0.21],
+          [1, 0.21],
+        ],
+        distance: 2050,
+        duration: 1260,
+      },
+      {
+        geometry: [
+          [0.4, 0],
+          [0.6, 0.45],
+          [1, 0.45],
+        ],
+        distance: 2100,
+        duration: 1500,
+      },
+    ];
+    render(<RouteLayer />);
+    expect(await screen.findByText("20 min")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Select route, +1 min" })).not.toBeInTheDocument();
+    const distinct = screen.getByRole("button", { name: "Select route, +5 min" });
+    fireEvent.click(distinct);
+    expect(selectRoute).toHaveBeenCalledWith(2);
+  });
+
   it("localizes equal-time pills and keeps alternative buttons keyboard-selectable", async () => {
     locale = "de";
     drawn.routes[1].duration = 1200;
@@ -223,14 +266,41 @@ describe("RouteLayer map pills", () => {
     expect(selectRoute).toHaveBeenCalledWith(1);
   });
 
-  it("omits pills for routes with invalid geometry or unknown duration", async () => {
+  it("rejects invalid and zero-length geometry after running the anchor selector", () => {
+    const result = routePillAnchors(
+      [
+        {
+          routeIndex: 0,
+          geometry: [
+            [0.4, 0],
+            [0.4, 0],
+          ],
+          width: 64,
+        },
+        {
+          routeIndex: 1,
+          geometry: [
+            [Number.NaN, 0],
+            [0.8, 0.2],
+          ],
+          width: 64,
+        },
+      ],
+      0,
+      ([lng, lat]) => ({ x: 300 + lng * 600, y: 300 + lat * 500 }),
+      { width: 1200, height: 800, insets: { top: 0, bottom: 0, left: 0, right: 0 } },
+    );
+    expect(result).toEqual([]);
+  });
+
+  it("omits an alternative with unknown duration after the marker module resolves", async () => {
     drawn.routes = [
       {
         geometry: [
           [0.4, 0],
-          [0.4, 0],
+          [1, 0.2],
         ],
-        distance: 0,
+        distance: 2000,
         duration: 1200,
       },
       {
@@ -243,6 +313,7 @@ describe("RouteLayer map pills", () => {
       },
     ];
     render(<RouteLayer />);
-    await waitFor(() => expect(document.querySelectorAll(".omx-route-map-pill")).toHaveLength(0));
+    expect(await screen.findByText("20 min")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Select route/ })).not.toBeInTheDocument();
   });
 });
