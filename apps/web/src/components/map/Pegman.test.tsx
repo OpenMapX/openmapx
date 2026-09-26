@@ -1,5 +1,36 @@
-import { describe, expect, it } from "vitest";
-import { nearestFeature } from "./Pegman";
+import { useStreetLevelStore } from "@openmapx/core";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { fireEvent, render, screen } from "@/test";
+
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
+vi.mock("@/integration-api/components/useStreetLevelProviders", () => ({
+  useStreetLevelProviders: () => ({ providers: [{ id: "panoramax" }], isLoading: false }),
+}));
+vi.mock("@/integration-api/map/MapContext", () => ({
+  useMap: () => ({ mapRef: { current: null }, mapReady: false }),
+}));
+
+import { nearestFeature, Pegman } from "./Pegman";
+
+afterEach(() => {
+  useStreetLevelStore.getState().closePanel();
+});
+
+it("opens street imagery with Enter and exposes its active state", () => {
+  render(<Pegman />);
+  const control = screen.getByRole("button", { name: "streetLevel.toggleCoverage" });
+  expect(control.getAttribute("aria-pressed")).toBe("false");
+  fireEvent.keyDown(control, { key: "Enter" });
+  expect(useStreetLevelStore.getState().panelOpen).toBe(true);
+  expect(control.getAttribute("aria-pressed")).toBe("true");
+  fireEvent.keyDown(control, { key: " ", code: "Space" });
+  expect(useStreetLevelStore.getState().panelOpen).toBe(false);
+  expect(control.getAttribute("aria-pressed")).toBe("false");
+  fireEvent.click(control, { detail: 0 });
+  expect(useStreetLevelStore.getState().panelOpen).toBe(true);
+  fireEvent.click(control, { detail: 1 });
+  expect(useStreetLevelStore.getState().panelOpen).toBe(true);
+});
 
 describe("nearestFeature", () => {
   const features = [

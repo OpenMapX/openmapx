@@ -15,13 +15,15 @@ import Tooltip from "@mui/material/Tooltip";
 import { useMapStore, useNavigationStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
-import { Suspense } from "react";
+import { Suspense, useEffect, useRef, useState } from "react";
 import { useMyLocation } from "@/components/command-palette/useMyLocation";
 import { useMap } from "@/integration-api/map/MapContext";
 import { clearAlignAnnouncement, useAlignAnnouncement } from "@/lib/alignAnnouncement";
+import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { useAlignToStreets } from "@/lib/useAlignToStreets";
+import { resolveControlPlacement } from "./controlPlacement";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
 import { Pegman } from "./Pegman";
 
@@ -65,11 +67,57 @@ export function MapControls() {
   const registry = useIntegrationRegistry();
   const crowdReportsEnabled = Boolean(registry.get("crowd-reports"));
   const vh = useWindowHeight();
+  const { top: topInset } = useMapObstructionInsets();
   // Cap how far the controls follow the sheet — when the user drags above the
   // medium snap, the sheet covers the controls anyway, so freezing the offset
   // here keeps them in their last reachable position rather than scrolling
   // them off the top of the visible map area.
   const followHeight = useMobilePanelClearance(vh);
+  const stackRef = useRef<HTMLDivElement>(null);
+  const [heights, setHeights] = useState({ column: 0, grid: 0 });
+  const desiredBottom = followHeight > 0 ? followHeight + PANEL_GAP : BASE_BOTTOM;
+  const placement =
+    vh > 0 && heights.column > 0
+      ? resolveControlPlacement(vh, topInset, desiredBottom, heights.column, heights.grid)
+      : { columns: 1 as const, bottom: desiredBottom };
+
+  useEffect(() => {
+    const stack = stackRef.current;
+    if (!stack) return;
+    const measure = () => {
+      const actions = Array.from(stack.querySelectorAll<HTMLElement>("button, [role='button']"));
+      const sizes = actions.map((action) => action.getBoundingClientRect().height);
+      if (sizes.length === 0 || sizes.some((size) => size <= 0)) return;
+      const column = sizes.reduce((sum, size) => sum + size, 0) + (sizes.length - 1) * 8 - 7; // The zoom pair shares one Paper and a 1px divider instead of an 8px gap.
+      let grid = 0;
+      for (let i = 0; i < sizes.length; i += 2) {
+        grid += Math.max(sizes[i], sizes[i + 1] ?? 0);
+        if (i > 0) grid += 8;
+      }
+      setHeights((previous) =>
+        previous.column === column && previous.grid === grid ? previous : { column, grid },
+      );
+    };
+    const resizeObserver =
+      typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    const observeActions = () => {
+      resizeObserver?.disconnect();
+      resizeObserver?.observe(stack);
+      for (const action of stack.querySelectorAll<HTMLElement>("button, [role='button']")) {
+        resizeObserver?.observe(action);
+      }
+      measure();
+    };
+    const mutationObserver = new MutationObserver(observeActions);
+    mutationObserver.observe(stack, { childList: true, subtree: true });
+    observeActions();
+    window.addEventListener("resize", measure);
+    return () => {
+      resizeObserver?.disconnect();
+      mutationObserver.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, []);
 
   return (
     <>
@@ -80,6 +128,8 @@ export function MapControls() {
         </Suspense>
       )}
       <Box
+        ref={stackRef}
+        data-map-controls-columns={placement.columns}
         sx={{
           position: "absolute",
           // Bottom-anchored mobile sheets (browsing panels and the navigation
@@ -87,19 +137,25 @@ export function MapControls() {
           // the controls always sit just above the tallest one — no hard-coded
           // per-context clearance.
           bottom: {
-            xs:
-              followHeight > 0
-                ? `calc(${followHeight + PANEL_GAP}px + var(--omx-safe-bottom))`
-                : `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
+            xs: `calc(${placement.bottom}px + var(--omx-safe-bottom))`,
             sm: `calc(${BASE_BOTTOM}px + var(--omx-safe-bottom))`,
           },
           right: "calc(12px + var(--omx-safe-right))",
-          display: "flex",
+          display: placement.columns === 2 ? "grid" : "flex",
           flexDirection: "column",
+          gridTemplateColumns: placement.columns === 2 ? "repeat(2, max-content)" : undefined,
           alignItems: "center",
           gap: 1,
           zIndex: 10,
           transition: "bottom 0.25s ease",
+          "@media (pointer: coarse)": {
+            "& .MuiIconButton-root": { width: 44, height: 44 },
+          },
+          "& .MuiIconButton-root.Mui-focusVisible": {
+            outline: "3px solid",
+            outlineColor: "primary.main",
+            outlineOffset: -3,
+          },
         }}
       >
         {/* Voice guidance toggle (ground navigation only) — top of the stack. */}
@@ -148,7 +204,23 @@ export function MapControls() {
         )}
 
         {/* Zoom in / zoom out */}
-        <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
+        <Paper
+          data-map-zoom-group
+          elevation={2}
+          sx={{
+            borderRadius: "12px",
+            overflow: "hidden",
+            ...(placement.columns === 2 && {
+              display: "contents",
+              "& .MuiIconButton-root": {
+                bgcolor: "background.paper",
+                boxShadow: 2,
+                borderRadius: "12px",
+              },
+              "& > .MuiBox-root": { display: "none" },
+            }),
+          }}
+        >
           <Tooltip title={t("zoomIn")} placement="left">
             <IconButton
               size="small"

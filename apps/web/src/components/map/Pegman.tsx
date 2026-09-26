@@ -51,6 +51,9 @@ export function Pegman() {
   const { providers } = useStreetLevelProviders();
   const setLayerVisible = useOverlayVisibilitySetter("street-level-imagery");
   const requestImageLoad = useStreetLevelStore((s) => s.requestImageLoad);
+  const panelOpen = useStreetLevelStore((s) => s.panelOpen);
+  const openPanel = useStreetLevelStore((s) => s.openPanel);
+  const closePanel = useStreetLevelStore((s) => s.closePanel);
   const [dragging, setDragging] = useState(false);
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
   const pegmanRef = useRef<HTMLDivElement>(null);
@@ -118,6 +121,11 @@ export function Pegman() {
     if (dot) requestImageLoad({ providerId: dot.providerId, imageId: dot.id });
   };
 
+  const toggleCoverage = () => {
+    if (panelOpen) closePanel();
+    else openPanel();
+  };
+
   return (
     <>
       <Tooltip title={t("streetLevelImagery")} placement="left">
@@ -128,6 +136,20 @@ export function Pegman() {
           onPointerDown={handlePointerDown}
           onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp}
+          onKeyDown={(event) => {
+            if (event.key === "Enter" || event.key === " ") {
+              event.preventDefault();
+              toggleCoverage();
+            }
+          }}
+          onClick={(event) => {
+            // Screen readers can synthesize a click without a pointer gesture.
+            if (event.detail === 0) toggleCoverage();
+          }}
+          role="button"
+          tabIndex={0}
+          aria-label={t("toggleCoverage")}
+          aria-pressed={panelOpen}
           sx={{
             borderRadius: "12px",
             width: 36,
@@ -139,6 +161,12 @@ export function Pegman() {
             touchAction: "none",
             userSelect: "none",
             flexShrink: 0,
+            "@media (pointer: coarse)": { width: 44, height: 44 },
+            "&:focus-visible": {
+              outline: "3px solid",
+              outlineColor: "primary.main",
+              outlineOffset: 2,
+            },
           }}
         >
           <BoyIcon sx={{ fontSize: 22, color: "#FB8C00" }} />
