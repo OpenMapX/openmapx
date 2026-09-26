@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { PANEL } from "../panels/ids";
 import { getPanel } from "../panels/registry";
 
 interface SidebarState {
@@ -28,7 +29,11 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
         console.error(`[sidebar] onDeactivate failed for panel "${current}":`, e);
       }
     }
-    set({ activeSidebarId: id, collapsed: false });
+    set({
+      activeSidebarId: id,
+      collapsed: false,
+      ...(id === PANEL.PLACE ? { activeDetailId: null } : {}),
+    });
   },
 
   closeSidebar: () => {
@@ -43,7 +48,17 @@ export const useSidebarStore = create<SidebarState>((set, get) => ({
     set({ activeSidebarId: null, activeDetailId: null, collapsed: false });
   },
 
-  openDetail: (id) => set({ activeDetailId: id }),
+  openDetail: (id) => {
+    const { activeSidebarId, collapsed } = get();
+    if (
+      id === PANEL.PLACE_CARD &&
+      (!activeSidebarId || activeSidebarId === PANEL.PLACE || collapsed)
+    ) {
+      get().openSidebar(PANEL.PLACE);
+      return;
+    }
+    set({ activeDetailId: id });
+  },
   closeDetail: () => set({ activeDetailId: null }),
 
   closeAll: () => {

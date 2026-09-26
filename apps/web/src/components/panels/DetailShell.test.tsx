@@ -21,22 +21,27 @@ describe("DetailShell on desktop", () => {
     useSidebarStore.setState({ activeSidebarId: null, collapsed: false });
   });
 
-  it("places a standalone detail beside the map without reserving an absent sidebar", () => {
-    useSidebarStore.setState({ activeSidebarId: null, collapsed: false });
-    const { container } = render(<DetailShell>card</DetailShell>);
-    const card = container.querySelector<HTMLElement>(".MuiPaper-root");
-
-    expect(card).not.toBeNull();
-    expect(getComputedStyle(card as HTMLElement).left).toBe("24px");
-    expect(getMapObstructionInsets().left).toBe(24 + 376);
+  it("never renders an orphan or a duplicate desktop place card", () => {
+    for (const activeSidebarId of [null, "place"]) {
+      useSidebarStore.setState({ activeSidebarId, collapsed: false });
+      const { container, unmount } = render(<DetailShell>card</DetailShell>);
+      expect(container.querySelector(".MuiPaper-root")).toBeNull();
+      expect(getMapObstructionInsets().left).toBe(0);
+      unmount();
+    }
   });
 
-  it("registers the card's right edge beside the rail, and beside the collapse gap when collapsed", () => {
+  it("shows the card and its obstruction only while the other rail is visible", () => {
     useSidebarStore.setState({ activeSidebarId: "category", collapsed: false });
-    const { unmount } = render(<DetailShell>card</DetailShell>);
+    const { container, unmount } = render(<DetailShell>card</DetailShell>);
+    expect(container.querySelector(".MuiPaper-root")).not.toBeNull();
     expect(getMapObstructionInsets().left).toBe(400 + 24 + 376);
     act(() => useSidebarStore.setState({ collapsed: true }));
-    expect(getMapObstructionInsets().left).toBe(24 + 376);
+    expect(container.querySelector(".MuiPaper-root")).toBeNull();
+    expect(getMapObstructionInsets().left).toBe(0);
+    act(() => useSidebarStore.setState({ collapsed: false }));
+    expect(container.querySelector(".MuiPaper-root")).not.toBeNull();
+    expect(getMapObstructionInsets().left).toBe(400 + 24 + 376);
     unmount();
     expect(getMapObstructionInsets().left).toBe(0);
   });

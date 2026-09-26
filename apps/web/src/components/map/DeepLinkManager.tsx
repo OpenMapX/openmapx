@@ -386,18 +386,16 @@ function makePlace(link: ParsedDeepLink["place"]): Place | null {
   });
 }
 
-function applyPlace(link: ParsedDeepLink["place"], panel?: string): void {
+function applyPlace(link: ParsedDeepLink["place"]): void {
   const place = makePlace(link);
   if (!place) return;
 
   usePlaceStore.getState().setSelectedPlace(place);
   useSearchStore.getState().setQuery(place.name);
 
-  if (panel === PANEL.PLACE_CARD) {
-    useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-  } else {
-    useSidebarStore.getState().openSidebar(PANEL.PLACE);
-  }
+  // Context panels are restored first. The sidebar store chooses the full
+  // place rail for a standalone link and a card beside a visible context rail.
+  useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
 }
 
 function applyDirections(parsed: ParsedDeepLink["directions"]): void {
@@ -526,7 +524,7 @@ function applyDeepLink(
   if (parsed.category || parsed.panel === PANEL.CATEGORY) applyCategory(parsed.category);
   if (parsed.dataSource || parsed.panel === PANEL.DATASOURCE) applyDataSource(parsed.dataSource);
   if (parsed.saved || parsed.panel === PANEL.SAVED) applySaved(parsed.saved);
-  if (parsed.place) applyPlace(parsed.place, parsed.panel);
+  if (parsed.place) applyPlace(parsed.place);
   applyMeasurement(parsed.measurement);
   applyTravelTime(parsed.travelTime);
 }

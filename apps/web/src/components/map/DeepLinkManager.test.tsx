@@ -5,10 +5,14 @@ import {
   getRegisteredOverlayStore,
   isOverlayActive,
   type OverlayStoreBase,
+  PANEL,
   registerOverlayEntry,
   runOverlayTransaction,
+  useCategorySearchStore,
+  usePlaceStore,
+  useSidebarStore,
 } from "@openmapx/core";
-import { render } from "@testing-library/react";
+import { act, render } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/integration-api/map/MapContext", () => ({
@@ -42,10 +46,64 @@ beforeEach(() => {
   resetOverlay("weather", ["air-quality"]);
   resetOverlay("air-quality", ["weather"]);
   window.history.replaceState(null, "", "/");
+  useSidebarStore.setState({ activeSidebarId: null, activeDetailId: null, collapsed: false });
+  usePlaceStore.setState({ selectedPlace: null });
+  useCategorySearchStore.getState().clearCategory();
 });
 
 afterEach(() => {
   window.history.replaceState(null, "", "/");
+});
+
+const grotesquePlace = "place=stylePoi%3A1&at=50.78%2C6.08&name=Grotesque";
+
+describe("DeepLinkManager place shells", () => {
+  it("docks a legacy standalone place-card URL", () => {
+    window.history.replaceState(null, "", `/?panel=place-card&${grotesquePlace}`);
+    render(<DeepLinkManager />);
+
+    expect(useSidebarStore.getState()).toMatchObject({
+      activeSidebarId: PANEL.PLACE,
+      activeDetailId: null,
+    });
+    expect(usePlaceStore.getState().selectedPlace?.name).toBe("Grotesque");
+  });
+
+  it("restores a place card beside its category sidebar", () => {
+    window.history.replaceState(
+      null,
+      "",
+      `/?panel=category&categoryId=restaurants&${grotesquePlace}`,
+    );
+    render(<DeepLinkManager />);
+
+    expect(useSidebarStore.getState()).toMatchObject({
+      activeSidebarId: PANEL.CATEGORY,
+      activeDetailId: PANEL.PLACE_CARD,
+    });
+    expect(useCategorySearchStore.getState().activeCategory).toBe("restaurants");
+    expect(usePlaceStore.getState().selectedPlace?.name).toBe("Grotesque");
+  });
+
+  it("rehydrates a legacy standalone card on browser history navigation", () => {
+    window.history.replaceState(
+      null,
+      "",
+      `/?panel=category&categoryId=restaurants&${grotesquePlace}`,
+    );
+    render(<DeepLinkManager />);
+
+    act(() => {
+      window.history.pushState(null, "", `/?panel=place-card&${grotesquePlace}`);
+      window.dispatchEvent(new PopStateEvent("popstate"));
+    });
+
+    expect(useSidebarStore.getState()).toMatchObject({
+      activeSidebarId: PANEL.PLACE,
+      activeDetailId: null,
+    });
+    expect(useCategorySearchStore.getState().activeCategory).toBeNull();
+  });
 });
 
 describe("DeepLinkManager overlay application", () => {

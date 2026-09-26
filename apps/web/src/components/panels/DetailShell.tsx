@@ -3,7 +3,7 @@
 import Paper from "@mui/material/Paper";
 import { useTheme } from "@mui/material/styles";
 import useMediaQuery from "@mui/material/useMediaQuery";
-import { useSidebarStore } from "@openmapx/core";
+import { PANEL, useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { lazy, type ReactNode, Suspense, useContext, useEffect, useState } from "react";
 import { PANEL_WIDTH } from "@/lib/layout";
@@ -63,11 +63,14 @@ function DesktopDetail({ children }: { children: ReactNode }) {
   const collapsed = useSidebarStore((s) => s.collapsed);
   const [el, setEl] = useState<HTMLDivElement | null>(null);
   useMobilePanelHeightTracker("detail", el);
-  // A detail can open directly with no sidebar. Reserve the rail's width only
-  // while one is visible, and frame the map to the card's actual right edge.
-  const sidebarVisible = Boolean(activeSidebarId) && !collapsed;
-  const left = (sidebarVisible ? PANEL_WIDTH : 0) + CARD_GAP;
-  useMapObstruction("detail", "left", left + DETAIL_CARD_WIDTH);
+  const contextRailVisible =
+    Boolean(activeSidebarId && activeSidebarId !== PANEL.PLACE) && !collapsed;
+  const left = PANEL_WIDTH + CARD_GAP;
+  useMapObstruction("detail", "left", contextRailVisible ? left + DETAIL_CARD_WIDTH : null);
+
+  // The floating card belongs beside another visible rail. Collapsing that
+  // rail hides its card temporarily; expanding restores both.
+  if (!contextRailVisible) return null;
 
   return (
     <Paper
