@@ -37,6 +37,8 @@ import type { Place } from "@openmapx/core";
 import {
   computePlusCode,
   isCityOrSmaller,
+  isFoodPlace,
+  isLodging,
   plusCodeUrl,
   safeHref,
   shortenPlusCode,
@@ -83,6 +85,33 @@ interface Props {
   onOpenDepartures: (mode?: TransportMode) => void;
   onOpenLineDetail: (route: MergedRoute) => void;
   onOpenTripDetail?: (dep: MergedDeparture) => void;
+}
+
+function isExplicitOutdoorPlace(place: Place): boolean {
+  const tags = place.osmTags;
+  if (
+    tags?.natural === "beach" ||
+    tags?.natural === "peak" ||
+    tags?.tourism === "viewpoint" ||
+    tags?.leisure === "park" ||
+    tags?.leisure === "nature_reserve" ||
+    tags?.leisure === "garden"
+  ) {
+    return true;
+  }
+  return ["beach", "viewpoint", "park", "nature reserve", "garden"].includes(
+    place.category?.toLowerCase() ?? "",
+  );
+}
+
+function isVisitBusiness(place: Place): boolean {
+  const tags = place.osmTags;
+  return (
+    isFoodPlace(place) ||
+    isLodging(place) ||
+    Boolean(tags?.shop || tags?.office || tags?.craft || tags?.healthcare) ||
+    ["bank", "pharmacy", "post_office"].includes(tags?.amenity ?? "")
+  );
 }
 
 function DetailRow({
@@ -229,6 +258,8 @@ export function PlaceOverviewTab({
   const { inSheet } = useMobileSheet();
   const ohText = useOpeningHoursText();
   const isCity = isCityOrSmaller(place);
+  const promotePracticalDetails =
+    !isCity && !isExplicitOutdoorPlace(place) && isVisitBusiness(place);
   const hours = place.openingHoursInfo?.status ?? null;
   const plusCode = computePlusCode(place.coordinates);
   const shortCode = shortenPlusCode(plusCode);
@@ -444,47 +475,17 @@ export function PlaceOverviewTab({
         {/* Detail rows */}
         <Box sx={{ px: 0 }}>
           {/* Address */}
-          <DetailRow
-            icon={<PlaceIcon sx={{ fontSize: 22 }} />}
-            copyValue={place.address}
-            copyLabel={t("copyAddress")}
-          >
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.primary",
-              }}
+          {place.address?.trim() && (
+            <DetailRow
+              icon={<PlaceIcon sx={{ fontSize: 22 }} />}
+              copyValue={place.address}
+              copyLabel={t("copyAddress")}
             >
-              {place.address}
-            </Typography>
-          </DetailRow>
-
-          {/* Plus Code */}
-          <DetailRow
-            icon={<AppsIcon sx={{ fontSize: 22 }} />}
-            copyValue={shortCodeDisplay ?? plusCode}
-            copyLabel={t("copyPlusCode")}
-          >
-            <Link
-              href={plusCodeUrl(plusCode)}
-              target="_blank"
-              rel="noopener noreferrer"
-              underline="hover"
-              sx={{ display: "block", color: "text.primary", typography: "body2" }}
-            >
-              {shortCodeDisplay ?? plusCode}
-            </Link>
-            {shortCodeDisplay && (
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                {plusCode}
+              <Typography variant="body2" sx={{ color: "text.primary" }}>
+                {place.address}
               </Typography>
-            )}
-          </DetailRow>
+            </DetailRow>
+          )}
 
           {/* Opening hours */}
           {isLoading && !place.openingHours ? (
@@ -687,6 +688,14 @@ export function PlaceOverviewTab({
             </DetailRow>
           )}
 
+          {promotePracticalDetails && place.osmTags && (
+            <PlaceTagDetails
+              osmTags={place.osmTags}
+              section="practical"
+              representedEmail={place.email}
+            />
+          )}
+
           {/* Wikipedia */}
           {place.wikipediaUrl && (
             <DetailRow icon={<ArticleIcon sx={{ fontSize: 22 }} />}>
@@ -873,6 +882,28 @@ export function PlaceOverviewTab({
               <PlaceMarineWeatherContent data={marineData} />
             </ExpandableDetailRow>
           )}
+
+          {/* Location detail remains available below the visit and environment rows. */}
+          <DetailRow
+            icon={<AppsIcon sx={{ fontSize: 22 }} />}
+            copyValue={shortCodeDisplay ?? plusCode}
+            copyLabel={t("copyPlusCode")}
+          >
+            <Link
+              href={plusCodeUrl(plusCode)}
+              target="_blank"
+              rel="noopener noreferrer"
+              underline="hover"
+              sx={{ display: "block", color: "text.primary", typography: "body2" }}
+            >
+              {shortCodeDisplay ?? plusCode}
+            </Link>
+            {shortCodeDisplay && (
+              <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                {plusCode}
+              </Typography>
+            )}
+          </DetailRow>
         </Box>
 
         {descriptionRow && inSheet && (
@@ -948,7 +979,11 @@ export function PlaceOverviewTab({
       <OsmContributionEntry osmId={place.ids?.osm} />
       {/* Structured OSM tag details (access, indoor, multilingual descriptions, etc.) */}
       {place.osmTags && Object.keys(place.osmTags).length > 0 && (
-        <PlaceTagDetails osmTags={place.osmTags} />
+        <PlaceTagDetails
+          osmTags={place.osmTags}
+          section={promotePracticalDetails ? "remaining" : "all"}
+          representedEmail={place.email}
+        />
       )}
       {/* Transit section — self-hides if no linked stops */}
       <PlaceTransitSection

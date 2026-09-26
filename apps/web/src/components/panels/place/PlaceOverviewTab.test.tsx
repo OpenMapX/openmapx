@@ -183,3 +183,100 @@ describe("uncertain opening hours", () => {
     expect(screen.queryByText("reportedHours")).not.toBeInTheDocument();
   });
 });
+
+function isBefore(first: Element, second: Element) {
+  return Boolean(first.compareDocumentPosition(second) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+describe("visit order", () => {
+  it("puts food amenities ahead of weather, with technical tags later and no duplicate facts", () => {
+    const { container } = renderOverview({
+      ...ENRICHED,
+      openingHoursInfo: { status: { isOpen: true } },
+      osmTags: {
+        amenity: "cafe",
+        cuisine: "mexican",
+        takeaway: "yes",
+        internet_access: "wlan",
+        operator: "Operator Co",
+        capacity: "40",
+      },
+    } as unknown as Place);
+
+    const address = screen.getByText("Enriched Street 9, 10115 Berlin");
+    const cuisine = screen.getByText("Mexican");
+    const takeaway = screen.getByText("takeawayYes");
+    const wifi = screen.getByText("wifiAvailable");
+    const weather = screen.getByRole("button", { name: "currentWeather" });
+    const operator = screen.getByText("Operator Co");
+    const plusCode = container.querySelector('a[href^="https://plus.codes/"]');
+    expect(plusCode).not.toBeNull();
+
+    expect(isBefore(address, cuisine)).toBe(true);
+    expect(isBefore(cuisine, weather)).toBe(true);
+    expect(isBefore(takeaway, weather)).toBe(true);
+    expect(isBefore(wifi, weather)).toBe(true);
+    expect(isBefore(weather, operator)).toBe(true);
+    expect(isBefore(weather, plusCode as Element)).toBe(true);
+    expect(screen.getAllByText("Mexican")).toHaveLength(1);
+    expect(screen.getAllByText("takeawayYes")).toHaveLength(1);
+  });
+
+  it("keeps weather ahead of amenities for a city and an explicit outdoor destination", () => {
+    for (const tags of [
+      { place: "city", internet_access: "wlan" },
+      { natural: "beach", internet_access: "wlan" },
+    ]) {
+      const view = renderOverview({ ...ENRICHED, osmTags: tags } as unknown as Place);
+      expect(
+        isBefore(
+          screen.getByRole("button", { name: "currentWeather" }),
+          screen.getByText("wifiAvailable"),
+        ),
+      ).toBe(true);
+      view.unmount();
+    }
+  });
+
+  it("places OSM-only business email before weather without duplicating a contact already in Overview", () => {
+    const { rerender } = renderOverview({
+      ...ENRICHED,
+      email: undefined,
+      osmTags: { amenity: "bar", email: "info@example.org" },
+    } as unknown as Place);
+    const email = screen.getByRole("link", { name: "info@example.org" });
+    expect(isBefore(email, screen.getByRole("button", { name: "currentWeather" }))).toBe(true);
+
+    rerender(
+      <PlaceOverviewTab
+        place={
+          {
+            ...ENRICHED,
+            email: "info@example.org",
+            osmTags: { amenity: "bar", email: "info@example.org" },
+          } as unknown as Place
+        }
+        isLoading={false}
+        onNavigateToInfo={() => {}}
+        onOpenDepartures={() => {}}
+        onOpenLineDetail={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole("link", { name: "info@example.org" })).toHaveLength(1);
+  });
+
+  it("does not render an empty prominent address row for a sparse place", () => {
+    const { container } = renderOverview({
+      ...ENRICHED,
+      address: "  ",
+      phone: undefined,
+      website: undefined,
+      email: undefined,
+      osmTags: undefined,
+    } as unknown as Place);
+    expect(container.querySelector('a[href^="https://plus.codes/"]')).toBeVisible();
+    expect(
+      [...container.querySelectorAll("p")].filter((paragraph) => !paragraph.textContent?.trim()),
+    ).toHaveLength(0);
+  });
+});

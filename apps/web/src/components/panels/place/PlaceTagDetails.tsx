@@ -50,7 +50,7 @@ import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import { safeHref } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 import {
   SiBluesky,
   SiFlickr,
@@ -537,9 +537,24 @@ export function getOverviewConsumedKeys(tags: Record<string, string>): Set<strin
 
 interface Props {
   osmTags: Record<string, string>;
+  section?: "all" | "practical" | "remaining";
+  representedEmail?: string;
 }
 
-export function PlaceTagDetails({ osmTags }: Props) {
+const PRACTICAL_GRID_KEYS = new Set([
+  "smoking",
+  "dog",
+  "drive_through",
+  "delivery",
+  "takeaway",
+  "outdoor_seating",
+  "internet_access",
+  "drinking_water",
+  "toilets",
+  "changing_table",
+]);
+
+export function PlaceTagDetails({ osmTags, section = "all", representedEmail }: Props) {
   const t = useTranslations("place");
 
   const tag = (k: string) => osmTags[k];
@@ -548,6 +563,8 @@ export function PlaceTagDetails({ osmTags }: Props) {
   const brand = humanizeOsmTagValue(tag("brand") ?? "") || tag("brand");
   const network = humanizeOsmTagValue(tag("network") ?? "") || tag("network");
   const email = tag("email") ?? tag("contact:email");
+  const visibleEmail =
+    email && email.trim().toLowerCase() !== representedEmail?.trim().toLowerCase() ? email : null;
   const wheelchair = tag("wheelchair");
   const access = tag("access");
   const fee = tag("fee");
@@ -663,7 +680,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
   const ac = access ? accessCfg[access] : null;
 
   // Collect grid items to determine whether to render the grid
-  const gridItems: ReactNode[] = [];
+  const gridItems: ReactElement[] = [];
 
   if (indoor) {
     gridItems.push(
@@ -1088,12 +1105,48 @@ export function PlaceTagDetails({ osmTags }: Props) {
     );
   }
 
+  const practicalGridItems = gridItems.filter((item) => PRACTICAL_GRID_KEYS.has(item.key ?? ""));
+  const remainingGridItems = gridItems.filter((item) => !PRACTICAL_GRID_KEYS.has(item.key ?? ""));
+  const visibleGridItems =
+    section === "all"
+      ? gridItems
+      : section === "practical"
+        ? practicalGridItems
+        : remainingGridItems;
+  const hasPractical = Boolean(
+    visibleEmail ||
+      wheelchair ||
+      access ||
+      fee ||
+      charge ||
+      cuisine ||
+      socialLinks.length ||
+      practicalGridItems.length,
+  );
+  const hasRemaining = Boolean(
+    operator ||
+      brand ||
+      network ||
+      religion ||
+      denomination ||
+      multilingualEntries.length ||
+      remainingGridItems.length,
+  );
+  if (
+    (section === "practical" && !hasPractical) ||
+    (section === "remaining" && !hasRemaining) ||
+    (section === "all" && !hasPractical && !hasRemaining)
+  ) {
+    return null;
+  }
+
   return (
     <>
-      <Divider sx={{ mx: 2, my: 1 }} />
-      <Box sx={{ px: 2, py: 0.5 }}>
+      <Divider sx={{ mx: section === "practical" ? 0 : 2, my: 1 }} />
+      <Box sx={{ px: section === "practical" ? 0 : 2, py: 0.5 }}>
         {/* Operator */}
-        {operator &&
+        {section !== "practical" &&
+          operator &&
           (() => {
             const url = resolveLinkedUrl(osmTags, "operator");
             return (
@@ -1124,7 +1177,8 @@ export function PlaceTagDetails({ osmTags }: Props) {
           })()}
 
         {/* Brand / Network */}
-        {(brand || network) &&
+        {section !== "practical" &&
+          (brand || network) &&
           !(brand && brand === operator) &&
           (() => {
             const url = resolveLinkedUrl(osmTags, "brand");
@@ -1158,21 +1212,21 @@ export function PlaceTagDetails({ osmTags }: Props) {
           })()}
 
         {/* Email */}
-        {email && (
+        {section !== "remaining" && visibleEmail && (
           <DetailItem icon={<EmailIcon sx={{ fontSize: 20 }} />}>
             <Link
-              href={`mailto:${email}`}
+              href={`mailto:${visibleEmail}`}
               variant="body2"
               underline="hover"
               sx={{ color: "text.primary" }}
             >
-              {email}
+              {visibleEmail}
             </Link>
           </DetailItem>
         )}
 
         {/* Wheelchair */}
-        {wheelchair && (
+        {section !== "remaining" && wheelchair && (
           <DetailItem
             icon={<AccessibleIcon sx={{ fontSize: 20, color: wc?.color ?? "text.secondary" }} />}
           >
@@ -1183,7 +1237,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
         )}
 
         {/* Access */}
-        {access && (
+        {section !== "remaining" && access && (
           <DetailItem icon={ac?.icon ?? <LockOpenIcon sx={{ fontSize: 20 }} />}>
             <Typography
               variant="body2"
@@ -1197,7 +1251,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
         )}
 
         {/* Fee + Charge */}
-        {(fee || charge) && (
+        {section !== "remaining" && (fee || charge) && (
           <DetailItem
             icon={
               fee === "no" ? (
@@ -1219,7 +1273,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
         )}
 
         {/* Cuisine */}
-        {cuisine && (
+        {section !== "remaining" && cuisine && (
           <DetailItem icon={<RestaurantIcon sx={{ fontSize: 20 }} />}>
             <Typography
               variant="body2"
@@ -1233,7 +1287,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
         )}
 
         {/* Religion + Denomination */}
-        {religion && (
+        {section !== "practical" && religion && (
           <DetailItem icon={<AccountBalanceIcon sx={{ fontSize: 20 }} />}>
             <Typography
               variant="body2"
@@ -1247,7 +1301,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
             </Typography>
           </DetailItem>
         )}
-        {denomination && !religion && (
+        {section !== "practical" && denomination && !religion && (
           <DetailItem icon={<AccountBalanceIcon sx={{ fontSize: 20 }} />}>
             <Typography
               variant="body2"
@@ -1261,7 +1315,7 @@ export function PlaceTagDetails({ osmTags }: Props) {
         )}
 
         {/* Compact 2-column grid for boolean/short-value items */}
-        {gridItems.length > 0 && (
+        {visibleGridItems.length > 0 && (
           <Box
             sx={{
               display: "grid",
@@ -1270,61 +1324,65 @@ export function PlaceTagDetails({ osmTags }: Props) {
               py: 0.25,
             }}
           >
-            {gridItems}
+            {visibleGridItems}
           </Box>
         )}
 
         {/* Multilingual text entries (description, note, *:location, etc.) */}
-        {multilingualEntries.map((entry) => (
-          <Box key={entry.label} sx={{ display: "flex", gap: 1.5, py: 0.75 }}>
-            <Box sx={{ color: BRAND, flexShrink: 0, display: "flex", mt: "2px" }}>
-              <NotesIcon sx={{ fontSize: 20 }} />
-            </Box>
-            <Box sx={{ flex: 1, minWidth: 0 }}>
-              <Typography
-                variant="caption"
-                sx={{
-                  color: "text.secondary",
-                  fontWeight: 600,
-                }}
-              >
-                {entry.label}
-              </Typography>
-              {entry.defaultValue && (
+        {section !== "practical" &&
+          multilingualEntries.map((entry) => (
+            <Box key={entry.label} sx={{ display: "flex", gap: 1.5, py: 0.75 }}>
+              <Box sx={{ color: BRAND, flexShrink: 0, display: "flex", mt: "2px" }}>
+                <NotesIcon sx={{ fontSize: 20 }} />
+              </Box>
+              <Box sx={{ flex: 1, minWidth: 0 }}>
                 <Typography
-                  variant="body2"
+                  variant="caption"
                   sx={{
-                    color: "text.primary",
-                    mt: 0.25,
+                    color: "text.secondary",
+                    fontWeight: 600,
                   }}
                 >
-                  <Linkified text={entry.defaultValue} color={BRAND} />
+                  {entry.label}
                 </Typography>
-              )}
-              {entry.translations.map(({ lang, flag, value }) => (
-                <Box key={lang} sx={{ display: "flex", alignItems: "flex-start", gap: 1, mt: 0.5 }}>
-                  <Typography
-                    component="span"
-                    sx={{ fontSize: 16, lineHeight: 1.4, flexShrink: 0 }}
-                  >
-                    {flag}
-                  </Typography>
+                {entry.defaultValue && (
                   <Typography
                     variant="body2"
                     sx={{
-                      color: "text.secondary",
+                      color: "text.primary",
+                      mt: 0.25,
                     }}
                   >
-                    <Linkified text={value} color={BRAND} />
+                    <Linkified text={entry.defaultValue} color={BRAND} />
                   </Typography>
-                </Box>
-              ))}
+                )}
+                {entry.translations.map(({ lang, flag, value }) => (
+                  <Box
+                    key={lang}
+                    sx={{ display: "flex", alignItems: "flex-start", gap: 1, mt: 0.5 }}
+                  >
+                    <Typography
+                      component="span"
+                      sx={{ fontSize: 16, lineHeight: 1.4, flexShrink: 0 }}
+                    >
+                      {flag}
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: "text.secondary",
+                      }}
+                    >
+                      <Linkified text={value} color={BRAND} />
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
             </Box>
-          </Box>
-        ))}
+          ))}
 
         {/* Social media icons row */}
-        {socialLinks.length > 0 && (
+        {section !== "remaining" && socialLinks.length > 0 && (
           <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, pt: 0.5, pb: 0.25 }}>
             {socialLinks.map(({ label, icon, url }) => (
               <Tooltip key={label} title={label}>

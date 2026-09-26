@@ -67,14 +67,14 @@ const place = {
   coordinates: [6.0839, 50.7753],
 } as unknown as Place;
 
-function renderAtDetent(detent: "peek" | "mid" | "full") {
+function renderAtDetent(detent: "peek" | "mid" | "full", selectedPlace = place) {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
     <QueryClientProvider client={client}>
       <MobileSheetContext.Provider
         value={{ detent, isExpanded: detent === "full", inSheet: true, snapTo: () => {} }}
       >
-        <PlaceDetailContent place={place} isLoading={false} />
+        <PlaceDetailContent place={selectedPlace} isLoading={false} />
       </MobileSheetContext.Provider>
     </QueryClientProvider>,
   );
@@ -94,6 +94,44 @@ describe("PlaceDetailContent per detent", () => {
   it("restores them at mid", () => {
     renderAtDetent("mid");
     expect(screen.getByTestId("place-meta-rows")).toBeDefined();
+  });
+
+  it("shows a known opening state beside category below the title and before actions", () => {
+    renderAtDetent("mid", {
+      ...place,
+      category: "Restaurant",
+      openingHoursInfo: { status: { isOpen: true } },
+    } as Place);
+    const meta = screen.getByTestId("place-meta-rows");
+    expect(within(meta).getByText("Restaurant")).toBeVisible();
+    expect(within(meta).getByText("open")).toBeVisible();
+    const actions = screen.getByText("directions");
+    expect(meta.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("keeps unknown hours neutral and omits a verdict when status is absent", () => {
+    const { rerender } = renderAtDetent("mid", {
+      ...place,
+      category: "Cafe",
+      isOpen: false,
+      openingHoursInfo: { status: { isOpen: false, isUnknown: true, text: "by appointment" } },
+    } as Place);
+    expect(within(screen.getByTestId("place-meta-rows")).getByText("unconfirmed")).toBeVisible();
+    expect(within(screen.getByTestId("place-meta-rows")).queryByText("closed")).toBeNull();
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <MobileSheetContext.Provider
+          value={{ detent: "mid", isExpanded: false, inSheet: true, snapTo: () => {} }}
+        >
+          <PlaceDetailContent
+            place={{ ...place, category: "Cafe", isOpen: false } as Place}
+            isLoading={false}
+          />
+        </MobileSheetContext.Provider>
+      </QueryClientProvider>,
+    );
+    expect(within(screen.getByTestId("place-meta-rows")).queryByText("closed")).toBeNull();
+    expect(within(screen.getByTestId("place-meta-rows")).queryByText("unconfirmed")).toBeNull();
   });
 });
 

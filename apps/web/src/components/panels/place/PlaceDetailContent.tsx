@@ -4,7 +4,6 @@ import type { ReviewAggregate } from "@integrations/reviews/types";
 import CloseIcon from "@mui/icons-material/Close";
 import StarIcon from "@mui/icons-material/Star";
 import Box from "@mui/material/Box";
-import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import Tab from "@mui/material/Tab";
 import Tabs from "@mui/material/Tabs";
@@ -40,6 +39,7 @@ import { PlaceOverviewTab } from "./PlaceOverviewTab";
 import { PlacePhotoGallery } from "./PlacePhotoGallery";
 import { PlacePhotoHero } from "./PlacePhotoHero";
 import { PlaceReviewsTab } from "./PlaceReviewsTab";
+import { PlaceVisitSummary } from "./PlaceVisitSummary";
 
 interface Props {
   place: Place;
@@ -464,13 +464,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
                     </Typography>
                   </Box>
                 )}
-                {place.category && (
-                  <Chip
-                    label={place.category.toLowerCase() === "poi" ? "POI" : place.category}
-                    size="small"
-                    sx={{ borderRadius: "4px", fontSize: 12 }}
-                  />
-                )}
+                <PlaceVisitSummary place={place} />
               </Box>
             )}
           </Box>
