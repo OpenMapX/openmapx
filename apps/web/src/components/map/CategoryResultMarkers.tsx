@@ -4,10 +4,9 @@ import type { BrandDetail, BrandKind, CategoryPlace } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
+  categoryPlaceToPlace,
   commonsLogoUrl,
-  createPlace,
   firstBrandIdentity,
-  idsFromPrimaryOrCoords,
   PANEL,
   poiCategoryIconPath,
   proxyImageUrl,
@@ -18,8 +17,8 @@ import {
   useTransitStops,
 } from "@openmapx/core";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
-import type { Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
-import { useEffect, useMemo, useRef } from "react";
+import type { FilterSpecification, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
@@ -37,7 +36,12 @@ const LABEL_LAYER_ID = "category-results-labels";
  * The icon uses a 24×24 viewBox scaled and centered inside the circle.
  */
 
-function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string): Promise<void> {
+function loadMarkerImage(
+  map: MaplibreMap,
+  imageId: string,
+  iconPath: string,
+  isCurrent: () => boolean,
+): Promise<void> {
   return new Promise((resolve) => {
     if (map.hasImage(imageId)) {
       resolve();
@@ -45,7 +49,7 @@ function loadMarkerImage(map: MaplibreMap, imageId: string, iconPath: string): P
     }
     const img = new Image(64, 64);
     img.onload = () => {
-      if (!map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
+      if (isCurrent() && !map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
       resolve();
     };
     img.onerror = () => resolve();
@@ -97,7 +101,11 @@ export function brandImageId(qid: string): string {
  * any step fails; callers fall back to the category marker, so a broken or
  * missing logo costs a plain pin rather than a missing one.
  */
-export async function loadBrandMarkerImage(map: MaplibreMap, qid: string): Promise<boolean> {
+export async function loadBrandMarkerImage(
+  map: MaplibreMap,
+  qid: string,
+  isCurrent: () => boolean = () => true,
+): Promise<boolean> {
   const imageId = brandImageId(qid);
   if (map.hasImage(imageId)) return true;
 
@@ -118,6 +126,10 @@ export async function loadBrandMarkerImage(map: MaplibreMap, qid: string): Promi
     return await new Promise<boolean>((resolve) => {
       const img = new Image(64, 64);
       img.onload = () => {
+        if (!isCurrent()) {
+          resolve(false);
+          return;
+        }
         if (!map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
         resolve(true);
       };
@@ -183,7 +195,11 @@ function createTransitMarkerSvg(mode: TransportMode): string {
   </svg>`;
 }
 
-function loadTransitMarkerImage(map: MaplibreMap, mode: TransportMode): Promise<string> {
+function loadTransitMarkerImage(
+  map: MaplibreMap,
+  mode: TransportMode,
+  isCurrent: () => boolean,
+): Promise<string> {
   const imageId = `transit-marker-${mode}`;
   return new Promise((resolve) => {
     if (map.hasImage(imageId)) {
@@ -192,7 +208,7 @@ function loadTransitMarkerImage(map: MaplibreMap, mode: TransportMode): Promise<
     }
     const img = new Image(48, 48);
     img.onload = () => {
-      if (!map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
+      if (isCurrent() && !map.hasImage(imageId)) map.addImage(imageId, img, { pixelRatio: 2 });
       resolve(imageId);
     };
     img.onerror = () => resolve(imageId);
@@ -233,13 +249,67 @@ export function CategoryResultMarkers() {
     setHoveredCategoryPlaceId,
   } = useCategorySearchStore();
   const { setSelectedPlace } = usePlaceStore();
+  const selectedPlace = usePlaceStore((state) => state.selectedPlace);
 
   const { filtered: results, isTransitCategory } = useExploreReachResults();
   const { data: transitStops } = useTransitStops(isTransitCategory ? searchBbox : null);
 
   // Resolve hovered place for the pin marker
+  const selectedResultId = selectedPlace
+    ? (results?.find((place) => categoryPlaceToPlace(place).id === selectedPlace.id)?.id ?? null)
+    : null;
   const hoveredPlace = results?.find((p) => p.id === hoveredCategoryPlaceId) ?? null;
-  usePinMarker(hoveredPlace?.coordinates ?? null, hoveredPlace?.name ?? "");
+  const hoveredPlaceRef = useRef(hoveredPlace);
+  hoveredPlaceRef.current = hoveredPlace;
+  const selectResult = useCallback(
+    (place: CategoryPlace) => {
+      flyTo(place.coordinates, 17);
+      setSelectedPlace(categoryPlaceToPlace(place, activeCategory ?? undefined));
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+    },
+    [flyTo, setSelectedPlace, activeCategory],
+  );
+  const hoverPinPlace = hoveredPlace?.id === selectedResultId ? null : hoveredPlace;
+  const activateHoverPin = useCallback(() => {
+    if (hoverPinPlace) selectResult(hoverPinPlace);
+  }, [hoverPinPlace, selectResult]);
+  usePinMarker(
+    hoverPinPlace?.coordinates ?? null,
+    hoverPinPlace?.name ?? "",
+    true,
+    undefined,
+    hoverPinPlace ? activateHoverPin : undefined,
+  );
+
+  const focusFilter = useMemo<FilterSpecification>(
+    () => [
+      "all",
+      ["!=", ["get", "id"], selectedResultId ?? ""],
+      ["!=", ["get", "id"], hoveredCategoryPlaceId ?? ""],
+    ],
+    [selectedResultId, hoveredCategoryPlaceId],
+  );
+  const applyFocusRef = useRef<() => void>(() => {});
+
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+    const applyFocus = () => {
+      for (const layerId of [LAYER_ID, LABEL_LAYER_ID]) {
+        if (!map.getLayer(layerId)) continue;
+        if (JSON.stringify(map.getFilter(layerId)) !== JSON.stringify(focusFilter)) {
+          map.setFilter(layerId, focusFilter);
+        }
+      }
+    };
+    applyFocusRef.current = applyFocus;
+    const unsubscribe = subscribeStyleLoaded(map, applyFocus);
+    return () => {
+      unsubscribe();
+      applyFocusRef.current = () => {};
+    };
+  }, [mapRef, mapReady, styleVersion, focusFilter]);
 
   const fallbackImageId =
     mode === "text" ? "category-marker-text" : `category-marker-${activeCategory}`;
@@ -317,7 +387,18 @@ export function CategoryResultMarkers() {
         markerPending.add(source);
 
         // Reconcile missing layers/images without republishing unchanged data.
-        void Promise.all(transitModes.map((m) => loadTransitMarkerImage(map, m))).then(() => {
+        void Promise.all(
+          transitModes.map((m) =>
+            loadTransitMarkerImage(
+              map,
+              m,
+              () =>
+                !cancelled &&
+                map.getSource(TRANSIT_SOURCE_ID) === source &&
+                map.isStyleLoaded() === true,
+            ),
+          ),
+        ).then(() => {
           markerPending.delete(source);
           if (cancelled || map.getSource(TRANSIT_SOURCE_ID) !== source) return;
           if (!map.getLayer(TRANSIT_LAYER_ID)) {
@@ -391,9 +472,14 @@ export function CategoryResultMarkers() {
         (!map.getLayer(LAYER_ID) || !map.getLayer(LABEL_LAYER_ID) || !map.hasImage(fallbackImageId))
       ) {
         markerPending.add(source);
-        void loadMarkerImage(map, fallbackImageId, iconPath).then(() => {
+        void loadMarkerImage(
+          map,
+          fallbackImageId,
+          iconPath,
+          () => !cancelled && map.getSource(SOURCE_ID) === source && map.isStyleLoaded() === true,
+        ).then(() => {
           markerPending.delete(source);
-          if (cancelled || map.getSource(SOURCE_ID) !== source) return;
+          if (cancelled || map.getSource(SOURCE_ID) !== source || !map.isStyleLoaded()) return;
           if (!map.getLayer(LAYER_ID)) {
             addLayerInSlot(
               map,
@@ -403,8 +489,9 @@ export function CategoryResultMarkers() {
                 source: SOURCE_ID,
                 layout: {
                   "icon-image": ["get", "imageId"],
-                  "icon-allow-overlap": true,
-                  "icon-ignore-placement": true,
+                  "icon-size": ["interpolate", ["linear"], ["zoom"], 10, 0.45, 14, 0.6, 17, 0.85],
+                  "icon-allow-overlap": false,
+                  "icon-ignore-placement": false,
                 },
               },
               "route-markers",
@@ -418,23 +505,27 @@ export function CategoryResultMarkers() {
                 id: LABEL_LAYER_ID,
                 type: "symbol",
                 source: SOURCE_ID,
+                minzoom: 15,
                 layout: {
                   "text-field": ["get", "name"],
                   "text-size": 11,
                   "text-offset": [0, 2.0],
                   "text-anchor": "top",
                   "text-max-width": 8,
+                  "text-allow-overlap": false,
+                  "text-ignore-placement": false,
                 },
                 paint: {
-                  "text-color": "#333333",
+                  "text-color": "#17212B",
                   "text-halo-color": "#FFFFFF",
-                  "text-halo-width": 1.5,
+                  "text-halo-width": 2,
                 },
               },
               "route-markers",
               7,
             );
           }
+          applyFocusRef.current();
         });
       }
 
@@ -455,7 +546,16 @@ export function CategoryResultMarkers() {
       ) {
         brandPending.add(source);
         void Promise.all(
-          qids.map(async (qid) => ((await loadBrandMarkerImage(map, qid)) ? qid : null)),
+          qids.map(async (qid) =>
+            (await loadBrandMarkerImage(
+              map,
+              qid,
+              () =>
+                !cancelled && map.getSource(SOURCE_ID) === source && map.isStyleLoaded() === true,
+            ))
+              ? qid
+              : null,
+          ),
         ).then((loaded) => {
           brandPending.delete(source);
           if (cancelled || map.getSource(SOURCE_ID) !== source) return;
@@ -524,57 +624,50 @@ export function CategoryResultMarkers() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    if (clickHandlerRef.current) {
-      map.off("click", LAYER_ID, clickHandlerRef.current);
-    }
+    if (clickHandlerRef.current) map.off("click", clickHandlerRef.current);
 
     const onClick = (e: MapMouseEvent) => {
-      const features = map.queryRenderedFeatures(e.point, { layers: [LAYER_ID] });
+      const layers = [LAYER_ID, LABEL_LAYER_ID].filter((id) => !!map.getLayer(id));
+      if (layers.length === 0) return;
+      const features = map.queryRenderedFeatures(e.point, { layers });
       if (!features.length) return;
-      const props = features[0].properties as {
-        id: string;
-        name: string;
-        address: string;
-        category: string;
-        phone: string;
-        website: string;
-        openingHours: string;
-      };
-      const coords = (features[0].geometry as unknown as { coordinates: [number, number] })
-        .coordinates;
-      flyTo(coords, 17);
-      setSelectedPlace(
-        createPlace({
-          ...idsFromPrimaryOrCoords(props.id, coords),
-          name: props.name,
-          address: props.address || props.name,
-          coordinates: coords,
-          category: props.category || undefined,
-          phone: props.phone || undefined,
-          website: props.website || undefined,
-          openingHours: props.openingHours || undefined,
-        }),
-      );
-      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+      const id = features[0].properties?.id;
+      const place = results?.find((result) => result.id === id);
+      if (place) selectResult(place);
     };
 
     clickHandlerRef.current = onClick;
-    map.on("click", LAYER_ID, onClick);
+    map.on("click", onClick);
 
     const onMouseMove = (e: MapMouseEvent) => {
-      const layers = [LAYER_ID, TRANSIT_LAYER_ID].filter((id) => !!map.getLayer(id));
+      const target = e.originalEvent?.target;
+      if (target instanceof Element && target.closest("[data-openmapx-pin-marker]")) return;
+      const layers = [LAYER_ID, LABEL_LAYER_ID, TRANSIT_LAYER_ID].filter((id) =>
+        Boolean(map.getLayer(id)),
+      );
       if (layers.length === 0) return;
       const features = map.queryRenderedFeatures(e.point, { layers });
-      if (features.length > 0) {
-        map.getCanvasContainer().style.cursor = "pointer";
-        const catFeatures = features.filter((f) => f.layer.id === LAYER_ID && f.properties?.id);
-        if (catFeatures.length) {
-          setHoveredCategoryPlaceId((catFeatures[0].properties as { id: string }).id);
-        }
-      } else {
-        map.getCanvasContainer().style.cursor = "";
-        setHoveredCategoryPlaceId(null);
+      map.getCanvasContainer().style.cursor = features.length > 0 ? "pointer" : "";
+      const catFeature = features.find(
+        (feature) =>
+          (feature.layer.id === LAYER_ID || feature.layer.id === LABEL_LAYER_ID) &&
+          feature.properties?.id,
+      );
+      if (catFeature) {
+        setHoveredCategoryPlaceId((catFeature.properties as { id: string }).id);
+        return;
       }
+      const pin = hoveredPlaceRef.current;
+      if (pin) {
+        const point = map.project(pin.coordinates);
+        if (
+          Math.abs(e.point.x - point.x) <= 16 &&
+          e.point.y >= point.y - 36 &&
+          e.point.y <= point.y + 8
+        )
+          return;
+      }
+      setHoveredCategoryPlaceId(null);
     };
 
     // Transit layer click handler
@@ -612,12 +705,21 @@ export function CategoryResultMarkers() {
     map.on("click", TRANSIT_LAYER_ID, onTransitClick);
 
     return () => {
-      map.off("click", LAYER_ID, onClick);
+      map.off("click", onClick);
       map.off("click", TRANSIT_LAYER_ID, onTransitClick);
       map.off("mousemove", onMouseMove);
       map.getCanvasContainer().style.cursor = "";
     };
-  }, [mapReady, styleVersion, mapRef, setSelectedPlace, flyTo, setHoveredCategoryPlaceId]);
+  }, [
+    mapReady,
+    styleVersion,
+    mapRef,
+    setSelectedPlace,
+    flyTo,
+    setHoveredCategoryPlaceId,
+    results,
+    selectResult,
+  ]);
 
   return null;
 }

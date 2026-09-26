@@ -22,16 +22,23 @@ export function usePinMarker(
   label: string,
   showLabel = true,
   color: PinColor = PIN_RED,
+  onActivate?: () => void,
 ) {
   const { mapRef, mapReady } = useMap();
   const markerRef = useRef<maplibregl.Marker | null>(null);
   const labelRef = useRef<HTMLSpanElement | null>(null);
+  const labelContainerRef = useRef<HTMLDivElement | null>(null);
+  const elementRef = useRef<HTMLDivElement | null>(null);
+  const onActivateRef = useRef(onActivate);
+  onActivateRef.current = onActivate;
 
   // Remove marker on unmount
   useEffect(() => {
     return () => {
       markerRef.current?.remove();
       markerRef.current = null;
+      elementRef.current = null;
+      labelContainerRef.current = null;
     };
   }, []);
 
@@ -40,6 +47,8 @@ export function usePinMarker(
     if (!coords) {
       markerRef.current?.remove();
       markerRef.current = null;
+      elementRef.current = null;
+      labelContainerRef.current = null;
       return;
     }
 
@@ -53,11 +62,45 @@ export function usePinMarker(
         if (markerRef.current) {
           markerRef.current.setLngLat(coords);
           if (labelRef.current) labelRef.current.textContent = label;
+          if (elementRef.current) {
+            if (onActivate) {
+              elementRef.current.setAttribute("role", "button");
+              elementRef.current.dataset.openmapxPinMarker = "";
+              elementRef.current.tabIndex = 0;
+              elementRef.current.setAttribute("aria-label", label);
+            } else {
+              elementRef.current.removeAttribute("role");
+              delete elementRef.current.dataset.openmapxPinMarker;
+              elementRef.current.removeAttribute("tabindex");
+              elementRef.current.removeAttribute("aria-label");
+            }
+          }
+          if (labelContainerRef.current) {
+            labelContainerRef.current.style.pointerEvents = onActivate ? "auto" : "none";
+            labelContainerRef.current.style.cursor = onActivate ? "pointer" : "";
+          }
           return;
         }
 
         const el = document.createElement("div");
         el.style.cssText = "cursor:pointer;";
+        if (onActivate) {
+          el.dataset.openmapxPinMarker = "";
+          el.setAttribute("role", "button");
+          el.tabIndex = 0;
+          el.setAttribute("aria-label", label);
+        }
+        el.addEventListener("click", (event) => {
+          if (!onActivateRef.current) return;
+          event.stopPropagation();
+          onActivateRef.current();
+        });
+        el.addEventListener("keydown", (event) => {
+          if (!onActivateRef.current || (event.key !== "Enter" && event.key !== " ")) return;
+          event.preventDefault();
+          event.stopPropagation();
+          onActivateRef.current();
+        });
 
         const svgDiv = document.createElement("div");
         svgDiv.style.cssText = "transform-origin:bottom center;";
@@ -70,8 +113,7 @@ export function usePinMarker(
       `;
 
         const labelContainer = document.createElement("div");
-        labelContainer.style.cssText =
-          "position:absolute;left:26px;top:0;bottom:0;display:flex;align-items:center;pointer-events:none;";
+        labelContainer.style.cssText = `position:absolute;left:20px;top:0;bottom:0;display:flex;align-items:center;pointer-events:${onActivate ? "auto" : "none"};${onActivate ? "cursor:pointer;" : ""}`;
 
         const labelSpan = document.createElement("span");
         labelSpan.textContent = label;
@@ -88,6 +130,8 @@ export function usePinMarker(
         ].join(";");
 
         labelRef.current = labelSpan;
+        labelContainerRef.current = labelContainer;
+        elementRef.current = el;
         labelContainer.appendChild(labelSpan);
         el.appendChild(svgDiv);
         if (showLabel) el.appendChild(labelContainer);
@@ -101,5 +145,5 @@ export function usePinMarker(
     return () => {
       destroyed = true;
     };
-  }, [coords, label, mapRef, mapReady, showLabel, color]);
+  }, [coords, label, mapRef, mapReady, showLabel, color, onActivate]);
 }
