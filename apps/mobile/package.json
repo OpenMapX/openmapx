@@ -24,7 +24,7 @@
     "@openmapx/core": "workspace:^",
     "@openmapx/i18n": "workspace:^",
     "@react-native-community/netinfo": "12.0.1",
-    "babel-preset-expo": "~57.0.12",
+    "babel-preset-expo": "~58.0.3",
     "expo": "~57.0.24",
     "expo-application": "~57.0.3",
     "expo-build-properties": "~57.0.21",
