@@ -1,9 +1,13 @@
 "use client";
 
+import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import CloudOutlinedIcon from "@mui/icons-material/CloudOutlined";
 import EnergySavingsLeafIcon from "@mui/icons-material/EnergySavingsLeaf";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import PaymentsOutlinedIcon from "@mui/icons-material/PaymentsOutlined";
+import TollOutlinedIcon from "@mui/icons-material/TollOutlined";
 import Box from "@mui/material/Box";
 import ButtonBase from "@mui/material/ButtonBase";
-import Chip from "@mui/material/Chip";
 import Typography from "@mui/material/Typography";
 import type { RouteImpact } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
@@ -39,6 +43,15 @@ export function formatImpactCost(
   locale: string,
   labels: ImpactCostLabels = DEFAULT_COST_LABELS,
 ): string {
+  const { amount, caveat } = formatImpactCostParts(cost, locale, labels);
+  return caveat ? `${amount} · ${caveat}` : amount;
+}
+
+function formatImpactCostParts(
+  cost: RouteImpact["cost"],
+  locale: string,
+  labels: ImpactCostLabels,
+): { amount: string; caveat?: string } {
   let formatter: Intl.NumberFormat;
   try {
     formatter = new Intl.NumberFormat(locale, {
@@ -53,11 +66,13 @@ export function formatImpactCost(
   }
 
   if (cost.costType === "transit" && cost.transitFare === null) {
-    return labels.fareUnavailable;
+    return { amount: labels.fareUnavailable };
   }
 
   if (cost.costCompleteness === "complete" && cost.totalCost !== null) {
-    return `${labels.totalCost ?? DEFAULT_COST_LABELS.totalCost} ~${formatter.format(cost.totalCost)}`;
+    return {
+      amount: `${labels.totalCost ?? DEFAULT_COST_LABELS.totalCost} ~${formatter.format(cost.totalCost)}`,
+    };
   }
 
   if (cost.costCompleteness === "partial" && cost.knownCost !== null) {
@@ -67,17 +82,20 @@ export function formatImpactCost(
         : cost.tollStatus === "unknown"
           ? labels.tollCoverageUnknown
           : (labels.additionalCostUnknown ?? DEFAULT_COST_LABELS.additionalCostUnknown);
-    return `${labels.knownCostSubtotal ?? DEFAULT_COST_LABELS.knownCostSubtotal} ~${formatter.format(cost.knownCost)} · ${unknownLabel}`;
+    return {
+      amount: `${labels.knownCostSubtotal ?? DEFAULT_COST_LABELS.knownCostSubtotal} ~${formatter.format(cost.knownCost)}`,
+      caveat: unknownLabel,
+    };
   }
 
-  return labels.costUnavailable;
+  return { amount: labels.costUnavailable };
 }
 
 export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
   const t = useTranslations("directions");
   const locale = useLocale();
 
-  const formattedCost = formatImpactCost(impact.cost, locale, {
+  const costLabels = {
     tollCoverageUnknown: t("tollCostUnknown"),
     tollAmountUnknown: t("tollsUnknown"),
     fareUnavailable: t("fareUnavailable"),
@@ -85,7 +103,9 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
     totalCost: t("totalCost"),
     knownCostSubtotal: t("knownCostSubtotal"),
     additionalCostUnknown: t("additionalCostUnknown"),
-  });
+  };
+  const costParts = formatImpactCostParts(impact.cost, locale, costLabels);
+  const formattedCost = formatImpactCost(impact.cost, locale, costLabels);
   const formattedCo2 = formatCo2Emission(impact.emissions.totalGrams, locale);
 
   const summary = formattedCo2
@@ -98,48 +118,104 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
   const ariaLabel = isEcoChoice ? `${ecoLabel}, ${summary}` : summary;
 
   const badgeContent = (
-    <>
-      {isEcoChoice && (
-        <Chip
-          size="small"
-          icon={<EnergySavingsLeafIcon sx={{ fontSize: "14px !important" }} />}
-          label={ecoLabel}
-          color="success"
-          data-testid="eco-choice-chip"
-          sx={{
-            height: 24,
-            fontSize: "0.75rem",
-            fontWeight: 700,
-            "& .MuiChip-label": { px: 0.75 },
-            "& .MuiChip-icon": { ml: 0.5, mr: -0.25 },
-          }}
-        />
-      )}
-      <Typography
-        variant="caption"
-        sx={{
-          fontWeight: 500,
-          color: isEcoChoice ? "success.main" : "text.secondary",
-          fontSize: "0.75rem",
-          lineHeight: 1.3,
-          minWidth: 0,
-          overflowWrap: "anywhere",
-        }}
-        data-testid="impact-summary-text"
-      >
-        {summary}
-      </Typography>
-    </>
-  );
-
-  return (
     <Box
+      data-testid="impact-summary-text"
       sx={{
-        display: "inline-flex",
-        alignItems: "center",
-        maxWidth: "100%",
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-start",
+        gap: 0.25,
+        minWidth: 0,
       }}
     >
+      {isEcoChoice && (
+        <Box
+          data-testid="eco-choice-chip"
+          sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, color: "success.main" }}
+        >
+          <EnergySavingsLeafIcon aria-hidden="true" sx={{ fontSize: 16 }} />
+          <Typography variant="caption" sx={{ fontWeight: 700, lineHeight: 1.3 }}>
+            {ecoLabel}
+          </Typography>
+        </Box>
+      )}
+      <Box
+        sx={{
+          display: "flex",
+          flexWrap: "wrap",
+          alignItems: "center",
+          columnGap: 1.5,
+          rowGap: 0.25,
+          minWidth: 0,
+        }}
+      >
+        <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+          <PaymentsOutlinedIcon
+            aria-hidden="true"
+            sx={{ fontSize: 16, color: "text.secondary", flexShrink: 0 }}
+          />
+          <Typography
+            variant="caption"
+            sx={{
+              fontWeight: 500,
+              color: "text.secondary",
+              lineHeight: 1.3,
+              overflowWrap: "anywhere",
+            }}
+          >
+            {costParts.amount}
+          </Typography>
+        </Box>
+        {formattedCo2 && (
+          <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.5, minWidth: 0 }}>
+            <CloudOutlinedIcon
+              aria-hidden="true"
+              sx={{ fontSize: 16, color: "text.secondary", flexShrink: 0 }}
+            />
+            <Typography
+              variant="caption"
+              sx={{ fontWeight: 500, color: "text.secondary", lineHeight: 1.3 }}
+            >
+              {formattedCo2}
+            </Typography>
+          </Box>
+        )}
+      </Box>
+      {costParts.caveat && (
+        <Box
+          sx={{
+            display: "inline-flex",
+            alignItems: "center",
+            gap: 0.5,
+            minWidth: 0,
+            color: "text.secondary",
+          }}
+        >
+          {impact.cost.tollStatus === "no_tolls" ? (
+            <InfoOutlinedIcon aria-hidden="true" sx={{ fontSize: 16, flexShrink: 0 }} />
+          ) : (
+            <TollOutlinedIcon aria-hidden="true" sx={{ fontSize: 16, flexShrink: 0 }} />
+          )}
+          <Typography variant="caption" sx={{ lineHeight: 1.3, overflowWrap: "anywhere" }}>
+            {costParts.caveat}
+          </Typography>
+        </Box>
+      )}
+    </Box>
+  );
+
+  const layoutSx = {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 0.25,
+    maxWidth: "100%",
+    minWidth: 0,
+    textAlign: "start",
+  } as const;
+
+  return (
+    <Box sx={{ display: "inline-flex", maxWidth: "100%" }}>
       {onClick ? (
         <ButtonBase
           onClick={onClick}
@@ -147,56 +223,27 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
           data-testid="route-impact-badge"
           focusRipple
           sx={{
-            minHeight: 48,
-            minWidth: 48,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "flex-start",
-            gap: 0.75,
-            flexWrap: "wrap",
-            maxWidth: "100%",
-            px: 1,
-            py: 0.5,
-            borderRadius: 999,
-            bgcolor: (theme) =>
-              theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
-            "&:hover": {
-              bgcolor: (theme) =>
-                theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)",
-            },
-            transition: "background-color 0.15s ease",
+            ...layoutSx,
+            py: 0.25,
+            borderRadius: 1,
             cursor: "pointer",
-            border: "1px solid",
-            borderColor: (theme) =>
-              theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)",
+            "@media (pointer: coarse)": { minHeight: 48, minWidth: 48 },
+            "&:hover": { bgcolor: "action.hover" },
+            "&:focus-visible, &.Mui-focusVisible": {
+              outline: "2px solid",
+              outlineColor: "primary.main",
+              outlineOffset: 2,
+            },
           }}
         >
           {badgeContent}
+          <ChevronRightIcon
+            aria-hidden="true"
+            sx={{ fontSize: 16, color: "text.secondary", flexShrink: 0 }}
+          />
         </ButtonBase>
       ) : (
-        <Box
-          data-testid="route-impact-badge"
-          role="status"
-          aria-label={ariaLabel}
-          sx={{
-            minHeight: 48,
-            minWidth: 48,
-            display: "inline-flex",
-            alignItems: "center",
-            justifyContent: "flex-start",
-            gap: 0.75,
-            flexWrap: "wrap",
-            maxWidth: "100%",
-            px: 1,
-            py: 0.5,
-            borderRadius: 999,
-            bgcolor: (theme) =>
-              theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.08)" : "rgba(0, 0, 0, 0.04)",
-            border: "1px solid",
-            borderColor: (theme) =>
-              theme.palette.mode === "dark" ? "rgba(255, 255, 255, 0.12)" : "rgba(0, 0, 0, 0.08)",
-          }}
-        >
+        <Box data-testid="route-impact-badge" role="status" aria-label={ariaLabel} sx={layoutSx}>
           {badgeContent}
         </Box>
       )}

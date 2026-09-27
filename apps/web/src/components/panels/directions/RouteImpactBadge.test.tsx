@@ -290,10 +290,9 @@ describe("RouteImpactBadge", () => {
     expect(badge.tagName.toLowerCase()).toBe("div");
   });
 
-  it("provides minimum 48px touch target on interactive element", () => {
+  it("uses a button for the interactive summary", () => {
     renderBadge({ impact: mockDieselImpact, onClick: vi.fn() });
     const badge = screen.getByTestId("route-impact-badge");
-    // ButtonBase element has minHeight: 48 and minWidth: 48
     expect(badge.tagName.toLowerCase()).toBe("button");
   });
 
