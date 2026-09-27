@@ -1,5 +1,5 @@
 import { useMapStore, useNavigationStore } from "@openmapx/core";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { announceAlign, clearAlignAnnouncement } from "@/lib/alignAnnouncement";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import type { StreetGridAlignment } from "@/lib/streetGrid";
@@ -28,7 +28,7 @@ vi.mock("./crowdReportsLazy", () => ({
 const mapRef = vi.hoisted(() => ({ current: null as unknown }));
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({ zoomIn: vi.fn(), zoomOut: vi.fn(), resetBearing: vi.fn() }),
-  useMapOptional: () => ({ mapRef, styleVersion: 0 }),
+  useMapOptional: () => ({ mapRef, mapReady: true, styleVersion: 0 }),
 }));
 
 const compute = vi.hoisted(() => vi.fn());
@@ -43,16 +43,25 @@ import { MapControls } from "./MapControls";
 mapRef.current = createFakeMap({ zoom: ALIGN_MIN_ZOOM }).map;
 
 const ALIGN_LABEL = "map.alignToStreetsAriaLabel";
+let fakeTimersActive = false;
 
 function renderControls(status: AlignStatus = "ok") {
   const result: StreetGridAlignment = status === "ok" ? { status, bearing: 30 } : { status };
   compute.mockReturnValue(result);
   useMapStore.setState({ zoom: ALIGN_MIN_ZOOM });
-  return render(<MapControls />);
+  const view = render(<MapControls />);
+  act(() => vi.advanceTimersByTime(0));
+  return view;
 }
 
 describe("MapControls align to streets", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    fakeTimersActive = true;
+  });
   afterEach(() => {
+    if (fakeTimersActive) act(() => vi.advanceTimersByTime(0));
+    vi.useRealTimers();
     controls.reportEnabled = false;
     publishMapObstruction("controls-test-filter", "top", null);
     useNavigationStore.setState({ status: "idle", kind: "ground", cameraMode: "follow" });
@@ -69,12 +78,18 @@ describe("MapControls align to streets", () => {
     expect(screen.queryByLabelText(ALIGN_LABEL)).toBeNull();
   });
 
-  it("aligns on click and explains when no grid is found", () => {
+  it("hides the button when a settled view has no grid", () => {
     renderControls("no-grid");
+    expect(screen.queryByLabelText(ALIGN_LABEL)).toBeNull();
+  });
+
+  it("explains when the grid disappears between detection and click", () => {
+    renderControls();
+    compute.mockReturnValue({ status: "no-grid" });
     act(() => {
       fireEvent.click(screen.getByLabelText(ALIGN_LABEL));
     });
-    expect(compute).toHaveBeenCalledTimes(1);
+    expect(compute).toHaveBeenCalledTimes(2); // background probe, then the explicit click
     expect(screen.getAllByText("map.alignNoGrid").length).toBeGreaterThan(0);
     // The polite live region owns the announcement; the toast must not repeat it
     // through its default alert role.
@@ -82,7 +97,8 @@ describe("MapControls align to streets", () => {
   });
 
   it("announces again when the same outcome repeats", () => {
-    renderControls("no-grid");
+    renderControls();
+    compute.mockReturnValue({ status: "no-grid" });
     const region = screen.getByRole("status");
 
     act(() => {
@@ -106,7 +122,8 @@ describe("MapControls align to streets", () => {
     ["zoomed-out", "map.alignZoomIn"],
     ["aligned", "map.alignAlready"],
   ] as const)("announces a distinct message for %s", (status, message) => {
-    renderControls(status);
+    renderControls(status === "aligned" ? "aligned" : "ok");
+    compute.mockReturnValue({ status });
     act(() => {
       fireEvent.click(screen.getByLabelText(ALIGN_LABEL));
     });
@@ -129,7 +146,8 @@ describe("MapControls align to streets", () => {
   });
 
   it("does not replay an outcome from before it was mounted", () => {
-    const view = renderControls("no-grid");
+    const view = renderControls();
+    compute.mockReturnValue({ status: "no-grid" });
     act(() => {
       fireEvent.click(screen.getByLabelText(ALIGN_LABEL));
     });
@@ -171,6 +189,8 @@ describe("MapControls align to streets", () => {
         useMapStore.setState({ bearing: 45 });
       });
       const view = renderControls();
+      vi.useRealTimers();
+      fakeTimersActive = false;
 
       expect(screen.getByRole("button", { name: "Report" })).toBeTruthy();
       expect(screen.getByRole("button", { name: "Pegman" })).toBeTruthy();

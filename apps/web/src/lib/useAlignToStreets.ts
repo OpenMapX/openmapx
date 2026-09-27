@@ -2,7 +2,7 @@
 
 import { useMapStore, useNavigationStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { alignRefusalKey, announceAlign } from "./alignAnnouncement";
 import { prefersReducedMotion } from "./reducedMotion";
@@ -12,6 +12,7 @@ import {
   computeStreetGridAlignment,
   type StreetGridAlignment,
 } from "./streetGrid";
+import { subscribeStreetGridAvailability } from "./streetGridAvailability";
 
 const ALIGN_EASE_MS = 300;
 /**
@@ -33,6 +34,23 @@ export function useAlignToStreets(): { available: boolean; align: () => void } {
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const memo = useRef<{ key: string; at: number; result: StreetGridAlignment } | null>(null);
   const styleVersion = ctx?.styleVersion ?? 0;
+  const map = ctx?.mapReady ? ctx.mapRef.current : null;
+  const eligible = Boolean(map) && !navigating && zoom >= ALIGN_MIN_ZOOM;
+  const [probe, setProbe] = useState({
+    map: null as typeof map,
+    styleVersion: -1,
+    available: false,
+  });
+
+  useEffect(() => {
+    if (!map || !eligible) {
+      setProbe({ map: null, styleVersion: -1, available: false });
+      return;
+    }
+    return subscribeStreetGridAvailability(map, styleVersion, (available) => {
+      setProbe({ map, styleVersion, available });
+    });
+  }, [map, eligible, styleVersion]);
 
   const align = useCallback((): void => {
     const announce = (status: StreetGridAlignment["status"]) => {
@@ -61,5 +79,9 @@ export function useAlignToStreets(): { available: boolean; align: () => void } {
     announce(result.status);
   }, [ctx, styleVersion, t]);
 
-  return { available: Boolean(ctx) && !navigating && zoom >= ALIGN_MIN_ZOOM, align };
+  return {
+    available:
+      eligible && probe.map === map && probe.styleVersion === styleVersion && probe.available,
+    align,
+  };
 }

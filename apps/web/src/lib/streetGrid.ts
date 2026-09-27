@@ -144,5 +144,7 @@ export function alignmentCacheKey(map: maplibregl.Map, styleVersion: number): st
   const center = map.getCenter();
   const zoom = Math.round(map.getZoom() * 4) / 4;
   const bearing = Math.round(map.getBearing() * 2) / 2;
-  return `${styleVersion}:${zoom}:${center.lng.toFixed(4)}:${center.lat.toFixed(4)}:${bearing}`;
+  const { clientWidth, clientHeight } = map.getContainer();
+  const { top = 0, right = 0, bottom = 0, left = 0 } = map.getPadding();
+  return `${styleVersion}:${zoom}:${center.lng.toFixed(4)}:${center.lat.toFixed(4)}:${bearing}:${map.getPitch()}:${clientWidth}x${clientHeight}:${top},${right},${bottom},${left}`;
 }
