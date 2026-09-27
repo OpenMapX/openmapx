@@ -353,6 +353,7 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
         <PlacePhotoHero
           photos={viableHeroPhotos}
           placeName={place.name}
+          clearSearchBar={clearSearchBar}
           onClose={onClose}
           onViewPhotos={() => setGalleryOpen(true)}
           onPhotoError={(url) =>

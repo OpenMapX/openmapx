@@ -13,6 +13,7 @@ import { PhotoAttribution } from "./PhotoAttribution";
 interface Props {
   photos: PlacePhoto[];
   placeName: string;
+  clearSearchBar?: boolean;
   onClose?: () => void;
   onViewPhotos: () => void;
   /**
@@ -23,7 +24,14 @@ interface Props {
   onPhotoError?: (url: string) => void;
 }
 
-export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPhotoError }: Props) {
+export function PlacePhotoHero({
+  photos,
+  placeName,
+  clearSearchBar = false,
+  onClose,
+  onViewPhotos,
+  onPhotoError,
+}: Props) {
   const tc = useTranslations("common");
   const tp = useTranslations("photoGallery");
   const photo = photos[0];
@@ -73,7 +81,7 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
           className="view-photos-pill"
           sx={{
             position: "absolute",
-            top: 12,
+            top: clearSearchBar ? { xs: 12, sm: "72px" } : 12,
             left: 12,
             maxWidth: "calc(100% - 76px)",
             display: "flex",
