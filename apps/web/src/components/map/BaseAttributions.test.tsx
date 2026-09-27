@@ -44,6 +44,13 @@ describe("BaseAttributions — base OSM-credit invariant", () => {
     expect(creditsOsm()).toBe(true);
   });
 
+  it("keeps vector credits when relief is selected", () => {
+    useLayerStore.setState({ activeLayer: "terrain" });
+    render(<BaseAttributions />);
+    expect(creditsOsm()).toBe(true);
+    expect(registeredAttributions().some((a) => a.includes("OpenMapTiles"))).toBe(true);
+  });
+
   it("does NOT force an OSM credit when a non-OSM raster base (satellite) is active", () => {
     // Guards against misattributing imagery to OSM: while a raster base owns the
     // screen, the vector-base credits (including OSM) are dropped and the raster

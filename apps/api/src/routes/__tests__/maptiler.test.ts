@@ -24,6 +24,30 @@ afterEach(() => {
 });
 
 describe("GET /maptiler/*", () => {
+  it.each([
+    ["terrain-rgb-v2", "webp"],
+    ["contours-v2", "pbf"],
+  ])("proxies %s TileJSON and rewrites its %s tiles", async (tileset, extension) => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    vi.stubEnv("PUBLIC_BASE_URL", "https://api.example.test");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        Response.json({
+          tiles: [
+            `https://api.maptiler.com/tiles/${tileset}/{z}/{x}/{y}.${extension}?key=upstream-key`,
+          ],
+        }),
+      ),
+    );
+
+    const res = await app.inject({ method: "GET", url: `/maptiler/tiles/${tileset}/tiles.json` });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toMatchObject({
+      tiles: [`https://api.example.test/api/maptiler/tiles/${tileset}/{z}/{x}/{y}.${extension}`],
+    });
+  });
+
   it("rewrites MapTiler style asset URLs to the API proxy", async () => {
     vi.stubEnv("MAPTILER_KEY", "test-key");
     // The proxy base is taken from configuration (PUBLIC_BASE_URL / DOMAIN),

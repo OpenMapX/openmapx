@@ -105,6 +105,29 @@ these values.
 `NEXT_PUBLIC_STYLE_PROVIDER=maptiler` selects MapTiler's complete hosted style
 through the API and does not use the local OpenMapX offline-package pipeline.
 
+## Relief and contours
+
+The Terrain option keeps the active vector style, adding hillshade and contour
+lines underneath its roads and labels. It also enables MapLibre's elevation
+surface, so a pitched map shows 3D terrain. By default, elevation comes from
+MapTiler Terrain RGB and contours from MapTiler Contours through the API proxy;
+`MAPTILER_KEY` is required. Terrain data is loaded only while Terrain is
+selected. MapTiler's Terrain RGB and contour datasets have a native maximum zoom
+of 14, so closer views use overzoomed elevation and contours.
+
+A self-hosted deployment can set `NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL` to a
+Mapbox Terrain RGB encoded DEM TileJSON endpoint and
+`NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL` to a vector TileJSON endpoint with a
+`contour` source layer and `height`/`nth_line` fields. Set
+`NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME` and
+`NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL` to the data provider's required credit.
+The previous `NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE` setting controlled a
+complete OpenTopoMap raster basemap and no longer controls the Terrain option.
+
+Downloaded browser packages currently contain OpenMapTiles vectors and glyphs,
+but no elevation or contour tiles. While an offline package is active, Terrain
+therefore shows the flat vector style and makes no terrain tile requests.
+
 ## Offline packages
 
 Offline package generation reads the same `tiles.mbtiles` and `tile-fonts`

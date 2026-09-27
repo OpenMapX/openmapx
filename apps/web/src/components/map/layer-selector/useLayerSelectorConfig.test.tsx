@@ -20,7 +20,10 @@ const env: ClientEnv = {
   styleProvider: "openmapx",
   trafficTileUrlTemplate: "",
   cyclOsmTileUrlTemplate: "",
-  terrainTileUrlTemplate: "",
+  terrainDemTilejsonUrl: "",
+  terrainContourTilejsonUrl: "",
+  terrainAttributionName: "© MapTiler",
+  terrainAttributionUrl: "https://www.maptiler.com/copyright/",
   martinBaseUrl: "",
 };
 

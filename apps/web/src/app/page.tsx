@@ -29,6 +29,7 @@ import { RouteLayer } from "@/components/map/layers/RouteLayer";
 import { RouteTrafficLayer } from "@/components/map/layers/RouteTrafficLayer";
 import { SavedPlacesLayer } from "@/components/map/layers/SavedPlacesLayer";
 import { SelectedStopInfrastructureLayer } from "@/components/map/layers/SelectedStopInfrastructureLayer";
+import { TerrainBaseLayer } from "@/components/map/layers/TerrainBaseLayer";
 import { TimelineMapLayer } from "@/components/map/layers/TimelineMapLayer";
 import { TransitItineraryLayer } from "@/components/map/layers/TransitItineraryLayer";
 import { TransitRouteLayer } from "@/components/map/layers/TransitRouteLayer";
@@ -83,37 +84,12 @@ const SATELLITE_ATTRIBUTIONS: Attribution[] = [
   },
 ];
 
-const TERRAIN_ATTRIBUTIONS: Attribution[] = [
-  {
-    sourceId: "opentopomap",
-    name: "© OpenTopoMap (CC-BY-SA)",
-    url: "https://opentopomap.org/about",
-    spdxLicense: "CC-BY-SA-4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by-sa/4.0/",
-  },
-  {
-    sourceId: "openstreetmap",
-    name: "© OpenStreetMap contributors",
-    url: "https://www.openstreetmap.org/copyright",
-    spdxLicense: "ODbL-1.0",
-    licenseUrl: "https://opendatacommons.org/licenses/odbl/",
-  },
-];
-
 function apiRoute(path: string): string {
   const apiBase = (process.env.NEXT_PUBLIC_API_URL ?? "").replace(/\/$/, "");
   return apiBase ? `${apiBase}${path}` : path;
 }
 
-function getTerrainTileUrl(): string {
-  if (process.env.NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE) {
-    return process.env.NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE;
-  }
-  return apiRoute("/api/tiles/terrain/{z}/{x}/{y}.png");
-}
-
 export default function HomePage() {
-  const terrainTileUrl = getTerrainTileUrl();
   const satelliteTiles = [apiRoute("/api/maptiler/tiles/satellite-v2/{z}/{x}/{y}.jpg")];
   return (
     <MapProvider>
@@ -137,15 +113,7 @@ export default function HomePage() {
               maxzoom={20}
               attributions={SATELLITE_ATTRIBUTIONS}
             />
-            <RasterBaseLayer
-              sourceId="openmapx-terrain-source"
-              layerId="openmapx-terrain-layer"
-              tiles={[terrainTileUrl]}
-              activeWhen="terrain"
-              maxzoom={17}
-              attributions={TERRAIN_ATTRIBUTIONS}
-              paint={{ "raster-opacity": 0.95, "raster-saturation": -0.15 }}
-            />
+            <TerrainBaseLayer />
             <CyclingBaseLayer />
             {/* Core layers (not integration-managed) */}
             <PlaceBoundaryLayer />

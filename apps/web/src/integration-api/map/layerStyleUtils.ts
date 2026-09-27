@@ -3,6 +3,15 @@
 import type * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, GeoJSONSourceDiff } from "maplibre-gl";
 
+/** A URL-backed tile source is fully described at creation, including on style reload. */
+export function ensureUrlTileSource(
+  map: Pick<maplibregl.Map, "getSource" | "addSource">,
+  id: string,
+  source: maplibregl.SourceSpecification,
+): void {
+  if (!map.getSource(id)) map.addSource(id, source);
+}
+
 export type GeoJsonSourceData = Parameters<GeoJSONSource["setData"]>[0];
 
 export interface GeoJsonSourceDataEntry {

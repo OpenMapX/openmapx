@@ -197,6 +197,29 @@ export function addLayerInSlot(
   map.addLayer(spec, resolveBeforeId(styleLayers, layerRegistrations(), slot, order));
 }
 
+/**
+ * Insert an extension of the base style among its own layers. Relief belongs
+ * below water, contour strokes below roads, and contour text below the base
+ * labels; these are not application overlays and must not enter overlay slots.
+ */
+export function addLayerWithinBasemap(
+  map: Pick<maplibregl.Map, "getStyle" | "addLayer">,
+  spec: maplibregl.AddLayerObject,
+  position: "before-water" | "before-lines" | "before-labels",
+): void {
+  const layers = map.getStyle().layers ?? [];
+  const anchor =
+    position === "before-water"
+      ? (layers.find(
+          (layer) =>
+            layer.type === "fill" && "source-layer" in layer && layer["source-layer"] === "water",
+        )?.id ?? layers.find((layer) => layer.type === "line")?.id)
+      : position === "before-lines"
+        ? layers.find((layer) => layer.type === "line")?.id
+        : layers.find((layer) => layer.type === "symbol")?.id;
+  map.addLayer(spec, anchor);
+}
+
 /** Re-assert the whole canonical order. Idempotent and cheap when nothing moved. */
 export function anchorMapLayers(map: StackMap): void {
   const styleLayers = map.getStyle()?.layers ?? [];

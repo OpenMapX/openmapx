@@ -18,7 +18,10 @@ export interface ClientEnv {
   styleProvider: "maptiler" | "openmapx";
   trafficTileUrlTemplate: string;
   cyclOsmTileUrlTemplate: string;
-  terrainTileUrlTemplate: string;
+  terrainDemTilejsonUrl: string;
+  terrainContourTilejsonUrl: string;
+  terrainAttributionName: string;
+  terrainAttributionUrl: string;
   /** Martin vector-tile server base (Traefik-proxied at `/martin`); first consumer is overlay-traffic-flow. */
   martinBaseUrl: string;
 }
@@ -46,11 +49,15 @@ export function buildClientEnv(): ClientEnv {
       (apiBase
         ? `${apiBase}/api/tiles/cyclosm/{z}/{x}/{y}.png`
         : "/api/tiles/cyclosm/{z}/{x}/{y}.png"),
-    terrainTileUrlTemplate:
-      process.env.NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE ||
-      (apiBase
-        ? `${apiBase}/api/tiles/terrain/{z}/{x}/{y}.png`
-        : "/api/tiles/terrain/{z}/{x}/{y}.png"),
+    terrainDemTilejsonUrl:
+      process.env.NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL ||
+      `${apiBase}/api/maptiler/tiles/terrain-rgb-v2/tiles.json`,
+    terrainContourTilejsonUrl:
+      process.env.NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL ||
+      `${apiBase}/api/maptiler/tiles/contours-v2/tiles.json`,
+    terrainAttributionName: process.env.NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME || "© MapTiler",
+    terrainAttributionUrl:
+      process.env.NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL || "https://www.maptiler.com/copyright/",
     martinBaseUrl:
       process.env.NEXT_PUBLIC_MARTIN_URL || (apiBase ? `${apiBase}/martin` : "/martin"),
   };

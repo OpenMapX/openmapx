@@ -15,7 +15,10 @@ function withEnv(children: ReactNode, apiUrl = "") {
     styleProvider: "openmapx",
     trafficTileUrlTemplate: "",
     cyclOsmTileUrlTemplate: "",
-    terrainTileUrlTemplate: "",
+    terrainDemTilejsonUrl: "",
+    terrainContourTilejsonUrl: "",
+    terrainAttributionName: "© MapTiler",
+    terrainAttributionUrl: "https://www.maptiler.com/copyright/",
     martinBaseUrl: "",
   };
   return <EnvProvider config={env}>{children}</EnvProvider>;
