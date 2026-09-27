@@ -63,6 +63,17 @@ afterEach(() => {
 });
 
 describe("Wikimedia photo provider — File: tag", () => {
+  it("surfaces a metadata rate limit in strict card lookup", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("busy", { status: 429, headers: { "Retry-After": "4" } })),
+    );
+    await expect(
+      wikimediaProvider.searchByTags({ wikimedia_commons: "File:Photo.jpg" }, undefined, {
+        strict: true,
+      }),
+    ).rejects.toMatchObject({ status: 429, retryAfterMs: 4000 });
+  });
   it("preserves rich credit when Commons normalizes an explicitly tagged title", async () => {
     routes = {
       "titles=": {

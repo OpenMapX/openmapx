@@ -91,6 +91,7 @@ export interface MetricsHandle {
   airQualityProviderCallCounter: Counter;
   airQualityProviderCallLatency: Histogram;
   airQualityRasterAge: Histogram;
+  cardEnrichmentCounter: Counter;
   privacyOpenRequests: ObservableGauge;
   privacyOldestRequestAge: ObservableGauge;
   privacySourceTasks: ObservableGauge;
@@ -217,6 +218,9 @@ export function initMetrics(): MetricsHandle {
   const airQualityRasterAge = meter.createHistogram("air_quality_raster_age_seconds", {
     description: "Age of a served air-quality raster frame",
     unit: "s",
+  });
+  const cardEnrichmentCounter = meter.createCounter("card_enrichment_fields_total", {
+    description: "Optional card field outcomes by field and bounded status",
   });
 
   // Privacy operations telemetry is deliberately exported as callbacks rather
@@ -355,6 +359,7 @@ export function initMetrics(): MetricsHandle {
     airQualityProviderCallCounter,
     airQualityProviderCallLatency,
     airQualityRasterAge,
+    cardEnrichmentCounter,
     privacyOpenRequests,
     privacyOldestRequestAge,
     privacySourceTasks,
@@ -399,6 +404,13 @@ export function initMetrics(): MetricsHandle {
  */
 export function getMetrics(): MetricsHandle {
   return singleton ?? initMetrics();
+}
+
+export function recordCardEnrichment(
+  field: "photo" | "rating",
+  status: "available" | "absent" | "failed",
+): void {
+  getMetrics().cardEnrichmentCounter.add(1, { field, status });
 }
 
 /**

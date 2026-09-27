@@ -1,7 +1,9 @@
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
-import type { CategoryPlace, SearchIntent } from "@openmapx/core";
+import type { CategoryCardEnrichmentRequest, CategoryPlace, SearchIntent } from "@openmapx/core";
 import {
   API_ENDPOINTS,
+  ApiClientError,
+  ApiRequestAbortedError,
   apiClient,
   useCategoryFacetStore,
   useCategorySearchStore,
@@ -591,6 +593,488 @@ describe("category result activation", () => {
 });
 
 describe("visible category card enrichment", () => {
+  function mountVisibleCards(places: CategoryPlace[]) {
+    let notifyIntersection: IntersectionObserverCallback = () => {};
+    const observed: Element[] = [];
+    class Observer {
+      constructor(callback: IntersectionObserverCallback) {
+        notifyIntersection = callback;
+      }
+      observe(element: Element) {
+        observed.push(element);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", Observer);
+    act(() => useCategorySearchStore.setState({ activeCategory: "cafes" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: places,
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+    });
+    const view = renderPanel(vi.fn());
+    const intersect = (ids: string[], isIntersecting = true) => {
+      act(() =>
+        notifyIntersection(
+          ids.map((id) => ({
+            target: observed.find((row) => row.getAttribute("data-card-id") === id),
+            isIntersecting,
+          })) as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+    };
+    return { intersect, view, observed };
+  }
+
+  async function advanceCardTimers(milliseconds: number) {
+    await act(async () => vi.advanceTimersByTimeAsync(milliseconds));
+  }
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("retries a transient batch failure once and displays the recovered photo", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    let notifyIntersection: IntersectionObserverCallback = () => {};
+    let observed: Element | undefined;
+    class Observer {
+      constructor(callback: IntersectionObserverCallback) {
+        notifyIntersection = callback;
+      }
+      observe(element: Element) {
+        observed = element;
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("IntersectionObserver", Observer);
+    const place = {
+      id: "osm:node/recover",
+      name: "Recovering cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi
+      .spyOn(apiClient, "post")
+      .mockRejectedValueOnce(new TypeError("Network failed"))
+      .mockResolvedValue({
+        results: [
+          {
+            id: place.id,
+            photo: { url: "https://upload.wikimedia.org/Recovered.jpg", source: "osm" },
+            outcomes: { photo: { status: "available" }, rating: { status: "absent" } },
+          },
+        ],
+      } as never);
+    act(() => useCategorySearchStore.setState({ activeCategory: "cafes" }));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [place],
+      isLoading: false,
+      isError: false,
+      partial: false,
+      isTransitCategory: false,
+    });
+    try {
+      renderPanel(vi.fn());
+      act(() =>
+        notifyIntersection(
+          [{ target: observed, isIntersecting: true }] as IntersectionObserverEntry[],
+          {} as IntersectionObserver,
+        ),
+      );
+      await act(async () => vi.advanceTimersByTimeAsync(50));
+      expect(post).toHaveBeenCalledTimes(1);
+      await act(async () => vi.advanceTimersByTimeAsync(2_500));
+      expect(post).toHaveBeenCalledTimes(2);
+      expect(
+        screen.getByRole("button", { name: /Recovering cafe/ }).querySelector("img"),
+      ).toBeTruthy();
+    } finally {
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("retries only a failed rating and preserves the successful photo", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const place = {
+      id: "osm:node/partial",
+      name: "Partial cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const photo = { url: "https://upload.wikimedia.org/Partial.jpg", source: "osm" };
+    let calls = 0;
+    const post = vi.spyOn(apiClient, "post").mockImplementation(
+      async () =>
+        (++calls === 1
+          ? {
+              results: [
+                {
+                  id: place.id,
+                  photo,
+                  outcomes: {
+                    photo: { status: "available" },
+                    rating: { status: "failed", retryAfterMs: 100 },
+                  },
+                },
+              ],
+            }
+          : {
+              results: [
+                {
+                  id: place.id,
+                  rating: { stars: 4.2, count: 4, source: "mangrove" },
+                  outcomes: { rating: { status: "available" } },
+                },
+              ],
+            }) as never,
+    );
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    expect(screen.getByRole("button", { name: /Partial cafe/ }).querySelector("img")).toBeTruthy();
+    await advanceCardTimers(2_500);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect((post.mock.calls[1]?.[1] as CategoryCardEnrichmentRequest).places[0]?.fields).toEqual([
+      "rating",
+    ]);
+    const row = screen.getByRole("button", { name: /Partial cafe/ });
+    expect(row.querySelector("img")).toBeTruthy();
+    expect(row).toHaveTextContent("4.2");
+  });
+
+  it("does not retry a confirmed absence or a permanent invalid request", async () => {
+    vi.useFakeTimers();
+    const absent = {
+      id: "osm:node/absent",
+      name: "Absent cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const invalid = {
+      id: "osm:node/invalid",
+      name: "Invalid cafe",
+      coordinates: [6.09, 50.77],
+    } as CategoryPlace;
+    let calls = 0;
+    const post = vi.spyOn(apiClient, "post").mockImplementation(async () => {
+      if (++calls === 1)
+        return {
+          results: [
+            {
+              id: absent.id,
+              outcomes: { photo: { status: "absent" }, rating: { status: "absent" } },
+            },
+          ],
+        } as never;
+      throw new ApiClientError(400, null, null);
+    });
+    const { intersect } = mountVisibleCards([absent, invalid]);
+    intersect([absent.id]);
+    await advanceCardTimers(50);
+    intersect([invalid.id]);
+    await advanceCardTimers(50);
+    await advanceCardTimers(5_000);
+    intersect([absent.id, invalid.id]);
+    await advanceCardTimers(100);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry an explicitly aborted request", async () => {
+    vi.useFakeTimers();
+    const place = {
+      id: "osm:node/abort",
+      name: "Aborted cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi
+      .spyOn(apiClient, "post")
+      .mockRejectedValue(new ApiRequestAbortedError("aborted"));
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    await advanceCardTimers(3_000);
+    intersect([place.id]);
+    await advanceCardTimers(100);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
+  it("treats an omitted item as a failure and retries it once", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const place = {
+      id: "osm:node/omitted",
+      name: "Omitted cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    let calls = 0;
+    const post = vi.spyOn(apiClient, "post").mockImplementation(
+      async () =>
+        (++calls === 1
+          ? { results: [] }
+          : {
+              results: [
+                {
+                  id: place.id,
+                  photo: { url: "https://upload.wikimedia.org/Omitted.jpg", source: "osm" },
+                  outcomes: { photo: { status: "available" }, rating: { status: "absent" } },
+                },
+              ],
+            }) as never,
+    );
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    expect(screen.getByRole("button", { name: /Omitted cafe/ }).querySelector("img")).toBeNull();
+    await advanceCardTimers(2_500);
+    expect(post).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("button", { name: /Omitted cafe/ }).querySelector("img")).toBeTruthy();
+  });
+
+  it("caps dispatches across same-search effect resets even when requests are cancelled", async () => {
+    vi.useFakeTimers();
+    const place = {
+      id: "osm:node/rerender",
+      name: "Rerender cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi.spyOn(apiClient, "post").mockImplementation(
+      async (_path, _body, options) =>
+        new Promise((_resolve, reject) => {
+          (options as { signal?: AbortSignal })?.signal?.addEventListener("abort", () =>
+            reject(new ApiRequestAbortedError("aborted")),
+          );
+        }),
+    );
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    expect(post).toHaveBeenCalledTimes(1);
+    for (let i = 0; i < 2; i++) {
+      mockUseExploreReachResults.mockReturnValue({
+        filtered: [place],
+        isLoading: false,
+        isError: false,
+        partial: false,
+        isTransitCategory: false,
+      });
+      act(() =>
+        useOpeningHoursStore.setState({ openingHoursFilter: i === 0 ? "open_now" : "any" }),
+      );
+      intersect([place.id]);
+      await advanceCardTimers(50);
+    }
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("refreshes confirmed card data after each cache TTL", async () => {
+    vi.useFakeTimers();
+    const place = {
+      id: "osm:node/ttl",
+      name: "TTL cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({
+      results: [
+        { id: place.id, outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+      ],
+    } as never);
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    for (let i = 0; i < 2; i++) {
+      await advanceCardTimers(600_001);
+      intersect([place.id]);
+      await advanceCardTimers(50);
+    }
+    expect(post).toHaveBeenCalledTimes(3);
+  });
+
+  it("waits for HTTP Retry-After before retrying a rate-limited request", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const place = {
+      id: "osm:node/rate-limit",
+      name: "Rate limited cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi
+      .spyOn(apiClient, "post")
+      .mockRejectedValueOnce(new ApiClientError(429, null, 5))
+      .mockResolvedValue({
+        results: [
+          { id: place.id, outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+        ],
+      } as never);
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    await advanceCardTimers(4_900);
+    expect(post).toHaveBeenCalledTimes(1);
+    await advanceCardTimers(150);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("retries an upstream 408 request timeout once", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const place = {
+      id: "osm:node/upstream-timeout",
+      name: "Upstream timeout cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi
+      .spyOn(apiClient, "post")
+      .mockRejectedValueOnce(new ApiClientError(408, null, null))
+      .mockResolvedValue({
+        results: [
+          { id: place.id, outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+        ],
+      } as never);
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    await advanceCardTimers(2_500);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a distant server retry time within the timer range", async () => {
+    vi.useFakeTimers();
+    const place = {
+      id: "osm:node/long-wait",
+      name: "Long wait cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi.spyOn(apiClient, "post").mockResolvedValue({
+      results: [
+        {
+          id: place.id,
+          outcomes: {
+            photo: { status: "failed", retryAfterMs: 3_000_000_000 },
+            rating: { status: "absent" },
+          },
+        },
+      ],
+    } as never);
+    const timeout = vi.spyOn(globalThis, "setTimeout");
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    expect(post).toHaveBeenCalledTimes(1);
+    expect(
+      timeout.mock.calls.every(([, delay]) => typeof delay !== "number" || delay <= 2_147_483_647),
+    ).toBe(true);
+  });
+
+  it("defers a failed field while its row is out of view", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    const place = {
+      id: "osm:node/scrolled",
+      name: "Scrolled cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi
+      .spyOn(apiClient, "post")
+      .mockRejectedValueOnce(new TypeError("Network failed"))
+      .mockResolvedValue({
+        results: [
+          { id: place.id, outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+        ],
+      } as never);
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    intersect([place.id], false);
+    await advanceCardTimers(3_000);
+    expect(post).toHaveBeenCalledTimes(1);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    expect(post).toHaveBeenCalledTimes(2);
+  });
+
+  it("defers a retry while offline or the document is hidden", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Math, "random").mockReturnValue(0);
+    let online = true;
+    let visibility: DocumentVisibilityState = "visible";
+    const originalOnline = Object.getOwnPropertyDescriptor(navigator, "onLine");
+    const originalVisibility = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(navigator, "onLine", { configurable: true, get: () => online });
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => visibility,
+    });
+    const place = {
+      id: "osm:node/paused",
+      name: "Paused cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    const post = vi
+      .spyOn(apiClient, "post")
+      .mockRejectedValueOnce(new TypeError("Network failed"))
+      .mockResolvedValue({
+        results: [
+          { id: place.id, outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+        ],
+      } as never);
+    const { intersect } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    online = false;
+    act(() => window.dispatchEvent(new Event("offline")));
+    await advanceCardTimers(3_000);
+    expect(post).toHaveBeenCalledTimes(1);
+    online = true;
+    visibility = "hidden";
+    act(() => {
+      window.dispatchEvent(new Event("online"));
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await advanceCardTimers(100);
+    expect(post).toHaveBeenCalledTimes(1);
+    visibility = "visible";
+    act(() => document.dispatchEvent(new Event("visibilitychange")));
+    await advanceCardTimers(50);
+    expect(post).toHaveBeenCalledTimes(2);
+    if (originalOnline) Object.defineProperty(navigator, "onLine", originalOnline);
+    else Reflect.deleteProperty(navigator, "onLine");
+    if (originalVisibility) Object.defineProperty(document, "visibilityState", originalVisibility);
+    else Reflect.deleteProperty(document, "visibilityState");
+  });
+
+  it("clears delayed retries and aborts in-flight work on unmount", async () => {
+    vi.useFakeTimers();
+    const place = {
+      id: "osm:node/unmount",
+      name: "Unmount cafe",
+      coordinates: [6.08, 50.77],
+    } as CategoryPlace;
+    let signal: AbortSignal | undefined;
+    const post = vi.spyOn(apiClient, "post").mockImplementation(async (_path, _body, options) => {
+      signal = (options as { signal?: AbortSignal })?.signal;
+      return new Promise((_resolve, reject) =>
+        signal?.addEventListener("abort", () => reject(new ApiRequestAbortedError("aborted"))),
+      );
+    });
+    const { intersect, view } = mountVisibleCards([place]);
+    intersect([place.id]);
+    await advanceCardTimers(50);
+    expect(signal?.aborted).toBe(false);
+    view.unmount();
+    expect(signal?.aborted).toBe(true);
+    await advanceCardTimers(3_000);
+    expect(post).toHaveBeenCalledTimes(1);
+  });
+
   it("drops malformed image tags so one bad row does not reject its visible batch", async () => {
     let notifyIntersection: IntersectionObserverCallback = () => {};
     const observed: Element[] = [];

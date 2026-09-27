@@ -1,4 +1,5 @@
 import type { PlacePhoto } from "../types/place";
+import { fetchJson } from "./fetchJson";
 import { USER_AGENT } from "./userAgent";
 
 const HEADERS = {
@@ -119,7 +120,7 @@ export function isDisplayablePhoto(photo: PlacePhoto): boolean {
  */
 export async function fetchCommonsMetadata(
   filenames: string[],
-  options?: { rejectedNonImageFiles?: Set<string> },
+  options?: { rejectedNonImageFiles?: Set<string>; strict?: boolean; signal?: AbortSignal },
 ): Promise<Map<string, PlacePhoto>> {
   const result = new Map<string, PlacePhoto>();
   if (filenames.length === 0) return result;
@@ -135,24 +136,30 @@ export async function fetchCommonsMetadata(
   url.searchParams.set("iiurlwidth", "800");
   url.searchParams.set("format", "json");
 
-  let res: Response;
-  try {
-    res = await fetch(url.toString(), {
-      headers: HEADERS,
-      signal: AbortSignal.timeout(4000),
-    });
-  } catch {
-    return result;
-  }
-  if (!res.ok) return result;
-
-  const data = (await res.json()) as {
+  type CommonsResponse = {
     query?: {
       pages?: Record<string, CommonsPage>;
       normalized?: Array<{ from: string; to: string }>;
       redirects?: Array<{ from: string; to: string }>;
     };
   };
+  let data: CommonsResponse;
+  if (options?.strict) {
+    data = await fetchJson<CommonsResponse>(url.toString(), {
+      headers: HEADERS,
+      timeoutMs: 4000,
+      signal: options.signal,
+    });
+  } else {
+    let res: Response;
+    try {
+      res = await fetch(url.toString(), { headers: HEADERS, signal: AbortSignal.timeout(4000) });
+    } catch {
+      return result;
+    }
+    if (!res.ok) return result;
+    data = (await res.json()) as CommonsResponse;
+  }
   const pages = data.query?.pages;
   if (!pages) return result;
 

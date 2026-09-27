@@ -222,15 +222,18 @@ export class ApiClient {
   }
 
   /**
-   * Runs one fetch with a merged abort signal and a guaranteed timer cleanup.
+   * Runs one fetch and consumes its response with a merged abort signal and a
+   * guaranteed timer cleanup. Headers alone do not complete the request: the
+   * body may still be pending when a caller aborts or the deadline passes.
    * A pending timer would otherwise keep a background task's event loop alive
    * after the session ended.
    */
-  private async send(
+  private async send<T>(
     url: string,
     init: RequestInit,
     options: ApiRequestOptions,
-  ): Promise<Response> {
+    consume: (response: Response) => Promise<T>,
+  ): Promise<T> {
     const cfg = this.config();
     const controller = new AbortController();
     let timedOut = false;
@@ -249,7 +252,7 @@ export class ApiClient {
     }
 
     try {
-      return await fetch(url, {
+      const response = await fetch(url, {
         ...init,
         headers: {
           Accept: "application/json",
@@ -260,6 +263,7 @@ export class ApiClient {
         credentials: cfg.credentials ?? "omit",
         signal: controller.signal,
       });
+      return await consume(response);
     } catch (error) {
       if (controller.signal.aborted) {
         throw new ApiRequestAbortedError(timedOut ? "timeout" : "aborted");
@@ -276,9 +280,10 @@ export class ApiClient {
     params?: Record<string, string>,
     options: ApiRequestOptions = {},
   ): Promise<T> {
-    const res = await this.send(this.buildUrl(path, params), {}, options);
-    await assertOk(res);
-    return res.json() as Promise<T>;
+    return this.send(this.buildUrl(path, params), {}, options, async (res) => {
+      await assertOk(res);
+      return res.json() as Promise<T>;
+    });
   }
 
   /**
@@ -292,10 +297,11 @@ export class ApiClient {
     params?: Record<string, string>,
     options: ApiRequestOptions = {},
   ): Promise<T | null> {
-    const res = await this.send(this.buildUrl(path, params), {}, options);
-    if (res.status === 204) return null;
-    await assertOk(res);
-    return res.json() as Promise<T>;
+    return this.send(this.buildUrl(path, params), {}, options, async (res) => {
+      if (res.status === 204) return null;
+      await assertOk(res);
+      return res.json() as Promise<T>;
+    });
   }
 
   async post<T>(path: string, body: unknown, options: ApiRequestOptions = {}): Promise<T> {
@@ -311,11 +317,12 @@ export class ApiClient {
   }
 
   async delete<T = void>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-    const res = await this.send(this.buildUrl(path), { method: "DELETE" }, options);
-    await assertOk(res);
-    if (res.status === 204) return undefined as T;
-    const text = await res.text();
-    return text ? (JSON.parse(text) as T) : (undefined as T);
+    return this.send(this.buildUrl(path), { method: "DELETE" }, options, async (res) => {
+      await assertOk(res);
+      if (res.status === 204) return undefined as T;
+      const text = await res.text();
+      return text ? (JSON.parse(text) as T) : (undefined as T);
+    });
   }
 
   private async mutate<T>(
@@ -324,7 +331,7 @@ export class ApiClient {
     body: unknown,
     options: ApiRequestOptions,
   ): Promise<T> {
-    const res = await this.send(
+    return this.send(
       this.buildUrl(path),
       {
         method,
@@ -332,9 +339,11 @@ export class ApiClient {
         body: JSON.stringify(body),
       },
       options,
+      async (res) => {
+        await assertOk(res);
+        return res.json() as Promise<T>;
+      },
     );
-    await assertOk(res);
-    return res.json() as Promise<T>;
   }
 }
 

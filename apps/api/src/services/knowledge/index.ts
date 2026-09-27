@@ -25,25 +25,52 @@ function getKnowledgeSources(disallowedIntegrations: Set<string>): KnowledgeProv
  * Photos and facts from all sources are concatenated.
  * Never throws — failures are silently dropped.
  */
-export async function getPlaceKnowledge(place: Place, lang?: string): Promise<KnowledgeResult> {
+export async function getPlaceKnowledge(
+  place: Place,
+  lang?: string,
+  options?: {
+    cardPhoto?: boolean;
+    signal?: AbortSignal;
+    onError?: (error: unknown) => void;
+    onPhotos?: (photos: NonNullable<KnowledgeResult["photos"]>) => void;
+  },
+): Promise<KnowledgeResult> {
   if (!place.osmTags && !place.coordinates) return {};
 
-  const sources = getKnowledgeSources(await getGatedIntegrationIds());
+  const sources = getKnowledgeSources(await getGatedIntegrationIds()).filter(
+    (source) => !options?.cardPhoto || source.name === "wikidata" || source.name === "wikipedia",
+  );
 
   const settled = await Promise.allSettled(
     sources.map((source) =>
-      source.lookup((place.osmTags ?? {}) as Record<string, string>, lang, {
-        coordinates: place.coordinates,
-        name: place.name,
-        ids: place.ids,
-      }),
+      source
+        .lookup((place.osmTags ?? {}) as Record<string, string>, lang, {
+          coordinates: place.coordinates,
+          name: place.name,
+          ids: place.ids,
+          cardPhoto: options?.cardPhoto,
+          signal: options?.signal,
+        })
+        .then(
+          (result) => {
+            if (options?.cardPhoto && result?.photos?.length) options.onPhotos?.(result.photos);
+            return result;
+          },
+          (error) => {
+            options?.onError?.(error);
+            throw error;
+          },
+        ),
     ),
   );
 
   const merged: KnowledgeResult = {};
 
   for (const result of settled) {
-    if (result.status !== "fulfilled" || !result.value) continue;
+    if (result.status === "rejected") {
+      continue;
+    }
+    if (!result.value) continue;
     const {
       photos,
       description,

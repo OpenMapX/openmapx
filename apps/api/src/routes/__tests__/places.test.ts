@@ -114,6 +114,8 @@ afterAll(async () => {
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+  mockFetchAggregate.mockReset().mockResolvedValue(null);
+  mockSearchHeroPhotos.mockReset().mockResolvedValue([]);
 });
 
 // Fixtures
@@ -156,6 +158,129 @@ describe("POST /places/card-enrichment", () => {
     photoTags: { wikimedia_commons: "File:Around_Aachener_Dom.JPG" },
   };
 
+  it("validates a nonempty unique field subset and only runs requested fields", async () => {
+    for (const fields of [[], ["photo", "photo"], ["other"], "photo"]) {
+      const invalid = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, fields }] },
+      });
+      expect(invalid.statusCode).toBe(400);
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: { places: [{ ...place, fields: ["rating"] }] },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      results: [{ id: place.id, outcomes: { rating: { status: "absent" } } }],
+    });
+    expect(mockSearchHeroPhotos).not.toHaveBeenCalled();
+  });
+
+  it("reports a transient photo failure without hiding a successful rating or caching absence", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    mockSearchHeroPhotos.mockRejectedValueOnce(new Error("network unavailable"));
+    mockFetchAggregate.mockResolvedValue({ stars: 4, count: 5, ratedCount: 5, source: "mangrove" });
+    const request = {
+      method: "POST" as const,
+      url: "/places/card-enrichment",
+      payload: { places: [place] },
+    };
+    const first = await app.inject(request);
+    expect(first.json().results[0]).toEqual({
+      id: place.id,
+      rating: { stars: 4, count: 5, source: "mangrove" },
+      outcomes: {
+        photo: { status: "failed", retryAfterMs: expect.any(Number) },
+        rating: { status: "available" },
+      },
+    });
+    mockSearchHeroPhotos.mockResolvedValueOnce([
+      {
+        url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Recovered.jpg",
+        source: "wikimedia",
+      },
+    ]);
+    const second = await app.inject(request);
+    expect(second.json().results[0].outcomes.photo.status).toBe("failed");
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(Date.now() + 2100);
+    const third = await app.inject(request);
+    expect(third.json().results[0].outcomes.photo).toEqual({ status: "available" });
+  });
+
+  it("honors provider Retry-After when a strict photo provider fails", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    mockSearchHeroPhotos.mockImplementationOnce(async (_tags, _providers, options) => {
+      options.onError(Object.assign(new Error("busy"), { status: 429, retryAfterMs: 12000 }));
+      return [];
+    });
+    const request = {
+      method: "POST" as const,
+      url: "/places/card-enrichment",
+      payload: { places: [{ ...place, id: "osm:node/999900", fields: ["photo"] }] },
+    };
+    const response = await app.inject(request);
+    expect(response.json().results[0].outcomes.photo).toEqual({
+      status: "failed",
+      retryAfterMs: 12000,
+    });
+    vi.setSystemTime(Date.now() + 9000);
+    const early = await app.inject(request);
+    expect(early.json().results[0].outcomes.photo).toEqual({
+      status: "failed",
+      retryAfterMs: 3000,
+    });
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
+    vi.setSystemTime(Date.now() + 3001);
+    await app.inject(request);
+    expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(2);
+  });
+
+  it("keeps a transient failure retryable when another photo source returns a permanent error", async () => {
+    mockSearchHeroPhotos.mockImplementationOnce(async (_tags, _providers, options) => {
+      options.onError(Object.assign(new Error("missing"), { status: 404 }));
+      options.onError(Object.assign(new Error("upstream unavailable"), { status: 503 }));
+      return [];
+    });
+    const response = await app.inject({
+      method: "POST",
+      url: "/places/card-enrichment",
+      payload: { places: [{ ...place, id: "osm:node/999901", fields: ["photo"] }] },
+    });
+    expect(response.json().results[0].outcomes.photo).toMatchObject({
+      status: "failed",
+      retryAfterMs: expect.any(Number),
+    });
+  });
+
+  it("aborts timed-out rating work and does not launch overlapping legacy work", async () => {
+    let aborted = false;
+    mockFetchAggregate.mockImplementation(
+      (_subject, _providers, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener(
+            "abort",
+            () => {
+              aborted = true;
+              reject(options.signal.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+    const payload = { places: [{ ...place, name: "Deadline fixture", fields: ["rating"] }] };
+    const first = await app.inject({ method: "POST", url: "/places/card-enrichment", payload });
+    expect(first.json().results[0].outcomes.rating).toMatchObject({
+      status: "failed",
+      retryAfterMs: expect.any(Number),
+    });
+    expect(aborted).toBe(true);
+    expect(mockFetchAggregate).toHaveBeenCalledTimes(1);
+  });
+
   it("returns a tagged photo with its credit and a qualifying provider-sourced rating", async () => {
     const photo = {
       url: "https://upload.wikimedia.org/wikipedia/commons/a/ab/Around_Aachener_Dom.JPG",
@@ -182,7 +307,14 @@ describe("POST /places/card-enrichment", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({
-      results: [{ id: place.id, photo, rating: { stars: 4.25, count: 12, source: "mangrove" } }],
+      results: [
+        {
+          id: place.id,
+          photo,
+          rating: { stars: 4.25, count: 12, source: "mangrove" },
+          outcomes: { photo: { status: "available" }, rating: { status: "available" } },
+        },
+      ],
     });
   });
 
@@ -211,6 +343,7 @@ describe("POST /places/card-enrichment", () => {
       id: place.id,
       photo,
       rating: { stars: 4, count: 4, source: "mangrove" },
+      outcomes: { photo: { status: "available" }, rating: { status: "available" } },
     });
   });
 
@@ -230,7 +363,15 @@ describe("POST /places/card-enrichment", () => {
       payload: { places: [{ ...place, photoTags: { wikidata: "Q5908" } }] },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ results: [{ id: place.id, photo }] });
+    expect(response.json()).toEqual({
+      results: [
+        {
+          id: place.id,
+          photo,
+          outcomes: { photo: { status: "available" }, rating: { status: "absent" } },
+        },
+      ],
+    });
   });
 
   it.each([
@@ -265,9 +406,13 @@ describe("POST /places/card-enrichment", () => {
     );
     const responses = await Promise.all(requests);
     expect(responses.map((response) => response.json().results[0])).toEqual([
-      { id: "osm:node/1" },
-      { id: "osm:node/2" },
-      { id: "osm:node/3", rating: { stars: 4, count: 3, source: "mangrove" } },
+      { id: "osm:node/1", outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+      { id: "osm:node/2", outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+      {
+        id: "osm:node/3",
+        rating: { stars: 4, count: 3, source: "mangrove" },
+        outcomes: { photo: { status: "absent" }, rating: { status: "available" } },
+      },
     ]);
   });
 
@@ -288,7 +433,11 @@ describe("POST /places/card-enrichment", () => {
       payload: { places: [place] },
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({ results: [{ id: place.id }] });
+    expect(response.json()).toEqual({
+      results: [
+        { id: place.id, outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+      ],
+    });
   });
 
   it("isolates cached photo results by every tag used for the lookup", async () => {
@@ -376,7 +525,11 @@ describe("POST /places/card-enrichment", () => {
       };
       const first = await app.inject(request);
       const second = await app.inject(request);
-      expect(first.json()).toEqual({ results: [{ id: place.id }] });
+      expect(first.json()).toEqual({
+        results: [
+          { id: place.id, outcomes: { photo: { status: "absent" }, rating: { status: "absent" } } },
+        ],
+      });
       expect(second.json()).toEqual(first.json());
       expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(1);
       expect(mockFetchAggregate).toHaveBeenCalledTimes(1);
@@ -432,6 +585,196 @@ describe("POST /places/card-enrichment", () => {
     expect(second.statusCode).toBe(200);
     expect(maximum).toBeLessThanOrEqual(4);
     expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(16);
+  });
+
+  it("caps unfinished legacy rating work after deadlines", async () => {
+    const pending: Array<() => void> = [];
+    mockFetchAggregate.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.push(() => resolve(null));
+        }),
+    );
+    const payload = {
+      places: Array.from({ length: 5 }, (_, index) => ({
+        ...place,
+        id: `osm:node/${880000 + index}`,
+        name: `Unfinished ${index}`,
+        fields: ["rating"],
+      })),
+    };
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(
+        response
+          .json()
+          .results.every(
+            (result: { outcomes: { rating: { status: string } } }) =>
+              result.outcomes.rating.status === "failed",
+          ),
+      ).toBe(true);
+      expect(mockFetchAggregate).toHaveBeenCalledTimes(4);
+    } finally {
+      for (const resolve of pending) resolve();
+    }
+  });
+
+  it("retains a completed knowledge photo when a legacy hero provider misses the deadline", async () => {
+    let finishHero!: (photos: unknown[]) => void;
+    mockSearchHeroPhotos.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishHero = resolve;
+        }),
+    );
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Knowledge.jpg",
+      source: "wikidata",
+    };
+    mockGetPlaceKnowledge.mockResolvedValue({ photos: [photo] });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: {
+          places: [
+            { ...place, id: "osm:node/880100", photoTags: { wikidata: "Q42" }, fields: ["photo"] },
+          ],
+        },
+      });
+      expect(response.json().results[0]).toMatchObject({
+        photo,
+        outcomes: { photo: { status: "available" } },
+      });
+    } finally {
+      finishHero?.([]);
+    }
+  });
+
+  it("retains an incremental hero photo while a sibling share preview hangs", async () => {
+    let finishHero!: (photos: unknown[]) => void;
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Provider.jpg",
+      source: "wikimedia",
+    };
+    mockSearchHeroPhotos.mockImplementation((_tags, _providers, options) => {
+      options.onPhotos([photo]);
+      return new Promise((resolve) => {
+        finishHero = resolve;
+      });
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: { places: [{ ...place, id: "osm:node/880101", fields: ["photo"] }] },
+      });
+      expect(response.json().results[0]).toMatchObject({
+        photo,
+        outcomes: { photo: { status: "available" } },
+      });
+    } finally {
+      finishHero?.([]);
+    }
+  });
+
+  it("retains a completed knowledge source photo when another source stalls", async () => {
+    let finishKnowledge!: (value: unknown) => void;
+    const photo = {
+      url: "https://upload.wikimedia.org/wikipedia/commons/a/aa/Knowledge-progress.jpg",
+      source: "wikidata",
+    };
+    mockGetPlaceKnowledge.mockImplementation((_place, _lang, options) => {
+      options.onPhotos([photo]);
+      return new Promise((resolve) => {
+        finishKnowledge = resolve;
+      });
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: {
+          places: [
+            { ...place, id: "osm:node/880102", photoTags: { wikidata: "Q42" }, fields: ["photo"] },
+          ],
+        },
+      });
+      expect(response.json().results[0]).toMatchObject({
+        photo,
+        outcomes: { photo: { status: "available" } },
+      });
+    } finally {
+      finishKnowledge?.({ photos: [] });
+    }
+  });
+
+  it("preserves a known Retry-After when a sibling photo source misses the deadline", async () => {
+    let finishKnowledge!: (value: unknown) => void;
+    mockGetPlaceKnowledge.mockImplementation((_place, _lang, options) => {
+      options.onError(Object.assign(new Error("busy"), { status: 429, retryAfterMs: 60000 }));
+      return new Promise((resolve) => {
+        finishKnowledge = resolve;
+      });
+    });
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload: {
+          places: [
+            { ...place, id: "osm:node/880103", photoTags: { wikidata: "Q42" }, fields: ["photo"] },
+          ],
+        },
+      });
+      expect(response.json().results[0].outcomes.photo).toEqual({
+        status: "failed",
+        retryAfterMs: 60000,
+      });
+    } finally {
+      finishKnowledge?.({ photos: [] });
+    }
+  });
+
+  it("caps unfinished legacy photo work after deadlines", async () => {
+    const pending: Array<() => void> = [];
+    mockSearchHeroPhotos.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          pending.push(() => resolve([]));
+        }),
+    );
+    const payload = {
+      places: Array.from({ length: 5 }, (_, index) => ({
+        ...place,
+        id: `osm:node/${881000 + index}`,
+        fields: ["photo"],
+      })),
+    };
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/places/card-enrichment",
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+      expect(
+        response
+          .json()
+          .results.every(
+            (result: { outcomes: { photo: { status: string } } }) =>
+              result.outcomes.photo.status === "failed",
+          ),
+      ).toBe(true);
+      expect(mockSearchHeroPhotos).toHaveBeenCalledTimes(4);
+    } finally {
+      for (const resolve of pending) resolve();
+    }
   });
 });
 

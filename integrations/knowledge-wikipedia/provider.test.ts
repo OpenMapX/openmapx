@@ -50,6 +50,15 @@ afterEach(() => {
 });
 
 describe("Wikipedia knowledge provider", () => {
+  it("surfaces a card photo summary rate limit while ordinary lookup stays empty", async () => {
+    mockFetch.mockResolvedValue(
+      new Response("busy", { status: 429, headers: { "Retry-After": "9" } }),
+    );
+    await expect(
+      wikipediaSource.lookup({ wikipedia: "en:Eiffel Tower" }, "en", { cardPhoto: true }),
+    ).rejects.toMatchObject({ status: 429, retryAfterMs: 9000 });
+    expect(await wikipediaSource.lookup({ wikipedia: "en:Eiffel Tower" })).toBeNull();
+  });
   it("returns null when the wikipedia tag is absent", async () => {
     expect(await wikipediaSource.lookup({})).toBeNull();
   });

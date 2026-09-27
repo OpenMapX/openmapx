@@ -75,9 +75,11 @@ export {
   DEFAULT_FETCH_ERROR_MAX_BYTES,
   DEFAULT_FETCH_JSON_MAX_BYTES,
   DEFAULT_FETCH_TIMEOUT_MS,
+  FetchJsonHttpError,
   type FetchJsonOptions,
   fetchJson,
   isJsonMediaType,
+  parseRetryAfterMs,
   readBoundedJsonResponse,
   readBoundedResponseText,
 } from "./fetchJson";

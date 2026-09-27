@@ -66,6 +66,25 @@ describe("getPhotoProviders", () => {
 });
 
 describe("searchHeroPhotos", () => {
+  it("reports failed providers in strict lookup while retaining another provider's photo", async () => {
+    const photo = { url: "https://upload.wikimedia.org/a.jpg", source: "wikimedia" };
+    const error = Object.assign(new Error("throttled"), { status: 429, retryAfterMs: 7000 });
+    const failed = {
+      ...photoProvider("failed"),
+      searchByTags: vi.fn(async () => {
+        throw error;
+      }),
+    };
+    const successful = { ...photoProvider("success"), searchByTags: vi.fn(async () => [photo]) };
+    const errors: unknown[] = [];
+    const photos = await searchHeroPhotos(
+      { wikimedia_commons: "File:Photo.jpg" },
+      [failed, successful],
+      { strict: true, onError: (reason) => errors.push(reason) },
+    );
+    expect(photos).toEqual([photo]);
+    expect(errors).toEqual([error]);
+  });
   it("returns OSM image tag photos without registered providers", async () => {
     const photos = await searchHeroPhotos(
       {

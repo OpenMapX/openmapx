@@ -1,6 +1,24 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import type { PlacePhoto } from "../types/place";
-import { isDisplayablePhoto } from "./commons-metadata";
+import { fetchCommonsMetadata, isDisplayablePhoto } from "./commons-metadata";
+
+describe("fetchCommonsMetadata strict lookup", () => {
+  it("surfaces upstream failure while preserving the default empty-map fallback", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("busy", { status: 429, headers: { "Retry-After": "5" } })),
+    );
+    try {
+      await expect(fetchCommonsMetadata(["Photo.jpg"], { strict: true })).rejects.toMatchObject({
+        status: 429,
+        retryAfterMs: 5000,
+      });
+      expect((await fetchCommonsMetadata(["Photo.jpg"])).size).toBe(0);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
 
 describe("isDisplayablePhoto for legacy Commons entries", () => {
   it.each([

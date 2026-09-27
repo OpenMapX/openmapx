@@ -3,10 +3,12 @@ export {
   ApiClient,
   type ApiClientConfig,
   ApiClientError,
+  ApiRequestAbortedError,
   apiClient,
   apiUrl,
   configureApiClient,
   isApiClientError,
+  isApiRequestAbortedError,
   proxyImageUrl,
 } from "./client";
 export {

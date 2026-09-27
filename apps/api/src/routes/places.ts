@@ -36,6 +36,7 @@ import {
 import type { FastifyPluginAsync } from "fastify";
 import { getAllIntegrations, isEnabledIntegrationScheme } from "../integration-host.js";
 import { getPlaceKnowledge } from "../services/knowledge/index";
+import { recordCardEnrichment } from "../services/metrics/index";
 import { buildReviewLinks } from "../services/review-links";
 import { hashKey, TTL, withCache } from "../utils/cache.js";
 import { createLimiter } from "../utils/concurrency.js";
@@ -50,6 +51,9 @@ import { isAllowedHost } from "./image-hosts.js";
 const ENRICH_CONCURRENCY = Math.trunc(Number(process.env.OPENMAPX_PLACE_ENRICH_CONCURRENCY)) || 8;
 const enrichLimit = createLimiter(Math.max(1, ENRICH_CONCURRENCY));
 const cardEnrichLimit = createLimiter(4);
+const pendingCardRating = new Map<string, Promise<unknown>>();
+const pendingCardPhoto = new Map<string, Promise<unknown>>();
+const cardFailureCooldown = new Map<string, { error: unknown; until: number }>();
 const CARD_PHOTO_TAGS = new Set([
   "image",
   "image:0",
@@ -74,6 +78,32 @@ function validWikipediaTag(tag: string): boolean {
 type CardInput = CategoryCardEnrichmentRequest["places"][number];
 type CardResult = CategoryCardEnrichmentResponse["results"][number];
 
+async function withCardCache<T>(key: string, ttlSeconds: number, fn: () => Promise<T>): Promise<T> {
+  const cooldown = cardFailureCooldown.get(key);
+  if (cooldown) {
+    const remaining = cooldown.until - Date.now();
+    if (remaining > 0) {
+      const previous = cooldown.error as { status?: number; message?: string };
+      throw Object.assign(new Error(previous?.message ?? "Card provider cooling down"), {
+        status: previous?.status,
+        retryAfterMs: remaining,
+      });
+    }
+    cardFailureCooldown.delete(key);
+  }
+  try {
+    return await withCache(key, ttlSeconds, fn);
+  } catch (error) {
+    const delay = failureOutcome(error).retryAfterMs;
+    if (delay) {
+      cardFailureCooldown.set(key, { error, until: Date.now() + delay });
+      if (cardFailureCooldown.size > 1024)
+        cardFailureCooldown.delete(cardFailureCooldown.keys().next().value as string);
+    }
+    throw error;
+  }
+}
+
 function normalizeCardRequest(value: unknown): CategoryCardEnrichmentRequest | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as Record<string, unknown>;
@@ -93,7 +123,12 @@ function normalizeCardRequest(value: unknown): CategoryCardEnrichmentRequest | n
     const row = raw as Record<string, unknown>;
     if (
       Object.keys(row).some(
-        (key) => key !== "id" && key !== "name" && key !== "coordinates" && key !== "photoTags",
+        (key) =>
+          key !== "id" &&
+          key !== "name" &&
+          key !== "coordinates" &&
+          key !== "photoTags" &&
+          key !== "fields",
       ) ||
       typeof row.id !== "string" ||
       !row.id.trim() ||
@@ -118,6 +153,15 @@ function normalizeCardRequest(value: unknown): CategoryCardEnrichmentRequest | n
     const id = row.id.trim();
     if (seen.has(id)) return null;
     seen.add(id);
+    if (
+      row.fields !== undefined &&
+      (!Array.isArray(row.fields) ||
+        row.fields.length < 1 ||
+        row.fields.length > 2 ||
+        new Set(row.fields).size !== row.fields.length ||
+        row.fields.some((field) => field !== "photo" && field !== "rating"))
+    )
+      return null;
     let photoTags: CardInput["photoTags"];
     if (row.photoTags !== undefined) {
       if (!row.photoTags || typeof row.photoTags !== "object" || Array.isArray(row.photoTags))
@@ -137,7 +181,13 @@ function normalizeCardRequest(value: unknown): CategoryCardEnrichmentRequest | n
         photoTags[key as keyof NonNullable<CardInput["photoTags"]>] = tag;
       }
     }
-    places.push({ id, name: row.name.trim(), coordinates: [lng, lat], photoTags });
+    places.push({
+      id,
+      name: row.name.trim(),
+      coordinates: [lng, lat],
+      photoTags,
+      fields: row.fields as CardInput["fields"],
+    });
   }
   return { places, lang: body.lang as string | undefined };
 }
@@ -177,19 +227,87 @@ async function cardPhoto(input: CardInput, lang: string | undefined): Promise<Pl
     lang,
     tags,
   });
-  const { photo } = await withCache(key, TTL.photos, async () => {
-    const [heroResult, knowledgeResult] = await Promise.allSettled([
-      searchHeroPhotos(tags, getPhotoProviders(getAllIntegrations())),
+  const { photo } = await withCardCache(key, TTL.photos, async () => {
+    if (pendingCardPhoto.has(key)) throw new Error("Previous photo request is still settling");
+    if (pendingCardPhoto.size >= 4) throw new Error("Photo providers are still settling");
+    const controller = new AbortController();
+    const failures: unknown[] = [];
+    let completedHeroes: PlacePhoto[] = [];
+    let completedKnowledge: PlacePhoto[] = [];
+    const work = Promise.allSettled([
+      searchHeroPhotos(tags, getPhotoProviders(getAllIntegrations()), {
+        strict: true,
+        signal: controller.signal,
+        onError: (error) => failures.push(error),
+        onPhotos: (photos) => completedHeroes.push(...photos),
+      }).then((photos) => {
+        completedHeroes = photos;
+        return photos;
+      }),
       tags.wikidata || tags.wikipedia
-        ? getPlaceKnowledge(categoryPlaceToPlace({ ...input, osmTags: tags }), lang)
+        ? getPlaceKnowledge(categoryPlaceToPlace({ ...input, osmTags: tags }), lang, {
+            cardPhoto: true,
+            signal: controller.signal,
+            onError: (error) => failures.push(error),
+            onPhotos: (photos) => completedKnowledge.push(...photos),
+          }).then((result) => {
+            completedKnowledge = result.photos ?? [];
+            return result;
+          })
         : Promise.resolve({ photos: [] }),
     ]);
-    const heroes = heroResult.status === "fulfilled" ? heroResult.value : [];
-    const knowledgePhotos =
-      knowledgeResult.status === "fulfilled" ? (knowledgeResult.value.photos ?? []) : [];
-    return {
-      photo: deduplicatePhotos([...heroes, ...knowledgePhotos]).find(proxyablePhoto) ?? null,
-    };
+    pendingCardPhoto.set(key, work);
+    void work.then(() => {
+      if (pendingCardPhoto.get(key) === work) pendingCardPhoto.delete(key);
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      const deadline = Symbol("photo deadline");
+      const settled = await Promise.race([
+        work,
+        new Promise<typeof deadline>((resolve) => {
+          timer = setTimeout(() => {
+            const error = new Error("Photo deadline exceeded");
+            controller.abort(error);
+            resolve(deadline);
+          }, 5500);
+        }),
+      ]);
+      if (settled === deadline) {
+        const completedPhoto = deduplicatePhotos([...completedHeroes, ...completedKnowledge]).find(
+          proxyablePhoto,
+        );
+        if (completedPhoto) return { photo: completedPhoto };
+        let knownDelay = 0;
+        let knownFailure: unknown;
+        for (const failure of failures) {
+          const delay = failureOutcome(failure).retryAfterMs ?? 0;
+          if (delay > knownDelay) {
+            knownDelay = delay;
+            knownFailure = failure;
+          }
+        }
+        if (knownDelay > 0) throw knownFailure;
+        throw controller.signal.reason;
+      }
+      const [heroResult, knowledgeResult] = settled;
+      const heroes = heroResult.status === "fulfilled" ? heroResult.value : [];
+      const knowledgePhotos =
+        knowledgeResult.status === "fulfilled" ? (knowledgeResult.value.photos ?? []) : [];
+      if (heroResult.status === "rejected") failures.push(heroResult.reason);
+      if (knowledgeResult.status === "rejected") failures.push(knowledgeResult.reason);
+      const photo = deduplicatePhotos([...heroes, ...knowledgePhotos]).find(proxyablePhoto) ?? null;
+      if (!photo && failures.length > 0) {
+        failures.sort(
+          (left, right) =>
+            (failureOutcome(right).retryAfterMs ?? -1) - (failureOutcome(left).retryAfterMs ?? -1),
+        );
+        throw failures[0];
+      }
+      return { photo };
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
   });
   return photo;
 }
@@ -204,13 +322,33 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
     osmId: match ? `${match[1]}/${match[2]}` : undefined,
   };
   const key = hashKey("cache:card-rating", subject);
-  const { rating } = await withCache(key, 600, async () => {
+  const { rating } = await withCardCache(key, 600, async () => {
+    if (pendingCardRating.has(key)) throw new Error("Previous rating request is still settling");
+    if (pendingCardRating.size >= 4) throw new Error("Rating providers are still settling");
+    const controller = new AbortController();
     let timer: ReturnType<typeof setTimeout> | undefined;
+    const work = fetchAggregate(subject, getReviewProviders(getAllIntegrations()), {
+      signal: controller.signal,
+      strict: true,
+    });
+    pendingCardRating.set(key, work);
+    void work.then(
+      () => {
+        if (pendingCardRating.get(key) === work) pendingCardRating.delete(key);
+      },
+      () => {
+        if (pendingCardRating.get(key) === work) pendingCardRating.delete(key);
+      },
+    );
     try {
       const aggregate = await Promise.race([
-        fetchAggregate(subject, getReviewProviders(getAllIntegrations())),
-        new Promise<null>((resolve) => {
-          timer = setTimeout(() => resolve(null), 1500);
+        work,
+        new Promise<never>((_resolve, reject) => {
+          timer = setTimeout(() => {
+            const error = new Error("Rating deadline exceeded");
+            controller.abort(error);
+            reject(error);
+          }, 1500);
         }),
       ]);
       const ratedCount = aggregate?.ratedCount;
@@ -230,8 +368,6 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
       return {
         rating: { stars: aggregate.stars, count: ratedCount, source: aggregate.source },
       };
-    } catch {
-      return { rating: null };
     } finally {
       if (timer) clearTimeout(timer);
     }
@@ -239,12 +375,55 @@ async function cardRating(input: CardInput): Promise<CardResult["rating"] | null
   return rating;
 }
 
+function failureOutcome(error: unknown): { status: "failed"; retryAfterMs?: number } {
+  const detail =
+    error && typeof error === "object"
+      ? (error as { status?: number; retryAfterMs?: number })
+      : undefined;
+  const status = detail?.status;
+  const transient = status === undefined || status === 408 || status === 429 || status >= 500;
+  if (!transient) return { status: "failed" };
+  return {
+    status: "failed",
+    retryAfterMs: Math.max(
+      2000,
+      Number.isFinite(detail?.retryAfterMs) ? (detail?.retryAfterMs ?? 0) : 0,
+    ),
+  };
+}
+
 async function enrichCard(input: CardInput, lang: string | undefined): Promise<CardResult> {
-  const [photo, rating] = await Promise.all([
-    cardPhoto(input, lang).catch(() => null),
-    cardRating(input).catch(() => null),
+  const fields = input.fields ?? ["photo", "rating"];
+  const [photoResult, ratingResult] = await Promise.all([
+    fields.includes("photo")
+      ? cardPhoto(input, lang).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        )
+      : Promise.resolve(undefined),
+    fields.includes("rating")
+      ? cardRating(input).then(
+          (value) => ({ value }),
+          (error) => ({ error }),
+        )
+      : Promise.resolve(undefined),
   ]);
-  return { id: input.id, ...(photo ? { photo } : {}), ...(rating ? { rating } : {}) };
+  const photo = photoResult && "value" in photoResult ? photoResult.value : null;
+  const rating = ratingResult && "value" in ratingResult ? ratingResult.value : null;
+  const outcomes: NonNullable<CardResult["outcomes"]> = {};
+  if (photoResult)
+    outcomes.photo =
+      "error" in photoResult
+        ? failureOutcome(photoResult.error)
+        : { status: photo ? "available" : "absent" };
+  if (ratingResult)
+    outcomes.rating =
+      "error" in ratingResult
+        ? failureOutcome(ratingResult.error)
+        : { status: rating ? "available" : "absent" };
+  if (outcomes.photo) recordCardEnrichment("photo", outcomes.photo.status);
+  if (outcomes.rating) recordCardEnrichment("rating", outcomes.rating.status);
+  return { id: input.id, ...(photo ? { photo } : {}), ...(rating ? { rating } : {}), outcomes };
 }
 
 /**

@@ -16,7 +16,7 @@ const WIKIPEDIA_LANGUAGE_RE = /^[a-z]{2,12}(?:-[a-z0-9]{1,12})*$/i;
 export const wikipediaSource: KnowledgeProvider = {
   name: "wikipedia",
 
-  async lookup(osmTags, lang?) {
+  async lookup(osmTags, lang?, context?) {
     const wiki = osmTags.wikipedia;
     if (!wiki) return null;
 
@@ -44,7 +44,8 @@ export const wikipediaSource: KnowledgeProvider = {
     }>(url, {
       headers: HEADERS,
       timeoutMs: 3000,
-      nullOnError: true,
+      ...(context?.cardPhoto ? {} : { nullOnError: true as const }),
+      signal: context?.signal,
     });
     if (!data) return null;
 
@@ -69,7 +70,9 @@ export const wikipediaSource: KnowledgeProvider = {
       const filename = fnMatch ? decodeURIComponent(fnMatch[1]) : undefined;
 
       if (filename) {
-        const metadata = await fetchCommonsMetadata([filename]);
+        const metadata = context?.cardPhoto
+          ? await fetchCommonsMetadata([filename], { strict: true, signal: context.signal })
+          : await fetchCommonsMetadata([filename]);
         const richPhoto = metadata.get(filename.replace(/_/g, " "));
         if (richPhoto) {
           richPhoto.source = "wikipedia";

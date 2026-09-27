@@ -106,6 +106,127 @@ describe("instance isolation", () => {
 });
 
 describe("timeouts and aborts", () => {
+  it("keeps the deadline active while a successful response body stalls", async () => {
+    vi.useFakeTimers();
+    let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let transportSignal: AbortSignal | undefined;
+    mockFetch((_url, init) => {
+      transportSignal = init.signal as AbortSignal;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            bodyController = controller;
+            transportSignal?.addEventListener("abort", () =>
+              controller.error(new DOMException("aborted", "AbortError")),
+            );
+          },
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    });
+    const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
+    const outcome = client
+      .post("/slow-body", {}, { timeoutMs: 1_000 })
+      .catch((error: unknown) => error);
+    try {
+      await vi.advanceTimersByTimeAsync(1_001);
+      expect(transportSignal?.aborted).toBe(true);
+      await expect(outcome).resolves.toMatchObject({ code: "timeout" });
+    } finally {
+      if (!transportSignal?.aborted) bodyController?.error(new Error("test cleanup"));
+      await outcome;
+    }
+  });
+
+  it("propagates caller aborts after headers while reading the response body", async () => {
+    let bodyController: ReadableStreamDefaultController<Uint8Array> | undefined;
+    let transportSignal: AbortSignal | undefined;
+    mockFetch((_url, init) => {
+      transportSignal = init.signal as AbortSignal;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            bodyController = controller;
+            transportSignal?.addEventListener("abort", () =>
+              controller.error(new DOMException("aborted", "AbortError")),
+            );
+          },
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    });
+    const caller = new AbortController();
+    const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
+    const outcome = client
+      .get("/slow-body", undefined, { signal: caller.signal })
+      .catch((error: unknown) => error);
+    try {
+      await Promise.resolve();
+      caller.abort();
+      expect(transportSignal?.aborted).toBe(true);
+      await expect(outcome).resolves.toMatchObject({ code: "aborted" });
+    } finally {
+      if (!transportSignal?.aborted) bodyController?.error(new Error("test cleanup"));
+      await outcome;
+    }
+  });
+
+  it.each([
+    [
+      "getOptional",
+      (client: ApiClient) => client.getOptional("/slow-body", undefined, { timeoutMs: 1_000 }),
+    ],
+    ["patch", (client: ApiClient) => client.patch("/slow-body", {}, { timeoutMs: 1_000 })],
+    ["put", (client: ApiClient) => client.put("/slow-body", {}, { timeoutMs: 1_000 })],
+    ["delete", (client: ApiClient) => client.delete("/slow-body", { timeoutMs: 1_000 })],
+  ])("bounds %s while its body stalls", async (_method, request) => {
+    vi.useFakeTimers();
+    let transportSignal: AbortSignal | undefined;
+    mockFetch((_url, init) => {
+      transportSignal = init.signal as AbortSignal;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            transportSignal?.addEventListener("abort", () =>
+              controller.error(new DOMException("aborted", "AbortError")),
+            );
+          },
+        }),
+        { headers: { "content-type": "application/json" } },
+      );
+    });
+    const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
+    const outcome = request(client).catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1_001);
+    expect(transportSignal?.aborted).toBe(true);
+    await expect(outcome).resolves.toMatchObject({ code: "timeout" });
+  });
+
+  it("bounds parsing a stalled JSON error response", async () => {
+    vi.useFakeTimers();
+    let transportSignal: AbortSignal | undefined;
+    mockFetch((_url, init) => {
+      transportSignal = init.signal as AbortSignal;
+      return new Response(
+        new ReadableStream<Uint8Array>({
+          start(controller) {
+            transportSignal?.addEventListener("abort", () =>
+              controller.error(new DOMException("aborted", "AbortError")),
+            );
+          },
+        }),
+        { status: 503, headers: { "content-type": "application/json" } },
+      );
+    });
+    const client = createApiClient({ baseUrl: "https://api.example/", credentials: "omit" });
+    const outcome = client
+      .get("/slow-error", undefined, { timeoutMs: 1_000 })
+      .catch((error: unknown) => error);
+    await vi.advanceTimersByTimeAsync(1_001);
+    expect(transportSignal?.aborted).toBe(true);
+    await expect(outcome).resolves.toMatchObject({ code: "timeout" });
+  });
+
   it("aborts with a timeout code once the deadline passes", async () => {
     vi.useFakeTimers();
     mockFetch(

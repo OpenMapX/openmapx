@@ -14,7 +14,6 @@ import ToggleButton from "@mui/material/ToggleButton";
 import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import type {
-  CategoryCardEnrichmentRequest,
   CategoryCardEnrichmentResponse,
   CategoryPlace,
   DistanceReference,
@@ -22,7 +21,6 @@ import type {
 } from "@openmapx/core";
 import {
   AD_HOC_CATEGORY_ID,
-  apiClient,
   categoryPlaceToPlace,
   formatMeasurementDistance,
   isAreaTooLarge,
@@ -60,77 +58,15 @@ import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { BrandHeaderCard } from "./BrandHeaderCard";
 import { ExploreTravelTimeControl } from "./ExploreTravelTimeControl";
 import { selectResultAttributes } from "./resultAttributes";
+import { cachedSummary, useCardEnrichment } from "./useCardEnrichment";
+
+type CardSummary = CategoryCardEnrichmentResponse["results"][number];
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   rail: TrainIcon,
   tram: TramIcon,
   bus: DirectionsBusIcon,
 };
-
-type CardInput = CategoryCardEnrichmentRequest["places"][number];
-type CardSummary = CategoryCardEnrichmentResponse["results"][number];
-type CachedCardSummary = { summary: CardSummary; expiresAt: number };
-const CARD_CACHE_TTL_MS = 600_000;
-const MAX_CACHED_CARDS = 256;
-const PHOTO_TAG_KEYS = [
-  "image",
-  "image:0",
-  "image:1",
-  "wikimedia_commons",
-  "wikidata",
-  "wikipedia",
-] as const;
-const WIKIPEDIA_LANGUAGE_RE = /^[a-z]{2,12}(?:-[a-z0-9]{1,12})*$/i;
-
-function validWikipediaTag(tag: string): boolean {
-  const colon = tag.indexOf(":");
-  if (colon < 0) return true;
-  const language = tag.slice(0, colon);
-  return (
-    language.length <= 32 &&
-    WIKIPEDIA_LANGUAGE_RE.test(language) &&
-    Boolean(tag.slice(colon + 1).trim())
-  );
-}
-
-function validCardImageTag(value: string): boolean {
-  if (value.startsWith("File:")) return Boolean(value.slice(5).trim());
-  try {
-    const url = new URL(value);
-    return (
-      (url.protocol === "https:" || url.protocol === "http:") && !url.username && !url.password
-    );
-  } catch {
-    return false;
-  }
-}
-
-function cardInput(place: CategoryPlace): CardInput {
-  const photoTags: NonNullable<CardInput["photoTags"]> = {};
-  for (const key of PHOTO_TAG_KEYS) {
-    const value = place.osmTags?.[key]?.trim();
-    if (!value || value.length > (key.startsWith("image") ? 4096 : 512)) continue;
-    if (key.startsWith("image") && !validCardImageTag(value)) continue;
-    if (key === "wikidata" && !/^Q[1-9]\d*$/.test(value)) continue;
-    if (key === "wikimedia_commons" && !/^(?:File|Category):\S/.test(value)) continue;
-    if (key === "wikipedia" && !validWikipediaTag(value)) continue;
-    photoTags[key] = value;
-  }
-  return { id: place.id, name: place.name, coordinates: place.coordinates, photoTags };
-}
-
-function cardIdentity(place: CategoryPlace, lang: string): string {
-  return JSON.stringify([cardInput(place), lang]);
-}
-
-function cachedSummary(
-  cache: Map<string, CachedCardSummary>,
-  place: CategoryPlace,
-  lang: string,
-): CardSummary | undefined {
-  const entry = cache.get(cardIdentity(place, lang));
-  return entry && entry.expiresAt > Date.now() ? entry.summary : undefined;
-}
 
 // Human-readable label for a dropped `require` predicate, for the relaxation
 // notice. Prefers the meaningful term: the value for things like `cuisine~thai`,
@@ -472,116 +408,14 @@ export function CategoryResultsContent() {
     );
   }, [chosenSort, distanceReference, filtered, providerFiltered]);
   const scrollRef = useRef<HTMLDivElement | null>(null);
-  const cardCache = useRef(new Map<string, CachedCardSummary>());
-  const [cardSummaries, setCardSummaries] = useState<Map<string, CachedCardSummary>>(
-    () => new Map(),
-  );
-
-  useEffect(() => {
-    const root = scrollRef.current;
-    if (
-      !root ||
-      isTransitCategory ||
-      !results?.length ||
-      typeof IntersectionObserver === "undefined"
-    )
-      return;
-    const byId = new Map(results.map((place) => [place.id, place]));
-    const visible = new Set<string>();
-    const pending = new Set<string>();
-    const attempted = new Set<string>();
-    const controller = new AbortController();
-    let alive = true;
-    let loading = false;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-
-    const flush = async () => {
-      if (!alive || loading) return;
-      const ids = [...pending].filter((id) => visible.has(id)).slice(0, 8);
-      for (const id of ids) pending.delete(id);
-      const places = ids
-        .map((id) => byId.get(id))
-        .filter((place): place is CategoryPlace => Boolean(place));
-      if (places.length === 0) return;
-      for (const place of places) attempted.add(cardIdentity(place, locale));
-      loading = true;
-      try {
-        const response = await apiClient.post<CategoryCardEnrichmentResponse>(
-          "/api/places/card-enrichment",
-          { places: places.map(cardInput), lang: locale } satisfies CategoryCardEnrichmentRequest,
-          { signal: controller.signal },
-        );
-        if (!alive || useCategorySearchStore.getState().searchRevision !== searchRevision) return;
-        const returned = new Map(response.results.map((summary) => [summary.id, summary]));
-        for (const place of places) {
-          const key = cardIdentity(place, locale);
-          cardCache.current.delete(key);
-          cardCache.current.set(key, {
-            summary: returned.get(place.id) ?? { id: place.id },
-            expiresAt: Date.now() + CARD_CACHE_TTL_MS,
-          });
-          while (cardCache.current.size > MAX_CACHED_CARDS) {
-            const oldest = cardCache.current.keys().next().value;
-            if (oldest === undefined) break;
-            cardCache.current.delete(oldest);
-          }
-        }
-        setCardSummaries(new Map(cardCache.current));
-      } catch {
-        // Optional enrichment never blocks the base result row.
-      } finally {
-        loading = false;
-        if (alive && pending.size > 0) schedule();
-      }
-    };
-    const schedule = () => {
-      if (timer !== null) return;
-      timer = setTimeout(() => {
-        timer = null;
-        void flush();
-      }, 40);
-    };
-    const observer = new IntersectionObserver(
-      (entries) => {
-        for (const entry of entries) {
-          const id = (entry.target as HTMLElement).dataset.cardId;
-          const place = id ? byId.get(id) : undefined;
-          if (!place) continue;
-          const bounds = entry.boundingClientRect ?? entry.target.getBoundingClientRect();
-          const nearViewport =
-            bounds.bottom >= -120 &&
-            bounds.top <= window.innerHeight + 120 &&
-            bounds.right >= -120 &&
-            bounds.left <= window.innerWidth + 120;
-          if (entry.isIntersecting && nearViewport) {
-            visible.add(id as string);
-            const identity = cardIdentity(place, locale);
-            const cached = cardCache.current.get(identity);
-            if (cached && cached.expiresAt <= Date.now()) {
-              cardCache.current.delete(identity);
-              attempted.delete(identity);
-            }
-            if (!cardCache.current.has(identity) && !attempted.has(identity))
-              pending.add(id as string);
-          } else {
-            visible.delete(id as string);
-            pending.delete(id as string);
-          }
-        }
-        if (pending.size > 0) schedule();
-      },
-      { root: null, rootMargin: "120px 0px" },
-    );
-    root.querySelectorAll<HTMLElement>("[data-card-id]").forEach((row) => {
-      observer.observe(row);
-    });
-    return () => {
-      alive = false;
-      controller.abort();
-      observer.disconnect();
-      if (timer !== null) clearTimeout(timer);
-    };
-  }, [results, searchRevision, isTransitCategory, locale]);
+  const cardSummaries = useCardEnrichment({
+    results,
+    locale,
+    searchRevision,
+    activeCategory,
+    isTransitCategory,
+    scrollRef,
+  });
   const poiAttributions = attributionsForSources(
     registry,
     results?.flatMap((place) => [

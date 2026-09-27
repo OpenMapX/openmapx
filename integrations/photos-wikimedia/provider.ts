@@ -28,8 +28,12 @@ export const wikimediaProvider: PhotoProvider = {
     return [...tagPhotos, ...geoPhotos];
   },
 
-  async searchByTags(osmTags: Record<string, string>, limit?: number): Promise<PlacePhoto[]> {
-    return searchByTags(osmTags, limit);
+  async searchByTags(
+    osmTags: Record<string, string>,
+    limit?: number,
+    options?: { strict?: boolean; signal?: AbortSignal },
+  ): Promise<PlacePhoto[]> {
+    return searchByTags(osmTags, limit, options);
   },
 };
 
@@ -37,6 +41,7 @@ export const wikimediaProvider: PhotoProvider = {
 async function searchByTags(
   osmTags: Record<string, string>,
   limit?: number,
+  options?: { strict?: boolean; signal?: AbortSignal },
 ): Promise<PlacePhoto[]> {
   const tag = osmTags.wikimedia_commons?.trim();
   if (!tag) return [];
@@ -44,7 +49,7 @@ async function searchByTags(
   if (tag.startsWith("File:")) {
     const filename = tag.slice(5);
     const rejectedNonImageFiles = new Set<string>();
-    const metadata = await fetchCommonsMetadata([filename], { rejectedNonImageFiles });
+    const metadata = await fetchCommonsMetadata([filename], { rejectedNonImageFiles, ...options });
     const normalizedFilename = filename.replace(/_/g, " ");
     const richPhoto = metadata.get(normalizedFilename);
     if (richPhoto) return isDisplayablePhoto(richPhoto) ? [richPhoto] : [];
@@ -81,7 +86,12 @@ async function searchByTags(
 
   const data = await fetchJson<{ query?: { pages?: Record<string, CommonsPage> } }>(
     url.toString(),
-    { timeoutMs: 4000, nullOnError: true, headers: { Accept: "application/json" } },
+    {
+      timeoutMs: 4000,
+      ...(options?.strict ? {} : { nullOnError: true as const }),
+      signal: options?.signal,
+      headers: { Accept: "application/json" },
+    },
   );
   if (!data) return [];
   const photos: PlacePhoto[] = [];

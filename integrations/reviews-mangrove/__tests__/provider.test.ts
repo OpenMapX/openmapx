@@ -76,6 +76,32 @@ describe("mangroveProvider place matching", () => {
     mockedGetReviews.mockReset();
   });
 
+  it("surfaces aggregate transport failure in strict card mode while preserving the legacy zero aggregate", async () => {
+    mockedGetReviews.mockRejectedValue(new Error("network down"));
+    const subject = { lat: 50.7, lng: 6.1, name: "Cafe" };
+    await expect(mangroveProvider.getAggregate(subject, { strict: true })).rejects.toThrow(
+      "network down",
+    );
+    expect((await mangroveProvider.getAggregate(subject)).count).toBe(0);
+  });
+
+  it("surfaces a strict companion-read failure for edited reviews", async () => {
+    const subject = { lat: 50.7, lng: 6.1, name: "Cafe" };
+    mockedGetReviews.mockResolvedValueOnce({
+      reviews: [
+        wireReview({
+          action: "edit",
+          sub: "urn:maresi:original",
+          originalSub: "geo:50.7,6.1?q=Cafe&u=50",
+        }),
+      ],
+    });
+    mockedGetReviews.mockRejectedValueOnce(new Error("companion unavailable"));
+    await expect(mangroveProvider.getAggregate(subject, { strict: true })).rejects.toThrow(
+      "companion unavailable",
+    );
+  });
+
   it("keeps an OSM-linked review on the matching place", async () => {
     mockedGetReviews.mockResolvedValue({
       reviews: [

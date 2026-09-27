@@ -503,6 +503,8 @@ export interface CategoryCardEnrichmentRequest {
     id: string;
     name: string;
     coordinates: LngLat;
+    /** Optional subset; omitted requests both optional card fields. */
+    fields?: Array<"photo" | "rating">;
     photoTags?: Partial<
       Record<
         "image" | "image:0" | "image:1" | "wikimedia_commons" | "wikidata" | "wikipedia",
@@ -518,6 +520,12 @@ export interface CategoryCardEnrichmentResponse {
     id: string;
     photo?: PlacePhoto;
     rating?: { stars: number; count: number; source: string };
+    outcomes?: Partial<
+      Record<
+        "photo" | "rating",
+        { status: "available" | "absent" | "failed"; retryAfterMs?: number }
+      >
+    >;
   }>;
 }
 

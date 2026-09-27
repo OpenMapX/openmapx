@@ -23,6 +23,7 @@ export async function mangroveGetReviews(
     issuers?: boolean;
     maresiSubjects?: boolean;
     latestEditsOnly?: boolean;
+    signal?: AbortSignal;
   },
 ): Promise<MangroveWireReviewsResponse> {
   const url = new URL(`${MANGROVE_API_URL}/reviews`);
@@ -37,6 +38,7 @@ export async function mangroveGetReviews(
 
   return fetchJson<MangroveWireReviewsResponse>(url.toString(), {
     timeoutMs: FETCH_TIMEOUT_MS,
+    signal: opts?.signal,
     headers: { Accept: "application/json" },
     errorMessage: ({ status, statusText }) => `Mangrove getReviews failed: ${status} ${statusText}`,
   });

@@ -101,6 +101,13 @@ afterEach(() => {
 });
 
 describe("Wikidata knowledge provider", () => {
+  it("surfaces a card photo entity fetch failure without changing ordinary lookup fallback", async () => {
+    mockFetch.mockResolvedValue(new Response("busy", { status: 503 }));
+    await expect(
+      wikidataSource.lookup({ wikidata: "Q243" }, "en", { cardPhoto: true }),
+    ).rejects.toMatchObject({ status: 503 });
+    expect(await wikidataSource.lookup({ wikidata: "Q243" })).toBeNull();
+  });
   it("starts all independent enrichment requests before waiting and retains partial results", async () => {
     const pending = new Map<string, ReturnType<typeof Promise.withResolvers<Response>>>();
     mockFetch.mockImplementation(async (input: unknown) => {

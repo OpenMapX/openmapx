@@ -61,6 +61,58 @@ function makePlace(osmTags?: Record<string, string>) {
 }
 
 describe("getPlaceKnowledge", () => {
+  it("publishes a completed card photo before another knowledge source settles", async () => {
+    const { getPlaceKnowledge } = await import("../index.js");
+    const slow = Promise.withResolvers<null>();
+    const photo = { url: "https://upload.wikimedia.org/ready.jpg", source: "wikidata" };
+    wikidataLookup.mockResolvedValue({ photos: [photo] });
+    wikipediaLookup.mockReturnValue(slow.promise);
+    const seen: unknown[] = [];
+    const work = getPlaceKnowledge(makePlace({ wikidata: "Q42", wikipedia: "en:Article" }), "en", {
+      cardPhoto: true,
+      onPhotos: (photos) => seen.push(...photos),
+    });
+    try {
+      await vi.waitFor(() => expect(seen).toEqual([photo]));
+    } finally {
+      slow.resolve(null);
+      await work;
+    }
+  });
+
+  it("reports a failed card photo source before another source settles", async () => {
+    const { getPlaceKnowledge } = await import("../index.js");
+    const slow = Promise.withResolvers<null>();
+    const error = Object.assign(new Error("throttled"), { status: 429, retryAfterMs: 60000 });
+    wikidataLookup.mockRejectedValue(error);
+    wikipediaLookup.mockReturnValue(slow.promise);
+    const errors: unknown[] = [];
+    const work = getPlaceKnowledge(makePlace({ wikidata: "Q42", wikipedia: "en:Article" }), "en", {
+      cardPhoto: true,
+      onError: (reason) => errors.push(reason),
+    });
+    try {
+      await vi.waitFor(() => expect(errors).toEqual([error]));
+    } finally {
+      slow.resolve(null);
+      await work;
+    }
+  });
+  it("reports card-photo source failure and retains the other source's photo", async () => {
+    const { getPlaceKnowledge } = await import("../index.js");
+    const error = new Error("wikidata down");
+    wikidataLookup.mockRejectedValue(error);
+    const photo = { url: "https://upload.wikimedia.org/a.jpg", source: "wikipedia" };
+    wikipediaLookup.mockResolvedValue({ photos: [photo] });
+    const errors: unknown[] = [];
+    const result = await getPlaceKnowledge(
+      makePlace({ wikidata: "Q42", wikipedia: "en:Article" }),
+      "en",
+      { cardPhoto: true, onError: (reason) => errors.push(reason) },
+    );
+    expect(result.photos).toEqual([photo]);
+    expect(errors).toEqual([error]);
+  });
   it("returns {} immediately when place has neither osmTags nor coordinates", async () => {
     const { getPlaceKnowledge } = await import("../index.js");
     const placeWithoutBoth = {

@@ -90,8 +90,14 @@ export interface Review {
 export interface ReviewProvider {
   readonly id: string;
   readonly name: string;
-  getReviews(subject: ReviewSubject): Promise<Review[]>;
-  getAggregate(subject: ReviewSubject): Promise<ReviewAggregate>;
+  getReviews(
+    subject: ReviewSubject,
+    options?: { signal?: AbortSignal; strict?: boolean },
+  ): Promise<Review[]>;
+  getAggregate(
+    subject: ReviewSubject,
+    options?: { signal?: AbortSignal; strict?: boolean },
+  ): Promise<ReviewAggregate>;
   /** Forwards a pre-signed JWT to the upstream review store. */
   submit?(signedJwt: string): Promise<{ id: string }>;
   /** Uploads an image and returns an absolute URL referencing it. */

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchJson } from "./fetchJson";
+import { type FetchJsonHttpError, fetchJson } from "./fetchJson";
 import { USER_AGENT } from "./userAgent";
 
 function mockFetch(impl: (url: string, init: RequestInit) => Promise<Response> | Response) {
@@ -301,6 +301,137 @@ describe("fetchJson", () => {
     mockFetch(() => jsonResponse({}, 500));
     const data = await fetchJson("https://x.test/data", { nullOnError: true });
     expect(data).toBeNull();
+  });
+
+  it("preserves status and Retry-After on a strict upstream error", async () => {
+    mockFetch(() => new Response("busy", { status: 429, headers: { "Retry-After": "7" } }));
+    await expect(fetchJson("https://x.test/data")).rejects.toMatchObject({
+      name: "FetchJsonHttpError",
+      status: 429,
+      retryAfterMs: 7000,
+    } satisfies Partial<FetchJsonHttpError>);
+  });
+
+  it("returns HTTP metadata promptly when an unused error body and its cancellation stall", async () => {
+    vi.useFakeTimers();
+    const read = vi.fn(async () => await new Promise<never>(() => {}));
+    const cancel = vi.fn(async () => await new Promise<void>(() => {}));
+    const reader = { read, cancel, releaseLock: vi.fn() };
+    mockFetch(
+      () =>
+        ({
+          ok: false,
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: new Headers({ "retry-after": "7" }),
+          body: { getReader: () => reader, cancel },
+        }) as unknown as Response,
+    );
+    let caught: Error | undefined;
+    const operation = fetchJson("https://x.test/data", { timeoutMs: 5_500 }).catch((error) => {
+      caught = error as Error;
+    });
+
+    await vi.advanceTimersByTimeAsync(300);
+    expect(caught).toMatchObject({
+      name: "FetchJsonHttpError",
+      message: "fetch HTTP 429",
+      status: 429,
+      retryAfterMs: 7000,
+    } satisfies Partial<FetchJsonHttpError>);
+    expect(read).not.toHaveBeenCalled();
+    expect(cancel).toHaveBeenCalledOnce();
+    await operation;
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("releases an unused error response stream after reading its HTTP metadata", async () => {
+    let cancelled = false;
+    const body = new ReadableStream<Uint8Array>({
+      pull: async () => await new Promise<void>(() => {}),
+      cancel: () => {
+        cancelled = true;
+      },
+    });
+    mockFetch(() => new Response(body, { status: 503, headers: { "retry-after": "9" } }));
+
+    await expect(fetchJson("https://x.test/data", { timeoutMs: 5_500 })).rejects.toMatchObject({
+      status: 503,
+      retryAfterMs: 9000,
+    } satisfies Partial<FetchJsonHttpError>);
+    expect(cancelled).toBe(true);
+    expect(body.locked).toBe(false);
+  });
+
+  it("preserves HTTP metadata and custom diagnostics when an error body read fails", async () => {
+    const readFailure = new Error("upstream body failed");
+    const reader = {
+      read: vi.fn().mockRejectedValue(readFailure),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      releaseLock: vi.fn(),
+    };
+    mockFetch(
+      () =>
+        ({
+          ok: false,
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: new Headers({ "retry-after": "11" }),
+          body: { getReader: () => reader },
+        }) as unknown as Response,
+    );
+
+    await expect(
+      fetchJson("https://x.test/data", {
+        errorMessage: ({ status, body }) => `upstream ${status}${body ? `: ${body}` : ""}`,
+      }),
+    ).rejects.toMatchObject({
+      name: "FetchJsonHttpError",
+      message: "upstream 429",
+      status: 429,
+      retryAfterMs: 11000,
+      cause: readFailure,
+    } satisfies Partial<FetchJsonHttpError>);
+    expect(reader.cancel).toHaveBeenCalledOnce();
+    expect(reader.releaseLock).toHaveBeenCalledOnce();
+  });
+
+  it("preserves HTTP metadata after a custom error body stalls until timeout", async () => {
+    vi.useFakeTimers();
+    const reader = {
+      read: vi.fn(async () => await new Promise<never>(() => {})),
+      cancel: vi.fn().mockResolvedValue(undefined),
+      releaseLock: vi.fn(),
+    };
+    mockFetch(
+      () =>
+        ({
+          ok: false,
+          status: 429,
+          statusText: "Too Many Requests",
+          headers: new Headers({ "retry-after": "7" }),
+          body: { getReader: () => reader },
+        }) as unknown as Response,
+    );
+    let caught: Error | undefined;
+    const operation = fetchJson("https://x.test/data", {
+      errorMessage: ({ status, body }) => `upstream ${status}${body ? `: ${body}` : ""}`,
+      timeoutMs: 30,
+    }).catch((error) => {
+      caught = error as Error;
+    });
+
+    await vi.advanceTimersByTimeAsync(30);
+    await operation;
+    expect(caught).toMatchObject({
+      name: "FetchJsonHttpError",
+      message: "upstream 429",
+      status: 429,
+      retryAfterMs: 7000,
+    } satisfies Partial<FetchJsonHttpError>);
+    expect(reader.cancel).toHaveBeenCalledOnce();
+    expect(reader.releaseLock).toHaveBeenCalledOnce();
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it("returns null on a network error when nullOnError is set", async () => {

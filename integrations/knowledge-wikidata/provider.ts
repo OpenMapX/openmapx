@@ -115,7 +115,7 @@ function formatQuantity(qv: QuantityValue, lang = "en"): string {
 export const wikidataSource: KnowledgeProvider = {
   name: "wikidata",
 
-  async lookup(osmTags, lang?) {
+  async lookup(osmTags, lang?, context?) {
     const qid = osmTags.wikidata;
     if (!qid) return null;
 
@@ -131,7 +131,8 @@ export const wikidataSource: KnowledgeProvider = {
     const data = await fetchJson<{ entities?: Record<string, WdEntity> }>(url.toString(), {
       headers: HEADERS,
       timeoutMs: 4000,
-      nullOnError: true,
+      ...(context?.cardPhoto ? {} : { nullOnError: true as const }),
+      signal: context?.signal,
     });
     if (!data) return null;
     const entity = data.entities?.[qid];
@@ -201,6 +202,7 @@ export const wikidataSource: KnowledgeProvider = {
     // retaining the synchronous-facts-first ordering and optional field fallbacks.
     await Promise.all([
       (async () => {
+        if (context?.cardPhoto) return;
         // Wikipedia URL + extract (longer summary for Info tab)
         const wikiTitle = entity.sitelinks?.[`${effectiveLang}wiki`]?.title;
         if (wikiTitle) {
@@ -222,7 +224,9 @@ export const wikidataSource: KnowledgeProvider = {
         const p18 = bestClaim(entity.claims, "P18");
         if (p18?.mainsnak.datavalue?.type === "string") {
           const p18Filename = p18.mainsnak.datavalue.value as string;
-          const metadata = await fetchCommonsMetadata([p18Filename]);
+          const metadata = context?.cardPhoto
+            ? await fetchCommonsMetadata([p18Filename], { strict: true, signal: context.signal })
+            : await fetchCommonsMetadata([p18Filename]);
           const richPhoto = metadata.get(p18Filename.replace(/_/g, " "));
           if (richPhoto) {
             result.photos = [richPhoto];
@@ -239,6 +243,7 @@ export const wikidataSource: KnowledgeProvider = {
         }
       })(),
       (async () => {
+        if (context?.cardPhoto) return;
         // Batch-resolve item labels in a single extra API call
         if (itemsToResolve.length > 0) {
           const allIds = [...new Set(itemsToResolve.flatMap((i) => i.ids))];

@@ -51,6 +51,7 @@ export async function fetchReviews(
 export async function fetchAggregate(
   subject: ReviewSubject,
   providers: ReviewProvider[],
+  options?: { signal?: AbortSignal; strict?: boolean },
 ): Promise<ReviewAggregate> {
   const zero: ReviewAggregate = {
     count: 0,
@@ -60,15 +61,35 @@ export async function fetchAggregate(
     quality: 0,
     stars: 0,
   };
+  let failure: unknown;
+  let failed = false;
+  let failurePriority = -2;
   for (const p of providers) {
+    options?.signal?.throwIfAborted();
     try {
-      const aggregate = await p.getAggregate(subject);
+      const aggregate = await p.getAggregate(subject, options);
       // Stamp the producing provider so the UI credits the aggregate's source.
       return aggregate.source ? aggregate : { ...aggregate, source: p.id };
-    } catch {
+    } catch (error) {
+      if (options?.signal?.aborted) throw error;
+      const detail =
+        error && typeof error === "object"
+          ? (error as { status?: number; retryAfterMs?: number })
+          : undefined;
+      const status = detail?.status;
+      const transient = status === undefined || status === 408 || status === 429 || status >= 500;
+      const priority = transient
+        ? Math.max(2000, Number.isFinite(detail?.retryAfterMs) ? (detail?.retryAfterMs ?? 0) : 0)
+        : -1;
+      if (!failed || priority > failurePriority) {
+        failure = error;
+        failurePriority = priority;
+      }
+      failed = true;
       // fall through to next provider
     }
   }
+  if (options?.strict && failed) throw failure;
   return zero;
 }
 

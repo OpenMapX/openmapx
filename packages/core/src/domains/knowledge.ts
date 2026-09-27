@@ -42,6 +42,9 @@ export interface KnowledgeContext {
   name?: string;
   /** All known external identifiers for the place (used for link-first GERS lookup). */
   ids?: Ids;
+  /** Optional card-photo lookup: report transport failures and skip unrelated lookups. */
+  cardPhoto?: boolean;
+  signal?: AbortSignal;
 }
 
 export interface KnowledgeProvider {

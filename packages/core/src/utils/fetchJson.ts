@@ -297,6 +297,28 @@ export interface FetchJsonOptions {
   init?: Omit<RequestInit, "signal" | "headers">;
 }
 
+/** Structured non-2xx response so callers can distinguish a missing resource from throttling. */
+export class FetchJsonHttpError extends Error {
+  readonly status: number;
+  readonly retryAfterMs?: number;
+
+  constructor(message: string, status: number, retryAfterMs?: number) {
+    super(message);
+    this.name = "FetchJsonHttpError";
+    this.status = status;
+    this.retryAfterMs = retryAfterMs;
+  }
+}
+
+export function parseRetryAfterMs(value: string | null): number | undefined {
+  if (!value) return undefined;
+  const seconds = /^\d+$/.test(value) ? Number(value) : Number.NaN;
+  const delay = Number.isFinite(seconds) ? seconds * 1000 : Date.parse(value) - Date.now();
+  return Number.isFinite(delay) && delay > 0 && delay <= Number.MAX_SAFE_INTEGER - Date.now()
+    ? delay
+    : undefined;
+}
+
 async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {
   const {
     timeoutMs = DEFAULT_FETCH_TIMEOUT_MS,
@@ -324,19 +346,36 @@ async function request<T>(url: string, options: FetchJsonOptions): Promise<T> {
     });
     const res = await awaitResponseWithSignal(fetchPromise, signal);
     if (!res.ok) {
-      const body = res.body
-        ? (
-            await readBoundedResponseText(res, DEFAULT_FETCH_ERROR_MAX_BYTES, {
-              truncate: true,
-              label: `${label} error response`,
-              signal,
-            })
-          ).trim()
-        : undefined;
-      throw new Error(
-        errorMessage
-          ? errorMessage({ status: res.status, statusText: res.statusText, url, body })
-          : `${label} HTTP ${res.status}`,
+      const status = res.status;
+      const retryAfterMs = parseRetryAfterMs(res.headers?.get?.("retry-after") ?? null);
+      let body: string | undefined;
+      let bodyError: unknown;
+      if (res.body) {
+        if (errorMessage) {
+          try {
+            body = (
+              await readBoundedResponseText(res, DEFAULT_FETCH_ERROR_MAX_BYTES, {
+                truncate: true,
+                label: `${label} error response`,
+                signal,
+              })
+            ).trim();
+          } catch (error) {
+            bodyError = error;
+          }
+        } else {
+          bodyError = await cancelBody(res.body);
+        }
+      }
+      throw withCleanupCause(
+        new FetchJsonHttpError(
+          errorMessage
+            ? errorMessage({ status, statusText: res.statusText, url, body })
+            : `${label} HTTP ${status}`,
+          status,
+          retryAfterMs,
+        ),
+        bodyError,
       );
     }
     return await readBoundedJsonResponse<T>(res, {

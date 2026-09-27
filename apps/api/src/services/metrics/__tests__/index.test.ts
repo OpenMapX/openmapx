@@ -6,6 +6,7 @@ import {
   initMetrics,
   recordAirQuality,
   recordAirQualityProviderCall,
+  recordCardEnrichment,
   recordOsmContributionOperation,
   recordPersonalTimelineRequest,
   recordProviderCall,
@@ -31,6 +32,15 @@ afterEach(async () => {
 });
 
 describe("metrics service", () => {
+  it("counts card enrichment outcomes with bounded field and status labels", async () => {
+    recordCardEnrichment("photo", "failed");
+    recordCardEnrichment("photo", "failed");
+    const text = await getMetrics().renderPrometheus();
+    expect(text).toMatch(
+      /card_enrichment_fields_total\{[^}]*field="photo"[^}]*status="failed"[^}]*\} 2/,
+    );
+    expect(text).not.toContain("place_id");
+  });
   it("registers the provider-call counter and histogram with stable names", () => {
     const handle = initMetrics();
     expect(handle.providerCallCounter).toBeDefined();

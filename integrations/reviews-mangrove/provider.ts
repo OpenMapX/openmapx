@@ -337,19 +337,29 @@ export const mangroveProvider: ReviewProvider = {
   id: "mangrove",
   name: "Mangrove.reviews",
 
-  async getReviews(subject: ReviewSubject): Promise<Review[]> {
+  async getReviews(
+    subject: ReviewSubject,
+    options?: { signal?: AbortSignal; strict?: boolean },
+  ): Promise<Review[]> {
     // Query without `q=NAME` so Mangrove's spatial-OR-name filter doesn't
     // bleed in same-named reviews from across the world. The post-filter
     // below tightens the upstream `stored_u + query_u` radius to a sane cap.
     const sub = buildMangroveQueryUri(subject);
-    const latest = await mangroveGetReviews(sub, { limit: 200 });
+    const latest = await mangroveGetReviews(sub, { limit: 200, signal: options?.signal });
     const hasAction = latest.reviews.some(
       (r) => r.payload.action && r.payload.sub?.startsWith(MARESI_PREFIX),
     );
     const originalReviews = hasAction
-      ? await mangroveGetReviews(sub, { limit: 200, latestEditsOnly: false })
+      ? await mangroveGetReviews(sub, {
+          limit: 200,
+          latestEditsOnly: false,
+          signal: options?.signal,
+        })
           .then((r) => r.reviews)
-          .catch(() => [])
+          .catch((error) => {
+            if (options?.strict || options?.signal?.aborted) throw error;
+            return [];
+          })
       : [];
     const seen = new Set<string>();
     const reviews = [...originalReviews, ...latest.reviews].filter((r) => {
@@ -364,13 +374,17 @@ export const mangroveProvider: ReviewProvider = {
     return collapseDuplicateEffectiveReviews(applyMutations(mapped));
   },
 
-  async getAggregate(subject: ReviewSubject): Promise<ReviewAggregate> {
+  async getAggregate(
+    subject: ReviewSubject,
+    options?: { signal?: AbortSignal; strict?: boolean },
+  ): Promise<ReviewAggregate> {
     // Compute from the spatially-filtered review list; `/subject/{sub}` has
     // the same flawed matching as `/reviews` and would over-count.
     try {
-      const reviews = await mangroveProvider.getReviews(subject);
+      const reviews = await mangroveProvider.getReviews(subject, options);
       return aggregateFromReviews(reviews);
-    } catch {
+    } catch (error) {
+      if (options?.strict || options?.signal?.aborted) throw error;
       return {
         count: 0,
         ratedCount: 0,

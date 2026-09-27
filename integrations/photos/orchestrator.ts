@@ -1,4 +1,10 @@
-import { fetchWithRedirects, type PlacePhoto, parseId } from "@openmapx/core";
+import {
+  FetchJsonHttpError,
+  fetchWithRedirects,
+  type PlacePhoto,
+  parseId,
+  parseRetryAfterMs,
+} from "@openmapx/core";
 import type { LoadedIntegration } from "@openmapx/integration-framework";
 import {
   lookupByNameAndCoords,
@@ -66,18 +72,36 @@ export async function searchPhotos(
 export async function searchHeroPhotos(
   osmTags: Record<string, string>,
   providers: PhotoProvider[],
+  options?: {
+    strict?: boolean;
+    signal?: AbortSignal;
+    onError?: (error: unknown) => void;
+    onPhotos?: (photos: PlacePhoto[]) => void;
+  },
 ): Promise<PlacePhoto[]> {
-  // OSM image tags first
-  const imageTagPhotos = await extractImageTagPhotos(osmTags);
-
-  // Tag-based lookups from providers that support it
+  // Start independent OSM tag and provider work together. Incremental photos
+  // let a bounded card request keep a completed source if another stalls.
+  const imageTask = extractImageTagPhotos(osmTags, options);
   const tagPromises: Promise<PlacePhoto[]>[] = [];
   for (const p of providers) {
-    if (p.searchByTags) tagPromises.push(p.searchByTags(osmTags));
+    if (p.searchByTags)
+      tagPromises.push(
+        p.searchByTags(osmTags, undefined, options).then(
+          (photos) => {
+            options?.onPhotos?.(photos);
+            return photos;
+          },
+          (error) => {
+            options?.onError?.(error);
+            throw error;
+          },
+        ),
+      );
   }
-  const results = await Promise.allSettled(tagPromises);
+  const [imageResult, ...results] = await Promise.allSettled([imageTask, ...tagPromises]);
 
-  const all: PlacePhoto[] = [...imageTagPhotos];
+  const all: PlacePhoto[] = imageResult.status === "fulfilled" ? [...imageResult.value] : [];
+  if (imageResult.status === "rejected") options?.onError?.(imageResult.reason);
   for (const result of results) {
     if (result.status === "fulfilled") all.push(...result.value);
   }
@@ -90,7 +114,15 @@ export async function searchHeroPhotos(
  * Handles: `image`, `image:0`, `image:1`, ...
  * Values can be direct URLs, Wikimedia Commons filenames, or Google Photos share links.
  */
-async function extractImageTagPhotos(tags: Record<string, string>): Promise<PlacePhoto[]> {
+async function extractImageTagPhotos(
+  tags: Record<string, string>,
+  options?: {
+    strict?: boolean;
+    signal?: AbortSignal;
+    onError?: (error: unknown) => void;
+    onPhotos?: (photos: PlacePhoto[]) => void;
+  },
+): Promise<PlacePhoto[]> {
   const photos: PlacePhoto[] = [];
   const seen = new Set<string>();
 
@@ -103,11 +135,37 @@ async function extractImageTagPhotos(tags: Record<string, string>): Promise<Plac
   }
 
   // Resolve all values (some may be async, e.g. Google Photos links)
-  const resolved = await Promise.allSettled(imageValues.map((raw) => resolveImageValue(raw)));
+  const resolved = await Promise.allSettled(
+    imageValues.map((raw) =>
+      resolveImageValue(raw, options).then(
+        (urls) => {
+          if (urls?.length) {
+            const isGooglePhotos =
+              raw.includes("photos.app.goo.gl") || raw.includes("photos.google.com/share");
+            options?.onPhotos?.(
+              urls.map((url) => ({
+                url,
+                source: isGooglePhotos ? "google-photos" : "osm",
+                pageUrl: isGooglePhotos ? raw : undefined,
+              })),
+            );
+          }
+          return urls;
+        },
+        (error) => {
+          options?.onError?.(error);
+          throw error;
+        },
+      ),
+    ),
+  );
 
   for (let i = 0; i < resolved.length; i++) {
     const result = resolved[i];
-    if (result.status !== "fulfilled" || !result.value) continue;
+    if (result.status !== "fulfilled") {
+      continue;
+    }
+    if (!result.value) continue;
     const rawValue = imageValues[i];
     const isGooglePhotos =
       rawValue.includes("photos.app.goo.gl") || rawValue.includes("photos.google.com/share");
@@ -129,7 +187,10 @@ async function extractImageTagPhotos(tags: Record<string, string>): Promise<Plac
  * Resolve an OSM image tag value to one or more displayable URLs.
  * Handles direct URLs, Wikimedia Commons filenames, and Google Photos share links.
  */
-async function resolveImageValue(value: string): Promise<string[] | null> {
+async function resolveImageValue(
+  value: string,
+  options?: { strict?: boolean; signal?: AbortSignal },
+): Promise<string[] | null> {
   // Wikimedia Commons filename: "File:Example.jpg"
   if (value.startsWith("File:")) {
     const filename = value.slice(5);
@@ -146,7 +207,7 @@ async function resolveImageValue(value: string): Promise<string[] | null> {
   // disabled for legal reasons (Google ToS, photographer copyright).
   // We only use the og:image which is intended for link-preview embedding.
   if (isGooglePhotosShareUrl(value)) {
-    const preview = await resolveGooglePhotosPreview(value);
+    const preview = await resolveGooglePhotosPreview(value, options);
     return preview ? [preview] : null;
   }
 
@@ -194,16 +255,45 @@ export function isGooglePhotosImageUrl(value: string | URL): boolean {
   return parsed !== null && GOOGLE_PHOTOS_IMAGE_HOST.test(parsed.hostname);
 }
 
-async function fetchGooglePhotosSharePage(shareUrl: string): Promise<Response | null> {
+async function fetchGooglePhotosSharePage(
+  shareUrl: string,
+  signal?: AbortSignal,
+  strict?: boolean,
+): Promise<Response | null> {
   const initial = parseHttpsUrl(shareUrl);
   if (!initial || !isGooglePhotosShareUrl(initial)) return null;
   const response = await fetchWithRedirects(initial, {
     timeoutMs: 8_000,
+    signal,
     headers: BROWSER_HEADERS,
     maxRedirects: 3,
     validateRedirectUrl: (next) => isGooglePhotosShareUrl(next),
   });
-  return response.ok ? response : null;
+  if (!response.ok) {
+    const error = new FetchJsonHttpError(
+      `Google Photos preview HTTP ${response.status}`,
+      response.status,
+      parseRetryAfterMs(response.headers.get("retry-after")),
+    );
+    if (response.body) {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        await Promise.race([
+          response.body.cancel(),
+          new Promise<void>((resolve) => {
+            timer = setTimeout(resolve, 250);
+          }),
+        ]);
+      } catch {
+        // Keep the upstream HTTP error as the reason for the card outcome.
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    }
+    if (strict) throw error;
+    return null;
+  }
+  return response;
 }
 
 /**
@@ -244,9 +334,12 @@ export async function resolveGooglePhotosLink(shareUrl: string): Promise<string[
  * The og:image is the preview thumbnail Google explicitly provides for link embedding
  * (used by social media cards, chat previews, etc.) — safer legally than scraping all images.
  */
-async function resolveGooglePhotosPreview(shareUrl: string): Promise<string | null> {
+async function resolveGooglePhotosPreview(
+  shareUrl: string,
+  options?: { strict?: boolean; signal?: AbortSignal },
+): Promise<string | null> {
   try {
-    const res = await fetchGooglePhotosSharePage(shareUrl);
+    const res = await fetchGooglePhotosSharePage(shareUrl, options?.signal, options?.strict);
     if (!res) return null;
 
     const html = await res.text();
@@ -262,7 +355,8 @@ async function resolveGooglePhotosPreview(shareUrl: string): Promise<string | nu
     }
 
     return null;
-  } catch {
+  } catch (error) {
+    if (options?.strict) throw error;
     return null;
   }
 }

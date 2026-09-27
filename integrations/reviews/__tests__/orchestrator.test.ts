@@ -102,6 +102,24 @@ describe("fetchReviews source tagging", () => {
 });
 
 describe("fetchAggregate source tagging", () => {
+  it("preserves a retryable provider failure ahead of a later permanent failure", async () => {
+    const first = reviewProvider("first");
+    const second = reviewProvider("second");
+    const throttled = Object.assign(new Error("busy"), { status: 429, retryAfterMs: 8000 });
+    (first.getAggregate as ReturnType<typeof vi.fn>).mockRejectedValue(throttled);
+    (second.getAggregate as ReturnType<typeof vi.fn>).mockRejectedValue(
+      Object.assign(new Error("gone"), { status: 404 }),
+    );
+    await expect(fetchAggregate(SUBJECT, [first, second], { strict: true })).rejects.toBe(
+      throttled,
+    );
+  });
+
+  it("does not turn a falsy provider rejection into a confirmed zero aggregate", async () => {
+    const provider = reviewProvider("falsy");
+    (provider.getAggregate as ReturnType<typeof vi.fn>).mockRejectedValue(undefined);
+    await expect(fetchAggregate(SUBJECT, [provider], { strict: true })).rejects.toBeUndefined();
+  });
   it("stamps the aggregate with the producing provider's id", async () => {
     const p = reviewProvider("mangrove");
     (p.getAggregate as ReturnType<typeof vi.fn>).mockResolvedValue({
