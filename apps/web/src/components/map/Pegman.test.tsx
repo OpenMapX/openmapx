@@ -1,4 +1,9 @@
-import { useStreetLevelStore } from "@openmapx/core";
+import {
+  createOverlayStore,
+  registerOverlayEntry,
+  toggleOverlay,
+  useStreetLevelStore,
+} from "@openmapx/core";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render, screen } from "@/test";
 
@@ -12,8 +17,36 @@ vi.mock("@/integration-api/map/MapContext", () => ({
 
 import { nearestFeature, Pegman } from "./Pegman";
 
+const peer = createOverlayStore({ overlayId: "pegman-exclusion-peer", extra: {} });
+registerOverlayEntry({
+  id: "street-level-imagery",
+  getState: () => useStreetLevelStore.getState(),
+  useActive: () => false,
+  excludes: ["pegman-exclusion-peer"],
+});
+registerOverlayEntry({
+  id: "pegman-exclusion-peer",
+  getState: () => peer.getState(),
+  useActive: () => false,
+  excludes: ["street-level-imagery"],
+});
+
 afterEach(() => {
   useStreetLevelStore.getState().closePanel();
+  peer.getState().closePanel();
+});
+
+it("closes an excluded overlay when keyboard users open street imagery", () => {
+  toggleOverlay("pegman-exclusion-peer", { kind: "user" });
+  expect(peer.getState().panelOpen).toBe(true);
+
+  render(<Pegman />);
+  fireEvent.keyDown(screen.getByRole("button", { name: "streetLevel.toggleCoverage" }), {
+    key: "Enter",
+  });
+
+  expect(useStreetLevelStore.getState().panelOpen).toBe(true);
+  expect(peer.getState().panelOpen).toBe(false);
 });
 
 it("opens street imagery with Enter and exposes its active state", () => {

@@ -4,7 +4,7 @@ import BoyIcon from "@mui/icons-material/Boy";
 import Box from "@mui/material/Box";
 import Paper from "@mui/material/Paper";
 import Tooltip from "@mui/material/Tooltip";
-import { useOverlayVisibilitySetter, useStreetLevelStore } from "@openmapx/core";
+import { toggleOverlay, useOverlayVisibilitySetter, useStreetLevelStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useRef, useState } from "react";
 import {
@@ -19,6 +19,7 @@ const CIRCLE_R = 10; // visual indicator radius — smaller than the boy
 const GHOST_SIZE = 38; // px rendered height of the ghost icon
 // Boy icon feet land at y=20 in a 24-unit viewBox
 const PIN_TIP_OFFSET = GHOST_SIZE * (20 / 24);
+const STREET_LEVEL_OVERLAY_ID = "street-level-imagery";
 
 export interface PegmanCandidate {
   id: string;
@@ -52,8 +53,6 @@ export function Pegman() {
   const setLayerVisible = useOverlayVisibilitySetter("street-level-imagery");
   const requestImageLoad = useStreetLevelStore((s) => s.requestImageLoad);
   const panelOpen = useStreetLevelStore((s) => s.panelOpen);
-  const openPanel = useStreetLevelStore((s) => s.openPanel);
-  const closePanel = useStreetLevelStore((s) => s.closePanel);
   const [dragging, setDragging] = useState(false);
   const [ghostPos, setGhostPos] = useState({ x: 0, y: 0 });
   const pegmanRef = useRef<HTMLDivElement>(null);
@@ -122,8 +121,7 @@ export function Pegman() {
   };
 
   const toggleCoverage = () => {
-    if (panelOpen) closePanel();
-    else openPanel();
+    toggleOverlay(STREET_LEVEL_OVERLAY_ID, { kind: "user" });
   };
 
   return (
