@@ -133,7 +133,7 @@ describe("TransitItineraryCard", () => {
       />,
     );
     expect(markup).toContain("1 leg not wheelchair accessible");
-    expect(markup).not.toContain("services cancelled");
+    expect(markup).not.toMatch(/\b(?:service|services) cancelled\b/i);
   });
 
   it("shows both confirmed conditions without treating unknown legs as clear", () => {
@@ -178,7 +178,7 @@ describe("TransitItineraryCard", () => {
         onDetails={() => {}}
       />,
     );
-    expect(markup).not.toContain("services cancelled");
+    expect(markup).not.toMatch(/\b(?:service|services) cancelled\b/i);
     expect(markup).not.toContain("not wheelchair accessible");
   });
 
