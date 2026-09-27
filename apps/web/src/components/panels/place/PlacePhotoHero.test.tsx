@@ -41,24 +41,25 @@ describe("PlacePhotoHero", () => {
     expect(renderHero([{ ...firstPhoto, url: "javascript:bad" }]).container.firstChild).toBeNull();
   });
 
-  it("shows a known-minimum photo count and opens the gallery from the keyboard", async () => {
+  it("opens the gallery from the keyboard without claiming every photo loads", async () => {
     const user = userEvent.setup();
     const { onViewPhotos } = renderHero([firstPhoto, secondPhoto]);
 
     const galleryButton = screen.getByRole("button", {
-      name: "View photos of Test Place, at least 2 available",
+      name: "View photos of Test Place",
     });
-    expect(galleryButton).toHaveTextContent("View photos · 2+");
+    expect(galleryButton).toHaveTextContent("View photos");
+    expect(galleryButton).not.toHaveTextContent(/\d/);
     galleryButton.focus();
     await user.keyboard("{Enter}");
     expect(onViewPhotos).toHaveBeenCalledTimes(1);
   });
 
-  it("does not count an unusable later photo as available", () => {
+  it("keeps the action when a later URL is unusable", () => {
     renderHero([firstPhoto, { ...secondPhoto, url: "javascript:bad" }]);
-    expect(
-      screen.getByRole("button", { name: "View photos of Test Place, at least 1 available" }),
-    ).toHaveTextContent("View photos · 1+");
+    expect(screen.getByRole("button", { name: "View photos of Test Place" })).toHaveTextContent(
+      "View photos",
+    );
   });
 
   it("keeps a one-photo gallery action and attribution link separate", async () => {
@@ -67,9 +68,9 @@ describe("PlacePhotoHero", () => {
     const { onViewPhotos } = renderHero([firstPhoto], { onClose });
 
     const galleryButton = screen.getByRole("button", {
-      name: "View photos of Test Place, at least 1 available",
+      name: "View photos of Test Place",
     });
-    expect(galleryButton).toHaveTextContent("View photos · 1+");
+    expect(galleryButton).toHaveTextContent("View photos");
     expect(galleryButton.querySelector("button, a")).toBeNull();
 
     await user.click(screen.getByRole("link", { name: "A. Author" }));

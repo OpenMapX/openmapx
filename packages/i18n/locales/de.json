@@ -2289,7 +2289,7 @@
     "viewOriginal": "Original anzeigen",
     "noPhotos": "Keine Fotos verfügbar",
     "viewPhotos": "Fotos ansehen",
-    "viewPhotosAccessible": "Fotos von {placeName} ansehen, mindestens {count} verfügbar"
+    "viewPhotosAccessible": "Fotos von {placeName} ansehen"
   },
   "sidebar": {
     "showSidebar": "Seitenleiste einblenden",

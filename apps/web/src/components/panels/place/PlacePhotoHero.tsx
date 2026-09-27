@@ -33,10 +33,6 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
   const isValid = photo.url.startsWith("https://") || photo.url.startsWith("http://");
   if (!isValid) return null;
 
-  const knownCount = photos.filter(
-    ({ url }) => url.startsWith("https://") || url.startsWith("http://"),
-  ).length;
-
   return (
     <Box
       data-testid="place-photo-hero"
@@ -63,7 +59,7 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
             outlineOffset: -3,
           },
         }}
-        aria-label={tp("viewPhotosAccessible", { placeName, count: knownCount })}
+        aria-label={tp("viewPhotosAccessible", { placeName })}
       >
         <Box
           component="img"
@@ -73,40 +69,38 @@ export function PlacePhotoHero({ photos, placeName, onClose, onViewPhotos, onPho
           sx={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
         />
 
-        {knownCount > 0 && (
-          <Box
-            className="view-photos-pill"
+        <Box
+          className="view-photos-pill"
+          sx={{
+            position: "absolute",
+            top: 12,
+            left: 12,
+            maxWidth: "calc(100% - 76px)",
+            display: "flex",
+            alignItems: "center",
+            gap: 0.75,
+            color: "#fff",
+            bgcolor: "rgba(0,0,0,0.72)",
+            borderRadius: 2,
+            px: 1.5,
+            py: 0.75,
+            opacity: 0,
+            transition: "opacity 0.2s ease",
+            pointerEvents: "none",
+          }}
+        >
+          <CollectionsIcon sx={{ fontSize: 18, flexShrink: 0 }} />
+          <Typography
+            variant="body2"
+            noWrap
             sx={{
-              position: "absolute",
-              top: 12,
-              left: 12,
-              maxWidth: "calc(100% - 76px)",
-              display: "flex",
-              alignItems: "center",
-              gap: 0.75,
-              color: "#fff",
-              bgcolor: "rgba(0,0,0,0.72)",
-              borderRadius: 2,
-              px: 1.5,
-              py: 0.75,
-              opacity: 0,
-              transition: "opacity 0.2s ease",
-              pointerEvents: "none",
+              fontWeight: 500,
+              minWidth: 0,
             }}
           >
-            <CollectionsIcon sx={{ fontSize: 18, flexShrink: 0 }} />
-            <Typography
-              variant="body2"
-              noWrap
-              sx={{
-                fontWeight: 500,
-                minWidth: 0,
-              }}
-            >
-              {tp("viewPhotos")} · {knownCount}+
-            </Typography>
-          </Box>
-        )}
+            {tp("viewPhotos")}
+          </Typography>
+        </Box>
       </ButtonBase>
       {/* Attribution badge */}
       <Box

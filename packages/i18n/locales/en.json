@@ -2289,7 +2289,7 @@
     "viewOriginal": "View original",
     "noPhotos": "No photos available",
     "viewPhotos": "View photos",
-    "viewPhotosAccessible": "View photos of {placeName}, at least {count} available"
+    "viewPhotosAccessible": "View photos of {placeName}"
   },
   "sidebar": {
     "showSidebar": "Show sidebar",
