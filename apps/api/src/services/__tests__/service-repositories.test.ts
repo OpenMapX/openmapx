@@ -47,6 +47,7 @@ import {
   discardRepoBackup,
   discardStagedRepo,
   hashUrl,
+  inspectStagedRepo,
   prepareRepo,
   publishStagedRepo,
   reconcileRepoBackups,
@@ -356,6 +357,39 @@ describe("community repository preflight", () => {
     discardStagedRepo(staged);
 
     expect(readdirSync(testState.communityDir)).toEqual([]);
+  });
+
+  it("inspects security facts from the exact staged checkout", async () => {
+    testState.clone.mockImplementation(async ({ targetDir }: { targetDir: string }) => {
+      mkdirSync(targetDir, { recursive: true });
+      writeFileSync(
+        join(targetDir, "service.json"),
+        JSON.stringify({
+          id: "community-service",
+          name: "Community Service",
+          version: "1.0.0",
+          quality: "community",
+          container: { image: "example/community-service", tag: "1.0.0" },
+          exposure: { hostPorts: [{ host: 8080, container: 80 }] },
+        }),
+      );
+    });
+    testState.findServiceManifestDirs.mockImplementation((dir: string) => [dir]);
+
+    const staged = await stageRepo(url);
+    const inspection = inspectStagedRepo(staged);
+
+    expect(inspection).toMatchObject({
+      commit: "a".repeat(40),
+      services: [
+        {
+          slug: "community-service",
+          hostPorts: [{ host: 8080, container: 80 }],
+          securityRating: { hostPorts: 1 },
+        },
+      ],
+    });
+    discardStagedRepo(staged);
   });
 
   it("rejects an update with a community bind mount before replacing its installed checkout", async () => {

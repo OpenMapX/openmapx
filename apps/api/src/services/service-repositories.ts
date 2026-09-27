@@ -15,7 +15,12 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { type ServiceRepositoryRow, serviceRepository } from "../db/schema";
 
-const { findServiceManifestDirs, getProvidedCapabilityNames, validateServiceManifest } = services;
+const {
+  computeServiceSecurityRating,
+  findServiceManifestDirs,
+  getProvidedCapabilityNames,
+  validateServiceManifest,
+} = services;
 
 export function hashUrl(url: string): string {
   return createHash("sha256").update(url).digest("hex").slice(0, 16);
@@ -52,6 +57,7 @@ export interface RepoManifestPreview {
   hostPorts: RepoHostPort[];
   proxyEnabled: boolean;
   devices: string[];
+  securityRating?: ReturnType<typeof computeServiceSecurityRating>;
   validationErrors: string[];
 }
 
@@ -140,6 +146,9 @@ function readPreviewsFromClone(target: string): RepoManifestPreview[] {
       hostPorts,
       proxyEnabled,
       devices: (c.devices ?? []) as string[],
+      securityRating: computeServiceSecurityRating(
+        raw as Parameters<typeof computeServiceSecurityRating>[0],
+      ),
       validationErrors: [],
     });
   }
@@ -172,6 +181,7 @@ export interface StagedServiceRepository {
 
 interface StagedRepositoryEntry {
   dir: string;
+  previews: RepoManifestPreview[];
   prepared: Omit<PreparedServiceRepository, "preparationJournal">;
   journalNewInstall: boolean;
   selectionBefore?: string[];
@@ -215,6 +225,7 @@ export async function stageRepo(
     const id = randomBytes(12).toString("hex");
     stagedRepositories.set(id, {
       dir,
+      previews,
       prepared: {
         hash: hashUrl(canonical),
         url: canonical,
@@ -236,6 +247,38 @@ export async function stageRepo(
     rmSync(dir, { recursive: true, force: true });
     throw error;
   }
+}
+
+export interface StagedRepositoryInspection {
+  commit: string;
+  services: RepoManifestPreview[];
+}
+
+/**
+ * Return the security-relevant facts from the exact validated checkout that a
+ * later publishStagedRepo call would install. No path or mutable handle leaks
+ * through this representation.
+ */
+export function inspectStagedRepo(stage: StagedServiceRepository): StagedRepositoryInspection {
+  const entry = stagedRepositoryEntry(stage);
+  return {
+    commit: entry.prepared.lastSha,
+    services: entry.previews.map((preview) => ({
+      ...preview,
+      provides: [...preview.provides],
+      needsCapabilities: [...preview.needsCapabilities],
+      hostPorts: preview.hostPorts.map((port) => ({ ...port })),
+      devices: [...preview.devices],
+      securityRating: preview.securityRating
+        ? {
+            ...preview.securityRating,
+            deploymentVariables: [...preview.securityRating.deploymentVariables],
+            factors: [...preview.securityRating.factors],
+          }
+        : undefined,
+      validationErrors: [...preview.validationErrors],
+    })),
+  };
 }
 
 /** Discard an unpublished staged checkout. Safe only for module-owned stage handles. */
@@ -287,6 +330,7 @@ function buildErrorPreview(slug: string, errors: string[]): RepoManifestPreview 
     hostPorts: [],
     proxyEnabled: false,
     devices: [],
+    securityRating: undefined,
     validationErrors: errors,
   };
 }

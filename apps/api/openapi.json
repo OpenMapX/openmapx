@@ -696,6 +696,20 @@
         "x-openmapx-auth": "admin"
       }
     },
+    "/api/admin/extensions/install-preview": {
+      "post": {
+        "operationId": "postApiAdminExtensionsInstallPreview",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "admin"
+        ],
+        "x-openmapx-auth": "admin"
+      }
+    },
     "/api/admin/extensions/installed": {
       "get": {
         "operationId": "getApiAdminExtensionsInstalled",

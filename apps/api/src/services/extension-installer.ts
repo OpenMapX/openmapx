@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { services as coreServices, findRepoRoot } from "@openmapx/core/server";
 import { PLATFORM_VERSION, satisfiesPlatformVersion } from "@openmapx/integration-framework";
 import {
@@ -41,6 +42,7 @@ import {
   discardRepoPreparation,
   discardStagedRepo,
   hashUrl,
+  inspectStagedRepo,
   type PreparedServiceRepository,
   publishStagedRepo,
   removeRepo,
@@ -62,6 +64,30 @@ export interface InstallExtensionOptions {
   sourceUrl?: string;
   sourceTrust: ExtensionTrust;
   actorId?: string;
+  /** Fingerprint returned by previewExtensionInstall for the exact port-bearing snapshot. */
+  hostPortConfirmation?: string;
+}
+
+export interface ExtensionInstallServicePreview {
+  id: string;
+  name: string;
+  version: string;
+  repositoryCommit: string;
+  hostPorts: Array<{
+    host: number;
+    container: number;
+    protocol: "tcp" | "udp";
+    bindAddress: string;
+  }>;
+  securityRating: coreServices.ServiceSecurityRating;
+}
+
+export interface ExtensionInstallPreview {
+  extension: { id: string; name: string; version: string };
+  sourceTrust: ExtensionTrust;
+  services: ExtensionInstallServicePreview[];
+  requiresHostPortConfirmation: boolean;
+  confirmation: string;
 }
 
 /**
@@ -80,6 +106,106 @@ export interface ExtensionInstallPreflight {
 
 export class ExtensionPreflightError extends Error {
   override readonly name = "ExtensionPreflightError";
+}
+
+function canonicalJson(value: unknown): string {
+  if (Array.isArray(value)) return `[${value.map(canonicalJson).join(",")}]`;
+  if (value && typeof value === "object") {
+    return `{${Object.entries(value as Record<string, unknown>)
+      .filter(([, child]) => child !== undefined)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, child]) => `${JSON.stringify(key)}:${canonicalJson(child)}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value);
+}
+
+function buildExtensionInstallPreview(
+  opts: InstallExtensionOptions,
+  stagedServiceRepos: ReadonlyMap<string, StagedServiceRepository>,
+): ExtensionInstallPreview {
+  const services = (opts.manifest.services ?? [])
+    .map((component): ExtensionInstallServicePreview => {
+      const stage = stagedServiceRepos.get(component.repo);
+      if (!stage) {
+        throw new ExtensionPreflightError(
+          `Extension service "${component.service}" has no staged repository`,
+        );
+      }
+      const inspection = inspectStagedRepo(stage);
+      const service = inspection.services.find((candidate) => candidate.slug === component.service);
+      if (!service?.securityRating) {
+        throw new ExtensionPreflightError(
+          `Extension service "${component.service}" was not found in its validated repository`,
+        );
+      }
+      return {
+        id: service.slug,
+        name: service.name,
+        version: service.version,
+        repositoryCommit: inspection.commit,
+        hostPorts: service.hostPorts.map((port) => ({
+          host: port.host,
+          container: port.container,
+          protocol: port.protocol ?? "tcp",
+          // Must match the community default in renderServiceSnippet.
+          bindAddress: port.bindAddress ?? "127.0.0.1",
+        })),
+        securityRating: service.securityRating,
+      };
+    })
+    .sort((left, right) => left.id.localeCompare(right.id));
+  const confirmation = createHash("sha256")
+    .update(
+      canonicalJson({
+        manifest: opts.manifest,
+        sourceTrust: opts.sourceTrust,
+        services,
+      }),
+    )
+    .digest("hex");
+
+  return {
+    extension: {
+      id: opts.manifest.id,
+      name: opts.manifest.name,
+      version: opts.manifest.version,
+    },
+    sourceTrust: opts.sourceTrust,
+    services,
+    requiresHostPortConfirmation: services.some((service) => service.hostPorts.length > 0),
+    confirmation,
+  };
+}
+
+async function stageExtensionServiceRepos(
+  opts: InstallExtensionOptions,
+): Promise<Map<string, StagedServiceRepository>> {
+  const staged = new Map<string, StagedServiceRepository>();
+  try {
+    for (const component of opts.manifest.services ?? []) {
+      if (staged.has(component.repo)) continue;
+      staged.set(component.repo, await stageRepo(component.repo, { ref: component.ref }));
+    }
+    return staged;
+  } catch (error) {
+    for (const stage of staged.values()) discardStagedRepo(stage);
+    throw error;
+  }
+}
+
+/** Clone and inspect exact service snapshots without publishing or starting them. */
+export async function previewExtensionInstall(
+  opts: InstallExtensionOptions,
+): Promise<ExtensionInstallPreview> {
+  await preflightExtensionInstall(opts);
+  await assertNotRevoked(opts.manifest.id, opts.manifest.version);
+  const staged = await stageExtensionServiceRepos(opts);
+  try {
+    return buildExtensionInstallPreview(opts, staged);
+  } finally {
+    for (const stage of staged.values()) discardStagedRepo(stage);
+  }
 }
 
 /**
@@ -312,6 +438,16 @@ export async function installExtension(
           touchedServiceIds: ledger.touchedServiceIds,
           previouslyEnabledServiceIds: ledger.previouslyEnabledServiceIds,
         }),
+      );
+    }
+
+    const installPreview = buildExtensionInstallPreview(opts, stagedServiceRepos);
+    if (
+      installPreview.requiresHostPortConfirmation &&
+      opts.hostPortConfirmation !== installPreview.confirmation
+    ) {
+      throw new ExtensionPreflightError(
+        "Community service host ports require a fresh security preview and explicit confirmation",
       );
     }
 
@@ -849,6 +985,7 @@ export async function handleExtensionInstallJob(ctx: JobContext): Promise<Record
     sourceUrl?: string;
     sourceTrust?: ExtensionTrust;
     actorId?: string;
+    hostPortConfirmation?: string;
   };
   if (!payload.manifest) throw new Error("extension install job is missing manifest");
   const validation = coreServices.validateExtensionManifest(payload.manifest);
@@ -860,6 +997,7 @@ export async function handleExtensionInstallJob(ctx: JobContext): Promise<Record
     sourceUrl: payload.sourceUrl,
     sourceTrust: payload.sourceTrust ?? "community",
     actorId: payload.actorId,
+    hostPortConfirmation: payload.hostPortConfirmation,
   });
 }
 

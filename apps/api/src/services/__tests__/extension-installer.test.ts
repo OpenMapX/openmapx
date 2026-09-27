@@ -96,6 +96,39 @@ vi.mock("../service-repositories", () => ({
   discardRepoBackup: vi.fn(),
   discardRepoPreparation: vi.fn(),
   hashUrl: vi.fn((u: string) => `hash-${u}`),
+  inspectStagedRepo: vi.fn().mockReturnValue({
+    commit: "d".repeat(40),
+    services: [
+      {
+        slug: "svc-one",
+        name: "Service One",
+        version: "1.0.0",
+        hostPorts: [],
+        securityRating: {
+          score: 6,
+          requiresBuiltIn: false,
+          hostPorts: 0,
+          secretCount: 0,
+          deploymentVariables: [],
+          factors: [],
+        },
+      },
+      {
+        slug: "svc-two",
+        name: "Service Two",
+        version: "1.0.0",
+        hostPorts: [],
+        securityRating: {
+          score: 6,
+          requiresBuiltIn: false,
+          hostPorts: 0,
+          secretCount: 0,
+          deploymentVariables: [],
+          factors: [],
+        },
+      },
+    ],
+  }),
   stageRepo: vi.fn().mockResolvedValue({ id: "staged-service-repository" }),
   publishStagedRepo: vi.fn().mockResolvedValue({
     hash: "h1",
@@ -136,6 +169,7 @@ import {
   discardRepoBackup,
   discardRepoPreparation,
   discardStagedRepo,
+  inspectStagedRepo,
   publishStagedRepo,
   registerRepo,
   removeRepo,
@@ -148,11 +182,14 @@ import { applyTrustedConfiguration } from "../trusted-config-operations";
 // factory reads `dbMock.db` only once `dbMock` is initialized — a static import
 // hoists above the const and hits the temporal dead zone.
 let installExtension: typeof import("../extension-installer.js").installExtension;
+let previewExtensionInstall: typeof import("../extension-installer.js").previewExtensionInstall;
 let removeExtension: typeof import("../extension-installer.js").removeExtension;
 // A cold full-suite run can spend over 10s transforming this API import graph
 // under worker saturation. Keep the larger budget local to this setup hook.
 beforeAll(async () => {
-  ({ installExtension, removeExtension } = await import("../extension-installer.js"));
+  ({ installExtension, previewExtensionInstall, removeExtension } = await import(
+    "../extension-installer.js"
+  ));
 }, 30_000);
 
 type ExtensionManifest = coreServices.ExtensionManifest;
@@ -211,6 +248,42 @@ const INTEGRATION_ONLY = {
   ],
 } satisfies ExtensionManifest;
 
+function safeRepoInspection() {
+  return {
+    commit: "d".repeat(40),
+    services: [
+      {
+        slug: "svc-one",
+        name: "Service One",
+        version: "1.0.0",
+        hostPorts: [],
+        securityRating: {
+          score: 6,
+          requiresBuiltIn: false,
+          hostPorts: 0,
+          secretCount: 0,
+          deploymentVariables: [],
+          factors: [],
+        },
+      },
+      {
+        slug: "svc-two",
+        name: "Service Two",
+        version: "1.0.0",
+        hostPorts: [],
+        securityRating: {
+          score: 6,
+          requiresBuiltIn: false,
+          hostPorts: 0,
+          secretCount: 0,
+          deploymentVariables: [],
+          factors: [],
+        },
+      },
+    ],
+  };
+}
+
 const dbInstallMock = vi.mocked(installIntegration);
 const dbRemoveMock = vi.mocked(removeIntegration);
 const integrationBackupMock = vi.mocked(backupInstalledIntegration);
@@ -220,6 +293,7 @@ const reloadMock = vi.mocked(reloadIntegrations);
 const composeMock = vi.mocked(dockerComposeAction);
 const registerRepoMock = vi.mocked(registerRepo);
 const stageRepoMock = vi.mocked(stageRepo);
+const inspectStagedRepoMock = vi.mocked(inspectStagedRepo);
 const publishStagedRepoMock = vi.mocked(publishStagedRepo);
 const discardStagedRepoMock = vi.mocked(discardStagedRepo);
 const removeRepoMock = vi.mocked(removeRepo);
@@ -244,6 +318,7 @@ afterEach(() => {
   composeMock.mockResolvedValue({ exitCode: 0, stdout: "", stderr: "" });
   registerRepoMock.mockResolvedValue({ hash: "h1" } as never);
   stageRepoMock.mockResolvedValue({ id: "staged-service-repository" } as never);
+  inspectStagedRepoMock.mockReturnValue(safeRepoInspection() as never);
   publishStagedRepoMock.mockResolvedValue({
     hash: "h1",
     url: "https://git.example/repo.git",
@@ -258,6 +333,59 @@ afterEach(() => {
 });
 
 describe("installExtension", () => {
+  it("requires confirmation bound to the exact host-port preview", async () => {
+    const portInspection = {
+      commit: "d".repeat(40),
+      services: [
+        {
+          slug: "svc-one",
+          name: "Service One",
+          version: "1.0.0",
+          hostPorts: [{ host: 8080, container: 80 }],
+          securityRating: {
+            score: 4,
+            requiresBuiltIn: false,
+            hostPorts: 1,
+            secretCount: 0,
+            deploymentVariables: [],
+            factors: ["-1 publishes 1 host port(s)"],
+          },
+        },
+      ],
+    };
+    inspectStagedRepoMock.mockReturnValue(portInspection as never);
+    dbMock.queueSelect([]);
+
+    await expect(
+      installExtension(makeCtx(), { manifest: MANIFEST, sourceTrust: "community" }),
+    ).rejects.toThrow(/fresh security preview and explicit confirmation/);
+    expect(publishStagedRepoMock).not.toHaveBeenCalled();
+
+    const preview = await previewExtensionInstall({
+      manifest: MANIFEST,
+      sourceTrust: "community",
+    });
+    expect(preview).toMatchObject({
+      requiresHostPortConfirmation: true,
+      services: [
+        {
+          id: "svc-one",
+          hostPorts: [{ bindAddress: "127.0.0.1", host: 8080, container: 80 }],
+        },
+      ],
+    });
+
+    dbMock.queueSelect([]);
+    dbMock.queueSelect([]);
+    await expect(
+      installExtension(makeCtx(), {
+        manifest: MANIFEST,
+        sourceTrust: "community",
+        hostPortConfirmation: preview.confirmation,
+      }),
+    ).resolves.toEqual({ id: "bundle-x", components: 2 });
+  });
+
   it("publishes an existing-repository update from its exact validated stage", async () => {
     const previous = {
       hash: "hash-https://git.example/repo.git",

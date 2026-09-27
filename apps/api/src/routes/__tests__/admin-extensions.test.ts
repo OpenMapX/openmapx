@@ -23,6 +23,41 @@ vi.mock("../../services/job-runner.js", () => ({
   jobRunner: { enqueue: (...a: unknown[]) => mockEnqueue(...a) },
 }));
 
+const INSTALL_PREVIEW = {
+  extension: { id: "openconditions", name: "OpenConditions", version: "1.0.0" },
+  sourceTrust: "verified",
+  services: [
+    {
+      id: "oc-ingest",
+      name: "OpenConditions ingest",
+      version: "1.0.0",
+      repositoryCommit: "a".repeat(40),
+      hostPorts: [
+        {
+          host: 8080,
+          container: 80,
+          protocol: "tcp",
+          bindAddress: "127.0.0.1",
+        },
+      ],
+      securityRating: {
+        score: 4,
+        requiresBuiltIn: false,
+        hostPorts: 1,
+        secretCount: 0,
+        deploymentVariables: [],
+        factors: ["-1 publishes 1 host port(s)"],
+      },
+    },
+  ],
+  requiresHostPortConfirmation: true,
+  confirmation: "b".repeat(64),
+};
+const mockPreviewExtensionInstall = vi.fn().mockResolvedValue(INSTALL_PREVIEW);
+vi.mock("../../services/extension-installer.js", () => ({
+  previewExtensionInstall: (...a: unknown[]) => mockPreviewExtensionInstall(...a),
+}));
+
 vi.mock("@openmapx/core/server", () => ({
   services: {
     computeServiceSecurityRating: vi.fn().mockReturnValue({ score: 7 }),
@@ -119,17 +154,38 @@ describe("GET /admin/extensions/catalog", () => {
 });
 
 describe("POST /admin/extensions/install", () => {
+  it("previews the exact resolved extension before installation", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/admin/extensions/install-preview",
+      payload: { id: "openconditions" },
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual(INSTALL_PREVIEW);
+    expect(mockPreviewExtensionInstall).toHaveBeenCalledWith({
+      manifest: MANIFEST,
+      sourceUrl: ENTRY.manifest,
+      sourceTrust: "verified",
+    });
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
   it("installs by catalog id and retains only a safe audit source summary", async () => {
     const res = await app.inject({
       method: "POST",
       url: "/admin/extensions/install",
-      payload: { id: "openconditions" },
+      payload: { id: "openconditions", hostPortConfirmation: "b".repeat(64) },
     });
     expect(res.statusCode).toBe(202);
     expect(res.json().jobId).toBe("job-ext-1");
     expect(mockEnqueue).toHaveBeenCalledWith(
       "extension.install",
-      expect.objectContaining({ sourceTrust: "verified", manifest: MANIFEST }),
+      expect.objectContaining({
+        sourceTrust: "verified",
+        manifest: MANIFEST,
+        hostPortConfirmation: "b".repeat(64),
+      }),
       fakeSession.user.id,
     );
     const auditEntry = mockWriteAuditLog.mock.calls[0]?.[0] as {

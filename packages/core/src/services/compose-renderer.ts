@@ -527,7 +527,11 @@ export function renderServiceSnippet(
   if (m.exposure?.hostPorts?.length) {
     snippet.ports = m.exposure.hostPorts.map((p) => {
       const proto = p.protocol ? `/${p.protocol}` : "";
-      const bind = p.bindAddress ? `${p.bindAddress}:` : "";
+      // Docker publishes an omitted bind address on every host interface. Keep
+      // that opt-in behavior for audited first-party manifests, but make the
+      // safe default for community services explicit and local-only.
+      const bindAddress = p.bindAddress ?? (service.isBuiltIn ? undefined : "127.0.0.1");
+      const bind = bindAddress ? `${bindAddress}:` : "";
       return `${bind}${p.host}:${p.container}${proto}`;
     });
   }

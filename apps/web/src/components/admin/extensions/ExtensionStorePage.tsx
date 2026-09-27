@@ -42,12 +42,16 @@ import Typography from "@mui/material/Typography";
 import { useState } from "react";
 import {
   type ExtensionCatalogView,
+  type ExtensionInstallPreview,
+  type ExtensionInstallRequest,
   type ExtensionSecurityRating,
+  type InstalledExtensionView,
   useAddExtensionSource,
   useExtensionCatalog,
   useExtensionSources,
   useInstallExtension,
   useInstalledExtensions,
+  usePreviewExtensionInstall,
   useRefreshExtensionCatalog,
   useRemoveExtension,
   useRemoveExtensionSource,
@@ -113,6 +117,97 @@ function SecurityChip({ rating }: { rating: ExtensionSecurityRating }) {
   );
 }
 
+function effectivePortLabel(
+  port: ExtensionInstallPreview["services"][number]["hostPorts"][number],
+) {
+  const host = port.bindAddress.includes(":") ? `[${port.bindAddress}]` : port.bindAddress;
+  return `${host}:${port.host} → container ${port.container}/${port.protocol}`;
+}
+
+function ExtensionSecurityPreviewDialog({
+  preview,
+  busy,
+  onClose,
+  onConfirm,
+}: {
+  preview: ExtensionInstallPreview | null;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const hostPorts = preview?.services.flatMap((service) =>
+    service.hostPorts.map((port) => ({ service: service.name, port })),
+  );
+
+  return (
+    <Dialog open={preview !== null} onClose={busy ? undefined : onClose} fullWidth maxWidth="sm">
+      <DialogTitle>Review extension security</DialogTitle>
+      <DialogContent>
+        {preview && (
+          <Stack sx={{ gap: 2, mt: 0.5 }}>
+            <Box>
+              <Typography variant="subtitle1" sx={{ fontWeight: 700 }}>
+                {preview.extension.name} v{preview.extension.version}
+              </Typography>
+              <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                This preview is bound to the resolved manifest and exact repository commits.
+              </Typography>
+            </Box>
+
+            {hostPorts && hostPorts.length > 0 ? (
+              <Alert severity="warning">
+                This extension publishes host ports. Confirm these effective bindings before the
+                service starts:
+                <Box component="ul" sx={{ mb: 0, pl: 2.5 }}>
+                  {hostPorts.map(({ service, port }) => (
+                    <li
+                      key={`${service}:${port.bindAddress}:${port.host}:${port.container}:${port.protocol}`}
+                    >
+                      {service}: <code>{effectivePortLabel(port)}</code>
+                    </li>
+                  ))}
+                </Box>
+              </Alert>
+            ) : (
+              <Alert severity="success">No host ports will be published.</Alert>
+            )}
+
+            {preview.services.length === 0 ? (
+              <Typography variant="body2">
+                This extension contains no service containers.
+              </Typography>
+            ) : (
+              preview.services.map((service) => (
+                <Paper key={service.id} variant="outlined" sx={{ p: 1.5 }}>
+                  <Stack direction="row" sx={{ gap: 1, alignItems: "center", flexWrap: "wrap" }}>
+                    <Typography variant="subtitle2" sx={{ flexGrow: 1 }}>
+                      {service.name} v{service.version}
+                    </Typography>
+                    <SecurityChip rating={service.securityRating} />
+                  </Stack>
+                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                    Commit {service.repositoryCommit.slice(0, 12)}
+                  </Typography>
+                </Paper>
+              ))
+            )}
+          </Stack>
+        )}
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose} disabled={busy}>
+          Cancel
+        </Button>
+        <Button variant="contained" color="warning" onClick={onConfirm} disabled={busy}>
+          {preview?.requiresHostPortConfirmation
+            ? "Confirm ports and install"
+            : "Install extension"}
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+}
+
 function BrowseTab() {
   const showToast = useAdminToast();
   const [q, setQ] = useState("");
@@ -120,16 +215,36 @@ function BrowseTab() {
   const [type, setType] = useState("");
   const [manifestOpen, setManifestOpen] = useState(false);
   const [manifestUrl, setManifestUrl] = useState("");
+  const [pendingInstall, setPendingInstall] = useState<ExtensionInstallRequest | null>(null);
+  const [securityPreview, setSecurityPreview] = useState<ExtensionInstallPreview | null>(null);
 
   const { data, isLoading, isError } = useExtensionCatalog({ q, trust, type });
   const refresh = useRefreshExtensionCatalog();
   const install = useInstallExtension();
+  const previewInstall = usePreviewExtensionInstall();
 
   const doInstall = (entry: ExtensionCatalogView) => {
+    const request = { id: entry.id };
+    previewInstall.mutate(request, {
+      onSuccess: (preview) => {
+        setPendingInstall(request);
+        setSecurityPreview(preview);
+      },
+      onError: (e) => showToast((e as Error).message, "error"),
+    });
+  };
+
+  const confirmInstall = () => {
+    if (!pendingInstall || !securityPreview) return;
     install.mutate(
-      { id: entry.id },
+      { ...pendingInstall, hostPortConfirmation: securityPreview.confirmation },
       {
-        onSuccess: () => showToast(`Installing ${entry.name}…`, "info"),
+        onSuccess: () => {
+          showToast(`Installing ${securityPreview.extension.name}…`, "info");
+          setSecurityPreview(null);
+          setPendingInstall(null);
+          setManifestUrl("");
+        },
         onError: (e) => showToast((e as Error).message, "error"),
       },
     );
@@ -252,7 +367,13 @@ function BrowseTab() {
                       size="small"
                       variant="contained"
                       fullWidth
-                      disabled={!e.compatible || !!e.removed || !!e.critical || install.isPending}
+                      disabled={
+                        !e.compatible ||
+                        !!e.removed ||
+                        !!e.critical ||
+                        install.isPending ||
+                        previewInstall.isPending
+                      }
                       onClick={() => doInstall(e)}
                     >
                       Install
@@ -285,25 +406,33 @@ function BrowseTab() {
           <Button onClick={() => setManifestOpen(false)}>Cancel</Button>
           <Button
             variant="contained"
-            disabled={!manifestUrl.trim() || install.isPending}
-            onClick={() =>
-              install.mutate(
-                { manifestUrl: manifestUrl.trim() },
-                {
-                  onSuccess: () => {
-                    showToast("Installing extension…", "info");
-                    setManifestOpen(false);
-                    setManifestUrl("");
-                  },
-                  onError: (e) => showToast((e as Error).message, "error"),
+            disabled={!manifestUrl.trim() || previewInstall.isPending}
+            onClick={() => {
+              const request = { manifestUrl: manifestUrl.trim() };
+              previewInstall.mutate(request, {
+                onSuccess: (preview) => {
+                  setPendingInstall(request);
+                  setSecurityPreview(preview);
+                  setManifestOpen(false);
                 },
-              )
-            }
+                onError: (e) => showToast((e as Error).message, "error"),
+              });
+            }}
           >
-            Install
+            Review security
           </Button>
         </DialogActions>
       </Dialog>
+
+      <ExtensionSecurityPreviewDialog
+        preview={securityPreview}
+        busy={install.isPending}
+        onClose={() => {
+          setSecurityPreview(null);
+          setPendingInstall(null);
+        }}
+        onConfirm={confirmInstall}
+      />
     </Stack>
   );
 }
@@ -312,7 +441,10 @@ function InstalledTab() {
   const showToast = useAdminToast();
   const { data, isLoading } = useInstalledExtensions();
   const update = useUpdateExtension();
+  const previewInstall = usePreviewExtensionInstall();
   const remove = useRemoveExtension();
+  const [pendingUpdate, setPendingUpdate] = useState<InstalledExtensionView | null>(null);
+  const [securityPreview, setSecurityPreview] = useState<ExtensionInstallPreview | null>(null);
   const rows = data?.extensions ?? [];
   const { paged, paginationProps } = useClientPagination(rows, 25);
 
@@ -330,107 +462,141 @@ function InstalledTab() {
     );
 
   return (
-    <AdminTableSurface
-      pagination={<AdminTablePagination {...paginationProps} count={rows.length} />}
-    >
-      <TableContainer>
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <TableCell>Extension</TableCell>
-              <TableCell>Trust</TableCell>
-              <TableCell>Version</TableCell>
-              <TableCell>Components</TableCell>
-              <TableCell align="right">Actions</TableCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {paged.map((ext) => (
-              <TableRow key={ext.id} hover>
-                <TableCell>
-                  <Typography variant="body2" sx={{ fontWeight: 600 }}>
-                    {ext.name}
-                  </Typography>
-                  <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                    {ext.id}
-                  </Typography>
-                </TableCell>
-                <TableCell>
-                  <TrustChip trust={ext.sourceTrust as Trust} />
-                </TableCell>
-                <TableCell>
-                  {ext.installedVersion}
-                  {ext.hasUpdate && (
-                    <Chip
-                      size="small"
-                      color="info"
-                      label={`→ ${ext.latestVersion}`}
-                      sx={{ ml: 1 }}
-                    />
-                  )}
-                </TableCell>
-                <TableCell>
-                  <Stack sx={{ gap: 0.5 }}>
-                    {ext.components.map((c) => (
-                      <Stack
-                        key={`${c.kind}:${c.componentId}`}
-                        direction="row"
-                        sx={{ gap: 0.5, alignItems: "center" }}
-                      >
-                        <Chip
-                          size="small"
-                          variant="outlined"
-                          icon={c.kind === "service" ? <ServicesIcon /> : <ExtensionIcon />}
-                          label={c.componentId}
-                        />
-                        {c.securityRating && <SecurityChip rating={c.securityRating} />}
-                      </Stack>
-                    ))}
-                  </Stack>
-                </TableCell>
-                <TableCell align="right">
-                  <Stack direction="row" sx={{ gap: 0.5, justifyContent: "flex-end" }}>
-                    {ext.hasUpdate && (
-                      <Button
-                        size="small"
-                        onClick={() =>
-                          update.mutate(ext.id, {
-                            onSuccess: () => showToast(`Updating ${ext.name}…`, "info"),
-                            onError: (e) => showToast((e as Error).message, "error"),
-                          })
-                        }
-                      >
-                        Update
-                      </Button>
-                    )}
-                    <Tooltip title="Uninstall">
-                      <IconButton
-                        size="small"
-                        color="error"
-                        onClick={() => {
-                          if (
-                            !confirm(
-                              `Uninstall ${ext.name}? This removes its services and integrations.`,
-                            )
-                          )
-                            return;
-                          remove.mutate(ext.id, {
-                            onSuccess: () => showToast(`Removing ${ext.name}…`, "info"),
-                            onError: (e) => showToast((e as Error).message, "error"),
-                          });
-                        }}
-                      >
-                        <DeleteIcon fontSize="small" />
-                      </IconButton>
-                    </Tooltip>
-                  </Stack>
-                </TableCell>
+    <>
+      <AdminTableSurface
+        pagination={<AdminTablePagination {...paginationProps} count={rows.length} />}
+      >
+        <TableContainer>
+          <Table size="small">
+            <TableHead>
+              <TableRow>
+                <TableCell>Extension</TableCell>
+                <TableCell>Trust</TableCell>
+                <TableCell>Version</TableCell>
+                <TableCell>Components</TableCell>
+                <TableCell align="right">Actions</TableCell>
               </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      </TableContainer>
-    </AdminTableSurface>
+            </TableHead>
+            <TableBody>
+              {paged.map((ext) => (
+                <TableRow key={ext.id} hover>
+                  <TableCell>
+                    <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                      {ext.name}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: "text.secondary" }}>
+                      {ext.id}
+                    </Typography>
+                  </TableCell>
+                  <TableCell>
+                    <TrustChip trust={ext.sourceTrust as Trust} />
+                  </TableCell>
+                  <TableCell>
+                    {ext.installedVersion}
+                    {ext.hasUpdate && (
+                      <Chip
+                        size="small"
+                        color="info"
+                        label={`→ ${ext.latestVersion}`}
+                        sx={{ ml: 1 }}
+                      />
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <Stack sx={{ gap: 0.5 }}>
+                      {ext.components.map((c) => (
+                        <Stack
+                          key={`${c.kind}:${c.componentId}`}
+                          direction="row"
+                          sx={{ gap: 0.5, alignItems: "center" }}
+                        >
+                          <Chip
+                            size="small"
+                            variant="outlined"
+                            icon={c.kind === "service" ? <ServicesIcon /> : <ExtensionIcon />}
+                            label={c.componentId}
+                          />
+                          {c.securityRating && <SecurityChip rating={c.securityRating} />}
+                        </Stack>
+                      ))}
+                    </Stack>
+                  </TableCell>
+                  <TableCell align="right">
+                    <Stack direction="row" sx={{ gap: 0.5, justifyContent: "flex-end" }}>
+                      {ext.hasUpdate && (
+                        <Button
+                          size="small"
+                          disabled={previewInstall.isPending || update.isPending}
+                          onClick={() =>
+                            previewInstall.mutate(
+                              { id: ext.id },
+                              {
+                                onSuccess: (preview) => {
+                                  setPendingUpdate(ext);
+                                  setSecurityPreview(preview);
+                                },
+                                onError: (e) => showToast((e as Error).message, "error"),
+                              },
+                            )
+                          }
+                        >
+                          Update
+                        </Button>
+                      )}
+                      <Tooltip title="Uninstall">
+                        <IconButton
+                          size="small"
+                          color="error"
+                          onClick={() => {
+                            if (
+                              !confirm(
+                                `Uninstall ${ext.name}? This removes its services and integrations.`,
+                              )
+                            )
+                              return;
+                            remove.mutate(ext.id, {
+                              onSuccess: () => showToast(`Removing ${ext.name}…`, "info"),
+                              onError: (e) => showToast((e as Error).message, "error"),
+                            });
+                          }}
+                        >
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    </Stack>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableContainer>
+      </AdminTableSurface>
+      <ExtensionSecurityPreviewDialog
+        preview={securityPreview}
+        busy={update.isPending}
+        onClose={() => {
+          setSecurityPreview(null);
+          setPendingUpdate(null);
+        }}
+        onConfirm={() => {
+          if (!pendingUpdate || !securityPreview) return;
+          update.mutate(
+            {
+              id: pendingUpdate.id,
+              hostPortConfirmation: securityPreview.confirmation,
+            },
+            {
+              onSuccess: () => {
+                showToast(`Updating ${pendingUpdate.name}…`, "info");
+                setSecurityPreview(null);
+                setPendingUpdate(null);
+              },
+              onError: (e) => showToast((e as Error).message, "error"),
+            },
+          );
+        }}
+      />
+    </>
   );
 }
 

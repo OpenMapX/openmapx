@@ -64,6 +64,32 @@ export interface ExtensionSource {
   isDefault: boolean;
 }
 
+export interface ExtensionInstallPreview {
+  extension: { id: string; name: string; version: string };
+  sourceTrust: "built-in" | "verified" | "community";
+  services: Array<{
+    id: string;
+    name: string;
+    version: string;
+    repositoryCommit: string;
+    hostPorts: Array<{
+      host: number;
+      container: number;
+      protocol: "tcp" | "udp";
+      bindAddress: string;
+    }>;
+    securityRating: ExtensionSecurityRating;
+  }>;
+  requiresHostPortConfirmation: boolean;
+  confirmation: string;
+}
+
+export interface ExtensionInstallRequest {
+  id?: string;
+  manifestUrl?: string;
+  hostPortConfirmation?: string;
+}
+
 const CATALOG_KEY = ["admin", "extensions", "catalog"];
 const INSTALLED_KEY = ["admin", "extensions", "installed"];
 const SOURCES_KEY = ["admin", "extensions", "sources"];
@@ -124,7 +150,7 @@ export function useInstallExtension() {
   const { apiUrl } = useEnv();
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: async (body: { id?: string; manifestUrl?: string }) => {
+    mutationFn: async (body: ExtensionInstallRequest) => {
       const res = await fetch(`${apiUrl}/api/admin/extensions/install`, {
         method: "POST",
         credentials: "include",
@@ -139,14 +165,33 @@ export function useInstallExtension() {
   });
 }
 
+export function usePreviewExtensionInstall() {
+  const { apiUrl } = useEnv();
+  return useMutation({
+    mutationFn: async (body: ExtensionInstallRequest) => {
+      const res = await fetch(`${apiUrl}/api/admin/extensions/install-preview`, {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);
+      return data as ExtensionInstallPreview;
+    },
+  });
+}
+
 export function useUpdateExtension() {
   const { apiUrl } = useEnv();
   const invalidate = useInvalidate();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const res = await fetch(`${apiUrl}/api/admin/extensions/update/${id}`, {
+    mutationFn: async (request: { id: string; hostPortConfirmation?: string }) => {
+      const res = await fetch(`${apiUrl}/api/admin/extensions/update/${request.id}`, {
         method: "POST",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ hostPortConfirmation: request.hostPortConfirmation }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data?.error ?? `HTTP ${res.status}`);

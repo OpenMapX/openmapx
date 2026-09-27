@@ -301,6 +301,30 @@ describe("renderServiceSnippet", () => {
     expect(snippet.ports).toEqual(["127.0.0.1:8080:80/tcp"]);
   });
 
+  it("defaults community host ports to loopback", () => {
+    const snippet = renderServiceSnippet(
+      communitySvc("community-port", {
+        exposure: { hostPorts: [{ container: 80, host: 8080 }] },
+      }),
+      {},
+    );
+
+    expect(snippet.ports).toEqual(["127.0.0.1:8080:80"]);
+  });
+
+  it("preserves an explicit community host-port bind address", () => {
+    const snippet = renderServiceSnippet(
+      communitySvc("community-port", {
+        exposure: {
+          hostPorts: [{ container: 80, host: 8080, bindAddress: "0.0.0.0" }],
+        },
+      }),
+      {},
+    );
+
+    expect(snippet.ports).toEqual(["0.0.0.0:8080:80"]);
+  });
+
   it("renders a UDP host port mapping (HTTP/3 / QUIC)", () => {
     const snippet = renderServiceSnippet(
       svc("alpha", {
