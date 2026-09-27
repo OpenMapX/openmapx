@@ -841,6 +841,7 @@
     "transitDuration": "~{duration}",
     "noRoutesFound": "No routes found between these locations.",
     "routeRequestFailed": "Could not load routes. Please try again.",
+    "routeServiceUnavailable": "Routing for these options is unavailable. Please try again.",
     "changeOrigin": "Change start",
     "changeDestination": "Change destination",
     "tryMode": "Try {mode}",

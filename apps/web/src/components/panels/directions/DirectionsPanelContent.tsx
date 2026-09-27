@@ -30,6 +30,7 @@ import {
   directionsQueryKey,
   formatDistance,
   formatDuration,
+  isApiClientError,
   preferredModesToMotis,
   rankItineraries,
   TRANSIT_ACCESS_MOTIS_MODES,
@@ -104,6 +105,7 @@ type GroundFallbackMode = (typeof GROUND_FALLBACK_MODES)[number];
 
 function RouteRecovery({
   failed,
+  error,
   onRetry,
   onEditOrigin,
   onEditDestination,
@@ -111,6 +113,7 @@ function RouteRecovery({
   onSelectMode,
 }: {
   failed: boolean;
+  error?: unknown;
   onRetry?: () => void;
   onEditOrigin: () => void;
   onEditDestination: () => void;
@@ -119,10 +122,17 @@ function RouteRecovery({
 }) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
+  const unavailable = isApiClientError(error) && [502, 503, 504].includes(error.status);
   return (
     <Box sx={{ px: 2, py: 3, textAlign: "center" }}>
       <Typography variant="body2" color={failed ? "error.main" : "text.secondary"}>
-        {t(failed ? "routeRequestFailed" : "noRoutesFound")}
+        {t(
+          failed
+            ? unavailable
+              ? "routeServiceUnavailable"
+              : "routeRequestFailed"
+            : "noRoutesFound",
+        )}
       </Typography>
       {failed ? (
         <Button size="small" onClick={onRetry} sx={{ mt: 1 }}>
@@ -1301,6 +1311,7 @@ export function DirectionsPanelContent() {
               ) : isError ? (
                 <RouteRecovery
                   failed
+                  error={directionsQuery.error}
                   onRetry={() => void directionsQuery.refetch()}
                   {...recoveryActions}
                 />
@@ -1339,7 +1350,12 @@ export function DirectionsPanelContent() {
                 <CircularProgress size={28} sx={{ color: BRAND }} />
               </Box>
             ) : evIsError ? (
-              <RouteRecovery failed onRetry={() => void evQuery.refetch()} {...recoveryActions} />
+              <RouteRecovery
+                failed
+                error={evQuery.error}
+                onRetry={() => void evQuery.refetch()}
+                {...recoveryActions}
+              />
             ) : evData?.routes.length === 0 ? (
               <RouteRecovery failed={false} {...recoveryActions} />
             ) : evData ? (
@@ -1359,6 +1375,7 @@ export function DirectionsPanelContent() {
           ) : transitChainQuery.isError ? (
             <RouteRecovery
               failed
+              error={transitChainQuery.error}
               onRetry={() => void transitChainQuery.refetch()}
               {...recoveryActions}
             />
@@ -1383,6 +1400,7 @@ export function DirectionsPanelContent() {
           ) : transitError ? (
             <RouteRecovery
               failed
+              error={transitPlanQuery.error}
               onRetry={() => void transitPlanQuery.refetch()}
               {...recoveryActions}
             />
@@ -1468,6 +1486,7 @@ export function DirectionsPanelContent() {
         ) : scheduleRequest && scheduledQuery.isError ? (
           <RouteRecovery
             failed
+            error={scheduledQuery.error}
             onRetry={() => void scheduledQuery.refetch()}
             {...recoveryActions}
           />
@@ -1485,6 +1504,7 @@ export function DirectionsPanelContent() {
         ) : !scheduleRequest && isError ? (
           <RouteRecovery
             failed
+            error={directionsQuery.error}
             onRetry={() => void directionsQuery.refetch()}
             {...recoveryActions}
           />

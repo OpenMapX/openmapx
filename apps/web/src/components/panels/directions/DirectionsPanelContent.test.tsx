@@ -56,7 +56,13 @@ vi.mock("@/components/panels/directions/TransitRouteView", () => ({
   ),
 }));
 
-import { useDirectionsStore, useMapStore, useSettingsStore, useSidebarStore } from "@openmapx/core";
+import {
+  ApiClientError,
+  useDirectionsStore,
+  useMapStore,
+  useSettingsStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import { MobileSheetContext } from "@/components/panels/sheet/sheetState";
 import { DirectionsPanelContent } from "./DirectionsPanelContent";
 
@@ -118,6 +124,99 @@ function seedOriginDestination() {
 const renderPanel = () => render(<DirectionsPanelContent />, { wrapper: createQueryWrapper() });
 
 describe("DirectionsPanelContent", () => {
+  it.each([502, 503, 504])("shows unavailable routing for an HTTP %i road response", (status) => {
+    seedOriginDestination();
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new ApiClientError(status, null, null),
+      refetch: vi.fn(),
+    });
+
+    renderPanel();
+    screen.getByText("directions.routeServiceUnavailable");
+    expect(screen.queryByText("directions.routeRequestFailed")).toBeNull();
+    expect(screen.queryByText("directions.noRoutesFound")).toBeNull();
+    screen.getByRole("button", { name: "common.retry" });
+  });
+
+  it.each([400, 404, 429, 500, 501, 505])(
+    "keeps HTTP %i road failures as generic request failures",
+    (status) => {
+      seedOriginDestination();
+      useDirectionsMock.mockReturnValue({
+        data: undefined,
+        isLoading: false,
+        isError: true,
+        error: new ApiClientError(status, null, null),
+        refetch: vi.fn(),
+      });
+
+      renderPanel();
+      screen.getByText("directions.routeRequestFailed");
+      expect(screen.queryByText("directions.routeServiceUnavailable")).toBeNull();
+    },
+  );
+
+  it("keeps an unstructured network failure generic", () => {
+    seedOriginDestination();
+    useDirectionsMock.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new TypeError("Failed to fetch"),
+      refetch: vi.fn(),
+    });
+
+    renderPanel();
+    screen.getByText("directions.routeRequestFailed");
+    expect(screen.queryByText("directions.routeServiceUnavailable")).toBeNull();
+  });
+
+  it.each([
+    ["ride", useDirectionsMock, () => useDirectionsStore.getState().setMode("ride")],
+    [
+      "EV",
+      useEvDirectionsMock,
+      () => {
+        useSettingsStore.getState().setEvVehicleId("test-vehicle");
+        useDirectionsStore.getState().setEvMode(true);
+      },
+    ],
+    ["transit", useTransitPlanMock, () => useDirectionsStore.getState().setMode("transit")],
+    [
+      "chained transit",
+      useTransitChainPlanMock,
+      () => {
+        useDirectionsStore.getState().addWaypoint(0);
+        useDirectionsStore.getState().setWaypoint(1, [12.37, 51.34], "Leipzig");
+        useDirectionsStore.getState().setMode("transit");
+      },
+    ],
+    [
+      "scheduled",
+      useScheduledDirectionsMock,
+      () => {
+        useDirectionsStore.getState().setWaypointSchedule(1, { dwellSeconds: 1800 });
+      },
+    ],
+  ] as const)("shows an unavailable %s planning response", (_name, hook, configure) => {
+    seedOriginDestination();
+    act(configure);
+    hook.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      error: new ApiClientError(503, null, null),
+      refetch: vi.fn(),
+    });
+
+    renderPanel();
+    screen.getByText("directions.routeServiceUnavailable");
+    screen.getByRole("button", { name: "common.retry" });
+  });
+
   it("requests a fresh location when opened and fills the origin", async () => {
     let succeed: ((position: GeolocationPosition) => void) | undefined;
     const getCurrentPosition = vi.fn((...args: unknown[]) => {
