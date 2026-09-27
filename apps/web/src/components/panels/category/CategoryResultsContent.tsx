@@ -2,12 +2,17 @@
 
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
+import ErrorOutlinedIcon from "@mui/icons-material/ErrorOutlined";
+import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
+import RefreshIcon from "@mui/icons-material/Refresh";
 import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
-import Alert from "@mui/material/Alert";
+import ZoomInIcon from "@mui/icons-material/ZoomIn";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import IconButton from "@mui/material/IconButton";
 import Skeleton from "@mui/material/Skeleton";
+import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type {
   CategoryCardEnrichmentResponse,
@@ -38,7 +43,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 import { distinctBrandQids, placeBrandIdentity } from "@/components/map/CategoryResultMarkers";
 import { PhotoAttribution } from "@/components/panels/place/PhotoAttribution";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
@@ -62,6 +67,62 @@ const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   tram: TramIcon,
   bus: DirectionsBusIcon,
 };
+
+function ResultNotice({
+  tone,
+  children,
+  action,
+}: {
+  tone: "error" | "info";
+  children: ReactNode;
+  action?: { label: string; kind: "retry" | "zoom"; onClick: () => void };
+}) {
+  const Icon = tone === "error" ? ErrorOutlinedIcon : InfoOutlinedIcon;
+  const ActionIcon = action?.kind === "zoom" ? ZoomInIcon : RefreshIcon;
+
+  return (
+    <Box
+      role={tone === "error" ? "alert" : "status"}
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        gap: 1,
+        minHeight: 48,
+        minWidth: 0,
+        px: 1.5,
+        py: 0.5,
+        borderRadius: "24px",
+        bgcolor: `color-mix(in srgb, var(--mui-palette-${tone}-main) 11%, var(--mui-palette-background-paper))`,
+      }}
+    >
+      <Icon aria-hidden="true" sx={{ fontSize: 19, color: `${tone}.main`, flexShrink: 0 }} />
+      <Typography variant="body2" sx={{ minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>
+        {children}
+      </Typography>
+      {action && (
+        <Tooltip title={action.label}>
+          <IconButton
+            color={tone}
+            aria-label={action.label}
+            onClick={action.onClick}
+            sx={{
+              flex: "0 0 44px",
+              width: 44,
+              height: 44,
+              "&.Mui-focusVisible": {
+                outline: "2px solid",
+                outlineColor: `${tone}.main`,
+                outlineOffset: 2,
+              },
+            }}
+          >
+            <ActionIcon aria-hidden="true" fontSize="small" />
+          </IconButton>
+        </Tooltip>
+      )}
+    </Box>
+  );
+}
 
 // Human-readable label for a dropped `require` predicate, for the relaxation
 // notice. Prefers the meaningful term: the value for things like `cuisine~thai`,
@@ -555,24 +616,21 @@ export function CategoryResultsContent() {
       )}
       {!isTransitCategory && isError && (
         <Box sx={{ px: 2, py: 2 }}>
-          <Alert severity={isAreaTooLarge(error) ? "info" : "error"} variant="outlined">
-            {isAreaTooLarge(error) ? ts("zoomInToSearch") : ts("failedToLoad")}
-          </Alert>
-          <Button
-            size="small"
-            variant="outlined"
-            sx={{ mt: 1 }}
-            onClick={isAreaTooLarge(error) ? zoomIn : () => void refetch()}
+          <ResultNotice
+            tone={isAreaTooLarge(error) ? "info" : "error"}
+            action={{
+              label: isAreaTooLarge(error) ? tm("zoomIn") : tc("retry"),
+              kind: isAreaTooLarge(error) ? "zoom" : "retry",
+              onClick: isAreaTooLarge(error) ? zoomIn : () => void refetch(),
+            }}
           >
-            {isAreaTooLarge(error) ? tm("zoomIn") : tc("retry")}
-          </Button>
+            {isAreaTooLarge(error) ? ts("zoomInToSearch") : ts("failedToLoad")}
+          </ResultNotice>
         </Box>
       )}
       {!isTransitCategory && !isError && partial && (
         <Box sx={{ px: 2, pt: 1.5 }}>
-          <Alert severity="info" variant="outlined">
-            {ts("partialResults")}
-          </Alert>
+          <ResultNotice tone="info">{ts("partialResults")}</ResultNotice>
         </Box>
       )}
       {/* The area holds more matches than the result cap returns. `partial`
@@ -582,34 +640,33 @@ export function CategoryResultsContent() {
           it whenever an hours or facet chip is active. */}
       {!isTransitCategory && !isError && !partial && truncated && (
         <Box sx={{ px: 2, pt: 1.5 }}>
-          <Alert severity="info" variant="outlined">
+          <ResultNotice tone="info">
             {total === undefined
               ? ts("truncatedResultsUnknown")
               : ts("truncatedResults", { total })}
-          </Alert>
+          </ResultNotice>
         </Box>
       )}
       {!isTransitCategory && !isError && relaxed && relaxed.length > 0 && (
         <Box sx={{ px: 2, pt: 1.5 }}>
-          <Alert severity="info" variant="outlined">
+          <ResultNotice tone="info">
             {ts("relaxedFilters", { filters: relaxed.map(relaxedFilterLabel).join(", ") })}
-          </Alert>
+          </ResultNotice>
         </Box>
       )}
       {/* Transit: empty state */}
       {isTransitCategory && transitStopsQuery.isError && (
         <Box sx={{ px: 2, py: 2 }}>
-          <Alert severity={transitAreaTooLarge ? "info" : "error"} variant="outlined">
-            {transitAreaTooLarge ? ts("zoomInToSearch") : ts("failedToLoad")}
-          </Alert>
-          <Button
-            size="small"
-            variant="outlined"
-            sx={{ mt: 1 }}
-            onClick={transitAreaTooLarge ? zoomIn : () => void transitStopsQuery.refetch()}
+          <ResultNotice
+            tone={transitAreaTooLarge ? "info" : "error"}
+            action={{
+              label: transitAreaTooLarge ? tm("zoomIn") : tc("retry"),
+              kind: transitAreaTooLarge ? "zoom" : "retry",
+              onClick: transitAreaTooLarge ? zoomIn : () => void transitStopsQuery.refetch(),
+            }}
           >
-            {transitAreaTooLarge ? tm("zoomIn") : tc("retry")}
-          </Button>
+            {transitAreaTooLarge ? ts("zoomInToSearch") : ts("failedToLoad")}
+          </ResultNotice>
         </Box>
       )}
       {isTransitCategory &&

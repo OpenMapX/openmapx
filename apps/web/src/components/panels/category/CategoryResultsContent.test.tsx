@@ -250,6 +250,27 @@ describe("CategoryResultsContent mobile sheet interactions", () => {
 describe("CategoryResultsContent recovery", () => {
   const bbox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
 
+  it("announces advisory result notices politely without interrupting the results", () => {
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: [],
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: true,
+      truncated: true,
+      total: 300,
+      relaxed: [{ key: "diet:vegan", op: "=", value: "yes" }],
+      isTransitCategory: false,
+    });
+    renderPanel(vi.fn());
+
+    const statuses = screen.getAllByRole("status");
+    expect(statuses).toHaveLength(2);
+    expect(statuses[0]).toHaveTextContent("search.partialResults");
+    expect(statuses[1]).toHaveTextContent("search.relaxedFilters");
+    expect(screen.queryByText(/search.truncatedResults/)).toBeNull();
+  });
+
   it("offers retry for a failed request and does not call it for a valid empty result", () => {
     const refetch = vi.fn();
     const stalePlace = {
@@ -270,7 +291,10 @@ describe("CategoryResultsContent recovery", () => {
       refetch,
     });
     const view = renderPanel(vi.fn());
-    expect(screen.getByText("search.failedToLoad")).toBeInTheDocument();
+    const notice = screen.getByRole("alert");
+    expect(notice).toHaveTextContent("search.failedToLoad");
+    expect(notice.contains(screen.getByRole("button", { name: "common.retry" }))).toBe(true);
+    expect(notice).not.toHaveTextContent("common.retry");
     expect(screen.queryByText("search.noResultsFound")).toBeNull();
     expect(screen.queryByText("Cached cafe")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
@@ -310,7 +334,9 @@ describe("CategoryResultsContent recovery", () => {
       refetch,
     });
     renderPanel(vi.fn(), { zoomIn, zoomOut: vi.fn() });
-    expect(screen.getByText("search.zoomInToSearch")).toBeInTheDocument();
+    const notice = screen.getByRole("status");
+    expect(notice).toHaveTextContent("search.zoomInToSearch");
+    expect(notice.contains(screen.getByRole("button", { name: "map.zoomIn" }))).toBe(true);
     expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "map.zoomIn" }));
     expect(zoomIn).toHaveBeenCalledTimes(1);
@@ -452,6 +478,9 @@ describe("CategoryResultsContent recovery", () => {
     await waitFor(() => expect(screen.getByText("search.failedToLoad")).toBeInTheDocument(), {
       timeout: 3_000,
     });
+    expect(
+      screen.getByRole("alert").contains(screen.getByRole("button", { name: "common.retry" })),
+    ).toBe(true);
     expect(screen.queryByText("search.noStopsFound")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "common.retry" }));
     await waitFor(() => expect(screen.getByText("search.noStopsFound")).toBeInTheDocument());
@@ -479,6 +508,9 @@ describe("CategoryResultsContent recovery", () => {
     });
     renderPanel(vi.fn(), { zoomIn, zoomOut: vi.fn() });
     await waitFor(() => expect(screen.getByText("search.zoomInToSearch")).toBeInTheDocument());
+    expect(
+      screen.getByRole("status").contains(screen.getByRole("button", { name: "map.zoomIn" })),
+    ).toBe(true);
     expect(screen.queryByRole("button", { name: "common.retry" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "map.zoomIn" }));
     expect(zoomIn).toHaveBeenCalledTimes(1);
