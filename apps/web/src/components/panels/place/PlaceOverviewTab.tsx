@@ -282,7 +282,7 @@ export function PlaceOverviewTab({
     <Typography variant="caption" sx={{ display: "block", color: "text.secondary", mt: 0.75 }}>
       {tHours("source")}:{" "}
       {sourceUrl ? (
-        <Link href={sourceUrl} target="_blank" rel="noopener noreferrer">
+        <Link href={safeHref(sourceUrl)} target="_blank" rel="noopener noreferrer">
           {hoursSource.name}
         </Link>
       ) : (
