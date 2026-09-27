@@ -134,6 +134,17 @@
       }
     },
     {
+      "id": "landuse-recreation",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landuse",
+      "filter": ["in", "class", "pitch", "playground", "stadium"],
+      "paint": {
+        "fill-color": "#294634",
+        "fill-opacity": 0.75
+      }
+    },
+    {
       "id": "landuse-railway",
       "type": "fill",
       "metadata": {
@@ -209,6 +220,28 @@
           "base": 1,
           "stops": [[2, 0.5], [4, 0.65], [6, 0.75], [8, 0.8], [12, 0.85], [15, 0.9]]
         }
+      }
+    },
+    {
+      "id": "landcover-rock",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landcover",
+      "filter": ["==", "class", "rock"],
+      "paint": {
+        "fill-color": "#41403f",
+        "fill-opacity": 0.8
+      }
+    },
+    {
+      "id": "landcover-wetland",
+      "type": "fill",
+      "source": "openmaptiles",
+      "source-layer": "landcover",
+      "filter": ["==", "class", "wetland"],
+      "paint": {
+        "fill-color": "#24483f",
+        "fill-opacity": 0.8
       }
     },
     {
@@ -2484,6 +2517,30 @@
       }
     },
     {
+      "id": "mountain-peak",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "mountain_peak",
+      "minzoom": 11,
+      "filter": ["all", ["has", "name"], ["in", "class", "peak", "volcano"]],
+      "layout": {
+        "text-field": [
+          "concat",
+          ["get", "name"],
+          ["case", ["has", "ele"], ["concat", "\n", ["to-string", ["get", "ele"]], " m"], ""]
+        ],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 11,
+        "text-max-width": 8,
+        "text-padding": 4
+      },
+      "paint": {
+        "text-color": "#c6cccb",
+        "text-halo-color": "#171a1d",
+        "text-halo-width": 1.2
+      }
+    },
+    {
       "id": "poi-level-3",
       "type": "symbol",
       "source": "openmaptiles",
@@ -3270,6 +3327,24 @@
         "text-halo-blur": 1,
         "text-halo-color": "rgba(11, 15, 20, 0.88)",
         "text-halo-width": 1.5
+      }
+    },
+    {
+      "id": "house-number",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "housenumber",
+      "minzoom": 17,
+      "layout": {
+        "text-field": ["get", "housenumber"],
+        "text-font": ["Noto Sans Regular"],
+        "text-size": 10,
+        "text-padding": 3
+      },
+      "paint": {
+        "text-color": "#a6acae",
+        "text-halo-color": "#171a1d",
+        "text-halo-width": 1
       }
     },
     {
