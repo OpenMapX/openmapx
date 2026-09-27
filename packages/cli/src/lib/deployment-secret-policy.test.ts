@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH,
+  assertApplicationDeploymentSecret,
   assertPostgresDeploymentSecret,
+  assertProductionApplicationSecret,
   assertProductionDatabaseUrlSecret,
   deploymentSecretIssue,
   POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH,
@@ -91,5 +94,43 @@ describe("deployment secret assertions", () => {
         "test",
       ),
     ).not.toThrow();
+  });
+
+  it("enforces the application-secret length boundary without URL decoding", () => {
+    expect(() =>
+      assertApplicationDeploymentSecret(
+        "BETTER_AUTH_SECRET",
+        "x".repeat(APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH - 1),
+      ),
+    ).toThrow(/BETTER_AUTH_SECRET.*too-short.*32/);
+    expect(() =>
+      assertApplicationDeploymentSecret(
+        "BETTER_AUTH_SECRET",
+        "x".repeat(APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH),
+      ),
+    ).not.toThrow();
+    expect(() =>
+      assertApplicationDeploymentSecret("DATA_MANAGER_AUTH_TOKEN", "%20".repeat(11)),
+    ).not.toThrow();
+  });
+
+  it("enforces application-secret strength only for production runtimes", () => {
+    expect(() =>
+      assertProductionApplicationSecret("BETTER_AUTH_SECRET", "short", "production"),
+    ).toThrow(/BETTER_AUTH_SECRET.*too-short/);
+    expect(() =>
+      assertProductionApplicationSecret("BETTER_AUTH_SECRET", "short", "development"),
+    ).not.toThrow();
+  });
+
+  it("never includes a rejected application secret in the error", () => {
+    expect.assertions(2);
+    const rejected = "private-application-fixture";
+    try {
+      assertApplicationDeploymentSecret("DATA_MANAGER_AUTH_TOKEN", rejected);
+    } catch (error) {
+      expect((error as Error).message).not.toContain(rejected);
+      expect((error as Error).message).toContain("DATA_MANAGER_AUTH_TOKEN");
+    }
   });
 });

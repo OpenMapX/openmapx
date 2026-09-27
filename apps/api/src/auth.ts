@@ -21,6 +21,7 @@ import {
   fetchMapillaryUserInfo,
   fetchOsmUserDetails,
 } from "./auth-provider-http";
+import { resolveBetterAuthSecret } from "./auth-secret";
 import { db } from "./db";
 import { user as userTable } from "./db/schema";
 import { managedOAuthProviderOptions } from "./managed-oauth-provider";
@@ -40,8 +41,7 @@ import { getOsmConfig } from "./utils/osm-config";
 import { createProviderAvatarSync } from "./utils/provider-avatar";
 import { projectSessionPayload } from "./utils/session-projection";
 
-const secret = process.env.BETTER_AUTH_SECRET;
-if (!secret) throw new Error("BETTER_AUTH_SECRET env var is required");
+const secret = resolveBetterAuthSecret();
 
 async function fetchProviderImage(
   providerId: string,

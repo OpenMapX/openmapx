@@ -56,9 +56,10 @@ Open `infra/docker/.env` and set, at minimum, the values the stack refuses to
 start without. Do this before the first render or start. The generated compose
 file references several of these with the `${VAR:?}` form, so a missing one
 fails the boot loudly rather than shipping an insecure default. That Compose
-syntax checks only that input is non-empty; OpenMapX separately rejects known
-database placeholders, values shorter than 24 characters, and passwords that
-match the database username:
+syntax checks only that input is non-empty. OpenMapX separately rejects known
+placeholders; requires at least 24 characters for the database password and 32
+for the Better Auth and data-manager secrets; and rejects a database password
+that matches its username:
 
 ```bash
 # Public domain + TLS (Traefik / Let's Encrypt)

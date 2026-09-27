@@ -15,7 +15,11 @@ describe("check deployment-secret preflight", () => {
 
     await expect(
       dockerComposeAfterDeploymentSecretCheck(["ps"], {
-        env: { POSTGRES_PASSWORD: "change-me" },
+        env: {
+          POSTGRES_PASSWORD: "change-me",
+          BETTER_AUTH_SECRET: "a".repeat(32),
+          DATA_MANAGER_AUTH_TOKEN: "b".repeat(32),
+        },
         dockerCompose: docker,
       }),
     ).rejects.toThrow(/known-placeholder/);
@@ -28,12 +32,35 @@ describe("check deployment-secret preflight", () => {
 
     await expect(
       dockerComposeAfterDeploymentSecretCheck(["ps"], {
-        env: { POSTGRES_PASSWORD: "x".repeat(24), POSTGRES_USER: "postgres" },
+        env: {
+          POSTGRES_PASSWORD: "x".repeat(24),
+          POSTGRES_USER: "postgres",
+          BETTER_AUTH_SECRET: "a".repeat(32),
+          DATA_MANAGER_AUTH_TOKEN: "b".repeat(32),
+        },
         dockerCompose: docker,
       }),
     ).resolves.toEqual(result);
     expect(docker).toHaveBeenCalledOnce();
   });
+
+  it.each(["BETTER_AUTH_SECRET", "DATA_MANAGER_AUTH_TOKEN"] as const)(
+    "rejects a weak %s before invoking Docker",
+    async (name) => {
+      const docker = vi.fn();
+      const env = {
+        POSTGRES_PASSWORD: "x".repeat(24),
+        BETTER_AUTH_SECRET: "a".repeat(32),
+        DATA_MANAGER_AUTH_TOKEN: "b".repeat(32),
+        [name]: "short",
+      };
+
+      await expect(
+        dockerComposeAfterDeploymentSecretCheck(["ps"], { env, dockerCompose: docker }),
+      ).rejects.toThrow(new RegExp(`${name}.*too-short`));
+      expect(docker).not.toHaveBeenCalled();
+    },
+  );
 });
 
 describe("buildProbeArgs", () => {

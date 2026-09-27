@@ -5,6 +5,7 @@ export type DeploymentSecretIssue =
   | "matches-username";
 
 export const POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH = 24;
+export const APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH = 32;
 
 const KNOWN_PLACEHOLDERS = new Set([
   "change-me",
@@ -27,20 +28,21 @@ function decoded(value: string): string {
 }
 
 /**
- * Pure deployment-secret policy shared by the CLI and production database
- * bootstraps. Database URLs percent-encode credentials, so both the candidate
- * and username are evaluated after URL decoding.
+ * Pure deployment-secret policy shared by the CLI and production bootstraps.
+ * Database URLs percent-encode credentials, so URL decoding is enabled by
+ * default; callers validating plain application secrets disable it.
  */
 export function deploymentSecretIssue(
   value: string | undefined,
-  options: { username?: string; minLength: number },
+  options: { username?: string; minLength: number; urlEncoded?: boolean },
 ): DeploymentSecretIssue | null {
   if (value === undefined) return "missing";
-  const normalized = decoded(value).trim();
+  const normalize = options.urlEncoded === false ? (candidate: string) => candidate : decoded;
+  const normalized = normalize(value).trim();
   if (normalized.length === 0) return "missing";
   if (KNOWN_PLACEHOLDERS.has(normalized.toLowerCase())) return "known-placeholder";
 
-  const username = options.username === undefined ? undefined : decoded(options.username).trim();
+  const username = options.username === undefined ? undefined : normalize(options.username).trim();
   if (username && normalized === username) return "matches-username";
   if (normalized.length < options.minLength) return "too-short";
   return null;
@@ -49,9 +51,17 @@ export function deploymentSecretIssue(
 export class DeploymentSecretPolicyError extends Error {
   readonly issue: DeploymentSecretIssue | "invalid-database-url";
 
-  constructor(issue: DeploymentSecretIssue | "invalid-database-url") {
+  constructor(
+    issue: DeploymentSecretIssue | "invalid-database-url",
+    options: {
+      credentialName?: string;
+      minLength?: number;
+    } = {},
+  ) {
+    const credentialName = options.credentialName ?? "PostgreSQL deployment credential";
+    const minLength = options.minLength ?? POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH;
     super(
-      `PostgreSQL deployment credential rejected by policy (${issue}); configure a unique value of at least ${POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH} characters`,
+      `${credentialName} rejected by policy (${issue}); configure a unique value of at least ${minLength} characters`,
     );
     this.name = "DeploymentSecretPolicyError";
     this.issue = issue;
@@ -67,6 +77,33 @@ export function assertPostgresDeploymentSecret(
     minLength: POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH,
   });
   if (issue) throw new DeploymentSecretPolicyError(issue);
+}
+
+/** Validate a plain-text application secret without exposing its value. */
+export function assertApplicationDeploymentSecret(
+  credentialName: string,
+  value: string | undefined,
+): void {
+  const issue = deploymentSecretIssue(value, {
+    minLength: APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH,
+    urlEncoded: false,
+  });
+  if (issue) {
+    throw new DeploymentSecretPolicyError(issue, {
+      credentialName,
+      minLength: APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH,
+    });
+  }
+}
+
+/** Fail closed for application secrets only in production runtime processes. */
+export function assertProductionApplicationSecret(
+  credentialName: string,
+  value: string | undefined,
+  nodeEnv: string | undefined,
+): void {
+  if (nodeEnv !== "production") return;
+  assertApplicationDeploymentSecret(credentialName, value);
 }
 
 /** Fail closed at database bootstrap only for production runtime processes. */

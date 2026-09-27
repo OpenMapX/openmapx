@@ -1,4 +1,5 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
+import { assertProductionApplicationSecret } from "@openmapx/core/deployment-secret-policy";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 
 /**
@@ -51,7 +52,10 @@ function getAuthToken(req: FastifyRequest): string | null {
  */
 export function resolveAuthToken(app: FastifyInstance): string {
   const configured = process.env.DATA_MANAGER_AUTH_TOKEN?.trim();
-  if (configured) return configured;
+  if (configured) {
+    assertProductionApplicationSecret("DATA_MANAGER_AUTH_TOKEN", configured, process.env.NODE_ENV);
+    return configured;
+  }
 
   if (process.env.NODE_ENV === "production") {
     app.log.error(

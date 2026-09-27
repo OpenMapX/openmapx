@@ -1,7 +1,13 @@
-import { assertPostgresDeploymentSecret } from "@openmapx/core/deployment-secret-policy";
+import {
+  assertApplicationDeploymentSecret,
+  assertPostgresDeploymentSecret,
+} from "@openmapx/core/deployment-secret-policy";
 
 export {
+  APPLICATION_DEPLOYMENT_SECRET_MIN_LENGTH,
+  assertApplicationDeploymentSecret,
   assertPostgresDeploymentSecret,
+  assertProductionApplicationSecret,
   assertProductionDatabaseUrlSecret,
   type DeploymentSecretIssue,
   DeploymentSecretPolicyError,
@@ -9,7 +15,9 @@ export {
   POSTGRES_DEPLOYMENT_SECRET_MIN_LENGTH,
 } from "@openmapx/core/deployment-secret-policy";
 
-/** Validate the Compose credential already loaded from infra/docker/.env. */
-export function assertCliDeploymentSecret(env: NodeJS.ProcessEnv = process.env): void {
+/** Validate deployment credentials already loaded from infra/docker/.env. */
+export function assertCliDeploymentSecrets(env: NodeJS.ProcessEnv = process.env): void {
   assertPostgresDeploymentSecret(env.POSTGRES_PASSWORD, env.POSTGRES_USER ?? "postgres");
+  assertApplicationDeploymentSecret("BETTER_AUTH_SECRET", env.BETTER_AUTH_SECRET);
+  assertApplicationDeploymentSecret("DATA_MANAGER_AUTH_TOKEN", env.DATA_MANAGER_AUTH_TOKEN);
 }

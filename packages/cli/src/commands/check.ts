@@ -1,7 +1,7 @@
 import { statSync } from "node:fs";
 import { join } from "node:path";
 import type { Command } from "commander";
-import { assertCliDeploymentSecret } from "../lib/deployment-secret-policy";
+import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerCompose, dockerRun } from "../lib/docker";
 import { log, table } from "../lib/output";
 import { repoPaths } from "../lib/paths";
@@ -22,7 +22,7 @@ export async function dockerComposeAfterDeploymentSecretCheck(
     dockerCompose?: (args: string[]) => Promise<DockerComposeResult>;
   } = {},
 ): Promise<DockerComposeResult> {
-  assertCliDeploymentSecret(dependencies.env ?? process.env);
+  assertCliDeploymentSecrets(dependencies.env ?? process.env);
   return (dependencies.dockerCompose ?? dockerCompose)(args);
 }
 

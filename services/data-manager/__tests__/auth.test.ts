@@ -128,6 +128,19 @@ describe("resolveAuthToken", () => {
     expect(() => resolveAuthToken(stubApp())).toThrow(/required in production/i);
   });
 
+  it("rejects a weak configured token in production", () => {
+    vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "short");
+    vi.stubEnv("NODE_ENV", "production");
+    expect(() => resolveAuthToken(stubApp())).toThrow(/DATA_MANAGER_AUTH_TOKEN.*too-short.*32/);
+  });
+
+  it("accepts a strong configured token in production", () => {
+    const token = "x".repeat(32);
+    vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", token);
+    vi.stubEnv("NODE_ENV", "production");
+    expect(resolveAuthToken(stubApp())).toBe(token);
+  });
+
   it("generates a 64-hex ephemeral token in non-production when unset", () => {
     vi.stubEnv("DATA_MANAGER_AUTH_TOKEN", "");
     vi.stubEnv("NODE_ENV", "development");

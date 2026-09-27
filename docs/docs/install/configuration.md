@@ -67,23 +67,25 @@ restart the daemon.
 The `${VAR:?required}` syntax rejects an unset or empty value only. It does not
 recognize a public example value, a username reused as a password, or a weak
 short value. `openmapx compose render`, service start, and `openmapx check`
-apply the stronger deployment policy before invoking Docker. The API and
-data-manager repeat the same check at production database bootstrap so direct
-Compose use cannot bypass it. Errors report only the policy reason, never the
+apply the stronger deployment policy before invoking Docker. Production
+database bootstraps repeat the database check, while the API and data-manager
+repeat the checks for their respective application secrets, so direct Compose
+use cannot bypass the policy. Errors report only the policy reason, never the
 credential or full database URL.
 :::
 
 ## Secrets
 
-Authentication and internal service secrets. The first two are enforced at
-runtime by the API; `DATA_MANAGER_AUTH_TOKEN` is enforced at the Compose layer.
-Generate each with the command shown.
+Authentication and internal service secrets. `BETTER_AUTH_SECRET` and
+`DATA_MANAGER_AUTH_TOKEN` must each contain at least 32 characters in production;
+the CLI validates both before deployment and their services validate them again
+at startup. Generate each with the command shown.
 
 | Variable                     | Description                                                                                                                                                                                                                                                                                                                                                          | Required / Default                     |
 | ---------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------- |
-| `BETTER_AUTH_SECRET`         | Better Auth session-signing key. No fallback — the API refuses to start without it. Generate with `npx @better-auth/cli@latest secret`.                                                                                                                                                                                                                              | **Required**                           |
+| `BETTER_AUTH_SECRET`         | Better Auth session-signing key. No fallback — the API refuses to start without it and rejects production values shorter than 32 characters. Generate with `npx @better-auth/cli@latest secret`.                                                                                                                                                                     | **Required**                           |
 | `OPENMAPX_SECRETS_KEY`       | Symmetric key (32 bytes, hex — 64 chars) used to encrypt integration secrets stored in the vault. If unset, integrations that store secrets in the admin panel won't decrypt after a restart. Generate with `openssl rand -hex 32`.                                                                                                                                  | **Required** (to use the secret vault) |
-| `DATA_MANAGER_AUTH_TOKEN`    | Shared secret between `app-api` and the `data-manager` service; every data-manager mutation endpoint (downloads, hardlinks, dataset reload, conversions) requires it. Compose refuses to start without it in production; development generates a random ephemeral token. Generate with `openssl rand -hex 32`.                                                       | **Required** in production             |
+| `DATA_MANAGER_AUTH_TOKEN`    | Shared secret between `app-api` and the `data-manager` service; every data-manager mutation endpoint (downloads, hardlinks, dataset reload, conversions) requires it. Production rejects values shorter than 32 characters; development generates a random ephemeral token when unset. Generate with `openssl rand -hex 32`.                                         | **Required** in production             |
 | `OPENMAPX_LOCAL_ADMIN_TOKEN` | Shared secret for the CLI ↔ API loopback admin short-circuit. When set, loopback requests only gain admin if they carry a matching `X-OpenMapX-Local-Admin` header (a CSRF guard); the CLI attaches it automatically. In production with no token, the loopback bypass is denied and the CLI needs a web-login session cookie. Generate with `openssl rand -hex 32`. | Optional (recommended). Default unset  |
 
 ## Docker & host wiring

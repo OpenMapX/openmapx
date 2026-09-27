@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { initializeErasureJournal } from "@openmapx/core/erasure-journal";
 import { services as coreServices } from "@openmapx/core/server";
 import { type Command, Option } from "commander";
-import { assertCliDeploymentSecret } from "../lib/deployment-secret-policy";
+import { assertCliDeploymentSecrets } from "../lib/deployment-secret-policy";
 import { dockerComposeStream } from "../lib/docker";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
 import { log } from "../lib/output";
@@ -205,7 +205,7 @@ export function rotateRedisPasswordForRepo(
 
 export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<RenderRepoResult> {
   const paths = repoPaths(opts.rootDir);
-  assertCliDeploymentSecret();
+  assertCliDeploymentSecrets();
   ensurePlatformPrivateDirectory(join(paths.infraDir, "data", "ops-agent", "trusted-config"));
   const erasureDirectory = join(paths.infraDir, "data", "erasure");
   ensurePlatformPrivateDirectory(erasureDirectory);

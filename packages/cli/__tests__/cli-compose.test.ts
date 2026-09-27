@@ -30,6 +30,8 @@ const { readServiceSecretKeysFromCompose } = coreServices;
 
 let tmp: string;
 let originalPostgresPassword: string | undefined;
+let originalBetterAuthSecret: string | undefined;
+let originalDataManagerAuthToken: string | undefined;
 
 function writeManifest(slug: string, body: Record<string, unknown>) {
   const dir = join(tmp, "services", slug);
@@ -46,7 +48,11 @@ const baseManifest = {
 
 beforeEach(() => {
   originalPostgresPassword = process.env.POSTGRES_PASSWORD;
+  originalBetterAuthSecret = process.env.BETTER_AUTH_SECRET;
+  originalDataManagerAuthToken = process.env.DATA_MANAGER_AUTH_TOKEN;
   process.env.POSTGRES_PASSWORD = "x".repeat(24);
+  process.env.BETTER_AUTH_SECRET = "a".repeat(32);
+  process.env.DATA_MANAGER_AUTH_TOKEN = "b".repeat(32);
   delete process.env.OPENMAPX_ENABLED_SERVICES;
   tmp = mkdtempSync(join(tmpdir(), "openmapx-cli-render-"));
   writeFileSync(join(tmp, "pnpm-workspace.yaml"), "packages: []\n");
@@ -56,6 +62,10 @@ beforeEach(() => {
 afterEach(() => {
   if (originalPostgresPassword === undefined) delete process.env.POSTGRES_PASSWORD;
   else process.env.POSTGRES_PASSWORD = originalPostgresPassword;
+  if (originalBetterAuthSecret === undefined) delete process.env.BETTER_AUTH_SECRET;
+  else process.env.BETTER_AUTH_SECRET = originalBetterAuthSecret;
+  if (originalDataManagerAuthToken === undefined) delete process.env.DATA_MANAGER_AUTH_TOKEN;
+  else process.env.DATA_MANAGER_AUTH_TOKEN = originalDataManagerAuthToken;
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -70,6 +80,20 @@ describe("renderComposeForRepo", () => {
     expect(existsSync(join(tmp, "infra", "docker", "docker-compose.generated.yml"))).toBe(false);
     expect(existsSync(join(tmp, "infra", "docker", "secrets"))).toBe(false);
   });
+
+  it.each(["BETTER_AUTH_SECRET", "DATA_MANAGER_AUTH_TOKEN"] as const)(
+    "rejects an unsafe %s before creating render output",
+    async (name) => {
+      writeManifest("alpha", { ...baseManifest, id: "alpha" });
+      process.env[name] = "short";
+
+      await expect(
+        renderComposeForRepo({ rootDir: tmp, domain: "example.com", services: ["alpha"] }),
+      ).rejects.toThrow(new RegExp(`${name}.*too-short`));
+      expect(existsSync(join(tmp, "infra", "docker", "docker-compose.generated.yml"))).toBe(false);
+      expect(existsSync(join(tmp, "infra", "docker", "secrets"))).toBe(false);
+    },
+  );
 
   it("writes docker-compose.generated.yml from explicitly selected manifests", async () => {
     writeManifest("alpha", { ...baseManifest, id: "alpha" });
