@@ -97,3 +97,49 @@ describe("bundled basemap POI sprites", () => {
     });
   }
 });
+
+describe("bundled basemap highway shields", () => {
+  const shieldCases = [
+    ["highway-shield-motorway", "motorway", "motorway"],
+    ["highway-shield-bundesstrasse", "road_yellow", "road_yellow"],
+    ["highway-shield-landstrasse", "road_yellow", "road_yellow"],
+    ["highway-shield-kreisstrasse", "road_yellow", "road_yellow"],
+    ["highway-shield-us-interstate", "us-interstate", "us-interstate"],
+    ["highway-shield-us-other", "us-highway", "us-highway"],
+    ["highway-shield-us-other", "us-state", "us-state"],
+  ] as const;
+
+  for (const spriteScale of ["", "@2x"]) {
+    it(`resolves every highway shield through both styles and ${spriteScale || "1x"} sprites`, () => {
+      const manifest = readSprite(`sprite${spriteScale}.json`);
+      const png = readFileSync(resolve(publicStyles, `sprite${spriteScale}.png`));
+      const atlasWidth = png.readUInt32BE(16);
+      const atlasHeight = png.readUInt32BE(20);
+      const pixelRatio = spriteScale ? 2 : 1;
+
+      for (const styleName of ["openmapx-streets.json", "openmapx-dark.json"]) {
+        const style = readStyle(styleName);
+        for (const [layerId, network, family] of shieldCases) {
+          const layer = style.layers.find((candidate) => candidate.id === layerId);
+          if (!layer) throw new Error(`${layerId} missing from ${styleName}`);
+          const template = layer.layout?.["icon-image"];
+          if (typeof template !== "string") throw new Error(`${layerId} has no icon template`);
+
+          for (let refLength = 1; refLength <= 6; refLength++) {
+            const icon = template
+              .replaceAll("{network}", network)
+              .replaceAll("{ref_length}", String(refLength));
+            expect(icon).toBe(`${family}_${refLength}`);
+            const entry = manifest[icon];
+            if (!entry) throw new Error(`${icon} missing from ${spriteScale || "1x"} sprite`);
+            expect(entry.pixelRatio).toBe(pixelRatio);
+            expect(entry.width).toBeGreaterThan(0);
+            expect(entry.height).toBeGreaterThan(0);
+            expect(entry.x + entry.width).toBeLessThanOrEqual(atlasWidth);
+            expect(entry.y + entry.height).toBeLessThanOrEqual(atlasHeight);
+          }
+        }
+      }
+    });
+  }
+});
