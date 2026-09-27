@@ -7,11 +7,7 @@ import TramIcon from "@mui/icons-material/Tram";
 import Alert from "@mui/material/Alert";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import FormControlLabel from "@mui/material/FormControlLabel";
 import Skeleton from "@mui/material/Skeleton";
-import Switch from "@mui/material/Switch";
-import ToggleButton from "@mui/material/ToggleButton";
-import ToggleButtonGroup from "@mui/material/ToggleButtonGroup";
 import Typography from "@mui/material/Typography";
 import type {
   CategoryCardEnrichmentResponse,
@@ -47,7 +43,6 @@ import { distinctBrandQids, placeBrandIdentity } from "@/components/map/Category
 import { PhotoAttribution } from "@/components/panels/place/PhotoAttribution";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
-import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
@@ -56,7 +51,7 @@ import { openingHoursTone } from "@/lib/openingHoursTone";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
 import { useOpeningHoursText } from "@/lib/useOpeningHoursText";
 import { BrandHeaderCard } from "./BrandHeaderCard";
-import { ExploreTravelTimeControl } from "./ExploreTravelTimeControl";
+import { CategoryResultsHeader } from "./CategoryResultsHeader";
 import { selectResultAttributes } from "./resultAttributes";
 import { cachedSummary, useCardEnrichment } from "./useCardEnrichment";
 
@@ -429,6 +424,13 @@ export function CategoryResultsContent() {
   // fixed no matter how many rows carry a brand identity.
   const brandQids = useMemo(() => distinctBrandQids(results ?? []), [results]);
   const brandLogos = useBrandLogos(brandQids);
+  const headerCount = isTransitCategory
+    ? !transitLoading && !transitStopsQuery.isError && transitStops
+      ? transitStops.length
+      : null
+    : !isLoading && !isError && results
+      ? results.length
+      : null;
 
   // Auto-search when category becomes active or changes
   // biome-ignore lint/correctness/useExhaustiveDependencies: intentional trigger on activeCategory change
@@ -514,34 +516,32 @@ export function CategoryResultsContent() {
     <Box
       ref={scrollRef}
       onClick={expandOnBackgroundTap}
-      sx={{ flex: 1, overflowY: "auto", pt: { xs: 2, sm: "72px" } }}
+      sx={{ flex: 1, overflowY: "auto", pt: { xs: 0, sm: "64px" } }}
     >
       <BrandHeaderCard />
-      {(anchor || activeCategory || isViewportText) && (
-        <Box
-          sx={{
-            px: 2,
-            py: 1,
-            borderBottom: "1px solid var(--omx-border)",
-            display: "flex",
-            flexDirection: "column",
-            gap: 0.75,
-          }}
-        >
-          {anchor && <ExploreTravelTimeControl />}
-          {(activeCategory || isViewportText) && (
-            <FormControlLabel
-              control={
-                <Switch
-                  size="small"
-                  checked={autoRefresh}
-                  onChange={(e) => setAutoRefresh(e.target.checked)}
-                />
-              }
-              label={<Typography variant="body2">{ts("updateOnMapMove")}</Typography>}
-            />
-          )}
-        </Box>
+      {(anchor || activeCategory || isViewportText || headerCount !== null) && (
+        <CategoryResultsHeader
+          count={headerCount}
+          isTransit={isTransitCategory}
+          sort={
+            chosenSort ??
+            (defaultSort === "distance" && distanceReference ? "distance" : "relevance")
+          }
+          onSort={(value) => setSortChoice({ revision: searchRevision, value })}
+          distanceReference={distanceReference ?? null}
+          showTravelTime={Boolean(anchor)}
+          showMapUpdate={Boolean(activeCategory || isViewportText)}
+          autoRefresh={autoRefresh}
+          onAutoRefresh={setAutoRefresh}
+          adHocLabel={activeCategory === AD_HOC_CATEGORY_ID ? adHocLabel : null}
+          attributions={
+            headerCount !== null && headerCount > 0
+              ? isTransitCategory
+                ? transitAttributions
+                : poiAttributions
+              : null
+          }
+        />
       )}
       {(isTransitCategory ? transitLoading : isLoading) && (
         <Box sx={{ px: 2, py: 2 }}>
@@ -639,28 +639,11 @@ export function CategoryResultsContent() {
         !transitStopsQuery.isError &&
         transitStops &&
         transitStops.length > 0 && (
-          <>
-            <Box sx={{ px: 2, pt: 1.5, pb: 0.5 }}>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.secondary",
-                }}
-              >
-                {tc("stopsCount", { count: transitStops.length })}
-              </Typography>
-            </Box>
-            <AttributionStrip
-              attributions={transitAttributions}
-              variant="inline"
-              label={tc("dataSources")}
-            />
-            <ResultList
-              items={transitStops}
-              getKey={(stop) => stop.id}
-              renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
-            />
-          </>
+          <ResultList
+            items={transitStops}
+            getKey={(stop) => stop.id}
+            renderItem={(stop) => <TransitStopCard stop={stop} onSelect={handleSelectStop} />}
+          />
         )}
       {/* Non-transit: empty state */}
       {!isTransitCategory && !isLoading && !isError && results && results.length === 0 && (
@@ -691,98 +674,24 @@ export function CategoryResultsContent() {
       )}
       {/* Non-transit: results list */}
       {!isTransitCategory && !isLoading && !isError && results && results.length > 0 && (
-        <>
-          {activeCategory === AD_HOC_CATEGORY_ID && adHocLabel && (
-            <Box sx={{ px: 2, pt: 1.5, pb: 0 }}>
-              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
-                {adHocLabel}
-              </Typography>
+        <ResultList
+          items={results}
+          getKey={(place) => place.id}
+          renderItem={(place) => (
+            <Box data-card-id={place.id}>
+              <CategoryPlaceCard
+                place={place}
+                summary={cachedSummary(cardSummaries, place, locale)}
+                isHovered={hoveredCategoryPlaceId === place.id}
+                onSelect={handleSelectPlace}
+                onHover={setHoveredCategoryPlaceId}
+                onHoverEnd={() => setHoveredCategoryPlaceId(null)}
+                brandLogos={brandLogos}
+                distanceReference={distanceReference}
+              />
             </Box>
           )}
-          <Box sx={{ px: 2, pt: 1.5, pb: 0.5, display: "flex", alignItems: "center", gap: 1 }}>
-            <Typography
-              variant="body2"
-              sx={{
-                color: "text.secondary",
-                flex: 1,
-              }}
-            >
-              {tc("resultsCount", { count: results.length })}
-            </Typography>
-          </Box>
-          <Box
-            sx={{
-              px: 2,
-              pb: 0.5,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              flexWrap: "wrap",
-              gap: 0.75,
-            }}
-          >
-            <Typography variant="caption" sx={{ color: "text.secondary" }}>
-              {ts("sortShownResults")}
-            </Typography>
-            <ToggleButtonGroup
-              exclusive
-              size="small"
-              aria-label={ts("sortShownResults")}
-              value={
-                chosenSort ??
-                (defaultSort === "distance" && distanceReference ? "distance" : "relevance")
-              }
-              onChange={(_event, value: "relevance" | "distance" | null) => {
-                if (value) setSortChoice({ revision: searchRevision, value });
-              }}
-            >
-              <ToggleButton value="relevance">{ts("sortRelevance")}</ToggleButton>
-              <ToggleButton value="distance" disabled={!distanceReference}>
-                {ts("sortDistance")}
-              </ToggleButton>
-            </ToggleButtonGroup>
-          </Box>
-          {distanceReference && (
-            <Typography
-              variant="caption"
-              sx={{ display: "block", px: 2, pb: 0.5, color: "text.secondary" }}
-            >
-              {distanceReference.kind === "user_location"
-                ? ts("distanceFromUserLocation")
-                : distanceReference.kind === "search_area_center"
-                  ? ts("distanceFromAreaCenter")
-                  : distanceReference.name
-                    ? ts("distanceFromOrigin", { name: distanceReference.name })
-                    : ts("distanceFromSearchLocation")}
-            </Typography>
-          )}
-          <Box sx={{ px: 2 }}>
-            <AttributionStrip
-              attributions={poiAttributions}
-              variant="inline"
-              label={tc("dataSources")}
-              maxVisible={3}
-            />
-          </Box>
-          <ResultList
-            items={results}
-            getKey={(place) => place.id}
-            renderItem={(place) => (
-              <Box data-card-id={place.id}>
-                <CategoryPlaceCard
-                  place={place}
-                  summary={cachedSummary(cardSummaries, place, locale)}
-                  isHovered={hoveredCategoryPlaceId === place.id}
-                  onSelect={handleSelectPlace}
-                  onHover={setHoveredCategoryPlaceId}
-                  onHoverEnd={() => setHoveredCategoryPlaceId(null)}
-                  brandLogos={brandLogos}
-                  distanceReference={distanceReference}
-                />
-              </Box>
-            )}
-          />
-        </>
+        />
       )}
     </Box>
   );

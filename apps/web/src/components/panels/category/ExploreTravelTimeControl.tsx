@@ -1,7 +1,7 @@
 "use client";
 
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
-import FormControlLabel from "@mui/material/FormControlLabel";
+import Box from "@mui/material/Box";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
 import { useCategorySearchStore } from "@openmapx/core";
@@ -43,15 +43,22 @@ export function ExploreTravelTimeControl() {
   };
 
   return (
-    <FormControlLabel
-      control={
-        <Switch size="small" checked={on} onChange={(e) => handleToggle(e.target.checked)} />
-      }
-      label={
-        <Typography variant="body2" sx={{ fontWeight: 600 }}>
-          {t("travelTime")}
-        </Typography>
-      }
-    />
+    <Box
+      component="label"
+      sx={{
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "space-between",
+        gap: 1,
+        minHeight: 40,
+        cursor: "pointer",
+        "@media (pointer: coarse)": { minHeight: 48 },
+      }}
+    >
+      <Typography variant="body2" sx={{ fontWeight: 600, minWidth: 0, overflowWrap: "anywhere" }}>
+        {t("travelTime")}
+      </Typography>
+      <Switch size="small" checked={on} onChange={(e) => handleToggle(e.target.checked)} />
+    </Box>
   );
 }

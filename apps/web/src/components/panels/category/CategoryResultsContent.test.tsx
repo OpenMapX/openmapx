@@ -1453,6 +1453,15 @@ describe("category result ordering", () => {
       : ["near", "far"];
   }
 
+  function openSortMenu() {
+    fireEvent.click(screen.getByRole("button", { name: /search.sortShownResults/ }));
+  }
+
+  function chooseSort(name: string) {
+    openSortMenu();
+    fireEvent.click(screen.getByRole("menuitemradio", { name }));
+  }
+
   beforeEach(() => {
     act(() => {
       useCategorySearchStore.getState().setActiveCategory("cafes");
@@ -1475,11 +1484,60 @@ describe("category result ordering", () => {
   it("keeps provider order by default and sorts only shown rows after a distance choice", () => {
     renderPanel(vi.fn());
     expect(shownOrder()).toEqual(["far", "near"]);
-    expect(screen.getByText("search.sortShownResults")).toBeInTheDocument();
-    fireEvent.click(screen.getByRole("button", { name: "search.sortDistance" }));
+    expect(
+      screen.getByRole("button", { name: /search.sortShownResults: search.sortRelevance/ }),
+    ).toBeInTheDocument();
+    chooseSort("search.sortDistance");
     expect(shownOrder()).toEqual(["near", "far"]);
-    fireEvent.click(screen.getByRole("button", { name: "search.sortRelevance" }));
+    chooseSort("search.sortRelevance");
     expect(shownOrder()).toEqual(["far", "near"]);
+  });
+
+  it("supports keyboard sort selection and closes the menu", () => {
+    renderPanel(vi.fn());
+    openSortMenu();
+    const relevance = screen.getByRole("menuitemradio", { name: "search.sortRelevance" });
+    const distance = screen.getByRole("menuitemradio", { name: "search.sortDistance" });
+    expect(relevance).toHaveAttribute("aria-checked", "true");
+    relevance.focus();
+    fireEvent.keyDown(relevance, { key: "ArrowDown" });
+    expect(distance).toHaveFocus();
+    fireEvent.keyDown(distance, { key: "Enter" });
+    expect(shownOrder()).toEqual(["near", "far"]);
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
+  });
+
+  it("keeps the sort menu closed when results return after loading", () => {
+    renderPanel(vi.fn());
+    openSortMenu();
+    expect(screen.getByRole("menuitemradio", { name: "search.sortRelevance" })).toBeInTheDocument();
+
+    const ready = mockUseExploreReachResults() as Record<string, unknown>;
+    mockUseExploreReachResults.mockReturnValue({ ...ready, isLoading: true });
+    act(() => useOpeningHoursStore.getState().setOpeningHoursFilter("open_now"));
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
+
+    mockUseExploreReachResults.mockReturnValue(ready);
+    act(() => useOpeningHoursStore.getState().reset());
+    expect(screen.getByRole("button", { name: /search.sortShownResults/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
+    expect(screen.queryByRole("menuitemradio")).toBeNull();
+  });
+
+  it("lets the labelled map-update row toggle while results load", () => {
+    mockUseExploreReachResults.mockReturnValue({
+      ...(mockUseExploreReachResults() as Record<string, unknown>),
+      isLoading: true,
+    });
+    renderPanel(vi.fn());
+    expect(screen.queryByRole("button", { name: /search.sortShownResults/ })).toBeNull();
+    const updateSwitch = screen.getByRole("switch", { name: "search.updateOnMapMove" });
+    expect(updateSwitch).not.toBeChecked();
+    fireEvent.click(screen.getByText("search.updateOnMapMove"));
+    expect(updateSwitch).toBeChecked();
+    expect(useCategorySearchStore.getState().autoRefresh).toBe(true);
   });
 
   it("restores provider rank from an NLP distance default when Relevance is chosen", () => {
@@ -1491,13 +1549,13 @@ describe("category result ordering", () => {
     });
     renderPanel(vi.fn());
     expect(shownOrder()).toEqual(["near", "far"]);
-    fireEvent.click(screen.getByRole("button", { name: "search.sortRelevance" }));
+    chooseSort("search.sortRelevance");
     expect(shownOrder()).toEqual(["far", "near"]);
   });
 
   it("preserves choice for filters and map movement, then resets on a new captured search area", () => {
     renderPanel(vi.fn());
-    fireEvent.click(screen.getByRole("button", { name: "search.sortDistance" }));
+    chooseSort("search.sortDistance");
     act(() => {
       useOpeningHoursStore.getState().setOpeningHoursFilter("open_now");
       useCategoryFacetStore.getState().toggleFacet("outdoorSeating");
@@ -1514,7 +1572,11 @@ describe("category result ordering", () => {
       distanceReference: null,
     });
     renderPanel(vi.fn());
-    expect(screen.getByRole("button", { name: "search.sortDistance" })).toBeDisabled();
+    openSortMenu();
+    expect(screen.getByRole("menuitemradio", { name: "search.sortDistance" })).toHaveAttribute(
+      "aria-disabled",
+      "true",
+    );
   });
 
   it("keeps Distance selected while a live location fix changes the shared reference", () => {
@@ -1531,13 +1593,17 @@ describe("category result ordering", () => {
       };
     });
     renderPanel(vi.fn());
-    fireEvent.click(screen.getByRole("button", { name: "search.sortDistance" }));
+    chooseSort("search.sortDistance");
     expect(shownOrder()).toEqual(["near", "far"]);
     expect(screen.getByText("search.distanceFromUserLocation")).toBeInTheDocument();
     act(() => useMapStore.getState().setUserLocation([0, 3]));
     expect(shownOrder()).toEqual(["far", "near"]);
-    expect(screen.getByRole("button", { name: "search.sortDistance" })).toHaveAttribute(
-      "aria-pressed",
+    expect(
+      screen.getByRole("button", { name: /search.sortShownResults: search.sortDistance/ }),
+    ).toBeInTheDocument();
+    openSortMenu();
+    expect(screen.getByRole("menuitemradio", { name: "search.sortDistance" })).toHaveAttribute(
+      "aria-checked",
       "true",
     );
   });

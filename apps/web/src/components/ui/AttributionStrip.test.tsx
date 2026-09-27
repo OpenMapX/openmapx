@@ -74,6 +74,18 @@ describe("AttributionStrip", () => {
     expect(markup).toContain("Data sources:");
   });
 
+  it("renders plain source credits as linked text with an accessible localized label", () => {
+    const markup = renderToStaticMarkup(
+      <AttributionStrip attributions={[delfi, delfi, tfl]} variant="plain" label="Datenquellen" />,
+    );
+    expect(markup).toContain('aria-label="Datenquellen"');
+    expect(markup.match(/data-source-id="delfi-de"/g)?.length).toBe(1);
+    expect(markup).toContain('href="https://www.delfi.de/"');
+    expect(markup).toContain('href="/licenses#source-tfl"');
+    expect(markup).toContain("CC-BY-4.0");
+    expect(markup).not.toContain("Datenquellen<");
+  });
+
   it("does not render the label for variants other than panel-header", () => {
     const inline = renderToStaticMarkup(
       <AttributionStrip attributions={[delfi]} variant="inline" label="Data:" />,

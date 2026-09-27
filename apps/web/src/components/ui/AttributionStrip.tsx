@@ -14,15 +14,16 @@ import { type JSX, useState } from "react";
  *
  * - `inline`: small chips inline with surrounding text (~11px, muted).
  * - `panel-header`: top of a panel, with optional label and a divider underneath.
+ * - `plain`: wrapping linked text for compact result headers.
  */
-export type AttributionStripVariant = "inline" | "panel-header";
+export type AttributionStripVariant = "inline" | "panel-header" | "plain";
 
 export interface AttributionStripProps {
   /** Attributions to render, typically from MobilityResult.attributions. */
   attributions: Attribution[] | null | undefined;
   /** Visual variant. */
   variant?: AttributionStripVariant;
-  /** Optional label prefixed to the chips (rendered for `panel-header`). */
+  /** Optional visible label for `panel-header` and accessible label for `plain`. */
   label?: string;
   /**
    * When true (default), each chip is a link:
@@ -102,6 +103,7 @@ export function AttributionStrip({
   if (items.length === 0) return null;
 
   const isPanelHeader = variant === "panel-header";
+  const isPlain = variant === "plain";
   const collapsible = typeof maxVisible === "number" && items.length > maxVisible;
   const visibleItems = collapsible && !expanded ? items.slice(0, maxVisible) : items;
   const hiddenCount = items.length - visibleItems.length;
@@ -110,7 +112,8 @@ export function AttributionStrip({
     display: "flex",
     flexWrap: "wrap" as const,
     alignItems: "center",
-    gap: 0.75,
+    gap: isPlain ? 0.5 : 0.75,
+    minWidth: 0,
     ...(isPanelHeader
       ? {
           px: 2,
@@ -124,7 +127,11 @@ export function AttributionStrip({
   const fontSize = isPanelHeader ? "0.75rem" : "0.6875rem";
 
   return (
-    <Box sx={containerSx} role="contentinfo" aria-label="Data sources">
+    <Box
+      sx={containerSx}
+      role="contentinfo"
+      aria-label={isPlain ? (label ?? "Data sources") : "Data sources"}
+    >
       {label && isPanelHeader && (
         <Typography
           variant="caption"
@@ -152,19 +159,21 @@ export function AttributionStrip({
           (attr.publisher?.name ?? attr.url ?? attr.name)
         );
         const chipSx = {
-          display: "inline-flex",
+          display: isPlain ? "inline" : "inline-flex",
           alignItems: "center",
           fontSize,
           lineHeight: 1.4,
           color: "text.secondary",
-          backgroundColor: "action.hover",
-          px: 0.75,
-          py: 0.25,
-          borderRadius: 0.75,
+          ...(!isPlain && {
+            backgroundColor: "action.hover",
+            px: 0.75,
+            py: 0.25,
+            borderRadius: 0.75,
+          }),
           maxWidth: "100%",
-          whiteSpace: "nowrap" as const,
-          overflow: "hidden",
-          textOverflow: "ellipsis",
+          whiteSpace: isPlain ? ("normal" as const) : ("nowrap" as const),
+          overflowWrap: isPlain ? ("anywhere" as const) : undefined,
+          ...(!isPlain && { overflow: "hidden", textOverflow: "ellipsis" }),
         };
         const chipContent = (
           <Box component="span" sx={chipSx} data-source-id={attr.sourceId}>
@@ -178,7 +187,11 @@ export function AttributionStrip({
             target={link.external ? "_blank" : undefined}
             rel={link.external ? "noopener noreferrer" : undefined}
             underline="hover"
-            sx={{ color: "inherit", textDecoration: "none" }}
+            sx={{
+              color: "inherit",
+              textDecoration: "none",
+              overflowWrap: isPlain ? "anywhere" : undefined,
+            }}
           >
             {chipContent}
           </Link>
@@ -188,11 +201,22 @@ export function AttributionStrip({
           </Box>
         );
         return (
-          <Tooltip key={attr.sourceId} title={tooltip} placement="top" arrow>
-            <Box component="span" sx={{ display: "inline-flex" }} data-idx={idx}>
-              {node}
-            </Box>
-          </Tooltip>
+          <Box key={attr.sourceId} component="span" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
+            {isPlain && idx > 0 && (
+              <Box component="span" sx={{ color: "text.disabled", mr: 0.5 }}>
+                ·
+              </Box>
+            )}
+            <Tooltip title={tooltip} placement="top" arrow>
+              <Box
+                component="span"
+                sx={{ display: isPlain ? "inline" : "inline-flex" }}
+                data-idx={idx}
+              >
+                {node}
+              </Box>
+            </Tooltip>
+          </Box>
         );
       })}
       {collapsible && (
