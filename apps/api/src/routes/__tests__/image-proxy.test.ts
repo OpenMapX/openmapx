@@ -1,3 +1,5 @@
+import { get } from "node:http";
+import type { AddressInfo } from "node:net";
 import { Writable } from "node:stream";
 import Fastify, { type FastifyInstance } from "fastify";
 import pino from "pino";
@@ -97,14 +99,21 @@ describe("image-proxy route", () => {
 
   beforeEach(async () => {
     process.env.CORS_ORIGIN = "http://localhost:3000";
-    vi.clearAllMocks();
+    mockFetchWithRedirects.mockReset();
+    mockResolveGooglePhotosLink.mockReset();
     app = await buildTestApp(imageProxyRoute);
   });
   afterEach(async () => {
     await app.close();
+    vi.unstubAllEnvs();
   });
 
-  const inject = (opts: { url?: string; referer?: string; origin?: string }) => {
+  const inject = (opts: {
+    url?: string;
+    referer?: string;
+    origin?: string;
+    remoteAddress?: string;
+  }) => {
     const headers: Record<string, string> = {};
     if (opts.referer) headers.referer = opts.referer;
     if (opts.origin) headers.origin = opts.origin;
@@ -113,8 +122,24 @@ describe("image-proxy route", () => {
       url: "/image-proxy",
       query: { url: opts.url ?? ALLOWED },
       headers,
+      remoteAddress: opts.remoteAddress,
     });
   };
+
+  async function rebuildApp(env: Record<string, string>): Promise<void> {
+    await app.close();
+    for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+    app = await buildTestApp(imageProxyRoute);
+  }
+
+  function imageResponse(bytes: number, declaredBytes: number | string = bytes): Response {
+    return new Response(new Uint8Array(bytes), {
+      headers: {
+        "content-length": String(declaredBytes),
+        "content-type": "image/png",
+      },
+    });
+  }
 
   it("rejects a request with no Referer/Origin (not an open relay)", async () => {
     const res = await inject({});
@@ -151,14 +176,20 @@ describe("image-proxy route", () => {
   });
 
   it("rejects a non-image content-type with 415", async () => {
+    let cancelled = false;
     mockFetchWithRedirects.mockResolvedValue({
       ok: true,
       status: 200,
       headers: new Headers({ "content-type": "text/html" }),
-      body: null,
+      body: new ReadableStream({
+        cancel: () => {
+          cancelled = true;
+        },
+      }),
     });
     const res = await inject({ referer: ALLOWED_REFERER });
     expect(res.statusCode).toBe(415);
+    expect(cancelled).toBe(true);
   });
 
   it("rejects an over-large image (by Content-Length) with 413", async () => {
@@ -170,6 +201,189 @@ describe("image-proxy route", () => {
     });
     const res = await inject({ referer: ALLOWED_REFERER });
     expect(res.statusCode).toBe(413);
+  });
+
+  it("limits actual image bytes per client and refills the budget", async () => {
+    await rebuildApp({
+      RATE_LIMIT_IMAGE_PROXY_MAX_BYTES: "5",
+      RATE_LIMIT_IMAGE_PROXY_WINDOW_MS: "100",
+    });
+    mockFetchWithRedirects.mockImplementation(async () => imageResponse(3));
+    const request = { referer: ALLOWED_REFERER, remoteAddress: "198.51.100.20" };
+
+    const first = await inject(request);
+    const exhausted = await inject(request);
+    await new Promise((resolve) => setTimeout(resolve, 110));
+    const refilled = await inject(request);
+
+    expect(first.statusCode).toBe(200);
+    expect(first.rawPayload.byteLength).toBe(3);
+    expect(exhausted.statusCode).toBe(429);
+    expect(exhausted.headers["cache-control"]).toBe("private, no-store");
+    expect(refilled.statusCode).toBe(200);
+  });
+
+  it("stops a stream that exceeds both its declared length and the remaining byte budget", async () => {
+    await rebuildApp({
+      RATE_LIMIT_IMAGE_PROXY_MAX_BYTES: "5",
+      RATE_LIMIT_IMAGE_PROXY_WINDOW_MS: "60000",
+    });
+    mockFetchWithRedirects.mockResolvedValueOnce(imageResponse(6, 3));
+
+    await expect(
+      inject({ referer: ALLOWED_REFERER, remoteAddress: "198.51.100.24" }),
+    ).rejects.toThrow(/byte budget/i);
+  });
+
+  it("charges completed responses by bytes streamed rather than an overstated length", async () => {
+    await rebuildApp({
+      RATE_LIMIT_IMAGE_PROXY_MAX_BYTES: "5",
+      RATE_LIMIT_IMAGE_PROXY_WINDOW_MS: "60000",
+    });
+    mockFetchWithRedirects
+      .mockResolvedValueOnce(imageResponse(2, 5))
+      .mockResolvedValueOnce(imageResponse(3, 3));
+    const request = { referer: ALLOWED_REFERER, remoteAddress: "198.51.100.25" };
+
+    const overstated = await inject(request);
+    const remainingBudget = await inject(request);
+
+    expect(overstated.statusCode).toBe(200);
+    expect(overstated.rawPayload.byteLength).toBe(2);
+    expect(remainingBudget.statusCode).toBe(200);
+    expect(remainingBudget.rawPayload.byteLength).toBe(3);
+  });
+
+  it("ignores an invalid Content-Length and enforces limits from streamed bytes", async () => {
+    mockFetchWithRedirects.mockResolvedValueOnce(imageResponse(3, "3junk"));
+
+    const response = await inject({ referer: ALLOWED_REFERER });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.rawPayload.byteLength).toBe(3);
+    expect(response.headers["content-length"]).toBeUndefined();
+  });
+
+  it("caps concurrent streams per client and releases the slot after completion", async () => {
+    await rebuildApp({
+      RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_PER_CLIENT: "1",
+      RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_GLOBAL: "10",
+    });
+    let finishFirst!: (response: Response) => void;
+    const firstUpstream = new Promise<Response>((resolve) => {
+      finishFirst = resolve;
+    });
+    mockFetchWithRedirects.mockReturnValueOnce(firstUpstream);
+    const request = { referer: ALLOWED_REFERER, remoteAddress: "198.51.100.21" };
+    const first = inject(request);
+    await vi.waitFor(() => expect(mockFetchWithRedirects).toHaveBeenCalledTimes(1));
+
+    let overlapping!: Awaited<ReturnType<typeof inject>>;
+    try {
+      overlapping = await inject(request);
+    } finally {
+      finishFirst(new Response(null, { status: 404 }));
+    }
+
+    expect(overlapping.statusCode).toBe(429);
+    expect(await first).toMatchObject({ statusCode: 404 });
+    mockFetchWithRedirects.mockResolvedValueOnce(new Response(null, { status: 404 }));
+    expect((await inject(request)).statusCode).toBe(404);
+  });
+
+  it("caps concurrent streams across different clients", async () => {
+    await rebuildApp({
+      RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_PER_CLIENT: "10",
+      RATE_LIMIT_IMAGE_PROXY_MAX_CONCURRENT_GLOBAL: "1",
+    });
+    let finishFirst!: (response: Response) => void;
+    const firstUpstream = new Promise<Response>((resolve) => {
+      finishFirst = resolve;
+    });
+    mockFetchWithRedirects.mockReturnValueOnce(firstUpstream);
+    const first = inject({ referer: ALLOWED_REFERER, remoteAddress: "198.51.100.22" });
+    await vi.waitFor(() => expect(mockFetchWithRedirects).toHaveBeenCalledTimes(1));
+
+    let overlapping!: Awaited<ReturnType<typeof inject>>;
+    try {
+      overlapping = await inject({
+        referer: ALLOWED_REFERER,
+        remoteAddress: "198.51.100.23",
+      });
+    } finally {
+      finishFirst(new Response(null, { status: 404 }));
+    }
+
+    expect(overlapping.statusCode).toBe(429);
+    expect(await first).toMatchObject({ statusCode: 404 });
+  });
+
+  it("cancels the upstream fetch when the client disconnects", async () => {
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address() as AddressInfo;
+    let finishUpstream!: (response: Response) => void;
+    let upstreamCancelled = false;
+    mockFetchWithRedirects.mockImplementation(
+      async (_url: string, options: { signal?: AbortSignal }) =>
+        new Promise<Response>((resolve, reject) => {
+          finishUpstream = resolve;
+          options.signal?.addEventListener(
+            "abort",
+            () => {
+              upstreamCancelled = true;
+              reject(options.signal?.reason);
+            },
+            { once: true },
+          );
+        }),
+    );
+    const request = get(
+      `http://127.0.0.1:${address.port}/image-proxy?url=${encodeURIComponent(ALLOWED)}`,
+      { headers: { referer: ALLOWED_REFERER } },
+    );
+    request.on("error", () => {});
+    await vi.waitFor(() => expect(mockFetchWithRedirects).toHaveBeenCalledOnce());
+
+    try {
+      request.destroy();
+      await vi.waitFor(() => expect(upstreamCancelled).toBe(true));
+    } finally {
+      finishUpstream?.(new Response(null, { status: 499 }));
+    }
+  });
+
+  it("cancels an active upstream body when the client disconnects after streaming starts", async () => {
+    await app.listen({ host: "127.0.0.1", port: 0 });
+    const address = app.server.address() as AddressInfo;
+    let upstreamCancelled = false;
+    let finishStream: (() => void) | undefined;
+    const upstreamBody = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new Uint8Array([1]));
+        finishStream = () => controller.close();
+      },
+      cancel() {
+        upstreamCancelled = true;
+      },
+    });
+    mockFetchWithRedirects.mockResolvedValue(
+      new Response(upstreamBody, { headers: { "content-type": "image/png" } }),
+    );
+    const request = get(
+      `http://127.0.0.1:${address.port}/image-proxy?url=${encodeURIComponent(ALLOWED)}`,
+      { headers: { referer: ALLOWED_REFERER } },
+      (response) => {
+        response.once("data", () => response.destroy());
+      },
+    );
+    request.on("error", () => {});
+
+    try {
+      await vi.waitFor(() => expect(upstreamCancelled).toBe(true));
+    } finally {
+      if (!upstreamCancelled) finishStream?.();
+      request.destroy();
+    }
   });
 
   it("re-checks redirect targets against the allowlist", async () => {

@@ -12,7 +12,7 @@ interface RateLimiterOptions {
   /** Time window in milliseconds to fully refill the bucket. */
   windowMs: number;
   /** Optional function to derive a key from the request (default: composite
-   *  of `request.ip` + socket peer — see `defaultKeyFn`). */
+   *  of `request.ip` + socket peer — see `requestNetworkKey`). */
   keyFn?: (request: FastifyRequest) => string;
   /**
    * Optional 429 body. Routes with their own closed error taxonomy pass one so
@@ -40,7 +40,7 @@ export interface RateLimitHookOptions {
  * forged XFF values). Behind a NAT'd shared proxy two distinct clients
  * still get separate keys because their `request.ip` differs.
  */
-function defaultKeyFn(req: FastifyRequest): string {
+export function requestNetworkKey(req: FastifyRequest): string {
   const peer = req.socket?.remoteAddress ?? "unknown";
   return `${req.ip}|${peer}`;
 }
@@ -56,7 +56,7 @@ export class RateLimiter {
   constructor(options: RateLimiterOptions) {
     this.max = options.max;
     this.windowMs = options.windowMs;
-    this.keyFn = options.keyFn ?? defaultKeyFn;
+    this.keyFn = options.keyFn ?? requestNetworkKey;
     this.errorBody =
       options.errorBody ?? ((retryAfter: number) => ({ error: "Too many requests", retryAfter }));
 
@@ -231,7 +231,7 @@ export const authLimit = new RateLimiter({
  */
 function userDigestKeyFn(req: FastifyRequest): string {
   const userId = (req as FastifyRequest & { userId?: string }).userId;
-  if (!userId) return defaultKeyFn(req);
+  if (!userId) return requestNetworkKey(req);
   return createHash("sha256").update(userId).digest("hex");
 }
 
