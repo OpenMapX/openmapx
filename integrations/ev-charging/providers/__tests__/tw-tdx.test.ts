@@ -19,7 +19,7 @@ function jsonResponse(value: unknown): Response {
   return new Response(JSON.stringify(value), { headers: { "Content-Type": "application/json" } });
 }
 
-function stubTaipeiFetch() {
+function stubTaipeiFetch(liveStatuses = fixture.liveStatuses) {
   return vi.fn().mockImplementation((url: string, init?: RequestInit) => {
     if (url === TOKEN_URL) {
       expect(init?.method).toBe("POST");
@@ -38,7 +38,7 @@ function stubTaipeiFetch() {
     }
     if (url.startsWith(`${API_BASE}/v1/EV/ConnectorLiveStatus/City/Taipei`)) {
       expect((init?.headers as Record<string, string>).Authorization).toBe("Bearer test-token");
-      return Promise.resolve(jsonResponse({ LiveStatuses: fixture.liveStatuses }));
+      return Promise.resolve(jsonResponse({ LiveStatuses: liveStatuses }));
     }
     // The Taipei approx-bbox sits entirely inside the NewTaipei approx-bbox
     // (New Taipei geographically surrounds Taipei), so any bbox touching
@@ -105,7 +105,7 @@ describe("searchTwTdxCharging", () => {
     expect(station.tariffs).toBeUndefined();
     expect(station.isLive).toBe(true);
     expect(station.availability).toMatchObject({ available: 2, total: 3 });
-    expect(station.updatedAt).toBe("2026-07-29T01:10:00+08:00");
+    expect(station.updatedAt).toBe("2026-07-29T01:00:00+08:00");
     expect(station.connectors).toEqual(
       expect.arrayContaining([
         expect.objectContaining({ type: "Type 2", currentType: "AC", quantity: 2 }),
@@ -142,6 +142,27 @@ describe("searchTwTdxCharging", () => {
 
     const tokenCalls = fetchMock.mock.calls.filter(([url]) => url === TOKEN_URL);
     expect(tokenCalls).toHaveLength(1);
+  });
+
+  it.each([
+    undefined,
+    "not-a-date",
+    "2026-07-29T01:05:00",
+    "2026-02-30T01:05:00+08:00",
+    "2999-01-01T00:00:00Z",
+  ])("leaves aggregate freshness unknown when a connector timestamp is %s", async (timestamp) => {
+    setTwTdxCredentials("test-client-id", "test-client-secret");
+    const liveStatuses = fixture.liveStatuses.map(
+      (status: Record<string, unknown>, index: number) =>
+        index === 1 ? { ...status, LastUpdateTime: timestamp } : status,
+    );
+    vi.stubGlobal("fetch", stubTaipeiFetch(liveStatuses));
+
+    const [station] = await searchTwTdxCharging(SEARCH_BBOX);
+
+    expect(station.availability).toMatchObject({ available: 2, total: 3 });
+    expect(station.availability?.updatedAt).toBeUndefined();
+    expect(station.updatedAt).toBeUndefined();
   });
 });
 

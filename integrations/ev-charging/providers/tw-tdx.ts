@@ -25,7 +25,7 @@
  * `RatePrice` per `RateType`), but joining it per station/connector is out of
  * scope for this source and left for a future enhancement.
  */
-import { type BoundingBox, fetchJson } from "@openmapx/core";
+import { type BoundingBox, fetchJson, validObservedAt } from "@openmapx/core";
 import type {
   EvChargingSource,
   EvChargingStation,
@@ -262,21 +262,27 @@ async function fetchLiveStatusByStation(
   });
 
   const byStation = new Map<string, EvseAvailability>();
+  const stationsWithUnknownTime = new Set<string>();
+  const observedNow = new Date();
   for (const status of data?.LiveStatuses ?? []) {
     const stationId = cleanString(status.StationID);
     if (!stationId) continue;
     const existing = byStation.get(stationId) ?? {
       available: 0,
       total: 0,
-      updatedAt: status.LastUpdateTime ?? undefined,
+      updatedAt: undefined,
     };
     existing.total += 1;
     if (status.ConnectorStatus === 1) existing.available += 1;
-    if (
-      status.LastUpdateTime &&
-      (!existing.updatedAt || status.LastUpdateTime > existing.updatedAt)
+    const validUpdateTime = validObservedAt(status.LastUpdateTime, observedNow);
+    if (!validUpdateTime) {
+      stationsWithUnknownTime.add(stationId);
+      existing.updatedAt = undefined;
+    } else if (
+      !stationsWithUnknownTime.has(stationId) &&
+      (!existing.updatedAt || Date.parse(validUpdateTime) < Date.parse(existing.updatedAt))
     ) {
-      existing.updatedAt = status.LastUpdateTime;
+      existing.updatedAt = validUpdateTime;
     }
     byStation.set(stationId, existing);
   }
