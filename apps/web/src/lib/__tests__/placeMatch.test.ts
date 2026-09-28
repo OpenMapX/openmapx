@@ -40,4 +40,20 @@ describe("isConfidentPlaceMatch", () => {
   it("rejects when the query has no significant tokens", () => {
     expect(isConfidentPlaceMatch("in the", r("Anything"))).toBe(false);
   });
+
+  it("does not treat a region name prefix as a deliberate destination", () => {
+    expect(isConfidentPlaceMatch("coffee", r("Coffee County, Georgia"))).toBe(false);
+    expect(isConfidentPlaceMatch("hotel", r("Hotel County, Georgia"))).toBe(false);
+    expect(isConfidentPlaceMatch("Coffee County", r("Coffee County, Georgia"))).toBe(true);
+    expect(isConfidentPlaceMatch("Coffee County Georgia", r("Coffee County, Georgia"))).toBe(true);
+    expect(isConfidentPlaceMatch("New York", r("New York, United States"))).toBe(true);
+    expect(isConfidentPlaceMatch("Coffee County near Berlin", r("Coffee County, Georgia"))).toBe(
+      false,
+    );
+  });
+
+  it("does not commit a single-word prefix of a named place", () => {
+    expect(isConfidentPlaceMatch("hotel", r("Hotel California", "address"))).toBe(false);
+    expect(isConfidentPlaceMatch("Hotel California", r("Hotel California", "address"))).toBe(true);
+  });
 });

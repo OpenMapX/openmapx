@@ -9,6 +9,8 @@ const useGeocodingMock = vi.fn();
 const useNlpSearchMock = vi.fn();
 const useSearchSuggestionsMock = vi.fn();
 const useBrandSuggestMock = vi.fn();
+const usePresetSuggestMock = vi.fn();
+const useChipTranslationsMock = vi.fn();
 const resolveStopAsPlaceMock = vi.fn();
 const useMediaQueryMock = vi.fn();
 vi.mock("@mui/material/useMediaQuery", () => ({
@@ -24,8 +26,8 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     useSearchSuggestions: (...a: unknown[]) => useSearchSuggestionsMock(...a),
     useBrandSuggest: (...a: unknown[]) => useBrandSuggestMock(...a),
     resolveStopAsPlace: (...a: unknown[]) => resolveStopAsPlaceMock(...a),
-    usePresetSuggest: () => ({ data: undefined }),
-    useChipTranslations: () => ({ data: {} }),
+    usePresetSuggest: (...a: unknown[]) => usePresetSuggestMock(...a),
+    useChipTranslations: (...a: unknown[]) => useChipTranslationsMock(...a),
     useLabeledPlaces: () => ({ data: undefined }),
     // The mobile empty state only needs a signed-out session. Keep the real
     // Better Auth client (and its delayed browser lifecycle) out of this test.
@@ -110,6 +112,8 @@ beforeEach(() => {
   useNlpSearchMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   useSearchSuggestionsMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   useBrandSuggestMock.mockReset().mockReturnValue({ data: undefined });
+  usePresetSuggestMock.mockReset().mockReturnValue({ data: undefined });
+  useChipTranslationsMock.mockReset().mockReturnValue({ data: {} });
   resolveStopAsPlaceMock.mockReset();
   useMediaQueryMock.mockReset().mockReturnValue(false);
   flyToMock.mockReset();
@@ -265,6 +269,263 @@ describe("SearchBar", () => {
     expect(useCategorySearchStore.getState().activeBrand?.qid).toBe("Q123");
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
     expect(usePlaceStore.getState().selectedPlace).toBeNull();
+  });
+
+  it("plain Enter uses an exact category search term ahead of a geocoded region", () => {
+    useChipTranslationsMock.mockReturnValue({
+      data: { cafes: { name: "Cafes", terms: ["coffee"] } },
+    });
+    useGeocodingMock.mockReturnValue({
+      data: [
+        {
+          id: "geo:coffee-county",
+          label: "Coffee County, Georgia, United States",
+          coordinates: [-82.8, 31.55],
+          type: "region",
+          confidence: 1,
+        },
+      ],
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "coffee" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(useCategorySearchStore.getState().activeCategory).toBe("cafes");
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    expect(flyToMock).not.toHaveBeenCalled();
+  });
+
+  it("plain Enter accepts the canonical category label when the dropdown is localized", () => {
+    useChipTranslationsMock.mockReturnValue({
+      data: { cafes: { name: "Kaffees", terms: ["kaffee"] } },
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Cafes" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(useCategorySearchStore.getState().activeCategory).toBe("cafes");
+  });
+
+  it("does not open Coffee County for a current coffee query without category data", () => {
+    useSearchStore.getState().setQuery("coffee");
+    useGeocodingMock.mockReturnValue({
+      data: [
+        {
+          id: "geo:coffee-county",
+          label: "Coffee County, Georgia",
+          coordinates: [-82.8, 31.55],
+          type: "region",
+          confidence: 1,
+        },
+      ],
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    expect(useSearchStore.getState().isFocused).toBe(true);
+    expect(flyToMock).not.toHaveBeenCalled();
+  });
+
+  it("still opens a deliberately named distant region", () => {
+    useSearchStore.getState().setQuery("Coffee County");
+    useGeocodingMock.mockReturnValue({
+      data: [
+        {
+          id: "geo:coffee-county",
+          label: "Coffee County, Georgia",
+          coordinates: [-82.8, 31.55],
+          type: "region",
+          confidence: 1,
+        },
+      ],
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(usePlaceStore.getState().selectedPlace?.name).toBe("Coffee County, Georgia");
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+  });
+
+  it("plain Enter still resolves a typed coordinate", () => {
+    useSearchStore.getState().setQuery("50.7753, 6.0839");
+    renderBar();
+
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(usePlaceStore.getState().selectedPlace?.coordinates).toEqual([6.0839, 50.7753]);
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+  });
+
+  it("does not submit blank text or text during IME composition", () => {
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(false);
+
+    fireEvent.change(input, { target: { value: "Berlin" } });
+    fireEvent.compositionStart(input);
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(false);
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+  });
+
+  it("plain Enter selects an exact brand name", async () => {
+    useBrandSuggestMock.mockReturnValue({
+      data: {
+        matches: [{ qid: "Q37158", name: "Starbucks", kind: ["brand"], matchedOn: "name" }],
+      },
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Starbucks" } });
+    await waitFor(() => expect(useBrandSuggestMock.mock.calls.at(-1)?.[0]).toBe("Starbucks"));
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(useCategorySearchStore.getState().activeBrand?.qid).toBe("Q37158");
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+  });
+
+  it("plain Enter selects an exact preset name", async () => {
+    usePresetSuggestMock.mockReturnValue({
+      data: {
+        matches: [
+          {
+            id: "amenity/ice_cream",
+            name: "Ice cream",
+            tags: { amenity: "ice_cream" },
+            matchedOn: "name",
+          },
+        ],
+      },
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Ice cream" } });
+    await waitFor(() => expect(usePresetSuggestMock.mock.calls.at(-1)?.[0]).toBe("Ice cream"));
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(useCategorySearchStore.getState().activeCategory).toBe("preset:amenity/ice_cream");
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+  });
+
+  it("plain Enter selects a current explicit alias from aggregate search", async () => {
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          id: "osm:node/123",
+          label: "Massachusetts Institute of Technology",
+          coordinates: [-71.092, 42.36],
+          searchMatch: { kind: "explicit_alias", value: "MIT", normalized: "mit" },
+        }),
+      ]),
+      isFetching: false,
+      isPlaceholderData: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "MIT" } });
+    await waitFor(() => expect(useSearchSuggestionsMock.mock.calls.at(-1)?.[0]).toBe("MIT"));
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(usePlaceStore.getState().selectedPlace?.id).toBe("osm:node/123");
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+  });
+
+  it("normalizes punctuation in a current explicit alias", async () => {
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          label: "Saint Xavier University",
+          searchMatch: { kind: "explicit_alias", value: "St. X", normalized: "st x" },
+        }),
+      ]),
+      isPlaceholderData: false,
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "St. X" } });
+    await waitFor(() => expect(useSearchSuggestionsMock.mock.calls.at(-1)?.[0]).toBe("St. X"));
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(usePlaceStore.getState().selectedPlace?.name).toBe("Saint Xavier University");
+  });
+
+  it("leaves ambiguous exact intents for the user to choose", async () => {
+    useChipTranslationsMock.mockReturnValue({
+      data: { cafes: { name: "Cafes", terms: ["coffee"] } },
+    });
+    useBrandSuggestMock.mockReturnValue({
+      data: { matches: [{ qid: "Q1", name: "Coffee", kind: ["brand"], matchedOn: "name" }] },
+    });
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          label: "Coffee House",
+          searchMatch: { kind: "explicit_alias", value: "Coffee", normalized: "coffee" },
+        }),
+      ]),
+      isPlaceholderData: false,
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "coffee" } });
+    await waitFor(() => expect(useBrandSuggestMock.mock.calls.at(-1)?.[0]).toBe("coffee"));
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(useCategorySearchStore.getState().activeCategory).toBeNull();
+    expect(useCategorySearchStore.getState().activeBrand).toBeNull();
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    expect(useSearchStore.getState().isFocused).toBe(true);
+  });
+
+  it("does not submit a stale geocode result immediately after editing", () => {
+    useGeocodingMock.mockReturnValue({
+      data: [
+        {
+          id: "geo:new-york",
+          label: "New York, United States",
+          coordinates: [-74.006, 40.7128],
+          type: "region",
+          confidence: 1,
+        },
+      ],
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "New York" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    expect(flyToMock).not.toHaveBeenCalled();
   });
 
   it("shows one authoritative airport ahead of its geocoder duplicate", async () => {

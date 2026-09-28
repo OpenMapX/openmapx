@@ -38,6 +38,7 @@ import {
   idsFromPrimaryOrCoords,
   isTransitRawCategory,
   mergeAutocompleteSuggestions,
+  normalizeSearchTerm,
   PANEL,
   parseCoordinateInput,
   parseDMSCoordinateInput,
@@ -146,6 +147,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const { flyTo, mapRef } = useMap();
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
+  const isComposingRef = useRef(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [highlightedIndex, setHighlightedIndex] = useState(-1);
   const [barEl, setBarEl] = useState<HTMLDivElement | null>(null);
@@ -173,19 +175,17 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const { data: brandData } = useBrandSuggest(debouncedQuery, viewportCountry ?? undefined);
   const { data: chipTranslations = {} } = useChipTranslations(locale);
 
-  // NLP search fires on submit whenever the query does NOT resolve to a
-  // confident place match (see handleSubmit). No keyword classifier — the
-  // geocode-confidence gate decides navigate-vs-search, language-agnostically.
+  // NLP search fires on submit when there is no unambiguous exact intent or
+  // confident place match (see handleSubmit). No keyword classifier is used.
   // Snapshot the current viewport for the parse request. These are cheap ref
   // reads; the hook's query key rounds the center so tiny pans don't refetch.
   const mapCenterRaw = mapRef.current?.getCenter();
   const mapCenter: LngLat | null = mapCenterRaw ? [mapCenterRaw.lng, mapCenterRaw.lat] : null;
-  const { data: aggregateSearchData, isFetching: aggregateSearchFetching } = useSearchSuggestions(
-    debouncedQuery,
-    locale,
-    mapCenter,
-    8,
-  );
+  const {
+    data: aggregateSearchData,
+    isFetching: aggregateSearchFetching,
+    isPlaceholderData: aggregateSearchPlaceholder,
+  } = useSearchSuggestions(debouncedQuery, locale, mapCenter, 8);
   const mapBoundsRaw = mapRef.current?.getBounds();
   const mapBbox: BoundingBox | null = mapBoundsRaw
     ? {
@@ -663,6 +663,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.nativeEvent.isComposing || e.keyCode === 229 || isComposingRef.current) return;
     if (!showDropdown) return;
     const count = effectiveSuggestions.length;
     if (e.key === "ArrowDown") {
@@ -705,6 +706,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     // reaches this handler unless we limit search handling to this form itself.
     if (e.target !== e.currentTarget) return;
     e.preventDefault();
+    if (isComposingRef.current || !q) return;
     if (nearbyMode) {
       inputRef.current?.blur();
       if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
@@ -715,12 +717,69 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       handleSelect(syntheticResult);
       return;
     }
+    // Plain Enter honors a complete, unambiguous category or brand intent.
+    // Category terms are local; debounced server suggestions must belong to
+    // the current input, especially when Enter follows an edit immediately.
+    const intentQuery = normalizeSearchTerm(q);
+    const exactIntents = displaySuggestions.filter((suggestion) => {
+      if (suggestion.type === "category") {
+        if (normalizeSearchTerm(suggestion.label) === intentQuery) {
+          return !suggestion.id.startsWith("category-preset:") || debouncedQuery === query;
+        }
+        if (
+          !suggestion.id.startsWith("category-") ||
+          suggestion.id.startsWith("category-preset:")
+        ) {
+          return false;
+        }
+        const categoryId = suggestion.id.slice("category-".length);
+        if (
+          CATEGORY_DEFINITIONS.some(
+            (category) =>
+              category.id === categoryId && normalizeSearchTerm(category.label) === intentQuery,
+          )
+        ) {
+          return true;
+        }
+        return (chipTranslations[categoryId]?.terms ?? []).some(
+          (term) => normalizeSearchTerm(term) === intentQuery,
+        );
+      }
+      return (
+        suggestion.type === "brand" &&
+        debouncedQuery === query &&
+        normalizeSearchTerm(suggestion.label) === intentQuery
+      );
+    });
+    // Aggregate results carry explicit evidence for aliases and official
+    // codes that cannot be inferred from the displayed place name.
+    const exactPlaces =
+      debouncedQuery === query && !aggregateSearchPlaceholder
+        ? displaySuggestions.filter((suggestion) => {
+            const match = suggestion.searchMatch;
+            return (
+              suggestion.coordinates &&
+              match &&
+              (match.kind === "authoritative_code" ||
+                match.kind === "explicit_reference" ||
+                match.kind === "explicit_alias") &&
+              normalizeSearchTerm(match.normalized) === intentQuery
+            );
+          })
+        : [];
+    const exactChoices = [...exactIntents, ...exactPlaces];
+    if (exactChoices.length === 1) {
+      inputRef.current?.blur();
+      handleSelect(exactChoices[0]);
+      return;
+    }
     // Navigate straight to a place ONLY when the top geocode result confidently
     // matches the query (its label covers most of what was typed) and is a
     // precise location or transit stop. A low-relevance match (e.g. "Glen Park,
     // Indiana" for "Park mit See in Aachen") must NOT teleport the user — it
     // falls through to the NL parse below instead.
-    const first = geocodeData?.[0];
+    const first =
+      exactChoices.length === 0 && debouncedGeoQuery === query ? geocodeData?.[0] : undefined;
     if (first) {
       const isTransit = Boolean(first.rawCategory && isTransitRawCategory(first.rawCategory));
       const isPreciseType = first.type !== "poi" || isTransit;
@@ -1004,6 +1063,12 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
               value={query}
               onChange={handleChange}
               onKeyDown={handleKeyDown}
+              onCompositionStart={() => {
+                isComposingRef.current = true;
+              }}
+              onCompositionEnd={() => {
+                isComposingRef.current = false;
+              }}
               onFocus={() => setIsFocused(true)}
               onBlur={handleBlur}
               placeholder={
