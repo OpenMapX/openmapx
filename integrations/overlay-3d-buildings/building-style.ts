@@ -93,6 +93,60 @@ export const EXTRUSION_BASE: maplibregl.ExpressionSpecification = [
   0,
 ];
 
+const RGBA_CHANNELS = [0, 1, 2] as const;
+
+/**
+ * Tint the roof with the OpenMapTiles `colour` field (OSM `building:colour`,
+ * or a palette colour derived from `building:material`). Raw OSM colours are
+ * often saturated CSS names, so they are only mixed into the basemap roof:
+ * about 45% on a light roof, falling to about 12% on a dark one so a tagged
+ * white facade does not glow in the dark theme. Unparseable values such as
+ * misspelt colour names fall back to the untinted roof.
+ */
+export function buildingExtrusionColor(
+  roof: string | maplibregl.ExpressionSpecification,
+): maplibregl.ExpressionSpecification {
+  const roofColor: maplibregl.ExpressionSpecification =
+    typeof roof === "string" ? ["to-color", roof] : roof;
+  const roofLuminance: maplibregl.ExpressionSpecification = [
+    "/",
+    [
+      "+",
+      ["*", 0.2126, ["at", 0, ["var", "roof"]]],
+      ["*", 0.7152, ["at", 1, ["var", "roof"]]],
+      ["*", 0.0722, ["at", 2, ["var", "roof"]]],
+    ],
+    255,
+  ];
+  const [red, green, blue] = RGBA_CHANNELS.map(
+    (channel): maplibregl.ExpressionSpecification => [
+      "+",
+      ["*", ["at", channel, ["var", "tag"]], ["var", "weight"]],
+      ["*", ["at", channel, ["var", "roof"]], ["-", 1, ["var", "weight"]]],
+    ],
+  );
+
+  return [
+    "case",
+    ["has", "colour"],
+    [
+      "let",
+      "roof",
+      ["to-rgba", roofColor],
+      [
+        "let",
+        // The rgba fallback keeps a height-graded roof expression typed as a colour.
+        "tag",
+        ["to-rgba", ["to-color", ["get", "colour"], ["var", "roof"]]],
+        "weight",
+        ["+", 0.12, ["*", 0.33, roofLuminance]],
+        ["rgb", red, green, blue],
+      ],
+    ],
+    roofColor,
+  ];
+}
+
 export const EXTRUSION_COLOR: maplibregl.ExpressionSpecification = [
   "interpolate",
   ["linear"],

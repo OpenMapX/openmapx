@@ -168,14 +168,14 @@ a glance.
 
 ### Recreation & specialty
 
-| Overlay               | Shows                                                                                                            | Data                                          |
-| --------------------- | ---------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
-| **Cycling**           | Cycle tracks, lanes, parking, and bike shops                                                                     | OpenStreetMap (via Overpass)                  |
-| **Hiking**            | Hiking trails and mountain shelters                                                                              | Waymarked Trails, Refuges.info, OpenStreetMap |
-| **Winter sports**     | Ski areas, pistes, and lifts                                                                                     | OpenSnowMap                                   |
-| **Nautical**          | Sea marks, depths, tides, and water levels                                                                       | OpenSeaMap and marine agencies                |
-| **Satellite imagery** | A true-color satellite overlay (distinct from the satellite base)                                                | NASA GIBS / MODIS                             |
-| **3D view**           | Tilts the camera; close-up buildings rise automatically from zoom 16.5 to 17, including when you tilt by gesture | OpenMapTiles-compatible building layers       |
+| Overlay               | Shows                                                                                                                                                       | Data                                          |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------- |
+| **Cycling**           | Cycle tracks, lanes, parking, and bike shops                                                                                                                | OpenStreetMap (via Overpass)                  |
+| **Hiking**            | Hiking trails and mountain shelters                                                                                                                         | Waymarked Trails, Refuges.info, OpenStreetMap |
+| **Winter sports**     | Ski areas, pistes, and lifts                                                                                                                                | OpenSnowMap                                   |
+| **Nautical**          | Sea marks, depths, tides, and water levels                                                                                                                  | OpenSeaMap and marine agencies                |
+| **Satellite imagery** | A true-color satellite overlay (distinct from the satellite base)                                                                                           | NASA GIBS / MODIS                             |
+| **3D view**           | Tilts the camera; close-up buildings rise automatically from zoom 16.5 to 17, including when you tilt by gesture, tinted by their mapped colour or material | OpenMapTiles-compatible building layers       |
 
 ### Map tools
 

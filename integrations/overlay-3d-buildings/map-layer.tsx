@@ -6,6 +6,7 @@ import { useEffect, useRef } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import {
+  buildingExtrusionColor,
   EXTRUSION_BASE,
   EXTRUSION_COLOR,
   EXTRUSION_HEIGHT,
@@ -62,7 +63,9 @@ export function BuildingExtrusionLayer() {
             minzoom: MIN_ZOOM,
             filter: ["!=", ["get", "hide_3d"], true],
             paint: {
-              "fill-extrusion-color": findBuildingRoofColor(map, buildingSource) ?? EXTRUSION_COLOR,
+              "fill-extrusion-color": buildingExtrusionColor(
+                findBuildingRoofColor(map, buildingSource) ?? EXTRUSION_COLOR,
+              ),
               "fill-extrusion-height": EXTRUSION_HEIGHT,
               "fill-extrusion-base": EXTRUSION_BASE,
               "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17, 1],
