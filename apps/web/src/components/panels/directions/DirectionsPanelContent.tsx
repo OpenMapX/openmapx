@@ -978,91 +978,87 @@ export function DirectionsPanelContent() {
   return (
     // Tapping the collapsed sheet's background opens it to mid.
     <Box onClick={expandOnBackgroundTap}>
-      {/* Top row: hamburger | mode buttons | close */}
+      {/* Keep panel actions separate so every travel mode gets the full panel width. */}
       <Box
         sx={{
           display: "flex",
-          alignItems: "flex-start",
-          pl: 2,
-          pr: 0.5,
-          pt: 1.5,
-          pb: 0.25,
-          gap: 0,
+          alignItems: "center",
+          px: 1,
+          pt: 0.5,
         }}
       >
         <IconButton
           size="small"
           aria-label={t("menu")}
           onClick={() => useMenuStore.getState().open()}
-          sx={{ mt: 1, ml: 0.5, mr: 0.5, flexShrink: 0 }}
+          sx={{ width: 44, height: 44, flexShrink: 0 }}
         >
           <MenuIcon sx={{ fontSize: 22 }} />
         </IconButton>
-
-        <Box
-          role="radiogroup"
-          aria-label={t("travelMode")}
-          sx={{
-            display: "flex",
-            flex: 1,
-            // Let this flex child shrink below its content so an over-wide set
-            // of mode buttons scrolls here instead of widening the panel.
-            minWidth: 0,
-            justifyContent: "space-around",
-            flexWrap: "nowrap",
-            overflowX: "auto",
-            scrollbarWidth: "none",
-            "&::-webkit-scrollbar": { display: "none" },
-          }}
-        >
-          {MODES.map(({ mode: m, icon, labelKey, disabled }) => {
-            // EV is a sub-option of driving (isEvMode), so the driving button
-            // stays highlighted while EV planning is active — isEvMode only ever
-            // coexists with mode === "driving".
-            const isActive = mode === m;
-            const isTransit = m === "transit";
-            const timeStr = disabled
-              ? undefined
-              : isTransit
-                ? isActive && transitItineraries[0]?.duration !== undefined
-                  ? formatDuration(transitItineraries[0].duration)
-                  : undefined
-                : isActive
-                  ? data?.routes[0]?.duration !== undefined
-                    ? formatDuration(data.routes[0].duration)
-                    : getCachedTime(m)
-                  : getCachedTime(m);
-            const modeLoading =
-              isActive && (isTransit ? transitLoading : isLoading && !getCachedTime(m));
-            return (
-              <ModeButton
-                key={m}
-                mode={m}
-                name="travel-mode"
-                icon={icon}
-                label={t(labelKey)}
-                time={timeStr}
-                active={isActive}
-                disabled={disabled}
-                loading={modeLoading}
-                onClick={() => {
-                  setMode(m);
-                  setDetailsRouteIndex(null);
-                  setTransitDetailsIndex(null);
-                }}
-              />
-            );
-          })}
-        </Box>
-
+        <Typography variant="subtitle2" sx={{ ml: 1, flex: 1, fontWeight: 600 }}>
+          {t("routes")}
+        </Typography>
         <IconButton
           size="small"
           onClick={() => useSidebarStore.getState().closeSidebar()}
-          sx={{ mt: 1, ml: 0.5, mr: 1, flexShrink: 0 }}
+          sx={{ width: 44, height: 44, flexShrink: 0 }}
           aria-label={t("close")}
         >
           <CloseIcon sx={{ fontSize: 22 }} />
         </IconButton>
+      </Box>
+
+      <Box
+        role="radiogroup"
+        aria-label={t("travelMode")}
+        sx={{
+          display: "flex",
+          width: "100%",
+          boxSizing: "border-box",
+          px: "6px",
+          pb: 0.25,
+          justifyContent: "space-around",
+          flexWrap: "wrap",
+        }}
+      >
+        {MODES.map(({ mode: m, icon, labelKey, disabled }) => {
+          // EV is a sub-option of driving (isEvMode), so the driving button
+          // stays highlighted while EV planning is active — isEvMode only ever
+          // coexists with mode === "driving".
+          const isActive = mode === m;
+          const isTransit = m === "transit";
+          const timeStr = disabled
+            ? undefined
+            : isTransit
+              ? isActive && transitItineraries[0]?.duration !== undefined
+                ? formatDuration(transitItineraries[0].duration)
+                : undefined
+              : isActive
+                ? data?.routes[0]?.duration !== undefined
+                  ? formatDuration(data.routes[0].duration)
+                  : getCachedTime(m)
+                : getCachedTime(m);
+          const modeLoading =
+            isActive && (isTransit ? transitLoading : isLoading && !getCachedTime(m));
+          return (
+            <ModeButton
+              key={m}
+              mode={m}
+              name="travel-mode"
+              icon={icon}
+              label={t(labelKey)}
+              time={timeStr}
+              active={isActive}
+              disabled={disabled}
+              loading={modeLoading}
+              onClick={() => {
+                setMode(m);
+                setDetailsRouteIndex(null);
+                setTransitDetailsIndex(null);
+              }}
+            />
+          );
+        })}
       </Box>
       {/* Driving sub-mode: normal route vs. EV charge planning. EV is a subtype
           of driving, not its own top-level mode, so it lives here rather than in

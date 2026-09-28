@@ -378,6 +378,17 @@ describe("DirectionsPanelContent", () => {
     expect((walking as HTMLInputElement).checked).toBe(true);
   });
 
+  it("keeps every travel mode in the full-width row with a wrapping fallback", () => {
+    renderPanel();
+    const group = screen.getByRole("radiogroup", { name: "directions.travelMode" });
+    expect(group.querySelectorAll('input[type="radio"]')).toHaveLength(7);
+    expect(getComputedStyle(group).flexWrap).toBe("wrap");
+    expect(getComputedStyle(group).overflowX).not.toBe("auto");
+    expect(
+      group.parentElement?.contains(screen.getByRole("button", { name: "directions.close" })),
+    ).toBe(true);
+  });
+
   it("driving depart/arrive time feeds the request after the debounce", async () => {
     seedOriginDestination();
     renderPanel();

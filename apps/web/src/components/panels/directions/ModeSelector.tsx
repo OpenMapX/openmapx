@@ -59,16 +59,17 @@ function ModeButton({
           flexDirection: "column",
           alignItems: "center",
           gap: 0.4,
-          px: 0.5,
+          px: 0,
           py: 0.5,
           cursor: disabled ? "default" : "pointer",
           opacity: disabled ? 0.35 : 1,
           borderRadius: 1,
           "&:hover": {},
-          // Keep the 44px touch-target floor; don't squish inside the
-          // horizontally-scrollable mode row.
+          // Seven modes fit a 320px viewport at this touch-target floor.
           minWidth: 44,
+          width: 44,
           flexShrink: 0,
+          "@media (min-width: 360px)": { minWidth: 48, width: 48 },
           position: "relative",
           "&:focus-within": {
             outline: "2px solid",
