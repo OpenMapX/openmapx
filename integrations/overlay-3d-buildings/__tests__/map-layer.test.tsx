@@ -59,20 +59,28 @@ afterEach(() => {
 });
 
 describe("BuildingExtrusionLayer", () => {
-  it("uses the building source and keeps the manifest and map-layer minimum zoom aligned", () => {
-    useBuildingsStore.setState({ layerVisible: true });
+  it("adds close-zoom extrusions without requiring the 3D view toggle", () => {
     render(<BuildingExtrusionLayer />);
 
     const layer = fake.state.layers.get(LAYER_ID);
     expect(manifest.frontend.overlay.minZoom).toBe(14);
-    expect(layer?.minzoom).toBe(manifest.frontend.overlay.minZoom);
+    expect(layer?.minzoom).toBe(16.5);
     expect(layer?.source).toBe("city");
     expect(layer?.["source-layer"]).toBe("building");
     expect(layer?.source).not.toBe("unrelated");
+    expect((layer?.paint as Record<string, unknown>)?.["fill-extrusion-opacity"]).toEqual([
+      "interpolate",
+      ["linear"],
+      ["zoom"],
+      16.5,
+      0,
+      17,
+      1,
+    ]);
+    expect(fake.state.layout.get(BUILDING_LAYER_ID)?.visibility).not.toBe("none");
   });
 
   it("inserts the layer already below the first symbol layer, not via a later move", () => {
-    useBuildingsStore.setState({ layerVisible: true });
     render(<BuildingExtrusionLayer />);
 
     const ids = [...fake.state.layers.keys()];
@@ -80,10 +88,9 @@ describe("BuildingExtrusionLayer", () => {
     expect(fake.state.movedLayers).toEqual([]);
   });
 
-  it("restores its layer after a style reload and toggles original building visibility", () => {
-    useBuildingsStore.setState({ layerVisible: true });
+  it("restores its layer after a style reload without hiding the flat footprints", () => {
     render(<BuildingExtrusionLayer />);
-    expect(fake.state.layout.get(BUILDING_LAYER_ID)?.visibility).toBe("none");
+    expect(fake.state.layout.get(BUILDING_LAYER_ID)?.visibility).not.toBe("none");
 
     fake.state.layers.delete(LAYER_ID);
     act(() => {
@@ -94,18 +101,23 @@ describe("BuildingExtrusionLayer", () => {
     act(() => {
       useBuildingsStore.setState({ layerVisible: false });
     });
-    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
-    expect(fake.state.layout.get(BUILDING_LAYER_ID)?.visibility).toBe("visible");
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).not.toBe("none");
   });
 
-  it("restores the exact pitch and maximum pitch captured before enabling", () => {
+  it("uses the 3D view toggle to return to an overhead camera without changing max pitch", () => {
+    fake.state.pitch = 0;
     const { rerender } = render(<BuildingExtrusionLayer />);
+    expect(fake.state.cameraTransitions).toEqual([]);
 
     act(() => {
       useBuildingsStore.setState({ layerVisible: true });
     });
     rerender(<BuildingExtrusionLayer />);
-    expect(fake.state.maxPitch).toBe(85);
+    expect(fake.state.maxPitch).toBe(70);
+    expect(fake.state.cameraTransitions.at(-1)).toEqual({
+      method: "easeTo",
+      options: { pitch: 45, duration: 800 },
+    });
 
     fake.state.pitch = 55;
     act(() => {
@@ -113,12 +125,25 @@ describe("BuildingExtrusionLayer", () => {
     });
     rerender(<BuildingExtrusionLayer />);
 
-    expect(fake.state.pitch).toBe(20);
+    expect(fake.state.pitch).toBe(0);
     expect(fake.state.maxPitch).toBe(70);
     expect(fake.state.cameraTransitions.at(-1)).toEqual({
       method: "easeTo",
-      options: { pitch: 20, duration: 600 },
+      options: { pitch: 0, duration: 600 },
     });
+  });
+
+  it("reflects a manual tilt in the view toggle without moving the camera again", () => {
+    render(<BuildingExtrusionLayer />);
+    fake.state.pitch = 28;
+    act(() => fake.emit("moveend"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    expect(fake.state.cameraTransitions).toEqual([]);
+
+    fake.state.pitch = 0;
+    act(() => fake.emit("moveend"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    expect(fake.state.cameraTransitions).toEqual([]);
   });
 
   it("uses immediate camera changes when reduced motion is requested", () => {

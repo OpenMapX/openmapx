@@ -134,7 +134,7 @@
       "directions": "Wegbeschreibung",
       "showTraffic": "Verkehr anzeigen",
       "showSatellite": "Satellit anzeigen",
-      "showRaisedBuildings": "3D-Gebäude anzeigen",
+      "showRaisedBuildings": "3D-Ansicht",
       "settings": "Einstellungen"
     },
     "rerouteFailed": "Keine neue Route gefunden. Wird erneut versucht…",
@@ -377,7 +377,7 @@
     "measure": "Messen",
     "standard": "Standard",
     "globeView": "Globusansicht",
-    "3dBuildings": "3D-Gebäude",
+    "3dBuildings": "3D-Ansicht",
     "earthquakes": "Erdbeben",
     "naturalEvents": "Naturereignisse",
     "weatherAlerts": "Wetterwarnungen",

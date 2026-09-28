@@ -1,4 +1,4 @@
 {
-  "name": "3D-Gebäude",
-  "description": "3D-Gebäudeextrusionen aus vorhandenen Kartenkacheldaten"
+  "name": "3D-Ansicht",
+  "description": "Karte neigen und Gebäude aus vorhandenen Kartenkacheldaten räumlich anzeigen"
 }

@@ -23,7 +23,7 @@ export interface NavMenuProps {
 
 /**
  * The navigation menu: actions (directions, overview), map-overlay toggles
- * (traffic, satellite, raised buildings), keep-screen-on, and settings.
+ * (traffic, satellite, 3D view), keep-screen-on, and settings.
  * Presentational — the container (sheet on mobile, panel on desktop) owns
  * layout; this owns the rows and their store wiring. Reporting stays the amber
  * FAB in the map controls (the crowd-reports integration is kept out of this

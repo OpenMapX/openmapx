@@ -1,6 +1,11 @@
 import type * as maplibregl from "maplibre-gl";
 import { describe, expect, it } from "vitest";
-import { EXTRUSION_BASE, EXTRUSION_HEIGHT, findBuildingSourceReference } from "../building-style";
+import {
+  EXTRUSION_BASE,
+  EXTRUSION_HEIGHT,
+  findBuildingRoofColor,
+  findBuildingSourceReference,
+} from "../building-style";
 
 function mapWithStyle(style: maplibregl.StyleSpecification): maplibregl.Map {
   return { getStyle: () => style } as unknown as maplibregl.Map;
@@ -91,5 +96,31 @@ describe("3D building style compatibility", () => {
     expect(JSON.stringify(EXTRUSION_BASE)).toContain("min_height");
     expect(JSON.stringify(EXTRUSION_BASE)).toContain("building:min_level");
     expect(EXTRUSION_BASE.at(-1)).toBe(0);
+  });
+
+  it("uses the top building fill color for the active vector source", () => {
+    const map = mapWithStyle({
+      version: 8,
+      sources: { city: { type: "vector", url: "mapbox://city" } },
+      layers: [
+        {
+          id: "building",
+          type: "fill",
+          source: "city",
+          "source-layer": "building",
+          paint: { "fill-color": "#777777" },
+        },
+        {
+          id: "building-top",
+          type: "fill",
+          source: "city",
+          "source-layer": "building",
+          paint: { "fill-color": "#242b35" },
+        },
+      ],
+    });
+
+    expect(findBuildingRoofColor(map, { source: "city", sourceLayer: "building" })).toBe("#242b35");
+    expect(findBuildingRoofColor(map, { source: "other", sourceLayer: "building" })).toBeNull();
   });
 });

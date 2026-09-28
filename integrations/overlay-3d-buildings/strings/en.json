@@ -1,4 +1,4 @@
 {
-  "name": "3D Buildings",
-  "description": "3D building extrusions using existing map tile data"
+  "name": "3D view",
+  "description": "Tilt the map to reveal close-up 3D buildings from existing map tile data"
 }

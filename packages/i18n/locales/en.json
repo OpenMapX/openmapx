@@ -134,7 +134,7 @@
       "directions": "Directions",
       "showTraffic": "Show traffic",
       "showSatellite": "Show satellite",
-      "showRaisedBuildings": "Show raised buildings",
+      "showRaisedBuildings": "3D view",
       "settings": "Settings"
     },
     "rerouteFailed": "Couldn't find a new route. Retrying…",
@@ -377,7 +377,7 @@
     "measure": "Measure",
     "standard": "Standard",
     "globeView": "Globe view",
-    "3dBuildings": "3D Buildings",
+    "3dBuildings": "3D view",
     "earthquakes": "Earthquakes",
     "naturalEvents": "Natural Events",
     "weatherAlerts": "Weather Alerts",

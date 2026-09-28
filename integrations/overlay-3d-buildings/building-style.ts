@@ -46,6 +46,27 @@ export function findBuildingSourceReference(map: maplibregl.Map): BuildingSource
   return match ? { source: match.source, sourceLayer: match.sourceLayer } : null;
 }
 
+/** Match the visible roof to the basemap, including its dark theme. */
+export function findBuildingRoofColor(
+  map: maplibregl.Map,
+  reference: BuildingSourceReference,
+): string | null {
+  const layers = map.getStyle().layers ?? [];
+  for (let index = layers.length - 1; index >= 0; index--) {
+    const layer = layers[index];
+    if (
+      layer.type !== "fill" ||
+      layer.source !== reference.source ||
+      layer["source-layer"] !== reference.sourceLayer
+    ) {
+      continue;
+    }
+    const color = layer.paint?.["fill-color"];
+    if (typeof color === "string") return color;
+  }
+  return null;
+}
+
 export const EXTRUSION_HEIGHT: maplibregl.ExpressionSpecification = [
   "case",
   ["has", "render_height"],
