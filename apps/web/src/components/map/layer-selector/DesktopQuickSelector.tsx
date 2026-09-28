@@ -30,12 +30,9 @@ function DetailOptionTile({ entry }: { entry: GeneratedLayerEntry }) {
   const t = useTranslations("layers");
   const overlayActive = useIntegrationOverlayActive(entry.overlayId);
 
-  // Overlays declare a minimum usable zoom in their manifest; below it the tile
-  // is disabled and explains itself rather than toggling on something that
-  // would render nothing.
+  // Gate new selections, but keep an active overlay selected and removable.
   const { minZoom, belowMinZoom } = useOverlayZoomGate(entry.overlayId);
-  const disabled = belowMinZoom;
-  const highlighted = overlayActive && !disabled;
+  const disabled = belowMinZoom && !overlayActive;
   const label = t(entry.labelKey);
 
   return (
@@ -43,14 +40,14 @@ function DetailOptionTile({ entry }: { entry: GeneratedLayerEntry }) {
       <LayerPreviewTile
         preview={entry.preview}
         label={label}
-        selected={highlighted}
+        selected={overlayActive}
         icon={entry.icon}
         disabled={disabled}
         onClick={() => {
           if (!disabled) toggleOverlay(entry.overlayId, { kind: "user" });
         }}
       >
-        {disabled ? (
+        {belowMinZoom ? (
           <Typography sx={{ mt: 0.2, fontSize: 9, color: "text.secondary" }}>
             {t("zoomInHint", { minZoom })}
           </Typography>

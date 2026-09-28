@@ -6,6 +6,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { GlobeSpaceLayer } from "./GlobeSpaceLayer";
 
 type SkySpecification = Parameters<maplibregl.Map["setSky"]>[0];
@@ -55,6 +56,7 @@ function getSky(activeLayer: string, isDark: boolean): SkySpecification {
 export function GlobeProjection() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const globeView = useLayerStore((s) => s.globeView);
+  const globeCameraBehavior = useLayerStore((s) => s.globeCameraBehavior);
   const activeLayer = useLayerStore((s) => s.activeLayer);
   const { mode, systemMode } = useColorScheme();
   const isDark = (mode === "system" ? systemMode : mode) === "dark";
@@ -83,12 +85,19 @@ export function GlobeProjection() {
       : previousBackground;
 
     const apply = () => {
-      if (globeView) {
-        map.setProjection({ type: "globe" });
-        map.setSky(getSky(activeLayer, isDark));
-      } else {
-        map.setProjection({ type: "mercator" });
-        map.setSky({ "atmosphere-blend": 0 });
+      const projection = globeView ? "globe" : "mercator";
+      if ((map.getProjection()?.type ?? "mercator") !== projection) {
+        map.setProjection({ type: projection });
+      }
+      const sky = globeView ? getSky(activeLayer, isDark) : { "atmosphere-blend": 0 };
+      const currentSky = map.getSky();
+      if (
+        Object.entries(sky).some(
+          ([key, value]) =>
+            JSON.stringify(currentSky?.[key as keyof SkySpecification]) !== JSON.stringify(value),
+        )
+      ) {
+        map.setSky(sky);
       }
       // Style reloads (including WebGL context restoration) drop custom layers.
       // Re-add with fresh GPU resources, in the same stack as the base imagery.
@@ -97,17 +106,16 @@ export function GlobeProjection() {
       }
     };
 
-    // Apply immediately only when the style is fully loaded. Otherwise wait
-    // for `style.load` — this avoids racing with setStyle() during theme
-    // swaps where setStyle() would reset the projection right after we set it.
-    if (map.isStyleLoaded()) {
-      apply();
-    }
-
-    const onStyleLoad = () => apply();
+    // isStyleLoaded also waits for tiles. Retry on idle as well as root style
+    // loads, and cancel the retry when selection/theme changes supersede it.
+    const unsubscribe = subscribeStyleLoaded(map, apply);
+    const onStyleLoad = () => {
+      if (map.isStyleLoaded()) apply();
+    };
     map.on("style.load", onStyleLoad);
 
     return () => {
+      unsubscribe();
       map.off("style.load", onStyleLoad);
       if (map.getLayer(space.id)) map.removeLayer(space.id);
       // A replacement style may already have dropped the layer without its
@@ -127,7 +135,7 @@ export function GlobeProjection() {
     const justEnabled = globeView && !prevGlobeRef.current;
     prevGlobeRef.current = globeView;
 
-    if (!justEnabled) return;
+    if (!justEnabled || globeCameraBehavior === "preserve") return;
     if (map.getZoom() <= ZOOM_OUT_THRESHOLD) return;
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -136,7 +144,7 @@ export function GlobeProjection() {
     } else {
       map.easeTo({ zoom: ZOOM_OUT_TARGET, duration: ZOOM_OUT_DURATION });
     }
-  }, [globeView, mapReady, styleVersion, mapRef]);
+  }, [globeView, globeCameraBehavior, mapReady, styleVersion, mapRef]);
 
   return null;
 }

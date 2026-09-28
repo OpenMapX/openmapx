@@ -13,15 +13,18 @@ interface LayerState {
   activeLayer: MapLayer;
   setActiveLayer: (layer: MapLayer) => void;
   globeView: boolean;
-  setGlobeView: (enabled: boolean) => void;
+  /** Transient camera intent; explicit deep-link cameras must not be replaced by a reveal. */
+  globeCameraBehavior: "reveal" | "preserve";
+  setGlobeView: (enabled: boolean, cameraBehavior?: "reveal" | "preserve") => void;
 }
 
 export const useLayerStore = create<LayerState>((set) => ({
   activeLayer: "default",
   setActiveLayer: (activeLayer) => set({ activeLayer }),
   globeView: readGlobePreference(),
-  setGlobeView: (globeView) => {
+  globeCameraBehavior: "reveal",
+  setGlobeView: (globeView, globeCameraBehavior = "reveal") => {
     getStorage().setString(GLOBE_STORAGE_KEY, String(globeView));
-    set({ globeView });
+    set({ globeView, globeCameraBehavior });
   },
 }));

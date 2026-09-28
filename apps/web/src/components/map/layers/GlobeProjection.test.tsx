@@ -8,8 +8,14 @@ import { GlobeProjection } from "./GlobeProjection";
 let fake: ReturnType<typeof createFakeMap>;
 let context: { mapRef: { current: typeof fake.map }; mapReady: boolean; styleVersion: number };
 let container: HTMLDivElement;
-const setProjection = vi.fn();
-const setSky = vi.fn();
+let projection: { type: string };
+let sky: Record<string, unknown>;
+const setProjection = vi.fn((value: unknown) => {
+  projection = value as typeof projection;
+});
+const setSky = vi.fn((value: unknown) => {
+  sky = value as typeof sky;
+});
 const SPACE_ID = "openmapx-globe-space";
 
 vi.mock("@mui/material/styles", () => ({ useColorScheme: () => ({ mode: "dark" }) }));
@@ -19,9 +25,21 @@ beforeEach(() => {
   fake = createFakeMap({ styleLoaded: true, baseLayers: [{ id: "labels", type: "symbol" }] });
   container = document.createElement("div");
   container.style.backgroundColor = "red";
-  Object.assign(fake.map, { getContainer: () => container, setProjection, setSky });
+  projection = { type: "mercator" };
+  sky = {};
+  Object.assign(fake.map, {
+    getContainer: () => container,
+    getProjection: () => projection,
+    getSky: () => sky,
+    setProjection,
+    setSky,
+  });
   context = { mapRef: { current: fake.map }, mapReady: true, styleVersion: 0 };
-  useLayerStore.setState({ globeView: true, activeLayer: "satellite" });
+  useLayerStore.setState({
+    globeView: true,
+    globeCameraBehavior: "reveal",
+    activeLayer: "satellite",
+  });
   vi.clearAllMocks();
   vi.stubGlobal(
     "matchMedia",
@@ -32,6 +50,46 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("GlobeProjection sky lifecycle", () => {
+  it.each([true, false])(
+    "applies globe=%s after tile loading finishes without a style reload",
+    (enabled) => {
+      useLayerStore.setState({ globeView: !enabled });
+      render(<GlobeProjection />);
+      fake.state.styleLoaded = false;
+      act(() => useLayerStore.getState().setGlobeView(enabled));
+      fake.state.styleLoaded = true;
+      act(() => fake.emit("idle"));
+      expect(projection.type).toBe(enabled ? "globe" : "mercator");
+      expect(Boolean(fake.map.getLayer(SPACE_ID))).toBe(enabled);
+    },
+  );
+
+  it("does not repeat projection or sky mutations on styledata", () => {
+    render(<GlobeProjection />);
+    const projectionWrites = setProjection.mock.calls.length;
+    const skyWrites = setSky.mock.calls.length;
+    act(() => {
+      fake.emit("styledata");
+      fake.emit("styledata");
+    });
+    expect(setProjection).toHaveBeenCalledTimes(projectionWrites);
+    expect(setSky).toHaveBeenCalledTimes(skyWrites);
+  });
+
+  it("cancels pending globe changes on replacement and unmount", () => {
+    const { unmount } = render(<GlobeProjection />);
+    fake.state.styleLoaded = false;
+    act(() => useLayerStore.getState().setGlobeView(false));
+    act(() => useLayerStore.getState().setGlobeView(true));
+    unmount();
+    const writes = setProjection.mock.calls.length;
+    fake.state.styleLoaded = true;
+    act(() => fake.emit("idle"));
+    expect(setProjection).toHaveBeenCalledTimes(writes);
+    expect(fake.map.getLayer(SPACE_ID)).toBeUndefined();
+    expect(fake.state.handlers.get("idle")?.size ?? 0).toBe(0);
+  });
+
   it("shares the map render loop and cleans up when satellite or globe mode is disabled", () => {
     const { unmount } = render(<GlobeProjection />);
     expect(setProjection).toHaveBeenLastCalledWith({ type: "globe" });

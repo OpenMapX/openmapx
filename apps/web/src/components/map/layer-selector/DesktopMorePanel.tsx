@@ -25,21 +25,20 @@ function OverlayDetailTile({ item, label }: { item: GeneratedLayerEntry; label: 
   const t = useTranslations("layers");
   const entry = item.overlayId ? OVERLAY_REGISTRY.find((r) => r.id === item.overlayId) : undefined;
   const active = entry?.useActive() ?? false;
-  // Overlays declare a minimum usable zoom in their manifest; below it the tile
-  // is disabled and explains itself rather than toggling on something that
-  // would render nothing.
+  // Gate new selections, but keep an active overlay selected and removable.
   const { minZoom, belowMinZoom } = useOverlayZoomGate(item.overlayId ?? "");
+  const disabled = belowMinZoom && !active;
 
   return (
     <DesktopMoreTile
-      item={{ ...item, selected: active && !belowMinZoom }}
+      item={{ ...item, selected: active }}
       label={label}
       labelWidth={96}
-      disabled={belowMinZoom}
+      disabled={disabled}
       onClick={
-        item.overlayId && !belowMinZoom
+        item.overlayId
           ? () => {
-              toggleOverlay(item.overlayId, { kind: "user" });
+              if (!disabled) toggleOverlay(item.overlayId, { kind: "user" });
             }
           : undefined
       }

@@ -101,7 +101,7 @@ describe("BuildingExtrusionLayer", () => {
     const layer = fake.state.layers.get(LAYER_ID);
     expect(useBuildingsStore.getState().panelOpen).toBe(true);
     expect(useBuildingsStore.getState().layerVisible).toBe(true);
-    expect(manifest.frontend.overlay.minZoom).toBe(14);
+    expect(manifest.frontend.overlay.minZoom).toBe(layer?.minzoom);
     expect(layer?.minzoom).toBe(16.5);
     expect(layer?.source).toBe("city");
     expect(layer?.["source-layer"]).toBe("building");
@@ -214,5 +214,50 @@ describe("BuildingExtrusionLayer", () => {
     expect(fake.state.cameraTransitions.some((transition) => transition.method === "easeTo")).toBe(
       false,
     );
+  });
+
+  it("does not restore an obsolete selection when a delayed idle arrives", () => {
+    render(<BuildingExtrusionLayer />);
+    fake.state.styleLoaded = false;
+    act(() => fake.emit("styledata"));
+
+    // Tiles finish before React handles the user's off choice, but the old
+    // style callback is still waiting for the later idle event.
+    fake.state.styleLoaded = true;
+    act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+    act(() => fake.emit("idle"));
+
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
+    expect(fake.state.pitch).toBe(20);
+  });
+
+  it("hides existing buildings immediately even while tiles are loading", () => {
+    render(<BuildingExtrusionLayer />);
+    fake.state.styleLoaded = false;
+    act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
+
+    act(() => {
+      fake.emit("styledata");
+      fake.emit("styledata");
+    });
+    expect(fake.state.handlers.get("idle")?.size).toBe(1);
+    fake.state.styleLoaded = true;
+    act(() => fake.emit("idle"));
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
+    expect(fake.state.handlers.get("idle")?.size ?? 0).toBe(0);
+  });
+
+  it("cannot recreate buildings from a pending callback after unmount", () => {
+    const { unmount } = render(<BuildingExtrusionLayer />);
+    fake.state.styleLoaded = false;
+    act(() => fake.emit("styledata"));
+    unmount();
+    fake.state.layers.delete(LAYER_ID);
+    fake.state.styleLoaded = true;
+    act(() => fake.emit("idle"));
+    expect(fake.state.layers.has(LAYER_ID)).toBe(false);
+    expect(fake.state.handlers.get("idle")?.size ?? 0).toBe(0);
   });
 });

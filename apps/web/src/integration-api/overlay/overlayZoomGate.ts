@@ -9,8 +9,8 @@ import { useMemo } from "react";
  * `frontend.overlay.minZoom` in its manifest.
  *
  * Below the threshold an overlay is treated as unusable: the layer selector
- * disables its control and shows a "Zoom N+" hint instead of toggling on
- * something that would render nothing, and overlays that fetch viewport-bbox
+ * prevents new selections and shows a "Zoom N+" hint; active selections remain
+ * removable. Overlays that fetch viewport-bbox
  * data skip fetching entirely — which is what keeps a country-sized view from
  * pulling (and painting) thousands of features.
  *

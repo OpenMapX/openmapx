@@ -5,6 +5,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import {
   buildingExtrusionColor,
   EXTRUSION_BASE,
@@ -13,10 +14,11 @@ import {
   findBuildingRoofColor,
   findBuildingSourceReference,
 } from "./building-style";
+import manifest from "./manifest.json";
 import { useBuildingsStore } from "./store";
 
 const LAYER_ID = "openmapx-3d-buildings";
-const MIN_ZOOM = 16.5;
+const MIN_ZOOM = manifest.frontend.overlay.minZoom;
 const AUTO_PITCH = 45;
 const TILT_THRESHOLD = 0.5;
 
@@ -41,6 +43,8 @@ export function BuildingExtrusionLayer() {
 
   useEffect(() => {
     void styleVersion;
+    // Reconcile selection changes immediately; callbacks read the latest store.
+    void layerVisible;
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
@@ -48,18 +52,16 @@ export function BuildingExtrusionLayer() {
     // selection itself remains authoritative when a user turns 3D off.
     const syncVisibility = () => {
       if (!map.getLayer(LAYER_ID)) return;
-      const visibility = layerVisible && map.getPitch() > TILT_THRESHOLD ? "visible" : "none";
+      const visibility =
+        useBuildingsStore.getState().layerVisible && map.getPitch() > TILT_THRESHOLD
+          ? "visible"
+          : "none";
       if (map.getLayoutProperty(LAYER_ID, "visibility") !== visibility) {
         map.setLayoutProperty(LAYER_ID, "visibility", visibility);
       }
     };
 
     const syncLayer = () => {
-      if (!map.isStyleLoaded()) {
-        map.once("idle", syncLayer);
-        return;
-      }
-
       const buildingSource = findBuildingSourceReference(map);
       if (!buildingSource) return;
 
@@ -74,7 +76,10 @@ export function BuildingExtrusionLayer() {
             minzoom: MIN_ZOOM,
             filter: ["!=", ["get", "hide_3d"], true],
             layout: {
-              visibility: layerVisible && map.getPitch() > TILT_THRESHOLD ? "visible" : "none",
+              visibility:
+                useBuildingsStore.getState().layerVisible && map.getPitch() > TILT_THRESHOLD
+                  ? "visible"
+                  : "none",
             },
             paint: {
               "fill-extrusion-color": buildingExtrusionColor(
@@ -82,7 +87,15 @@ export function BuildingExtrusionLayer() {
               ),
               "fill-extrusion-height": EXTRUSION_HEIGHT,
               "fill-extrusion-base": EXTRUSION_BASE,
-              "fill-extrusion-opacity": ["interpolate", ["linear"], ["zoom"], 16.5, 0, 17, 1],
+              "fill-extrusion-opacity": [
+                "interpolate",
+                ["linear"],
+                ["zoom"],
+                MIN_ZOOM,
+                0,
+                MIN_ZOOM + 0.5,
+                1,
+              ],
               "fill-extrusion-vertical-gradient": true,
             },
           },
@@ -100,12 +113,13 @@ export function BuildingExtrusionLayer() {
       }
     };
 
-    syncLayer();
-    map.on("styledata", syncLayer);
+    // Hiding an existing layer must not wait for unrelated tiles to finish.
+    syncVisibility();
+    const unsubscribe = subscribeStyleLoaded(map, syncLayer);
     map.on("pitch", syncVisibility);
     map.on("pitchend", syncVisibility);
     return () => {
-      map.off("styledata", syncLayer);
+      unsubscribe();
       map.off("pitch", syncVisibility);
       map.off("pitchend", syncVisibility);
     };

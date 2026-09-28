@@ -25,15 +25,14 @@ import { useLayerSelectorConfig } from "./useLayerSelectorConfig";
 function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
   const t = useTranslations("layers");
   const active = useIntegrationOverlayActive(entry.overlayId);
-  // Overlays declare a minimum usable zoom in their manifest; below it the row
-  // is disabled and says so rather than toggling on something that would
-  // render nothing.
+  // Gate new selections, but keep an active overlay selected and removable.
   const { minZoom, belowMinZoom } = useOverlayZoomGate(entry.overlayId);
+  const disabled = belowMinZoom && !active;
 
   return (
     <FormControlLabel
       sx={{ mr: 0, ml: 0.25 }}
-      disabled={belowMinZoom}
+      disabled={disabled}
       label={
         <Box sx={{ display: "flex", alignItems: "center", gap: 0.8 }}>
           <Box
@@ -58,9 +57,9 @@ function OverlaySwitchRow({ entry }: { entry: GeneratedLayerEntry }) {
       }
       control={
         <Switch
-          checked={active && !belowMinZoom}
+          checked={active}
           onChange={() => {
-            if (!belowMinZoom) toggleOverlay(entry.overlayId, { kind: "user" });
+            if (!disabled) toggleOverlay(entry.overlayId, { kind: "user" });
           }}
           slotProps={{ input: { "aria-label": t("toggleOverlay", { layer: t(entry.labelKey) }) } }}
           size="small"

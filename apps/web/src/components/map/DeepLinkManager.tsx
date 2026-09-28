@@ -502,7 +502,7 @@ function applyDeepLink(
 
   const layer = useLayerStore.getState();
   layer.setActiveLayer(oneOf(parsed.base, MAP_LAYERS) ?? "default");
-  layer.setGlobeView(Boolean(parsed.globe));
+  layer.setGlobeView(Boolean(parsed.globe), parsed.map ? "preserve" : "reveal");
 
   if (options.overlays) applyOverlayDeepLink(parsed);
 
