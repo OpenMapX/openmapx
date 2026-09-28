@@ -71,6 +71,7 @@ import { MODES, ModeButton } from "@/components/panels/directions/ModeSelector";
 import { RidePanel } from "@/components/panels/directions/RidePanel";
 import { RouteCard } from "@/components/panels/directions/RouteCard";
 import { RouteOptions } from "@/components/panels/directions/RouteOptions";
+import type { RouteArrivalContext } from "@/components/panels/directions/routeArrival";
 import { ShareRouteDialog } from "@/components/panels/directions/ShareRouteDialog";
 import {
   type TimeMode,
@@ -367,6 +368,26 @@ export function DirectionsPanelContent() {
     isDrivingTimeMode && timeMode === "arrive" && debouncedDrivingTime instanceof Date
       ? toDateTimeLocalString(debouncedDrivingTime)
       : undefined;
+  const arrivalContext: RouteArrivalContext | undefined =
+    isDrivingTimeMode && timeMode === "now"
+      ? {
+          kind: "now",
+          destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
+        }
+      : drivingDepartAtStr
+        ? {
+            kind: "departAt",
+            wallClock: drivingDepartAtStr,
+            originTimeZone: origin ? timeZoneAt(origin[1], origin[0]) : null,
+            destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
+          }
+        : drivingArriveByStr
+          ? {
+              kind: "arriveBy",
+              wallClock: drivingArriveByStr,
+              destinationTimeZone: destination ? timeZoneAt(destination[1], destination[0]) : null,
+            }
+          : undefined;
 
   // One of the two ground queries runs at a time: the scheduled endpoint takes
   // over the moment any waypoint carries a constraint, so the two can never
@@ -1614,6 +1635,13 @@ export function DirectionsPanelContent() {
                   onSelect={() => snapTo("peek")}
                   onDetails={() => setDetailsRouteIndex(i)}
                   units={units}
+                  arrivalContext={{
+                    kind: "scheduled",
+                    arrival: scheduledData.schedule.arrival,
+                    destinationTimeZone: destination
+                      ? timeZoneAt(destination[1], destination[0])
+                      : null,
+                  }}
                   provider={scheduledData.provider}
                   roadConditionImpact={scheduledData.roadConditionImpact}
                   impact={routeImpacts[i]}
@@ -1653,6 +1681,7 @@ export function DirectionsPanelContent() {
                     }}
                     onDetails={() => setDetailsRouteIndex(i)}
                     units={units}
+                    arrivalContext={arrivalContext}
                     alternatives={data.routes.filter((_, idx) => idx !== i)}
                     provider={data.provider}
                     roadConditionImpact={data.roadConditionImpact}

@@ -779,6 +779,8 @@
     "train": "Zug",
     "tramLightRail": "Tram und Stadtbahn",
     "bestRoute": "Beste Route",
+    "estimatedArrival": "Ankunft ca. {time}",
+    "arrivalDeadline": "Ankunft bis {time}",
     "mapRouteSelected": "Gewählte Route, {duration}",
     "mapRouteSelect": "Route wählen, {difference}",
     "mapRouteSameTime": "Gleiche Dauer",

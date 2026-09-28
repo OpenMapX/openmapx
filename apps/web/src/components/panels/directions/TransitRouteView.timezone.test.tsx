@@ -30,6 +30,9 @@ vi.mock("next-intl", () => ({
       return `${String(values?.distance ?? "")} walk`;
     }
     if (namespace === "common" && key === "details") return "Details";
+    if (namespace === "navigation" && key === "towards")
+      return `towards ${String(values?.headsign)}`;
+    if (namespace === "transit" && key === "platform") return "Pl.";
     return key;
   },
   useLocale: () => "en",
@@ -118,6 +121,43 @@ describe("TransitItineraryCard destination time zone", () => {
 });
 
 describe("TransitItineraryCard origin time zone", () => {
+  it("uses the boarding stop's timezone and the leg departure after an access walk", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={{
+          ...itinerary,
+          legs: [
+            {
+              ...SAMPLE_TRANSIT_ITINERARY.legs[0],
+              mode: "walking",
+              route: undefined,
+            },
+            {
+              ...SAMPLE_TRANSIT_ITINERARY.legs[0],
+              startTime: "2026-07-15T00:05:00Z",
+              from: {
+                name: "Tokyo Station",
+                lat: 35.6812,
+                lng: 139.7671,
+                platformCode: "3",
+              },
+              headsign: "Shinjuku",
+            },
+          ],
+        }}
+        active={false}
+        originTimeZone="Asia/Tokyo"
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+
+    expect(markup).toContain("09:05");
+    expect(markup).toContain("UTC+9");
+    expect(markup).toContain("Pl. 3");
+    expect(markup).toContain("towards Shinjuku");
+  });
+
   it("renders the departure in the origin zone, with no offset chip, when it differs from the viewer's", () => {
     const markup = renderToStaticMarkup(
       <TransitItineraryCard

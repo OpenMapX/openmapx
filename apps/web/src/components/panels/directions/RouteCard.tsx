@@ -4,6 +4,7 @@ import DirectionsBikeIcon from "@mui/icons-material/DirectionsBike";
 import DirectionsCarIcon from "@mui/icons-material/DirectionsCar";
 import DirectionsWalkIcon from "@mui/icons-material/DirectionsWalk";
 import NavigationIcon from "@mui/icons-material/Navigation";
+import ScheduleIcon from "@mui/icons-material/Schedule";
 import TwoWheelerIcon from "@mui/icons-material/TwoWheeler";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
@@ -21,26 +22,73 @@ import {
   estimateDrivingCo2Grams,
   formatDistance,
   formatDuration,
+  tzDiffMinutes,
+  tzOffsetLabel,
   useDirectionsStore,
   useSettingsStore,
+  viewerTimeZone,
 } from "@openmapx/core";
 import { useLocale, useTranslations } from "next-intl";
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { RouteImpactBadge } from "@/components/panels/directions/RouteImpactBadge";
 import {
   type RouteImpactAssumptions,
   RouteImpactDetailsDialog,
 } from "@/components/panels/directions/RouteImpactDetailsDialog";
 import { BRAND, TRAFFIC_TEXT_COLOR } from "@/integration-api/runtime/theme";
+import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 import { formatCo2Emission } from "@/lib/formatCo2";
 import { useStartNavigation } from "@/lib/mobile/useStartNavigation";
 import { primeSpeechSynthesis } from "@/lib/navigation/useNavigationVoice";
 import { requestHeadingPermission } from "@/lib/useHeading";
+import { useNow } from "@/lib/useNow";
+import { type RouteArrivalContext, resolveRouteArrival } from "./routeArrival";
 
 const GROUND_MODES = new Set<Route["mode"]>(["driving", "walking", "cycling", "motorcycle"]);
 
 /** Absolute floor for showing a traffic delay, in seconds. */
 const MIN_TRAFFIC_DELAY_SECONDS = 300;
+
+function RouteArrivalCaption({
+  context,
+  durationSeconds,
+  id,
+}: {
+  context: RouteArrivalContext;
+  durationSeconds: number;
+  id: string;
+}) {
+  const t = useTranslations("directions");
+  const fmt = useDateTimeFormat();
+  const nowMs = useNow(60_000);
+  const resolved = resolveRouteArrival(context, durationSeconds, nowMs);
+  if (!resolved) return null;
+
+  const viewerZone = viewerTimeZone();
+  const destinationZone = context.destinationTimeZone;
+  const destinationOffset = destinationZone ? tzOffsetLabel(resolved.at, destinationZone) : null;
+  const displayZone = destinationOffset ? (destinationZone as string) : viewerZone;
+  const zoneOption = { timeZone: displayZone };
+  const time =
+    fmt.date(resolved.at, zoneOption) === fmt.date(nowMs, zoneOption)
+      ? fmt.time(resolved.at, zoneOption)
+      : fmt.dateTime(resolved.at, zoneOption);
+  const showOffset = destinationOffset && tzDiffMinutes(resolved.at, viewerZone, displayZone) !== 0;
+
+  return (
+    <Box
+      id={id}
+      data-testid="route-arrival"
+      sx={{ display: "flex", alignItems: "center", gap: 0.5, mt: 0.25, color: "text.secondary" }}
+    >
+      <ScheduleIcon aria-hidden sx={{ fontSize: 14 }} />
+      <Typography variant="caption" sx={{ fontVariantNumeric: "tabular-nums" }}>
+        {t(resolved.isDeadline ? "arrivalDeadline" : "estimatedArrival", { time })}
+        {showOffset ? ` · ${destinationOffset}` : ""}
+      </Typography>
+    </Box>
+  );
+}
 
 export interface RouteCardProps {
   route: Route;
@@ -62,6 +110,7 @@ export interface RouteCardProps {
   impactUnavailableReason?: RouteImpactUnavailableReason | null;
   vehicles?: PersonalVehicle[];
   onUpdateAssumptions?: (assumptions: RouteImpactAssumptions) => void;
+  arrivalContext?: RouteArrivalContext;
 }
 
 export function RouteCard({
@@ -80,6 +129,7 @@ export function RouteCard({
   impactUnavailableReason,
   vehicles,
   onUpdateAssumptions,
+  arrivalContext,
 }: RouteCardProps) {
   const t = useTranslations("directions");
   const tc = useTranslations("common");
@@ -96,6 +146,7 @@ export function RouteCard({
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [impactDetailsOpen, setImpactDetailsOpen] = useState(false);
+  const arrivalCaptionId = useId();
 
   const handleStart = async () => {
     const coords = waypoints.map((w) => w.coords).filter((c): c is [number, number] => c !== null);
@@ -208,6 +259,13 @@ export function RouteCard({
           {dist}
         </Typography>
       </Box>
+      {route.mode === "driving" && arrivalContext && (
+        <RouteArrivalCaption
+          context={arrivalContext}
+          durationSeconds={route.duration}
+          id={arrivalCaptionId}
+        />
+      )}
       {ascentLabel && (
         <Typography
           variant="caption"
@@ -283,6 +341,9 @@ export function RouteCard({
             component="button"
             type="button"
             aria-label={selectionLabel}
+            aria-describedby={
+              route.mode === "driving" && arrivalContext ? arrivalCaptionId : undefined
+            }
             onClick={onSelect}
             sx={selectionSx}
           >
@@ -295,6 +356,9 @@ export function RouteCard({
               type="radio"
               name="alternative-route"
               aria-label={selectionLabel}
+              aria-describedby={
+                route.mode === "driving" && arrivalContext ? arrivalCaptionId : undefined
+              }
               checked={active}
               onChange={onSelect}
               onClick={() => {

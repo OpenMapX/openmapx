@@ -31,6 +31,9 @@ vi.mock("next-intl", () => ({
       const count = Number(values?.count ?? 0);
       return `${count} ${count === 1 ? "leg" : "legs"} not wheelchair accessible`;
     }
+    if (namespace === "navigation" && key === "towards")
+      return `towards ${String(values?.headsign)}`;
+    if (namespace === "transit" && key === "platform") return "Pl.";
     if (namespace === "common" && key === "details") return "Details";
     return key;
   },
@@ -49,6 +52,7 @@ const railLeg = SAMPLE_TRANSIT_ITINERARY.legs[0];
 vi.mock("@openmapx/core", () => ({
   formatDistance: (distance: number) => `${distance} m`,
   formatDuration: (duration: number) => `${duration}s`,
+  timeZoneAt: () => null,
   useVehicleJourney: () => ({ data: null }),
   useRefreshTransitItinerary: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSettingsStore: (sel: (s: { units: string }) => unknown) => sel({ units: "metric" }),
@@ -83,6 +87,61 @@ vi.mock("@/lib/transitOccupancy", () => ({
 }));
 
 describe("TransitItineraryCard", () => {
+  it("shows each boarded leg's own departure, known platform, and vehicle direction", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itineraryWith([
+          { ...railLeg, mode: "walking", route: undefined, startTime: "2026-04-21T22:00:00+02:00" },
+          {
+            ...railLeg,
+            startTime: "2026-04-21T22:15:00+02:00",
+            from: { ...railLeg.from, platformCode: "4" },
+            headsign: "Drammen",
+          },
+        ])}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+
+    expect(markup).toContain("2026-04-21T22:15:00+02:00");
+    expect(markup).toContain("Pl. 4");
+    expect(markup).toContain("towards Drammen");
+    expect(markup).not.toContain("Pl. undefined");
+  });
+
+  it("does not invent boarding details when the provider omitted them", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itineraryWith([{ ...railLeg, headsign: undefined }])}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+    expect(markup).not.toContain("boarding-summary");
+    expect(markup).not.toContain("towards");
+  });
+
+  it("keeps only the first boarding on the summary card", () => {
+    const markup = renderToStaticMarkup(
+      <TransitItineraryCard
+        itinerary={itineraryWith([
+          { ...railLeg, from: { ...railLeg.from, platformCode: "2" } },
+          { ...railLeg, headsign: "Dal" },
+        ])}
+        active={false}
+        onSelect={() => {}}
+        onDetails={() => {}}
+      />,
+    );
+
+    expect(markup.match(/data-testid="boarding-summary"/g)).toHaveLength(1);
+    expect(markup).toContain("Pl. 2");
+    expect(markup).not.toContain("towards Dal");
+  });
+
   it("renders a first-class CO2 badge for the lowest-emission itinerary", () => {
     const markup = renderToStaticMarkup(
       <TransitItineraryCard

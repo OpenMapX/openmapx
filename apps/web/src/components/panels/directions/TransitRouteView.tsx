@@ -15,17 +15,21 @@ import type { TransitReplanOptions } from "@openmapx/core";
 import {
   formatDistance,
   formatDuration,
+  timeZoneAt,
+  tzDiffMinutes,
   tzOffsetLabel,
   useRefreshTransitItinerary,
   useSettingsStore,
   useVehicleJourney,
+  viewerTimeZone,
 } from "@openmapx/core";
-import { itineraryTransferRisk } from "@openmapx/core/navigation";
+import { changedFromPlatform, itineraryTransferRisk } from "@openmapx/core/navigation";
 import { apiClient } from "@openmapx/core/navigation/api";
 import type { OccupancyLevel, TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
 import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { OccupancyIndicator } from "@/components/panels/transit/OccupancyIndicator";
+import { PlatformBadge } from "@/components/panels/transit/PlatformBadge";
 import { RemarkChip } from "@/components/panels/transit/RemarkChip";
 import { RouteBadge } from "@/components/panels/transit/RouteBadge";
 import { BRAND, BRAND_HEX } from "@/integration-api/runtime/theme";
@@ -75,6 +79,41 @@ function LegBadge({ leg }: { leg: TripLeg }) {
     );
   }
   return <DirectionsBusIcon sx={{ fontSize: 16, color: "text.secondary" }} />;
+}
+
+function BoardingSummary({ leg }: { leg: TripLeg }) {
+  const tNav = useTranslations("navigation");
+  const fmt = useDateTimeFormat();
+  if (leg.mode === "walking" || leg.mode === "cycling" || leg.mode === "driving") return null;
+
+  const platform = leg.from.platformCode?.trim();
+  const headsign = leg.headsign?.trim();
+  if (!platform && !headsign) return null;
+
+  const zone = timeZoneAt(leg.from.lat, leg.from.lng);
+  const validZone = zone && tzOffsetLabel(new Date(leg.startTime), zone) ? zone : undefined;
+  const departure = fmt.time(leg.startTime, validZone ? { timeZone: validZone } : undefined);
+  const offset =
+    validZone && tzDiffMinutes(new Date(leg.startTime), viewerTimeZone(), validZone)
+      ? tzOffsetLabel(new Date(leg.startTime), validZone)
+      : null;
+
+  return (
+    <Box
+      data-testid="boarding-summary"
+      sx={{ display: "flex", alignItems: "center", gap: 0.5, flexWrap: "wrap", mt: 0.5 }}
+    >
+      <Typography variant="caption" sx={{ color: "text.secondary" }}>
+        {[
+          offset ? `${departure} ${offset}` : departure,
+          headsign ? tNav("towards", { headsign }) : null,
+        ]
+          .filter(Boolean)
+          .join(" · ")}
+      </Typography>
+      {platform && <PlatformBadge code={platform} changed={!!changedFromPlatform(leg.from)} />}
+    </Box>
+  );
 }
 
 function LegRemarks({ tripId }: { tripId: string }) {
@@ -271,6 +310,9 @@ export function TransitItineraryCard({
   const refreshMutation = useRefreshTransitItinerary();
   const fareSummary = extractFareSummary(itinerary.fare);
   const occupancy = worstOccupancy(itinerary);
+  const firstBoardingLeg = itinerary.legs.find(
+    (leg) => leg.mode !== "walking" && leg.mode !== "cycling" && leg.mode !== "driving",
+  );
   const cancelledLegs = itinerary.legs.filter((leg) => leg.cancelled === true).length;
   const wheelchairRestrictedLegs = itinerary.legs.filter(
     (leg) => leg.wheelchairAccessible === false,
@@ -402,6 +444,7 @@ export function TransitItineraryCard({
           </Typography>
         )}
       </Box>
+      {firstBoardingLeg && <BoardingSummary leg={firstBoardingLeg} />}
       {metaBits.length > 0 && (
         <Typography
           variant="caption"

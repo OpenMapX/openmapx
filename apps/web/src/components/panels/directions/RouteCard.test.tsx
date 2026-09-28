@@ -93,6 +93,76 @@ describe("RouteCard ascent", () => {
   );
 });
 
+describe("RouteCard arrival time", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-09-28T10:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  const renderArrival = (
+    arrivalContext: React.ComponentProps<typeof RouteCard>["arrivalContext"],
+  ) =>
+    render(
+      <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
+        <RouteCard
+          route={{ ...baseRoute, duration: 5400 }}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          arrivalContext={arrivalContext}
+        />
+      </NextIntlClientProvider>,
+    );
+
+  it("shows an estimated arrival from the current time for depart-now driving", () => {
+    renderArrival({ kind: "now", destinationTimeZone: "Europe/Berlin" });
+    const arrival = screen.getByTestId("route-arrival");
+    expect(arrival).toHaveTextContent(/Arrives.*1:30\s*PM/);
+    expect(screen.getByRole("radio").getAttribute("aria-describedby")).toBe(arrival.id);
+  });
+
+  it("resolves a chosen departure in the origin zone before displaying destination time", () => {
+    renderArrival({
+      kind: "departAt",
+      wallClock: "2026-07-04T09:30",
+      originTimeZone: "America/New_York",
+      destinationTimeZone: "Europe/Berlin",
+    });
+    expect(screen.getByTestId("route-arrival")).toHaveTextContent(/Arrives.*5:00\s*PM/);
+    expect(screen.getByTestId("route-arrival")).not.toHaveTextContent("UTC+2");
+  });
+
+  it("labels an arrive-by request as a deadline instead of an exact ETA", () => {
+    renderArrival({
+      kind: "arriveBy",
+      wallClock: "2026-07-04T18:00",
+      destinationTimeZone: "Europe/Berlin",
+    });
+    expect(screen.getByTestId("route-arrival")).toHaveTextContent(/Arrive by.*6:00\s*PM/);
+    expect(screen.getByTestId("route-arrival")).not.toHaveTextContent("Arrives");
+  });
+
+  it("uses a resolved scheduled arrival instead of adding duration to the deadline", () => {
+    renderArrival({
+      kind: "scheduled",
+      arrival: "2026-07-04T17:00:00+02:00",
+      destinationTimeZone: "Europe/Berlin",
+    });
+    expect(screen.getByTestId("route-arrival")).toHaveTextContent(/Arrives.*5:00\s*PM/);
+  });
+
+  it("does not invent an arrival when there is no time context", () => {
+    renderCard(baseRoute);
+    expect(screen.queryByTestId("route-arrival")).toBeNull();
+  });
+});
+
 describe("RouteCard road-condition context", () => {
   const statuses: Array<{
     availability: RoadConditionRouteImpact["availability"];
