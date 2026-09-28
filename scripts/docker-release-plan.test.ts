@@ -213,6 +213,80 @@ describe("selective release planning", () => {
       ),
     ).toBe(true);
   });
+  it("keeps the cold-refresh deadline across cached source rebuilds and retries failed refreshes", () => {
+    const previous = baseline();
+    const changed = tree.map((entry) =>
+      entry.path === "apps/api/src/server.ts" ? { ...entry, oid: "0".repeat(40) } : entry,
+    );
+    const cached = createReleasePlan({
+      ...options,
+      tree: changed,
+      previous,
+      now: "2026-09-18T12:00:00.000Z",
+    });
+    expect(cached.images.find((image: { app: string }) => image.app === "api")).toMatchObject({
+      rebuild: true,
+      refresh: false,
+    });
+    expect(cached.buildMetadata.images.api).toMatchObject({
+      builtAt: "2026-09-18T12:00:00.000Z",
+      coldRefreshedAt: now,
+    });
+    const published = { ...previous, buildMetadata: cached.buildMetadata };
+    for (const attemptAt of ["2026-09-19T12:00:00.000Z", "2026-09-20T12:00:00.000Z"]) {
+      // Neither failed attempt advances release-manifest:latest.
+      const attempt = createReleasePlan({
+        ...options,
+        tree: changed,
+        previous: published,
+        now: attemptAt,
+      });
+      expect(attempt.images.every((image: { refresh: boolean }) => image.refresh)).toBe(true);
+      expect(attempt.buildMetadata.images.api.coldRefreshedAt).toBe(attemptAt);
+    }
+    const successful = createReleasePlan({
+      ...options,
+      tree: changed,
+      previous: published,
+      now: "2026-09-20T12:00:00.000Z",
+    });
+    const next = createReleasePlan({
+      ...options,
+      tree: changed,
+      previous: { ...previous, buildMetadata: successful.buildMetadata },
+      now: "2026-09-21T12:00:00.000Z",
+    });
+    expect(next.images.every((image: { rebuild: boolean }) => !image.rebuild)).toBe(true);
+    expect(next.buildMetadata.images.api.coldRefreshedAt).toBe("2026-09-20T12:00:00.000Z");
+  });
+  it("cold-builds bootstrap and legacy metadata without guessing a refresh date", () => {
+    const bootstrap = createReleasePlan(options);
+    expect(bootstrap.images.every((image: { refresh: boolean }) => image.refresh)).toBe(true);
+    const previous = baseline();
+    for (const metadata of Object.values(previous.buildMetadata.images) as {
+      coldRefreshedAt?: string;
+    }[]) {
+      delete metadata.coldRefreshedAt;
+    }
+    const migrated = createReleasePlan({ ...options, previous });
+    expect(migrated.images.every((image: { refresh: boolean }) => image.refresh)).toBe(true);
+    expect(migrated.buildMetadata.images.api.coldRefreshedAt).toBe(now);
+  });
+  it("refreshes an image with a future cold-refresh clock", () => {
+    const previous = baseline();
+    previous.buildMetadata.images.api.coldRefreshedAt = "2026-09-13T12:00:00.000Z";
+    const plan = createReleasePlan({ ...options, previous });
+    expect(
+      plan.images
+        .filter((image: { refresh: boolean }) => image.refresh)
+        .map((image: { app: string }) => image.app),
+    ).toEqual(["api"]);
+  });
+  it.each(["tomorrow", null, ""])("rejects malformed cold-refresh metadata: %s", (value) => {
+    const previous = baseline();
+    previous.buildMetadata.images.api.coldRefreshedAt = value;
+    expect(() => createReleasePlan({ ...options, previous })).toThrow();
+  });
   it.each(["tag", "missing", "metadata", "timestamp"])("rejects invalid baseline %s", (kind) => {
     const previous = baseline();
     if (kind === "tag") previous.images.api = "ghcr.io/openmapx/api:latest";

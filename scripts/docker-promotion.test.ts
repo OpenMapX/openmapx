@@ -75,6 +75,7 @@ function promote(
                 builtAt: reusedApps.includes(app)
                   ? "2026-09-10T12:00:00.000Z"
                   : "2026-09-12T12:00:00.000Z",
+                coldRefreshedAt: "2026-09-09T12:00:00.000Z",
               },
             ]),
           ),
@@ -156,7 +157,11 @@ describe("aggregate Docker promotion", () => {
     expect(manifest.images.api).toBe(`${prefix}/api@${digests.api}`);
     expect(manifest.buildMetadata.images.api.sourceRevision).toBe("b".repeat(40));
     expect(manifest.buildMetadata.images.api.builtAt).toBe("2026-09-10T12:00:00.000Z");
+    expect(manifest.buildMetadata.images.api.coldRefreshedAt).toBe("2026-09-09T12:00:00.000Z");
     expect(manifest.buildMetadata.images["ops-agent"].sourceRevision).toBe(sha);
+    expect(manifest.buildMetadata.images["ops-agent"].coldRefreshedAt).toBe(
+      "2026-09-09T12:00:00.000Z",
+    );
     expect(Object.keys(manifest.images)).toEqual(apps);
   });
   it.each([

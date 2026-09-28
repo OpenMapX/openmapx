@@ -47,8 +47,12 @@ A complete release can reuse images from earlier releases: CI rebuilds only imag
 whose inputs changed, then scans all seven selected application digests before publishing.
 Shared dependency and privacy changes can require several images to rebuild.
 Unchanged images retain their digest and original build revision; the release
-identifier describes the complete selected set. Weekly security refreshes rebuild
-all images, and images at least seven days old refresh on the next release.
+identifier describes the complete selected set. Daily CI catches up with `main`,
+including automated merges that do not trigger push workflows. Each image gets an
+uncached security refresh when its last published cold refresh is at least seven
+days old. Cached source rebuilds preserve that clock; failed releases leave it due
+for the next daily attempt. Existing releases without cold-refresh metadata get
+one uncached rebuild. Every selected image is scanned, including reused digests.
 
 For a reproducible rollback reference, use the run-qualified manifest tag
 `ghcr.io/openmapx/release-manifest:<commit>-<run-id>-<attempt>` (the identifier is

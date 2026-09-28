@@ -80,7 +80,9 @@ jobs:
       - name: Compare build inputs with the last published release
         env:
           RELEASE_SHA: ${{ needs.gate.outputs.sha }}
-          FORCE_REBUILD: ${{ github.event_name == 'schedule' || vars.OPENMAPX_FORCE_IMAGE_REBUILD == 'true' }}
+          # The published per-image cold-refresh clock drives automatic refresh
+          # and retries. Daily catch-up alone must not bypass every build cache.
+          FORCE_REBUILD: ${{ vars.OPENMAPX_FORCE_IMAGE_REBUILD == 'true' }}
         run: node scripts/docker-release-plan.mjs plan release-plan
       - name: Preserve the complete build selection
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

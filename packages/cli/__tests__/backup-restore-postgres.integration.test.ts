@@ -415,10 +415,10 @@ INSERT INTO "user" (id, name, email, email_verified, created_at, updated_at)
 VALUES
   ('${DELETED_USER_ID}', 'Deleted Restore User', '${DELETED_EMAIL}', true, now(), now()),
   ('${UNRELATED_USER_ID}', 'Unrelated Restore User', '${UNRELATED_EMAIL}', true, now(), now());
-INSERT INTO account (id, issuer, account_id, provider_id, user_id, access_token, refresh_token, id_token, created_at, updated_at)
+INSERT INTO account (id, account_id, provider_id, user_id, access_token, refresh_token, id_token, created_at, updated_at)
 VALUES
-  ('deleted-account', 'fixture', 'deleted-account', 'fixture', '${DELETED_USER_ID}', 'deleted-access', 'deleted-refresh', 'deleted-id', now(), now()),
-  ('unrelated-account', 'fixture', 'unrelated-account', 'fixture', '${UNRELATED_USER_ID}', 'unrelated-access', 'unrelated-refresh', 'unrelated-id', now(), now());
+  ('deleted-account', 'deleted-account', 'fixture', '${DELETED_USER_ID}', 'deleted-access', 'deleted-refresh', 'deleted-id', now(), now()),
+  ('unrelated-account', 'unrelated-account', 'fixture', '${UNRELATED_USER_ID}', 'unrelated-access', 'unrelated-refresh', 'unrelated-id', now(), now());
 INSERT INTO session (id, expires_at, token, created_at, updated_at, user_id)
 VALUES
   ('deleted-session', now() + interval '1 day', 'deleted-session-token', now(), now(), '${DELETED_USER_ID}'),

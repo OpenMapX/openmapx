@@ -35,7 +35,7 @@ const shaPattern = /^[a-f0-9]{40}$/;
 const releasePattern = /^[a-f0-9]{40}(?:-[1-9][0-9]*-[1-9][0-9]*)?$/;
 const hashPattern = /^[a-f0-9]{64}$/;
 const digestPattern = /^sha256:[a-f0-9]{64}$/;
-const maxBuildAge = 7 * 24 * 60 * 60 * 1000;
+const maxColdRefreshAge = 7 * 24 * 60 * 60 * 1000;
 const globalInputs = [
   ".github/workflows/docker.yml",
   ".github/workflows/ci.yml",
@@ -167,6 +167,8 @@ function validatePrevious(previous, imagePrefix) {
     )
       throw new Error(`Invalid previous build metadata: ${app}`);
     timestamp(metadata.builtAt);
+    // Legacy manifests lack this field; their next release must cold-build.
+    if (metadata.coldRefreshedAt !== undefined) timestamp(metadata.coldRefreshedAt);
   }
 }
 
@@ -199,11 +201,11 @@ export function createReleasePlan({
         : undefined;
     const refresh =
       force ||
-      Boolean(
-        old &&
-          (currentTime - timestamp(old.builtAt) >= maxBuildAge ||
-            timestamp(old.builtAt) > currentTime),
-      );
+      !old ||
+      old.coldRefreshedAt === undefined ||
+      currentTime - timestamp(old.coldRefreshedAt) >= maxColdRefreshAge ||
+      timestamp(old.coldRefreshedAt) > currentTime ||
+      timestamp(old.builtAt) > currentTime;
     const privacyChanged =
       target.app === "api" &&
       previous?.privacyReleaseValidation.sourceBuildFingerprint !== privacyFingerprint;
@@ -215,8 +217,16 @@ export function createReleasePlan({
         : rebuild
           ? "inputs-changed"
           : "unchanged";
+    // These proposed timestamps become authoritative only when promotion
+    // advances release-manifest:latest. Failed releases therefore remain due,
+    // and cached source rebuilds cannot postpone an uncached security refresh.
     buildMetadata.images[target.app] = rebuild
-      ? { inputHash, sourceRevision: revision, builtAt: now }
+      ? {
+          inputHash,
+          sourceRevision: revision,
+          builtAt: now,
+          coldRefreshedAt: refresh ? now : old.coldRefreshedAt,
+        }
       : old;
     return {
       ...target,
