@@ -26,6 +26,17 @@ import {
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
 
+/** The main map uses its camera-aware 3D layer instead of basemap extrusions. */
+function withoutNativeBuildingExtrusions(style: Record<string, unknown>): Record<string, unknown> {
+  if (!Array.isArray(style.layers)) return style;
+  const layers = style.layers.filter((layer) => {
+    if (!layer || typeof layer !== "object") return true;
+    const { type, "source-layer": sourceLayer } = layer as Record<string, unknown>;
+    return type !== "fill-extrusion" || (sourceLayer !== "building" && sourceLayer !== "buildings");
+  });
+  return layers.length === style.layers.length ? style : { ...style, layers };
+}
+
 async function loadStyleForViewport(
   env: ReturnType<typeof useEnv>,
   variant: MapStyleVariant,
@@ -148,7 +159,9 @@ export function MapCanvas() {
       // lib/map.ts), so no credit is lost by turning the control off.
       const map = new maplibregl.Map({
         container: containerRef.current,
-        style: viewportStyle.style as maplibregl.StyleSpecification,
+        style: withoutNativeBuildingExtrusions(
+          viewportStyle.style,
+        ) as maplibregl.StyleSpecification,
         center: initialCenter,
         zoom: initialZoom,
         bearing,
@@ -168,7 +181,9 @@ export function MapCanvas() {
           .then((next) => {
             if (!isActive() || request !== styleRequestRef.current) return;
             setOfflinePackageActive(next.offline);
-            map.setStyle(next.style as maplibregl.StyleSpecification);
+            map.setStyle(
+              withoutNativeBuildingExtrusions(next.style) as maplibregl.StyleSpecification,
+            );
           })
           .catch((err) => {
             if (!isActive() || request !== styleRequestRef.current) return;
@@ -367,7 +382,7 @@ export function MapCanvas() {
         // The persistent `style.load` listener registered at map creation bumps
         // styleVersion once the new style lands.
         setOfflinePackageActive(s.offline);
-        map.setStyle(s.style as maplibregl.StyleSpecification);
+        map.setStyle(withoutNativeBuildingExtrusions(s.style) as maplibregl.StyleSpecification);
       })
       .catch((err) => {
         if (request !== styleRequestRef.current) return;

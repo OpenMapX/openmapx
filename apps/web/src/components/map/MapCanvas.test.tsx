@@ -48,7 +48,7 @@ vi.mock("@/lib/map", () => {
   const style = {
     version: 8,
     sources: { openmaptiles: { type: "vector", tiles: [] } },
-    layers: [],
+    layers: [] as Array<{ id: string; type: string; source?: string; "source-layer"?: string }>,
   };
   let stylePromise = Promise.resolve(style);
   const test = {
@@ -66,6 +66,11 @@ vi.mock("@/lib/map", () => {
       };
     },
     reset() {
+      style.layers = [];
+      stylePromise = Promise.resolve(style);
+    },
+    setStyleLayers(layers: typeof style.layers) {
+      style.layers = layers;
       stylePromise = Promise.resolve(style);
     },
   };
@@ -87,7 +92,12 @@ vi.mock("@/lib/offlineAreas", () => ({
 vi.mock("maplibre-gl", () => {
   const instances: FakeMap[] = [];
   const scales: FakeScaleControl[] = [];
-  const options: Array<{ center: [number, number]; container: HTMLElement; zoom: number }> = [];
+  const options: Array<{
+    center: [number, number];
+    container: HTMLElement;
+    style: { layers: Array<{ id: string }> };
+    zoom: number;
+  }> = [];
   const workerUrlsAtConstruction: string[] = [];
   let workerUrl = "";
   let setupError: Error | undefined;
@@ -109,7 +119,12 @@ vi.mock("maplibre-gl", () => {
     /** Counts camera reads so a test can prove a guarded path never took one. */
     cameraReads = 0;
 
-    constructor(mapOptions: { center: [number, number]; container: HTMLElement; zoom: number }) {
+    constructor(mapOptions: {
+      center: [number, number];
+      container: HTMLElement;
+      style: { layers: Array<{ id: string }> };
+      zoom: number;
+    }) {
       this.container = mapOptions.container;
       instances.push(this);
       options.push(mapOptions);
@@ -229,7 +244,11 @@ const maplibreTest = (
         options: { maxWidth?: number; unit?: string };
         setUnit: ReturnType<typeof vi.fn>;
       }>;
-      options: Array<{ center: [number, number]; zoom: number }>;
+      options: Array<{
+        center: [number, number];
+        style: { layers: Array<{ id: string }> };
+        zoom: number;
+      }>;
       workerUrlsAtConstruction: string[];
       failSetup(error: Error, onCall?: number): void;
       deferInitialStyle(definitionLoaded: boolean): void;
@@ -240,7 +259,14 @@ const maplibreTest = (
 ).__test;
 const mapStyleTest = (
   mapStyle as unknown as {
-    __test: { deferStyle(): () => void; failStyleOnce(error: Error): () => void; reset(): void };
+    __test: {
+      deferStyle(): () => void;
+      failStyleOnce(error: Error): () => void;
+      reset(): void;
+      setStyleLayers(
+        layers: Array<{ id: string; type: string; source?: string; "source-layer"?: string }>,
+      ): void;
+    };
   }
 ).__test;
 const mapContextTest = (
@@ -277,6 +303,24 @@ async function renderWithMoveEnd() {
 }
 
 describe("MapCanvas", () => {
+  it("removes native building extrusions while preserving flat buildings and other 3D layers", async () => {
+    maplibreTest.reset();
+    mapStyleTest.reset();
+    mapStyleTest.setStyleLayers([
+      { id: "Building", type: "fill", source: "city", "source-layer": "building" },
+      { id: "Building 3D", type: "fill-extrusion", source: "city", "source-layer": "building" },
+      { id: "Other 3D", type: "fill-extrusion", source: "city", "source-layer": "landmark" },
+    ]);
+    vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
+
+    render(<MapCanvas />);
+    await waitFor(() => expect(maplibreTest.options).toHaveLength(1));
+    expect(maplibreTest.options[0].style.layers.map((layer) => layer.id)).toEqual([
+      "Building",
+      "Other 3D",
+    ]);
+  });
+
   it("keeps one scale per map through unit and style changes, then removes it", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();
