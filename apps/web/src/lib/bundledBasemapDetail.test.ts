@@ -63,5 +63,47 @@ describe("bundled basemap detail", () => {
         filter: ["==", "class", "wetland"],
       });
     });
+
+    it(`${styleName} names protected and local parks without duplicate POI labels`, () => {
+      const styleLayers = layers(styleName);
+      expect(styleLayers.find((layer) => layer.id === "park-name")).toMatchObject({
+        type: "symbol",
+        source: "openmaptiles",
+        "source-layer": "park",
+        minzoom: 7,
+        filter: ["all", ["==", "$type", "Point"], ["has", "name"]],
+        layout: { "text-field": ["coalesce", ["get", "name:latin"], ["get", "name"]] },
+      });
+      expect(styleLayers.find((layer) => layer.id === "poi-park-name")).toMatchObject({
+        type: "symbol",
+        source: "openmaptiles",
+        "source-layer": "poi",
+        minzoom: 14,
+        filter: [
+          "all",
+          ["==", "$type", "Point"],
+          ["==", "class", "park"],
+          ["has", "name"],
+          ["any", ["!has", "level"], ["==", "level", 0]],
+        ],
+        layout: {
+          "icon-image": "park_11",
+          "text-field": ["coalesce", ["get", "name:latin"], ["get", "name"]],
+        },
+      });
+      for (const id of ["poi-level-1", "poi-level-2", "poi-level-3"]) {
+        const genericPoi = styleLayers.find((layer) => layer.id === id);
+        const namedParkExclusion =
+          id === "poi-level-1"
+            ? ["!=", "class", "park"]
+            : ["any", ["!=", "class", "park"], ["!has", "name"]];
+        expect(genericPoi?.filter?.map((entry) => JSON.stringify(entry))).toContain(
+          JSON.stringify(namedParkExclusion),
+        );
+        expect(styleLayers.findIndex((layer) => layer.id === "poi-park-name")).toBeGreaterThan(
+          styleLayers.findIndex((layer) => layer.id === id),
+        );
+      }
+    });
   }
 });

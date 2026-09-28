@@ -2517,6 +2517,26 @@
       }
     },
     {
+      "id": "park-name",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "park",
+      "minzoom": 7,
+      "filter": ["all", ["==", "$type", "Point"], ["has", "name"]],
+      "layout": {
+        "text-field": ["coalesce", ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Italic"],
+        "text-size": 12,
+        "text-max-width": 8,
+        "text-padding": 5
+      },
+      "paint": {
+        "text-color": "#497254",
+        "text-halo-color": "#f7f6f6",
+        "text-halo-width": 1.2
+      }
+    },
+    {
       "id": "mountain-peak",
       "type": "symbol",
       "source": "openmaptiles",
@@ -2550,6 +2570,7 @@
         "all",
         ["==", "$type", "Point"],
         [">=", "rank", 25],
+        ["any", ["!=", "class", "park"], ["!has", "name"]],
         ["any", ["!has", "level"], ["==", "level", 0]]
       ],
       "layout": {
@@ -2600,6 +2621,7 @@
         ["==", "$type", "Point"],
         ["<=", "rank", 24],
         [">=", "rank", 15],
+        ["any", ["!=", "class", "park"], ["!has", "name"]],
         ["any", ["!has", "level"], ["==", "level", 0]]
       ],
       "layout": {
@@ -2650,6 +2672,7 @@
         ["==", "$type", "Point"],
         ["<=", "rank", 14],
         ["has", "name"],
+        ["!=", "class", "park"],
         ["any", ["!has", "level"], ["==", "level", 0]]
       ],
       "layout": {
@@ -2687,6 +2710,35 @@
         "text-halo-blur": 0.5,
         "text-halo-color": "rgba(255,255,255,0.8)",
         "text-halo-width": 1
+      }
+    },
+    {
+      "id": "poi-park-name",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "poi",
+      "minzoom": 14,
+      "filter": [
+        "all",
+        ["==", "$type", "Point"],
+        ["==", "class", "park"],
+        ["has", "name"],
+        ["any", ["!has", "level"], ["==", "level", 0]]
+      ],
+      "layout": {
+        "icon-image": "park_11",
+        "text-anchor": "top",
+        "text-field": ["coalesce", ["get", "name:latin"], ["get", "name"]],
+        "text-font": ["Noto Sans Regular"],
+        "text-max-width": 9,
+        "text-offset": [0, 0.6],
+        "text-padding": 3,
+        "text-size": 12
+      },
+      "paint": {
+        "text-color": "#497254",
+        "text-halo-color": "#f7f6f6",
+        "text-halo-width": 1.2
       }
     },
     {
