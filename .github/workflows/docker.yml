@@ -29,6 +29,7 @@ jobs:
     permissions:
       contents: read
     outputs:
+      eligible: ${{ steps.verify.outputs.eligible }}
       sha: ${{ steps.verify.outputs.sha }}
     steps:
       - name: Require the current trusted main commit
@@ -36,6 +37,7 @@ jobs:
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
         with:
           script: |
+            core.setOutput("eligible", "false");
             if (!["push", "schedule"].includes(context.eventName) || context.ref !== "refs/heads/main") {
               core.setFailed("Refusing a release outside a trusted main push or scheduled run");
               return;
@@ -47,17 +49,20 @@ jobs:
               ref: "heads/main",
             });
             if (candidate !== main.object.sha) {
-              core.setFailed(
-                `Candidate ${candidate} is not the current main commit ${main.object.sha}`,
+              core.notice(
+                `Skipping release: candidate ${candidate} is no longer current main (${main.object.sha})`,
               );
               return;
             }
 
             core.setOutput("sha", candidate);
+            core.setOutput("eligible", "true");
 
   plan:
     name: Select changed images from the published release
     needs: gate
+    # A superseded candidate is a successful gate with no release work to do.
+    if: needs.gate.outputs.eligible == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -95,6 +100,7 @@ jobs:
   build:
     name: Build or reuse and scan ${{ matrix.app }}
     needs: [gate, plan]
+    if: needs.gate.outputs.eligible == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 60
     permissions:
@@ -272,6 +278,7 @@ jobs:
   validate-privacy-release:
     name: Validate privacy release evidence
     needs: gate
+    if: needs.gate.outputs.eligible == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
@@ -308,6 +315,7 @@ jobs:
   promote:
     name: Publish coherent release
     needs: [gate, plan, build, validate-privacy-release]
+    if: needs.gate.outputs.eligible == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:

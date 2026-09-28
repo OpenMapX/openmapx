@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { runInNewContext } from "node:vm";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
@@ -10,9 +11,94 @@ function read(relativePath: string): string {
   return readFileSync(resolve(root, relativePath), "utf8");
 }
 
+// Execute the actual github-script gate, replacing only the Actions/GitHub APIs.
+async function verifyCandidate({
+  eventName = "push",
+  ref = "refs/heads/main",
+  head = "a".repeat(40),
+  apiError = false,
+} = {}) {
+  const workflow = read(".github/workflows/docker.yml");
+  const block = workflow.slice(workflow.indexOf("  gate:\n"), workflow.indexOf("  plan:\n"));
+  const match = block.match(/^ {10}script: \|\n((?:^ {12}.*\n|^\n)*)/m);
+  if (!match) throw new Error("Missing trusted-main gate script");
+  const script = match[1]
+    .split("\n")
+    .map((line) => line.slice(12))
+    .join("\n");
+  const outputs: Record<string, string> = {};
+  const failures: string[] = [];
+  const notices: string[] = [];
+  await runInNewContext(`(async () => {\n${script}\n})()`, {
+    context: { eventName, ref, sha: "a".repeat(40), repo: { owner: "OpenMapX", repo: "openmapx" } },
+    core: {
+      setOutput: (name: string, value: string) => {
+        outputs[name] = value;
+      },
+      setFailed: (message: string) => failures.push(message),
+      notice: (message: string) => notices.push(message),
+    },
+    github: {
+      rest: {
+        git: {
+          getRef: async () => {
+            if (apiError) throw new Error("GitHub API unavailable");
+            return { data: { object: { sha: head } } };
+          },
+        },
+      },
+    },
+  });
+  return { outputs, failures, notices };
+}
+
+describe("trusted-main candidate eligibility", () => {
+  it.each(["push", "schedule"])("admits the exact tested main SHA for %s", async (eventName) => {
+    expect(await verifyCandidate({ eventName })).toEqual({
+      outputs: { eligible: "true", sha: "a".repeat(40) },
+      failures: [],
+      notices: [],
+    });
+  });
+  it.each(["push", "schedule"])(
+    "cleanly skips a superseded %s without exporting a checkout SHA",
+    async (eventName) => {
+      const result = await verifyCandidate({ eventName, head: "b".repeat(40) });
+      expect(result.outputs).toEqual({ eligible: "false" });
+      expect(result.failures).toEqual([]);
+      expect(result.notices).toHaveLength(1);
+      expect(result.notices[0]).toContain("a".repeat(40));
+      expect(result.notices[0]).toContain("b".repeat(40));
+    },
+  );
+  it.each([
+    { eventName: "pull_request" },
+    { eventName: "workflow_dispatch" },
+    { ref: "refs/heads/feature" },
+    { ref: "refs/tags/main" },
+  ])("still fails for an untrusted event or ref: %s", async (input) => {
+    const result = await verifyCandidate(input);
+    expect(result.outputs).toEqual({ eligible: "false" });
+    expect(result.failures).toHaveLength(1);
+    expect(result.notices).toEqual([]);
+  });
+  it("does not disguise an API failure as a superseded candidate", async () => {
+    await expect(verifyCandidate({ apiError: true })).rejects.toThrow("GitHub API unavailable");
+  });
+});
+
 describe("Docker release trust gate", () => {
   const release = read(".github/workflows/docker.yml");
   const ci = read(".github/workflows/ci.yml");
+
+  it("requires explicit eligibility for every downstream release job", () => {
+    // biome-ignore lint/suspicious/noTemplateCurlyInString: Literal GitHub Actions output expression.
+    expect(release).toContain("eligible: ${{ steps.verify.outputs.eligible }}");
+    for (const job of ["plan", "build", "validate-privacy-release", "promote"]) {
+      const block = release.split(`  ${job}:\n`)[1].split(/^ {2}[\w-]+:\n/m)[0];
+      expect(block).toContain("    if: needs.gate.outputs.eligible == 'true'");
+    }
+  });
 
   it("starts publication only after successful CI for the current trusted main commit", () => {
     expect(release).toContain("workflow_call:");
