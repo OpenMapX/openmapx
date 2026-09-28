@@ -83,11 +83,11 @@ export function MapCanvas() {
   const viewportHeight = useWindowHeight();
   const viewportWidth = useWindowWidth();
   const sheetClearance = useMobilePanelClearance(viewportHeight);
-  const scaleLeft = Math.max(0, insets.left) + 12;
+  const scaleLeft = 12;
   const scaleBottom = Math.max(102, insets.bottom + 12, sheetClearance + 12);
   const scaleVisible =
     (viewportHeight === 0 || viewportHeight - insets.top - scaleBottom >= 24) &&
-    (viewportWidth === 0 || viewportWidth - scaleLeft - Math.max(0, insets.right) - 12 >= 100);
+    (viewportWidth === 0 || viewportWidth - scaleLeft - 12 >= 100);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -425,7 +425,7 @@ export function MapCanvas() {
             color: "text.primary",
             borderColor: "currentColor",
             fontSize: 10,
-            transition: "margin-left 0.25s ease, margin-bottom 0.25s ease",
+            transition: "margin-bottom 0.25s ease",
           },
         }}
       />

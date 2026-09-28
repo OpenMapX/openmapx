@@ -304,7 +304,7 @@ describe("MapCanvas", () => {
     useSettingsStore.setState({ units: "metric" });
   });
 
-  it("hides the scale when two panels leave less than its width", async () => {
+  it("keeps the scale at the map corner when desktop panels open", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();
     const previousWidth = window.innerWidth;
@@ -316,15 +316,10 @@ describe("MapCanvas", () => {
       const scale = view.container.querySelector<HTMLElement>(".maplibregl-ctrl-scale");
       expect(scale).not.toBeNull();
       act(() => publishMapObstruction("scale-test-left", "left", 800));
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
-
-      Object.defineProperty(window, "innerWidth", { configurable: true, value: 950 });
-      act(() => window.dispatchEvent(new Event("resize")));
+      expect(getComputedStyle(scale as HTMLElement).marginLeft).toBe("12px");
       expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
       act(() => publishMapObstruction("scale-test-right", "right", 30));
-      expect(getComputedStyle(scale as HTMLElement).display).toBe("none");
-      Object.defineProperty(window, "innerWidth", { configurable: true, value: 960 });
-      act(() => window.dispatchEvent(new Event("resize")));
+      expect(getComputedStyle(scale as HTMLElement).marginLeft).toBe("12px");
       expect(getComputedStyle(scale as HTMLElement).display).toBe("block");
     } finally {
       view.unmount();
