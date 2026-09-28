@@ -13,7 +13,9 @@
     "build:copy-assets": "mkdir -p .next/standalone/apps/web/public .next/standalone/apps/web/.next/static && cp -R public/. .next/standalone/apps/web/public/ && cp -R .next/static/. .next/standalone/apps/web/.next/static/",
     "start": "node .next/standalone/apps/web/server.js",
     "check-types": "pnpm build:licenses && tsc --noEmit && tsc --noEmit -p tsconfig.sw.json && tsc --noEmit -p tsconfig.integrations.json",
-    "icons:sync": "node scripts/copy-preset-icons.mjs"
+    "icons:sync": "node scripts/copy-preset-icons.mjs",
+    "icons:basemap": "node scripts/generate-poi-sprites.mjs",
+    "style:poi": "node scripts/apply-poi-visibility.mjs && node scripts/generate-dark-map-style.mjs"
   },
   "dependencies": {
     "@better-auth/core": "1.7.5",
@@ -80,6 +82,7 @@
     "@types/react-dom": "^19.3.0",
     "esbuild": "^0.28.2",
     "jsdom": "^30.1.1",
+    "sharp": "0.35.4",
     "typescript": "^6.0.3"
   }
 }

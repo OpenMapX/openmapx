@@ -17,7 +17,7 @@ const { createExpression } = requireFromMapLibre("@maplibre/maplibre-gl-style-sp
     value?: {
       evaluate: (
         globals: { zoom: number },
-        feature: { type: "Point"; properties: { class: string } },
+        feature: { type: "Point"; properties: { class: string; subclass?: string } },
         featureState: undefined,
         canonical: undefined,
         availableImages: string[],
@@ -26,7 +26,12 @@ const { createExpression } = requireFromMapLibre("@maplibre/maplibre-gl-style-sp
   };
 };
 
-type Layer = { id: string; layout?: { "icon-image"?: unknown } };
+type Layer = {
+  id: string;
+  minzoom?: number;
+  filter?: unknown;
+  layout?: { "icon-image"?: unknown };
+};
 type Style = { layers: Layer[] };
 type SpriteEntry = { x: number; y: number; width: number; height: number; pixelRatio: number };
 
@@ -41,7 +46,12 @@ function readSprite(name: string): Record<string, SpriteEntry> {
   >;
 }
 
-function resolvedIcon(layer: Layer, poiClass: string, availableImages: string[]): string | null {
+function resolvedIcon(
+  layer: Layer,
+  poiClass: string,
+  availableImages: string[],
+  subclass?: string,
+): string | null {
   const iconImage = layer.layout?.["icon-image"];
   if (typeof iconImage === "string") {
     const name = iconImage.replace("{class}", poiClass);
@@ -53,7 +63,7 @@ function resolvedIcon(layer: Layer, poiClass: string, availableImages: string[])
   expect(expression.result).toBe("success");
   const image = expression.value?.evaluate(
     { zoom: 16 },
-    { type: "Point", properties: { class: poiClass } },
+    { type: "Point", properties: { class: poiClass, ...(subclass ? { subclass } : {}) } },
     undefined,
     undefined,
     availableImages,
@@ -63,7 +73,7 @@ function resolvedIcon(layer: Layer, poiClass: string, availableImages: string[])
 
 describe("bundled basemap POI sprites", () => {
   for (const spriteScale of ["", "@2x"]) {
-    it(`resolves missing POI classes in both styles with ${spriteScale || "1x"} sprites`, () => {
+    it(`resolves broad POI classes and specific subclasses in both styles with ${spriteScale || "1x"} sprites`, () => {
       const manifest = readSprite(`sprite${spriteScale}.json`);
       const availableImages = Object.keys(manifest);
       const png = readFileSync(resolve(publicStyles, `sprite${spriteScale}.png`));
@@ -82,17 +92,90 @@ describe("bundled basemap POI sprites", () => {
         for (const id of ["poi-level-1", "poi-level-2", "poi-level-3"]) {
           const layer = style.layers.find((candidate) => candidate.id === id);
           if (!layer) throw new Error(`${id} missing from ${styleName}`);
-          expect(resolvedIcon(layer, "parking", availableImages)).toBe("car_11");
-          expect(resolvedIcon(layer, "atm", availableImages)).toBe("bank_11");
-          expect(resolvedIcon(layer, "toilets", availableImages)).toBe("toilet_11");
-          expect(resolvedIcon(layer, "office", availableImages)).toBe("marker_11");
+          expect(resolvedIcon(layer, "parking", availableImages)).toBe("poi-parking");
+          expect(resolvedIcon(layer, "atm", availableImages)).toBe("poi-atm");
+          expect(resolvedIcon(layer, "toilets", availableImages)).toBe("poi-toilets");
+          expect(resolvedIcon(layer, "office", availableImages)).toBe("poi-office");
           expect(resolvedIcon(layer, "unmapped_class", availableImages)).toBe("marker_11");
-          expect(resolvedIcon(layer, "restaurant", availableImages)).toBe("restaurant_11");
+          expect(resolvedIcon(layer, "restaurant", availableImages)).toBe("poi-restaurant");
+          expect(resolvedIcon(layer, "bus", availableImages, "bus_stop")).toBe("poi-bus");
+          expect(resolvedIcon(layer, "school", availableImages, "kindergarten")).toBe("poi-school");
+          expect(resolvedIcon(layer, "hospital", availableImages, "hospital")).toBe("poi-hospital");
+          expect(resolvedIcon(layer, "grocery", availableImages, "supermarket")).toBe(
+            "poi-grocery",
+          );
+          expect(resolvedIcon(layer, "shop", availableImages, "beauty")).toBe("poi-shop-beauty");
+          expect(resolvedIcon(layer, "shop", availableImages, "florist")).toBe("poi-shop-florist");
+          expect(resolvedIcon(layer, "shop", availableImages, "chemist")).toBe("poi-shop-chemist");
+          expect(resolvedIcon(layer, "town_hall", availableImages, "community_centre")).toBe(
+            "poi-town_hall-community_centre",
+          );
+          expect(resolvedIcon(layer, "railway", availableImages, "tram_stop")).toBe(
+            "poi-railway-tram_stop",
+          );
+          expect(resolvedIcon(layer, "shop", availableImages, "unmapped_subclass")).toBe(
+            "poi-shop",
+          );
+          for (const [poiClass, subclass, icon] of [
+            ["motorcycle_parking", undefined, "poi-motorcycle_parking"],
+            ["cycle_barrier", undefined, "poi-cycle_barrier"],
+            ["toll_booth", undefined, "poi-toll_booth"],
+            ["yoga", undefined, "poi-yoga"],
+            ["table_tennis", undefined, "poi-table_tennis"],
+            ["ice_rink", undefined, "poi-ice_rink"],
+            ["climbing", undefined, "poi-climbing"],
+            ["pitch", "table_tennis", "poi-pitch-table_tennis"],
+            ["pitch", "basketball", "poi-pitch-basketball"],
+            ["pitch", "tennis", "poi-pitch-tennis"],
+            ["pitch", "soccer", "poi-pitch-soccer"],
+            ["bar", "nightclub", "poi-bar-nightclub"],
+          ] as const) {
+            expect(resolvedIcon(layer, poiClass, availableImages, subclass)).toBe(icon);
+          }
         }
 
         const railway = style.layers.find((candidate) => candidate.id === "poi-railway");
         if (!railway) throw new Error(`poi-railway missing from ${styleName}`);
         expect(resolvedIcon(railway, "railway", availableImages)).toBe("railway_11");
+
+        const streetFixtures = style.layers.find(
+          (candidate) => candidate.id === "poi-street-fixtures",
+        );
+        if (!streetFixtures) throw new Error(`poi-street-fixtures missing from ${styleName}`);
+        expect(streetFixtures.minzoom).toBe(19);
+        expect(resolvedIcon(streetFixtures, "waste_basket", availableImages)).toBe(
+          "poi-waste_basket",
+        );
+        expect(resolvedIcon(streetFixtures, "bicycle_parking", availableImages)).toBe(
+          "poi-bicycle_parking",
+        );
+        expect(resolvedIcon(streetFixtures, "motorcycle_parking", availableImages)).toBe(
+          "poi-motorcycle_parking",
+        );
+        expect(resolvedIcon(streetFixtures, "cycle_barrier", availableImages)).toBe(
+          "poi-cycle_barrier",
+        );
+
+        for (const name of [
+          "poi-restaurant",
+          "poi-shop-beauty",
+          "poi-railway-tram_stop",
+          "poi-waste_basket",
+          "poi-bus",
+          "poi-school",
+          "poi-shop-florist",
+          "poi-motorcycle_parking",
+          "poi-cycle_barrier",
+          "poi-pitch-table_tennis",
+        ]) {
+          const entry = manifest[name];
+          if (!entry) throw new Error(`${name} missing from ${spriteScale || "1x"} sprite`);
+          expect(entry.pixelRatio).toBe(spriteScale ? 2 : 1);
+          expect(entry.width).toBe(23 * (spriteScale ? 2 : 1));
+          expect(entry.height).toBe(23 * (spriteScale ? 2 : 1));
+          expect(entry.x + entry.width).toBeLessThanOrEqual(width);
+          expect(entry.y + entry.height).toBeLessThanOrEqual(height);
+        }
       }
     });
   }

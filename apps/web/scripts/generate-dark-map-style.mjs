@@ -62,6 +62,9 @@ const surfaceMap = {
   "#c3f1d5": "#224432",
   "#d0f6e0": "#264a37",
   "#d8f5e4": "#284d3a",
+  "#d9edd7": "#294634", // recreation
+  "#dedbd5": "#41403f", // rock
+  "#bce2d7": "#24483f", // wetland
   // White road segments (steps etc.) -> light grey so they read like other roads
   "#fff": "#4b5563",
   // Subtle alpha fills/outlines (recompute for a dark base)
@@ -85,6 +88,9 @@ const textMap = {
   "#3c3c3c": "#e3e6ea",
   "#3c4043": "#e8eaed",
   "#5f6368": "#9aa0a6",
+  "#497254": "#a6cbae", // park names
+  "#545c5c": "#c6cccb", // mountain peaks
+  "#747b80": "#a6acae", // house numbers
   "#4a5568": "#99a0ab",
   "#80868b": "#aab0b6",
   "#4a89b8": "#7fb0cc", // water labels
@@ -99,6 +105,7 @@ const haloMap = {
   "rgba(255,255,255,0.8)": "rgba(11, 15, 20, 0.85)",
   "rgba(255,255,255,0.85)": "rgba(11, 15, 20, 0.88)",
   "rgba(255,255,255,0.9)": "rgba(11, 15, 20, 0.9)",
+  "#f7f6f6": "#171a1d", // labels added after the original palette
 };
 
 const isColor = (v) =>

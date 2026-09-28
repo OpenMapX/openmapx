@@ -2561,6 +2561,49 @@
       }
     },
     {
+      "id": "poi-street-fixtures",
+      "type": "symbol",
+      "source": "openmaptiles",
+      "source-layer": "poi",
+      "minzoom": 19,
+      "filter": [
+        "all",
+        ["==", ["geometry-type"], "Point"],
+        [
+          "match",
+          ["get", "class"],
+          "bicycle_parking",
+          [">=", ["zoom"], 19],
+          "motorcycle_parking",
+          [">=", ["zoom"], 19],
+          ["waste_basket", "bollard", "cycle_barrier"],
+          [">=", ["zoom"], 20],
+          false
+        ],
+        ["any", ["!", ["has", "level"]], ["==", ["get", "level"], 0]]
+      ],
+      "layout": {
+        "icon-image": [
+          "coalesce",
+          ["image", ["concat", "poi-", ["get", "class"]]],
+          ["image", "marker_11"]
+        ],
+        "text-anchor": "top",
+        "text-field": "{name:latin}\n{name:nonlatin}",
+        "text-font": ["Noto Sans Regular"],
+        "text-max-width": 9,
+        "text-offset": [0, 1.05],
+        "text-padding": 2,
+        "text-size": 12
+      },
+      "paint": {
+        "text-color": "#5f6368",
+        "text-halo-blur": 0.5,
+        "text-halo-color": "rgba(255,255,255,0.8)",
+        "text-halo-width": 1
+      }
+    },
+    {
       "id": "poi-level-3",
       "type": "symbol",
       "source": "openmaptiles",
@@ -2568,14 +2611,132 @@
       "minzoom": 16,
       "filter": [
         "all",
-        ["==", "$type", "Point"],
-        [">=", "rank", 25],
-        ["any", ["!=", "class", "park"], ["!has", "name"]],
-        ["any", ["!has", "level"], ["==", "level", 0]]
+        ["==", ["geometry-type"], "Point"],
+        [
+          "<=",
+          ["coalesce", ["get", "rank"], 9999],
+          [
+            "match",
+            ["get", "class"],
+            [
+              "attraction",
+              "castle",
+              "monument",
+              "zoo",
+              "aquarium",
+              "amusement_park",
+              "theme_park",
+              "stadium",
+              "airport",
+              "railway",
+              "hospital",
+              "viewpoint"
+            ],
+            ["step", ["zoom"], 0, 14, 8, 15, 20, 16, 40, 17, 100, 18, 9999, 19, 9999, 20, 9999],
+            ["museum"],
+            ["step", ["zoom"], 0, 14, 12, 15, 35, 16, 80, 17, 220, 18, 9999, 19, 9999, 20, 9999],
+            ["art_gallery", "theatre", "cinema"],
+            ["step", ["zoom"], 0, 14, 0, 15, 12, 16, 45, 17, 85, 18, 180, 19, 9999, 20, 9999],
+            [
+              "town_hall",
+              "library",
+              "police",
+              "fire_station",
+              "place_of_worship",
+              "college",
+              "harbor",
+              "ferry_terminal",
+              "garden",
+              "beach",
+              "cemetery"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 6, 16, 25, 17, 50, 18, 130, 19, 9999, 20, 9999],
+            ["restaurant", "cafe", "bar", "beer", "bakery", "ice_cream"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 25, 17, 115, 18, 220, 19, 9999, 20, 9999],
+            ["fast_food"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 22, 17, 42, 18, 110, 19, 9999, 20, 9999],
+            ["lodging", "campsite"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 25, 17, 78, 18, 180, 19, 9999, 20, 9999],
+            ["shop", "grocery", "clothing_store", "alcohol_shop", "parking"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 12, 17, 22, 18, 65, 19, 140, 20, 9999],
+            ["bus"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 3, 18, 7, 19, 15, 20, 9999],
+            [
+              "school",
+              "office",
+              "bank",
+              "atm",
+              "doctors",
+              "dentist",
+              "pharmacy",
+              "veterinary",
+              "information",
+              "playground",
+              "sports_centre",
+              "swimming_pool",
+              "golf",
+              "dog_park",
+              "pitch",
+              "post",
+              "bicycle_rental",
+              "car",
+              "fuel",
+              "taxi",
+              "airfield",
+              "waterfall",
+              "shelter",
+              "music",
+              "escape_game",
+              "sailing",
+              "tennis",
+              "cycling",
+              "basketball",
+              "swimming",
+              "picnic_site",
+              "horse_racing",
+              "paragliding",
+              "laundry",
+              "hairdresser"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 8, 18, 35, 19, 90, 20, 9999],
+            [
+              "toilets",
+              "recycling",
+              "drinking_water",
+              "telephone",
+              "gate",
+              "lift_gate",
+              "entrance",
+              "bicycle"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 0, 18, 10, 19, 50, 20, 9999],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 0, 18, 10, 19, 50, 20, 9999]
+          ]
+        ],
+        [
+          "!",
+          [
+            "in",
+            ["get", "class"],
+            [
+              "literal",
+              ["waste_basket", "bicycle_parking", "bollard", "motorcycle_parking", "cycle_barrier"]
+            ]
+          ]
+        ],
+        ["any", ["!", ["has", "level"]], ["==", ["get", "level"], 0]],
+        [">=", ["coalesce", ["get", "rank"], 9999], 25],
+        ["any", ["!=", ["get", "class"], "park"], ["!", ["has", "name"]]],
+        ["any", [">=", ["zoom"], 19], ["has", "name"]]
       ],
       "layout": {
         "icon-image": [
           "coalesce",
+          [
+            "image",
+            ["concat", "poi-", ["get", "class"], "-", ["coalesce", ["get", "subclass"], ""]]
+          ],
+          ["image", ["concat", "poi-", ["get", "class"]]],
           ["image", ["concat", ["get", "class"], "_11"]],
           [
             "image",
@@ -2594,11 +2755,12 @@
             ]
           ]
         ],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 16, 0.82, 18, 1],
         "text-anchor": "top",
         "text-field": "{name:latin}\n{name:nonlatin}",
         "text-font": ["Noto Sans Regular"],
         "text-max-width": 9,
-        "text-offset": [0, 0.6],
+        "text-offset": [0, 1.05],
         "text-padding": 2,
         "text-size": 12,
         "visibility": "visible"
@@ -2618,15 +2780,136 @@
       "minzoom": 15,
       "filter": [
         "all",
-        ["==", "$type", "Point"],
-        ["<=", "rank", 24],
-        [">=", "rank", 15],
-        ["any", ["!=", "class", "park"], ["!has", "name"]],
-        ["any", ["!has", "level"], ["==", "level", 0]]
+        ["==", ["geometry-type"], "Point"],
+        [
+          "<=",
+          ["coalesce", ["get", "rank"], 9999],
+          [
+            "match",
+            ["get", "class"],
+            [
+              "attraction",
+              "castle",
+              "monument",
+              "zoo",
+              "aquarium",
+              "amusement_park",
+              "theme_park",
+              "stadium",
+              "airport",
+              "railway",
+              "hospital",
+              "viewpoint"
+            ],
+            ["step", ["zoom"], 0, 14, 8, 15, 20, 16, 40, 17, 100, 18, 9999, 19, 9999, 20, 9999],
+            ["museum"],
+            ["step", ["zoom"], 0, 14, 12, 15, 35, 16, 80, 17, 220, 18, 9999, 19, 9999, 20, 9999],
+            ["art_gallery", "theatre", "cinema"],
+            ["step", ["zoom"], 0, 14, 0, 15, 12, 16, 45, 17, 85, 18, 180, 19, 9999, 20, 9999],
+            [
+              "town_hall",
+              "library",
+              "police",
+              "fire_station",
+              "place_of_worship",
+              "college",
+              "harbor",
+              "ferry_terminal",
+              "garden",
+              "beach",
+              "cemetery"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 6, 16, 25, 17, 50, 18, 130, 19, 9999, 20, 9999],
+            ["restaurant", "cafe", "bar", "beer", "bakery", "ice_cream"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 25, 17, 115, 18, 220, 19, 9999, 20, 9999],
+            ["fast_food"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 22, 17, 42, 18, 110, 19, 9999, 20, 9999],
+            ["lodging", "campsite"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 25, 17, 78, 18, 180, 19, 9999, 20, 9999],
+            ["shop", "grocery", "clothing_store", "alcohol_shop", "parking"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 12, 17, 22, 18, 65, 19, 140, 20, 9999],
+            ["bus"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 3, 18, 7, 19, 15, 20, 9999],
+            [
+              "school",
+              "office",
+              "bank",
+              "atm",
+              "doctors",
+              "dentist",
+              "pharmacy",
+              "veterinary",
+              "information",
+              "playground",
+              "sports_centre",
+              "swimming_pool",
+              "golf",
+              "dog_park",
+              "pitch",
+              "post",
+              "bicycle_rental",
+              "car",
+              "fuel",
+              "taxi",
+              "airfield",
+              "waterfall",
+              "shelter",
+              "music",
+              "escape_game",
+              "sailing",
+              "tennis",
+              "cycling",
+              "basketball",
+              "swimming",
+              "picnic_site",
+              "horse_racing",
+              "paragliding",
+              "laundry",
+              "hairdresser"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 8, 18, 35, 19, 90, 20, 9999],
+            [
+              "toilets",
+              "recycling",
+              "drinking_water",
+              "telephone",
+              "gate",
+              "lift_gate",
+              "entrance",
+              "bicycle"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 0, 18, 10, 19, 50, 20, 9999],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 0, 18, 10, 19, 50, 20, 9999]
+          ]
+        ],
+        [
+          "!",
+          [
+            "in",
+            ["get", "class"],
+            [
+              "literal",
+              ["waste_basket", "bicycle_parking", "bollard", "motorcycle_parking", "cycle_barrier"]
+            ]
+          ]
+        ],
+        ["any", ["!", ["has", "level"]], ["==", ["get", "level"], 0]],
+        [
+          "all",
+          [">=", ["coalesce", ["get", "rank"], 9999], 15],
+          ["<=", ["coalesce", ["get", "rank"], 9999], 24]
+        ],
+        ["any", ["!=", ["get", "class"], "park"], ["!", ["has", "name"]]],
+        ["any", [">=", ["zoom"], 19], ["has", "name"]]
       ],
       "layout": {
         "icon-image": [
           "coalesce",
+          [
+            "image",
+            ["concat", "poi-", ["get", "class"], "-", ["coalesce", ["get", "subclass"], ""]]
+          ],
+          ["image", ["concat", "poi-", ["get", "class"]]],
           ["image", ["concat", ["get", "class"], "_11"]],
           [
             "image",
@@ -2645,11 +2928,12 @@
             ]
           ]
         ],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 15, 0.8, 17, 1],
         "text-anchor": "top",
         "text-field": "{name:latin}\n{name:nonlatin}",
         "text-font": ["Noto Sans Regular"],
         "text-max-width": 9,
-        "text-offset": [0, 0.6],
+        "text-offset": [0, 1.05],
         "text-padding": 2,
         "text-size": 12,
         "visibility": "visible"
@@ -2669,15 +2953,132 @@
       "minzoom": 14,
       "filter": [
         "all",
-        ["==", "$type", "Point"],
-        ["<=", "rank", 14],
+        ["==", ["geometry-type"], "Point"],
+        [
+          "<=",
+          ["coalesce", ["get", "rank"], 9999],
+          [
+            "match",
+            ["get", "class"],
+            [
+              "attraction",
+              "castle",
+              "monument",
+              "zoo",
+              "aquarium",
+              "amusement_park",
+              "theme_park",
+              "stadium",
+              "airport",
+              "railway",
+              "hospital",
+              "viewpoint"
+            ],
+            ["step", ["zoom"], 0, 14, 8, 15, 20, 16, 40, 17, 100, 18, 9999, 19, 9999, 20, 9999],
+            ["museum"],
+            ["step", ["zoom"], 0, 14, 12, 15, 35, 16, 80, 17, 220, 18, 9999, 19, 9999, 20, 9999],
+            ["art_gallery", "theatre", "cinema"],
+            ["step", ["zoom"], 0, 14, 0, 15, 12, 16, 45, 17, 85, 18, 180, 19, 9999, 20, 9999],
+            [
+              "town_hall",
+              "library",
+              "police",
+              "fire_station",
+              "place_of_worship",
+              "college",
+              "harbor",
+              "ferry_terminal",
+              "garden",
+              "beach",
+              "cemetery"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 6, 16, 25, 17, 50, 18, 130, 19, 9999, 20, 9999],
+            ["restaurant", "cafe", "bar", "beer", "bakery", "ice_cream"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 25, 17, 115, 18, 220, 19, 9999, 20, 9999],
+            ["fast_food"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 22, 17, 42, 18, 110, 19, 9999, 20, 9999],
+            ["lodging", "campsite"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 25, 17, 78, 18, 180, 19, 9999, 20, 9999],
+            ["shop", "grocery", "clothing_store", "alcohol_shop", "parking"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 12, 17, 22, 18, 65, 19, 140, 20, 9999],
+            ["bus"],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 3, 18, 7, 19, 15, 20, 9999],
+            [
+              "school",
+              "office",
+              "bank",
+              "atm",
+              "doctors",
+              "dentist",
+              "pharmacy",
+              "veterinary",
+              "information",
+              "playground",
+              "sports_centre",
+              "swimming_pool",
+              "golf",
+              "dog_park",
+              "pitch",
+              "post",
+              "bicycle_rental",
+              "car",
+              "fuel",
+              "taxi",
+              "airfield",
+              "waterfall",
+              "shelter",
+              "music",
+              "escape_game",
+              "sailing",
+              "tennis",
+              "cycling",
+              "basketball",
+              "swimming",
+              "picnic_site",
+              "horse_racing",
+              "paragliding",
+              "laundry",
+              "hairdresser"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 8, 18, 35, 19, 90, 20, 9999],
+            [
+              "toilets",
+              "recycling",
+              "drinking_water",
+              "telephone",
+              "gate",
+              "lift_gate",
+              "entrance",
+              "bicycle"
+            ],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 0, 18, 10, 19, 50, 20, 9999],
+            ["step", ["zoom"], 0, 14, 0, 15, 0, 16, 0, 17, 0, 18, 10, 19, 50, 20, 9999]
+          ]
+        ],
+        [
+          "!",
+          [
+            "in",
+            ["get", "class"],
+            [
+              "literal",
+              ["waste_basket", "bicycle_parking", "bollard", "motorcycle_parking", "cycle_barrier"]
+            ]
+          ]
+        ],
+        ["any", ["!", ["has", "level"]], ["==", ["get", "level"], 0]],
+        ["<=", ["coalesce", ["get", "rank"], 9999], 14],
         ["has", "name"],
-        ["!=", "class", "park"],
-        ["any", ["!has", "level"], ["==", "level", 0]]
+        ["!=", ["get", "class"], "park"]
       ],
       "layout": {
         "icon-image": [
           "coalesce",
+          [
+            "image",
+            ["concat", "poi-", ["get", "class"], "-", ["coalesce", ["get", "subclass"], ""]]
+          ],
+          ["image", ["concat", "poi-", ["get", "class"]]],
           ["image", ["concat", ["get", "class"], "_11"]],
           [
             "image",
@@ -2696,11 +3097,12 @@
             ]
           ]
         ],
+        "icon-size": ["interpolate", ["linear"], ["zoom"], 14, 0.78, 16, 1],
         "text-anchor": "top",
         "text-field": "{name:latin}\n{name:nonlatin}",
         "text-font": ["Noto Sans Regular"],
         "text-max-width": 9,
-        "text-offset": [0, 0.6],
+        "text-offset": [0, 1.05],
         "text-padding": 2,
         "text-size": 12,
         "visibility": "visible"
@@ -3386,12 +3788,12 @@
       "type": "symbol",
       "source": "openmaptiles",
       "source-layer": "housenumber",
-      "minzoom": 17,
+      "minzoom": 19,
       "layout": {
         "text-field": ["get", "housenumber"],
         "text-font": ["Noto Sans Regular"],
-        "text-size": 10,
-        "text-padding": 3
+        "text-size": 9,
+        "text-padding": 1
       },
       "paint": {
         "text-color": "#747b80",
