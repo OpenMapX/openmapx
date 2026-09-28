@@ -278,7 +278,7 @@ export function RouteImpactDetailsDialog({
                     sx={{ fontWeight: 700 }}
                     data-testid="wtw-total-emissions"
                   >
-                    {formatCo2Emission(impact.emissions.totalGrams, locale) ?? "0 g CO2"}
+                    {formatCo2Emission(impact.emissions.totalGrams, locale) ?? "0 g CO₂"}
                   </Typography>
                 </Box>
                 <Divider />
@@ -295,7 +295,7 @@ export function RouteImpactDetailsDialog({
                   >
                     {isElectricTailpipeZero
                       ? t("zeroDirectEmissions")
-                      : (formatCo2Emission(impact.emissions.tailpipeGrams, locale) ?? "0 g CO2")}
+                      : (formatCo2Emission(impact.emissions.tailpipeGrams, locale) ?? "0 g CO₂")}
                   </Typography>
                 </Box>
                 <Box
@@ -309,7 +309,7 @@ export function RouteImpactDetailsDialog({
                     sx={{ fontWeight: 500 }}
                     data-testid="upstream-emissions"
                   >
-                    {formatCo2Emission(impact.emissions.upstreamGrams, locale) ?? "0 g CO2"}
+                    {formatCo2Emission(impact.emissions.upstreamGrams, locale) ?? "0 g CO₂"}
                   </Typography>
                 </Box>
               </Box>

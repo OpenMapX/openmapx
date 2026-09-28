@@ -21,8 +21,8 @@ vi.mock("next-intl", () => ({
     if (namespace === "directions" && key === "walkDistance") {
       return `${String(values?.distance ?? "")} walk`;
     }
-    if (namespace === "directions" && key === "lowestCo2") return "Lowest CO2";
-    if (namespace === "directions" && key === "co2Emissions") return "CO2";
+    if (namespace === "directions" && key === "lowestCo2") return "Lowest CO₂";
+    if (namespace === "directions" && key === "co2Emissions") return "CO₂";
     if (namespace === "directions" && key === "cancelledServices") {
       const count = Number(values?.count ?? 0);
       return `${count} ${count === 1 ? "service" : "services"} cancelled`;
@@ -96,8 +96,8 @@ describe("TransitItineraryCard", () => {
 
     expect(markup).toContain("1 transfer");
     expect(markup).toContain("250 m walk");
-    expect(markup).toContain("Lowest CO2");
-    expect(markup).toContain("43 g CO2");
+    expect(markup).toContain("Lowest CO₂");
+    expect(markup).toContain("43 g CO₂");
     expect(markup).not.toContain("cancelled");
     expect(markup).not.toContain("not wheelchair accessible");
   });

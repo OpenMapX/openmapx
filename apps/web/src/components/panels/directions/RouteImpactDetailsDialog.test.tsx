@@ -200,18 +200,18 @@ describe("RouteImpactDetailsDialog", () => {
 
     it("displays the well-to-wheel emissions breakdown for ICE diesel", () => {
       renderDialog({ impact: mockDieselImpact });
-      expect(screen.getByTestId("wtw-total-emissions").textContent).toContain("8.4 kg CO2");
-      expect(screen.getByTestId("tailpipe-emissions").textContent).toContain("7 kg CO2");
-      expect(screen.getByTestId("upstream-emissions").textContent).toContain("1.4 kg CO2");
+      expect(screen.getByTestId("wtw-total-emissions").textContent).toContain("8.4 kg CO₂");
+      expect(screen.getByTestId("tailpipe-emissions").textContent).toContain("7 kg CO₂");
+      expect(screen.getByTestId("upstream-emissions").textContent).toContain("1.4 kg CO₂");
     });
 
     it("displays the emissions breakdown for EV with zero direct tailpipe note", () => {
       renderDialog({ impact: mockEvImpactMultiOccupancy });
-      expect(screen.getByTestId("wtw-total-emissions").textContent).toContain("2.4 kg CO2");
+      expect(screen.getByTestId("wtw-total-emissions").textContent).toContain("2.4 kg CO₂");
       expect(screen.getByTestId("tailpipe-emissions").textContent).toContain(
         "0 g (Zero direct emissions)",
       );
-      expect(screen.getByTestId("upstream-emissions").textContent).toContain("2.4 kg CO2");
+      expect(screen.getByTestId("upstream-emissions").textContent).toContain("2.4 kg CO₂");
     });
 
     it("displays energy consumed", () => {
@@ -249,7 +249,7 @@ describe("RouteImpactDetailsDialog", () => {
     it("shows per-person breakdown when occupancy > 1", () => {
       renderDialog({ impact: mockEvImpactMultiOccupancy });
       expect(screen.getByTestId("per-person-section")).toBeInTheDocument();
-      expect(screen.getByTestId("per-person-emissions").textContent).toContain("800 g CO2");
+      expect(screen.getByTestId("per-person-emissions").textContent).toContain("800 g CO₂");
       expect(screen.getByTestId("per-person-cost").textContent).toContain("1.40");
       expect(screen.getAllByText("Known subtotal").length).toBeGreaterThan(0);
     });
@@ -364,7 +364,7 @@ describe("RouteImpactDetailsDialog", () => {
       expect(screen.getByTestId("emissions-provenance-citation").textContent).toContain(
         "GLEC Framework v3",
       );
-      expect(screen.getByText("Tailpipe factor: 2,640 g CO2e/L")).toBeInTheDocument();
+      expect(screen.getByText("Tailpipe factor: 2,640 g CO₂e/L")).toBeInTheDocument();
     });
 
     it("does not expose an unsafe provenance URL", () => {
@@ -397,7 +397,7 @@ describe("RouteImpactDetailsDialog", () => {
       });
 
       expect(screen.getByText("Routen-Auswirkungen")).toBeInTheDocument();
-      expect(screen.getByTestId("wtw-total-emissions").textContent).toContain("2,4 kg CO2");
+      expect(screen.getByTestId("wtw-total-emissions").textContent).toContain("2,4 kg CO₂");
       expect(screen.getByTestId("tailpipe-emissions").textContent).toContain(
         "0 g (Keine direkten Emissionen)",
       );

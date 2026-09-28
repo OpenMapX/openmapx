@@ -620,10 +620,10 @@ describe("RouteCard impact integration", () => {
     const badge = screen.getByTestId("route-impact-badge");
     expect(badge).toBeDefined();
     // Displays vehicle-aware emissions and cost instead of static 170 g/km estimate
-    expect(badge.textContent).toContain("8.4 kg CO2");
+    expect(badge.textContent).toContain("8.4 kg CO₂");
     expect(badge.textContent).toContain("~€6.80");
     // Ensure static ~20 kg CO2 is not rendered
-    expect(screen.queryByText(/20\.1 kg CO2/)).toBeNull();
+    expect(screen.queryByText(/20\.1 kg CO₂/)).toBeNull();
   });
 
   it("displays Eco Choice badge on alternative with lowest emissions", () => {
@@ -710,7 +710,7 @@ describe("RouteCard impact integration", () => {
 
     expect(screen.queryByTestId("route-impact-badge")).toBeNull();
     // 118.132 km * 170 g/km = 20082 g = 20.1 kg CO2
-    expect(screen.getByText(/20\.1 kg CO2/)).toBeDefined();
+    expect(screen.getByText(/20\.1 kg CO₂/)).toBeDefined();
   });
 
   it("explains why a plug-in hybrid estimate is unavailable", () => {
@@ -729,7 +729,7 @@ describe("RouteCard impact integration", () => {
     );
 
     expect(screen.getByText("Impact estimate unavailable for plug-in hybrids")).toBeDefined();
-    expect(screen.queryByText(/20\.1 kg CO2/)).toBeNull();
+    expect(screen.queryByText(/20\.1 kg CO₂/)).toBeNull();
   });
 
   it("explains why an unknown motorized powertrain cannot be estimated", () => {
@@ -748,7 +748,7 @@ describe("RouteCard impact integration", () => {
     );
 
     expect(screen.getByText("Impact estimate unavailable for this powertrain")).toBeDefined();
-    expect(screen.queryByText(/20\.1 kg CO2/)).toBeNull();
+    expect(screen.queryByText(/20\.1 kg CO₂/)).toBeNull();
   });
 
   it("uses the calculated fastest route instead of assuming index zero", () => {

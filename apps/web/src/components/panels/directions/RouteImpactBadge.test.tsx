@@ -247,7 +247,7 @@ describe("RouteImpactBadge", () => {
     renderBadge({ impact: mockDieselImpact });
     const textEl = screen.getByTestId("impact-summary-text");
     expect(textEl.textContent).toContain("6.80");
-    expect(textEl.textContent).toContain("8.4 kg CO2");
+    expect(textEl.textContent).toContain("8.4 kg CO₂");
   });
 
   it("renders Eco Choice badge when isLowestEmissions is true", () => {
@@ -303,7 +303,7 @@ describe("RouteImpactBadge", () => {
       messages: de,
     });
     expect(screen.getByTestId("eco-choice-chip").textContent).toBe("Öko-Tipp");
-    expect(screen.getByTestId("impact-summary-text").textContent).toContain("8,4 kg CO2");
+    expect(screen.getByTestId("impact-summary-text").textContent).toContain("8,4 kg CO₂");
     expect(screen.getByTestId("impact-summary-text").textContent).toContain(
       "Bekannte Zwischensumme",
     );

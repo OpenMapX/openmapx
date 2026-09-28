@@ -6,8 +6,8 @@ export function formatCo2Emission(
 
   if (co2Grams >= 1000) {
     const kilograms = co2Grams / 1000;
-    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(kilograms)} kg CO2`;
+    return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 1 }).format(kilograms)} kg CO₂`;
   }
 
-  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(co2Grams))} g CO2`;
+  return `${new Intl.NumberFormat(locale, { maximumFractionDigits: 0 }).format(Math.round(co2Grams))} g CO₂`;
 }
