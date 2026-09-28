@@ -1175,6 +1175,7 @@
     "noOsmAttributes": "OpenStreetMap has no extra attributes for this place.",
     "aboutThisPlace": "About this place",
     "otherDetails": "Other details",
+    "allOpenStreetMapTags": "All OpenStreetMap tags",
     "externalReferences": "External references",
     "openDetail": "Open · {detail}",
     "closedDetail": "Closed · {detail}",

@@ -3,6 +3,7 @@
 import CheckIcon from "@mui/icons-material/Check";
 import CloseIcon from "@mui/icons-material/Close";
 import ContentCopyIcon from "@mui/icons-material/ContentCopy";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
 import OpenInNewIcon from "@mui/icons-material/OpenInNew";
 import Box from "@mui/material/Box";
@@ -19,6 +20,7 @@ import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { attributionsForSources } from "@/lib/attributionForProviders";
+import { humanizeOsmTagValue } from "@/lib/humanizeOsmTagValue";
 import { buildExternalRefs, type ExternalRef } from "./externalIdLinks";
 import { getOverviewConsumedKeys } from "./PlaceTagDetails";
 
@@ -31,9 +33,6 @@ interface TagGroup {
   labelKey: string;
   keys: readonly string[];
 }
-
-// Keys consumed by knowledge providers — shown elsewhere, not as raw OSM strings
-const KNOWLEDGE_KEYS = new Set(["wikidata", "wikipedia", "wikimedia_commons"]);
 
 const TAG_GROUPS: TagGroup[] = [
   {
@@ -88,10 +87,27 @@ const TAG_GROUPS: TagGroup[] = [
 
 /** Converts an OSM tag key into a human-readable label. */
 function formatTagKey(key: string): string {
+  if (key.startsWith("payment:")) {
+    return key
+      .slice("payment:".length)
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (character) => character.toUpperCase());
+  }
   return key
     .replace(/^[^:]+:/, (prefix) => `${prefix.slice(0, -1).replace(/_/g, " ")} · `)
     .replace(/_/g, " ")
     .replace(/^\w/, (c) => c.toUpperCase());
+}
+
+function formatTagValue(key: string, value: string): string {
+  if (key.endsWith(":description")) return value;
+  return value
+    .split(";")
+    .map((part) => {
+      const readable = humanizeOsmTagValue(part.trim());
+      return readable.charAt(0).toUpperCase() + readable.slice(1);
+    })
+    .join(", ");
 }
 
 function TagItem({ tagKey, value }: { tagKey: string; value: string }) {
@@ -123,7 +139,7 @@ function TagItem({ tagKey, value }: { tagKey: string; value: string }) {
             }}
           >
             {" · "}
-            {value}
+            {formatTagValue(tagKey, value)}
           </Typography>
         )}
       </Typography>
@@ -137,37 +153,32 @@ interface RenderedGroup {
 }
 
 function buildGroups(osmTags: Record<string, string>): RenderedGroup[] {
-  const assigned = new Set<string>();
   const groups: RenderedGroup[] = [];
   const overviewKeys = getOverviewConsumedKeys(osmTags);
 
   for (const group of TAG_GROUPS) {
     const entries: Array<{ key: string; value: string }> = [];
-    for (const key of group.keys) {
+    const keys =
+      group.labelKey === "paymentMethods"
+        ? [
+            ...group.keys,
+            ...Object.keys(osmTags)
+              .filter((key) => key.startsWith("payment:") && !group.keys.includes(key))
+              .sort(),
+          ]
+        : group.keys;
+    for (const key of keys) {
       if (overviewKeys.has(key)) {
-        assigned.add(key);
         continue;
       }
       const value = osmTags[key];
       if (value !== undefined) {
         entries.push({ key, value });
-        assigned.add(key);
       }
     }
     if (entries.length > 0) {
       groups.push({ labelKey: group.labelKey, entries });
     }
-  }
-
-  // Catch-all for unassigned tags (excluding knowledge meta-keys and overview-consumed keys)
-  const other: Array<{ key: string; value: string }> = [];
-  for (const [key, value] of Object.entries(osmTags)) {
-    if (!assigned.has(key) && !KNOWLEDGE_KEYS.has(key) && !overviewKeys.has(key)) {
-      other.push({ key, value });
-    }
-  }
-  if (other.length > 0) {
-    groups.push({ labelKey: "otherDetails", entries: other });
   }
 
   return groups;
@@ -264,6 +275,7 @@ function ExternalRefRow({ ref }: { ref: ExternalRef }) {
 
 export function PlaceInfoTab({ place, isLoading }: Props) {
   const t = useTranslations("place");
+  const [rawTagsExpanded, setRawTagsExpanded] = useState(false);
   const registry = useIntegrationRegistry();
   const infoDescription = place.wikipediaExtract ?? place.description;
   const hasDescription = Boolean(infoDescription);
@@ -486,6 +498,83 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
             label={t("dataSources")}
             maxVisible={3}
           />
+        </>
+      )}
+      {hasOsmTags && (
+        <>
+          {(hasDescription ||
+            hasFacts ||
+            osmGroups.length > 0 ||
+            hasExternalRefs ||
+            placeAttributions.length > 0) && <Divider />}
+          <Box
+            component="button"
+            type="button"
+            aria-expanded={rawTagsExpanded}
+            onClick={() => setRawTagsExpanded((expanded) => !expanded)}
+            sx={{
+              width: "100%",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "space-between",
+              px: 2,
+              py: 1.5,
+              border: 0,
+              bgcolor: "transparent",
+              color: "text.primary",
+              textAlign: "left",
+              cursor: "pointer",
+              "&:hover": { bgcolor: "action.hover" },
+              "&:focus-visible": {
+                outline: "2px solid",
+                outlineColor: "primary.main",
+                outlineOffset: -2,
+              },
+            }}
+          >
+            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+              {t("allOpenStreetMapTags")}
+            </Typography>
+            <ExpandMoreIcon
+              sx={{
+                fontSize: 20,
+                color: "text.secondary",
+                transform: rawTagsExpanded ? "rotate(180deg)" : "none",
+              }}
+            />
+          </Box>
+          {rawTagsExpanded && (
+            <Box component="dl" sx={{ mx: 2, my: 0, pb: 1.5 }}>
+              {Object.entries(place.osmTags ?? {})
+                .sort(([first], [second]) => first.localeCompare(second))
+                .map(([key, value]) => (
+                  <Box
+                    key={key}
+                    sx={{
+                      display: "grid",
+                      gridTemplateColumns: "minmax(0, 1fr) minmax(0, 1fr)",
+                      gap: 1,
+                      py: 0.5,
+                    }}
+                  >
+                    <Typography
+                      component="dt"
+                      variant="caption"
+                      sx={{ color: "text.secondary", overflowWrap: "anywhere" }}
+                    >
+                      {key}
+                    </Typography>
+                    <Typography
+                      component="dd"
+                      variant="body2"
+                      sx={{ m: 0, overflowWrap: "anywhere" }}
+                    >
+                      {value}
+                    </Typography>
+                  </Box>
+                ))}
+            </Box>
+          )}
         </>
       )}
     </Box>
