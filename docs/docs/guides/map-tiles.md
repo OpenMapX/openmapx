@@ -131,8 +131,13 @@ With a MapTiler basemap, Terrain keeps MapTiler Terrain RGB and MapTiler
 Contours through the existing API proxy; `MAPTILER_KEY` is required. MapTiler's
 terrain datasets have a native maximum zoom of 14. Mapterhorn's worldwide DEM
 supports contours through zoom 12; higher-resolution elevation tiles are
-available in some regions, and closer views overzoom where necessary. Terrain
-data is loaded only while Terrain is selected.
+available in some regions, and closer views overzoom where necessary.
+
+The Default street map uses the same DEM for soft mountain shading: a plain
+hillshade from zoom 6 that fades out by zoom 14, with no contours, elevation
+tint or 3D terrain. It requests DEM tiles only up to zoom 9 and overzooms them,
+which keeps the shading generalised and the tile count low. Satellite and
+Cycling load no elevation data.
 
 A deployment with its own DEM can set `NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL` to
 a locally served DEM TileJSON endpoint and set
@@ -146,8 +151,9 @@ URL to skip that extra TileJSON request. Alternatively, set
 `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL` to the data provider's required credit.
 
 Downloaded browser packages currently contain OpenMapTiles vectors and glyphs,
-but no elevation or contour tiles. While an offline package is active, Terrain
-therefore shows the flat vector style and makes no terrain tile requests.
+but no elevation or contour tiles. While an offline package is active, Default
+and Terrain therefore show the flat vector style and make no terrain tile
+requests.
 
 ## Offline packages
 

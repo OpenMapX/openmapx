@@ -9,6 +9,15 @@ const ELEVATION_TINT = "openmapx-terrain-elevation-tint";
 const HILLSHADE = "openmapx-terrain-hillshade";
 const CONTOUR_LINES = "openmapx-terrain-contour-lines";
 const CONTOUR_LABELS = "openmapx-terrain-contour-labels";
+const RELIEF_DEM = "openmapx-default-relief-dem";
+const RELIEF = "openmapx-default-relief";
+const TERRAIN_LAYERS = [ELEVATION_TINT, HILLSHADE, CONTOUR_LINES, CONTOUR_LABELS];
+
+/**
+ * `subtle` is the soft mountain shading of the default street map; `full` is
+ * the Terrain base with contours, elevation tint and a 3D terrain mesh.
+ */
+export type TerrainRelief = "off" | "subtle" | "full";
 
 export interface TerrainStyleOptions {
   demUrl: string;
@@ -18,32 +27,120 @@ export interface TerrainStyleOptions {
   generatedContourUrl?: string;
 }
 
+type TerrainStyleMap = Pick<
+  MapLibreMap,
+  | "getSource"
+  | "addSource"
+  | "getLayer"
+  | "addLayer"
+  | "setLayoutProperty"
+  | "getLayoutProperty"
+  | "setPaintProperty"
+  | "getPaintProperty"
+  | "getTerrain"
+  | "setTerrain"
+  | "getStyle"
+>;
+
+function setLayersVisible(map: TerrainStyleMap, ids: readonly string[], visible: boolean): void {
+  const visibility = visible ? "visible" : "none";
+  for (const id of ids) {
+    if (map.getLayer(id) && (map.getLayoutProperty(id, "visibility") ?? "visible") !== visibility) {
+      map.setLayoutProperty(id, "visibility", visibility);
+    }
+  }
+}
+
+function reliefColors(dark: boolean) {
+  return dark
+    ? {
+        "hillshade-shadow-color": "rgba(4, 8, 14, 0.6)",
+        "hillshade-highlight-color": "rgba(170, 190, 200, 0.14)",
+        "hillshade-accent-color": "rgba(4, 8, 14, 0.3)",
+      }
+    : {
+        "hillshade-shadow-color": "rgba(40, 70, 55, 0.55)",
+        "hillshade-highlight-color": "rgba(255, 255, 255, 0.5)",
+        "hillshade-accent-color": "rgba(40, 70, 55, 0.3)",
+      };
+}
+
+/**
+ * Soft shading that reads mountains without turning the street map into a
+ * topographic one: it fades in from zoom 6, peaks around zoom 10–12 and is
+ * gone by zoom 14 where streets matter. Capping the DEM at zoom 9 lets closer
+ * views overzoom it, which generalises the relief instead of showing every
+ * gully.
+ */
+function syncSubtleRelief(
+  map: TerrainStyleMap,
+  demUrl: string,
+  demEncoding: "mapbox" | "terrarium",
+  dark: boolean,
+): void {
+  ensureUrlTileSource(map, RELIEF_DEM, {
+    type: "raster-dem",
+    url: demUrl,
+    tileSize: 512,
+    encoding: demEncoding,
+    maxzoom: 9,
+  });
+  const colors = reliefColors(dark);
+  if (!map.getLayer(RELIEF)) {
+    addLayerWithinBasemap(
+      map,
+      {
+        id: RELIEF,
+        type: "hillshade",
+        source: RELIEF_DEM,
+        minzoom: 6,
+        maxzoom: 14,
+        paint: {
+          "hillshade-method": "standard",
+          "hillshade-exaggeration": [
+            "interpolate",
+            ["linear"],
+            ["zoom"],
+            6,
+            0,
+            8,
+            0.15,
+            10,
+            0.4,
+            12,
+            0.35,
+            13,
+            0.18,
+            14,
+            0,
+          ],
+          "hillshade-illumination-direction": 315,
+          "hillshade-illumination-anchor": "map",
+          ...colors,
+        },
+      },
+      "before-water",
+    );
+  }
+  setLayersVisible(map, [RELIEF], true);
+  for (const [property, value] of Object.entries(colors) as [keyof typeof colors, string][]) {
+    if (map.getPaintProperty(RELIEF, property) !== value) {
+      map.setPaintProperty(RELIEF, property, value);
+    }
+  }
+}
+
 /** Keep relief below vector roads and labels, including after a style swap. */
 export function syncTerrainStyle(
-  map: Pick<
-    MapLibreMap,
-    | "getSource"
-    | "addSource"
-    | "getLayer"
-    | "addLayer"
-    | "setLayoutProperty"
-    | "getLayoutProperty"
-    | "setPaintProperty"
-    | "getPaintProperty"
-    | "getTerrain"
-    | "setTerrain"
-    | "getStyle"
-  >,
-  enabled: boolean,
+  map: TerrainStyleMap,
+  relief: TerrainRelief,
   { demUrl, contoursUrl, dark, demEncoding = "mapbox", generatedContourUrl }: TerrainStyleOptions,
 ): void {
-  if (!enabled) {
+  if (relief !== "subtle") setLayersVisible(map, [RELIEF], false);
+  if (relief !== "full") {
     if (map.getTerrain()?.source === DEM) map.setTerrain(null);
-    for (const id of [ELEVATION_TINT, HILLSHADE, CONTOUR_LINES, CONTOUR_LABELS]) {
-      if (map.getLayer(id) && map.getLayoutProperty(id, "visibility") !== "none") {
-        map.setLayoutProperty(id, "visibility", "none");
-      }
-    }
+    setLayersVisible(map, TERRAIN_LAYERS, false);
+    if (relief === "subtle") syncSubtleRelief(map, demUrl, demEncoding, dark);
     return;
   }
 
@@ -181,11 +278,7 @@ export function syncTerrainStyle(
     );
   }
 
-  for (const id of [ELEVATION_TINT, HILLSHADE, CONTOUR_LINES, CONTOUR_LABELS]) {
-    if (map.getLayer(id) && map.getLayoutProperty(id, "visibility") === "none") {
-      map.setLayoutProperty(id, "visibility", "visible");
-    }
-  }
+  setLayersVisible(map, TERRAIN_LAYERS, true);
   const colors = [
     [
       HILLSHADE,

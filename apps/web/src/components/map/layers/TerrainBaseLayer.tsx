@@ -10,8 +10,13 @@ import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useOfflinePackageActive } from "@/lib/offlineAreas";
 import { contourDemTileUrl, generatedContourUrl } from "./generatedContours";
-import { syncTerrainStyle } from "./terrainStyle";
+import { syncTerrainStyle, type TerrainRelief } from "./terrainStyle";
 
+/**
+ * Elevation on the vector basemap: soft mountain shading on the default street
+ * map, and the full relief with contours and 3D terrain on the Terrain base.
+ * Raster bases cover the vector land cover, so they get none.
+ */
 export function TerrainBaseLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const env = useEnv();
@@ -19,7 +24,14 @@ export function TerrainBaseLayer() {
   const offlinePackageActive = useOfflinePackageActive();
   const { mode, systemMode } = useColorScheme();
   const dark = (mode === "system" ? systemMode : mode) === "dark";
-  const enabled = activeLayer === "terrain" && !offlinePackageActive;
+  const relief: TerrainRelief = offlinePackageActive
+    ? "off"
+    : activeLayer === "terrain"
+      ? "full"
+      : activeLayer === "default"
+        ? "subtle"
+        : "off";
+  const enabled = relief !== "off";
 
   const attributions = useMemo<Attribution[]>(
     () =>
@@ -45,7 +57,7 @@ export function TerrainBaseLayer() {
     const subscribe = (contourUrl?: string) => {
       if (disposed) return;
       unsubscribe = subscribeStyleLoaded(map, () =>
-        syncTerrainStyle(map, enabled, {
+        syncTerrainStyle(map, relief, {
           demUrl: env.terrainDemTilejsonUrl,
           contoursUrl: contourUrl === "" ? "" : env.terrainContourTilejsonUrl,
           demEncoding: env.terrainDemEncoding,
@@ -54,7 +66,7 @@ export function TerrainBaseLayer() {
         }),
       );
     };
-    if (enabled && env.terrainContourMode === "generated") {
+    if (relief === "full" && env.terrainContourMode === "generated") {
       void contourDemTileUrl(env.terrainDemTileUrlTemplate, env.terrainDemTilejsonUrl)
         .then((tileUrl) => generatedContourUrl(tileUrl, env.terrainDemEncoding))
         .then(subscribe)
@@ -73,7 +85,7 @@ export function TerrainBaseLayer() {
     mapRef,
     mapReady,
     styleVersion,
-    enabled,
+    relief,
     env.terrainDemTilejsonUrl,
     env.terrainDemTileUrlTemplate,
     env.terrainDemEncoding,

@@ -21,20 +21,21 @@ ships four:
 
 | Style         | What it shows                                                                                         |
 | ------------- | ----------------------------------------------------------------------------------------------------- |
-| **Default**   | The standard OpenMapX street map — roads, labels, land use, water.                                    |
+| **Default**   | The standard OpenMapX street map — roads, labels, land use, water, and soft shading on mountains.     |
 | **Satellite** | True-color aerial and satellite imagery, with street and place labels drawn on top.                   |
 | **Terrain**   | The street map with shaded relief, elevation tinting, contour lines, and 3D terrain when you tilt it. |
 | **Cycling**   | A bike-oriented base that foregrounds cycle routes and infrastructure.                                |
 
 Where the data comes from depends on how your instance is configured. The street
 map is served by your tile stack (a self-hosted tile server, or MapTiler Cloud).
-Terrain adds elevation data on top of it: Mapterhorn when you host your own
-tiles, MapTiler Terrain with a MapTiler basemap, or a DEM of your own (see
-[Map tiles](../guides/map-tiles.md)). Satellite imagery comes from MapTiler and
+Default and Terrain add elevation data on top of it: Mapterhorn when you host
+your own tiles, MapTiler Terrain with a MapTiler basemap, or a DEM of your own
+(see [Map tiles](../guides/map-tiles.md)). Default only shades mountains softly
+between zoom 6 and 14; Terrain shows the full relief at every zoom. Satellite imagery comes from MapTiler and
 needs `MAPTILER_KEY`; the cycling base uses Thunderforest when a key is set and
 CyclOSM otherwise. The picker always lists all four bases, so a base whose
 source isn't configured on your deployment shows no imagery. While an offline
-package is active, Terrain shows the flat street map. The picker also has a
+package is active, Default and Terrain show the flat street map. The picker also has a
 **Globe view** toggle that switches the map from a flat projection to a 3D globe.
 
 ## How overlays work

@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { syncTerrainStyle } from "./terrainStyle";
+import { syncTerrainStyle, type TerrainRelief } from "./terrainStyle";
 
 function fakeMap() {
   const sources = new Map<string, unknown>();
@@ -63,7 +63,7 @@ const options = {
 describe("terrain on the vector basemap", () => {
   it("uses Terrarium elevation and browser-generated contours for self-hosted basemaps", () => {
     const { map, sources, layers } = fakeMap();
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, {
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", {
       ...options,
       demEncoding: "terrarium",
       generatedContourUrl: "dem-contour://fixture/{z}/{x}/{y}",
@@ -89,7 +89,7 @@ describe("terrain on the vector basemap", () => {
   });
   it("adds elevation and contours below roads and labels, and enables 3D terrain", () => {
     const { map, sources } = fakeMap();
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
     expect(sources.get("openmapx-terrain-dem")).toMatchObject({
       type: "raster-dem",
       url: options.demUrl,
@@ -119,10 +119,10 @@ describe("terrain on the vector basemap", () => {
 
   it("turns relief off without fetching sources when selected again offline", () => {
     const { map } = fakeMap();
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], false, options);
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "off", options);
     expect(map.addSource).not.toHaveBeenCalled();
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], false, options);
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "off", options);
     expect(map.setTerrain).toHaveBeenLastCalledWith(null);
     expect(map.setLayoutProperty).toHaveBeenCalledWith(
       "openmapx-terrain-hillshade",
@@ -133,7 +133,7 @@ describe("terrain on the vector basemap", () => {
 
   it("keeps hillshade and 3D elevation when contour generation is unavailable", () => {
     const { map, sources } = fakeMap();
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, {
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", {
       ...options,
       contoursUrl: "",
       demEncoding: "terrarium",
@@ -147,9 +147,9 @@ describe("terrain on the vector basemap", () => {
 
   it("restores missing layers after a style reload", () => {
     const { map, resetStyle } = fakeMap();
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
     resetStyle();
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
     expect(map.addLayer).toHaveBeenCalledTimes(8);
     expect(map.addSource).toHaveBeenCalledTimes(6);
     expect(map.setTerrain).toHaveBeenCalledTimes(2);
@@ -157,11 +157,93 @@ describe("terrain on the vector basemap", () => {
 
   it("does not repeatedly mutate the style on styledata", () => {
     const { map } = fakeMap();
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
-    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], "full", options);
     expect(map.addSource).toHaveBeenCalledTimes(3);
     expect(map.addLayer).toHaveBeenCalledTimes(4);
     expect(map.setTerrain).toHaveBeenCalledTimes(1);
     expect(map.setPaintProperty).not.toHaveBeenCalled();
+  });
+});
+
+describe("soft relief on the default street map", () => {
+  const sync = (map: ReturnType<typeof fakeMap>["map"], relief: TerrainRelief, dark = false) =>
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], relief, {
+      ...options,
+      dark,
+    });
+
+  it("adds only a generalised hillshade below water, without contours or 3D terrain", () => {
+    const { map, sources, layers } = fakeMap();
+    sync(map, "subtle");
+
+    expect([...sources.keys()]).toEqual(["openmapx-default-relief-dem"]);
+    expect(sources.get("openmapx-default-relief-dem")).toMatchObject({
+      type: "raster-dem",
+      url: options.demUrl,
+      maxzoom: 9,
+    });
+    expect(map.addLayer).toHaveBeenCalledTimes(1);
+    expect(map.addLayer).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: "openmapx-default-relief",
+        type: "hillshade",
+        minzoom: 6,
+        maxzoom: 14,
+      }),
+      "water",
+    );
+    expect(layers.get("openmapx-default-relief")?.paint).toMatchObject({
+      "hillshade-method": "standard",
+    });
+    expect(map.setTerrain).not.toHaveBeenCalled();
+  });
+
+  it("fades out before street zooms", () => {
+    const { map, layers } = fakeMap();
+    sync(map, "subtle");
+    const exaggeration = layers.get("openmapx-default-relief")?.paint?.[
+      "hillshade-exaggeration"
+    ] as unknown[];
+
+    expect(exaggeration.slice(3, 5)).toEqual([6, 0]);
+    expect(exaggeration.slice(-2)).toEqual([14, 0]);
+  });
+
+  it("swaps with the full relief when switching between Default and Terrain", () => {
+    const { map, layers } = fakeMap();
+    sync(map, "subtle");
+    sync(map, "full");
+
+    expect(layers.get("openmapx-default-relief")?.layout?.visibility).toBe("none");
+    expect(layers.get("openmapx-terrain-hillshade")?.layout?.visibility).not.toBe("none");
+    expect(map.setTerrain).toHaveBeenLastCalledWith({
+      source: "openmapx-terrain-dem",
+      exaggeration: 1,
+    });
+
+    sync(map, "subtle");
+
+    expect(layers.get("openmapx-default-relief")?.layout?.visibility).toBe("visible");
+    expect(layers.get("openmapx-terrain-hillshade")?.layout?.visibility).toBe("none");
+    expect(layers.get("openmapx-terrain-contour-lines")?.layout?.visibility).toBe("none");
+    expect(map.setTerrain).toHaveBeenLastCalledWith(null);
+
+    sync(map, "off");
+
+    expect(layers.get("openmapx-default-relief")?.layout?.visibility).toBe("none");
+  });
+
+  it("retints for the dark basemap and stays idle when nothing changed", () => {
+    const { map, layers } = fakeMap();
+    sync(map, "subtle");
+    sync(map, "subtle");
+    expect(map.setPaintProperty).not.toHaveBeenCalled();
+
+    sync(map, "subtle", true);
+
+    expect(layers.get("openmapx-default-relief")?.paint).toMatchObject({
+      "hillshade-shadow-color": "rgba(4, 8, 14, 0.6)",
+    });
   });
 });
