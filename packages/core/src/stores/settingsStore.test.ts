@@ -57,6 +57,26 @@ describe("useSettingsStore", () => {
     expect(useSettingsStore.getState().aiSearchEnabled).toBe(false);
   });
 
+  it("search history defaults to enabled", () => {
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().searchHistoryEnabled).toBe(true);
+  });
+
+  it("turning search history off persists the preference and removes saved queries", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    storage.setString("openmapx:recentSearches", '["Berlin"]');
+
+    useSettingsStore.getState().setSearchHistoryEnabled(false);
+
+    expect(useSettingsStore.getState().searchHistoryEnabled).toBe(false);
+    expect(storage.getString("openmapx:searchHistoryEnabled")).toBe("false");
+    expect(storage.getString("openmapx:recentSearches")).toBeNull();
+    useSettingsStore.setState({ searchHistoryEnabled: true });
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().searchHistoryEnabled).toBe(false);
+  });
+
   it("incident alerts and avoid-incidents both default on", () => {
     configureStorage(makeMemoryStorage());
     useSettingsStore.getState().hydrate();

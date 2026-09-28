@@ -12,6 +12,8 @@ const SPEED_CAMERA_ALERTS_STORAGE_KEY = "openmapx:speedCameraAlerts";
 const JUNCTION_VIEW_STORAGE_KEY = "openmapx:junctionView";
 const JUNCTION_PHOTOS_STORAGE_KEY = "openmapx:junctionPhotos";
 const AI_SEARCH_STORAGE_KEY = "openmapx:aiSearch";
+const SEARCH_HISTORY_ENABLED_STORAGE_KEY = "openmapx:searchHistoryEnabled";
+const RECENT_SEARCHES_STORAGE_KEY = "openmapx:recentSearches";
 const INCIDENT_ALERTS_STORAGE_KEY = "openmapx:incidentAlerts";
 const AVOID_INCIDENTS_STORAGE_KEY = "openmapx:avoidIncidents";
 const FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:fasterRoutes";
@@ -84,6 +86,10 @@ function readJunctionPhotos(): boolean {
 // means enabled.
 function readAiSearch(): boolean {
   return getStorage().getString(AI_SEARCH_STORAGE_KEY) !== "false";
+}
+
+function readSearchHistoryEnabled(): boolean {
+  return getStorage().getString(SEARCH_HISTORY_ENABLED_STORAGE_KEY) !== "false";
 }
 
 // Traffic-incident announcements during navigation are on by default (no legal
@@ -190,6 +196,9 @@ interface SettingsState {
   /** Natural-language ("AI") search understanding (on by default; opt-out). */
   aiSearchEnabled: boolean;
   setAiSearchEnabled: (v: boolean) => void;
+  /** Store recent search queries on this device (on by default). */
+  searchHistoryEnabled: boolean;
+  setSearchHistoryEnabled: (v: boolean) => void;
   /** Announce traffic incidents ahead during navigation (on by default). */
   incidentAlerts: boolean;
   setIncidentAlerts: (v: boolean) => void;
@@ -282,6 +291,13 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(AI_SEARCH_STORAGE_KEY, String(aiSearchEnabled));
     set({ aiSearchEnabled });
   },
+  searchHistoryEnabled: readSearchHistoryEnabled(),
+  setSearchHistoryEnabled: (searchHistoryEnabled) => {
+    const storage = getStorage();
+    storage.setString(SEARCH_HISTORY_ENABLED_STORAGE_KEY, String(searchHistoryEnabled));
+    if (!searchHistoryEnabled) storage.remove(RECENT_SEARCHES_STORAGE_KEY);
+    set({ searchHistoryEnabled });
+  },
   incidentAlerts: readIncidentAlerts(),
   setIncidentAlerts: (incidentAlerts) => {
     getStorage().setString(INCIDENT_ALERTS_STORAGE_KEY, String(incidentAlerts));
@@ -369,6 +385,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       junctionView: readJunctionView(),
       junctionPhotos: readJunctionPhotos(),
       aiSearchEnabled: readAiSearch(),
+      searchHistoryEnabled: readSearchHistoryEnabled(),
       incidentAlerts: readIncidentAlerts(),
       avoidIncidents: readAvoidIncidents(),
       fasterRoutes: readFasterRoutes(),

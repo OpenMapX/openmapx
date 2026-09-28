@@ -34,6 +34,7 @@ import { KeypairSessionGuard } from "../providers/KeypairSessionGuard";
 import { MangroveTransportProvider } from "../providers/MangroveTransportProvider";
 import { PersonalTimelineSessionGuard } from "../providers/PersonalTimelineSessionGuard";
 import { SessionAuthorityBoundary } from "../providers/SessionAuthorityBoundary";
+import { subscribeRecentSearchStorage, useRecentSearchStore } from "../stores/recentSearchStore";
 
 /**
  * Identifies this deployment to the installed shell during the handshake, so a
@@ -134,11 +135,14 @@ export function Providers({ children }: { children: React.ReactNode }) {
     // Storage is configured at module scope above, but the settings store may
     // have initialized before that ran; re-read the persisted units preference.
     useSettingsStore.getState().hydrate();
+    useRecentSearchStore.getState().hydrate();
     // Same for the navigation voice / keep-screen-on toggle preferences.
     useNavigationStore.getState().hydrate();
     // And the persisted route-avoidance defaults.
     useDirectionsStore.getState().hydrateRoutePrefs();
   }, []);
+
+  useEffect(() => subscribeRecentSearchStorage(), []);
 
   useEffect(() => installHighCardinalityQueryCacheBudget(queryClient), [queryClient]);
 

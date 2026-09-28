@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
-import { createFakeMap, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
+import { act, createFakeMap, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 
@@ -93,6 +93,7 @@ import {
 import type { Disclosure } from "@openmapx/integration-framework";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
 import { IntegrationDisclosuresProvider } from "@/lib/integrationDisclosuresContext";
+import { useRecentSearchStore } from "@/stores/recentSearchStore";
 import { SearchBar } from "./SearchBar";
 
 // The bar's measured map registration observes its element, and jsdom ships no
@@ -125,7 +126,8 @@ beforeEach(() => {
   useCategorySearchStore.setState({ anchor: null, exploreBoxOpen: false, activeCategory: null });
   usePlaceStore.setState({ selectedPlace: null });
   useSidebarStore.setState({ activeSidebarId: null });
-  useSettingsStore.setState({ aiSearchEnabled: true });
+  useSettingsStore.setState({ aiSearchEnabled: true, searchHistoryEnabled: true });
+  useRecentSearchStore.getState().clear();
   localStorage.clear();
 });
 
@@ -161,6 +163,59 @@ describe("SearchBar", () => {
   it("mounts and renders the search input", () => {
     renderBar();
     screen.getByLabelText("search.ariaLabel");
+  });
+
+  it("shows empty-search shortcuts on desktop when the input is focused", () => {
+    renderBar();
+    fireEvent.focus(screen.getByLabelText("search.ariaLabel"));
+
+    expect(screen.getByText("search.emptyStateSignedOut")).toBeInTheDocument();
+  });
+
+  it("shows and recalls a recent query on desktop without navigating to a stored result", () => {
+    useRecentSearchStore.getState().add("Berlin cafes");
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel") as HTMLInputElement;
+    fireEvent.focus(input);
+
+    fireEvent.click(screen.getByRole("button", { name: "Berlin cafes" }));
+
+    expect(input.value).toBe("Berlin cafes");
+    expect(useSearchStore.getState().isFocused).toBe(true);
+    expect(flyToMock).not.toHaveBeenCalled();
+  });
+
+  it("lets the user clear recent queries without leaving mobile search", async () => {
+    useMediaQueryMock.mockReturnValue(true);
+    useRecentSearchStore.getState().add("Berlin cafes");
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+
+    expect(screen.getByRole("button", { name: "Berlin cafes" })).toBeInTheDocument();
+    fireEvent.blur(input);
+    fireEvent.click(screen.getByRole("button", { name: "search.clearHistory" }));
+
+    expect(useRecentSearchStore.getState().entries).toEqual([]);
+    expect(screen.queryByRole("button", { name: "Berlin cafes" })).toBeNull();
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 180));
+    });
+    expect(useSearchStore.getState().isFocused).toBe(true);
+  });
+
+  it("does not display or record searches while history is disabled", () => {
+    useRecentSearchStore.getState().add("Berlin cafes");
+    useSettingsStore.getState().setSearchHistoryEnabled(false);
+    renderBar();
+    fireEvent.focus(screen.getByLabelText("search.ariaLabel"));
+
+    expect(screen.queryByRole("button", { name: "Berlin cafes" })).toBeNull();
+    fireEvent.change(screen.getByLabelText("search.ariaLabel"), {
+      target: { value: "Amsterdam" },
+    });
+    fireEvent.submit(screen.getByLabelText("search.ariaLabel").closest("form") as HTMLFormElement);
+    expect(useRecentSearchStore.getState().entries).toEqual([]);
   });
 
   it("does not treat an auth-dialog submit as a search submit", () => {
@@ -216,6 +271,17 @@ describe("SearchBar", () => {
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
     expect(useSearchStore.getState().query).toBe("Berlin Hbf");
     expect(useSearchStore.getState().isFocused).toBe(false);
+    expect(useRecentSearchStore.getState().entries).toEqual(["Berlin Hbf"]);
+  });
+
+  it("records an explicitly submitted query without storing every keystroke", () => {
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.change(input, { target: { value: "Quiet cafés" } });
+    expect(useRecentSearchStore.getState().entries).toEqual([]);
+
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+    expect(useRecentSearchStore.getState().entries).toEqual(["Quiet cafés"]);
   });
 
   it("keeps keyboard selection aligned across category, brand, and place suggestions", async () => {
@@ -360,7 +426,7 @@ describe("SearchBar", () => {
   });
 
   it("plain Enter still resolves a typed coordinate", () => {
-    useSearchStore.getState().setQuery("50.7753, 6.0839");
+    useSearchStore.getState().setQuery("50.7753N 6.0839E");
     renderBar();
 
     const input = screen.getByLabelText("search.ariaLabel");
@@ -368,6 +434,7 @@ describe("SearchBar", () => {
 
     expect(usePlaceStore.getState().selectedPlace?.coordinates).toEqual([6.0839, 50.7753]);
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+    expect(useRecentSearchStore.getState().entries).toEqual(["50.7753N 6.0839E"]);
   });
 
   it("does not submit blank text or text during IME composition", () => {
@@ -450,6 +517,7 @@ describe("SearchBar", () => {
 
     expect(usePlaceStore.getState().selectedPlace?.id).toBe("osm:node/123");
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+    expect(useRecentSearchStore.getState().entries).toEqual(["MIT"]);
   });
 
   it("normalizes punctuation in a current explicit alias", async () => {

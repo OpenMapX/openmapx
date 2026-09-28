@@ -23,6 +23,7 @@ import type {
   AutocompleteResult,
   BoundingBox,
   CategoryId,
+  LabeledPlace,
   LngLat,
   NlpCloudAccess,
 } from "@openmapx/core";
@@ -94,9 +95,10 @@ import {
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { isConfidentPlaceMatch } from "@/lib/placeMatch";
 import { useHydrated } from "@/lib/useHydrated";
+import { useRecentSearchStore } from "@/stores/recentSearchStore";
 import { AutocompleteDropdown } from "./AutocompleteDropdown";
-import { MobileSearchEmptyState } from "./MobileSearchEmptyState";
 import { NlpSearchCard } from "./NlpSearchCard";
+import { SearchEmptyState } from "./SearchEmptyState";
 import { VoiceSearchButton } from "./VoiceSearchButton";
 
 /** Pre-parsed once at module load — the shortcut never changes, no need to
@@ -235,6 +237,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // The natural-language parse is opt-out: when AI search is disabled in
   // Settings the parse never fires, so search falls back to plain autocomplete.
   const aiSearchEnabled = useSettingsStore((s) => s.aiSearchEnabled);
+  const addRecentSearch = useRecentSearchStore((s) => s.add);
+  const clearRecentSearches = useRecentSearchStore((s) => s.clear);
 
   const disclosures = useIntegrationDisclosures();
   const aiSearchDisclosure = useAiSearchDisclosure();
@@ -619,6 +623,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     </Box>
   ) : null;
   const showDropdown = isFocused && (effectiveSuggestions.length > 0 || showNlpCard || nlpPending);
+  const showEmptySearch = isFocused && !nearbyMode && q.length === 0;
 
   const tryOpenTransitStop = async (coords: LngLat, name: string): Promise<boolean> => {
     try {
@@ -681,8 +686,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     }
   };
 
-  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newValue = e.target.value;
+  const updateQuery = (newValue: string) => {
     // In nearby mode keep the anchor (don't clearCategory — that would drop it);
     // the nearby dropdown re-filters and a selection relaunches the search.
     if (!nearbyMode) {
@@ -700,6 +704,24 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     setQuery(newValue);
   };
 
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    updateQuery(e.target.value);
+  };
+
+  const handleSelectRecent = (recent: string) => {
+    if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    updateQuery(recent);
+    setIsFocused(true);
+    inputRef.current?.focus();
+  };
+
+  const handleClearRecent = () => {
+    if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    clearRecentSearches();
+    setIsFocused(true);
+    inputRef.current?.focus();
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     // AuthDialog is portaled from the mobile account avatar inside this form.
     // React portal events follow the component tree, so its inner form's submit
@@ -712,9 +734,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
       return;
     }
+    addRecentSearch(q);
     if (syntheticResult) {
       inputRef.current?.blur();
-      handleSelect(syntheticResult);
+      handleSelect(syntheticResult, false);
       return;
     }
     // Plain Enter honors a complete, unambiguous category or brand intent.
@@ -770,7 +793,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     const exactChoices = [...exactIntents, ...exactPlaces];
     if (exactChoices.length === 1) {
       inputRef.current?.blur();
-      handleSelect(exactChoices[0]);
+      handleSelect(exactChoices[0], false);
       return;
     }
     // Navigate straight to a place ONLY when the top geocode result confidently
@@ -826,7 +849,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     }
   };
 
-  const handleSelect = (result: AutocompleteResult) => {
+  const handleSelect = (result: AutocompleteResult, recordHistory = true) => {
+    if (recordHistory) addRecentSearch(result.label);
     if (result.type === "labeled_place" && result.coordinates) {
       setQuery(result.label);
       setIsFocused(false);
@@ -955,6 +979,21 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     inputRef.current?.blur();
   };
 
+  const handleSelectLabeledPlace = (place: LabeledPlace) => {
+    setQuery(place.label);
+    setIsFocused(false);
+    flyTo([place.lng, place.lat], 15);
+    setSelectedPlace(
+      createPlace({
+        ...idsFromPrimaryOrCoords(place.placeId ?? place.id, [place.lng, place.lat]),
+        name: place.name,
+        address: place.address ?? place.name,
+        coordinates: [place.lng, place.lat],
+      }),
+    );
+    useSidebarStore.getState().openSidebar(PANEL.PLACE);
+  };
+
   return (
     <>
       {showConsentDialog && (
@@ -1009,7 +1048,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
           elevation={fullScreen ? 0 : isFocused ? 4 : 2}
           sx={{
             width: { xs: "100%", sm: 376 },
-            borderRadius: !fullScreen && showDropdown ? "24px 24px 16px 16px" : "24px",
+            borderRadius:
+              !fullScreen && (showDropdown || showEmptySearch) ? "24px 24px 16px 16px" : "24px",
             overflow: "hidden",
             transition: "box-shadow 0.2s, border-radius 0.15s, background-color 0.15s",
             // Bar turns into a light grey pill while focused,
@@ -1242,6 +1282,18 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
           {/* Suggestions list — directly attached inside the same card.
             Skipped on mobile-fullscreen, where the dropdown is rendered as
             a full-width sibling panel below the bar (see end of return). */}
+          {!fullScreen && showEmptySearch && (
+            <>
+              <Divider />
+              <Box sx={{ maxHeight: 320, overflowY: "auto" }}>
+                <SearchEmptyState
+                  onSelectPlace={handleSelectLabeledPlace}
+                  onSelectRecent={handleSelectRecent}
+                  onClearRecent={handleClearRecent}
+                />
+              </Box>
+            </>
+          )}
           {!fullScreen && showDropdown && (
             <>
               <Divider />
@@ -1307,21 +1359,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
           }}
         >
           {query.trim().length === 0 && !nearbyMode ? (
-            <MobileSearchEmptyState
-              onSelectPlace={(p) => {
-                setQuery(p.label);
-                setIsFocused(false);
-                flyTo([p.lng, p.lat], 15);
-                setSelectedPlace(
-                  createPlace({
-                    ...idsFromPrimaryOrCoords(p.placeId ?? p.id, [p.lng, p.lat]),
-                    name: p.name,
-                    address: p.address ?? p.name,
-                    coordinates: [p.lng, p.lat],
-                  }),
-                );
-                useSidebarStore.getState().openSidebar(PANEL.PLACE);
-              }}
+            <SearchEmptyState
+              onSelectPlace={handleSelectLabeledPlace}
+              onSelectRecent={handleSelectRecent}
+              onClearRecent={handleClearRecent}
             />
           ) : showDropdown ? (
             <>

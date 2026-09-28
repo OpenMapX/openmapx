@@ -66,6 +66,8 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setDateFormat = useSettingsStore((s) => s.setDateFormat);
   const aiSearchEnabled = useSettingsStore((s) => s.aiSearchEnabled);
   const setAiSearchEnabled = useSettingsStore((s) => s.setAiSearchEnabled);
+  const searchHistoryEnabled = useSettingsStore((s) => s.searchHistoryEnabled);
+  const setSearchHistoryEnabled = useSettingsStore((s) => s.setSearchHistoryEnabled);
   const fullScreen = useFullScreenOnMobile();
   const [navSettingsOpen, setNavSettingsOpen] = useState(false);
   const [vehiclesOpen, setVehiclesOpen] = useState(false);
@@ -191,6 +193,16 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
           </SettingRow>
           <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
             {ts("aiSearchHint")}
+          </Typography>
+          <SettingRow label={ts("searchHistory")}>
+            <Switch
+              checked={searchHistoryEnabled}
+              onChange={(e) => setSearchHistoryEnabled(e.target.checked)}
+              slotProps={{ input: { "aria-label": ts("searchHistory") } }}
+            />
+          </SettingRow>
+          <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+            {ts("searchHistoryHint")}
           </Typography>
         </Section>
       </DialogContent>

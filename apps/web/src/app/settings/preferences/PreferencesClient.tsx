@@ -6,7 +6,7 @@ import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Switch from "@mui/material/Switch";
 import Typography from "@mui/material/Typography";
-import { useNavigationStore } from "@openmapx/core";
+import { useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
 import { haptics, hapticsSupported, isHapticsEnabled, setHapticsEnabled } from "@/lib/haptics";
@@ -23,6 +23,8 @@ export function PreferencesClient() {
   const keepScreenOn = useNavigationStore((s) => s.keepScreenOn);
   const toggleVoice = useNavigationStore((s) => s.toggleVoice);
   const toggleKeepScreenOn = useNavigationStore((s) => s.toggleKeepScreenOn);
+  const searchHistoryEnabled = useSettingsStore((s) => s.searchHistoryEnabled);
+  const setSearchHistoryEnabled = useSettingsStore((s) => s.setSearchHistoryEnabled);
 
   const handleToggle = (next: boolean) => {
     setHapticsOn(next);
@@ -43,6 +45,25 @@ export function PreferencesClient() {
 
       <Paper variant="outlined" sx={{ p: 2, borderRadius: 2 }}>
         <Stack spacing={2}>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={searchHistoryEnabled}
+                onChange={(e) => setSearchHistoryEnabled(e.target.checked)}
+              />
+            }
+            label={
+              <Stack spacing={0.5}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {t("searchHistory")}
+                </Typography>
+                <Typography variant="body2" sx={{ color: "text.secondary" }}>
+                  {t("searchHistoryHint")}
+                </Typography>
+              </Stack>
+            }
+            sx={{ alignItems: "flex-start", m: 0 }}
+          />
           <FormControlLabel
             control={
               <Switch
