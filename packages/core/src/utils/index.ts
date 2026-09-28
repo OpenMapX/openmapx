@@ -17,6 +17,7 @@ export {
   firstBrandIdentity,
   gapFillBranding,
 } from "./brandFilter";
+export { isBuildingStyleLayer } from "./buildingStyle";
 export { withCache } from "./cache-helpers";
 export type { CategoryFacet, FacetPlacement, FacetType } from "./categoryFacets";
 export {

@@ -6,11 +6,15 @@ import CircularProgress from "@mui/material/CircularProgress";
 import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import type { LngLat } from "@openmapx/core";
-import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
+import {
+  isBuildingStyleLayer,
+  useMapStore,
+  useNavigationStore,
+  useSettingsStore,
+} from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
-import { isBuildingStyleLayer } from "@/integration-api/map/buildingStyle";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";

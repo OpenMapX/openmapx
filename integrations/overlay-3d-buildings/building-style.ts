@@ -1,5 +1,5 @@
+import { isBuildingStyleLayer } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
-import { isBuildingStyleLayer } from "@/integration-api/map/buildingStyle";
 
 export interface BuildingSourceReference {
   source: string;
