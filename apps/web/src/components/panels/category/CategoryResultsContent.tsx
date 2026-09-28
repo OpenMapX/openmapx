@@ -10,6 +10,7 @@ import TramIcon from "@mui/icons-material/Tram";
 import ZoomInIcon from "@mui/icons-material/ZoomIn";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
+import CircularProgress from "@mui/material/CircularProgress";
 import IconButton from "@mui/material/IconButton";
 import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
@@ -61,6 +62,7 @@ import { selectResultAttributes } from "./resultAttributes";
 import { cachedSummary, useCardEnrichment } from "./useCardEnrichment";
 
 type CardSummary = CategoryCardEnrichmentResponse["results"][number];
+const SLOW_SEARCH_NOTICE_MS = 8_000;
 
 const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   rail: TrainIcon,
@@ -72,10 +74,12 @@ function ResultNotice({
   tone,
   children,
   action,
+  pending = false,
 }: {
   tone: "error" | "info";
   children: ReactNode;
   action?: { label: string; kind: "retry" | "zoom"; onClick: () => void };
+  pending?: boolean;
 }) {
   const Icon = tone === "error" ? ErrorOutlinedIcon : InfoOutlinedIcon;
   const ActionIcon = action?.kind === "zoom" ? ZoomInIcon : RefreshIcon;
@@ -95,7 +99,11 @@ function ResultNotice({
         bgcolor: `color-mix(in srgb, var(--mui-palette-${tone}-main) 11%, var(--mui-palette-background-paper))`,
       }}
     >
-      <Icon aria-hidden="true" sx={{ fontSize: 19, color: `${tone}.main`, flexShrink: 0 }} />
+      {pending ? (
+        <CircularProgress size={19} color="info" aria-hidden="true" sx={{ flexShrink: 0 }} />
+      ) : (
+        <Icon aria-hidden="true" sx={{ fontSize: 19, color: `${tone}.main`, flexShrink: 0 }} />
+      )}
       <Typography variant="body2" sx={{ minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>
         {children}
       </Typography>
@@ -119,6 +127,34 @@ function ResultNotice({
             <ActionIcon aria-hidden="true" fontSize="small" />
           </IconButton>
         </Tooltip>
+      )}
+    </Box>
+  );
+}
+
+function SearchLoading({ waitingForResponse }: { waitingForResponse: boolean }) {
+  const ts = useTranslations("search");
+  const [slow, setSlow] = useState(false);
+
+  useEffect(() => {
+    if (!waitingForResponse) return;
+    const timer = window.setTimeout(() => setSlow(true), SLOW_SEARCH_NOTICE_MS);
+    return () => window.clearTimeout(timer);
+  }, [waitingForResponse]);
+
+  return (
+    <Box sx={{ px: 2, py: 2 }}>
+      {slow ? (
+        <ResultNotice tone="info" pending>
+          {ts("searchTakingLonger")}
+        </ResultNotice>
+      ) : (
+        [0, 1, 2, 3, 4].map((i) => (
+          <Box key={i} sx={{ mb: 2 }}>
+            <Skeleton variant="text" width="60%" height={20} />
+            <Skeleton variant="text" width="80%" height={16} />
+          </Box>
+        ))
       )}
     </Box>
   );
@@ -423,9 +459,11 @@ export function CategoryResultsContent() {
     distanceReference,
   } = useExploreReachResults();
   const transitStopsQuery = useTransitStops(isTransitCategory ? searchBbox : null);
-  const { data: transitStops, isPending: transitPending } = transitStopsQuery;
+  const { data: transitStops } = transitStopsQuery;
   const transitAttributions = useAttributionFromHooks(transitStopsQuery);
-  const transitLoading = isTransitCategory && transitPending;
+  const transitLoading = isTransitCategory && transitStopsQuery.isLoading;
+  const loading = isTransitCategory ? transitLoading : isLoading;
+  const waitingForResponse = isTransitCategory ? transitStopsQuery.isFetching : isLoading;
   const transitAreaTooLarge = isAreaTooLarge(transitStopsQuery.error);
   const hasAdHocPredicates =
     (adHocFilter?.require?.length ?? 0) > 0 || (adHocFilter?.exclude?.length ?? 0) > 0;
@@ -604,15 +642,11 @@ export function CategoryResultsContent() {
           }
         />
       )}
-      {(isTransitCategory ? transitLoading : isLoading) && (
-        <Box sx={{ px: 2, py: 2 }}>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <Box key={i} sx={{ mb: 2 }}>
-              <Skeleton variant="text" width="60%" height={20} />
-              <Skeleton variant="text" width="80%" height={16} />
-            </Box>
-          ))}
-        </Box>
+      {loading && (
+        <SearchLoading
+          key={`${mode}:${activeCategory}:${searchRevision}:${JSON.stringify(adHocFilter)}:${waitingForResponse}`}
+          waitingForResponse={waitingForResponse}
+        />
       )}
       {!isTransitCategory && isError && (
         <Box sx={{ px: 2, py: 2 }}>

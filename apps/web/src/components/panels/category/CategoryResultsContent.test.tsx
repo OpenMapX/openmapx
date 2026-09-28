@@ -250,6 +250,115 @@ describe("CategoryResultsContent mobile sheet interactions", () => {
 describe("CategoryResultsContent recovery", () => {
   const bbox = { west: 13.3, south: 52.4, east: 13.5, north: 52.6 };
 
+  it("does not show a transit loading skeleton before an area can be searched", () => {
+    act(() => useCategorySearchStore.getState().setActiveCategory("transit"));
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: undefined,
+      isLoading: false,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: true,
+      refetch: vi.fn(),
+    });
+
+    const view = renderPanel(vi.fn());
+    expect(view.container.querySelectorAll(".MuiSkeleton-root")).toHaveLength(0);
+    expect(screen.queryByText("search.noStopsFound")).toBeNull();
+  });
+
+  it("explains a slow active search and resets the notice for a new area or finished request", async () => {
+    vi.useFakeTimers();
+    act(() => {
+      useCategorySearchStore.getState().setActiveCategory("restaurants");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+    });
+    const pending = {
+      filtered: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch: vi.fn(),
+    };
+    mockUseExploreReachResults.mockReturnValue(pending);
+    const view = renderPanel(vi.fn());
+    try {
+      expect(screen.queryByText("search.searchTakingLonger")).toBeNull();
+      expect(view.container.querySelectorAll(".MuiSkeleton-root")).toHaveLength(10);
+      expect(screen.queryByText("search.noResultsFound")).toBeNull();
+
+      await act(async () => vi.advanceTimersByTimeAsync(8_000));
+      expect(screen.getByRole("status")).toHaveTextContent("search.searchTakingLonger");
+      expect(view.container.querySelectorAll(".MuiSkeleton-root")).toHaveLength(0);
+      expect(screen.queryByText("search.noResultsFound")).toBeNull();
+
+      act(() => useCategorySearchStore.getState().setSearchBbox({ ...bbox, east: 13.6 }));
+      expect(screen.queryByText("search.searchTakingLonger")).toBeNull();
+      expect(view.container.querySelectorAll(".MuiSkeleton-root")).toHaveLength(10);
+
+      mockUseExploreReachResults.mockReturnValue({ ...pending, filtered: [], isLoading: false });
+      act(() => useOpeningHoursStore.getState().setOpeningHoursFilter("open_now"));
+      expect(screen.queryByText("search.searchTakingLonger")).toBeNull();
+      expect(screen.getByText("search.noResultsFound")).toBeInTheDocument();
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
+  it("restarts the slow-search clock when an ad-hoc predicate changes in the same area", async () => {
+    vi.useFakeTimers();
+    const baseFilter = {
+      selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "cafe" }] }],
+    };
+    act(() => {
+      useCategorySearchStore.getState().setAdHocFilter(baseFilter, "Cafes");
+      useCategorySearchStore.getState().setSearchBbox(bbox);
+    });
+    mockUseExploreReachResults.mockReturnValue({
+      filtered: undefined,
+      isLoading: true,
+      isError: false,
+      error: null,
+      partial: false,
+      truncated: false,
+      total: undefined,
+      relaxed: [],
+      isTransitCategory: false,
+      refetch: vi.fn(),
+    });
+    const view = renderPanel(vi.fn());
+    try {
+      await act(async () => vi.advanceTimersByTimeAsync(8_000));
+      expect(screen.getByRole("status")).toHaveTextContent("search.searchTakingLonger");
+      const revision = useCategorySearchStore.getState().searchRevision;
+
+      act(() =>
+        useCategorySearchStore
+          .getState()
+          .setAdHocFilter(
+            { ...baseFilter, require: [{ key: "outdoor_seating", op: "=", value: "yes" }] },
+            "Outdoor cafes",
+            { preserveSearch: true },
+          ),
+      );
+      expect(useCategorySearchStore.getState().searchRevision).toBe(revision);
+      expect(screen.queryByText("search.searchTakingLonger")).toBeNull();
+      expect(view.container.querySelectorAll(".MuiSkeleton-root")).toHaveLength(10);
+    } finally {
+      view.unmount();
+      vi.useRealTimers();
+    }
+  });
+
   it("announces advisory result notices politely without interrupting the results", () => {
     mockUseExploreReachResults.mockReturnValue({
       filtered: [],

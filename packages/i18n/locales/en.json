@@ -288,6 +288,7 @@
     "noBrandLocationsInView": "No {brand} locations in this view. Zoom out and search again.",
     "noStopsFound": "No stops found in this area.",
     "failedToLoad": "Failed to load results. Try again.",
+    "searchTakingLonger": "Search is taking longer than usual. Still looking for results…",
     "zoomInToSearch": "Zoom in, then search the smaller area.",
     "partialResults": "Some results may be missing. Zoom in for complete results.",
     "truncatedResults": "This area has {total} matches — too many to show at once. Zoom in to see them all.",

@@ -288,6 +288,7 @@
     "noBrandLocationsInView": "Keine {brand}-Standorte in diesem Ausschnitt. Zoome heraus und suche erneut.",
     "noStopsFound": "Keine Haltestellen in diesem Bereich gefunden.",
     "failedToLoad": "Ergebnisse konnten nicht geladen werden. Erneut versuchen.",
+    "searchTakingLonger": "Die Suche dauert länger als üblich. Wir suchen weiter …",
     "zoomInToSearch": "Näher heranzoomen und anschließend den kleineren Bereich durchsuchen.",
     "partialResults": "Einige Ergebnisse fehlen möglicherweise. Für vollständige Ergebnisse näher heranzoomen.",
     "truncatedResults": "In diesem Bereich gibt es {total} Treffer – zu viele für eine gleichzeitige Anzeige. Zum Anzeigen aller näher heranzoomen.",
