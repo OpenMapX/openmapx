@@ -12,6 +12,7 @@ import { useTranslations } from "next-intl";
 import { type ComponentType, lazy, Suspense, useMemo, useState } from "react";
 import { useAnyOverlayPanelOpen } from "@/integration-api/overlay/useOverlayStoreState";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
+import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
 import { dedupeSharedMapLayers } from "./sharedIntegrationLayer";
@@ -87,6 +88,7 @@ export function LegendHost() {
   // so there is no per-context clearance to keep in sync. 0 on desktop.
   const vh = useWindowHeight();
   const followHeight = useMobilePanelClearance(vh);
+  const { bottom: bottomInset } = useMapObstructionInsets();
 
   // Declarative legends (manifest `frontend.overlay.legend` data) are rendered by
   // the host; they take precedence over the code legend path.
@@ -107,10 +109,12 @@ export function LegendHost() {
 
   if (!anyPanelOpen && !anyStandaloneToolbarActive) return null;
 
+  const footerClearance = bottomInset > 0 ? `${bottomInset + 8}px` : FLUSH_BOTTOM;
   const bottom = {
-    // Flush against the top edge of the mobile bottom sheet (no gap).
-    xs: followHeight > 0 ? `calc(${followHeight}px + var(--omx-safe-bottom))` : FLUSH_BOTTOM,
-    sm: FLUSH_BOTTOM,
+    // The sheet already clears footer credits. Without a sheet, keep the legend
+    // above the measured footer as overlay attributions wrap onto more lines.
+    xs: followHeight > 0 ? `calc(${followHeight}px + var(--omx-safe-bottom))` : footerClearance,
+    sm: footerClearance,
   };
 
   return (

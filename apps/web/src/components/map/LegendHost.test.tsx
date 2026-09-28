@@ -6,8 +6,9 @@ import { useNavigationStore, useSidebarStore } from "@openmapx/core";
 import type { LoadedIntegrationMeta } from "@openmapx/integration-framework";
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { publishMapObstruction } from "@/lib/mapObstructions";
 import { LegendHost } from "./LegendHost";
 
 vi.mock("next-intl", () => ({
@@ -69,10 +70,13 @@ function renderHost() {
 }
 
 afterEach(() => {
-  useMeasurementStore.getState().deactivate();
-  useTravelTimeStore.getState().deactivate();
-  useSidebarStore.getState().closeAll();
-  useNavigationStore.setState({ status: "idle" });
+  act(() => {
+    useMeasurementStore.getState().deactivate();
+    useTravelTimeStore.getState().deactivate();
+    useSidebarStore.getState().closeAll();
+    useNavigationStore.setState({ status: "idle" });
+    publishMapObstruction("legend-test-footer", "bottom", null);
+  });
 });
 
 describe("LegendHost", () => {
@@ -94,5 +98,21 @@ describe("LegendHost", () => {
     renderHost();
 
     expect(screen.queryByRole("button", { name: "hideLegend" })).not.toBeNull();
+  });
+
+  it("lifts the legend above a footer that grows with overlay credits", () => {
+    useMeasurementStore.getState().activate();
+    act(() => publishMapObstruction("legend-test-footer", "bottom", 34));
+    renderHost();
+    const host = screen.getByRole("button", { name: "hideLegend" }).parentElement;
+    const bottomRule = () =>
+      [...document.querySelectorAll("style")]
+        .map((style) => style.textContent ?? "")
+        .filter((css) => css.includes(`.${host?.classList[1]}{bottom:`))
+        .join(" ");
+    expect(bottomRule()).toContain("bottom:42px");
+
+    act(() => publishMapObstruction("legend-test-footer", "bottom", 60));
+    expect(bottomRule()).toContain("bottom:68px");
   });
 });
