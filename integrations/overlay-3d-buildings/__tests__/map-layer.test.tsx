@@ -1,3 +1,4 @@
+import { getOverlayEntry, registerOverlayEntry } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import manifest from "../manifest.json";
@@ -18,6 +19,16 @@ import { BuildingExtrusionLayer } from "../map-layer";
 const LAYER_ID = "openmapx-3d-buildings";
 const BUILDING_LAYER_ID = "base-buildings";
 const SYMBOL_LAYER_ID = "place-labels";
+
+// In the app, the integration registry is ready before this lazy map layer mounts.
+if (!getOverlayEntry("3d-buildings")) {
+  registerOverlayEntry({
+    id: "3d-buildings",
+    getState: () => useBuildingsStore.getState(),
+    useActive: () => useBuildingsStore((s) => s.panelOpen && s.layerVisible),
+    excludes: [],
+  });
+}
 
 function addBaseStyle(): void {
   fake.state.sources.set("unrelated", { type: "vector" });
@@ -46,7 +57,7 @@ function addBaseStyle(): void {
 beforeEach(() => {
   fake = createFakeMap({ zoom: 16, pitch: 20, maxPitch: 70 });
   addBaseStyle();
-  useBuildingsStore.setState({ panelOpen: false, layerVisible: false });
+  useBuildingsStore.setState({ panelOpen: false, layerVisible: false, userRevision: 0 });
   vi.stubGlobal(
     "matchMedia",
     vi.fn(() => ({ matches: false })),
@@ -54,7 +65,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  useBuildingsStore.setState({ panelOpen: false, layerVisible: false });
+  useBuildingsStore.setState({ panelOpen: false, layerVisible: false, userRevision: 0 });
   vi.unstubAllGlobals();
 });
 
@@ -138,11 +149,13 @@ describe("BuildingExtrusionLayer", () => {
     fake.state.pitch = 28;
     act(() => fake.emit("moveend"));
     expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    expect(useBuildingsStore.getState().userRevision).toBe(1);
     expect(fake.state.cameraTransitions).toEqual([]);
 
     fake.state.pitch = 0;
     act(() => fake.emit("moveend"));
     expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    expect(useBuildingsStore.getState().userRevision).toBe(2);
     expect(fake.state.cameraTransitions).toEqual([]);
   });
 

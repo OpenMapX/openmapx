@@ -1,6 +1,6 @@
 "use client";
 
-import { useOverlayExclusion } from "@openmapx/core";
+import { runOverlayTransaction, useOverlayExclusion } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
@@ -117,8 +117,7 @@ export function BuildingExtrusionLayer() {
       const tilted = map.getPitch() > 0.5;
       const state = useBuildingsStore.getState();
       if (state.layerVisible === tilted) return;
-      if (tilted) state.openPanel();
-      else state.closePanel();
+      runOverlayTransaction("3d-buildings", { panelOpen: tilted }, { kind: "user" });
     };
     // An initial pitched camera may come from a saved view or deep link. Do
     // not clear an explicit 3D request before its camera animation begins.
