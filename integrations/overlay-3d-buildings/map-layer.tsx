@@ -15,12 +15,11 @@ import {
   findBuildingSourceReference,
 } from "./building-style";
 import manifest from "./manifest.json";
-import { useBuildingsStore } from "./store";
+import { BUILDING_TILT_THRESHOLD as TILT_THRESHOLD, useBuildingsStore } from "./store";
 
 const LAYER_ID = "openmapx-3d-buildings";
 const MIN_ZOOM = manifest.frontend.overlay.minZoom;
 const AUTO_PITCH = 45;
-const TILT_THRESHOLD = 0.5;
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
@@ -40,6 +39,8 @@ export function BuildingExtrusionLayer() {
   useOverlayExclusion("3d-buildings", layerVisible);
 
   const prevVisibleRef = useRef(false);
+  const wasTiltedRef = useRef(false);
+  const currentMap = mapRef.current;
 
   useEffect(() => {
     void styleVersion;
@@ -142,14 +143,15 @@ export function BuildingExtrusionLayer() {
   }, [layerVisible, mapReady, styleVersion, mapRef]);
 
   useEffect(() => {
-    const map = mapRef.current;
+    const map = currentMap;
     if (!map || !mapReady) return;
-    let wasTilted = false;
     const syncViewState = () => {
       const tilted = map.getPitch() > TILT_THRESHOLD;
-      if (tilted === wasTilted) return;
-      wasTilted = tilted;
       const state = useBuildingsStore.getState();
+      if (!tilted && state.cameraAutoEnableBlocked) state.setCameraAutoEnableBlocked(false);
+      if (tilted === wasTiltedRef.current) return;
+      wasTiltedRef.current = tilted;
+      if (tilted && state.cameraAutoEnableBlocked) return;
       if (state.layerVisible === tilted) return;
       runOverlayTransaction(
         "3d-buildings",
@@ -160,14 +162,14 @@ export function BuildingExtrusionLayer() {
     // An initial pitched camera may come from a saved view or deep link.
     // Only camera tilt transitions auto-select 3D; ordinary map movements
     // must not undo an explicit off choice while the camera stays tilted.
-    if (map.getPitch() > TILT_THRESHOLD) syncViewState();
+    if (map.getPitch() > TILT_THRESHOLD || wasTiltedRef.current) syncViewState();
     map.on("pitch", syncViewState);
     map.on("pitchend", syncViewState);
     return () => {
       map.off("pitch", syncViewState);
       map.off("pitchend", syncViewState);
     };
-  }, [mapReady, mapRef]);
+  }, [mapReady, currentMap]);
 
   return null;
 }

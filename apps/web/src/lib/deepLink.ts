@@ -14,6 +14,7 @@ export const DEEPLINK_PARAMS = new Set([
   "map",
   "base",
   "globe",
+  "buildings",
   "ov",
   "panel",
   "place",
@@ -84,6 +85,7 @@ export interface ParsedDeepLink {
   map?: CameraDeepLink;
   base?: string;
   globe?: boolean;
+  buildingsOff?: boolean;
   overlays?: string[];
   panel?: string;
   place?: DeepLinkPlace;
@@ -429,6 +431,7 @@ export function parseDeepLinkSearch(search: string | URLSearchParams): ParsedDee
     map: parseCameraParam(params.get("map")) ?? undefined,
     base: params.get("base") ?? undefined,
     globe: params.has("globe") ? params.get("globe") === "1" : undefined,
+    buildingsOff: params.get("buildings") === "0",
     overlays: splitCsv(params.get("ov")),
     panel: params.get("panel") ?? undefined,
     place,

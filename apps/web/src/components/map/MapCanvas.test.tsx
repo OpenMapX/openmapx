@@ -309,7 +309,14 @@ describe("MapCanvas", () => {
     mapStyleTest.setStyleLayers([
       { id: "Building", type: "fill", source: "city", "source-layer": "building" },
       { id: "Building 3D", type: "fill-extrusion", source: "city", "source-layer": "building" },
-      { id: "Other 3D", type: "fill-extrusion", source: "city", "source-layer": "landmark" },
+      { id: "Uppercase", type: "fill-extrusion", source: "city", "source-layer": "Building" },
+      { id: "buildings-3d", type: "fill-extrusion", source: "city", "source-layer": "structures" },
+      {
+        id: "shipbuilding-monument",
+        type: "fill-extrusion",
+        source: "city",
+        "source-layer": "landmark",
+      },
     ]);
     vi.stubGlobal("navigator", { ...navigator, geolocation: undefined, permissions: undefined });
 
@@ -317,7 +324,7 @@ describe("MapCanvas", () => {
     await waitFor(() => expect(maplibreTest.options).toHaveLength(1));
     expect(maplibreTest.options[0].style.layers.map((layer) => layer.id)).toEqual([
       "Building",
-      "Other 3D",
+      "shipbuilding-monument",
     ]);
   });
 

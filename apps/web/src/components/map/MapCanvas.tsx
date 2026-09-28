@@ -10,6 +10,7 @@ import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/cor
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
+import { isBuildingStyleLayer } from "@/integration-api/map/buildingStyle";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
@@ -31,8 +32,7 @@ function withoutNativeBuildingExtrusions(style: Record<string, unknown>): Record
   if (!Array.isArray(style.layers)) return style;
   const layers = style.layers.filter((layer) => {
     if (!layer || typeof layer !== "object") return true;
-    const { type, "source-layer": sourceLayer } = layer as Record<string, unknown>;
-    return type !== "fill-extrusion" || (sourceLayer !== "building" && sourceLayer !== "buildings");
+    return layer.type !== "fill-extrusion" || !isBuildingStyleLayer(layer);
   });
   return layers.length === style.layers.length ? style : { ...style, layers };
 }

@@ -56,6 +56,7 @@ export function TerrainBaseLayer() {
     let unsubscribe: (() => void) | undefined;
     const subscribe = (contourUrl?: string) => {
       if (disposed) return;
+      unsubscribe?.();
       unsubscribe = subscribeStyleLoaded(map, () =>
         syncTerrainStyle(map, relief, {
           demUrl: env.terrainDemTilejsonUrl,
@@ -67,12 +68,17 @@ export function TerrainBaseLayer() {
       );
     };
     if (relief === "full" && env.terrainContourMode === "generated") {
+      // Contours are optional; an unresolved TileJSON/worker must not delay relief.
+      subscribe("");
       void contourDemTileUrl(env.terrainDemTileUrlTemplate, env.terrainDemTilejsonUrl)
-        .then((tileUrl) => generatedContourUrl(tileUrl, env.terrainDemEncoding))
-        .then(subscribe)
+        .then((tileUrl) =>
+          disposed ? undefined : generatedContourUrl(tileUrl, env.terrainDemEncoding),
+        )
+        .then((url) => {
+          if (url) subscribe(url);
+        })
         .catch(() => {
-          // A failed optional contour worker must not suppress hillshade/3D.
-          subscribe("");
+          // Elevation and hillshade are already active if optional setup fails.
         });
     } else {
       subscribe();

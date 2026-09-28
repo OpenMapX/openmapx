@@ -5,13 +5,14 @@ import manifest from "../manifest.json";
 import { useBuildingsStore } from "../store";
 
 let fake: FakeMap;
+let styleVersion = 0;
 let mapRef: { current: FakeMap["map"] };
 
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
     mapRef,
     mapReady: true,
-    styleVersion: 0,
+    styleVersion,
   }),
 }));
 
@@ -56,6 +57,7 @@ function addBaseStyle(): void {
 }
 
 beforeEach(() => {
+  styleVersion = 0;
   fake = createFakeMap({ zoom: 16, pitch: 20, maxPitch: 70 });
   mapRef = { current: fake.map };
   addBaseStyle();
@@ -72,6 +74,37 @@ afterEach(() => {
 });
 
 describe("BuildingExtrusionLayer", () => {
+  it("rebinds camera synchronization to a replacement map without resetting manual-off", () => {
+    const { rerender } = render(<BuildingExtrusionLayer />);
+    act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+    const oldMap = fake;
+    fake = createFakeMap({ zoom: 17, pitch: 30 });
+    mapRef.current = fake.map;
+    addBaseStyle();
+    styleVersion++;
+    rerender(<BuildingExtrusionLayer />);
+    act(() => fake.emit("pitch"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    fake.state.pitch = 0;
+    act(() => fake.emit("pitch"));
+    fake.state.pitch = 45;
+    act(() => fake.emit("pitch"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    oldMap.state.pitch = 0;
+    act(() => oldMap.emit("pitch"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+  });
+
+  it("preserves manual-off across a style reload", () => {
+    const { rerender } = render(<BuildingExtrusionLayer />);
+    act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+    styleVersion++;
+    rerender(<BuildingExtrusionLayer />);
+    fake.state.pitch = 55;
+    act(() => fake.emit("pitch"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+  });
+
   it("keeps flat buildings unobscured until the camera tilts", () => {
     fake.state.pitch = 0;
     render(<BuildingExtrusionLayer />);

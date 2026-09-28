@@ -1,7 +1,10 @@
 "use client";
 
 import { useAirQualityStore } from "@integrations/air-quality/store";
-import { useBuildingsStore } from "@integrations/overlay-3d-buildings/store";
+import {
+  BUILDING_TILT_THRESHOLD,
+  useBuildingsStore,
+} from "@integrations/overlay-3d-buildings/store";
 import { useCyclingStore } from "@integrations/overlay-cycling/store";
 import { useEarthquakeStore } from "@integrations/overlay-earthquakes/store";
 import type { EnvironmentSensorType } from "@integrations/overlay-environment/store";
@@ -248,6 +251,7 @@ function activeOverlayIds(): string[] {
 
 function applyOverlayState(parsed: ParsedDeepLink): void {
   const requested = new Set(parsed.overlays ?? []);
+  if (parsed.buildingsOff) requested.delete("3d-buildings");
   const settings = parsed.overlaySettings;
 
   if (settings.weather) requested.add("weather");
@@ -483,6 +487,9 @@ function applyTravelTime(parsed: ParsedDeepLink["travelTime"]): void {
 
 function applyOverlayDeepLink(parsed: ParsedDeepLink): void {
   applyOverlayState(parsed);
+  if (parsed.buildingsOff) {
+    runOverlayTransaction("3d-buildings", { panelOpen: false }, { kind: "user" });
+  }
   applyOverlaySettings(parsed);
 }
 
@@ -503,6 +510,18 @@ function applyDeepLink(
   const layer = useLayerStore.getState();
   layer.setActiveLayer(oneOf(parsed.base, MAP_LAYERS) ?? "default");
   layer.setGlobeView(Boolean(parsed.globe), parsed.map ? "preserve" : "reveal");
+
+  // Apply explicit off intent before camera events and before the lazy overlay
+  // registry arrives. Links without this flag keep the existing tilt automation.
+  const restoredPitch = parsed.map?.pitch ?? map?.getPitch() ?? 0;
+  useBuildingsStore
+    .getState()
+    .setCameraAutoEnableBlocked(
+      Boolean(parsed.buildingsOff) && restoredPitch > BUILDING_TILT_THRESHOLD,
+    );
+  if (parsed.buildingsOff) {
+    runOverlayTransaction("3d-buildings", { panelOpen: false }, { kind: "user" });
+  }
 
   if (options.overlays) applyOverlayDeepLink(parsed);
 
@@ -717,6 +736,9 @@ function encodeCurrentUrl(map: maplibregl.Map | null): string {
   params.set("map", formatCameraParam({ center, zoom, bearing, pitch }));
   if (layer.activeLayer !== "default") params.set("base", layer.activeLayer);
   if (layer.globeView) params.set("globe", "1");
+  if (pitch > BUILDING_TILT_THRESHOLD && !useBuildingsStore.getState().layerVisible) {
+    params.set("buildings", "0");
+  }
 
   encodeOverlaySettings(params);
   encodePanelState(params, map);

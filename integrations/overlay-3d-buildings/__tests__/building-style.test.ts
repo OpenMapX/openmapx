@@ -51,6 +51,29 @@ function mapWithStyle(style: maplibregl.StyleSpecification): maplibregl.Map {
 }
 
 describe("3D building style compatibility", () => {
+  it.each([
+    ["roofs", "Building"],
+    ["buildings-3d", "structures"],
+  ])(
+    "recognizes the same provider building geometry as basemap sanitization: %s",
+    (id, sourceLayer) => {
+      const map = mapWithStyle({
+        version: 8,
+        sources: { city: { type: "vector", url: "https://example.test/tiles.json" } },
+        layers: [
+          {
+            id: "shipbuilding-monument",
+            type: "fill-extrusion",
+            source: "city",
+            "source-layer": "landmark",
+          },
+          { id, type: "fill", source: "city", "source-layer": sourceLayer },
+        ],
+      });
+      expect(findBuildingSourceReference(map)).toEqual({ source: "city", sourceLayer });
+    },
+  );
+
   it("selects the vector source referenced by a visible building layer", () => {
     const map = mapWithStyle({
       version: 8,

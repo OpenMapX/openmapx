@@ -1,17 +1,9 @@
 import type * as maplibregl from "maplibre-gl";
+import { isBuildingStyleLayer } from "@/integration-api/map/buildingStyle";
 
 export interface BuildingSourceReference {
   source: string;
   sourceLayer: string;
-}
-
-const BUILDING_SOURCE_LAYER_NAMES = new Set(["building", "buildings"]);
-
-function isBuildingLayer(layer: maplibregl.LayerSpecification): boolean {
-  if (!("source-layer" in layer) || typeof layer["source-layer"] !== "string") return false;
-
-  const sourceLayer = layer["source-layer"].toLowerCase();
-  return BUILDING_SOURCE_LAYER_NAMES.has(sourceLayer) || /buildings?/i.test(layer.id);
 }
 
 /**
@@ -28,7 +20,7 @@ export function findBuildingSourceReference(map: maplibregl.Map): BuildingSource
 
   const matches: Array<BuildingSourceReference & { hidden: boolean }> = [];
   for (const layer of layers) {
-    if (!isBuildingLayer(layer) || !("source" in layer) || typeof layer.source !== "string") {
+    if (!isBuildingStyleLayer(layer) || !("source" in layer) || typeof layer.source !== "string") {
       continue;
     }
 

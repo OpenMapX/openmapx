@@ -22,6 +22,13 @@ afterEach(() => {
 });
 
 describe("deepLink helpers", () => {
+  it("only treats buildings=0 as explicit off and strips it from unrelated links", () => {
+    expect(parseDeepLinkSearch("?buildings=0").buildingsOff).toBe(true);
+    expect(parseDeepLinkSearch("?buildings=invalid").buildingsOff).toBe(false);
+    expect(parseDeepLinkSearch("?map=50,6,17").buildingsOff).toBe(false);
+    expect(paramsWithoutDeepLink("?buildings=0&token=keep").toString()).toBe("token=keep");
+  });
+
   it("parses place links using the current schema", () => {
     const parsed = parseDeepLinkSearch(
       "?place=osm:node:123&at=52.517036,13.38886&name=Berlin&cat=city&raw=place/city",
