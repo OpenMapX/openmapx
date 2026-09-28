@@ -1174,6 +1174,7 @@
     "noAdditionalInfo": "No additional information available",
     "noOsmAttributes": "OpenStreetMap has no extra attributes for this place.",
     "aboutThisPlace": "About this place",
+    "conditions": "Conditions",
     "otherDetails": "Other details",
     "allOpenStreetMapTags": "All OpenStreetMap tags",
     "externalReferences": "External references",

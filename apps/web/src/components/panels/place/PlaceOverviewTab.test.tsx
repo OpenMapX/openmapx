@@ -1,8 +1,9 @@
-import type { Place } from "@openmapx/core";
+import { computePlusCode, type Place } from "@openmapx/core";
 import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { createQueryWrapper } from "@/test/query";
+import { MobileSheetContext } from "../sheet/sheetState";
 
 vi.mock("next-intl", () => ({
   useTranslations: () => (key: string) => key,
@@ -14,6 +15,7 @@ vi.mock("@openmapx/mangrove-react", () => ({
 }));
 
 vi.mock("./PlacePhotoGallery", () => ({ PlacePhotoGallery: () => null }));
+vi.mock("./PlaceHarborFacilities", () => ({ PlaceHarborFacilities: () => null }));
 
 const airQualityProps = vi.fn();
 vi.mock("./PlaceAirQuality", () => ({
@@ -106,9 +108,14 @@ describe("OSM contribution entry placement", () => {
     expect(props.osmId).toBeUndefined();
   });
 
-  it("mounts an independent collapsed air-quality row beside Weather with normalized hints", () => {
+  it("groups conditions for a business and keeps weather and air quality lazy and independent", () => {
     airQualityProps.mockClear();
     renderOverview(ENRICHED);
+
+    const conditions = screen.getByRole("button", { name: "conditions" });
+    expect(conditions).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("button", { name: "currentWeather" })).not.toBeInTheDocument();
+    fireEvent.click(conditions);
 
     const weather = screen.getByRole("button", { name: "currentWeather" });
     const airQuality = screen.getByRole("button", { name: "section" });
@@ -139,6 +146,7 @@ describe("OSM contribution entry placement", () => {
     airQualityProps.mockClear();
     renderOverview(ENRICHED);
 
+    await user.click(screen.getByRole("button", { name: "conditions" }));
     const airQuality = screen.getByRole("button", { name: "section" });
     airQuality.focus();
     await user.keyboard("{Enter}");
@@ -237,7 +245,7 @@ describe("visit order", () => {
     const cuisine = screen.getByText("Mexican");
     const takeaway = screen.getByText("takeawayYes");
     const wifi = screen.getByText("wifiAvailable");
-    const weather = screen.getByRole("button", { name: "currentWeather" });
+    const weather = screen.getByRole("button", { name: "conditions" });
     const operator = screen.getByText("Operator Co");
     const plusCode = container.querySelector('a[href^="https://plus.codes/"]');
     expect(plusCode).not.toBeNull();
@@ -268,6 +276,12 @@ describe("visit order", () => {
     }
   });
 
+  it("keeps marine conditions prominent for a harbor", () => {
+    renderOverview({ ...ENRICHED, primaryScheme: "openseamap-harbour" } as unknown as Place);
+    expect(screen.getByRole("button", { name: "currentWeather" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "conditions" })).not.toBeInTheDocument();
+  });
+
   it("places OSM-only business email before weather without duplicating a contact already in Overview", () => {
     const { rerender } = renderOverview({
       ...ENRICHED,
@@ -275,7 +289,7 @@ describe("visit order", () => {
       osmTags: { amenity: "bar", email: "info@example.org" },
     } as unknown as Place);
     const email = screen.getByRole("link", { name: "info@example.org" });
-    expect(isBefore(email, screen.getByRole("button", { name: "currentWeather" }))).toBe(true);
+    expect(isBefore(email, screen.getByRole("button", { name: "conditions" }))).toBe(true);
 
     rerender(
       <PlaceOverviewTab
@@ -309,6 +323,52 @@ describe("visit order", () => {
       [...container.querySelectorAll("p")].filter((paragraph) => !paragraph.textContent?.trim()),
     ).toHaveLength(0);
   });
+
+  it("shows two labeled landmark facts and a single visible Plus Code", () => {
+    const { container } = renderOverview({
+      ...ENRICHED,
+      city: "Berlin",
+      facts: [
+        { label: "Opened", value: "1969" },
+        { label: "Height", value: "368 m" },
+        { label: "Architect", value: "Fritz Leonhardt" },
+      ],
+    } as unknown as Place);
+
+    expect(screen.getByText("Opened")).toBeVisible();
+    expect(screen.getByText("1969")).toBeVisible();
+    expect(screen.getByText("Height")).toBeVisible();
+    expect(screen.queryByText("Architect")).not.toBeInTheDocument();
+
+    const plusCode = computePlusCode(ENRICHED.coordinates);
+    const link = container.querySelector('a[href^="https://plus.codes/"]');
+    expect(link).toBeVisible();
+    expect(link).toHaveTextContent("Berlin");
+    expect(screen.queryByText(plusCode)).not.toBeInTheDocument();
+  });
+
+  it("places the mobile description after visit details and before conditions", () => {
+    render(
+      <MobileSheetContext.Provider
+        value={{ inSheet: true, detent: "full", isExpanded: true, snapTo: () => {} }}
+      >
+        <PlaceOverviewTab
+          place={ENRICHED}
+          isLoading={false}
+          onNavigateToInfo={() => {}}
+          onOpenDepartures={() => {}}
+          onOpenLineDetail={() => {}}
+        />
+      </MobileSheetContext.Provider>,
+      { wrapper: createQueryWrapper() },
+    );
+
+    const address = screen.getByText("Enriched Street 9, 10115 Berlin");
+    const description = screen.getByText("An enriched description from a knowledge provider.");
+    const conditions = screen.getByRole("button", { name: "conditions" });
+    expect(isBefore(address, description)).toBe(true);
+    expect(isBefore(description, conditions)).toBe(true);
+  });
 });
 
 describe("detail copy actions", () => {
@@ -327,5 +387,18 @@ describe("detail copy actions", () => {
 
     expect(writeText).toHaveBeenCalledWith("Enriched Street 9, 10115 Berlin");
     expect(screen.getByRole("button", { name: "copied" })).toBe(copyAddress);
+  });
+
+  it("copies the canonical Plus Code while displaying only the short city form", async () => {
+    const user = userEvent.setup();
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    renderOverview({ ...ENRICHED, city: "Berlin" } as unknown as Place);
+
+    await user.click(screen.getByRole("button", { name: "copyPlusCode" }));
+    expect(writeText).toHaveBeenCalledWith(computePlusCode(ENRICHED.coordinates));
   });
 });

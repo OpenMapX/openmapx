@@ -88,6 +88,18 @@ interface Props {
   onOpenTripDetail?: (dep: MergedDeparture) => void;
 }
 
+const OVERVIEW_FACT_LABELS = [
+  "Opened",
+  "Founded",
+  "Height",
+  "Architect",
+  "Heritage designation",
+  "Capacity",
+  "Elevation",
+  "Area",
+  "Length",
+] as const;
+
 function isExplicitOutdoorPlace(place: Place): boolean {
   const tags = place.osmTags;
   if (
@@ -195,12 +207,14 @@ function ExpandableDetailRow({
   expanded,
   onToggle,
   children,
+  contentInset = true,
 }: {
   icon: ReactNode;
   label: ReactNode;
   expanded: boolean;
   onToggle: () => void;
   children: ReactNode;
+  contentInset?: boolean;
 }) {
   return (
     <Box
@@ -243,7 +257,7 @@ function ExpandableDetailRow({
           <ExpandMoreIcon sx={{ fontSize: 18, color: "text.secondary", flexShrink: 0 }} />
         )}
       </Box>
-      {expanded && <Box sx={{ pl: "54px", pr: 2 }}>{children}</Box>}
+      {expanded && <Box sx={{ pl: contentInset ? "54px" : 3, pr: 2 }}>{children}</Box>}
     </Box>
   );
 }
@@ -270,6 +284,8 @@ export function PlaceOverviewTab({
   const { inSheet } = useMobileSheet();
   const ohText = useOpeningHoursText();
   const isCity = isCityOrSmaller(place);
+  const showGroupedConditions =
+    !isCity && !isExplicitOutdoorPlace(place) && place.primaryScheme !== "openseamap-harbour";
   const promotePracticalDetails =
     !isCity && !isExplicitOutdoorPlace(place) && isVisitBusiness(place);
   const hours = place.openingHoursInfo?.status ?? null;
@@ -302,6 +318,7 @@ export function PlaceOverviewTab({
   const shortCodeDisplay = city ? `${shortCode} ${city}` : null;
   const [hoursExpanded, setHoursExpanded] = useState(false);
   const [weatherExpanded, setWeatherExpanded] = useState(false);
+  const [conditionsExpanded, setConditionsExpanded] = useState(false);
   const [airQualityExpanded, setAirQualityExpanded] = useState(false);
   const [sunTimesExpanded, setSunTimesExpanded] = useState(false);
   const [tidesExpanded, setTidesExpanded] = useState(false);
@@ -417,12 +434,139 @@ export function PlaceOverviewTab({
       </Box>
     ) : null;
 
+  const overviewFacts = !isCity
+    ? (place.facts ?? [])
+        .filter(({ label }) => OVERVIEW_FACT_LABELS.some((candidate) => candidate === label))
+        .sort(
+          (first, second) =>
+            OVERVIEW_FACT_LABELS.indexOf(first.label as (typeof OVERVIEW_FACT_LABELS)[number]) -
+            OVERVIEW_FACT_LABELS.indexOf(second.label as (typeof OVERVIEW_FACT_LABELS)[number]),
+        )
+        .slice(0, 2)
+    : [];
+
+  const conditionRows = (
+    <>
+      {/* Weather (expandable) */}
+      <ExpandableDetailRow
+        icon={<WbSunnyOutlinedIcon sx={{ fontSize: 22 }} />}
+        expanded={weatherExpanded}
+        onToggle={() => setWeatherExpanded((v) => !v)}
+        label={
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.primary",
+            }}
+          >
+            {tWeather("currentWeather")}
+          </Typography>
+        }
+      >
+        <PlaceWeather
+          lat={place.coordinates[1]}
+          lng={place.coordinates[0]}
+          enabled={weatherExpanded}
+        />
+      </ExpandableDetailRow>
+
+      {/* Canonical air quality (expandable, lazy). */}
+      <ExpandableDetailRow
+        icon={<AirIcon sx={{ fontSize: 22 }} />}
+        expanded={airQualityExpanded}
+        onToggle={() => setAirQualityExpanded((value) => !value)}
+        label={
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.primary",
+            }}
+          >
+            {tAirQuality("section")}
+          </Typography>
+        }
+      >
+        <PlaceAirQuality
+          lat={place.coordinates[1]}
+          lng={place.coordinates[0]}
+          enabled={airQualityExpanded}
+          countryCode={airQualityCountryCode}
+          subdivisionCode={airQualitySubdivisionCode}
+        />
+      </ExpandableDetailRow>
+
+      <PlaceLocalTime lat={place.coordinates[1]} lng={place.coordinates[0]} />
+
+      {/* Sunrise & sunset (expandable) */}
+      <ExpandableDetailRow
+        icon={<WbTwilightIcon sx={{ fontSize: 22 }} />}
+        expanded={sunTimesExpanded}
+        onToggle={() => setSunTimesExpanded((v) => !v)}
+        label={
+          <Typography
+            variant="body2"
+            sx={{
+              color: "text.primary",
+            }}
+          >
+            {tSun("sunriseSunset")}
+          </Typography>
+        }
+      >
+        <PlaceSunTimes
+          lat={place.coordinates[1]}
+          lng={place.coordinates[0]}
+          enabled={sunTimesExpanded}
+        />
+      </ExpandableDetailRow>
+
+      {/* Tides (expandable) — hidden when no NOAA tide station is within range. */}
+      {tidesData && (
+        <ExpandableDetailRow
+          icon={<WavesIcon sx={{ fontSize: 22 }} />}
+          expanded={tidesExpanded}
+          onToggle={() => setTidesExpanded((v) => !v)}
+          label={
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.primary",
+              }}
+            >
+              {tTides("section")}
+            </Typography>
+          }
+        >
+          <PlaceTidesContent data={tidesData} />
+        </ExpandableDetailRow>
+      )}
+
+      {/* Marine weather (expandable) — hidden for inland points (204). */}
+      {marineData && (
+        <ExpandableDetailRow
+          icon={<WavesIcon sx={{ fontSize: 22 }} />}
+          expanded={marineExpanded}
+          onToggle={() => setMarineExpanded((v) => !v)}
+          label={
+            <Typography
+              variant="body2"
+              sx={{
+                color: "text.primary",
+              }}
+            >
+              {tMarine("section")}
+            </Typography>
+          }
+        >
+          <PlaceMarineWeatherContent data={marineData} />
+        </ExpandableDetailRow>
+      )}
+    </>
+  );
+
   return (
     <>
-      {/* No bottom padding when the description trails the detail rows: it is
-          the last child there, so the padding would land between it and the
-          next section's divider and read as a wider gap than the one above it. */}
-      <Box sx={{ px: 2, pt: 1, pb: descriptionRow && inSheet ? 0 : 1 }}>
+      <Box sx={{ px: 2, pt: 1, pb: 1 }}>
         {/* Outside a sheet the actions stay here, at the top of the tab. In a
             sheet they render once above the tabs instead, where they can form
             the collapsed peek layout. */}
@@ -489,11 +633,8 @@ export function PlaceOverviewTab({
           </>
         )}
 
-        {/* Description sits above the detail rows here. In a sheet it moves
-            below them instead — with the actions above the tabs, leading with
-            a paragraph pushes the address and phone too far down. Rendered in
-            exactly one of the two places, so the dividers stay paired with
-            whichever block actually follows. */}
+        {/* On desktop the summary leads the details; inside a sheet the core
+            visit rows stay first and the summary follows them. */}
         {descriptionRow && !inSheet && (
           <>
             <Divider sx={{ my: 1 }} />
@@ -501,10 +642,7 @@ export function PlaceOverviewTab({
           </>
         )}
 
-        {/* Only when something actually precedes the detail rows. In a sheet
-            the actions sit above the tab bar and the description moved below,
-            so the rows can start directly under the tabs — a rule there would
-            sit immediately beneath the tab strip's own edge. */}
+        {/* Avoid a divider immediately below the sheet's tab strip. */}
         {(!inSheet || isCity || savedInLists.length > 0) && <Divider sx={{ my: 1 }} />}
 
         {/* Detail rows */}
@@ -733,6 +871,41 @@ export function PlaceOverviewTab({
             />
           )}
 
+          {descriptionRow && inSheet && (
+            <>
+              <Divider sx={{ my: 1 }} />
+              {descriptionRow}
+            </>
+          )}
+
+          {overviewFacts.length > 0 && (
+            <Box sx={{ py: 1.5 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 0.75 }}>
+                {t("aboutThisPlace")}
+              </Typography>
+              <Box
+                sx={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 1 }}
+              >
+                {overviewFacts.map(({ label, value }) => (
+                  <Box key={label} sx={{ minWidth: 0 }}>
+                    <Typography
+                      variant="caption"
+                      sx={{ display: "block", color: "text.secondary" }}
+                    >
+                      {label}
+                    </Typography>
+                    <Typography variant="body2" sx={{ overflowWrap: "anywhere" }}>
+                      {value}
+                    </Typography>
+                  </Box>
+                ))}
+              </Box>
+              <Button size="small" onClick={onNavigateToInfo} sx={{ mt: 0.5, px: 0 }}>
+                {t("more")}
+              </Button>
+            </Box>
+          )}
+
           {/* Wikipedia */}
           {place.wikipediaUrl && (
             <DetailRow icon={<ArticleIcon sx={{ fontSize: 22 }} />}>
@@ -805,125 +978,28 @@ export function PlaceOverviewTab({
             )}
           </Box>
 
-          {/* Weather (expandable) */}
-          <ExpandableDetailRow
-            icon={<WbSunnyOutlinedIcon sx={{ fontSize: 22 }} />}
-            expanded={weatherExpanded}
-            onToggle={() => setWeatherExpanded((v) => !v)}
-            label={
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.primary",
-                }}
-              >
-                {tWeather("currentWeather")}
-              </Typography>
-            }
-          >
-            <PlaceWeather
-              lat={place.coordinates[1]}
-              lng={place.coordinates[0]}
-              enabled={weatherExpanded}
-            />
-          </ExpandableDetailRow>
-
-          {/* Canonical air quality (expandable, lazy). */}
-          <ExpandableDetailRow
-            icon={<AirIcon sx={{ fontSize: 22 }} />}
-            expanded={airQualityExpanded}
-            onToggle={() => setAirQualityExpanded((value) => !value)}
-            label={
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.primary",
-                }}
-              >
-                {tAirQuality("section")}
-              </Typography>
-            }
-          >
-            <PlaceAirQuality
-              lat={place.coordinates[1]}
-              lng={place.coordinates[0]}
-              enabled={airQualityExpanded}
-              countryCode={airQualityCountryCode}
-              subdivisionCode={airQualitySubdivisionCode}
-            />
-          </ExpandableDetailRow>
-
-          <PlaceLocalTime lat={place.coordinates[1]} lng={place.coordinates[0]} />
-
-          {/* Sunrise & sunset (expandable) */}
-          <ExpandableDetailRow
-            icon={<WbTwilightIcon sx={{ fontSize: 22 }} />}
-            expanded={sunTimesExpanded}
-            onToggle={() => setSunTimesExpanded((v) => !v)}
-            label={
-              <Typography
-                variant="body2"
-                sx={{
-                  color: "text.primary",
-                }}
-              >
-                {tSun("sunriseSunset")}
-              </Typography>
-            }
-          >
-            <PlaceSunTimes
-              lat={place.coordinates[1]}
-              lng={place.coordinates[0]}
-              enabled={sunTimesExpanded}
-            />
-          </ExpandableDetailRow>
-
-          {/* Tides (expandable) — hidden when no NOAA tide station is within range. */}
-          {tidesData && (
+          {showGroupedConditions ? (
             <ExpandableDetailRow
-              icon={<WavesIcon sx={{ fontSize: 22 }} />}
-              expanded={tidesExpanded}
-              onToggle={() => setTidesExpanded((v) => !v)}
+              icon={<WbSunnyOutlinedIcon sx={{ fontSize: 22 }} />}
+              expanded={conditionsExpanded}
+              onToggle={() => setConditionsExpanded((expanded) => !expanded)}
               label={
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.primary",
-                  }}
-                >
-                  {tTides("section")}
+                <Typography component="span" variant="body2">
+                  {t("conditions")}
                 </Typography>
               }
+              contentInset={false}
             >
-              <PlaceTidesContent data={tidesData} />
+              {conditionRows}
             </ExpandableDetailRow>
-          )}
-
-          {/* Marine weather (expandable) — hidden for inland points (204). */}
-          {marineData && (
-            <ExpandableDetailRow
-              icon={<WavesIcon sx={{ fontSize: 22 }} />}
-              expanded={marineExpanded}
-              onToggle={() => setMarineExpanded((v) => !v)}
-              label={
-                <Typography
-                  variant="body2"
-                  sx={{
-                    color: "text.primary",
-                  }}
-                >
-                  {tMarine("section")}
-                </Typography>
-              }
-            >
-              <PlaceMarineWeatherContent data={marineData} />
-            </ExpandableDetailRow>
+          ) : (
+            conditionRows
           )}
 
           {/* Location detail remains available below the visit and environment rows. */}
           <DetailRow
             icon={<AppsIcon sx={{ fontSize: 22 }} />}
-            copyValue={shortCodeDisplay ?? plusCode}
+            copyValue={plusCode}
             copyLabel={t("copyPlusCode")}
           >
             <Link
@@ -935,20 +1011,8 @@ export function PlaceOverviewTab({
             >
               {shortCodeDisplay ?? plusCode}
             </Link>
-            {shortCodeDisplay && (
-              <Typography variant="caption" sx={{ color: "text.secondary" }}>
-                {plusCode}
-              </Typography>
-            )}
           </DetailRow>
         </Box>
-
-        {descriptionRow && inSheet && (
-          <>
-            <Divider sx={{ my: 1 }} />
-            {descriptionRow}
-          </>
-        )}
       </Box>
       {/* Add label dialog */}
       <Dialog
