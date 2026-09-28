@@ -167,7 +167,11 @@ export const maptilerRoute: FastifyPluginAsync = async (fastify) => {
       return reply.status(400).send({ message: "Unsupported MapTiler asset path" });
     }
 
-    const upstreamUrl = new URL(`${MAPTILER_ORIGIN}/${encodePath(path)}`);
+    // MapTiler serves high-density sprites at a literal @2x path and returns
+    // 404 for the percent-encoded %402x form. The allowlist above restricts
+    // this exception to sprite JSON/PNG filenames.
+    const upstreamPath = encodePath(path).replace(/%40(?=2x\.(?:json|png)$)/i, "@");
+    const upstreamUrl = new URL(`${MAPTILER_ORIGIN}/${upstreamPath}`);
     upstreamUrl.searchParams.set("key", key);
 
     let upstream: Response;

@@ -116,6 +116,34 @@ describe("GET /maptiler/*", () => {
     );
   });
 
+  it.each([
+    ["sprite.json", "application/json"],
+    ["sprite.png", "image/png"],
+    ["sprite@2x.json", "application/json"],
+    ["sprite@2x.png", "image/png"],
+    ["sprite%402x.json", "application/json"],
+    ["sprite%402x.png", "image/png"],
+  ])("forwards %s with the filename MapTiler accepts", async (requested, contentType) => {
+    vi.stubEnv("MAPTILER_KEY", "test-key");
+    const fetchMock = vi.fn(
+      async () =>
+        new Response(contentType === "image/png" ? new Uint8Array([137, 80, 78, 71]) : "{}", {
+          headers: { "content-type": contentType },
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const res = await app.inject({ method: "GET", url: `/maptiler/maps/bright-v2/${requested}` });
+
+    expect(res.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      new URL(
+        `https://api.maptiler.com/maps/bright-v2/${requested.replace("%40", "@")}?key=test-key`,
+      ),
+      expect.any(Object),
+    );
+  });
+
   it("rejects unsupported paths", async () => {
     vi.stubEnv("MAPTILER_KEY", "test-key");
     vi.stubGlobal("fetch", vi.fn());
