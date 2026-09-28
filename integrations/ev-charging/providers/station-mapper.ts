@@ -3,10 +3,14 @@ import {
   type DataSourceDetail,
   type DataSourceDetailSection,
   type DataSourceResult,
+  formatPaymentMethods,
   gapFillBranding,
   type OsmIdentity,
   validObservedAt,
 } from "@openmapx/core";
+
+export { formatPaymentMethods } from "@openmapx/core";
+
 import {
   type I18nToken,
   sharedT,
@@ -298,52 +302,6 @@ function pricingCaption(station: EvChargingStation): I18nToken {
   return tariffs.every((tariff) => tariff.isDirectPayment)
     ? token("pricingNote")
     : token("pricingNoteOperator");
-}
-
-// Whole-value spellings that per-word casing cannot produce.
-const PAYMENT_BRAND_CASING: Record<string, string> = {
-  paypal: "PayPal",
-  applepay: "Apple Pay",
-  "apple pay": "Apple Pay",
-  googlepay: "Google Pay",
-  "google pay": "Google Pay",
-};
-
-// Single words that are acronyms or brands rather than ordinary nouns. Applied
-// per word, so they still work inside a compound like "kreditkarte (nfc)".
-const PAYMENT_WORD_CASING: Record<string, string> = {
-  nfc: "NFC",
-  rfid: "RFID",
-  ec: "EC",
-  paypal: "PayPal",
-};
-
-/**
- * Upper-case the first letter of each word, leaving separators alone.
- *
- * Unicode-aware on purpose: an ASCII `\b\w` boundary treats "ä" as a separator,
- * so "lesegerät" came out as "LesegeräT".
- */
-function titleCasePayment(value: string): string {
-  return value.replace(
-    /\p{L}[\p{L}\p{N}]*/gu,
-    (word) => PAYMENT_WORD_CASING[word] ?? word.charAt(0).toUpperCase() + word.slice(1),
-  );
-}
-
-// Payment methods arrive as lowercase tokens (from OSM `payment:*` tags or
-// provider feeds), e.g. "mastercard", "debit cards", "apple_pay". Render them
-// as readable text: brand-cased where known, otherwise title-cased per word.
-export function formatPaymentMethods(methods: string[]): string {
-  const seen = new Set<string>();
-  const formatted: string[] = [];
-  for (const raw of methods) {
-    const normalized = raw.trim().toLowerCase().replace(/_/g, " ");
-    if (!normalized || seen.has(normalized)) continue;
-    seen.add(normalized);
-    formatted.push(PAYMENT_BRAND_CASING[normalized] ?? titleCasePayment(normalized));
-  }
-  return formatted.join(", ");
 }
 
 function formatTimestamp(value: string | undefined): string | undefined {

@@ -14,7 +14,7 @@ import Skeleton from "@mui/material/Skeleton";
 import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type { Place } from "@openmapx/core";
-import { buildAttributionHtml, safeHref } from "@openmapx/core";
+import { buildAttributionHtml, formatPaymentMethodLabel, safeHref } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { useState } from "react";
@@ -88,10 +88,7 @@ const TAG_GROUPS: TagGroup[] = [
 /** Converts an OSM tag key into a human-readable label. */
 function formatTagKey(key: string): string {
   if (key.startsWith("payment:")) {
-    return key
-      .slice("payment:".length)
-      .replace(/_/g, " ")
-      .replace(/\b\w/g, (character) => character.toUpperCase());
+    return formatPaymentMethodLabel(key.slice("payment:".length));
   }
   return key
     .replace(/^[^:]+:/, (prefix) => `${prefix.slice(0, -1).replace(/_/g, " ")} · `)
@@ -532,7 +529,7 @@ export function PlaceInfoTab({ place, isLoading }: Props) {
               },
             }}
           >
-            <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+            <Typography component="span" variant="subtitle2" sx={{ fontWeight: 600 }}>
               {t("allOpenStreetMapTags")}
             </Typography>
             <ExpandMoreIcon

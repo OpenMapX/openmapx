@@ -210,6 +210,7 @@ export {
   parseCoordinateInput,
   parseDMSCoordinateInput,
 } from "./parseCoordinates";
+export { formatPaymentMethodLabel, formatPaymentMethods } from "./paymentMethods";
 export {
   computePlusCode,
   decodePlusCode,

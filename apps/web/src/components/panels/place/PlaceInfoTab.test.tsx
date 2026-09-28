@@ -23,6 +23,8 @@ const PLACE = {
     "payment:cash": "yes",
     "payment:american_express": "yes",
     "payment:visa": "no",
+    "payment:paypal": "yes",
+    "payment:apple_pay": "yes",
     "diet:vegan": "yes",
     "internet_access:fee": "pay_per_use",
   },
@@ -53,6 +55,8 @@ describe("PlaceInfoTab visitor details", () => {
     expect(screen.getByText("American Express")).toBeVisible();
     expect(screen.getByText("Cash")).toBeVisible();
     expect(screen.getByText("Visa")).toBeVisible();
+    expect(screen.getByText("PayPal")).toBeVisible();
+    expect(screen.getByText("Apple Pay")).toBeVisible();
     expect(screen.getByText(/Pay Per Use/)).toBeVisible();
     expect(screen.queryByText("Other details")).not.toBeInTheDocument();
   });
