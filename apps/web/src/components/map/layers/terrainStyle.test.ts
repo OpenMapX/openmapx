@@ -61,6 +61,32 @@ const options = {
 };
 
 describe("terrain on the vector basemap", () => {
+  it("uses Terrarium elevation and browser-generated contours for self-hosted basemaps", () => {
+    const { map, sources, layers } = fakeMap();
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, {
+      ...options,
+      demEncoding: "terrarium",
+      generatedContourUrl: "dem-contour://fixture/{z}/{x}/{y}",
+    });
+    expect(sources.get("openmapx-terrain-dem")).toMatchObject({ encoding: "terrarium" });
+    expect(sources.get("openmapx-terrain-contours")).toMatchObject({
+      type: "vector",
+      tiles: ["dem-contour://fixture/{z}/{x}/{y}"],
+    });
+    expect(layers.get("openmapx-terrain-contour-lines")).toMatchObject({
+      "source-layer": "contours",
+    });
+    expect(layers.get("openmapx-terrain-contour-labels")).toMatchObject({
+      filter: [">", ["get", "level"], 0],
+    });
+    expect(layers.get("openmapx-terrain-hillshade")?.paint).toMatchObject({
+      "hillshade-method": "multidirectional",
+    });
+    expect(layers.get("openmapx-terrain-elevation-tint")).toMatchObject({
+      type: "color-relief",
+      source: "openmapx-terrain-hillshade-dem",
+    });
+  });
   it("adds elevation and contours below roads and labels, and enables 3D terrain", () => {
     const { map, sources } = fakeMap();
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
@@ -105,12 +131,26 @@ describe("terrain on the vector basemap", () => {
     );
   });
 
+  it("keeps hillshade and 3D elevation when contour generation is unavailable", () => {
+    const { map, sources } = fakeMap();
+    syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, {
+      ...options,
+      contoursUrl: "",
+      demEncoding: "terrarium",
+    });
+    expect(sources.has("openmapx-terrain-contours")).toBe(false);
+    expect(map.setTerrain).toHaveBeenCalledWith({
+      source: "openmapx-terrain-dem",
+      exaggeration: 1,
+    });
+  });
+
   it("restores missing layers after a style reload", () => {
     const { map, resetStyle } = fakeMap();
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
     resetStyle();
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
-    expect(map.addLayer).toHaveBeenCalledTimes(6);
+    expect(map.addLayer).toHaveBeenCalledTimes(8);
     expect(map.addSource).toHaveBeenCalledTimes(6);
     expect(map.setTerrain).toHaveBeenCalledTimes(2);
   });
@@ -120,7 +160,7 @@ describe("terrain on the vector basemap", () => {
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
     syncTerrainStyle(map as unknown as Parameters<typeof syncTerrainStyle>[0], true, options);
     expect(map.addSource).toHaveBeenCalledTimes(3);
-    expect(map.addLayer).toHaveBeenCalledTimes(3);
+    expect(map.addLayer).toHaveBeenCalledTimes(4);
     expect(map.setTerrain).toHaveBeenCalledTimes(1);
     expect(map.setPaintProperty).not.toHaveBeenCalled();
   });

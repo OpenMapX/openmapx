@@ -22,6 +22,7 @@ import { internalMetricsRoute } from "./internal-metrics";
 import { internalPoiSourcesRoute } from "./internal-poi-sources";
 import { isochroneRoute } from "./isochrone";
 import { legalConfigRoute } from "./legal-config";
+import { mapterhornRoute } from "./mapterhorn";
 import { maptilerRoute } from "./maptiler";
 import { meRoute } from "./me";
 import { metaRoute } from "./meta";
@@ -91,6 +92,7 @@ export async function registerCoreRoutes(
   await server.register(tilesRoute, { prefix: "/api" });
   await server.register(streetLevelRoute, { prefix: "/api" });
   await server.register(maptilerRoute, { prefix: "/api" });
+  await server.register(mapterhornRoute, { prefix: "/api" });
   await server.register(isochroneRoute, { prefix: "/api" });
   await server.register(imageProxyRoute, { prefix: "/api" });
   await server.register(internalMetricsRoute, { prefix: "/api" });

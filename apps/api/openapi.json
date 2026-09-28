@@ -51,6 +51,10 @@
       "description": "Routes under /api/legal-config."
     },
     {
+      "name": "mapterhorn",
+      "description": "Routes under /api/mapterhorn."
+    },
+    {
       "name": "maptiler",
       "description": "Routes under /api/maptiler."
     },
@@ -6020,6 +6024,60 @@
         },
         "tags": [
           "legal-config"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
+    "/api/mapterhorn/tiles.json": {
+      "get": {
+        "operationId": "getApiMapterhornTilesJson",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "mapterhorn"
+        ],
+        "x-openmapx-auth": "public"
+      }
+    },
+    "/api/mapterhorn/{z}/{x}/{y}.webp": {
+      "get": {
+        "operationId": "getApiMapterhornZXYWebp",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "z",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "x",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "y",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "mapterhorn"
         ],
         "x-openmapx-auth": "public"
       }

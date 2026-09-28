@@ -9,6 +9,7 @@ import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useOfflinePackageActive } from "@/lib/offlineAreas";
+import { contourDemTileUrl, generatedContourUrl } from "./generatedContours";
 import { syncTerrainStyle } from "./terrainStyle";
 
 export function TerrainBaseLayer() {
@@ -39,19 +40,44 @@ export function TerrainBaseLayer() {
     void styleVersion;
     const map = mapRef.current;
     if (!map || !mapReady) return;
-    return subscribeStyleLoaded(map, () =>
-      syncTerrainStyle(map, enabled, {
-        demUrl: env.terrainDemTilejsonUrl,
-        contoursUrl: env.terrainContourTilejsonUrl,
-        dark,
-      }),
-    );
+    let disposed = false;
+    let unsubscribe: (() => void) | undefined;
+    const subscribe = (contourUrl?: string) => {
+      if (disposed) return;
+      unsubscribe = subscribeStyleLoaded(map, () =>
+        syncTerrainStyle(map, enabled, {
+          demUrl: env.terrainDemTilejsonUrl,
+          contoursUrl: contourUrl === "" ? "" : env.terrainContourTilejsonUrl,
+          demEncoding: env.terrainDemEncoding,
+          generatedContourUrl: contourUrl,
+          dark,
+        }),
+      );
+    };
+    if (enabled && env.terrainContourMode === "generated") {
+      void contourDemTileUrl(env.terrainDemTileUrlTemplate, env.terrainDemTilejsonUrl)
+        .then((tileUrl) => generatedContourUrl(tileUrl, env.terrainDemEncoding))
+        .then(subscribe)
+        .catch(() => {
+          // A failed optional contour worker must not suppress hillshade/3D.
+          subscribe("");
+        });
+    } else {
+      subscribe();
+    }
+    return () => {
+      disposed = true;
+      unsubscribe?.();
+    };
   }, [
     mapRef,
     mapReady,
     styleVersion,
     enabled,
     env.terrainDemTilejsonUrl,
+    env.terrainDemTileUrlTemplate,
+    env.terrainDemEncoding,
+    env.terrainContourMode,
     env.terrainContourTilejsonUrl,
     dark,
   ]);

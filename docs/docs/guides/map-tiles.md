@@ -107,16 +107,39 @@ through the API and does not use the local OpenMapX offline-package pipeline.
 
 ## Relief and contours
 
-The Terrain option keeps the active vector style, adding hillshade and contour
-lines underneath its roads and labels. It also enables MapLibre's elevation
-surface, so a pitched map shows 3D terrain. By default, elevation comes from
-MapTiler Terrain RGB and contours from MapTiler Contours through the API proxy;
-`MAPTILER_KEY` is required. Terrain data is loaded only while Terrain is
-selected. MapTiler's Terrain RGB and contour datasets have a native maximum zoom
-of 14, so closer views use overzoomed elevation and contours.
+The Terrain option keeps the active vector style, adding multidirectional
+hillshade and contour lines underneath its roads and labels. It also enables
+MapLibre's elevation surface, so a pitched map shows 3D terrain. With
+self-hosted vector tiles, Terrain uses Mapterhorn's Terrarium DEM through the
+OpenMapX API proxy and generates contours in a browser worker. No MapTiler key
+is needed for this terrain source. The visible map credit links to Mapterhorn's
+full source attribution, which includes the underlying elevation providers.
+The browser contacts OpenMapX for DEM tiles, not Mapterhorn directly.
+Mapterhorn publishes the [tile endpoint](https://mapterhorn.com/data-access/)
+for interactive maps and a [source-by-source license and attribution
+catalog](https://mapterhorn.com/attribution/). Its terrain data is assembled
+from open-data sources with attribution requirements; the Mapterhorn link in
+the map footer is the project's consolidated upstream credit. The contour
+renderer, `maplibre-contour`, is [BSD-3 licensed](https://github.com/onthegomap/maplibre-contour/blob/main/LICENSE)
+and is bundled with the web app. For a custom DEM, operators must supply the
+correct credit and verify that dataset's terms separately.
+Mapterhorn documents public tile access but does not publish a service-level
+capacity or availability commitment; high-volume deployments can serve its
+downloadable PMTiles themselves, subject to the same source attributions.
 
-A self-hosted deployment can set `NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL` to a
-Mapbox Terrain RGB encoded DEM TileJSON endpoint and
+With a MapTiler basemap, Terrain keeps MapTiler Terrain RGB and MapTiler
+Contours through the existing API proxy; `MAPTILER_KEY` is required. MapTiler's
+terrain datasets have a native maximum zoom of 14. Mapterhorn's worldwide DEM
+supports contours through zoom 12; higher-resolution elevation tiles are
+available in some regions, and closer views overzoom where necessary. Terrain
+data is loaded only while Terrain is selected.
+
+A deployment with its own DEM can set `NEXT_PUBLIC_TERRAIN_DEM_TILEJSON_URL` to
+a locally served DEM TileJSON endpoint and set
+`NEXT_PUBLIC_TERRAIN_DEM_ENCODING` to `mapbox` (default) or `terrarium`. For
+browser-generated contours, the app reads the tile URL from TileJSON. You can
+set `NEXT_PUBLIC_TERRAIN_DEM_TILE_URL_TEMPLATE` to its local `{z}/{x}/{y}` tile
+URL to skip that extra TileJSON request. Alternatively, set
 `NEXT_PUBLIC_TERRAIN_CONTOUR_TILEJSON_URL` to a vector TileJSON endpoint with a
 `contour` source layer and `height`/`nth_line` fields. Set
 `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME` and
