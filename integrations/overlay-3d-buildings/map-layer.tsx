@@ -44,11 +44,11 @@ export function BuildingExtrusionLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
-    // Extrusions paint their roofs even from directly above, obscuring the
-    // basemap's subtler flat building fill unless the layer is hidden.
+    // An active selection needs a tilted camera to show geometry. The
+    // selection itself remains authoritative when a user turns 3D off.
     const syncVisibility = () => {
       if (!map.getLayer(LAYER_ID)) return;
-      const visibility = map.getPitch() > TILT_THRESHOLD ? "visible" : "none";
+      const visibility = layerVisible && map.getPitch() > TILT_THRESHOLD ? "visible" : "none";
       if (map.getLayoutProperty(LAYER_ID, "visibility") !== visibility) {
         map.setLayoutProperty(LAYER_ID, "visibility", visibility);
       }
@@ -73,7 +73,9 @@ export function BuildingExtrusionLayer() {
             "source-layer": buildingSource.sourceLayer,
             minzoom: MIN_ZOOM,
             filter: ["!=", ["get", "hide_3d"], true],
-            layout: { visibility: map.getPitch() > TILT_THRESHOLD ? "visible" : "none" },
+            layout: {
+              visibility: layerVisible && map.getPitch() > TILT_THRESHOLD ? "visible" : "none",
+            },
             paint: {
               "fill-extrusion-color": buildingExtrusionColor(
                 findBuildingRoofColor(map, buildingSource) ?? EXTRUSION_COLOR,
@@ -107,10 +109,10 @@ export function BuildingExtrusionLayer() {
       map.off("pitch", syncVisibility);
       map.off("pitchend", syncVisibility);
     };
-  }, [mapReady, styleVersion, mapRef]);
+  }, [layerVisible, mapReady, styleVersion, mapRef]);
 
-  // The selector is a camera shortcut. Building geometry is part of the
-  // close-up basemap, so gestures and deep links reveal it without this toggle.
+  // Selecting 3D from the layer catalog also provides a useful camera angle.
+  // Turning the layer off does not change a camera angle chosen by the user.
   useEffect(() => {
     void styleVersion;
     const map = mapRef.current;
@@ -122,30 +124,34 @@ export function BuildingExtrusionLayer() {
       }
     }
 
-    if (!layerVisible && prevVisibleRef.current) {
-      if (map.getPitch() > TILT_THRESHOLD) {
-        moveToPitch(map, 0, 600);
-      }
-    }
-
     prevVisibleRef.current = layerVisible;
   }, [layerVisible, mapReady, styleVersion, mapRef]);
 
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !mapReady) return;
+    let wasTilted = false;
     const syncViewState = () => {
       const tilted = map.getPitch() > TILT_THRESHOLD;
+      if (tilted === wasTilted) return;
+      wasTilted = tilted;
       const state = useBuildingsStore.getState();
       if (state.layerVisible === tilted) return;
-      runOverlayTransaction("3d-buildings", { panelOpen: tilted }, { kind: "user" });
+      runOverlayTransaction(
+        "3d-buildings",
+        { panelOpen: tilted },
+        { kind: "automation", owner: "3d-buildings-camera" },
+      );
     };
-    // An initial pitched camera may come from a saved view or deep link. Do
-    // not clear an explicit 3D request before its camera animation begins.
+    // An initial pitched camera may come from a saved view or deep link.
+    // Only camera tilt transitions auto-select 3D; ordinary map movements
+    // must not undo an explicit off choice while the camera stays tilted.
     if (map.getPitch() > TILT_THRESHOLD) syncViewState();
-    map.on("moveend", syncViewState);
+    map.on("pitch", syncViewState);
+    map.on("pitchend", syncViewState);
     return () => {
-      map.off("moveend", syncViewState);
+      map.off("pitch", syncViewState);
+      map.off("pitchend", syncViewState);
     };
   }, [mapReady, mapRef]);
 

@@ -1,14 +1,15 @@
-import { getOverlayEntry, registerOverlayEntry } from "@openmapx/core";
+import { getOverlayEntry, registerOverlayEntry, toggleOverlay } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import manifest from "../manifest.json";
 import { useBuildingsStore } from "../store";
 
 let fake: FakeMap;
+let mapRef: { current: FakeMap["map"] };
 
 vi.mock("@/integration-api/map/MapContext", () => ({
   useMap: () => ({
-    mapRef: { current: fake.map },
+    mapRef,
     mapReady: true,
     styleVersion: 0,
   }),
@@ -56,6 +57,7 @@ function addBaseStyle(): void {
 
 beforeEach(() => {
   fake = createFakeMap({ zoom: 16, pitch: 20, maxPitch: 70 });
+  mapRef = { current: fake.map };
   addBaseStyle();
   useBuildingsStore.setState({ panelOpen: false, layerVisible: false, userRevision: 0 });
   vi.stubGlobal(
@@ -79,10 +81,12 @@ describe("BuildingExtrusionLayer", () => {
 
     fake.state.pitch = 30;
     act(() => fake.emit("pitch"));
+    expect(useBuildingsStore.getState().panelOpen).toBe(true);
     expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("visible");
 
     fake.state.pitch = 0;
     act(() => fake.emit("pitchend"));
+    expect(useBuildingsStore.getState().panelOpen).toBe(false);
     expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
     expect(fake.state.layout.get(BUILDING_LAYER_ID)?.visibility).not.toBe("none");
 
@@ -91,10 +95,12 @@ describe("BuildingExtrusionLayer", () => {
     expect(fake.state.layers.get(LAYER_ID)?.layout?.visibility).toBe("none");
   });
 
-  it("adds close-zoom extrusions without requiring the 3D view toggle", () => {
+  it("enables the selector for an initially tilted camera", () => {
     render(<BuildingExtrusionLayer />);
 
     const layer = fake.state.layers.get(LAYER_ID);
+    expect(useBuildingsStore.getState().panelOpen).toBe(true);
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
     expect(manifest.frontend.overlay.minZoom).toBe(14);
     expect(layer?.minzoom).toBe(16.5);
     expect(layer?.source).toBe("city");
@@ -131,12 +137,12 @@ describe("BuildingExtrusionLayer", () => {
     expect(fake.state.layers.has(LAYER_ID)).toBe(true);
 
     act(() => {
-      useBuildingsStore.setState({ layerVisible: false });
+      toggleOverlay("3d-buildings", { kind: "user" });
     });
-    expect(fake.state.layout.get(LAYER_ID)?.visibility).not.toBe("none");
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
   });
 
-  it("uses the 3D view toggle to return to an overhead camera without changing max pitch", () => {
+  it("lets the 3D view toggle tilt the camera without changing max pitch", () => {
     fake.state.pitch = 0;
     const { rerender } = render(<BuildingExtrusionLayer />);
     expect(fake.state.cameraTransitions).toEqual([]);
@@ -151,32 +157,42 @@ describe("BuildingExtrusionLayer", () => {
       options: { pitch: 45, duration: 800 },
     });
 
-    fake.state.pitch = 55;
     act(() => {
-      useBuildingsStore.setState({ layerVisible: false });
+      toggleOverlay("3d-buildings", { kind: "user" });
     });
     rerender(<BuildingExtrusionLayer />);
 
-    expect(fake.state.pitch).toBe(0);
+    expect(fake.state.pitch).toBe(45);
     expect(fake.state.maxPitch).toBe(70);
-    expect(fake.state.cameraTransitions.at(-1)).toEqual({
-      method: "easeTo",
-      options: { pitch: 0, duration: 600 },
-    });
+    expect(fake.state.cameraTransitions).toHaveLength(1);
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
   });
 
-  it("reflects a manual tilt in the view toggle without moving the camera again", () => {
+  it("keeps manual 3D off while tilted until returning overhead and tilting again", () => {
     render(<BuildingExtrusionLayer />);
-    fake.state.pitch = 28;
-    act(() => fake.emit("moveend"));
     expect(useBuildingsStore.getState().layerVisible).toBe(true);
-    expect(useBuildingsStore.getState().userRevision).toBe(1);
+
+    act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+    expect(useBuildingsStore.getState().panelOpen).toBe(false);
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
+
+    fake.state.pitch = 28;
+    act(() => {
+      fake.emit("pitch");
+      fake.emit("moveend");
+    });
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
     expect(fake.state.cameraTransitions).toEqual([]);
 
     fake.state.pitch = 0;
-    act(() => fake.emit("moveend"));
+    act(() => fake.emit("pitchend"));
     expect(useBuildingsStore.getState().layerVisible).toBe(false);
-    expect(useBuildingsStore.getState().userRevision).toBe(2);
+
+    fake.state.pitch = 28;
+    act(() => fake.emit("pitch"));
+    expect(useBuildingsStore.getState().panelOpen).toBe(true);
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("visible");
     expect(fake.state.cameraTransitions).toEqual([]);
   });
 
