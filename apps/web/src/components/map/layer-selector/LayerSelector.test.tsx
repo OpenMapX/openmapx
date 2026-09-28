@@ -4,8 +4,9 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { ReactNode, Ref } from "react";
 import { useImperativeHandle } from "react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
+import { publishMapObstruction } from "@/lib/mapObstructions";
 
 const mockState = {
   desktopDock: true,
@@ -87,7 +88,32 @@ beforeEach(() => {
   mockPopoverAction.updatePosition.mockClear();
 });
 
+afterEach(() => publishMapObstruction("map-footer", "bottom", null));
+
+function dockBottom(label: string): string {
+  let element = screen.getByLabelText(label).parentElement;
+  while (element && getComputedStyle(element).position !== "absolute") {
+    element = element.parentElement;
+  }
+  if (!element) throw new Error("Layer dock was not positioned");
+  return getComputedStyle(element).bottom;
+}
+
 describe("LayerSelector desktop dock", () => {
+  it("clears a wrapped footer on mobile without moving the ordinary desktop dock", () => {
+    mockState.desktopDock = false;
+    publishMapObstruction("map-footer", "bottom", 34);
+    const { rerender } = render(<LayerSelector />);
+
+    expect(dockBottom("openLayerMenu")).toBe("42px");
+
+    mockState.desktopDock = true;
+    publishMapObstruction("map-footer", "bottom", 17);
+    rerender(<LayerSelector />);
+
+    expect(dockBottom("openLayers")).toBe("26px");
+  });
+
   it("collapses the quick selector when the full map-details panel opens", async () => {
     const user = userEvent.setup();
     render(<LayerSelector />);

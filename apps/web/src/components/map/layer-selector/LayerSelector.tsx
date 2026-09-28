@@ -16,6 +16,7 @@ import type { FocusEvent, MouseEvent } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { LAYER_SELECTOR_OPEN_EVENT } from "@/components/command-palette/constants";
 import { isPanelShiftActive, PANEL_WIDTH, shouldHideLayerSelector } from "@/lib/layout";
+import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { DesktopMorePanel } from "./DesktopMorePanel";
 import { DesktopQuickSelector } from "./DesktopQuickSelector";
 import { BASE_LAYER_OPTIONS } from "./layerSelectorConfig";
@@ -45,6 +46,7 @@ export function LayerSelector() {
   const selectedPlace = usePlaceStore((s) => s.selectedPlace);
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const activeLayer = useLayerStore((s) => s.activeLayer);
+  const { bottom: bottomInset } = useMapObstructionInsets();
 
   const panelShiftActive = isPanelShiftActive({
     sidebarOpen: activeSidebarId !== null,
@@ -175,9 +177,9 @@ export function LayerSelector() {
         sx={[
           {
             position: "absolute",
-            bottom: 26,
+            bottom: Math.max(26, bottomInset + 8),
             left: 12,
-            transition: "opacity 0.18s ease",
+            transition: "opacity 0.18s ease, bottom 0.25s ease",
             zIndex: 10,
           },
           hiddenByFloatingCard
