@@ -29,41 +29,11 @@ function pngResponseMock() {
   );
 }
 
-describe("GET /tiles/terrain — empty-string env regression", () => {
-  // Compose injects optional vars as "" via `${OPENTOPOMAP_TILE_URL:-}`. A
+describe("GET /tiles/cyclosm — empty-string env regression", () => {
+  // Compose injects optional vars as "" via `${CYCLOSM_TILE_URL:-}`. A
   // nullish `??` kept that empty string, so the route built `fetch("")` →
   // ERR_INVALID_URL → 502 in production while working in dev (where the var is
   // genuinely undefined). The route must treat blank as unset.
-  it("falls back to the default OpenTopoMap URL when OPENTOPOMAP_TILE_URL is empty", async () => {
-    vi.stubEnv("OPENTOPOMAP_TILE_URL", "");
-    const fetchMock = pngResponseMock();
-    vi.stubGlobal("fetch", fetchMock);
-
-    const res = await app.inject({ method: "GET", url: "/tiles/terrain/3/4/2.png" });
-
-    expect(res.statusCode).toBe(200);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://tile.opentopomap.org/3/4/2.png",
-      expect.any(Object),
-    );
-  });
-
-  it("honours a configured OPENTOPOMAP_TILE_URL override", async () => {
-    vi.stubEnv("OPENTOPOMAP_TILE_URL", "https://topo.example.test/{z}/{x}/{y}.png");
-    const fetchMock = pngResponseMock();
-    vi.stubGlobal("fetch", fetchMock);
-
-    const res = await app.inject({ method: "GET", url: "/tiles/terrain/5/1/2.png" });
-
-    expect(res.statusCode).toBe(200);
-    expect(fetchMock).toHaveBeenCalledWith(
-      "https://topo.example.test/5/1/2.png",
-      expect.any(Object),
-    );
-  });
-});
-
-describe("GET /tiles/cyclosm — empty-string env regression", () => {
   it("falls back to the default CyclOSM URL when CYCLOSM_TILE_URL is empty", async () => {
     vi.stubEnv("THUNDERFOREST_API_KEY", undefined);
     vi.stubEnv("CYCLOSM_TILE_URL", "");

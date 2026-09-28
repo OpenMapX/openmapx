@@ -8381,49 +8381,6 @@
         "x-openmapx-auth": "public"
       }
     },
-    "/api/tiles/terrain/{z}/{x}/{y}.png": {
-      "get": {
-        "operationId": "getApiTilesTerrainZXYPng",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]{1,2}$"
-            },
-            "in": "path",
-            "name": "z",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            },
-            "in": "path",
-            "name": "x",
-            "required": true
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^[0-9]+$"
-            },
-            "in": "path",
-            "name": "y",
-            "required": true
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Default Response"
-          }
-        },
-        "tags": [
-          "tiles"
-        ],
-        "x-openmapx-auth": "public"
-      }
-    },
     "/api/timeline/connection": {
       "get": {
         "operationId": "getApiTimelineConnection",

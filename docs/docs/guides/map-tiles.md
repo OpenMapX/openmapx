@@ -144,8 +144,6 @@ URL to skip that extra TileJSON request. Alternatively, set
 `contour` source layer and `height`/`nth_line` fields. Set
 `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_NAME` and
 `NEXT_PUBLIC_TERRAIN_ATTRIBUTION_URL` to the data provider's required credit.
-The previous `NEXT_PUBLIC_TERRAIN_TILE_URL_TEMPLATE` setting controlled a
-complete OpenTopoMap raster basemap and no longer controls the Terrain option.
 
 Downloaded browser packages currently contain OpenMapTiles vectors and glyphs,
 but no elevation or contour tiles. While an offline package is active, Terrain

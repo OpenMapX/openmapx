@@ -19,19 +19,23 @@ You control both from the **layer picker** in the bottom-left corner of the map.
 A base style is the foundation, and exactly one is active at a time. OpenMapX
 ships four:
 
-| Style         | What it shows                                                          |
-| ------------- | ---------------------------------------------------------------------- |
-| **Default**   | The standard OpenMapX street map — roads, labels, land use, water.     |
-| **Satellite** | True-color aerial and satellite imagery instead of drawn streets.      |
-| **Terrain**   | A relief-shaded map that emphasizes elevation, slopes, and landforms.  |
-| **Cycling**   | A bike-oriented base that foregrounds cycle routes and infrastructure. |
+| Style         | What it shows                                                                                         |
+| ------------- | ----------------------------------------------------------------------------------------------------- |
+| **Default**   | The standard OpenMapX street map — roads, labels, land use, water.                                    |
+| **Satellite** | True-color aerial and satellite imagery, with street and place labels drawn on top.                   |
+| **Terrain**   | The street map with shaded relief, elevation tinting, contour lines, and 3D terrain when you tilt it. |
+| **Cycling**   | A bike-oriented base that foregrounds cycle routes and infrastructure.                                |
 
-Where the imagery comes from depends on how your instance is configured. The
-street and terrain bases are served by your tile stack (a self-hosted tile
-server, or MapTiler Cloud); satellite imagery requires a configured imagery
-source. If a base style has no data source available on your deployment, it
-simply isn't offered. The picker also has a **Globe view** toggle that switches
-the map from a flat projection to a 3D globe.
+Where the data comes from depends on how your instance is configured. The street
+map is served by your tile stack (a self-hosted tile server, or MapTiler Cloud).
+Terrain adds elevation data on top of it: Mapterhorn when you host your own
+tiles, MapTiler Terrain with a MapTiler basemap, or a DEM of your own (see
+[Map tiles](../guides/map-tiles.md)). Satellite imagery comes from MapTiler and
+needs `MAPTILER_KEY`; the cycling base uses Thunderforest when a key is set and
+CyclOSM otherwise. The picker always lists all four bases, so a base whose
+source isn't configured on your deployment shows no imagery. While an offline
+package is active, Terrain shows the flat street map. The picker also has a
+**Globe view** toggle that switches the map from a flat projection to a 3D globe.
 
 ## How overlays work
 

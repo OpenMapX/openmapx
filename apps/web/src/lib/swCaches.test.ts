@@ -276,7 +276,7 @@ describe("service-worker API authority", () => {
       "/api/places/123",
       "/api/integrations/geocoding/geocode",
       "/api/maptiler/tiles.json",
-      "/api/tiles/terrain/14/8/5.png",
+      "/api/tiles/cyclosm/14/8/5.png",
       "/api/traffic/flow/14/8/5.png",
       "/api/offline/packages/glyphs/glyphs-v1/font/0-255.pbf",
     ])

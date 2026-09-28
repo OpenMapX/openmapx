@@ -339,7 +339,6 @@ Keys and overrides for the `app-api` traffic and tile proxies.
 | `THUNDERFOREST_API_KEY`                     | Thunderforest OpenCycleMap key (free Hobby Project key at [thunderforest.com](https://www.thunderforest.com/)). | Optional. Default unset                      |
 | `CYCLOSM_TILE_URL`                          | Override URL for the CyclOSM tile proxy.                                                                        | Optional. Commented                          |
 | `WAYMARKED_CYCLING_TILE_URL`                | Override URL for the Waymarked Trails cycling layer.                                                            | Optional. Commented                          |
-| `OPENTOPOMAP_TILE_URL`                      | Override URL for the OpenTopoMap layer.                                                                         | Optional. Commented                          |
 | `TRAFFIC_EXTRACT_CRON`                      | Cron schedule for extracting Valhalla traffic CSVs.                                                             | Default `0 5 * * *` (daily, 05:00 UTC)       |
 | `NEXT_PUBLIC_TRAFFIC_MIN_ZOOM`              | Minimum zoom level where traffic overlays render in the frontend.                                               | Default `6`                                  |
 | `INTEGRATION_STREET_LEVEL_IMAGERY_PROVIDER` | Preferred order for street-level imagery providers (`panoramax,mapillary`).                                     | Optional. Default unset                      |

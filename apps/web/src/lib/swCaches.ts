@@ -102,7 +102,6 @@ export const PUBLIC_CACHEABLE_API_PATH_TEMPLATES = [
   "/api/offline/packages/glyphs/{version}/{wildcard}",
   "/api/tiles/cycling-routes/{z}/{x}/{y}.png",
   "/api/tiles/cyclosm/{z}/{x}/{y}.png",
-  "/api/tiles/terrain/{z}/{x}/{y}.png",
   "/api/traffic/flow/{z}/{x}/{y}.png",
   "/api/integrations/street-level-imagery-mapillary/tiles/{z}/{x}/{y}",
   "/api/integrations/street-level-imagery-panoramax/tiles/{z}/{x}/{y}",
