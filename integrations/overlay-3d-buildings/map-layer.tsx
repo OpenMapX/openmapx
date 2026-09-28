@@ -18,6 +18,7 @@ import { useBuildingsStore } from "./store";
 const LAYER_ID = "openmapx-3d-buildings";
 const MIN_ZOOM = 16.5;
 const AUTO_PITCH = 45;
+const TILT_THRESHOLD = 0.5;
 
 function prefersReducedMotion(): boolean {
   return window.matchMedia?.("(prefers-reduced-motion: reduce)").matches === true;
@@ -43,6 +44,16 @@ export function BuildingExtrusionLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
+    // Extrusions paint their roofs even from directly above, obscuring the
+    // basemap's subtler flat building fill unless the layer is hidden.
+    const syncVisibility = () => {
+      if (!map.getLayer(LAYER_ID)) return;
+      const visibility = map.getPitch() > TILT_THRESHOLD ? "visible" : "none";
+      if (map.getLayoutProperty(LAYER_ID, "visibility") !== visibility) {
+        map.setLayoutProperty(LAYER_ID, "visibility", visibility);
+      }
+    };
+
     const syncLayer = () => {
       if (!map.isStyleLoaded()) {
         map.once("idle", syncLayer);
@@ -62,6 +73,7 @@ export function BuildingExtrusionLayer() {
             "source-layer": buildingSource.sourceLayer,
             minzoom: MIN_ZOOM,
             filter: ["!=", ["get", "hide_3d"], true],
+            layout: { visibility: map.getPitch() > TILT_THRESHOLD ? "visible" : "none" },
             paint: {
               "fill-extrusion-color": buildingExtrusionColor(
                 findBuildingRoofColor(map, buildingSource) ?? EXTRUSION_COLOR,
@@ -81,13 +93,19 @@ export function BuildingExtrusionLayer() {
           intensity: 0.4,
           position: [1.5, 210, 30],
         });
+      } else {
+        syncVisibility();
       }
     };
 
     syncLayer();
     map.on("styledata", syncLayer);
+    map.on("pitch", syncVisibility);
+    map.on("pitchend", syncVisibility);
     return () => {
       map.off("styledata", syncLayer);
+      map.off("pitch", syncVisibility);
+      map.off("pitchend", syncVisibility);
     };
   }, [mapReady, styleVersion, mapRef]);
 
@@ -99,13 +117,13 @@ export function BuildingExtrusionLayer() {
     if (!map || !mapReady) return;
 
     if (layerVisible && !prevVisibleRef.current) {
-      if (map.getPitch() <= 0.5) {
+      if (map.getPitch() <= TILT_THRESHOLD) {
         moveToPitch(map, AUTO_PITCH, 800);
       }
     }
 
     if (!layerVisible && prevVisibleRef.current) {
-      if (map.getPitch() > 0.5) {
+      if (map.getPitch() > TILT_THRESHOLD) {
         moveToPitch(map, 0, 600);
       }
     }
@@ -117,14 +135,14 @@ export function BuildingExtrusionLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
     const syncViewState = () => {
-      const tilted = map.getPitch() > 0.5;
+      const tilted = map.getPitch() > TILT_THRESHOLD;
       const state = useBuildingsStore.getState();
       if (state.layerVisible === tilted) return;
       runOverlayTransaction("3d-buildings", { panelOpen: tilted }, { kind: "user" });
     };
     // An initial pitched camera may come from a saved view or deep link. Do
     // not clear an explicit 3D request before its camera animation begins.
-    if (map.getPitch() > 0.5) syncViewState();
+    if (map.getPitch() > TILT_THRESHOLD) syncViewState();
     map.on("moveend", syncViewState);
     return () => {
       map.off("moveend", syncViewState);
