@@ -15,8 +15,14 @@ import List from "@mui/material/List";
 import ListItemButton from "@mui/material/ListItemButton";
 import ListItemIcon from "@mui/material/ListItemIcon";
 import ListItemText from "@mui/material/ListItemText";
-import type { AutocompleteResult } from "@openmapx/core";
-import { isTransitRawCategory, normalizeSearchTerm } from "@openmapx/core";
+import type { AutocompleteResult, DistanceReference } from "@openmapx/core";
+import {
+  formatMeasurementDistance,
+  isTransitRawCategory,
+  normalizeSearchTerm,
+  resultDistanceMetres,
+  useSettingsStore,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { BRAND } from "@/integration-api/runtime/theme";
@@ -27,6 +33,7 @@ interface AutocompleteDropdownProps {
   suggestions: AutocompleteResult[];
   onSelect: (result: AutocompleteResult) => void;
   highlightedIndex?: number;
+  distanceReference?: DistanceReference | null;
 }
 
 const labeledPlaceIcon: Record<string, React.ReactNode> = {
@@ -128,8 +135,10 @@ export function AutocompleteDropdown({
   suggestions,
   onSelect,
   highlightedIndex = -1,
+  distanceReference,
 }: AutocompleteDropdownProps) {
   const t = useTranslations("search");
+  const units = useSettingsStore((s) => s.units);
   const activeRef = useRef<HTMLLIElement>(null);
 
   useEffect(() => {
@@ -147,6 +156,17 @@ export function AutocompleteDropdown({
         const showMatchedValue =
           Boolean(matchedValue) &&
           normalizeSearchTerm(matchedValue ?? "") !== normalizeSearchTerm(s.label);
+        const description = resultDescription(s, t);
+        const distance = resultDistanceMetres(distanceReference ?? null, s.coordinates);
+        const distanceText =
+          distance !== null &&
+          s.type !== "category" &&
+          s.type !== "brand" &&
+          s.type !== "nlp_search"
+            ? `${formatMeasurementDistance(distance, units)} ${t(
+                distanceReference?.kind === "user_location" ? "fromYou" : "fromMapCenter",
+              )}`
+            : null;
         return (
           <li
             key={`${s.id}-${s.type}-${s.sublabel ?? i}`}
@@ -182,7 +202,7 @@ export function AutocompleteDropdown({
                     )}
                   </Box>
                 }
-                secondary={resultDescription(s, t)}
+                secondary={[description, distanceText].filter(Boolean).join(" · ")}
                 slotProps={{
                   primary: { sx: { fontSize: 14, fontWeight: 400 } },
                   secondary: { sx: { fontSize: 12 } },

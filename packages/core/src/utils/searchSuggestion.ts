@@ -5,6 +5,8 @@ import type { SearchMatchKind } from "../types/searchSuggestion";
 import { haversineDistance } from "./coordinates";
 
 const MAX_PROXIMITY_METERS = 100_000;
+const NEARBY_RADIUS_METERS = 50_000;
+const NEARBY_IMPORTANCE_BOOST = 0.75;
 /**
  * Two same-named suggestions closer than this are treated as one place. Wide
  * enough that a station record from a rail operator, the OSM station node and
@@ -60,6 +62,17 @@ function proximityDistance(item: AutocompleteResult, proximity?: LngLat): number
   return Math.min(haversineDistance(item.coordinates, proximity), MAX_PROXIMITY_METERS);
 }
 
+function localRelevance(item: AutocompleteResult, proximity?: LngLat): number {
+  const distance = proximityDistance(item, proximity);
+  // Nearby places can overcome provider prominence for equally good text
+  // matches. The preference fades out within 50 km, leaving distant queries
+  // ordered by their original importance; explicit match tiers still win first.
+  const nearbyBoost = proximity
+    ? NEARBY_IMPORTANCE_BOOST * Math.max(0, 1 - distance / NEARBY_RADIUS_METERS)
+    : 0;
+  return (item.importance ?? 0) + nearbyBoost;
+}
+
 export function compareSearchSuggestions(
   a: AutocompleteResult,
   b: AutocompleteResult,
@@ -87,8 +100,8 @@ export function compareSearchSuggestions(
   const textualDifference = textualScore(b, normalizedQuery) - textualScore(a, normalizedQuery);
   if (textualDifference !== 0) return textualDifference;
 
-  const importanceDifference = (b.importance ?? 0) - (a.importance ?? 0);
-  if (importanceDifference !== 0) return importanceDifference;
+  const relevanceDifference = localRelevance(b, proximity) - localRelevance(a, proximity);
+  if (relevanceDifference !== 0) return relevanceDifference;
 
   const proximityDifference = proximityDistance(a, proximity) - proximityDistance(b, proximity);
   if (proximityDifference !== 0) return proximityDifference;

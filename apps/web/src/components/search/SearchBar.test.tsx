@@ -84,6 +84,7 @@ import {
   PANEL,
   useCategorySearchStore,
   useDirectionsStore,
+  useMapStore,
   useNlpSearchStore,
   usePlaceStore,
   useSearchStore,
@@ -125,6 +126,7 @@ beforeEach(() => {
   useDirectionsStore.getState().close(); // SearchBar returns null while directions open
   useCategorySearchStore.setState({ anchor: null, exploreBoxOpen: false, activeCategory: null });
   usePlaceStore.setState({ selectedPlace: null });
+  useMapStore.setState({ userLocation: null });
   useSidebarStore.setState({ activeSidebarId: null });
   useSettingsStore.setState({ aiSearchEnabled: true, searchHistoryEnabled: true });
   useRecentSearchStore.getState().clear();
@@ -163,6 +165,28 @@ describe("SearchBar", () => {
   it("mounts and renders the search input", () => {
     renderBar();
     screen.getByLabelText("search.ariaLabel");
+  });
+
+  it("labels suggestion distance from the shown user location", async () => {
+    useMapStore.setState({ userLocation: [6.084, 50.775] });
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          label: "Central Cafe",
+          coordinates: [6.084, 50.775],
+          searchMatch: { kind: "name", value: "Central Cafe", normalized: "central cafe" },
+        }),
+      ]),
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Central Cafe" } });
+
+    await waitFor(() => expect(screen.getByText(/0 m search\.fromYou/)).toBeInTheDocument());
+    expect(screen.queryByText(/search\.fromMapCenter/)).toBeNull();
   });
 
   it("shows empty-search shortcuts on desktop when the input is focused", () => {

@@ -282,6 +282,8 @@
     "resultTypeStreet": "Street",
     "resultTypeArea": "Area",
     "resultTypeStop": "Transit stop",
+    "fromYou": "from you",
+    "fromMapCenter": "from map center",
     "matchedValue": "Matched value",
     "searchInArea": "Search in this area",
     "noResultsFound": "No results found in this area.",

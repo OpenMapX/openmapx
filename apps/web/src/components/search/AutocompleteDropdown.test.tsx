@@ -109,6 +109,43 @@ describe("AutocompleteDropdown", () => {
     screen.getByText("search.resultTypeAddress · Missouri, USA");
   });
 
+  it("shows a distance from the known user location without changing the address", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({
+            label: "Central Cafe",
+            sublabel: "Station Road, Aachen",
+            type: "poi",
+            coordinates: [6.084, 50.775],
+          }),
+        ]}
+        distanceReference={{ kind: "user_location", coordinates: [6.084, 50.775] }}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    screen.getByText("search.resultTypePlace · Station Road, Aachen · 0 m search.fromYou");
+  });
+
+  it("uses the map center only without a user fix and leaves unknown positions unmeasured", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({ id: "near", label: "Near", coordinates: [6.084, 50.775] }),
+          makeResult({ id: "unknown", label: "Unknown" }),
+        ]}
+        distanceReference={{ kind: "search_area_center", coordinates: [6.084, 50.775] }}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    screen.getByText("search.resultTypeAddress · 0 m search.fromMapCenter");
+    expect(screen.getByRole("button", { name: /Unknown/ }).textContent).not.toContain(
+      "fromMapCenter",
+    );
+  });
+
   it("shows the place type without an address and preserves unfamiliar address formats", () => {
     render(
       <AutocompleteDropdown

@@ -31,7 +31,7 @@ describe("search suggestion primitives", () => {
     expect(searchMatchTier("generated_acronym")).toBe(100);
   });
 
-  it("sorts by tier, exact text, importance, then proximity", () => {
+  it("keeps match evidence and exact text ahead of local preference", () => {
     const exact: AutocompleteResult = {
       id: "exact",
       label: "Frankfurt Airport",
@@ -55,6 +55,46 @@ describe("search suggestion primitives", () => {
 
     const nearby = { ...exact, id: "nearby", coordinates: [8.5, 50] as [number, number] };
     expect(compareSearchSuggestions(nearby, exact, "FRA", [8.5, 50])).toBeLessThan(0);
+  });
+
+  it("promotes a nearby equally matching place over a more prominent distant one", () => {
+    const distant: AutocompleteResult = {
+      id: "distant",
+      label: "Central Cafe",
+      coordinates: [-80, 35],
+      type: "poi",
+      importance: 0.9,
+    };
+    const nearby: AutocompleteResult = {
+      ...distant,
+      id: "nearby",
+      coordinates: [6.084, 50.775],
+      importance: 0.3,
+    };
+
+    expect(compareSearchSuggestions(nearby, distant, "Central Cafe", [6.084, 50.775])).toBeLessThan(
+      0,
+    );
+    expect(compareSearchSuggestions(distant, nearby, "Central Cafe")).toBeLessThan(0);
+  });
+
+  it("keeps an exact distant place ahead of a nearby prefix match", () => {
+    const distant: AutocompleteResult = {
+      id: "paris-france",
+      label: "Paris",
+      coordinates: [2.35, 48.86],
+      type: "region",
+      importance: 0.9,
+    };
+    const nearby: AutocompleteResult = {
+      id: "paris-cafe",
+      label: "Paris Cafe",
+      coordinates: [6.084, 50.775],
+      type: "poi",
+      importance: 0.1,
+    };
+
+    expect(compareSearchSuggestions(distant, nearby, "Paris", [6.084, 50.775])).toBeLessThan(0);
   });
 
   it("deduplicates a geocoder and catalog result without losing the stronger match", () => {

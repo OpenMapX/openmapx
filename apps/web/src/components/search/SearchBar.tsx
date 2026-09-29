@@ -23,6 +23,7 @@ import type {
   AutocompleteResult,
   BoundingBox,
   CategoryId,
+  DistanceReference,
   LabeledPlace,
   LngLat,
   NlpCloudAccess,
@@ -58,6 +59,7 @@ import {
   useDirectionsStore,
   useGeocoding,
   useLabeledPlaces,
+  useMapStore,
   useMenuStore,
   useNlpSearch,
   useNlpSearchStore,
@@ -147,6 +149,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const openMenu = useMenuStore((s) => s.open);
   const { selectedListId, clearSelectedList } = useSavedPlacesStore();
   const { flyTo, mapRef } = useMap();
+  const userLocation = useMapStore((s) => s.userLocation);
   const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
@@ -183,6 +186,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // reads; the hook's query key rounds the center so tiny pans don't refetch.
   const mapCenterRaw = mapRef.current?.getCenter();
   const mapCenter: LngLat | null = mapCenterRaw ? [mapCenterRaw.lng, mapCenterRaw.lat] : null;
+  const suggestionDistanceReference: DistanceReference | null = userLocation
+    ? { kind: "user_location", coordinates: userLocation }
+    : mapCenter
+      ? { kind: "search_area_center", coordinates: mapCenter }
+      : null;
   const {
     data: aggregateSearchData,
     isFetching: aggregateSearchFetching,
@@ -1311,6 +1319,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                   suggestions={effectiveSuggestions}
                   onSelect={handleSelectAny}
                   highlightedIndex={highlightedIndex}
+                  distanceReference={suggestionDistanceReference}
                 />
                 {visibleAttributions.length > 0 && (
                   <Box sx={{ display: "flex", justifyContent: "center", px: 1, py: 0.5 }}>
@@ -1372,6 +1381,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                 suggestions={effectiveSuggestions}
                 onSelect={handleSelectAny}
                 highlightedIndex={highlightedIndex}
+                distanceReference={suggestionDistanceReference}
               />
               {visibleAttributions.length > 0 && (
                 <Box sx={{ display: "flex", justifyContent: "center", px: 1, py: 1 }}>

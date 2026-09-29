@@ -282,6 +282,8 @@
     "resultTypeStreet": "Straße",
     "resultTypeArea": "Gebiet",
     "resultTypeStop": "Haltestelle",
+    "fromYou": "von dir",
+    "fromMapCenter": "vom Kartenzentrum",
     "matchedValue": "Übereinstimmender Wert",
     "searchInArea": "In diesem Bereich suchen",
     "noResultsFound": "Keine Ergebnisse in diesem Bereich gefunden.",
