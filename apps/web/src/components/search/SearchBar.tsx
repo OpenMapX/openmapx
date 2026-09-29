@@ -420,7 +420,14 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         type: "category" as const,
         iconPath: ds.iconPath,
       }));
-    return [...dsMatches, ...poiMatches];
+    // An integration can own the same category ID as the built-in POI list
+    // (parking does). Selection already routes that ID to the integration.
+    const seenIds = new Set<string>();
+    return [...dsMatches, ...poiMatches].filter((suggestion) => {
+      if (seenIds.has(suggestion.id)) return false;
+      seenIds.add(suggestion.id);
+      return true;
+    });
   }, [q, t, dataSourceCategories, chipTranslations]);
 
   const brandSuggestions = useMemo<AutocompleteResult[]>(() => {

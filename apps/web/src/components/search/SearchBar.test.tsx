@@ -1,3 +1,5 @@
+import { IntegrationRegistry } from "@openmapx/integration-framework";
+import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
 import { act, createFakeMap, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
@@ -165,6 +167,35 @@ describe("SearchBar", () => {
   it("mounts and renders the search input", () => {
     renderBar();
     screen.getByLabelText("search.ariaLabel");
+  });
+
+  it("shows a shared integration and POI category only once", async () => {
+    const registry = new IntegrationRegistry([
+      {
+        id: "parking",
+        name: "Parking",
+        enabled: true,
+        domains: ["data-source"],
+        frontend: { searchCategory: { id: "parking", label: "Parking" } },
+      },
+    ]);
+    render(
+      <IntegrationRegistryContext.Provider value={registry}>
+        <SearchBar />
+      </IntegrationRegistryContext.Provider>,
+      { wrapper: createQueryWrapper() },
+    );
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "parking" } });
+
+    await waitFor(() => {
+      expect(screen.getAllByRole("button", { name: "Parking search.searchCategory" })).toHaveLength(
+        1,
+      );
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Parking search.searchCategory" }));
+    expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DATASOURCE);
   });
 
   it("labels suggestion distance from the shown user location", async () => {
