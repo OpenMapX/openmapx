@@ -9,6 +9,7 @@ import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { findVectorLineReference, setLayerVisibility } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
+import { useTransitItineraryOnMap } from "@/integration-api/map/useTransitItineraryOnMap";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { useTransitStore } from "./store";
@@ -34,9 +35,17 @@ const MOTIS_FETCH_DEBOUNCE_MS = 350;
 
 const EMPTY_FC: GeoJSON.FeatureCollection = { type: "FeatureCollection", features: [] };
 
+const TRANSIT_LINE_OPACITY = 0.95;
+const MOTIS_LINE_OPACITY = 0.9;
+// While a chosen itinerary is drawn, the network recedes to context: still
+// readable as "where the lines run", but no longer competing with the one route
+// the traveller picked.
+const RECEDED_LINE_OPACITY = 0.25;
+
 export function TransitLayer() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const showTransit = useTransitStore((s) => s.panelOpen && s.layerVisible);
+  const receded = useTransitItineraryOnMap();
   const {
     publish: publishGeoJson,
     reset: resetGeoJson,
@@ -94,7 +103,7 @@ export function TransitLayer() {
                   "#00ACC1",
                   "#34A853",
                 ],
-                "line-opacity": 0.95,
+                "line-opacity": TRANSIT_LINE_OPACITY,
                 "line-width": ["interpolate", ["linear"], ["zoom"], 6, 0.9, 10, 1.8, 14, 3],
               },
               layout: {
@@ -141,7 +150,7 @@ export function TransitLayer() {
           source: MOTIS_SOURCE_ID,
           paint: {
             "line-color": ["get", "color"],
-            "line-opacity": 0.9,
+            "line-opacity": MOTIS_LINE_OPACITY,
             "line-width": ["interpolate", ["linear"], ["zoom"], 11, 1.5, 14, 3, 17, 5],
           },
           layout: { "line-cap": "round", "line-join": "round" },
@@ -225,6 +234,35 @@ export function TransitLayer() {
       map.off("styledata", ensureLayer);
     };
   }, [beginRequest, mapReady, mapRef, publishGeoJson, resetGeoJson, styleVersion, showTransit]);
+
+  // Both network layers recede while an itinerary is on the map. Re-applied on
+  // styledata because either layer can be (re)created after this runs; MapLibre
+  // ignores a setPaintProperty that doesn't change the value, so this settles.
+  useEffect(() => {
+    void styleVersion;
+    const map = mapRef.current;
+    if (!map || !mapReady) return;
+
+    const applyOpacity = () => {
+      const layers: Array<[string, number]> = [
+        [TRANSIT_LAYER_ID, TRANSIT_LINE_OPACITY],
+        [MOTIS_LINE_ID, MOTIS_LINE_OPACITY],
+      ];
+      for (const [layerId, full] of layers) {
+        if (!map.getLayer(layerId)) continue;
+        const opacity = receded ? RECEDED_LINE_OPACITY : full;
+        if (map.getPaintProperty(layerId, "line-opacity") !== opacity) {
+          map.setPaintProperty(layerId, "line-opacity", opacity);
+        }
+      }
+    };
+
+    applyOpacity();
+    map.on("styledata", applyOpacity);
+    return () => {
+      map.off("styledata", applyOpacity);
+    };
+  }, [mapReady, mapRef, styleVersion, receded]);
 
   return null;
 }

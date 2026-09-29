@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
+import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { shouldRefineLegGeometry } from "./legGeometryRefine";
 
 // Non-transit "street" legs (walk plus intermodal bike/car access) render as
@@ -22,6 +23,7 @@ const STREET_MODES = new Set<TransportMode>(["walking", "cycling", "driving"]);
 
 const SOURCE_ID = "transit-itinerary-source";
 const WALK_LAYER_ID = "transit-itinerary-walk";
+const CASING_LAYER_ID = "transit-itinerary-casing";
 const TRANSIT_LAYER_ID = "transit-itinerary-transit";
 const POINTS_SOURCE_ID = "transit-itinerary-points-source";
 const POINTS_LAYER_ID = "transit-itinerary-points";
@@ -96,11 +98,13 @@ export function TransitItineraryLayer() {
       if (map.getLayer(POINTS_LAYER_ID)) map.removeLayer(POINTS_LAYER_ID);
       if (map.getLayer(TRANSIT_LAYER_ID)) map.removeLayer(TRANSIT_LAYER_ID);
       if (map.getLayer(WALK_LAYER_ID)) map.removeLayer(WALK_LAYER_ID);
+      if (map.getLayer(CASING_LAYER_ID)) map.removeLayer(CASING_LAYER_ID);
       if (map.getSource(POINTS_SOURCE_ID)) map.removeSource(POINTS_SOURCE_ID);
       if (map.getSource(SOURCE_ID)) map.removeSource(SOURCE_ID);
       unregisterLayerSlot(POINTS_LAYER_ID);
       unregisterLayerSlot(TRANSIT_LAYER_ID);
       unregisterLayerSlot(WALK_LAYER_ID);
+      unregisterLayerSlot(CASING_LAYER_ID);
     };
 
     const isTransit = mode === "transit";
@@ -160,6 +164,28 @@ export function TransitItineraryLayer() {
       data: { type: "FeatureCollection", features: lineFeatures },
     });
 
+    // The chosen trip sits in the route slot with the same white casing as a
+    // driving route, above any transit-network overlay, so a line coloured like
+    // its neighbours in the network still reads as the one being taken.
+    const widths = navActive ? ROUTE_WIDTHS.nav : ROUTE_WIDTHS.planning;
+    addLayerInSlot(
+      map,
+      {
+        id: CASING_LAYER_ID,
+        type: "line",
+        source: SOURCE_ID,
+        filter: ["==", ["get", "isStreet"], false],
+        paint: {
+          "line-color": ROUTE_COLORS.casing,
+          "line-width": widths.casing,
+          "line-opacity": lineOpacity,
+        },
+        layout: { "line-cap": "round", "line-join": "round" },
+      },
+      "route-active",
+      2,
+    );
+
     // Street legs (walk/bike/car) — dashed, colored per mode
     addLayerInSlot(
       map,
@@ -176,8 +202,8 @@ export function TransitItineraryLayer() {
         },
         layout: { "line-cap": "round", "line-join": "round" },
       },
-      "overlay-lines",
-      17,
+      "route-active",
+      3,
     );
 
     // Transit legs — solid colored
@@ -190,13 +216,13 @@ export function TransitItineraryLayer() {
         filter: ["==", ["get", "isStreet"], false],
         paint: {
           "line-color": ["get", "color"],
-          "line-width": 5,
+          "line-width": widths.line,
           "line-opacity": lineOpacity,
         },
         layout: { "line-cap": "round", "line-join": "round" },
       },
-      "overlay-lines",
-      18,
+      "route-active",
+      4,
     );
 
     // Transfer points

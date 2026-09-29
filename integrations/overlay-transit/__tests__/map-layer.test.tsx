@@ -1,3 +1,5 @@
+import { useDirectionsStore } from "@openmapx/core";
+import type { TransitItinerary } from "@openmapx/mobility-core/transit";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import { useTransitStore } from "../store";
@@ -24,6 +26,10 @@ vi.mock("@/integration-api/overlay/useMapAttributions", () => ({
 import { TransitLayer } from "../map-layer";
 
 const SOURCE_ID = "openmapx-transit-motis-source";
+const MOTIS_LINE_ID = "openmapx-transit-motis-line";
+const ITINERARY = {
+  legs: [{ mode: "tram" }],
+} as unknown as TransitItinerary;
 const STALE_DATA: GeoJSON.FeatureCollection = {
   type: "FeatureCollection",
   features: [
@@ -49,6 +55,7 @@ beforeEach(() => {
 
 afterEach(() => {
   useTransitStore.setState({ panelOpen: false, layerVisible: false });
+  useDirectionsStore.setState({ mode: "driving", transitItineraries: [], activeItineraryIndex: 0 });
   vi.useRealTimers();
 });
 
@@ -67,5 +74,24 @@ describe("TransitLayer", () => {
       type: "FeatureCollection",
       features: [],
     });
+  });
+
+  it("recedes the operated network while a chosen itinerary is on the map", () => {
+    render(<TransitLayer />);
+    expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.9);
+
+    act(() => {
+      useDirectionsStore.setState({
+        mode: "transit",
+        transitItineraries: [ITINERARY],
+        activeItineraryIndex: 0,
+      });
+    });
+    expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.25);
+
+    act(() => {
+      useDirectionsStore.setState({ transitItineraries: [] });
+    });
+    expect(fake.state.paint.get(MOTIS_LINE_ID)?.["line-opacity"]).toBe(0.9);
   });
 });
