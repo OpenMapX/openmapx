@@ -361,6 +361,40 @@ describe("SearchBar", () => {
     expect(usePlaceStore.getState().selectedPlace).toBeNull();
   });
 
+  it("shows an exact geographic place before same-named brand actions", async () => {
+    useBrandSuggestMock.mockReturnValue({
+      data: {
+        matches: [
+          { qid: "Q1", name: "Aachen", kind: ["brand"], matchedOn: "name" },
+          { qid: "Q2", name: "Aachener Verkehrsverbund", kind: ["brand"], matchedOn: "name" },
+        ],
+      },
+    });
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          id: "geo:aachen",
+          label: "Aachen",
+          type: "region",
+          coordinates: [6.084, 50.775],
+          searchMatch: { kind: "name", value: "Aachen", normalized: "aachen" },
+        }),
+      ]),
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Aachen" } });
+
+    const placeRow = (await screen.findByText(/search\.resultTypeArea/)).closest('[role="button"]');
+    const brandRow = screen.getByText("Aachener Verkehrsverbund").closest('[role="button"]');
+    expect(screen.getAllByRole("button").indexOf(placeRow as HTMLElement)).toBeLessThan(
+      screen.getAllByRole("button").indexOf(brandRow as HTMLElement),
+    );
+  });
+
   it("plain Enter uses an exact category search term ahead of a geocoded region", () => {
     useChipTranslationsMock.mockReturnValue({
       data: { cafes: { name: "Cafes", terms: ["coffee"] } },

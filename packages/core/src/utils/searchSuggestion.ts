@@ -4,7 +4,7 @@ import type { Ids } from "../types/identified";
 import type { SearchMatchKind } from "../types/searchSuggestion";
 import { haversineDistance } from "./coordinates";
 
-const MAX_PROXIMITY_METERS = 100_000;
+const UNKNOWN_PROXIMITY_METERS = Number.MAX_SAFE_INTEGER;
 const NEARBY_RADIUS_METERS = 50_000;
 const NEARBY_IMPORTANCE_BOOST = 0.75;
 /**
@@ -58,8 +58,8 @@ function textualScore(item: AutocompleteResult, normalizedQuery: string): number
 }
 
 function proximityDistance(item: AutocompleteResult, proximity?: LngLat): number {
-  if (!proximity || !item.coordinates) return MAX_PROXIMITY_METERS;
-  return Math.min(haversineDistance(item.coordinates, proximity), MAX_PROXIMITY_METERS);
+  if (!proximity || !item.coordinates) return UNKNOWN_PROXIMITY_METERS;
+  return haversineDistance(item.coordinates, proximity);
 }
 
 function localRelevance(item: AutocompleteResult, proximity?: LngLat): number {

@@ -97,6 +97,23 @@ describe("search suggestion primitives", () => {
     expect(compareSearchSuggestions(distant, nearby, "Paris", [6.084, 50.775])).toBeLessThan(0);
   });
 
+  it("keeps a closer exact destination ahead when both are outside the nearby boost", () => {
+    const france: AutocompleteResult = {
+      id: "z-france",
+      label: "Paris",
+      coordinates: [2.348, 48.853],
+      type: "region",
+    };
+    const texas: AutocompleteResult = {
+      id: "a-texas",
+      label: "Paris",
+      coordinates: [-95.555, 33.662],
+      type: "region",
+    };
+
+    expect(compareSearchSuggestions(france, texas, "Paris", [6.084, 50.775])).toBeLessThan(0);
+  });
+
   it("deduplicates a geocoder and catalog result without losing the stronger match", () => {
     const merged = mergeAutocompleteSuggestions(
       [

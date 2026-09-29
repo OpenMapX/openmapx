@@ -496,13 +496,20 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       q,
       mapCenter ?? undefined,
     );
+    const normalizedQuery = normalizeSearchTerm(q);
+    const isExactGeographicPlace = (suggestion: AutocompleteResult) =>
+      (suggestion.type === "region" ||
+        suggestion.type === "street" ||
+        suggestion.type === "address") &&
+      normalizeSearchTerm(suggestion.label) === normalizedQuery;
 
     return [
       ...labeledSuggestions,
       ...categorySuggestions,
+      ...placeSuggestions.filter(isExactGeographicPlace),
       ...brandSuggestions,
       ...presetSuggestions,
-      ...placeSuggestions,
+      ...placeSuggestions.filter((suggestion) => !isExactGeographicPlace(suggestion)),
     ];
   }, [
     q,
