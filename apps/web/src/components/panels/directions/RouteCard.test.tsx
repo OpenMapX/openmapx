@@ -9,6 +9,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { MobileRuntimeProvider } from "@/lib/mobile/MobileRuntimeProvider";
 import { RouteCard } from "./RouteCard";
 
+// Pin the viewer's zone so the arrival offset assertions do not depend on the
+// machine running the suite.
+vi.mock("@openmapx/core", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@openmapx/core")>();
+  return { ...actual, viewerTimeZone: () => "Europe/Berlin" };
+});
+
 // This project does not enable Testing Library's automatic cleanup, so without
 // this every render in the file stays in the document and role queries find
 // several Start buttons.
