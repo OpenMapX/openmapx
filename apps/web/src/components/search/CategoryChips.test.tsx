@@ -5,6 +5,7 @@ import { fireEvent, render, screen } from "@/test";
 const isMobileRef = { current: true };
 const sourcesRef: { current: Array<{ id: string; categoryChipLabel: string }> } = { current: [] };
 vi.mock("@mui/material/useMediaQuery", () => ({ default: () => isMobileRef.current }));
+vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
 vi.mock("@openmapx/core", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@openmapx/core")>();
   return { ...actual, useDataSources: () => ({ data: { sources: sourcesRef.current } }) };
@@ -158,5 +159,70 @@ describe("CategoryChips discovery order", () => {
     render(<CategoryChips />);
     fireEvent.click(screen.getByRole("button", { name: "Transit" }));
     expect(useCategorySearchStore.getState().activeCategory).toBe("transit");
+  });
+});
+
+describe("CategoryChips scroll arrows", () => {
+  const LEFT = "search.scrollCategoriesLeft";
+  const RIGHT = "search.scrollCategoriesRight";
+
+  beforeEach(() => {
+    isMobileRef.current = false;
+    sourcesRef.current = [];
+    useMapStore.setState({ zoom: 12 });
+    useDirectionsStore.setState({ isOpen: false });
+    useCategorySearchStore.setState({ activeCategory: null, mode: "category" });
+    useDataSourceStore.setState({ activeSource: null });
+  });
+
+  /** jsdom lays nothing out, so the row is given a scroll extent and a scrollTo that moves it. */
+  function scrollableRow(clientWidth: number, scrollWidth: number): HTMLElement {
+    const row = screen.getByRole("button", { name: "Restaurants" }).parentElement
+      ?.parentElement as HTMLElement;
+    let scrollLeft = 0;
+    Object.defineProperties(row, {
+      clientWidth: { configurable: true, value: clientWidth },
+      scrollWidth: { configurable: true, value: scrollWidth },
+      scrollLeft: { configurable: true, get: () => scrollLeft },
+    });
+    row.scrollTo = ((options: ScrollToOptions) => {
+      scrollLeft = options.left ?? scrollLeft;
+      fireEvent.scroll(row);
+    }) as typeof row.scrollTo;
+    fireEvent.scroll(row);
+    return row;
+  }
+
+  it("offers an arrow only toward the side with more chips", () => {
+    render(<CategoryChips />);
+    expect(screen.queryByLabelText(LEFT)).toBeNull();
+    expect(screen.queryByLabelText(RIGHT)).toBeNull();
+
+    const row = scrollableRow(800, 1600);
+    expect(screen.queryByLabelText(LEFT)).toBeNull();
+
+    fireEvent.click(screen.getByLabelText(RIGHT));
+    expect(row.scrollLeft).toBe(640);
+    expect(screen.getByLabelText(LEFT)).toBeTruthy();
+    expect(screen.getByLabelText(RIGHT)).toBeTruthy();
+  });
+
+  it("finishes the scroll rather than leave a sliver for another click", () => {
+    render(<CategoryChips />);
+    const row = scrollableRow(800, 1500);
+
+    fireEvent.click(screen.getByLabelText(RIGHT));
+    expect(row.scrollLeft).toBe(700);
+    expect(screen.queryByLabelText(RIGHT)).toBeNull();
+
+    fireEvent.click(screen.getByLabelText(LEFT));
+    expect(row.scrollLeft).toBe(0);
+    expect(screen.queryByLabelText(LEFT)).toBeNull();
+  });
+
+  it("keeps the arrows out of the tab order, which already reaches every chip", () => {
+    render(<CategoryChips />);
+    scrollableRow(800, 1600);
+    expect(screen.getByLabelText(RIGHT).getAttribute("tabindex")).toBe("-1");
   });
 });

@@ -252,6 +252,8 @@
     "detailsPanelAriaLabel": "Ortsdetails"
   },
   "search": {
+    "scrollCategoriesLeft": "Kategorien nach links blättern",
+    "scrollCategoriesRight": "Kategorien nach rechts blättern",
     "distanceFromOrigin": "Entfernungen ab {name}",
     "distanceFromSearchLocation": "Entfernungen ab dem gesuchten Ort",
     "distanceFromAreaCenter": "Entfernungen ab der Mitte des Suchgebiets",

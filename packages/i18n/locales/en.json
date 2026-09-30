@@ -252,6 +252,8 @@
     "detailsPanelAriaLabel": "Place details"
   },
   "search": {
+    "scrollCategoriesLeft": "Scroll categories left",
+    "scrollCategoriesRight": "Scroll categories right",
     "distanceFromOrigin": "Distances from {name}",
     "distanceFromSearchLocation": "Distances from the searched location",
     "distanceFromAreaCenter": "Distances from the center of the searched area",
