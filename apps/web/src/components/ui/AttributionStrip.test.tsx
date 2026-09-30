@@ -123,6 +123,33 @@ describe("AttributionStrip", () => {
     expect(tooltip.textContent).not.toContain("<a href=");
   });
 
+  it("moves a long license description from the chip into the tooltip", async () => {
+    const transitous: Attribution = {
+      sourceId: "transitous",
+      name: "Transitous",
+      spdxLicense: "Mixed (per upstream GTFS/GBFS feed; mostly open data)",
+      attributionText: "Public transport data via Transitous",
+    };
+    const { container } = render(
+      <AttributionStrip attributions={[transitous]} variant="panel-header" label="Data sources" />,
+    );
+    expect(container.querySelector("[data-source-id]")?.textContent).toBe("Transitous");
+
+    fireEvent.mouseOver(container.querySelector("[data-idx]") as HTMLElement);
+    const tooltip = await screen.findByRole("tooltip");
+    expect(tooltip.textContent).toContain("Public transport data via Transitous");
+    expect(tooltip.textContent).toContain("Mixed (per upstream GTFS/GBFS feed; mostly open data)");
+  });
+
+  it("keeps a short license label on the chip", () => {
+    const markup = renderToStaticMarkup(
+      <AttributionStrip
+        attributions={[{ sourceId: "entur", name: "Entur", spdxLicense: "NLOD 2.0" }]}
+      />,
+    );
+    expect(markup).toContain("Entur · NLOD 2.0");
+  });
+
   it("collapses to maxVisible with a toggle that expands and collapses", () => {
     const items: Attribution[] = [
       { sourceId: "a", name: "Alpha" },

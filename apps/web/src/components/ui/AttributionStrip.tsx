@@ -46,8 +46,26 @@ function chipHref(attr: Attribution): { href: string; external: boolean } {
   return { href: `/licenses#source-${encodeURIComponent(attr.sourceId)}`, external: false };
 }
 
+/**
+ * Longest license that still reads as a chip suffix. Identifiers and short
+ * labels ("CC-BY-4.0", "NLOD 2.0", "U.S. Public Domain") fit; qualified
+ * descriptions ("Mixed (per upstream GTFS/GBFS feed; mostly open data)") move
+ * to the tooltip instead of stretching the chip across the panel.
+ */
+const MAX_CHIP_LICENSE_LENGTH = 24;
+
+function license(attr: Attribution): string | undefined {
+  return attr.spdxLicense?.trim() || undefined;
+}
+
+function chipLicense(attr: Attribution): string | undefined {
+  const text = license(attr);
+  return text && text.length <= MAX_CHIP_LICENSE_LENGTH ? text : undefined;
+}
+
 function displayLabel(attr: Attribution): string {
-  return attr.spdxLicense ? `${attr.name} · ${attr.spdxLicense}` : attr.name;
+  const text = chipLicense(attr);
+  return text ? `${attr.name} · ${text}` : attr.name;
 }
 
 /**
@@ -148,7 +166,7 @@ export function AttributionStrip({
       {visibleItems.map((attr, idx) => {
         const labelText = displayLabel(attr);
         const link = chipHref(attr);
-        const tooltip = attr.attributionText ? (
+        const credit = attr.attributionText ? (
           <Box
             component="span"
             sx={{ "& a": { color: "inherit" } }}
@@ -158,9 +176,23 @@ export function AttributionStrip({
         ) : (
           (attr.publisher?.name ?? attr.url ?? attr.name)
         );
+        const tooltipLicense = chipLicense(attr) ? undefined : license(attr);
+        const tooltip = tooltipLicense ? (
+          <>
+            {credit}
+            <Box component="span" sx={{ display: "block", mt: 0.5 }}>
+              {tooltipLicense}
+            </Box>
+          </>
+        ) : (
+          credit
+        );
+        // Every box from the strip down to the chip is capped at the strip's
+        // width, so a chip too long for the panel ends in an ellipsis instead
+        // of running past the panel edge.
+        const fitSx = isPlain ? {} : { display: "flex", minWidth: 0, maxWidth: "100%" };
         const chipSx = {
-          display: isPlain ? "inline" : "inline-flex",
-          alignItems: "center",
+          display: isPlain ? "inline" : "block",
           fontSize,
           lineHeight: 1.4,
           color: "text.secondary",
@@ -191,17 +223,22 @@ export function AttributionStrip({
               color: "inherit",
               textDecoration: "none",
               overflowWrap: isPlain ? "anywhere" : undefined,
+              ...fitSx,
             }}
           >
             {chipContent}
           </Link>
         ) : (
-          <Box key={attr.sourceId} component="span">
+          <Box key={attr.sourceId} component="span" sx={fitSx}>
             {chipContent}
           </Box>
         );
         return (
-          <Box key={attr.sourceId} component="span" sx={{ minWidth: 0, overflowWrap: "anywhere" }}>
+          <Box
+            key={attr.sourceId}
+            component="span"
+            sx={{ minWidth: 0, overflowWrap: "anywhere", ...fitSx }}
+          >
             {isPlain && idx > 0 && (
               <Box component="span" sx={{ color: "text.disabled", mr: 0.5 }}>
                 ·
@@ -210,7 +247,7 @@ export function AttributionStrip({
             <Tooltip title={tooltip} placement="top" arrow>
               <Box
                 component="span"
-                sx={{ display: isPlain ? "inline" : "inline-flex" }}
+                sx={{ display: isPlain ? "inline" : "inline-flex", ...fitSx }}
                 data-idx={idx}
               >
                 {node}
