@@ -15,10 +15,13 @@ import { BRAND } from "@/integration-api/runtime/theme";
  * use the theme-aware `--omx-chip-hover` so the inactive hover stays dark in
  * dark mode.
  */
+/** Height of a floating chip; controls placed beside chips match it. */
+export const FLOATING_CHIP_HEIGHT = 36;
+
 export function floatingChipSx(active: boolean, variant: "category" | "toggle"): SxProps<Theme> {
   const base = {
-    height: 36,
-    borderRadius: "18px",
+    height: FLOATING_CHIP_HEIGHT,
+    borderRadius: `${FLOATING_CHIP_HEIGHT / 2}px`,
     fontWeight: 500,
     fontSize: 13,
     bgcolor: active ? BRAND : "background.paper",

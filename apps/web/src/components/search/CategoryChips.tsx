@@ -24,12 +24,12 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { prefersReducedMotion } from "@/lib/reducedMotion";
-import { floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
+import { FLOATING_CHIP_HEIGHT, floatingChipSx, floatingToolbarSx } from "./floatingChipSx";
 
 const FINE_POINTER = "@media (hover: hover) and (pointer: fine)";
 const TOUCH_FADE = 24;
-/** Wide enough to fade the chips out behind a 32px arrow. */
-const ARROW_FADE = 48;
+/** Wide enough to fade the chips out behind an arrow. */
+const ARROW_FADE = FLOATING_CHIP_HEIGHT + 16;
 /** Share of the visible row one arrow click scrolls, leaving a chip in view for context. */
 const PAGE_FRACTION = 0.8;
 
@@ -235,8 +235,10 @@ export function CategoryChips() {
     top: "50%",
     [side]: 0,
     transform: "translateY(-50%)",
-    width: 32,
-    height: 32,
+    // Same height as the chips, and round like their ends.
+    width: FLOATING_CHIP_HEIGHT,
+    height: FLOATING_CHIP_HEIGHT,
+    borderRadius: "50%",
     bgcolor: "background.paper",
     border: "1px solid var(--omx-border)",
     boxShadow: "0 1px 3px var(--omx-shadow-soft)",
