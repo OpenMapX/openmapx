@@ -85,6 +85,26 @@ describe("useAlignToStreets", () => {
     expect(compute).toHaveBeenCalledTimes(3);
   });
 
+  it("reports the grid's compass axis, from the target or from an already-aligned map", () => {
+    compute.mockReturnValue({ status: "ok", bearing: 118.7 });
+    const { result } = renderHook(() => useAlignToStreets());
+    act(() => vi.advanceTimersByTime(0));
+    expect(result.current.axis).toBe(28.5);
+
+    compute.mockReturnValue({ status: "aligned" });
+    fake.state.bearing = -61;
+    act(() => fake.emit("moveend"));
+    act(() => vi.advanceTimersByTime(0));
+    expect(result.current.axis).toBe(29);
+
+    compute.mockReturnValue({ status: "no-grid" });
+    fake.state.center.lng = 1;
+    act(() => fake.emit("moveend"));
+    act(() => vi.advanceTimersByTime(0));
+    expect(result.current.axis).toBeNull();
+    expect(result.current.available).toBe(false);
+  });
+
   it("does not inspect style or probe for unrelated source updates", () => {
     compute.mockReturnValue({ status: "ok", bearing: 30 });
     const getStyle = vi.spyOn(fake.map, "getStyle");

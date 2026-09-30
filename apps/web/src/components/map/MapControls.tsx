@@ -2,7 +2,6 @@
 
 import AddIcon from "@mui/icons-material/Add";
 import ExploreIcon from "@mui/icons-material/Explore";
-import Grid4x4Icon from "@mui/icons-material/Grid4x4";
 import MyLocationIcon from "@mui/icons-material/MyLocation";
 import RemoveIcon from "@mui/icons-material/Remove";
 import VolumeOffIcon from "@mui/icons-material/VolumeOff";
@@ -23,6 +22,7 @@ import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useNavigationMutations } from "@/lib/mobile/useNavigationMutations";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { useAlignToStreets } from "@/lib/useAlignToStreets";
+import { AlignToStreetsIcon, gridScreenTilt } from "./AlignToStreetsIcon";
 import { resolveControlPlacement } from "./controlPlacement";
 import { CrowdApproachPromptLazy, ReportDialogLazy, ReportFabLazy } from "./crowdReportsLazy";
 import { Pegman } from "./Pegman";
@@ -61,7 +61,7 @@ export function MapControls() {
   const pitch = useMapStore((s) => s.pitch);
   const touchZoomButtons = useSettingsStore((s) => s.touchZoomButtons);
   const handleMyLocation = useMyLocation();
-  const { available: alignAvailable, align } = useAlignToStreets();
+  const { axis: gridAxis, align } = useAlignToStreets();
   // The hook picks the words; this is simply the surface that shows them, for
   // every way of asking — the button below, or the command palette.
   const alignMessage = useAlignAnnouncement();
@@ -281,7 +281,7 @@ export function MapControls() {
 
         {/* Align to the local street grid — offered only where the hook can act
           on it (a live map, not navigating, zoomed in far enough). */}
-        {alignAvailable && (
+        {gridAxis !== null && (
           <Tooltip title={t("alignToStreets")} placement="left">
             <Paper elevation={2} sx={{ borderRadius: "12px", overflow: "hidden" }}>
               <IconButton
@@ -290,7 +290,10 @@ export function MapControls() {
                 sx={{ width: 36, height: 36 }}
                 aria-label={t("alignToStreetsAriaLabel")}
               >
-                <Grid4x4Icon sx={{ fontSize: 18, color: "primary.main" }} />
+                <AlignToStreetsIcon
+                  tilt={gridScreenTilt(gridAxis, bearing)}
+                  sx={{ fontSize: 20, color: "primary.main" }}
+                />
               </IconButton>
             </Paper>
           </Tooltip>

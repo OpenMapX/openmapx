@@ -1,12 +1,29 @@
 import type * as maplibregl from "maplibre-gl";
-import { alignmentCacheKey, computeStreetGridAlignment } from "./streetGrid";
+import {
+  alignmentCacheKey,
+  computeStreetGridAlignment,
+  type StreetGridAlignment,
+} from "./streetGrid";
 
-type Listener = (available: boolean) => void;
+/**
+ * The street grid's axis as a compass bearing folded into [0, 90), or null
+ * while there is no grid to align to.
+ */
+export type StreetGridAxis = number | null;
+
+type Listener = (axis: StreetGridAxis) => void;
+
+/** The grid axis a settled result implies: its target bearing, or the current one when already aligned. */
+function gridAxis(result: StreetGridAlignment, currentBearing: number): StreetGridAxis {
+  if (result.status !== "ok" && result.status !== "aligned") return null;
+  const bearing = result.status === "ok" ? result.bearing : currentBearing;
+  return Math.round((((bearing % 90) + 90) % 90) * 2) / 2;
+}
 
 /** One settled-view probe and one set of map listeners for all hook consumers. */
 class StreetGridAvailability {
   private readonly listeners = new Set<Listener>();
-  private available = false;
+  private axis: StreetGridAxis = null;
   private sampledKey: string | null = null;
   private roadsChanged = true;
   private roadSourceIds = new Set<string>();
@@ -27,7 +44,7 @@ class StreetGridAvailability {
   subscribe(styleVersion: number, listener: Listener): () => void {
     this.listeners.add(listener);
     if (this.styleVersion !== styleVersion) this.invalidateStyle(styleVersion);
-    listener(this.available);
+    listener(this.axis);
     this.queueIfNeeded();
     return () => {
       this.listeners.delete(listener);
@@ -42,10 +59,11 @@ class StreetGridAvailability {
     };
   }
 
-  private publish(available: boolean): void {
-    if (this.available === available) return;
-    this.available = available;
-    for (const listener of this.listeners) listener(available);
+  private publish(axis: StreetGridAxis): void {
+    // The axis is rounded, so an unchanged grid is equal and doesn't re-render consumers.
+    if (this.axis === axis) return;
+    this.axis = axis;
+    for (const listener of this.listeners) listener(axis);
   }
 
   private cancelTimer(): void {
@@ -59,7 +77,7 @@ class StreetGridAvailability {
     this.roadsChanged = true;
     this.refreshRoadSources();
     this.cancelTimer();
-    this.publish(false);
+    this.publish(null);
   }
 
   private refreshRoadSources(): void {
@@ -87,7 +105,7 @@ class StreetGridAvailability {
     if (event.dataType !== "source" || !event.sourceId || !this.roadSourceIds.has(event.sourceId))
       return;
     this.roadsChanged = true;
-    this.publish(false);
+    this.publish(null);
     // Source data can arrive tile by tile. The next idle coalesces the batch.
   };
 
@@ -97,7 +115,7 @@ class StreetGridAvailability {
     if (this.listeners.size === 0 || this.timer !== null) return;
     const key = alignmentCacheKey(this.map, this.styleVersion);
     if (!this.roadsChanged && this.sampledKey === key) return;
-    this.publish(false);
+    this.publish(null);
     if (this.map.isMoving() || !this.map.loaded()) return;
     this.timer = setTimeout(() => {
       this.timer = null;
@@ -106,7 +124,7 @@ class StreetGridAvailability {
       const result = computeStreetGridAlignment(this.map);
       this.sampledKey = currentKey;
       this.roadsChanged = false;
-      this.publish(result.status === "ok" || result.status === "aligned");
+      this.publish(gridAxis(result, this.map.getBearing()));
     }, 0);
   }
 }

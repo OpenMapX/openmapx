@@ -12,7 +12,7 @@ import {
   computeStreetGridAlignment,
   type StreetGridAlignment,
 } from "./streetGrid";
-import { subscribeStreetGridAvailability } from "./streetGridAvailability";
+import { type StreetGridAxis, subscribeStreetGridAvailability } from "./streetGridAvailability";
 
 const ALIGN_EASE_MS = 300;
 /**
@@ -27,7 +27,12 @@ const ALIGN_MEMO_MS = 1000;
  * publishes what to say when it cannot — so every caller surfaces the same
  * words without choosing them.
  */
-export function useAlignToStreets(): { available: boolean; align: () => void } {
+export function useAlignToStreets(): {
+  available: boolean;
+  /** The street grid's compass axis folded into [0, 90), or null while unavailable. */
+  axis: StreetGridAxis;
+  align: () => void;
+} {
   const t = useTranslations("map");
   const ctx = useMapOptional();
   const zoom = useMapStore((s) => s.zoom);
@@ -39,16 +44,16 @@ export function useAlignToStreets(): { available: boolean; align: () => void } {
   const [probe, setProbe] = useState({
     map: null as typeof map,
     styleVersion: -1,
-    available: false,
+    axis: null as StreetGridAxis,
   });
 
   useEffect(() => {
     if (!map || !eligible) {
-      setProbe({ map: null, styleVersion: -1, available: false });
+      setProbe({ map: null, styleVersion: -1, axis: null });
       return;
     }
-    return subscribeStreetGridAvailability(map, styleVersion, (available) => {
-      setProbe({ map, styleVersion, available });
+    return subscribeStreetGridAvailability(map, styleVersion, (axis) => {
+      setProbe({ map, styleVersion, axis });
     });
   }, [map, eligible, styleVersion]);
 
@@ -79,9 +84,7 @@ export function useAlignToStreets(): { available: boolean; align: () => void } {
     announce(result.status);
   }, [ctx, styleVersion, t]);
 
-  return {
-    available:
-      eligible && probe.map === map && probe.styleVersion === styleVersion && probe.available,
-    align,
-  };
+  const axis =
+    eligible && probe.map === map && probe.styleVersion === styleVersion ? probe.axis : null;
+  return { available: axis !== null, axis, align };
 }

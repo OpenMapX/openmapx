@@ -161,6 +161,15 @@ describe("MapControls align to streets", () => {
     expect(screen.queryAllByText("map.alignNoGrid")).toHaveLength(0);
   });
 
+  it("leans its icon as the streets on screen do, following the live map bearing", () => {
+    renderControls();
+    const tilt = () =>
+      screen.getByLabelText(ALIGN_LABEL).querySelector("g")?.getAttribute("transform");
+    expect(tilt()).toBe("rotate(30 12 12)");
+    act(() => useMapStore.setState({ bearing: 20 }));
+    expect(tilt()).toBe("rotate(10 12 12)");
+  });
+
   it("keeps the compass alongside it as the way back to north", () => {
     renderControls();
     act(() => useMapStore.setState({ bearing: 45 }));
