@@ -12,6 +12,7 @@ vi.mock("@/integration-api/map/MapContext", () => {
   };
   return { __test: context, useMap: () => context };
 });
+vi.mock("next-intl", () => ({ useLocale: () => "en" }));
 
 import { PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
@@ -121,6 +122,22 @@ describe("MapStylePoiClickHandler", () => {
       rawCategory: "culture/museum",
     });
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+  });
+
+  it("names the place the way the map labels it in the UI language", () => {
+    const fake = new FakeMap({
+      "poi-label": [
+        pointFeature({ name: "Berliner Fernsehturm", "name:en": "Fernsehturm Berlin" }, { id: 7 }),
+      ],
+    });
+    renderHandler(fake);
+
+    act(() => fake.emit("click", { point: { x: 12, y: 24 } }));
+
+    expect(usePlaceStore.getState().selectedPlace).toMatchObject({
+      name: "Fernsehturm Berlin",
+      ids: { stylePoi: "7" },
+    });
   });
 
   it("preserves an active category sidebar and opens the place card", () => {

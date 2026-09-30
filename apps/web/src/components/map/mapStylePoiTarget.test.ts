@@ -1,6 +1,11 @@
 import type { MapGeoJSONFeature, Map as MaplibreMap, PointLike } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
-import { findStylePoiAtPoint, getStylePoiLayerIds } from "./mapStylePoiTarget";
+import {
+  filterWithoutFeature,
+  findStylePoiAtPoint,
+  findStylePoiFeatureId,
+  getStylePoiLayerIds,
+} from "./mapStylePoiTarget";
 
 const point = { x: 12, y: 24 } as unknown as PointLike;
 
@@ -79,6 +84,21 @@ describe("mapStylePoiTarget", () => {
     });
   });
 
+  it("takes the label's localized name over the local one", () => {
+    const map = makeHitMap({
+      "poi-label": [
+        pointFeature({ name: "Berliner Fernsehturm", "name:en": "Fernsehturm Berlin" }),
+      ],
+    });
+
+    expect(findStylePoiAtPoint(map, point, ["poi-label"], new Set(), "en")).toMatchObject({
+      name: "Fernsehturm Berlin",
+    });
+    expect(findStylePoiAtPoint(map, point, ["poi-label"], new Set(), "fr")).toMatchObject({
+      name: "Berliner Fernsehturm",
+    });
+  });
+
   it("returns null for unnamed features", () => {
     const map = makeHitMap({ "poi-label": [pointFeature({ class: "culture" })] });
 
@@ -118,5 +138,92 @@ describe("mapStylePoiTarget", () => {
     expect(findStylePoiAtPoint(map, point, ["poi-label"], new Set())).toMatchObject({
       featureId: "-77.02573-38.88859",
     });
+  });
+});
+
+describe("findStylePoiFeatureId", () => {
+  const tower: [number, number] = [13.40942, 52.52082];
+
+  function sourceMap(features: MapGeoJSONFeature[]) {
+    const queried: Array<{ source: string; sourceLayer?: string }> = [];
+    const map = {
+      getStyle: () => ({
+        layers: [
+          { id: "poi-level-1", type: "symbol", source: "openmaptiles", "source-layer": "poi" },
+          { id: "road-label", type: "symbol", source: "openmaptiles", "source-layer": "road" },
+        ],
+      }),
+      querySourceFeatures: (source: string, options: { sourceLayer?: string }) => {
+        queried.push({ source, sourceLayer: options.sourceLayer });
+        return features;
+      },
+    } as unknown as MaplibreMap;
+    return { map, queried };
+  }
+
+  it("takes a clicked POI's tile id without searching", () => {
+    const { map, queried } = sourceMap([]);
+
+    expect(
+      findStylePoiFeatureId(map, ["poi-level-1"], {
+        coordinates: tower,
+        names: ["Fernsehturm Berlin"],
+        stylePoiId: "5564352411",
+      }),
+    ).toBe(5564352411);
+    expect(queried).toEqual([]);
+  });
+
+  it("matches the nearest POI carrying one of the place's names in any language", () => {
+    const { map, queried } = sourceMap([
+      pointFeature({ name: "Espresso House" }, { id: 1, coordinates: [13.4096, 52.52085] }),
+      pointFeature(
+        { name: "Berliner Fernsehturm", "name:en": "Fernsehturm Berlin" },
+        { id: 2, coordinates: [13.40945, 52.5208] },
+      ),
+    ]);
+
+    expect(
+      findStylePoiFeatureId(map, ["poi-level-1"], {
+        coordinates: tower,
+        names: ["fernsehturm berlin"],
+      }),
+    ).toBe(2);
+    expect(queried).toEqual([{ source: "openmaptiles", sourceLayer: "poi" }]);
+  });
+
+  it("ignores a same-named POI that is not the selected place", () => {
+    const { map } = sourceMap([
+      pointFeature({ name: "Starbucks" }, { id: 3, coordinates: [13.42, 52.5208] }),
+    ]);
+
+    expect(
+      findStylePoiFeatureId(map, ["poi-level-1"], { coordinates: tower, names: ["Starbucks"] }),
+    ).toBeNull();
+  });
+});
+
+describe("filterWithoutFeature", () => {
+  it("adds an expression clause to an expression filter", () => {
+    expect(filterWithoutFeature(["has", "name"], 7)).toEqual([
+      "all",
+      ["has", "name"],
+      ["!=", ["id"], 7],
+    ]);
+    expect(filterWithoutFeature(["==", ["get", "class"], "park"], 7)).toEqual([
+      "all",
+      ["==", ["get", "class"], "park"],
+      ["!=", ["id"], 7],
+    ]);
+  });
+
+  it("keeps a legacy filter in legacy syntax, which cannot mix with expressions", () => {
+    const legacy = ["all", ["==", "$type", "Point"], ["==", "class", "park"]];
+
+    expect(filterWithoutFeature(legacy as never, 7)).toEqual(["all", legacy, ["!=", "$id", 7]]);
+  });
+
+  it("filters out just the feature when the layer has no filter", () => {
+    expect(filterWithoutFeature(undefined, 7)).toEqual(["!=", ["id"], 7]);
   });
 });

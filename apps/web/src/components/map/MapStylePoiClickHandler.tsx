@@ -2,6 +2,7 @@
 
 import { createPlace, PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
 import type { MapMouseEvent } from "maplibre-gl";
+import { useLocale } from "next-intl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -16,6 +17,7 @@ import { findStylePoiAtPoint, getStylePoiLayerIds } from "./mapStylePoiTarget";
 export function MapStylePoiClickHandler() {
   const { mapRef, mapReady, styleVersion } = useMap();
   const { setSelectedPlace } = usePlaceStore();
+  const locale = useLocale();
   const poiLayerIdsRef = useRef<string[]>([]);
 
   // Discover POI layers from the style and keep the shared interactive-layer
@@ -68,6 +70,7 @@ export function MapStylePoiClickHandler() {
         e.point,
         poiLayerIdsRef.current,
         INTERACTIVE_LAYER_IDS,
+        locale,
       );
       if (!target) return;
 
@@ -99,7 +102,7 @@ export function MapStylePoiClickHandler() {
     return () => {
       map.off("click", onClick);
     };
-  }, [mapRef, mapReady, styleVersion, setSelectedPlace]);
+  }, [mapRef, mapReady, styleVersion, setSelectedPlace, locale]);
 
   // Cursor: show pointer when hovering over any named style POI.
   useEffect(() => {
