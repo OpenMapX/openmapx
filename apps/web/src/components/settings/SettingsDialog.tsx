@@ -13,6 +13,7 @@ import Select from "@mui/material/Select";
 import Switch from "@mui/material/Switch";
 import { useColorScheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
+import useMediaQuery from "@mui/material/useMediaQuery";
 import {
   type DateFormat,
   formatCalendarDate,
@@ -68,6 +69,9 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
   const setAiSearchEnabled = useSettingsStore((s) => s.setAiSearchEnabled);
   const searchHistoryEnabled = useSettingsStore((s) => s.searchHistoryEnabled);
   const setSearchHistoryEnabled = useSettingsStore((s) => s.setSearchHistoryEnabled);
+  const touchZoomButtons = useSettingsStore((s) => s.touchZoomButtons);
+  const setTouchZoomButtons = useSettingsStore((s) => s.setTouchZoomButtons);
+  const coarsePointer = useMediaQuery("(pointer: coarse)", { noSsr: true });
   const fullScreen = useFullScreenOnMobile();
   const [navSettingsOpen, setNavSettingsOpen] = useState(false);
   const [vehiclesOpen, setVehiclesOpen] = useState(false);
@@ -101,6 +105,21 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
               <MenuItem value="dark">{t("themeDark")}</MenuItem>
             </Select>
           </SettingRow>
+          {/* Zoom buttons are always shown with a mouse; only touch screens hide them. */}
+          {coarsePointer && (
+            <>
+              <SettingRow label={ts("touchZoomButtons")}>
+                <Switch
+                  checked={touchZoomButtons}
+                  onChange={(e) => setTouchZoomButtons(e.target.checked)}
+                  slotProps={{ input: { "aria-label": ts("touchZoomButtons") } }}
+                />
+              </SettingRow>
+              <Typography variant="caption" sx={{ color: "text.secondary", display: "block" }}>
+                {ts("touchZoomButtonsHint")}
+              </Typography>
+            </>
+          )}
         </Section>
 
         <Section title={ts("languageAndRegion")}>

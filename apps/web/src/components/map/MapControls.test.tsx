@@ -1,4 +1,4 @@
-import { useMapStore, useNavigationStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { announceAlign, clearAlignAnnouncement } from "@/lib/alignAnnouncement";
 import { publishMapObstruction } from "@/lib/mapObstructions";
@@ -246,6 +246,78 @@ describe("MapControls align to streets", () => {
       expect(screen.getByLabelText("map.zoomInAriaLabel")).toBeTruthy();
     } finally {
       rect.mockRestore();
+      Object.defineProperty(window, "innerHeight", { configurable: true, value: originalHeight });
+    }
+  });
+});
+
+describe("MapControls zoom buttons on touch screens", () => {
+  // jsdom doesn't evaluate media queries, so these read the emitted rule and
+  // stand in for the browser's computed style.
+  function coarsePointerHidesZoom(): boolean {
+    const group = document.querySelector("[data-map-zoom-group]");
+    const classes = Array.from(group?.classList ?? []).filter((c) => c.startsWith("css-"));
+    const css = Array.from(document.querySelectorAll("style"))
+      .map((style) => style.textContent ?? "")
+      .join("");
+    return classes.some((c) =>
+      new RegExp(`@media \\(pointer: coarse\\)\\s*\\{\\s*\\.${c}\\s*\\{\\s*display:\\s*none`).test(
+        css,
+      ),
+    );
+  }
+
+  afterEach(() => {
+    useSettingsStore.setState({ touchZoomButtons: false });
+    publishMapObstruction("controls-test-filter", "top", null);
+    vi.restoreAllMocks();
+  });
+
+  it("hides the zoom pair on touch screens unless the user turns it on", () => {
+    compute.mockReturnValue({ status: "ok", bearing: 30 });
+    render(<MapControls />);
+    // Still in the DOM: with a mouse, or a keyboard, the pair stays usable.
+    expect(screen.getByLabelText("map.zoomInAriaLabel")).toBeTruthy();
+    expect(coarsePointerHidesZoom()).toBe(true);
+
+    act(() => useSettingsStore.getState().setTouchZoomButtons(true));
+    expect(coarsePointerHidesZoom()).toBe(false);
+  });
+
+  it("leaves a hidden zoom pair out of the stack height", async () => {
+    const originalHeight = window.innerHeight;
+    Object.defineProperty(window, "innerHeight", { configurable: true, value: 800 });
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (
+      this: HTMLElement,
+    ) {
+      const height = this.matches("button, [role='button']") ? 44 : 0;
+      return DOMRect.fromRect({ width: 44, height });
+    });
+    const columns = () =>
+      document
+        .querySelector("[data-map-controls-columns]")
+        ?.getAttribute("data-map-controls-columns");
+    // An inline style stands in for the coarse-pointer rule jsdom can't match.
+    const setZoomDisplay = (display: string) => {
+      const group = document.querySelector<HTMLElement>("[data-map-zoom-group]");
+      if (group) group.style.display = display;
+      act(() => window.dispatchEvent(new Event("resize")));
+    };
+    try {
+      compute.mockReturnValue({ status: "ok", bearing: 30 });
+      useMapStore.setState({ zoom: ALIGN_MIN_ZOOM });
+      // Location, Pegman and align fit under a 520px filter bar in one column;
+      // with the zoom pair as well they need two.
+      act(() => publishMapObstruction("controls-test-filter", "top", 520));
+      render(<MapControls />);
+      await waitFor(() => expect(columns()).toBe("2"));
+
+      setZoomDisplay("none");
+      await waitFor(() => expect(columns()).toBe("1"));
+
+      setZoomDisplay("");
+      await waitFor(() => expect(columns()).toBe("2"));
+    } finally {
       Object.defineProperty(window, "innerHeight", { configurable: true, value: originalHeight });
     }
   });

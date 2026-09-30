@@ -142,4 +142,20 @@ describe("useSettingsStore", () => {
     useSettingsStore.getState().hydrate();
     expect(useSettingsStore.getState().junctionPhotos).toBe(false);
   });
+
+  it("touch zoom buttons default off", () => {
+    configureStorage(makeMemoryStorage());
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().touchZoomButtons).toBe(false);
+  });
+
+  it("setTouchZoomButtons(true) persists and hydrates back as enabled", () => {
+    const storage = makeMemoryStorage();
+    configureStorage(storage);
+    useSettingsStore.getState().setTouchZoomButtons(true);
+    expect(storage.getString("openmapx:touchZoomButtons")).toBe("true");
+    useSettingsStore.setState({ touchZoomButtons: false });
+    useSettingsStore.getState().hydrate();
+    expect(useSettingsStore.getState().touchZoomButtons).toBe(true);
+  });
 });

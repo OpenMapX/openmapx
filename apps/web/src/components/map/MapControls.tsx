@@ -12,7 +12,7 @@ import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Snackbar from "@mui/material/Snackbar";
 import Tooltip from "@mui/material/Tooltip";
-import { useMapStore, useNavigationStore } from "@openmapx/core";
+import { useMapStore, useNavigationStore, useSettingsStore } from "@openmapx/core";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { useTranslations } from "next-intl";
 import { Suspense, useEffect, useRef, useState } from "react";
@@ -59,6 +59,7 @@ export function MapControls() {
   const showVoiceButton = navigating && (navKind === "ground" || navKind === "transit");
   const bearing = useMapStore((s) => s.bearing);
   const pitch = useMapStore((s) => s.pitch);
+  const touchZoomButtons = useSettingsStore((s) => s.touchZoomButtons);
   const handleMyLocation = useMyLocation();
   const { available: alignAvailable, align } = useAlignToStreets();
   // The hook picks the words; this is simply the surface that shows them, for
@@ -93,10 +94,17 @@ export function MapControls() {
     const stack = stackRef.current;
     if (!stack) return;
     const measure = () => {
-      const actions = Array.from(stack.querySelectorAll<HTMLElement>("button, [role='button']"));
+      // The zoom pair is hidden by a media query on touch screens, so it takes no space there.
+      const zoomGroup = stack.querySelector<HTMLElement>("[data-map-zoom-group]");
+      const zoomShown = !!zoomGroup && getComputedStyle(zoomGroup).display !== "none";
+      const actions = Array.from(
+        stack.querySelectorAll<HTMLElement>("button, [role='button']"),
+      ).filter((action) => zoomShown || !zoomGroup?.contains(action));
       const sizes = actions.map((action) => action.getBoundingClientRect().height);
       if (sizes.length === 0 || sizes.some((size) => size <= 0)) return;
-      const column = sizes.reduce((sum, size) => sum + size, 0) + (sizes.length - 1) * 8 - 7; // The zoom pair shares one Paper and a 1px divider instead of an 8px gap.
+      // The zoom pair shares one Paper and a 1px divider instead of an 8px gap.
+      const column =
+        sizes.reduce((sum, size) => sum + size, 0) + (sizes.length - 1) * 8 - (zoomShown ? 7 : 0);
       let grid = 0;
       for (let i = 0; i < sizes.length; i += 2) {
         grid += Math.max(sizes[i], sizes[i + 1] ?? 0);
@@ -223,7 +231,10 @@ export function MapControls() {
           </Tooltip>
         )}
 
-        {/* Zoom in / zoom out */}
+        {/* Zoom in / zoom out. Touch screens pinch and double-tap to zoom, so
+          there the pair is hidden unless the user asks for it in Settings. A
+          media query rather than a render check, so the server-rendered page
+          doesn't flash the buttons before hydration. */}
         <Paper
           data-map-zoom-group
           elevation={2}
@@ -239,6 +250,7 @@ export function MapControls() {
               },
               "& > .MuiBox-root": { display: "none" },
             }),
+            ...(!touchZoomButtons && { "@media (pointer: coarse)": { display: "none" } }),
           }}
         >
           <Tooltip title={t("zoomIn")} placement="left">

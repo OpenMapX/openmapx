@@ -2159,6 +2159,8 @@
   "settings": {
     "title": "Settings",
     "appearance": "Appearance",
+    "touchZoomButtons": "Zoom buttons",
+    "touchZoomButtonsHint": "Show + and − buttons on the map. Without them, pinch or double-tap to zoom.",
     "languageAndRegion": "Language & region",
     "navigation": "Navigation",
     "voiceGuidanceTiming": "Voice guidance timing",

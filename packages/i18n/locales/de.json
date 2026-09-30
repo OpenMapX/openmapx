@@ -2159,6 +2159,8 @@
   "settings": {
     "title": "Einstellungen",
     "appearance": "Darstellung",
+    "touchZoomButtons": "Zoom-Tasten",
+    "touchZoomButtonsHint": "Plus- und Minus-Tasten auf der Karte anzeigen. Ohne sie zoomen Sie mit zwei Fingern oder durch Doppeltippen.",
     "languageAndRegion": "Sprache & Region",
     "navigation": "Navigation",
     "voiceGuidanceTiming": "Zeitpunkt der Sprachansagen",

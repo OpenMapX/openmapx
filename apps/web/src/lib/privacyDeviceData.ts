@@ -36,6 +36,7 @@ const PREFERENCE_KEYS = [
   "openmapx:avoidFerries",
   "openmapx:voiceName",
   "openmapx:mapNorthUp",
+  "openmapx:touchZoomButtons",
   "openmapx:globeView",
   "openmapx-haptics-enabled",
   "openmapx.nlp.cloudConsent",

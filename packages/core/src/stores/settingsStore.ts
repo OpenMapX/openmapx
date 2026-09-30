@@ -20,6 +20,7 @@ const FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:fasterRoutes";
 const AUTO_SWITCH_FASTER_ROUTES_STORAGE_KEY = "openmapx:nav:autoSwitchFasterRoutes";
 const VOICE_NAME_STORAGE_KEY = "openmapx:voiceName";
 const MAP_NORTH_UP_STORAGE_KEY = "openmapx:mapNorthUp";
+const TOUCH_ZOOM_BUTTONS_STORAGE_KEY = "openmapx:touchZoomButtons";
 const EV_VEHICLE_ID_STORAGE_KEY = "openmapx:evVehicleId";
 const EV_SOC_TARGET_PCT_STORAGE_KEY = "openmapx:evSocTargetPct";
 const EV_PREFERRED_NETWORKS_STORAGE_KEY = "openmapx:evPreferredNetworks";
@@ -130,6 +131,12 @@ function readMapNorthUp(): boolean {
   return getStorage().getString(MAP_NORTH_UP_STORAGE_KEY) === "true";
 }
 
+// Defaults OFF: pinch and double-tap already zoom on a touch screen, so the
+// buttons only earn their space for users who can't or don't want to use them.
+function readTouchZoomButtons(): boolean {
+  return getStorage().getString(TOUCH_ZOOM_BUTTONS_STORAGE_KEY) === "true";
+}
+
 /** Last-chosen EV vehicle preset key (`@openmapx/ev-charge-planner`'s `VEHICLE_PRESETS`); null = none picked. */
 function readEvVehicleId(): string | null {
   return getStorage().getString(EV_VEHICLE_ID_STORAGE_KEY) || null;
@@ -217,6 +224,9 @@ interface SettingsState {
   /** Keep the map north-up during navigation instead of the default course-up. */
   mapNorthUp: boolean;
   setMapNorthUp: (v: boolean) => void;
+  /** Show the map's zoom buttons on touch screens too (off by default; always shown with a mouse). */
+  touchZoomButtons: boolean;
+  setTouchZoomButtons: (v: boolean) => void;
   /** Last-chosen EV vehicle preset key; null = no vehicle picked yet. */
   evVehicleId: string | null;
   setEvVehicleId: (v: string | null) => void;
@@ -328,6 +338,11 @@ export const useSettingsStore = create<SettingsState>((set) => ({
     getStorage().setString(MAP_NORTH_UP_STORAGE_KEY, String(mapNorthUp));
     set({ mapNorthUp });
   },
+  touchZoomButtons: readTouchZoomButtons(),
+  setTouchZoomButtons: (touchZoomButtons) => {
+    getStorage().setString(TOUCH_ZOOM_BUTTONS_STORAGE_KEY, String(touchZoomButtons));
+    set({ touchZoomButtons });
+  },
   evVehicleId: readEvVehicleId(),
   setEvVehicleId: (evVehicleId) => {
     getStorage().setString(EV_VEHICLE_ID_STORAGE_KEY, evVehicleId ?? "");
@@ -392,6 +407,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
       autoSwitchFasterRoutes: readAutoSwitchFasterRoutes(),
       voiceName: readVoiceName(),
       mapNorthUp: readMapNorthUp(),
+      touchZoomButtons: readTouchZoomButtons(),
       evVehicleId: readEvVehicleId(),
       evSocTargetPct: readEvSocTargetPct(),
       evPreferredNetworks: readStringArray(EV_PREFERRED_NETWORKS_STORAGE_KEY),
