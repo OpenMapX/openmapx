@@ -1591,9 +1591,11 @@ describe("safeDownload", () => {
 
       expect(caught?.message).toMatch(/cleanup|deadline|dispatcher/i);
       expect(existsSync(destination)).toBe(false);
-      expect(await readdir(directory)).toHaveLength(0);
 
       vi.useRealTimers();
+      // The fake clock can pass the cleanup deadline before the real rm I/O
+      // lands, so the removal may still be finishing in the background.
+      await vi.waitFor(async () => expect(await readdir(directory)).toHaveLength(0));
       undiciLifecycle.close.mockReset().mockResolvedValue(undefined);
       undiciLifecycle.destroy.mockReset().mockResolvedValue(undefined);
       stubFetchSequence(makeResponse({ bodyText: "recovered" }));
