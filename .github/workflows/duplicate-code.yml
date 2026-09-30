@@ -35,13 +35,15 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - name: Audit duplicate production code
-        run: pnpm check-duplicates --reporters ai,html,markdown,json --output .jscpd-report
+        # upload-artifact skips hidden paths, so the report cannot live in the
+        # gitignored .jscpd-report directory local runs use.
+        run: pnpm check-duplicates --reporters ai,html,markdown,json --output "$RUNNER_TEMP/jscpd-report"
 
       - name: Upload duplicate-code report
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: duplicate-code-report
-          path: .jscpd-report
+          path: ${{ runner.temp }}/jscpd-report
           if-no-files-found: error
           retention-days: 14
