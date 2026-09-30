@@ -163,6 +163,11 @@ export interface Route {
   segmentSpeedLimits?: (number | null)[];
   /** Human-readable summary of the primary road, e.g. "via A57" */
   summary?: string;
+  /**
+   * Whether the route uses a toll road, as its engine reported it. `undefined`
+   * when the engine does not say — never read that as toll-free.
+   */
+  hasTolls?: boolean;
   /** Elevation values (metres) at regular intervals along the route */
   elevation?: number[];
   /** Distance in metres between elevation samples */

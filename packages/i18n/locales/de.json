@@ -815,12 +815,10 @@
     "bikeHillsStronglyAvoid": "Steile Strecken stark vermeiden",
     "fastestRoute": "Schnellste Route",
     "co2Estimate": "≈ {co2} (geschätzt)",
-    "roadConditionImpact": {
-      "current": "Verfügbare Straßenbedingungen berücksichtigt",
-      "limited": "Einige Straßenbedingungen fehlen möglicherweise",
-      "unsupported": "Straßenbedingungen können für diese Route nicht berücksichtigt werden",
-      "unavailable": "Straßenbedingungen für diese Route nicht verfügbar",
-      "expired": "Informationen zu Straßenbedingungen sind veraltet"
+    "roadConditionNotice": {
+      "notApplied": "Gemeldete Straßenbedingungen in der Nähe sind in dieser Route möglicherweise nicht berücksichtigt",
+      "outdated": "Die Straßenbedingungen können sich seit der Routenplanung geändert haben",
+      "checkFailed": "Straßenbedingungen für diese Route konnten nicht geprüft werden"
     },
     "trafficDelay": "+{delay} Verkehr",
     "trafficDelayNormally": "normalerweise {baseline}",

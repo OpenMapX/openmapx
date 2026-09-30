@@ -244,4 +244,19 @@ describe("concatenateRoutes", () => {
     expect(merged.summary).toBe("via A57");
     expect(merged.mode).toBe("driving");
   });
+
+  it("tolls the trip when any leg is tolled, and frees it only when every leg is", () => {
+    const leg = (hasTolls?: boolean) =>
+      route({
+        geometry: [
+          [0, 0],
+          [1, 1],
+        ],
+        ...(hasTolls === undefined ? {} : { hasTolls }),
+      });
+
+    expect(concatenateRoutes([leg(false), leg(true)]).hasTolls).toBe(true);
+    expect(concatenateRoutes([leg(false), leg(false)]).hasTolls).toBe(false);
+    expect(concatenateRoutes([leg(false), leg()]).hasTolls).toBeUndefined();
+  });
 });

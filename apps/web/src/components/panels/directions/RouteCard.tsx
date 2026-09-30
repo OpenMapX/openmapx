@@ -22,6 +22,7 @@ import {
   estimateDrivingCo2Grams,
   formatDistance,
   formatDuration,
+  roadConditionRouteNotice,
   tzDiffMinutes,
   tzOffsetLabel,
   useDirectionsStore,
@@ -147,6 +148,7 @@ export function RouteCard({
   const [startError, setStartError] = useState<string | null>(null);
   const [impactDetailsOpen, setImpactDetailsOpen] = useState(false);
   const arrivalCaptionId = useId();
+  const roadConditionNotice = roadConditionRouteNotice(roadConditionImpact);
 
   const handleStart = async () => {
     const coords = waypoints.map((w) => w.coords).filter((c): c is [number, number] => c !== null);
@@ -286,13 +288,13 @@ export function RouteCard({
           {t("trafficDelayNormally", { baseline: formatDuration(trafficDelay.baseline) })}
         </Typography>
       )}
-      {roadConditionImpact && (
+      {roadConditionNotice && (
         <Typography
           variant="caption"
           data-testid="road-condition-route-status"
           sx={{ color: "text.secondary", display: "block", mt: 0.25 }}
         >
-          {t(`roadConditionImpact.${roadConditionImpact.availability}`)}
+          {t(`roadConditionNotice.${roadConditionNotice}`)}
         </Typography>
       )}
     </>

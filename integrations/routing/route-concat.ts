@@ -28,6 +28,12 @@ export function concatenateRoutes(routes: Route[]): Route {
 
   const everyHasSpeedLimits = routes.every((route) => route.segmentSpeedLimits !== undefined);
   const everyHasBaseline = routes.every((route) => typeof route.baselineDuration === "number");
+  // One tolled leg tolls the trip; it is toll-free only when every leg says so.
+  const hasTolls = routes.some((route) => route.hasTolls === true)
+    ? true
+    : routes.every((route) => route.hasTolls === false)
+      ? false
+      : undefined;
   const interval = routes[0].elevationInterval;
   const everyHasElevation = routes.every(
     (route) => route.elevation !== undefined && route.elevationInterval === interval,
@@ -63,6 +69,7 @@ export function concatenateRoutes(routes: Route[]): Route {
     mode: routes[0].mode,
     ...(everyHasSpeedLimits ? { segmentSpeedLimits: speedLimits } : {}),
     ...(routes[0].summary ? { summary: routes[0].summary } : {}),
+    ...(hasTolls === undefined ? {} : { hasTolls }),
     ...(everyHasElevation && interval !== undefined
       ? { elevation, elevationInterval: interval }
       : {}),

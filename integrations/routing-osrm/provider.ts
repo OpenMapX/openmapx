@@ -314,6 +314,11 @@ function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
   // per-step fallback). Lets navigation read the limit for the exact segment the
   // user is on instead of one stale value per (often long) step.
   const segmentSpeedLimits = osrmRouteSegmentSpeedLimits(r);
+  // OSRM's car profile tags toll roads with a "toll" class. A route without
+  // one stays unknown rather than toll-free: a profile may not report classes.
+  const usesToll = r.legs.some((leg) =>
+    leg.steps.some((step) => step.intersections?.some((i) => i.classes?.includes("toll"))),
+  );
 
   return {
     distance: r.distance,
@@ -324,6 +329,7 @@ function transformRoute(r: OsrmRoute, mode: TravelMode): Route {
     mode,
     segmentSpeedLimits,
     summary,
+    ...(usesToll && { hasTolls: true }),
   };
 }
 

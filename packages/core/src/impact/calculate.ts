@@ -201,6 +201,17 @@ function provenance(
   };
 }
 
+/**
+ * A road route's toll status from what its engine reported. Toll prices are
+ * never known, so a route that uses a toll road keeps an incomplete total; a
+ * route the engine reports toll-free is complete at its energy cost.
+ */
+function roadTollStatus(route: Route): TollStatus {
+  if (route.hasTolls === false) return "no_tolls";
+  if (route.hasTolls === true) return "tolls_unknown";
+  return "unknown";
+}
+
 function withPerPerson(
   result: RouteImpact,
   emissionsGrams: number,
@@ -385,8 +396,8 @@ function electricImpact(
         },
     benchmark.electricityPricePerKwh.source,
   );
-  const tollStatus: TollStatus = "unknown";
-  const totalCost = null;
+  const tollStatus = roadTollStatus(route);
+  const totalCost = tollStatus === "no_tolls" ? costParts.energyCost : null;
   const gridIntensity = benchmark.gridCarbonIntensityGramsPerKwh;
   const totalGrams = gridKwh * gridIntensity.value;
   const occupancy = normalizeOccupancy(options.occupancy);
@@ -435,7 +446,7 @@ function electricImpact(
         transitFare: null,
         knownCost: costParts.energyCost,
         totalCost,
-        costCompleteness: "partial",
+        costCompleteness: totalCost === null ? "partial" : "complete",
       },
       occupancy,
     },
@@ -492,8 +503,8 @@ function combustionImpact(
         },
     benchmarkFuelPrice.source,
   );
-  const tollStatus: TollStatus = "unknown";
-  const totalCost = null;
+  const tollStatus = roadTollStatus(route);
+  const totalCost = tollStatus === "no_tolls" ? costParts.energyCost : null;
   const occupancy = normalizeOccupancy(options.occupancy);
   const vehicleName = vehicle?.name ?? (motorcycle ? "Default Motorcycle" : "Default Car");
 
@@ -537,7 +548,7 @@ function combustionImpact(
         transitFare: null,
         knownCost: costParts.energyCost,
         totalCost,
-        costCompleteness: "partial",
+        costCompleteness: totalCost === null ? "partial" : "complete",
       },
       occupancy,
     },

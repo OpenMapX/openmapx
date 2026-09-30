@@ -510,6 +510,12 @@ describe("transformTrip baseline duration", () => {
     expect(route.duration).toBe(600);
   });
 
+  it("carries the engine's toll flag, and leaves it unknown when absent", () => {
+    expect(transformTrip(trip({ has_toll: true }), "driving").hasTolls).toBe(true);
+    expect(transformTrip(trip({ has_toll: false }), "driving").hasTolls).toBe(false);
+    expect(transformTrip(trip(), "driving").hasTolls).toBeUndefined();
+  });
+
   it("treats a null time_baseline as absent", () => {
     const route = transformTrip(trip({ time_baseline: null }), "driving");
     expect(route.baselineDuration).toBeUndefined();

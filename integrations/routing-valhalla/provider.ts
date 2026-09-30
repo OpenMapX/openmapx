@@ -143,7 +143,13 @@ interface ValhallaTrip {
    * `time_<name>` keys are emitted per requested recosting. We request one named
    * `baseline`; Valhalla sends `null` when a leg could not be recosted.
    */
-  summary: { length: number; time: number; time_baseline?: number | null };
+  summary: {
+    length: number;
+    time: number;
+    time_baseline?: number | null;
+    /** Whether any edge of the trip is a toll road. */
+    has_toll?: boolean;
+  };
   legs: ValhallaLeg[];
   units?: "miles" | "mi" | "kilometers" | "km";
   locations?: ValhallaLocation[];
@@ -419,6 +425,7 @@ export function transformTrip(
     steps,
     mode,
     summary,
+    ...(typeof trip.summary.has_toll === "boolean" && { hasTolls: trip.summary.has_toll }),
     ...(elevation && { elevation, elevationInterval }),
   };
 }

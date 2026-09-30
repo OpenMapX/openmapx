@@ -157,7 +157,7 @@ describe("formatImpactCost", () => {
     expect(formatImpactCost(cost, "en")).toContain("Total");
   });
 
-  it("formats a known road subtotal without claiming that tolls apply", () => {
+  it("names the fuel cost without a toll caveat when the engine cannot tell about tolls", () => {
     const cost: RouteImpact["cost"] = {
       costType: "road",
       currency: "EUR",
@@ -171,30 +171,29 @@ describe("formatImpactCost", () => {
       energyCostProvenance: mockDieselImpact.cost.energyCostProvenance,
     };
     const formatted = formatImpactCost(cost, "en", {
-      tollCoverageUnknown: "Tolls may apply; cost unknown",
-      tollAmountUnknown: "Tolls apply; amount unknown",
+      tollAmountUnknown: "Tolls apply (amount unknown)",
       fareUnavailable: "Fare unavailable",
       costUnavailable: "Cost unavailable",
     });
-    expect(formatted).toContain("6.80");
-    expect(formatted).toContain("Known subtotal");
-    expect(formatted).toContain("Tolls may apply; cost unknown");
-    expect(formatted).not.toContain("+");
+    expect(formatted).toBe("Fuel cost ~€6.80");
   });
 
-  it("distinguishes known toll applicability from unknown toll coverage", () => {
-    const formatted = formatImpactCost(mockEvImpactTollsUnknown.cost, "en");
-    expect(formatted).toContain("Known subtotal");
-    expect(formatted).toContain("Tolls apply; amount unknown");
-    expect(formatted).not.toContain("Tolls may apply; cost unknown");
+  it("adds the toll caveat when the route uses a toll road", () => {
+    const formatted = formatImpactCost(mockEvImpactTollsUnknown.cost, "en", {
+      tollAmountUnknown: "Tolls apply (amount unknown)",
+      fareUnavailable: "Fare unavailable",
+      costUnavailable: "Cost unavailable",
+      energyCost: "Electricity cost",
+    });
+    expect(formatted).toBe("Electricity cost ~€6.80 · Tolls apply (amount unknown)");
   });
 
-  it("keeps a known zero subtotal rather than reporting cost unavailable", () => {
+  it("keeps a known zero cost rather than reporting cost unavailable", () => {
     const formatted = formatImpactCost(
       { ...mockDieselImpact.cost, knownCost: 0, totalCost: null },
       "en",
     );
-    expect(formatted).toContain("Known subtotal");
+    expect(formatted).toContain("Fuel cost");
     expect(formatted).toContain("0.00");
     expect(formatted).not.toContain("Cost unavailable");
   });
@@ -202,7 +201,7 @@ describe("formatImpactCost", () => {
   it("does not blame tolls when a different partial cost component is unknown", () => {
     const formatted = formatImpactCost({ ...mockDieselImpact.cost, tollStatus: "no_tolls" }, "en");
     expect(formatted).toContain("Additional costs unknown");
-    expect(formatted).not.toContain("Tolls may apply");
+    expect(formatted).not.toContain("Tolls");
   });
 
   it("does not expose an amount when all cost components are unavailable", () => {
@@ -232,8 +231,7 @@ describe("formatImpactCost", () => {
       energyCostProvenance: mockDieselImpact.cost.energyCostProvenance,
     };
     const formatted = formatImpactCost(cost, "en", {
-      tollCoverageUnknown: "Tolls may apply; cost unknown",
-      tollAmountUnknown: "Tolls apply; amount unknown",
+      tollAmountUnknown: "Tolls apply (amount unknown)",
       fareUnavailable: "Fare unavailable",
       costUnavailable: "Cost unavailable",
     });
@@ -304,11 +302,7 @@ describe("RouteImpactBadge", () => {
     });
     expect(screen.getByTestId("eco-choice-chip").textContent).toBe("Öko-Tipp");
     expect(screen.getByTestId("impact-summary-text").textContent).toContain("8,4 kg CO₂");
-    expect(screen.getByTestId("impact-summary-text").textContent).toContain(
-      "Bekannte Zwischensumme",
-    );
-    expect(screen.getByTestId("impact-summary-text").textContent).toContain(
-      "Maut möglich; Kosten unbekannt",
-    );
+    expect(screen.getByTestId("impact-summary-text").textContent).toContain("Kraftstoffkosten");
+    expect(screen.getByTestId("impact-summary-text").textContent).not.toContain("Maut");
   });
 });

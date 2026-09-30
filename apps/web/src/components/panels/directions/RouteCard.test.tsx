@@ -164,78 +164,87 @@ describe("RouteCard arrival time", () => {
 });
 
 describe("RouteCard road-condition context", () => {
-  const statuses: Array<{
+  const notices: Array<{
     availability: RoadConditionRouteImpact["availability"];
+    reasons: string[];
     en: string;
     de: string;
   }> = [
     {
-      availability: "current",
-      en: "Available road conditions included",
-      de: "Verfügbare Straßenbedingungen berücksichtigt",
-    },
-    {
       availability: "limited",
-      en: "Some road conditions may be missing",
-      de: "Einige Straßenbedingungen fehlen möglicherweise",
+      reasons: ["legacy_geometry_unverified"],
+      en: "Reported road conditions nearby may not be reflected in this route",
+      de: "Gemeldete Straßenbedingungen in der Nähe sind in dieser Route möglicherweise nicht berücksichtigt",
     },
     {
       availability: "unsupported",
-      en: "Road conditions cannot be applied to this route",
-      de: "Straßenbedingungen können für diese Route nicht berücksichtigt werden",
+      reasons: ["missing_routing_evidence"],
+      en: "Reported road conditions nearby may not be reflected in this route",
+      de: "Gemeldete Straßenbedingungen in der Nähe sind in dieser Route möglicherweise nicht berücksichtigt",
     },
     {
       availability: "unavailable",
-      en: "Road conditions unavailable for this route",
-      de: "Straßenbedingungen für diese Route nicht verfügbar",
+      reasons: ["road_condition_provider_unavailable"],
+      en: "Couldn't check road conditions for this route",
+      de: "Straßenbedingungen für diese Route konnten nicht geprüft werden",
     },
     {
       availability: "expired",
-      en: "Road condition information is out of date",
-      de: "Informationen zu Straßenbedingungen sind veraltet",
+      reasons: ["evidence_expired"],
+      en: "Road conditions may have changed since this route was planned",
+      de: "Die Straßenbedingungen können sich seit der Routenplanung geändert haben",
     },
   ];
 
-  it.each(statuses)(
-    "explains $availability without implying another state",
-    ({ availability, en: english, de: german }) => {
+  function renderWithImpact(impact: RoadConditionRouteImpact, locale: "en" | "de" = "en") {
+    return render(
+      <NextIntlClientProvider
+        locale={locale}
+        messages={locale === "en" ? en : de}
+        timeZone="Europe/Berlin"
+      >
+        <RouteCard
+          route={baseRoute}
+          index={0}
+          active
+          onSelect={() => {}}
+          onDetails={() => {}}
+          units="metric"
+          roadConditionImpact={impact}
+        />
+      </NextIntlClientProvider>,
+    );
+  }
+
+  it.each(notices)(
+    "tells the traveller when $availability conditions ($reasons) may affect the route",
+    ({ availability, reasons, en: english, de: german }) => {
       const impact: RoadConditionRouteImpact = {
         availability,
         evaluatedAt: "2026-09-12T12:00:00Z",
         validUntil: null,
-        reasons: [],
+        reasons,
       };
-      const view = render(
-        <NextIntlClientProvider locale="en" messages={en} timeZone="Europe/Berlin">
-          <RouteCard
-            route={baseRoute}
-            index={0}
-            active
-            onSelect={() => {}}
-            onDetails={() => {}}
-            units="metric"
-            roadConditionImpact={impact}
-          />
-        </NextIntlClientProvider>,
-      );
+      const view = renderWithImpact(impact);
       expect(screen.getByTestId("road-condition-route-status")).toHaveTextContent(english);
       view.unmount();
-      render(
-        <NextIntlClientProvider locale="de" messages={de} timeZone="Europe/Berlin">
-          <RouteCard
-            route={baseRoute}
-            index={0}
-            active
-            onSelect={() => {}}
-            onDetails={() => {}}
-            units="metric"
-            roadConditionImpact={impact}
-          />
-        </NextIntlClientProvider>,
-      );
+      renderWithImpact(impact, "de");
       expect(screen.getByTestId("road-condition-route-status")).toHaveTextContent(german);
     },
   );
+
+  it.each([
+    { availability: "current" as const, reasons: [] },
+    { availability: "unavailable" as const, reasons: ["no_road_condition_provider"] },
+    { availability: "unavailable" as const, reasons: ["missing_current_evidence"] },
+    {
+      availability: "unsupported" as const,
+      reasons: ["no_road_condition_provider", "unverified_engine_application"],
+    },
+  ])("stays quiet when nothing reported applies ($availability, $reasons)", (impact) => {
+    renderWithImpact({ ...impact, evaluatedAt: "2026-09-12T12:00:00Z", validUntil: null });
+    expect(screen.queryByTestId("road-condition-route-status")).toBeNull();
+  });
 
   it("does not imply a road-condition check when no assessment exists", () => {
     renderCard(baseRoute);
@@ -586,7 +595,7 @@ describe("RouteCard Start under browser authority", () => {
     );
 
     expect(screen.getByTestId("road-condition-route-status").textContent).toContain(
-      "Some road conditions may be missing",
+      "Reported road conditions nearby may not be reflected in this route",
     );
     fireEvent.click(view.getByRole("button", { name: "Start" }));
 

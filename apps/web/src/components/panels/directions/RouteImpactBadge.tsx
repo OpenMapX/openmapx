@@ -19,22 +19,21 @@ export interface RouteImpactBadgeProps {
 }
 
 export interface ImpactCostLabels {
-  tollCoverageUnknown: string;
   tollAmountUnknown: string;
   fareUnavailable: string;
   costUnavailable: string;
   totalCost?: string;
-  knownCostSubtotal?: string;
+  /** Names the known part of an incomplete road cost, e.g. "Fuel cost". */
+  energyCost?: string;
   additionalCostUnknown?: string;
 }
 
 const DEFAULT_COST_LABELS: ImpactCostLabels = {
-  tollCoverageUnknown: "Tolls may apply; cost unknown",
-  tollAmountUnknown: "Tolls apply; amount unknown",
+  tollAmountUnknown: "Tolls apply (amount unknown)",
   fareUnavailable: "Fare unavailable",
   costUnavailable: "Cost unavailable",
   totalCost: "Total cost",
-  knownCostSubtotal: "Known subtotal",
+  energyCost: "Fuel cost",
   additionalCostUnknown: "Additional costs unknown",
 };
 
@@ -76,15 +75,18 @@ function formatImpactCostParts(
   }
 
   if (cost.costCompleteness === "partial" && cost.knownCost !== null) {
-    const unknownLabel =
+    // The amount names what it covers, so a caveat is only added for a cost
+    // known to be missing: tolls on a route that uses a toll road, or another
+    // unknown component. An engine that cannot tell about tolls adds nothing.
+    const caveat =
       cost.tollStatus === "tolls_unknown"
         ? labels.tollAmountUnknown
         : cost.tollStatus === "unknown"
-          ? labels.tollCoverageUnknown
+          ? undefined
           : (labels.additionalCostUnknown ?? DEFAULT_COST_LABELS.additionalCostUnknown);
     return {
-      amount: `${labels.knownCostSubtotal ?? DEFAULT_COST_LABELS.knownCostSubtotal} ~${formatter.format(cost.knownCost)}`,
-      caveat: unknownLabel,
+      amount: `${labels.energyCost ?? DEFAULT_COST_LABELS.energyCost} ~${formatter.format(cost.knownCost)}`,
+      ...(caveat && { caveat }),
     };
   }
 
@@ -96,12 +98,11 @@ export function RouteImpactBadge({ impact, onClick }: RouteImpactBadgeProps) {
   const locale = useLocale();
 
   const costLabels = {
-    tollCoverageUnknown: t("tollCostUnknown"),
     tollAmountUnknown: t("tollsUnknown"),
     fareUnavailable: t("fareUnavailable"),
     costUnavailable: t("costUnavailable"),
     totalCost: t("totalCost"),
-    knownCostSubtotal: t("knownCostSubtotal"),
+    energyCost: impact.energy.electricityKwh !== null ? t("electricityCost") : t("fuelCost"),
     additionalCostUnknown: t("additionalCostUnknown"),
   };
   const costParts = formatImpactCostParts(impact.cost, locale, costLabels);

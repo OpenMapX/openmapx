@@ -247,6 +247,10 @@ export {
 } from "./resultReference";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export {
+  type RoadConditionRouteNotice,
+  roadConditionRouteNotice,
+} from "./roadConditionRouteImpact";
+export {
   getRoadConditionRoutingDecision,
   isRoadConditionRoutingEvidence,
 } from "./roadConditionRouting";

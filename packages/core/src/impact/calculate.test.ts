@@ -11,6 +11,7 @@ function makeRoute(options: {
   elevationInterval?: number;
   steps?: RouteStep[];
   co2Grams?: number;
+  hasTolls?: boolean;
 }): Route {
   const distance = options.distance ?? 50_000; // 50 km default
   return {
@@ -36,6 +37,7 @@ function makeRoute(options: {
     elevation: options.elevation,
     elevationInterval: options.elevationInterval,
     ...(options.co2Grams !== undefined ? { co2Grams: options.co2Grams } : {}),
+    ...(options.hasTolls !== undefined ? { hasTolls: options.hasTolls } : {}),
   } as Route;
 }
 
@@ -199,6 +201,28 @@ describe("calculateRouteImpact", () => {
       expect(impact.cost.totalCost).toBeNull();
       expect(impact.cost.costCompleteness).toBe("partial");
       expect(impact.cost.tollStatus).toBe("unknown");
+    });
+  });
+
+  describe("tolls reported by the routing engine", () => {
+    it("completes the cost of a route its engine reports toll-free", () => {
+      const impact = calculateRouteImpact(makeRoute({ hasTolls: false }), null, {
+        countryCode: "DE",
+      });
+
+      expect(impact.cost.tollStatus).toBe("no_tolls");
+      expect(impact.cost.costCompleteness).toBe("complete");
+      expect(impact.cost.totalCost).toBeCloseTo(impact.cost.energyCost, 6);
+    });
+
+    it("keeps a tolled route's total open, since toll prices are unknown", () => {
+      const impact = calculateRouteImpact(makeRoute({ hasTolls: true }), evCar, {
+        countryCode: "DE",
+      });
+
+      expect(impact.cost.tollStatus).toBe("tolls_unknown");
+      expect(impact.cost.costCompleteness).toBe("partial");
+      expect(impact.cost.totalCost).toBeNull();
     });
   });
 
