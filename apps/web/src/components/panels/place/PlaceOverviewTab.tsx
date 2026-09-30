@@ -15,7 +15,9 @@ import HomeIcon from "@mui/icons-material/Home";
 import LanguageIcon from "@mui/icons-material/Language";
 import PhoneIcon from "@mui/icons-material/Phone";
 import PlaceIcon from "@mui/icons-material/Place";
+import SailingOutlinedIcon from "@mui/icons-material/SailingOutlined";
 import WavesIcon from "@mui/icons-material/Waves";
+import WbCloudyOutlinedIcon from "@mui/icons-material/WbCloudyOutlined";
 import WbSunnyOutlinedIcon from "@mui/icons-material/WbSunnyOutlined";
 import WbTwilightIcon from "@mui/icons-material/WbTwilight";
 import WorkIcon from "@mui/icons-material/Work";
@@ -447,9 +449,9 @@ export function PlaceOverviewTab({
 
   const conditionRows = (
     <>
-      {/* Weather (expandable) */}
+      {/* Weather (expandable). A cloud, not the sun of the Conditions row that groups it. */}
       <ExpandableDetailRow
-        icon={<WbSunnyOutlinedIcon sx={{ fontSize: 22 }} />}
+        icon={<WbCloudyOutlinedIcon sx={{ fontSize: 22 }} />}
         expanded={weatherExpanded}
         onToggle={() => setWeatherExpanded((v) => !v)}
         label={
@@ -495,8 +497,6 @@ export function PlaceOverviewTab({
         />
       </ExpandableDetailRow>
 
-      <PlaceLocalTime lat={place.coordinates[1]} lng={place.coordinates[0]} />
-
       {/* Sunrise & sunset (expandable) */}
       <ExpandableDetailRow
         icon={<WbTwilightIcon sx={{ fontSize: 22 }} />}
@@ -541,10 +541,11 @@ export function PlaceOverviewTab({
         </ExpandableDetailRow>
       )}
 
-      {/* Marine weather (expandable) — hidden for inland points (204). */}
+      {/* Marine weather (expandable) — hidden for inland points (204). A boat,
+        so it doesn't repeat the waves of the Tides row above it. */}
       {marineData && (
         <ExpandableDetailRow
-          icon={<WavesIcon sx={{ fontSize: 22 }} />}
+          icon={<SailingOutlinedIcon sx={{ fontSize: 22 }} />}
           expanded={marineExpanded}
           onToggle={() => setMarineExpanded((v) => !v)}
           label={
@@ -997,6 +998,7 @@ export function PlaceOverviewTab({
           )}
 
           {/* Location detail remains available below the visit and environment rows. */}
+          <PlaceLocalTime lat={place.coordinates[1]} lng={place.coordinates[0]} />
           <DetailRow
             icon={<AppsIcon sx={{ fontSize: 22 }} />}
             copyValue={plusCode}

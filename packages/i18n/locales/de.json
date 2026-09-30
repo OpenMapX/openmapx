@@ -2620,7 +2620,7 @@
     "noData": "Sonnenzeitdaten nicht verfügbar"
   },
   "localTime": {
-    "localTime": "Ortszeit",
+    "localTimeAt": "{time} Ortszeit",
     "ahead": "{span} vor dir",
     "behind": "{span} hinter dir"
   },

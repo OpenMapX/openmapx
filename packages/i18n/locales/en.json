@@ -2620,7 +2620,7 @@
     "noData": "Sun times data unavailable"
   },
   "localTime": {
-    "localTime": "Local time",
+    "localTimeAt": "{time} local time",
     "ahead": "{span} ahead of you",
     "behind": "{span} behind you"
   },

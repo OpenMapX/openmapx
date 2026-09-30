@@ -1,10 +1,12 @@
 "use client";
 
+import PublicOutlinedIcon from "@mui/icons-material/PublicOutlined";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import { timeZoneAt, tzDiffMinutes, tzOffsetLabel, viewerTimeZone } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
+import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
 
 interface Props {
@@ -51,11 +53,14 @@ export function PlaceLocalTime({ lat, lng }: Props) {
   const clock = fmt.time(now, { timeZone: zone });
 
   return (
-    <Box sx={{ py: 0.5 }}>
-      <Typography sx={{ fontSize: 12, color: "text.secondary" }}>{t("localTime")}</Typography>
-      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1 }}>
-        <Typography sx={{ fontWeight: 600, fontSize: 16 }}>{clock}</Typography>
-        <Typography sx={{ fontSize: 12, color: "text.secondary" }}>
+    // Laid out like the overview's other detail rows, beside which it sits as a location fact.
+    <Box sx={{ display: "flex", gap: 2, alignItems: "center", py: 1.25 }}>
+      <Box sx={{ color: BRAND, flexShrink: 0, display: "flex" }}>
+        <PublicOutlinedIcon sx={{ fontSize: 22 }} />
+      </Box>
+      <Box sx={{ flex: 1, minWidth: 0 }}>
+        <Typography variant="body2">{t("localTimeAt", { time: clock })}</Typography>
+        <Typography variant="caption" sx={{ display: "block", color: "text.secondary" }}>
           {label} · {formatLead(t, diff)}
         </Typography>
       </Box>

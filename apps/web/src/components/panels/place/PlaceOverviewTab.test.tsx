@@ -16,6 +16,9 @@ vi.mock("@openmapx/mangrove-react", () => ({
 
 vi.mock("./PlacePhotoGallery", () => ({ PlacePhotoGallery: () => null }));
 vi.mock("./PlaceHarborFacilities", () => ({ PlaceHarborFacilities: () => null }));
+vi.mock("./PlaceLocalTime", () => ({
+  PlaceLocalTime: () => <div data-testid="place-local-time" />,
+}));
 
 const airQualityProps = vi.fn();
 vi.mock("./PlaceAirQuality", () => ({
@@ -256,6 +259,12 @@ describe("visit order", () => {
     expect(isBefore(wifi, weather)).toBe(true);
     expect(isBefore(weather, operator)).toBe(true);
     expect(isBefore(weather, plusCode as Element)).toBe(true);
+    // Local time is a location fact beside the Plus Code, not a condition:
+    // it shows with the group still collapsed.
+    const localTime = screen.getByTestId("place-local-time");
+    expect(weather).toHaveAttribute("aria-expanded", "false");
+    expect(isBefore(weather, localTime)).toBe(true);
+    expect(localTime.nextElementSibling?.contains(plusCode)).toBe(true);
     expect(screen.getAllByText("Mexican")).toHaveLength(1);
     expect(screen.getAllByText("takeawayYes")).toHaveLength(1);
   });

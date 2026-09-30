@@ -18,7 +18,10 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 vi.mock("@/integration-api/runtime/useDateTimeFormat", () => ({
   useDateTimeFormat: () => ({ time: (...args: unknown[]) => time(...args) }),
 }));
-vi.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
+vi.mock("next-intl", () => ({
+  useTranslations: () => (key: string, values?: { time?: string }) =>
+    values?.time ? `${key}:${values.time}` : key,
+}));
 
 import { PlaceLocalTime } from "./PlaceLocalTime";
 
@@ -40,7 +43,7 @@ describe("PlaceLocalTime", () => {
     timeZoneAt.mockReturnValue("Asia/Tokyo");
     render(<PlaceLocalTime lat={35.68} lng={139.69} />);
 
-    expect(screen.getByText("19:00")).toBeInTheDocument();
+    expect(screen.getByText("localTimeAt:19:00")).toBeInTheDocument();
     // The exact string — not just a substring match on the offset — also
     // catches formatLead picking "behind" instead of "ahead" for a positive
     // diff.
