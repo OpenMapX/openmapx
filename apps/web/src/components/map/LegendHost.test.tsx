@@ -8,6 +8,7 @@ import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
 import { act, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import { publishMapObstruction } from "@/lib/mapObstructions";
 import { LegendHost } from "./LegendHost";
 
@@ -76,6 +77,7 @@ afterEach(() => {
     useSidebarStore.getState().closeAll();
     useNavigationStore.setState({ status: "idle" });
     publishMapObstruction("legend-test-footer", "bottom", null);
+    publishMapFooterCenterCovered(false);
   });
 });
 
@@ -100,19 +102,35 @@ describe("LegendHost", () => {
     expect(screen.queryByRole("button", { name: "hideLegend" })).not.toBeNull();
   });
 
-  it("lifts the legend above a footer that grows with overlay credits", () => {
-    useMeasurementStore.getState().activate();
-    act(() => publishMapObstruction("legend-test-footer", "bottom", 34));
-    renderHost();
+  function bottomRule(): string {
     const host = screen.getByRole("button", { name: "hideLegend" }).parentElement;
-    const bottomRule = () =>
-      [...document.querySelectorAll("style")]
-        .map((style) => style.textContent ?? "")
-        .filter((css) => css.includes(`.${host?.classList[1]}{bottom:`))
-        .join(" ");
-    expect(bottomRule()).toContain("bottom:42px");
+    return [...document.querySelectorAll("style")]
+      .map((style) => style.textContent ?? "")
+      .filter((css) => css.includes(`.${host?.classList[1]}{bottom:`))
+      .join(" ");
+  }
+
+  it("keeps the toggle flush on the map edge while the footer leaves its column free", () => {
+    useMeasurementStore.getState().activate();
+    act(() => publishMapObstruction("legend-test-footer", "bottom", 22));
+    renderHost();
+
+    expect(bottomRule()).toContain("bottom:var(--omx-safe-bottom)");
+  });
+
+  it("stands the legend on a footer whose credits run under the toggle", () => {
+    useMeasurementStore.getState().activate();
+    act(() => {
+      publishMapObstruction("legend-test-footer", "bottom", 34);
+      publishMapFooterCenterCovered(true);
+    });
+    renderHost();
+    expect(bottomRule()).toContain("bottom:34px");
 
     act(() => publishMapObstruction("legend-test-footer", "bottom", 60));
-    expect(bottomRule()).toContain("bottom:68px");
+    expect(bottomRule()).toContain("bottom:60px");
+
+    act(() => publishMapFooterCenterCovered(false));
+    expect(bottomRule()).toContain("bottom:var(--omx-safe-bottom)");
   });
 });

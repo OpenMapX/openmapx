@@ -8,6 +8,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useMapAttributionHtml } from "@/integration-api/overlay/mapAttributionStore";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
+import { coversFooterCenter, publishMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { CREDITS_SEPARATOR, CREDITS_SX } from "./MapCredits";
 
@@ -61,22 +62,27 @@ export function MapFooter() {
     if (!container || !links) return;
     const measure = () => {
       const creditsEl = creditsRef.current;
-      if (!creditsEl) {
+      const l = links.getBoundingClientRect();
+      const c = creditsEl?.getBoundingClientRect();
+      publishMapFooterCenterCovered(
+        coversFooterCenter(container.getBoundingClientRect(), c ? [l, c] : [l]),
+      );
+      if (!c) {
         setMerged(false);
         return;
       }
-      const l = links.getBoundingClientRect();
-      const c = creditsEl.getBoundingClientRect();
       const sameLine = Math.abs(l.top - c.top) < 1;
       setMerged(!sameLine || c.left - l.right < MERGE_GAP);
     };
     measure();
-    if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(measure);
-    observer.observe(container);
-    observer.observe(links);
-    if (creditsRef.current) observer.observe(creditsRef.current);
-    return () => observer.disconnect();
+    const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
+    observer?.observe(container);
+    observer?.observe(links);
+    if (creditsRef.current) observer?.observe(creditsRef.current);
+    return () => {
+      observer?.disconnect();
+      publishMapFooterCenterCovered(false);
+    };
   }, [creditsHtml]);
 
   // Typography/colors come from the shared credits style so the footer and the

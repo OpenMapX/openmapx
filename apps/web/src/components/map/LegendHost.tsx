@@ -12,6 +12,7 @@ import { useTranslations } from "next-intl";
 import { type ComponentType, lazy, Suspense, useMemo, useState } from "react";
 import { useAnyOverlayPanelOpen } from "@/integration-api/overlay/useOverlayStoreState";
 import { isPanelShiftActive, PANEL_WIDTH } from "@/lib/layout";
+import { LEGEND_TOGGLE_WIDTH, useMapFooterCenterCovered } from "@/lib/mapFooterCenter";
 import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useMobilePanelClearance, useWindowHeight } from "@/lib/mobilePanelHeight";
 import { DeclarativeLegend } from "./overlay/DeclarativeLegend";
@@ -89,6 +90,7 @@ export function LegendHost() {
   const vh = useWindowHeight();
   const followHeight = useMobilePanelClearance(vh);
   const { bottom: bottomInset } = useMapObstructionInsets();
+  const footerCoversCenter = useMapFooterCenterCovered();
 
   // Declarative legends (manifest `frontend.overlay.legend` data) are rendered by
   // the host; they take precedence over the code legend path.
@@ -109,10 +111,12 @@ export function LegendHost() {
 
   if (!anyPanelOpen && !anyStandaloneToolbarActive) return null;
 
-  const footerClearance = bottomInset > 0 ? `${bottomInset + 8}px` : FLUSH_BOTTOM;
+  // The tab normally sits flush on the map's bottom edge, over the gap between
+  // the footer's legal links and credits. Only when footer text runs under it
+  // (long or wrapped overlay credits) does the stack stand on the footer instead.
+  const footerClearance = footerCoversCenter && bottomInset > 0 ? `${bottomInset}px` : FLUSH_BOTTOM;
   const bottom = {
-    // The sheet already clears footer credits. Without a sheet, keep the legend
-    // above the measured footer as overlay attributions wrap onto more lines.
+    // The sheet already clears footer credits.
     xs: followHeight > 0 ? `calc(${followHeight}px + var(--omx-safe-bottom))` : footerClearance,
     sm: footerClearance,
   };
@@ -145,7 +149,7 @@ export function LegendHost() {
           bgcolor: "background.paper",
           borderRadius: "6px 6px 0 0",
           boxShadow: "0 -2px 8px var(--omx-shadow-soft)",
-          width: 54,
+          width: LEGEND_TOGGLE_WIDTH,
           height: 22,
           padding: 0,
           // Re-assert bgcolor on hover — MUI's IconButton default hover sets a
