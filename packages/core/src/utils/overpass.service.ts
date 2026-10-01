@@ -3,7 +3,7 @@ import type { BoundingBox } from "../types/geometry";
 import type { PlaceProvenance } from "../types/place";
 import { openingHoursSourceFromOsm } from "./openingHoursSource";
 import type { OsmFilter } from "./osmCategoryFilters";
-import { overpassQuery } from "./overpass";
+import { isOverpassRuntimeLimit, OverpassTimeoutError, overpassQuery } from "./overpass";
 import type { OverpassElement } from "./overpass/types";
 
 export type { OsmFilter } from "./osmCategoryFilters";
@@ -64,6 +64,9 @@ export function overpassOutStatement(): string {
  */
 export async function overpassPoiSearch(query: string): Promise<PoiSearchOutcome> {
   const data = await overpassQuery(query);
+  // Elements cut short by the query's own time or memory limit would pass
+  // for every match in the area; a smaller area can be asked instead.
+  if (isOverpassRuntimeLimit(data.remark)) throw new OverpassTimeoutError();
   const truncated = data.elements.length > OVERPASS_FETCH_LIMIT;
   const elements = truncated ? data.elements.slice(0, OVERPASS_FETCH_LIMIT) : data.elements;
   return { results: mapOverpassElements(elements), truncated };

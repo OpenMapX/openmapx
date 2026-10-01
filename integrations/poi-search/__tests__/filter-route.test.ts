@@ -1,4 +1,4 @@
-import { OverpassTimeoutError } from "@openmapx/core";
+import { OverpassTimeoutError, OverpassUnavailableError } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { setup } from "../index";
@@ -276,6 +276,46 @@ describe("POST /filter route", () => {
 
     expect(reply.statusCode).toBe(422);
     expect(reply.payload).toEqual({ error: "area_too_large" });
+  });
+
+  it("503 when Overpass is too busy to answer, which no smaller area fixes", async () => {
+    const ctx = makeRouteCtx();
+
+    (ctx as unknown as Record<string, unknown>).getIntegrationsByDomain = () => [
+      {
+        providers: new Map([
+          [
+            "poi-search",
+            [
+              {
+                id: "fake-overpass",
+                categories: [],
+                search: vi.fn(),
+                searchByFilter: vi.fn(async () => {
+                  throw new OverpassUnavailableError();
+                }),
+              },
+            ],
+          ],
+        ]),
+      },
+    ];
+
+    setup(ctx);
+    const handler = getHandler(ctx);
+
+    const reply = makeReply();
+    await handler(
+      {
+        query: {},
+        params: {},
+        body: { filter: VALID_FILTER, ...VALID_BBOX },
+      },
+      reply,
+    );
+
+    expect(reply.statusCode).toBe(503);
+    expect(reply.payload).toEqual({ error: "overpass_unavailable" });
   });
 
   it("sets Cache-Control header on success", async () => {

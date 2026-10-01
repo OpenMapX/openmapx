@@ -5,15 +5,38 @@ import {
   bboxCacheKey,
   fetchCommonsMetadata,
   normalizeFilter,
+  OverpassRateLimitError,
   OverpassTimeoutError,
+  OverpassUnavailableError,
   validateOverpassFilter,
 } from "@openmapx/core";
 import { currentOpeningHoursInfo } from "@openmapx/core/server";
-import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
+import {
+  type IntegrationContext,
+  type RouteHandler,
+  scalarQueries,
+} from "@openmapx/integration-framework";
 import { getChipTranslations, suggestPresets } from "@openmapx/presets";
 import { createPoiSearchOrchestrator, type PoiSearchResponse } from "./orchestrator.js";
 
 const BRAND_KINDS: readonly BrandKind[] = ["brand", "operator", "network"];
+
+/**
+ * Answers an Overpass failure the app can act on: zoom in for a query that
+ * ran out of time, try again later for a server that is busy or did not
+ * answer. False for anything else.
+ */
+function sendOverpassFailure(reply: Parameters<RouteHandler>[1], err: unknown): boolean {
+  if (err instanceof OverpassTimeoutError) {
+    reply.status(422).send({ error: "area_too_large" });
+    return true;
+  }
+  if (err instanceof OverpassUnavailableError || err instanceof OverpassRateLimitError) {
+    reply.status(503).send({ error: "overpass_unavailable" });
+    return true;
+  }
+  return false;
+}
 
 /** Re-evaluate the final fused schedule after reading the stable-result cache. */
 async function withCurrentHours(result: PoiSearchResponse): Promise<PoiSearchResponse> {
@@ -71,10 +94,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "no-store");
       reply.send(await withCurrentHours(result));
     } catch (err) {
-      if (err instanceof OverpassTimeoutError) {
-        reply.status(422).send({ error: "area_too_large" });
-        return;
-      }
+      if (sendOverpassFailure(reply, err)) return;
       const e = err as { statusCode?: number; message: string };
       if (e.statusCode === 400) {
         reply.status(400).send({ error: e.message });
@@ -114,10 +134,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "no-store");
       reply.send(await withCurrentHours(result));
     } catch (err) {
-      if (err instanceof OverpassTimeoutError) {
-        reply.status(422).send({ error: "area_too_large" });
-        return;
-      }
+      if (sendOverpassFailure(reply, err)) return;
       const e = err as { statusCode?: number; message: string };
       if (e.statusCode === 400) {
         reply.status(400).send({ error: e.message });
@@ -191,10 +208,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "no-store");
       reply.send(await withCurrentHours(result));
     } catch (err) {
-      if (err instanceof OverpassTimeoutError) {
-        reply.status(422).send({ error: "area_too_large" });
-        return;
-      }
+      if (sendOverpassFailure(reply, err)) return;
       const e = err as { statusCode?: number; message: string };
       if (e.statusCode === 400) {
         reply.status(400).send({ error: e.message });
@@ -374,10 +388,7 @@ export function setup(ctx: IntegrationContext): void {
       reply.header("Cache-Control", "no-store");
       reply.send(await withCurrentHours(result));
     } catch (err) {
-      if (err instanceof OverpassTimeoutError) {
-        reply.status(422).send({ error: "area_too_large" });
-        return;
-      }
+      if (sendOverpassFailure(reply, err)) return;
       const e = err as { statusCode?: number; message: string };
       if (e.statusCode === 400) {
         reply.status(400).send({ error: e.message });

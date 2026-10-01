@@ -1,6 +1,8 @@
 export {
+  isOverpassRuntimeLimit,
   OverpassRateLimitError,
   OverpassTimeoutError,
+  OverpassUnavailableError,
   overpassQuery,
   overpassQuerySafe,
   setOverpassUrl,

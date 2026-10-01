@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mockOverpassQuery = vi.hoisted(() => vi.fn());
-vi.mock("./overpass", () => ({
+vi.mock("./overpass", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./overpass")>()),
   overpassQuery: mockOverpassQuery,
 }));
 

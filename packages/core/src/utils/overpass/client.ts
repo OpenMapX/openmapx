@@ -28,6 +28,11 @@ export class OverpassRateLimitError extends Error {
   }
 }
 
+/**
+ * The query ran out of the time or memory it asked for: the area holds too
+ * much for it, and a smaller one may work. Overpass says so in the answer's
+ * `remark`, not with a status.
+ */
 export class OverpassTimeoutError extends Error {
   constructor() {
     super("Overpass API query timed out");
@@ -35,22 +40,57 @@ export class OverpassTimeoutError extends Error {
   }
 }
 
+/**
+ * The server would not run the query now, or did not answer: Overpass sends
+ * 504 when it is too busy to take a query of any size. A smaller area does
+ * not help; trying again later may.
+ */
+export class OverpassUnavailableError extends Error {
+  constructor() {
+    super("Overpass API unavailable");
+    this.name = "OverpassUnavailableError";
+  }
+}
+
+/**
+ * How long to wait for an answer. Queries ask the server for 15–25 s; a busy
+ * server can queue a query past that without answering at all.
+ */
+const OVERPASS_REQUEST_TIMEOUT_MS = 35_000;
+
 async function fetchOverpass(url: string, query: string): Promise<OverpassResponse> {
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/x-www-form-urlencoded",
-      "User-Agent": USER_AGENT,
-    },
-    body: `data=${encodeURIComponent(query)}`,
-    signal: AbortSignal.timeout(35_000),
-  });
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-www-form-urlencoded",
+        "User-Agent": USER_AGENT,
+      },
+      body: `data=${encodeURIComponent(query)}`,
+      signal: AbortSignal.timeout(OVERPASS_REQUEST_TIMEOUT_MS),
+    });
 
-  if (res.status === 429) throw new OverpassRateLimitError();
-  if (res.status === 504 || res.status === 408) throw new OverpassTimeoutError();
-  if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
+    if (res.status === 429) throw new OverpassRateLimitError();
+    if (res.status === 504 || res.status === 408) throw new OverpassUnavailableError();
+    if (!res.ok) throw new Error(`Overpass API error: ${res.status}`);
 
-  return res.json() as Promise<OverpassResponse>;
+    return (await res.json()) as OverpassResponse;
+  } catch (err) {
+    // A server that does not answer in time is as unavailable as one that
+    // says it is too busy.
+    if ((err as { name?: unknown } | null)?.name === "TimeoutError") {
+      throw new OverpassUnavailableError();
+    }
+    throw err;
+  }
+}
+
+/**
+ * Whether an answer's remark says the query ran out of time or memory, in
+ * which case its elements are only what was found before it stopped.
+ */
+export function isOverpassRuntimeLimit(remark: string | undefined): boolean {
+  return /runtime error/i.test(remark ?? "") && /timed out|out of memory/i.test(remark ?? "");
 }
 
 /**
@@ -69,7 +109,7 @@ export async function overpassQuery(query: string): Promise<OverpassResponse> {
     // to a different public server.
     const usingCustomUrl = configuredOverpassUrl !== null || !!process.env.OVERPASS_URL;
     const isFallbackable =
-      err instanceof OverpassRateLimitError || err instanceof OverpassTimeoutError;
+      err instanceof OverpassRateLimitError || err instanceof OverpassUnavailableError;
     if (!usingCustomUrl && isFallbackable) {
       return fetchOverpass(OVERPASS_FALLBACK_URL, query);
     }

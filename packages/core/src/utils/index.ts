@@ -155,8 +155,10 @@ export { otpMode } from "./otp";
 export {
   buildNodeMap,
   buildWayMap,
+  isOverpassRuntimeLimit,
   OverpassRateLimitError,
   OverpassTimeoutError,
+  OverpassUnavailableError,
   overpassQuery,
   overpassQuerySafe,
   reconstructLineString,

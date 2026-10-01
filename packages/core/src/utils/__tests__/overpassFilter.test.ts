@@ -10,7 +10,8 @@ import {
   validateOverpassFilter,
 } from "../overpassFilter";
 
-vi.mock("../overpass", () => ({
+vi.mock("../overpass", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../overpass")>()),
   overpassQuery: vi.fn().mockResolvedValue({
     elements: [
       {
