@@ -12,9 +12,24 @@ vi.mock("@/integration-api/map/MapContext", () => {
   };
   return { __test: context, useMap: () => context };
 });
-vi.mock("next-intl", () => ({ useLocale: () => "en" }));
+vi.mock("next-intl", () => ({
+  useLocale: () => "en",
+  useTranslations: () => (key: string) => key,
+}));
+const finePointer = { current: true };
+vi.mock("@mui/material/useMediaQuery", () => ({ default: () => finePointer.current }));
+const usePlaceDetailsMock = vi.fn();
+vi.mock("@openmapx/core", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@openmapx/core")>()),
+  usePlaceDetails: (...args: unknown[]) => usePlaceDetailsMock(...args),
+  useSession: () => ({ data: null }),
+  useIsSaved: () => ({ data: undefined }),
+}));
+vi.mock("@/components/auth/AuthDialog", () => ({ AuthDialog: () => null }));
+vi.mock("@/components/panels/saved/SavePlaceDialog", () => ({ SavePlaceDialog: () => null }));
 
-import { PANEL, usePlaceStore, useSidebarStore } from "@openmapx/core";
+import { PANEL, useDirectionsStore, usePlaceStore, useSidebarStore } from "@openmapx/core";
+import { fireEvent, screen } from "@testing-library/react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import * as mapContext from "@/integration-api/map/MapContext";
 import { MapStylePoiClickHandler } from "./MapStylePoiClickHandler";
@@ -54,6 +69,8 @@ class FakeMap {
       ? { id }
       : undefined;
   getCanvasContainer = () => this.canvas;
+  getContainer = () => this.canvas;
+  project = () => ({ x: 400, y: 200 });
   on = (event: string, handler: (event: never) => void) => {
     const handlers = this.handlers.get(event) ?? new Set();
     handlers.add(handler);
@@ -81,6 +98,8 @@ function renderHandler(map: FakeMap) {
 }
 
 beforeEach(() => {
+  finePointer.current = true;
+  usePlaceDetailsMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   usePlaceStore.setState({ selectedPlace: null });
   useSidebarStore.setState({ activeSidebarId: null, activeDetailId: null, collapsed: false });
   INTERACTIVE_LAYER_IDS.clear();
@@ -168,11 +187,12 @@ describe("MapStylePoiClickHandler", () => {
     const fake = new FakeMap({ "poi-label": [pointFeature({ name: "Smithsonian" })] });
     renderHandler(fake);
 
-    act(() => fake.emit("mousemove", { point: { x: 12, y: 24 } }));
+    const move = { point: { x: 12, y: 24 }, originalEvent: { buttons: 0 } };
+    act(() => fake.emit("mousemove", move));
     expect(fake.canvas.style.cursor).toBe("pointer");
 
     fake.setFeatures({ "poi-label": [pointFeature({})] });
-    act(() => fake.emit("mousemove", { point: { x: 12, y: 24 } }));
+    act(() => fake.emit("mousemove", move));
     expect(fake.canvas.style.cursor).toBe("");
   });
 
@@ -185,6 +205,131 @@ describe("MapStylePoiClickHandler", () => {
     act(() => fake.emit("styledata"));
 
     expect(INTERACTIVE_LAYER_IDS.has("poi-label")).toBe(true);
+  });
+
+  describe("hover card", () => {
+    const POI = { name: "Smithsonian Institution Building", class: "culture", subclass: "museum" };
+    const hover = (fake: FakeMap, buttons = 0) =>
+      act(() => fake.emit("mousemove", { point: { x: 12, y: 24 }, originalEvent: { buttons } }));
+    const advance = (ms: number) => act(() => vi.advanceTimersByTime(ms));
+    const lookedUpIds = () => usePlaceDetailsMock.mock.calls.map((call) => call[0]);
+
+    beforeEach(() => vi.useFakeTimers());
+    afterEach(() => vi.useRealTimers());
+
+    it("shows the card after a short rest and looks the place up only after a longer one", () => {
+      const fake = new FakeMap({ "poi-label": [pointFeature(POI, { id: 42 })] });
+      renderHandler(fake);
+
+      hover(fake);
+      advance(100);
+      expect(screen.queryByTestId("poi-hover-card")).toBeNull();
+      advance(30);
+      expect(screen.getByTestId("poi-hover-card")).toHaveTextContent(POI.name);
+      expect(lookedUpIds()).not.toContain("stylePoi:42");
+
+      advance(200);
+      // The very lookup a click makes, so the panel opens from its cache.
+      expect(usePlaceDetailsMock).toHaveBeenLastCalledWith(
+        "stylePoi:42",
+        [-77.02573, 38.88859],
+        POI.name,
+        undefined,
+        true,
+      );
+    });
+
+    it("never shows or looks up a POI the pointer only passes over", () => {
+      const fake = new FakeMap({ "poi-label": [pointFeature(POI, { id: 42 })] });
+      renderHandler(fake);
+
+      hover(fake);
+      advance(60);
+      fake.setFeatures({});
+      hover(fake);
+      advance(500);
+
+      expect(screen.queryByTestId("poi-hover-card")).toBeNull();
+      expect(lookedUpIds()).not.toContain("stylePoi:42");
+    });
+
+    it("stays open while the pointer crosses into the card and closes once it leaves", () => {
+      const fake = new FakeMap({ "poi-label": [pointFeature(POI, { id: 42 })] });
+      renderHandler(fake);
+      hover(fake);
+      advance(150);
+
+      fake.setFeatures({});
+      hover(fake);
+      advance(50);
+      fireEvent.pointerEnter(screen.getByTestId("poi-hover-card"));
+      advance(500);
+      expect(screen.getByTestId("poi-hover-card")).toBeInTheDocument();
+
+      fireEvent.pointerLeave(screen.getByTestId("poi-hover-card"));
+      advance(200);
+      expect(screen.queryByTestId("poi-hover-card")).toBeNull();
+    });
+
+    it("closes at once when the map starts to move or a drag begins", () => {
+      const fake = new FakeMap({ "poi-label": [pointFeature(POI, { id: 42 })] });
+      renderHandler(fake);
+      hover(fake);
+      advance(150);
+
+      act(() => fake.emit("movestart"));
+      expect(screen.queryByTestId("poi-hover-card")).toBeNull();
+
+      hover(fake, 1);
+      advance(500);
+      expect(screen.queryByTestId("poi-hover-card")).toBeNull();
+    });
+
+    it("switches straight to the next POI while a card is open", () => {
+      const fake = new FakeMap({ "poi-label": [pointFeature(POI, { id: 42 })] });
+      renderHandler(fake);
+      hover(fake);
+      advance(150);
+
+      fake.setFeatures({ "poi-label": [pointFeature({ name: "Hirshhorn Museum" }, { id: 43 })] });
+      hover(fake);
+
+      expect(screen.getByTestId("poi-hover-card")).toHaveTextContent("Hirshhorn Museum");
+    });
+
+    it("opens the same place as a click, and directions from its button", () => {
+      const fake = new FakeMap({ "poi-label": [pointFeature(POI, { id: 42 })] });
+      renderHandler(fake);
+      hover(fake);
+      advance(150);
+
+      fireEvent.click(screen.getByTestId("poi-hover-card"));
+      expect(usePlaceStore.getState().selectedPlace).toMatchObject({ id: "stylePoi:42" });
+      expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.PLACE);
+      expect(screen.queryByTestId("poi-hover-card")).toBeNull();
+
+      hover(fake);
+      fake.setFeatures({});
+      hover(fake);
+      fake.setFeatures({ "poi-label": [pointFeature(POI, { id: 42 })] });
+      hover(fake);
+      advance(150);
+      fireEvent.click(screen.getByRole("button", { name: "directions" }));
+      const { waypoints, isOpen } = useDirectionsStore.getState();
+      expect(isOpen).toBe(true);
+      expect(waypoints.at(-1)).toMatchObject({ coords: [-77.02573, 38.88859], label: POI.name });
+      expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DIRECTIONS);
+    });
+
+    it("shows no card on a touch screen", () => {
+      finePointer.current = false;
+      const fake = new FakeMap({ "poi-label": [pointFeature(POI, { id: 42 })] });
+      renderHandler(fake);
+      hover(fake);
+      advance(500);
+      expect(screen.queryByTestId("poi-hover-card")).toBeNull();
+      expect(fake.canvas.style.cursor).toBe("pointer");
+    });
   });
 
   it("removes handlers and registered layer ids on unmount", () => {

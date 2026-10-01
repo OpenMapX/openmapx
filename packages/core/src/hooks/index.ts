@@ -131,6 +131,7 @@ export { type NearestAirportHit, useNearestAirports } from "./useNearestAirports
 export { useNeighborhoods } from "./useNeighborhoods";
 export { type NlpCloudAccess, type NlpParseResponse, useNlpSearch } from "./useNlpSearch";
 export { useOfficialBookingUrl } from "./useOfficialBookingUrl";
+export { useOpeningHoursClock } from "./useOpeningHoursClock";
 export { useOptimizeRoute } from "./useOptimizeRoute";
 export {
   OSM_CATEGORY_MIN_QUERY_LENGTH,
