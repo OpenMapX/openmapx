@@ -1,0 +1,149 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/975312193",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Neue Promenade 3, Berlin, Germany",
+      "coordinates": [13.4020866, 52.5231934],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/66917199",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Friedrichstrasse, Berlin, Germany",
+      "coordinates": [13.3887381, 52.5194029],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4388936224",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Dircksenstraße, Berlin, Germany",
+      "coordinates": [13.4115986, 52.5212498],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11717339483",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Am Tacheles, Berlin, Germany",
+      "coordinates": [13.3877971, 52.5250223],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10800211947",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Alexanderplatz 2, Berlin, Germany",
+      "coordinates": [13.4142012, 52.5208209],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3987051075",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Grunerstraße 20, Berlin, Germany",
+      "coordinates": [13.4152257, 52.5195867],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/66917229",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Pariser Platz 4A, Berlin, Germany",
+      "coordinates": [13.3797732, 52.5167295],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/87040343",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Friedrichstrasse 61, Berlin, Germany",
+      "coordinates": [13.3900182, 52.5110724],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/429271492",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Eingangsebene, Berlin, Germany",
+      "coordinates": [13.3701701, 52.5246624],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7132010681",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Warschauer Brücke, Berlin, Germany",
+      "coordinates": [13.4497985, 52.5063819],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12601250398",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Tauentzienstraße, Berlin, Germany",
+      "coordinates": [13.3386501, 52.5036693],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1047617421",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Hardenbergplatz, Berlin, Germany",
+      "coordinates": [13.3325535, 52.5070493],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6588859242",
+      "label": "Starbucks",
+      "sublabel": "Starbucks, Joachimsthaler Straße 1-4, Berlin, Germany",
+      "coordinates": [13.3316262, 52.5057007],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q37158",
+      "name": "Starbucks",
+      "description": "American multinational coffee company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q117236699",
+      "name": "Stars Coffee",
+      "description": "Russian coffee cafe chain network",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q71150001",
+      "name": "Starbucks Reserve",
+      "description": "International café chain and brand",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": []
+}

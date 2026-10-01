@@ -193,4 +193,17 @@ describe("Pelias geocoding provider", () => {
     expect(result?.sublabel).toBeUndefined();
     expect(result?.type).toBe("region");
   });
+
+  it("sends the autocomplete bias as focus.point", async () => {
+    mockFetch.mockImplementation(async () => mockOk({ features: [] }));
+
+    await peliasService.autocomplete("coffee", "de", { proximity: [13.4, 52.52], zoom: 12 });
+    await peliasService.autocomplete("coffee", "de");
+
+    const biased = new URL(String(mockFetch.mock.calls[0]?.[0])).searchParams;
+    expect(biased.get("focus.point.lat")).toBe("52.52");
+    expect(biased.get("focus.point.lon")).toBe("13.4");
+    const unbiased = new URL(String(mockFetch.mock.calls[1]?.[0])).searchParams;
+    expect(unbiased.has("focus.point.lat")).toBe(false);
+  });
 });

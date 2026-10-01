@@ -1,0 +1,115 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/4546753612",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Karl-Liebknecht-Straße 13, Berlin, Deutschland",
+      "coordinates": [13.4075889, 52.5224189],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/498839307",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Brunnenstraße 105-109, Berlin, Deutschland",
+      "coordinates": [13.3916155, 52.547982],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/494497710",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Storkower Straße 139, Berlin, Deutschland",
+      "coordinates": [13.4565336, 52.5340406],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1410376784",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Perleberger Straße 42, Berlin, Deutschland",
+      "coordinates": [13.3438942, 52.5284784],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/664265053",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Hermann-Blankenstein-Straße 38, Berlin, Deutschland",
+      "coordinates": [13.4616186, 52.5236849],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/28704816",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Residenzstraße 85, Berlin, Deutschland",
+      "coordinates": [13.3736092, 52.5589798],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1918454955",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Karl-Marx-Straße 231-235, Berlin, Deutschland",
+      "coordinates": [13.4432574, 52.4686658],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/27861033",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Bessemerstraße, Berlin, Deutschland",
+      "coordinates": [13.3671364, 52.4620031],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/295577478",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Bessemerstraße 63, Berlin, Deutschland",
+      "coordinates": [13.3676646, 52.46171],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/715180327",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Pichelswerderstraße 6, Berlin, Deutschland",
+      "coordinates": [13.2144631, 52.5295139],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3112849844",
+      "label": "Kaufland",
+      "sublabel": "Kaufland, Walter-Friedrich-Straße 4, Berlin, Deutschland",
+      "coordinates": [13.495938, 52.6345809],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q685967",
+      "name": "Kaufland",
+      "description": "supermarket chain and online marketplace",
+      "kind": ["brand", "operator"],
+      "matchedOn": "name",
+      "presence": "here"
+    }
+  ],
+  "presets": []
+}

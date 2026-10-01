@@ -35,14 +35,28 @@ describe("useSearchSuggestions", () => {
     const get = vi.spyOn(apiClient, "get").mockResolvedValue(response as never);
     const { rerender, result } = renderHook(
       ({ query }) => useSearchSuggestions(query, "en", null, 8),
+      { initialProps: { query: "Berlin Hbf" }, wrapper: createQueryWrapper() },
+    );
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    rerender({ query: "  berlin  hbf  " });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps uppercase acronym input apart from the same letters in lowercase", async () => {
+    const response = { suggestions: [], attributions: [], partial: false };
+    const get = vi.spyOn(apiClient, "get").mockResolvedValue(response as never);
+    const { rerender, result } = renderHook(
+      ({ query }) => useSearchSuggestions(query, "en", null, 8),
       { initialProps: { query: "UNCC" }, wrapper: createQueryWrapper() },
     );
 
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
-    rerender({ query: "  uncc  " });
+    rerender({ query: "uncc" });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
-    expect(get).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(2));
   });
 
   it("does not request fewer than two normalized letters or digits", () => {

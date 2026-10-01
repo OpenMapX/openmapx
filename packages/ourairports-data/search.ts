@@ -2,17 +2,17 @@ import type { AirportRecord } from "./types.js";
 
 /**
  * Search index over the airport catalog. Provides exact-match lookup by
- * IATA/ICAO/ident codes and substring / token match on name + keywords.
+ * IATA/ICAO/ident codes and word-start match on name + keywords.
  */
 export interface SearchIndex {
   /** Exact-match by IATA, ICAO, ident, gpsCode, or localCode (uppercased). */
   byCode(code: string): AirportRecord | null;
   /**
-   * Substring / token-prefix search over name + keywords. Results ranked by:
+   * Word-start search over name + keywords. Results ranked by:
    * 1. Exact IATA/ICAO/ident code match (highest)
    * 2. Name starts with the query
-   * 3. Name contains the query
-   * 4. Keyword tokens contain the query
+   * 3. A later word of the name starts with the query
+   * 4. A keyword word starts with the query
    * Within each tier, large airports rank above medium / small / heliport.
    */
   query(q: string, limit?: number): AirportRecord[];
@@ -39,8 +39,20 @@ const TYPE_RANK: Record<string, number> = {
 
 const RANK_EXACT_CODE = 0;
 const RANK_NAME_PREFIX = 1;
-const RANK_NAME_CONTAINS = 2;
+const RANK_NAME_WORD = 2;
 const RANK_KEYWORD_MATCH = 3;
+
+/**
+ * True when `query` begins a word of `text` (both lowercase). A query in the
+ * middle of a word ("coffee" in "Coffeen") is a spelling coincidence, not a
+ * reference to the airport.
+ */
+function startsAWord(text: string, query: string): boolean {
+  for (let at = text.indexOf(query); at !== -1; at = text.indexOf(query, at + 1)) {
+    if (at === 0 || !/[\p{L}\p{N}]/u.test(text[at - 1])) return true;
+  }
+  return false;
+}
 
 interface IndexEntry {
   record: AirportRecord;
@@ -108,16 +120,20 @@ export function buildSearchIndex(records: AirportRecord[]): SearchIndex {
       let matchedValue = entry.record.name;
       if (entry.nameLower.startsWith(queryLower)) {
         rank = RANK_NAME_PREFIX;
-      } else if (entry.nameLower.includes(queryLower)) {
-        rank = RANK_NAME_CONTAINS;
-      } else if (entry.keywordsLower.includes(queryLower)) {
-        rank = RANK_KEYWORD_MATCH;
-        kind = "explicit_alias";
-        matchedValue =
-          entry.record.keywords
-            ?.split(",")
-            .map((value) => value.trim())
-            .find((value) => value.toLowerCase().includes(queryLower)) ?? trimmed;
+      } else if (startsAWord(entry.nameLower, queryLower)) {
+        rank = RANK_NAME_WORD;
+      } else if (startsAWord(entry.keywordsLower, queryLower)) {
+        const keyword = entry.record.keywords
+          ?.split(",")
+          .map((value) => value.trim())
+          .find((value) => startsAWord(value.toLowerCase(), queryLower));
+        if (keyword) {
+          rank = RANK_KEYWORD_MATCH;
+          matchedValue = keyword;
+          // Only a keyword typed out in full is an alias of the airport; the
+          // start of one is an ordinary name match.
+          if (keyword.toLowerCase() === queryLower) kind = "explicit_alias";
+        }
       }
       if (rank !== null) {
         ranked.push({

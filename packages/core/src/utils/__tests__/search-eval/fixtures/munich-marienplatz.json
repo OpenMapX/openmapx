@@ -1,0 +1,34 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/1016158681",
+      "label": "Marienplatz",
+      "sublabel": "Marienplatz, München, Deutschland",
+      "coordinates": [11.5751012, 48.1374814],
+      "type": "street",
+      "rawCategory": "highway/pedestrian",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/7366154",
+      "label": "Marienplatz",
+      "sublabel": "Marienplatz, München, Deutschland",
+      "coordinates": [11.5759246, 48.1370318],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2941687118",
+      "label": "Marienplatz",
+      "sublabel": "Marienplatz, Marienplatz, München, Deutschland",
+      "coordinates": [11.5753989, 48.1371436],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

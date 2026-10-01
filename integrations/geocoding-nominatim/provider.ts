@@ -1,5 +1,8 @@
 import { formatAddress, formatStreetLine } from "@openmapx/integration-geocoding/format-address";
-import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
+import type {
+  GeocodingBias,
+  GeocodingProvider as GeocodingProviderImpl,
+} from "@openmapx/integration-geocoding/types";
 /**
  * Nominatim geocoding client.
  * Uses the public OSM instance by default; override with NOMINATIM_URL.
@@ -97,6 +100,29 @@ async function fetchNominatim(
   });
 }
 
+// Nominatim has no point bias, only a viewbox; size it from the map zoom.
+const DEFAULT_BIAS_ZOOM = 12;
+const MIN_VIEWBOX_HALF_DEG = 0.01;
+const MAX_VIEWBOX_HALF_DEG = 45;
+
+/**
+ * Viewbox (lon1,lat1,lon2,lat2) centred on the bias point, roughly one screen
+ * wide at the given zoom and square on the ground. Sent without `bounded`, so
+ * it only ranks nearby matches higher and never filters farther ones out.
+ */
+function biasViewbox({ proximity: [lng, lat], zoom }: GeocodingBias): string {
+  const halfLng = Math.min(
+    MAX_VIEWBOX_HALF_DEG,
+    Math.max(MIN_VIEWBOX_HALF_DEG, 360 / 2 ** (zoom ?? DEFAULT_BIAS_ZOOM)),
+  );
+  const halfLat = Math.max(MIN_VIEWBOX_HALF_DEG, halfLng * Math.cos((lat * Math.PI) / 180));
+  const west = Math.max(-180, lng - halfLng);
+  const east = Math.min(180, lng + halfLng);
+  const south = Math.max(-90, lat - halfLat);
+  const north = Math.min(90, lat + halfLat);
+  return `${west},${south},${east},${north}`;
+}
+
 function makeId(r: NominatimResult): string {
   return `osm:${r.osm_type}/${r.osm_id}`;
 }
@@ -158,8 +184,14 @@ export const nominatimService: GeocodingProviderImpl = {
     return { address, city };
   },
 
-  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
-    const data = await fetchNominatim({ q: query, limit: "6", dedupe: "1" }, lang);
+  async autocomplete(
+    query: string,
+    lang?: string,
+    bias?: GeocodingBias,
+  ): Promise<AutocompleteResult[]> {
+    const params: Record<string, string> = { q: query, limit: "6", dedupe: "1" };
+    if (bias) params.viewbox = biasViewbox(bias);
+    const data = await fetchNominatim(params, lang);
     return data.map((r) => {
       // Unnamed address/building features lead display_name with the bare house
       // number in DE/AT/CH, so derive a proper street line ("Kinderhauser

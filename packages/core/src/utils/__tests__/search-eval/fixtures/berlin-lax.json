@@ -1,0 +1,209 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/1685325",
+      "label": "Lax",
+      "sublabel": "Lax, Switzerland",
+      "coordinates": [8.1195682, 46.3888757],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/649268639",
+      "label": "Los Angeles International Airport",
+      "sublabel": "Los Angeles International Airport, World Way 1, Los Angeles, United States",
+      "coordinates": [-118.4213591, 33.9421675],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3158020540",
+      "label": "Lax",
+      "sublabel": "Lax, Bahnhofstrasse, Lax, Switzerland",
+      "coordinates": [8.1170895, 46.3870036],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/8491976806",
+      "label": "Lax",
+      "sublabel": "Lax, Mouret, France",
+      "coordinates": [2.5410321, 44.5075256],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7799208340",
+      "label": "Lax",
+      "sublabel": "Lax, Churwalden, Switzerland",
+      "coordinates": [9.5335633, 46.7945656],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/154327508",
+      "label": "Lax",
+      "sublabel": "Lax, United States",
+      "coordinates": [-83.1215404, 31.4732507],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2272605389",
+      "label": "Lax",
+      "sublabel": "Lax, Meisebacher Straße, Bad Hersfeld, Germany",
+      "coordinates": [9.6792202, 50.8695192],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/835567241",
+      "label": "Lax",
+      "sublabel": "Lax, Churwalden, Switzerland",
+      "coordinates": [9.5334829, 46.7944162],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10049046040",
+      "label": "Lax",
+      "sublabel": "Lax, Bahnhofstrasse, Lax, Switzerland",
+      "coordinates": [8.1168919, 46.3867246],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/52398",
+      "label": "Laxou",
+      "sublabel": "Laxou, France",
+      "coordinates": [6.1522232, 48.6848709],
+      "type": "region",
+      "rawCategory": "place/town",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/111877",
+      "label": "Laxenburg",
+      "sublabel": "Laxenburg, Austria",
+      "coordinates": [16.3561206, 48.0686831],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1895033017",
+      "label": "Lax Luch",
+      "sublabel": "Lax Luch, Lübben (Spreewald) - Lubin (Błota), Germany",
+      "coordinates": [13.9063073, 51.9729327],
+      "type": "region",
+      "rawCategory": "place/locality",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:KLAX",
+      "ids": {
+        "oa": "KLAX",
+        "iata": "LAX",
+        "icao": "KLAX"
+      },
+      "label": "Los Angeles International Airport",
+      "sublabel": "Los Angeles, US",
+      "coordinates": [-118.407997, 33.942501],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "authoritative_code",
+        "value": "LAX",
+        "normalized": "lax",
+        "namespace": "iata"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:ESSH",
+      "ids": {
+        "oa": "ESSH"
+      },
+      "label": "Laxå Airfield",
+      "sublabel": "Laxå, SE",
+      "coordinates": [14.6662, 58.978699],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxå Airfield",
+        "normalized": "laxa airfield"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CA-0740",
+      "ids": {
+        "oa": "CA-0740"
+      },
+      "label": "Lax Kw'alaams Heliport",
+      "sublabel": "Lax Kw'alaams, CA",
+      "coordinates": [-130.42957, 54.55985],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Lax Kw'alaams Heliport",
+        "normalized": "lax kw alaams heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:JP-1725",
+      "ids": {
+        "oa": "JP-1725"
+      },
+      "label": "Laxa Osaka Helipad",
+      "sublabel": "Osaka, JP",
+      "coordinates": [135.48748, 34.69688],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxa Osaka Helipad",
+        "normalized": "laxa osaka helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:JP-1726",
+      "ids": {
+        "oa": "JP-1726"
+      },
+      "label": "Laxa Osaka Residences Helipad",
+      "sublabel": "Osaka, JP",
+      "coordinates": [135.4884, 34.697],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxa Osaka Residences Helipad",
+        "normalized": "laxa osaka residences helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

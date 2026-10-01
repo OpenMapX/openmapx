@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { getBrandByQid, suggestBrands, warmBrandIndex } from "@openmapx/brands";
 import {
+  type BrandKind,
   bboxCacheKey,
   fetchCommonsMetadata,
   normalizeFilter,
@@ -11,6 +12,8 @@ import { currentOpeningHoursInfo } from "@openmapx/core/server";
 import { type IntegrationContext, scalarQueries } from "@openmapx/integration-framework";
 import { getChipTranslations, suggestPresets } from "@openmapx/presets";
 import { createPoiSearchOrchestrator, type PoiSearchResponse } from "./orchestrator.js";
+
+const BRAND_KINDS: readonly BrandKind[] = ["brand", "operator", "network"];
 
 /** Re-evaluate the final fused schedule after reading the stable-result cache. */
 async function withCurrentHours(result: PoiSearchResponse): Promise<PoiSearchResponse> {
@@ -226,10 +229,11 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/brand-suggest", async (req, reply) => {
-    const { q, country, limit } = scalarQueries(req.query) as {
+    const { q, country, limit, kind } = scalarQueries(req.query) as {
       q?: string;
       country?: string;
       limit?: string;
+      kind?: string;
     };
 
     if (!q || q.trim().length < 2) {
@@ -247,9 +251,12 @@ export function setup(ctx: IntegrationContext): void {
         ? country.toLowerCase()
         : undefined;
 
-    const cacheKey = `brand-suggest:${cc ?? "-"}:${limitN}:${q.trim().toLowerCase()}`;
+    // Unknown roles are ignored like an unknown country, so the filter only narrows.
+    const brandKind = BRAND_KINDS.find((known) => known === kind);
+
+    const cacheKey = `brand-suggest:${cc ?? "-"}:${brandKind ?? "-"}:${limitN}:${q.trim().toLowerCase()}`;
     const result = await ctx.cache.withCache(cacheKey, 3600, async () => ({
-      matches: suggestBrands(q, cc, limitN),
+      matches: suggestBrands(q, cc, limitN, brandKind),
     }));
 
     reply.header("Cache-Control", "public, max-age=3600");

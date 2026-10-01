@@ -1,0 +1,168 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/3334327193",
+      "label": "Apotheke 4.0",
+      "sublabel": "Apotheke 4.0, Turmstraße 29, Berlin, Deutschland",
+      "coordinates": [13.3417528, 52.526505],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/308019535",
+      "label": "Apotheke 24",
+      "sublabel": "Apotheke 24, Alfred-Kowalke-Straße 1, Berlin, Deutschland",
+      "coordinates": [13.5142084, 52.5054076],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1413247085",
+      "label": "Apotheke 97",
+      "sublabel": "Apotheke 97, Nonnendammallee 97, Berlin, Deutschland",
+      "coordinates": [13.2672695, 52.5369189],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2796710201",
+      "label": "Apotheke Hackesches Quartier",
+      "sublabel": "Apotheke Hackesches Quartier, Henriette-Herz-Platz 3, Berlin, Deutschland",
+      "coordinates": [13.4024813, 52.5221812],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/322151533",
+      "label": "Apotheke am Koppenplatz",
+      "sublabel": "Apotheke am Koppenplatz, Koppenplatz, Berlin, Deutschland",
+      "coordinates": [13.3978184, 52.5274856],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/956306643",
+      "label": "Apotheke Q205",
+      "sublabel": "Apotheke Q205, Friedrichstraße 68, Berlin, Deutschland",
+      "coordinates": [13.3903812, 52.5122639],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/771769255",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Am Grünzug 12, Hoppegarten, Deutschland",
+      "coordinates": [13.6428877, 52.5394863],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2806096142",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Berliner Straße, Lychen, Deutschland",
+      "coordinates": [13.3076035, 53.2105087],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/521520217",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Berliner Straße, Lychen, Deutschland",
+      "coordinates": [13.3074914, 53.2105567],
+      "type": "street",
+      "rawCategory": "highway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7902899981",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Thiemstraße, Cottbus, Deutschland",
+      "coordinates": [14.3274714, 51.7455538],
+      "type": "poi",
+      "rawCategory": "information/board",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/142214897",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Brandenburgische Straße 90, Schöneiche bei Berlin, Deutschland",
+      "coordinates": [13.6980382, 52.4672223],
+      "type": "address",
+      "rawCategory": "building/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3492671233",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Lutherstraße, Oschatz, Deutschland",
+      "coordinates": [13.1085402, 51.299234],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/525767070",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Schloßallee, Moritzburg, Deutschland",
+      "coordinates": [13.6800004, 51.1608854],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/542616363",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Friedhofsweg 1, Bautzen, Deutschland",
+      "coordinates": [14.3904895, 51.2106823],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1069496242",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Naumburger Straße, Merseburg, Deutschland",
+      "coordinates": [11.983034, 51.3338704],
+      "type": "poi",
+      "rawCategory": "amenity/pharmacy",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/523199520",
+      "label": "Apotheke",
+      "sublabel": "Apotheke, Hauptstraße, Heidenau, Deutschland",
+      "coordinates": [13.8543664, 50.9778868],
+      "type": "poi",
+      "rawCategory": "healthcare/pharmacy",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": [
+    {
+      "id": "amenity/veterinary_pharmacy",
+      "name": "Tierapotheke",
+      "tags": {
+        "amenity": "veterinary_pharmacy"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "shop/chemist",
+      "name": "Drogerie",
+      "tags": {
+        "shop": "chemist"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

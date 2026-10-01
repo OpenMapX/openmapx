@@ -1,0 +1,242 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/1802652184",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Bridge Street, London, United Kingdom",
+      "coordinates": [-0.1245721, 51.5007042],
+      "type": "poi",
+      "rawCategory": "amenity/clock",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12178873897",
+      "label": "Big Ben Halal Meats",
+      "sublabel": "Big Ben Halal Meats, High Street Harlesden 7, London, United Kingdom",
+      "coordinates": [-0.2486421, 51.5372744],
+      "type": "poi",
+      "rawCategory": "shop/butcher",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12178873895",
+      "label": "Big Ben Fisheries",
+      "sublabel": "Big Ben Fisheries, High Street Harlesden 11, London, United Kingdom",
+      "coordinates": [-0.2485648, 51.537174],
+      "type": "poi",
+      "rawCategory": "shop/seafood",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12178873899",
+      "label": "Big Ben Supermarket",
+      "sublabel": "Big Ben Supermarket, High Street Harlesden 9, London, United Kingdom",
+      "coordinates": [-0.2486035, 51.5372242],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2625341781",
+      "label": "Big Ben Fish Bar",
+      "sublabel": "Big Ben Fish Bar, Craven Park Road 104, London, United Kingdom",
+      "coordinates": [-0.2530299, 51.5398368],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/8519176236",
+      "label": "Big Ben Fisheries",
+      "sublabel": "Big Ben Fisheries, Broadway 9-13, London, United Kingdom",
+      "coordinates": [-0.3225142, 51.5103183],
+      "type": "poi",
+      "rawCategory": "shop/seafood",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6986727107",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Zeedijk 293, Koksijde, Belgium",
+      "coordinates": [2.632892, 51.1204403],
+      "type": "poi",
+      "rawCategory": "leisure/amusement_arcade",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4614979432",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Rue Racine 27, Le Havre, France",
+      "coordinates": [0.1056139, 49.4904868],
+      "type": "poi",
+      "rawCategory": "amenity/pub",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4857700129",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Rue Cormont, Amiens, France",
+      "coordinates": [2.3015905, 49.8942858],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1233645110",
+      "label": "Big Ben's Fish And Chips Burnham",
+      "sublabel": "Big Ben's Fish And Chips Burnham, Lent Rise Road 87, Slough, United Kingdom",
+      "coordinates": [-0.6670205, 51.5265658],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:US-0120",
+      "ids": {
+        "oa": "US-0120"
+      },
+      "label": "Big Bend Airport",
+      "sublabel": "Mercer, US",
+      "coordinates": [-80.280899, 41.280602],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Airport",
+        "normalized": "big bend airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-7855",
+      "ids": {
+        "oa": "US-7855"
+      },
+      "label": "Big Bend Landing Strip",
+      "sublabel": "Fort Thompson, US",
+      "coordinates": [-99.464979, 44.069767],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Landing Strip",
+        "normalized": "big bend landing strip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CEM4",
+      "ids": {
+        "oa": "CEM4"
+      },
+      "label": "Big Bend Airport",
+      "sublabel": "Innisfail, CA",
+      "coordinates": [-114.027, 52.078602],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Airport",
+        "normalized": "big bend airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-8236",
+      "ids": {
+        "oa": "US-8236"
+      },
+      "label": "Big Bend Airport",
+      "sublabel": "Agness, US",
+      "coordinates": [-124.04415, 42.64028],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Airport",
+        "normalized": "big bend airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:70TT",
+      "ids": {
+        "oa": "70TT"
+      },
+      "label": "Big Bend Valley Airport",
+      "sublabel": "Terlingua, US",
+      "coordinates": [-103.553029, 29.614018],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Valley Airport",
+        "normalized": "big bend valley airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-3T9",
+      "ids": {
+        "oa": "US-3T9"
+      },
+      "label": "Big Bend Ranch State Park Airport",
+      "sublabel": "Redford, US",
+      "coordinates": [-103.936899, 29.471037],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Ranch State Park Airport",
+        "normalized": "big bend ranch state park airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-4151",
+      "ids": {
+        "oa": "US-4151"
+      },
+      "label": "Big Ben Airstrip",
+      "sublabel": "Animas, US",
+      "coordinates": [-108.81648, 31.9407],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Ben Airstrip",
+        "normalized": "big ben airstrip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:FDBS",
+      "ids": {
+        "oa": "FDBS"
+      },
+      "label": "Big Bend Sugar E Airport",
+      "sublabel": "Big Bend, SZ",
+      "coordinates": [31.92, -26.836111],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Sugar E Airport",
+        "normalized": "big bend sugar e airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

@@ -8,7 +8,10 @@ import {
   type SearchResult,
 } from "@openmapx/core";
 import type { Wgs84BoundingBox } from "@openmapx/integration-framework";
-import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
+import type {
+  GeocodingBias,
+  GeocodingProvider as GeocodingProviderImpl,
+} from "@openmapx/integration-geocoding/types";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 
 type EnturMultiModal = "parent" | "child" | "all";
@@ -444,6 +447,7 @@ async function fetchEnturAutocomplete(
   options?: {
     boundaryCountry?: string;
     multiModal?: EnturMultiModal;
+    focus?: GeocodingBias["proximity"];
   },
 ): Promise<EnturFeature[]> {
   const data = await fetchEntur("/autocomplete", {
@@ -452,6 +456,8 @@ async function fetchEnturAutocomplete(
     size: String(size),
     "boundary.country": options?.boundaryCountry,
     multiModal: options?.multiModal,
+    "focus.point.lat": options?.focus ? String(options.focus[1]) : undefined,
+    "focus.point.lon": options?.focus ? String(options.focus[0]) : undefined,
   });
   return data.features ?? [];
 }
@@ -473,10 +479,15 @@ export const enturGeocodingService: GeocodingProviderImpl = {
       .filter((result): result is SearchResult => result != null);
   },
 
-  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
+  async autocomplete(
+    query: string,
+    lang?: string,
+    bias?: GeocodingBias,
+  ): Promise<AutocompleteResult[]> {
     const features = await fetchEnturAutocomplete(query, 6, lang, {
       boundaryCountry: boundaryCountry || undefined,
       multiModal,
+      focus: bias?.proximity,
     });
     return features
       .map((feature) => featureToAutocompleteResult(feature, lang))

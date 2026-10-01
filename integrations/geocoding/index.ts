@@ -10,6 +10,7 @@ import {
   setPlaceLookupNominatimUrl,
 } from "./place-lookup.js";
 import { expandSearchQuery, fetchWithVariants } from "./query-expansion.js";
+import type { GeocodingBias } from "./types.js";
 
 /** Build a short hash key from a prefix + arbitrary data. */
 function hashKey(prefix: string, data: unknown): string {
@@ -26,6 +27,8 @@ function round(value: number, decimals: number): number {
 const TTL_FORWARD = 86400;
 const TTL_REVERSE = 86400;
 const TTL_AUTOCOMPLETE = 3600;
+// Deepest map zoom accepted as an autocomplete bias hint.
+const MAX_BIAS_ZOOM = 24;
 
 // L1 in-memory cache: sub-millisecond reads for hot autocomplete queries.
 // Soft TTL 5 min (serve stale + background refresh), hard TTL 2 h (evict).
@@ -143,11 +146,51 @@ export function setup(ctx: IntegrationContext): void {
       return;
     }
 
+    const latRaw = scalarQueries(req.query).lat;
+    const lngRaw = scalarQueries(req.query).lng;
+    const lat = Number.parseFloat(latRaw ?? "");
+    const lng = Number.parseFloat(lngRaw ?? "");
+    if (
+      (latRaw !== undefined) !== (lngRaw !== undefined) ||
+      (latRaw !== undefined &&
+        (!Number.isFinite(lat) ||
+          !Number.isFinite(lng) ||
+          lat < -90 ||
+          lat > 90 ||
+          lng < -180 ||
+          lng > 180))
+    ) {
+      reply.status(400).send({ error: "lat and lng must both be valid coordinates" });
+      return;
+    }
+    // An unusable zoom only drops the radius hint; the point bias still applies.
+    const zoomValue = Number.parseFloat(scalarQueries(req.query).zoom ?? "");
+    const zoom =
+      Number.isFinite(zoomValue) && zoomValue >= 0 && zoomValue <= MAX_BIAS_ZOOM
+        ? Math.floor(zoomValue)
+        : undefined;
+    // ~1 km cells: the upstream sees the rounded point, so every request that
+    // shares a cache slot would have produced the same answer.
+    const bias: GeocodingBias | undefined =
+      latRaw !== undefined
+        ? {
+            proximity: [round(lng, 2), round(lat, 2)],
+            ...(zoom !== undefined ? { zoom } : {}),
+          }
+        : undefined;
+
     const effectiveLang = lang ?? "en";
     const expandedQ = expandSearchQuery(q);
     // Normalize for cache key so "Hamburg"/"hamburg" and "Hbf"/"Hauptbahnhof" share a slot
     const normalizedQ = expandedQ.trim().toLowerCase();
-    const key = hashKey("cache:autocomplete", { q: normalizedQ, lang: effectiveLang });
+    const key = hashKey("cache:autocomplete", {
+      q: normalizedQ,
+      lang: effectiveLang,
+      prox: bias ? bias.proximity.join(",") : "none",
+      zoom: bias?.zoom ?? "none",
+    });
+    const load = () =>
+      fetchWithVariants(q, (v) => getGeocodingProvider(ctx).autocomplete(v, effectiveLang, bias));
 
     // L1: in-memory check (sub-millisecond)
     const mem = memCache.get(key);
@@ -155,9 +198,7 @@ export function setup(ctx: IntegrationContext): void {
       if (mem.stale) {
         // Stale-while-revalidate: serve immediately, refresh in background
         void ctx.cache
-          .withCache(key, TTL_AUTOCOMPLETE, () =>
-            fetchWithVariants(q, (v) => getGeocodingProvider(ctx).autocomplete(v, effectiveLang)),
-          )
+          .withCache(key, TTL_AUTOCOMPLETE, load)
           .then((fresh) => memCache.set(key, fresh, MEM_SOFT_MS, MEM_HARD_MS))
           .catch(() => {});
       }
@@ -168,9 +209,7 @@ export function setup(ctx: IntegrationContext): void {
 
     // L2: Redis + upstream -- gracefully degrade on failure
     try {
-      const result = await ctx.cache.withCache(key, TTL_AUTOCOMPLETE, () =>
-        fetchWithVariants(q, (v) => getGeocodingProvider(ctx).autocomplete(v, effectiveLang)),
-      );
+      const result = await ctx.cache.withCache(key, TTL_AUTOCOMPLETE, load);
       memCache.set(key, result, MEM_SOFT_MS, MEM_HARD_MS);
       reply.header("Cache-Control", "public, max-age=3600");
       reply.send(result);

@@ -1,0 +1,308 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/2841527495",
+      "label": "Pizza",
+      "sublabel": "Pizza, Tempelhofer Damm 148, Berlin, Germany",
+      "coordinates": [13.3853593, 52.4652544],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1447902615",
+      "label": "Pizza Peppino",
+      "sublabel": "Pizza Peppino, Johannisstraße, Berlin, Germany",
+      "coordinates": [13.3924038, 52.5244354],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1602162087",
+      "label": "Pizza-Scheune",
+      "sublabel": "Pizza-Scheune, Rosa-Luxemburg-Straße 49, Berlin, Germany",
+      "coordinates": [13.4099813, 52.5280496],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4160090540",
+      "label": "Pizza del Quartiere",
+      "sublabel": "Pizza del Quartiere, Brunnenstraße 10, Berlin, Germany",
+      "coordinates": [13.40029, 52.5311505],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/775857971",
+      "label": "Pizza Berlino",
+      "sublabel": "Pizza Berlino, Seydelstraße 20, Berlin, Germany",
+      "coordinates": [13.4049397, 52.5088541],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4870088447",
+      "label": "Pizza - Pasta",
+      "sublabel": "Pizza - Pasta, Brückenstraße 1B, Berlin, Germany",
+      "coordinates": [13.4169426, 52.5115755],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/389239309",
+      "label": "Pizza",
+      "sublabel": "Pizza, Bahnhofstraße 2a, Krostitz, Germany",
+      "coordinates": [12.4465949, 51.4649632],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4716640992",
+      "label": "Pizza",
+      "sublabel": "Pizza, Zur Spetze 2, Flechtingen, Germany",
+      "coordinates": [11.2414696, 52.331214],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2407615011",
+      "label": "Pizza",
+      "sublabel": "Pizza, Studniční, Žandov, Czechia",
+      "coordinates": [14.3975104, 50.7135106],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10110059636",
+      "label": "Pizza",
+      "sublabel": "Pizza, Kolejowa, Wołów, Poland",
+      "coordinates": [16.6335529, 51.3335745],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10142932166",
+      "label": "pizza",
+      "sublabel": "pizza, Jankovcova, Prague, Czechia",
+      "coordinates": [14.4545511, 50.1078139],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5759900236",
+      "label": "Pizza",
+      "sublabel": "Pizza, Generała Józefa Hallera, Więcbork, Poland",
+      "coordinates": [17.48637, 53.3499694],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3282661279",
+      "label": "Pizza",
+      "sublabel": "Pizza, U Modré školy, Prague, Czechia",
+      "coordinates": [14.5254684, 50.0303957],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1017096437",
+      "label": "Pizza",
+      "sublabel": "Pizza, Konečná, Beroun, Czechia",
+      "coordinates": [14.0437065, 49.9518129],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/869991220",
+      "label": "Pizza",
+      "sublabel": "Pizza, Mlynářská, Čerčany, Czechia",
+      "coordinates": [14.7026807, 49.8516034],
+      "type": "poi",
+      "rawCategory": "amenity/pub",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:2TA4",
+      "ids": {
+        "oa": "2TA4"
+      },
+      "label": "Mario's Flying Pizza Airport",
+      "sublabel": "Sealy, US",
+      "coordinates": [-96.290066, 29.747506],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Mario's Flying Pizza Airport",
+        "normalized": "mario s flying pizza airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SIWE",
+      "ids": {
+        "oa": "SIWE"
+      },
+      "label": "Nelson Pizzani Airport",
+      "sublabel": "Monte Carlo, BR",
+      "coordinates": [-50.956501, -27.2127],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Nelson Pizzani Airport",
+        "normalized": "nelson pizzani airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:OBBS",
+      "ids": {
+        "oa": "OBBS",
+        "icao": "OBBS"
+      },
+      "label": "Sheik Isa Air Base",
+      "sublabel": "Sitrah, BH",
+      "coordinates": [50.590599, 25.9184],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Shakey's Pizza",
+        "normalized": "shakey s pizza"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q191615",
+      "name": "Pizza Hut",
+      "description": "American restaurant chain and international franchise",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q114189329",
+      "name": "Pizza Max",
+      "description": "German fast food chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q7199971",
+      "name": "Pizza Nova",
+      "description": "Canadian pizza restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q7199979",
+      "name": "Pizza Schmizza",
+      "description": "American fast food chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q110454959",
+      "name": "Pizza Pilgrims",
+      "description": "UK pizza restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q110473017",
+      "name": "Pizza Union",
+      "description": "UK pizzeria chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q133254934",
+      "name": "Pizza Depot",
+      "description": "Canadian pizzeria chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q7199970",
+      "name": "Pizza My Heart",
+      "description": "pizzeria chain in California",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/fast_food/pizza",
+      "name": "Pizza Fast Food",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "pizza"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/pizza",
+      "name": "Pizza Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "pizza"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/vending_machine/pizza",
+      "name": "Pizza Vending Machine",
+      "tags": {
+        "amenity": "vending_machine",
+        "vending": "pizza"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/italian",
+      "name": "Italian Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "italian"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/baking_oven",
+      "name": "Baking Oven",
+      "tags": {
+        "amenity": "baking_oven"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

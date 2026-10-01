@@ -141,6 +141,19 @@ describe("enturGeocodingService.autocomplete", () => {
     expect(result?.transitStop).toBeUndefined();
     expect(result?.rawCategory).toBe("Street address");
   });
+
+  it("sends the autocomplete bias as focus.point", async () => {
+    mockFetch.mockImplementation(async () => mockOk({ features: [] }));
+
+    await enturGeocodingService.autocomplete("Karl", "en", { proximity: [10.75, 59.91] });
+    await enturGeocodingService.autocomplete("Karl", "en");
+
+    const biased = new URL(String(mockFetch.mock.calls[0]?.[0])).searchParams;
+    expect(biased.get("focus.point.lat")).toBe("59.91");
+    expect(biased.get("focus.point.lon")).toBe("10.75");
+    const unbiased = new URL(String(mockFetch.mock.calls[1]?.[0])).searchParams;
+    expect(unbiased.has("focus.point.lat")).toBe(false);
+  });
 });
 
 describe("enturGeocodingService.reverseGeocode", () => {

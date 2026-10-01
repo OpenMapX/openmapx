@@ -87,6 +87,7 @@ import { WaypointScheduleDialog } from "@/components/panels/directions/WaypointS
 import { useExpandOnBackgroundTap, useMobileSheet } from "@/components/panels/sheet/sheetState";
 import { AutocompleteDropdown } from "@/components/search/AutocompleteDropdown";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
+import { useMapOptional } from "@/integration-api/map/MapContext";
 import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
@@ -264,6 +265,7 @@ export function DirectionsPanelContent() {
   const evHomeCurrency = useSettingsStore((s) => s.evHomeCurrency);
 
   const { userLocation } = useMapStore();
+  const mapContext = useMapOptional();
   const registry = useIntegrationRegistry();
   const { services: caps } = useCapabilities();
   const queryClient = useQueryClient();
@@ -719,7 +721,18 @@ export function DirectionsPanelContent() {
   // Autocomplete for the currently focused waypoint input
   const activeQuery = focusedField !== null ? (inputValues[focusedField] ?? "") : "";
   const debouncedActiveQuery = useDebounce(activeQuery, 300);
-  const { data: wsSuggestions } = useAutocomplete(debouncedActiveQuery, locale);
+  // Rank suggestions near the visible map. A cheap ref read each render; the
+  // hook rounds the point, so small pans keep the same query key.
+  const suggestionMap = mapContext?.mapRef.current;
+  const suggestionCenter = suggestionMap?.getCenter();
+  const suggestionBias =
+    suggestionMap && suggestionCenter
+      ? {
+          proximity: [suggestionCenter.lng, suggestionCenter.lat] as LngLat,
+          zoom: suggestionMap.getZoom(),
+        }
+      : null;
+  const { data: wsSuggestions } = useAutocomplete(debouncedActiveQuery, locale, suggestionBias);
   const showSuggestions = focusedField !== null && (wsSuggestions?.length ?? 0) > 0;
 
   const detailsRoute =

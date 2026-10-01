@@ -1,7 +1,7 @@
 import { type BrandIndex, loadBrandIndex } from "./loader";
 import { searchBrands } from "./matcher";
 import { resolveBrandByTags } from "./resolve";
-import type { BrandEntry, BrandMatch } from "./types";
+import type { BrandEntry, BrandKind, BrandMatch } from "./types";
 
 // Built once per process on first use. The artifact is ~6 MB of JSON; parsing
 // it costs ~100 ms, so the first caller pays and everyone after reads the Map.
@@ -17,11 +17,17 @@ export function warmBrandIndex(): void {
   getIndex();
 }
 
-export function suggestBrands(q: string, country: string | undefined, limit: number): BrandMatch[] {
+export function suggestBrands(
+  q: string,
+  country: string | undefined,
+  limit: number,
+  kind?: BrandKind,
+): BrandMatch[] {
   return searchBrands(getIndex(), {
     q,
     country: country?.toLowerCase(),
     limit: Math.min(Math.max(limit, 1), 20),
+    kind,
   });
 }
 

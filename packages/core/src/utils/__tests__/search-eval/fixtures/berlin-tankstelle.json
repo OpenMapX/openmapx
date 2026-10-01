@@ -1,0 +1,181 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/28949710",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Denkzeichenweg, Berlin, Deutschland",
+      "coordinates": [13.2300682, 52.5206264],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/494594916",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Kanalstraße, Velten, Deutschland",
+      "coordinates": [13.1972066, 52.6791916],
+      "type": "address",
+      "rawCategory": "building/commercial",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/494698326",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Am Hafen, Velten, Deutschland",
+      "coordinates": [13.1910527, 52.6816647],
+      "type": "address",
+      "rawCategory": "building/commercial",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/974358220",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, KGA Klein Ahlbeck, Eberswalde, Deutschland",
+      "coordinates": [13.798625, 52.8414897],
+      "type": "address",
+      "rawCategory": "building/transportation",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/431065010",
+      "label": "Tankstelle Havelbaude",
+      "sublabel": "Tankstelle Havelbaude, Hohen Neuendorf, Deutschland",
+      "coordinates": [13.244677, 52.684028],
+      "type": "poi",
+      "rawCategory": "waterway/fuel",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4222276049",
+      "label": "freie internationale tankstelle",
+      "sublabel": "freie internationale tankstelle, Templiner Straße, Berlin, Deutschland",
+      "coordinates": [13.409657, 52.533316],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/885863841",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Freienwalder Straße, Wriezen, Deutschland",
+      "coordinates": [14.1282827, 52.7248264],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/245007971",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Schulstraße 19, Gröditsch, Deutschland",
+      "coordinates": [13.9822895, 52.0532109],
+      "type": "poi",
+      "rawCategory": "amenity/fuel",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/41233320",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Fährstraße 35, Eisenhüttenstadt, Deutschland",
+      "coordinates": [14.6456746, 52.144949],
+      "type": "address",
+      "rawCategory": "building/retail",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/41816895",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Parkstraße, Ziltendorf, Deutschland",
+      "coordinates": [14.6447547, 52.2250425],
+      "type": "poi",
+      "rawCategory": "amenity/fuel",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/553325054",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Schlachthausstraße, Pritzwalk, Deutschland",
+      "coordinates": [12.1686683, 53.1569381],
+      "type": "poi",
+      "rawCategory": "amenity/fuel",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11644754751",
+      "label": "Tankstelle",
+      "sublabel": "Tankstelle, Aufbauweg, Arzberg, Deutschland",
+      "coordinates": [13.1229266, 51.4996007],
+      "type": "poi",
+      "rawCategory": "amenity/fuel",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q565734",
+      "name": "Aral AG",
+      "description": "German petroleum company",
+      "kind": ["brand", "operator"],
+      "matchedOn": "alias",
+      "presence": "here"
+    },
+    {
+      "qid": "Q1009104",
+      "name": "bft",
+      "description": "German association for independent petrol stations operators",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "here"
+    }
+  ],
+  "presets": [
+    {
+      "id": "shop/fuel",
+      "name": "Tankstelle",
+      "tags": {
+        "shop": "fuel"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "highway/rest_area",
+      "name": "Rastplatz ohne Tankstelle/Restaurant",
+      "tags": {
+        "highway": "rest_area"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "highway/services",
+      "name": "Raststätte mit Tankstelle/Restaurant",
+      "tags": {
+        "highway": "services"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "waterway/fuel",
+      "name": "Bootstankstelle",
+      "tags": {
+        "waterway": "fuel"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "man_made/fuel_pump",
+      "name": "Tanksäule",
+      "tags": {
+        "man_made": "fuel_pump"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "shop/convenience",
+      "name": "Minimarkt",
+      "tags": {
+        "shop": "convenience"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

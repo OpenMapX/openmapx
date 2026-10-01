@@ -1,0 +1,320 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/62422",
+      "label": "Berlin",
+      "sublabel": "Berlin, Deutschland",
+      "coordinates": [13.3951309, 52.5173885],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1152723",
+      "label": "Berlingen",
+      "sublabel": "Berlingen, Frankreich",
+      "coordinates": [7.2418378, 48.8009528],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/313826576",
+      "label": "Berlin",
+      "sublabel": "Berlin, Tauentzienstraße, Berlin, Deutschland",
+      "coordinates": [13.3386522, 52.503379],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3009689860",
+      "label": "Berlin",
+      "sublabel": "Berlin, Harta, Polen",
+      "coordinates": [22.1921352, 49.8650444],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4329873408",
+      "label": "Berlin",
+      "sublabel": "Berlin, Willy-Brandt-Straße, Berlin, Deutschland",
+      "coordinates": [13.3704874, 52.5202262],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/50798110",
+      "label": "Berlin",
+      "sublabel": "Berlin, Seedorf, Deutschland",
+      "coordinates": [10.4461313, 54.0363605],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11824487884",
+      "label": "Berlin",
+      "sublabel": "Berlin, Zalesie, Polen",
+      "coordinates": [20.3730041, 49.6335712],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13456118964",
+      "label": "Berlin Wall",
+      "sublabel": "Berlin Wall, Alexanderufer, Berlin, Deutschland",
+      "coordinates": [13.3735305, 52.5241276],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13456106083",
+      "label": "Berlin Wall",
+      "sublabel": "Berlin Wall, Alexanderufer, Berlin, Deutschland",
+      "coordinates": [13.3735293, 52.5242131],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3528200549",
+      "label": "Berlin",
+      "sublabel": "Berlin, Aillas, Frankreich",
+      "coordinates": [-0.0962418, 44.4925624],
+      "type": "region",
+      "rawCategory": "place/isolated_dwelling",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:EDDB",
+      "ids": {
+        "oa": "EDDB",
+        "iata": "BER",
+        "icao": "EDDB"
+      },
+      "label": "Berlin Brandenburg Airport",
+      "sublabel": "Berlin, DE",
+      "coordinates": [13.502341, 52.361738],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Brandenburg Airport",
+        "normalized": "berlin brandenburg airport"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0456",
+      "ids": {
+        "oa": "DE-0456"
+      },
+      "label": "Berlin Tempelhof International Airport",
+      "sublabel": "Berlin, DE",
+      "coordinates": [13.404599, 52.472451],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Tempelhof International Airport",
+        "normalized": "berlin tempelhof international airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:KBML",
+      "ids": {
+        "oa": "KBML",
+        "iata": "BML",
+        "icao": "KBML"
+      },
+      "label": "Berlin Regional Airport",
+      "sublabel": "Berlin, US",
+      "coordinates": [-71.17590332, 44.57540131],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Regional Airport",
+        "normalized": "berlin regional airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-12369",
+      "ids": {
+        "oa": "US-12369"
+      },
+      "label": "Berlin Armory Heliport",
+      "sublabel": "Berlin, US",
+      "coordinates": [-72.565697, 44.220901],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Armory Heliport",
+        "normalized": "berlin armory heliport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-11618",
+      "ids": {
+        "oa": "US-11618"
+      },
+      "label": "Berlin Lndg Area",
+      "sublabel": "Berlin, US",
+      "coordinates": [-71.641701, 42.367595],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Lndg Area",
+        "normalized": "berlin lndg area"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-11994",
+      "ids": {
+        "oa": "US-11994"
+      },
+      "label": "Berlin Station Landing Strip",
+      "sublabel": "Delaware, US",
+      "coordinates": [-83.011803, 40.2589],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Station Landing Strip",
+        "normalized": "berlin station landing strip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:31WN",
+      "ids": {
+        "oa": "31WN"
+      },
+      "label": "Berlin Field LLC",
+      "sublabel": "Berlin, US",
+      "coordinates": [-88.961968, 43.991368],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Field LLC",
+        "normalized": "berlin field llc"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-7975",
+      "ids": {
+        "oa": "US-7975"
+      },
+      "label": "Berlin Airport",
+      "sublabel": "Austin, US",
+      "coordinates": [-117.62651, 38.90125],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Airport",
+        "normalized": "berlin airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q821855",
+      "name": "Berliner Volksbank",
+      "description": "regional cooperative bank in Germany",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q126195313",
+      "name": "Berlin Döner Kebap",
+      "description": "chain of kebab fast food shops in Poland",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q107156547",
+      "name": "Liebeskind Berlin",
+      "description": "German fashion brand and retailer",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q117890527",
+      "name": "IMD Berlin",
+      "description": "German medical laboratory chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q1656189",
+      "name": "Sparda-Bank Berlin",
+      "description": "cooperative bank headquartered in Berlin, Germany",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q1664257",
+      "name": "Innungskrankenkasse Brandenburg und Berlin",
+      "description": "health insurance company in Germany",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q2351279",
+      "name": "Nextbike",
+      "description": "German bicycle-sharing company and franchise",
+      "kind": ["brand", "operator"],
+      "matchedOn": "alias",
+      "presence": "global"
+    },
+    {
+      "qid": "Q2327629",
+      "name": "Stadtmobil",
+      "description": "carsharing network in Germany",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "traffic_calming/cushion",
+      "name": "Bodenwelle mit Lücken",
+      "tags": {
+        "traffic_calming": "cushion"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

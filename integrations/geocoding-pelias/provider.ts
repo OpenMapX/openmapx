@@ -1,4 +1,7 @@
-import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
+import type {
+  GeocodingBias,
+  GeocodingProvider as GeocodingProviderImpl,
+} from "@openmapx/integration-geocoding/types";
 /**
  * Pelias geocoding client (self-hosted).
  * Set PELIAS_URL to your Pelias instance (e.g. http://localhost:4300).
@@ -124,9 +127,17 @@ export const peliasService: GeocodingProviderImpl = {
     return { address: p.label, city };
   },
 
-  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
+  async autocomplete(
+    query: string,
+    lang?: string,
+    bias?: GeocodingBias,
+  ): Promise<AutocompleteResult[]> {
     const params: Record<string, string> = { text: query, size: "6" };
     if (lang) params.lang = lang;
+    if (bias) {
+      params["focus.point.lat"] = String(bias.proximity[1]);
+      params["focus.point.lon"] = String(bias.proximity[0]);
+    }
     const data = await fetchPelias("/v1/autocomplete", params);
     return data.features.map((f) => {
       const p = f.properties;

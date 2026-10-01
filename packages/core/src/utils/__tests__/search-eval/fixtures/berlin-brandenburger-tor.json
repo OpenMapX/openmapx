@@ -1,0 +1,97 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/518071791",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Pariser Platz 1, Berlin, Deutschland",
+      "coordinates": [13.3777034, 52.5162699],
+      "type": "poi",
+      "rawCategory": "tourism/attraction",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/30353086",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Berlin, Deutschland",
+      "coordinates": [13.3818418, 52.5164415],
+      "type": "poi",
+      "rawCategory": "railway/halt",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3862767512",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Berlin, Deutschland",
+      "coordinates": [13.3809897, 52.5166047],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/322796388",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Berlin, Deutschland",
+      "coordinates": [13.3827482, 52.5164463],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/11762778",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Berlin, Deutschland",
+      "coordinates": [13.3818959, 52.5164419],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4946539237",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Berlin, Deutschland",
+      "coordinates": [13.3809354, 52.5164367],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/50637691",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Brandenburger Straße, Potsdam, Deutschland",
+      "coordinates": [13.0480817, 52.3995537],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/253846340",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Berlin, Deutschland",
+      "coordinates": [13.3811634, 52.516664],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13254184468",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Kastanienallee, Berlin, Deutschland",
+      "coordinates": [13.5278896, 52.4676229],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/155193081",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Ziesar, Deutschland",
+      "coordinates": [12.3028904, 52.2701767],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

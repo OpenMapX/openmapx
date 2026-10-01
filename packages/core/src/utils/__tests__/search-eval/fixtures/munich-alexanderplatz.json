@@ -1,0 +1,79 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/783052052",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Berlin, Deutschland",
+      "coordinates": [13.4136358, 52.5219814],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3908141014",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Dircksenstraße 2, Berlin, Deutschland",
+      "coordinates": [13.4112804, 52.5215661],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1123165587",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Maxhütte-Haidhof, Deutschland",
+      "coordinates": [12.0838222, 49.205377],
+      "type": "region",
+      "rawCategory": "place/locality",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/380379371",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Chur, Schweiz",
+      "coordinates": [9.5312855, 46.8522009],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/383296331",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Bretten, Deutschland",
+      "coordinates": [8.6888047, 49.0384105],
+      "type": "street",
+      "rawCategory": "highway/primary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12402716429",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Eschbach, Deutschland",
+      "coordinates": [7.6199651, 47.8935512],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3838651030",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Alexanderstrasse, Chur, Schweiz",
+      "coordinates": [9.531325, 46.8524416],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/378618337",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Burrweiler, Deutschland",
+      "coordinates": [8.0729583, 49.2477442],
+      "type": "region",
+      "rawCategory": "place/locality",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

@@ -170,6 +170,25 @@ describe("Nominatim geocoding provider", () => {
     expect(result?.sublabel).toBe("Köln Hauptbahnhof, Köln, Germany");
   });
 
+  it("biases autocomplete with an unbounded viewbox sized from the zoom", async () => {
+    mockFetch.mockImplementation(async () => mockOk([]));
+
+    await nominatimService.autocomplete("coffee", "de", { proximity: [0, 0], zoom: 10 });
+    await nominatimService.autocomplete("coffee", "de", { proximity: [0, 0] });
+    await nominatimService.autocomplete("coffee", "de");
+
+    const zoomed = new URL(String(mockFetch.mock.calls[0]?.[0])).searchParams;
+    // 360 / 2^10 = 0.3515625 degrees each side at the equator.
+    expect(zoomed.get("viewbox")).toBe("-0.3515625,-0.3515625,0.3515625,0.3515625");
+    expect(zoomed.has("bounded")).toBe(false);
+
+    const defaultZoom = new URL(String(mockFetch.mock.calls[1]?.[0])).searchParams;
+    expect(defaultZoom.get("viewbox")).toBe("-0.087890625,-0.087890625,0.087890625,0.087890625");
+
+    const unbiased = new URL(String(mockFetch.mock.calls[2]?.[0])).searchParams;
+    expect(unbiased.has("viewbox")).toBe(false);
+  });
+
   it("builds a reverse-geocode address from the matched feature", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({

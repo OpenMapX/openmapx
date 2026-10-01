@@ -76,8 +76,24 @@ describe("createGeocoderSuggestionProvider", () => {
 
     const result = await provider.searchSuggestions({ query: "Oslo", lang: "nb", limit: 2 }, CALL);
 
-    expect(upstream.autocomplete).toHaveBeenCalledWith("Oslo", "nb");
+    expect(upstream.autocomplete).toHaveBeenCalledWith("Oslo", "nb", undefined);
     expect(result.suggestions.map((s) => s.id)).toEqual(["row-0", "row-1"]);
+  });
+
+  it("passes the query proximity to the geocoder as a location bias", async () => {
+    const upstream = geocoder();
+    const provider = createGeocoderSuggestionProvider({
+      id: "g",
+      geocoder: upstream,
+      attributions: () => [ATTRIBUTION],
+    });
+
+    await provider.searchSuggestions(
+      { query: "Oslo", lang: "en", limit: 8, proximity: [10.7, 59.9] },
+      CALL,
+    );
+
+    expect(upstream.autocomplete).toHaveBeenCalledWith("Oslo", "en", { proximity: [10.7, 59.9] });
   });
 
   it("returns nothing, without calling upstream, when the proximity lies outside coverage", async () => {

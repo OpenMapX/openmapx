@@ -73,12 +73,26 @@ describe("OurAirports search index", () => {
     expect(results.some((r) => r.iata === "FKB")).toBe(true);
   });
 
-  it("classifies keyword-only matches as explicit aliases", () => {
+  it("classifies a keyword typed out in full as an explicit alias", () => {
     expect(index.queryMatches("Söllingen")[0]).toMatchObject({
       record: { iata: "FKB" },
       kind: "explicit_alias",
       matchedValue: "Söllingen",
     });
+  });
+
+  it("treats the start of a keyword as an ordinary name match", () => {
+    expect(index.queryMatches("Söll")[0]).toMatchObject({
+      record: { iata: "FKB" },
+      kind: "name",
+      matchedValue: "Söllingen",
+    });
+  });
+
+  it("matches names and keywords only at word starts", () => {
+    expect(index.query("furt")).toEqual([]);
+    expect(index.query("lingen")).toEqual([]);
+    expect(index.query("baden")[0]?.iata).toBe("FKB");
   });
 
   it("returns empty for missing query", () => {

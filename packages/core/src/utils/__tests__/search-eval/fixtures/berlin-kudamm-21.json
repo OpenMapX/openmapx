@@ -1,0 +1,94 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/219869019",
+      "label": "Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3299899, 52.5040875],
+      "type": "address",
+      "rawCategory": "building/commercial",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/651949238",
+      "label": "Erster Wiener",
+      "sublabel": "Erster Wiener, Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3299493, 52.5041093],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11025773384",
+      "label": "FernUniversität in Hagen – Campus Berlin",
+      "sublabel": "FernUniversität in Hagen – Campus Berlin, Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3301295, 52.5041961],
+      "type": "poi",
+      "rawCategory": "amenity/university",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12563785675",
+      "label": "The Barn",
+      "sublabel": "The Barn, Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3299337, 52.5040095],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6848436877",
+      "label": "Coffee & Greek Bakery",
+      "sublabel": "Coffee & Greek Bakery, Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3299169, 52.5039266],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9910954656",
+      "label": "SKW Schwarz",
+      "sublabel": "SKW Schwarz, Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3300938, 52.5043623],
+      "type": "poi",
+      "rawCategory": "office/lawyer",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4111759313",
+      "label": "Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.329894, 52.5037625],
+      "type": "region",
+      "rawCategory": "place/house",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4012854129",
+      "label": "Berlin",
+      "sublabel": "Berlin, Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3299412, 52.5037701],
+      "type": "poi",
+      "rawCategory": "shop/gift",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3042466050",
+      "label": "dean&david",
+      "sublabel": "dean&david, Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3299072, 52.5038415],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/314317682",
+      "label": "Kurfürstendamm 21, Groß Twülpstedt, Deutschland",
+      "coordinates": [10.8989313, 52.3781346],
+      "type": "address",
+      "rawCategory": "building/residential",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

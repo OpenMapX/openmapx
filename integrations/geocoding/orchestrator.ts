@@ -129,8 +129,11 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
           single.integrationId,
         );
       },
-      async autocomplete(query, lang) {
-        return tagProvider(await single.provider.autocomplete(query, lang), single.integrationId);
+      async autocomplete(query, lang, bias) {
+        return tagProvider(
+          await single.provider.autocomplete(query, lang, bias),
+          single.integrationId,
+        );
       },
       async reverseGeocode(lat, lng, lang) {
         const result = await single.provider.reverseGeocode(lat, lng, lang);
@@ -153,10 +156,10 @@ export function getGeocodingProvider(ctx: IntegrationContext): GeocodingProvider
       }
       return [];
     },
-    async autocomplete(query, lang) {
+    async autocomplete(query, lang, bias) {
       for (let i = 0; i < chain.length; i++) {
         try {
-          const results = await chain[i].provider.autocomplete(query, lang);
+          const results = await chain[i].provider.autocomplete(query, lang, bias);
           if (results.length > 0) return tagProvider(results, chain[i].integrationId);
         } catch (err) {
           if (i === chain.length - 1) throw err;

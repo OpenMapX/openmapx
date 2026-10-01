@@ -1,0 +1,211 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/11027556740",
+      "label": "REWE",
+      "sublabel": "REWE, Friedrichstraße 111, Berlin, Germany",
+      "coordinates": [13.3893156, 52.525331],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/348000444",
+      "label": "REWE",
+      "sublabel": "REWE, Invalidenstraße 158, Berlin, Germany",
+      "coordinates": [13.3970838, 52.5319807],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/318349843",
+      "label": "REWE",
+      "sublabel": "REWE, Schönhauser Allee 10-11, Berlin, Germany",
+      "coordinates": [13.4121544, 52.5305826],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1110843201",
+      "label": "REWE",
+      "sublabel": "REWE, Chausseestraße 118-120, Berlin, Germany",
+      "coordinates": [13.3839754, 52.5295638],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/14188897492",
+      "label": "Rewe",
+      "sublabel": "Rewe, Leipziger Platz 12, Berlin, Germany",
+      "coordinates": [13.3808887, 52.5106846],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2137158125",
+      "label": "REWE",
+      "sublabel": "REWE, Schönhauser Allee 36-39, Berlin, Germany",
+      "coordinates": [13.4127688, 52.5387764],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/347303768",
+      "label": "REWE",
+      "sublabel": "REWE, Lankwitzer Straße 19-24, Berlin, Germany",
+      "coordinates": [13.3302464, 52.4294636],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/381418960",
+      "label": "REWE",
+      "sublabel": "REWE, Am Ostbahnhof 9, Berlin, Germany",
+      "coordinates": [13.4351398, 52.5096516],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9167471817",
+      "label": "REWE",
+      "sublabel": "REWE, Kurfürstenstraße 46, Berlin, Germany",
+      "coordinates": [13.3588252, 52.5009959],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/739645090",
+      "label": "REWE",
+      "sublabel": "REWE, Tamara-Danz-Straße 11, Berlin, Germany",
+      "coordinates": [13.4476385, 52.5060399],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/261743904",
+      "label": "REWE",
+      "sublabel": "REWE, Turmstraße 60, Berlin, Germany",
+      "coordinates": [13.3291604, 52.5276119],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13857918270",
+      "label": "Rewe",
+      "sublabel": "Rewe, Frankfurter Allee 113-117, Berlin, Germany",
+      "coordinates": [13.4763047, 52.5138548],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/874269152",
+      "label": "REWE",
+      "sublabel": "REWE, Gotlindestraße 40A, Berlin, Germany",
+      "coordinates": [13.4970769, 52.5187056],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/34418406",
+      "label": "REWE",
+      "sublabel": "REWE, Weitlingstraße 59-60, Berlin, Germany",
+      "coordinates": [13.4962746, 52.5054065],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/319546170",
+      "label": "REWE",
+      "sublabel": "REWE, Siemensdamm 43-44, Berlin, Germany",
+      "coordinates": [13.2746944, 52.5363802],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1493309776",
+      "label": "REWE",
+      "sublabel": "REWE, Hauptstraße 70, Berlin, Germany",
+      "coordinates": [13.4324718, 52.6039283],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q16968817",
+      "name": "REWE",
+      "description": "German supermarket chain",
+      "kind": ["brand", "operator"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q57519344",
+      "name": "REWE Getränkemarkt",
+      "description": "chain of beverage stores",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q85224313",
+      "name": "REWE To Go",
+      "description": "German convenience store chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    }
+  ],
+  "presets": [
+    {
+      "id": "craft/brewery",
+      "name": "Craft Brewery",
+      "tags": {
+        "craft": "brewery"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "man_made/works/brewery",
+      "name": "Industrial Brewery",
+      "tags": {
+        "man_made": "works",
+        "product": "beer"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/pub/microbrewery",
+      "name": "Brewpub",
+      "tags": {
+        "amenity": "pub",
+        "microbrewery": "yes"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "man_made/works",
+      "name": "Factory",
+      "tags": {
+        "man_made": "works"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

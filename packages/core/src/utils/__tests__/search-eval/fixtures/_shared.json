@@ -1,0 +1,579 @@
+{
+  "chipTranslations": {
+    "en": {
+      "pharmacies": {
+        "name": "Pharmacy Counter",
+        "terms": [
+          "apothecary",
+          "chemist",
+          "dispensary",
+          "drug store",
+          "drugstore",
+          "medicine",
+          "prescription"
+        ]
+      },
+      "atms": {
+        "name": "ATM",
+        "terms": ["cash", "machine", "money", "withdrawal"]
+      },
+      "cafes": {
+        "name": "Cafe",
+        "terms": ["bistro", "coffee", "espresso", "latte", "tea"]
+      },
+      "hospitals": {
+        "name": "Hospital Grounds",
+        "terms": [
+          "clinic",
+          "doctor",
+          "emergency room",
+          "health",
+          "infirmary",
+          "institution",
+          "sanatorium",
+          "sanitarium",
+          "sick",
+          "surgery",
+          "ward"
+        ]
+      },
+      "dentists": {
+        "name": "Dentist",
+        "terms": ["dental", "teeth", "tooth"]
+      },
+      "libraries": {
+        "name": "Library",
+        "terms": ["book", "public library", "reading"]
+      },
+      "banks": {
+        "name": "Bank",
+        "terms": [
+          "check",
+          "deposit",
+          "financial",
+          "fund",
+          "investment",
+          "repository",
+          "reserve",
+          "safe",
+          "savings",
+          "stock",
+          "treasury",
+          "trust",
+          "vault"
+        ]
+      },
+      "fuel": {
+        "name": "Gas Station",
+        "terms": ["biodiesel", "cng", "diesel", "fuel", "gasoline", "lng", "petrol", "propane"]
+      },
+      "fire_stations": {
+        "name": "Fire Station",
+        "terms": ["fire brigade", "fire department", "fire fighters", "firehouse"]
+      },
+      "police": {
+        "name": "Police",
+        "terms": [
+          "badge",
+          "constable",
+          "constabulary",
+          "cop",
+          "detective",
+          "enforcement",
+          "fed",
+          "law",
+          "officer",
+          "patrol"
+        ]
+      },
+      "post_offices": {
+        "name": "Post Office",
+        "terms": ["letter", "mail", "package", "parcel", "postal service", "shipping"]
+      },
+      "ev_charging": {
+        "name": "Charging Station",
+        "terms": [
+          "charge point",
+          "charger",
+          "charging stall",
+          "dc charger",
+          "electric vehicle",
+          "ev",
+          "fast charger",
+          "fast charging",
+          "supercharger"
+        ]
+      },
+      "aeds": {
+        "name": "Defibrillator",
+        "terms": ["aed"]
+      },
+      "toilets": {
+        "name": "Restroom",
+        "terms": [
+          "head",
+          "latrine",
+          "outhouse",
+          "privy",
+          "public restroom",
+          "public toilet",
+          "w.c.",
+          "water closet",
+          "wc"
+        ]
+      },
+      "car_rental": {
+        "name": "Car Rental",
+        "terms": ["hire", "vehicle"]
+      },
+      "car_sharing": {
+        "name": "Car Sharing Station",
+        "terms": ["car pool", "carpooling", "lift sharing", "ride sharing"]
+      },
+      "bicycle_rental": {
+        "name": "Bicycle Rental",
+        "terms": [
+          "bicycle",
+          "bicycle share",
+          "bike",
+          "bike share",
+          "bikeshare",
+          "cycle dock",
+          "cycle hub",
+          "cycleshare",
+          "cycling",
+          "rent a bike"
+        ]
+      },
+      "beaches": {
+        "name": "Beach",
+        "terms": ["shore"]
+      },
+      "viewpoints": {
+        "name": "Viewpoint",
+        "terms": ["lookout", "overlook", "scenery", "scenic", "vantage point", "vista"]
+      },
+      "dog_parks": {
+        "name": "Dog Park",
+        "terms": [
+          "dog exercise area",
+          "dog play area",
+          "dog playground",
+          "off-leash",
+          "offleash",
+          "puppy park"
+        ]
+      },
+      "drinking_water": {
+        "name": "Drinking Water",
+        "terms": [
+          "bubbler",
+          "drinking fountain",
+          "potable water source",
+          "water fountain",
+          "water refill",
+          "water tap"
+        ]
+      },
+      "veterinarians": {
+        "name": "Veterinary",
+        "terms": ["animal hospital", "pet clinic", "pet doctor", "veterinarian"]
+      },
+      "blood_donation": {
+        "name": "Blood Donation Center",
+        "terms": [
+          "apheresis",
+          "blood bank",
+          "blood donation",
+          "blood transfusion",
+          "plasmapheresis",
+          "plateletpheresis",
+          "stem cell donation"
+        ]
+      },
+      "markets": {
+        "name": "Marketplace",
+        "terms": ["bazaar"]
+      },
+      "bookstores": {
+        "name": "Bookstore",
+        "terms": ["hobby"]
+      }
+    },
+    "de": {
+      "pharmacies": {
+        "name": "Apotheke",
+        "terms": ["apotheke"]
+      },
+      "atms": {
+        "name": "Geldautomat",
+        "terms": ["geldautomat", "bankautomat", "bankomat", "bancomat", "geldausgabeautomat", "atm"]
+      },
+      "cafes": {
+        "name": "Café",
+        "terms": ["kaffee", "cafe", "kaffeehaus", "cafebar", "bistro", "teehaus", "teestube"]
+      },
+      "hospitals": {
+        "name": "Krankenhaus",
+        "terms": [
+          "krankenhaus",
+          "klinik",
+          "klinikgelande",
+          "hospital",
+          "krankenhausgelande",
+          "spital"
+        ]
+      },
+      "dentists": {
+        "name": "Zahnarzt",
+        "terms": ["zahnarzt", "dentist", "stomatologe"]
+      },
+      "libraries": {
+        "name": "Bibliothek",
+        "terms": ["bibliothek", "bucherei"]
+      },
+      "banks": {
+        "name": "Bank-Filiale",
+        "terms": [
+          "bank",
+          "kreditinstitut",
+          "sparkasse",
+          "kreditgenossenschaft",
+          "treuhandgesellschaft"
+        ]
+      },
+      "fuel": {
+        "name": "Tankstelle",
+        "terms": ["tankstelle", "tanke"]
+      },
+      "fire_stations": {
+        "name": "Feuerwache",
+        "terms": [
+          "feuerwehr",
+          "feuerwehrstation",
+          "feuerwache",
+          "feuerwehrhaus",
+          "feuerwehrgeratehaus",
+          "feuerwehrstandort",
+          "feuerwehrmagazin"
+        ]
+      },
+      "police": {
+        "name": "Polizei",
+        "terms": ["polizei", "polizeistation", "polizeirevier", "polizeiwache", "polizeiinspektion"]
+      },
+      "post_offices": {
+        "name": "Postfiliale",
+        "terms": ["post", "postamt", "poststelle"]
+      },
+      "ev_charging": {
+        "name": "Ladestation für Elektrofahrzeuge",
+        "terms": [
+          "ladestation fur elektrofahrzeuge",
+          "ladestation",
+          "e-tankstelle",
+          "stromtankstelle",
+          "ladestation fur elektroautos",
+          "plug-in hybridfahrzeuge",
+          "pedelecs und e-bikes",
+          "normalladepunkt",
+          "schnellladepunkt",
+          "ladesaule",
+          "normalladesaule",
+          "schnellladesaule",
+          "ladestelle",
+          "normalladestelle",
+          "schnellladestelle"
+        ]
+      },
+      "aeds": {
+        "name": "Defibrillator",
+        "terms": ["defibrillator", "defi", "schockgeber", "aed"]
+      },
+      "toilets": {
+        "name": "Toilette",
+        "terms": ["toiletten", "wc", "klo", "klosett", "urinal"]
+      },
+      "car_rental": {
+        "name": "Autovermietung",
+        "terms": ["autovermietung", "kfz-verleih"]
+      },
+      "car_sharing": {
+        "name": "Car Sharing Station",
+        "terms": ["car sharing"]
+      },
+      "bicycle_rental": {
+        "name": "Fahrradverleih",
+        "terms": ["fahrradverleih", "fahrradmietstation"]
+      },
+      "beaches": {
+        "name": "Strand",
+        "terms": ["strand"]
+      },
+      "viewpoints": {
+        "name": "Aussichtspunkt",
+        "terms": ["aussichtspunkt"]
+      },
+      "dog_parks": {
+        "name": "Hundepark",
+        "terms": [
+          "hundefreilaufzone",
+          "hundeauslaufzone",
+          "hundezone",
+          "hundeauslaufplatz",
+          "hundewiese"
+        ]
+      },
+      "drinking_water": {
+        "name": "Trinkwasser",
+        "terms": ["brunnen", "trinkwasserbrunnen", "wasserhahn", "trinkbrunnen"]
+      },
+      "veterinarians": {
+        "name": "Tierarztpraxis",
+        "terms": ["tierarzt", "tierarztin", "veterinar", "tierklinik", "tierarztpraxis"]
+      },
+      "blood_donation": {
+        "name": "Blutspendezentrum",
+        "terms": ["blutspendedienst", "blutspendestelle", "blutspendeinstitut"]
+      },
+      "markets": {
+        "name": "Marktplatz",
+        "terms": ["wochenmarkt", "marktverkauf", "markt", "marktgelande"]
+      },
+      "bookstores": {
+        "name": "Buchhandlung",
+        "terms": ["buchladen", "buchhandler", "bucher"]
+      }
+    },
+    "fr": {
+      "pharmacies": {
+        "name": "Pharmacy Counter",
+        "terms": [
+          "apothecary",
+          "chemist",
+          "dispensary",
+          "drug store",
+          "drugstore",
+          "medicine",
+          "prescription"
+        ]
+      },
+      "atms": {
+        "name": "ATM",
+        "terms": ["cash", "machine", "money", "withdrawal"]
+      },
+      "cafes": {
+        "name": "Cafe",
+        "terms": ["bistro", "coffee", "espresso", "latte", "tea"]
+      },
+      "hospitals": {
+        "name": "Hospital Grounds",
+        "terms": [
+          "clinic",
+          "doctor",
+          "emergency room",
+          "health",
+          "infirmary",
+          "institution",
+          "sanatorium",
+          "sanitarium",
+          "sick",
+          "surgery",
+          "ward"
+        ]
+      },
+      "dentists": {
+        "name": "Dentist",
+        "terms": ["dental", "teeth", "tooth"]
+      },
+      "libraries": {
+        "name": "Library",
+        "terms": ["book", "public library", "reading"]
+      },
+      "banks": {
+        "name": "Bank",
+        "terms": [
+          "check",
+          "deposit",
+          "financial",
+          "fund",
+          "investment",
+          "repository",
+          "reserve",
+          "safe",
+          "savings",
+          "stock",
+          "treasury",
+          "trust",
+          "vault"
+        ]
+      },
+      "fuel": {
+        "name": "Gas Station",
+        "terms": ["biodiesel", "cng", "diesel", "fuel", "gasoline", "lng", "petrol", "propane"]
+      },
+      "fire_stations": {
+        "name": "Fire Station",
+        "terms": ["fire brigade", "fire department", "fire fighters", "firehouse"]
+      },
+      "police": {
+        "name": "Police",
+        "terms": [
+          "badge",
+          "constable",
+          "constabulary",
+          "cop",
+          "detective",
+          "enforcement",
+          "fed",
+          "law",
+          "officer",
+          "patrol"
+        ]
+      },
+      "post_offices": {
+        "name": "Post Office",
+        "terms": ["letter", "mail", "package", "parcel", "postal service", "shipping"]
+      },
+      "ev_charging": {
+        "name": "Charging Station",
+        "terms": [
+          "charge point",
+          "charger",
+          "charging stall",
+          "dc charger",
+          "electric vehicle",
+          "ev",
+          "fast charger",
+          "fast charging",
+          "supercharger"
+        ]
+      },
+      "aeds": {
+        "name": "Defibrillator",
+        "terms": ["aed"]
+      },
+      "toilets": {
+        "name": "Restroom",
+        "terms": [
+          "head",
+          "latrine",
+          "outhouse",
+          "privy",
+          "public restroom",
+          "public toilet",
+          "w.c.",
+          "water closet",
+          "wc"
+        ]
+      },
+      "car_rental": {
+        "name": "Car Rental",
+        "terms": ["hire", "vehicle"]
+      },
+      "car_sharing": {
+        "name": "Car Sharing Station",
+        "terms": ["car pool", "carpooling", "lift sharing", "ride sharing"]
+      },
+      "bicycle_rental": {
+        "name": "Bicycle Rental",
+        "terms": [
+          "bicycle",
+          "bicycle share",
+          "bike",
+          "bike share",
+          "bikeshare",
+          "cycle dock",
+          "cycle hub",
+          "cycleshare",
+          "cycling",
+          "rent a bike"
+        ]
+      },
+      "beaches": {
+        "name": "Beach",
+        "terms": ["shore"]
+      },
+      "viewpoints": {
+        "name": "Viewpoint",
+        "terms": ["lookout", "overlook", "scenery", "scenic", "vantage point", "vista"]
+      },
+      "dog_parks": {
+        "name": "Dog Park",
+        "terms": [
+          "dog exercise area",
+          "dog play area",
+          "dog playground",
+          "off-leash",
+          "offleash",
+          "puppy park"
+        ]
+      },
+      "drinking_water": {
+        "name": "Drinking Water",
+        "terms": [
+          "bubbler",
+          "drinking fountain",
+          "potable water source",
+          "water fountain",
+          "water refill",
+          "water tap"
+        ]
+      },
+      "veterinarians": {
+        "name": "Veterinary",
+        "terms": ["animal hospital", "pet clinic", "pet doctor", "veterinarian"]
+      },
+      "blood_donation": {
+        "name": "Blood Donation Center",
+        "terms": [
+          "apheresis",
+          "blood bank",
+          "blood donation",
+          "blood transfusion",
+          "plasmapheresis",
+          "plateletpheresis",
+          "stem cell donation"
+        ]
+      },
+      "markets": {
+        "name": "Marketplace",
+        "terms": ["bazaar"]
+      },
+      "bookstores": {
+        "name": "Bookstore",
+        "terms": ["hobby"]
+      }
+    }
+  },
+  "integrationCategories": [
+    {
+      "id": "bike-sharing",
+      "label": "Bike Sharing"
+    },
+    {
+      "id": "car-sharing",
+      "label": "Car Sharing"
+    },
+    {
+      "id": "ev-charging",
+      "label": "EV Charging"
+    },
+    {
+      "id": "fuel",
+      "label": "Gas Stations"
+    },
+    {
+      "id": "parking",
+      "label": "Parking"
+    },
+    {
+      "id": "scooter-sharing",
+      "label": "E-Scooters"
+    },
+    {
+      "id": "webcam",
+      "label": "Webcams"
+    }
+  ]
+}

@@ -31,6 +31,7 @@ import type {
 import {
   API_ENDPOINTS,
   apiClient,
+  brandSuggestionRows,
   brandToFilter,
   CATEGORY_DEFINITIONS,
   coordinateId,
@@ -38,13 +39,16 @@ import {
   decodeShortPlusCode,
   detectShortPlusCodeCity,
   idsFromPrimaryOrCoords,
+  isConfidentTopRow,
   isTransitRawCategory,
-  mergeAutocompleteSuggestions,
-  normalizeSearchTerm,
+  matchCategorySuggestions,
+  matchRecentSearches,
   PANEL,
   parseCoordinateInput,
   parseDMSCoordinateInput,
   parsePlusCodeInput,
+  presetSuggestionRows,
+  rankAutocompleteRows,
   resolveStopAsPlace,
   useActiveSidePanel,
   useAdaptiveDebounce,
@@ -74,7 +78,6 @@ import {
 import { isPlausibleNlSearch } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop } from "@openmapx/mobility-core/transit";
-import { useQueryClient } from "@tanstack/react-query";
 import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { AccountAvatarButton } from "@/components/auth/AccountAvatarButton";
@@ -98,7 +101,11 @@ import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { isConfidentPlaceMatch } from "@/lib/placeMatch";
 import { useHydrated } from "@/lib/useHydrated";
 import { useRecentSearchStore } from "@/stores/recentSearchStore";
-import { AutocompleteDropdown } from "./AutocompleteDropdown";
+import {
+  AutocompleteDropdown,
+  suggestionListboxId,
+  suggestionOptionId,
+} from "./AutocompleteDropdown";
 import { NlpSearchCard } from "./NlpSearchCard";
 import { SearchEmptyState } from "./SearchEmptyState";
 import { VoiceSearchButton } from "./VoiceSearchButton";
@@ -124,6 +131,20 @@ export interface SearchBarProps {
   surface?: SearchBarSurface;
 }
 
+/**
+ * How long plain Enter waits for suggestions of the text as typed before it
+ * acts on whatever has arrived; a slow provider must not swallow the key.
+ */
+const SUBMIT_SETTLE_TIMEOUT_MS = 2_500;
+
+/** Shorter queries are never sent to the natural-language parse (see useNlpSearch). */
+const NLP_MIN_QUERY_LENGTH = 4;
+
+/** Rows are keyed by type and id together: a category and a place can share an id. */
+function rowKey(row: AutocompleteResult): string {
+  return `${row.type}:${row.id}`;
+}
+
 export function SearchBar({ surface = "map" }: SearchBarProps) {
   const t = useTranslations("search");
   const tSaved = useTranslations("saved");
@@ -132,8 +153,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const locale = useLocale();
   const muiTheme = useTheme();
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("sm"));
-  const { query, isFocused, suggestions, setQuery, setIsFocused, setSuggestions, setResults } =
-    useSearchStore();
+  const { query, isFocused, setQuery, setIsFocused, setSuggestions, setResults } = useSearchStore();
   const { setSelectedPlace } = usePlaceStore();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
@@ -150,42 +170,61 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const { selectedListId, clearSelectedList } = useSavedPlacesStore();
   const { flyTo, mapRef } = useMap();
   const userLocation = useMapStore((s) => s.userLocation);
-  const queryClient = useQueryClient();
   const inputRef = useRef<HTMLInputElement>(null);
   const isComposingRef = useRef(false);
   const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [highlightedIndex, setHighlightedIndex] = useState(-1);
+  // Keyed by row rather than position, so rows arriving late cannot slide a
+  // different place under the highlight.
+  const [highlightedKey, setHighlightedKey] = useState<string | null>(null);
   const [barEl, setBarEl] = useState<HTMLDivElement | null>(null);
   const shortcutPlatform = useHydrated() ? getPlatform() : "other";
   const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
-  const { data: autocompleteData, isFetching } = useAutocomplete(debouncedQuery, locale);
-  const { data: geocodeData } = useGeocoding(debouncedGeoQuery, locale);
+
+  // Snapshot of the viewport, read from the map on each render (cheap ref
+  // reads). Suggestions are biased towards it and ranked by distance from it;
+  // the hooks round it, so small pans reuse cached answers.
+  const mapCenterRaw = mapRef.current?.getCenter();
+  const mapCenterLng = mapCenterRaw?.lng;
+  const mapCenterLat = mapCenterRaw?.lat;
+  const mapZoom = mapRef.current?.getZoom();
+  const mapCenter = useMemo<LngLat | null>(
+    () =>
+      mapCenterLng !== undefined && mapCenterLat !== undefined
+        ? [mapCenterLng, mapCenterLat]
+        : null,
+    [mapCenterLng, mapCenterLat],
+  );
+  const suggestionBias = useMemo(
+    () => (mapCenter ? { proximity: mapCenter, zoom: mapZoom } : null),
+    [mapCenter, mapZoom],
+  );
+
+  const {
+    data: autocompleteData,
+    isFetching,
+    isPlaceholderData: autocompletePlaceholder,
+  } = useAutocomplete(debouncedQuery, locale, suggestionBias);
+  const { data: geocodeData } = useGeocoding(debouncedGeoQuery, locale, mapCenter);
   const { data: presetData } = usePresetSuggest(debouncedQuery, locale);
   // One country lookup per ~1° cell: the value only steers brand ranking, so a
   // coarse cell is plenty and keeps the query cache from churning while panning.
-  // Named distinctly from the `mapCenter`/`mapCenterRaw` pair below (used for the
-  // NLP parse snapshot) to avoid redeclaring the same identifier.
-  const brandCenterRaw = mapRef.current?.getCenter();
-  const brandCenterLng = brandCenterRaw?.lng;
-  const brandCenterLat = brandCenterRaw?.lat;
   const countryProbe = useMemo<[number, number] | null>(
     () =>
-      brandCenterLng !== undefined && brandCenterLat !== undefined
-        ? [Math.round(brandCenterLng * 1) / 1, Math.round(brandCenterLat * 1) / 1]
+      mapCenterLng !== undefined && mapCenterLat !== undefined
+        ? [Math.round(mapCenterLng), Math.round(mapCenterLat)]
         : null,
-    [brandCenterLng, brandCenterLat],
+    [mapCenterLng, mapCenterLat],
   );
   const { data: viewportCountry } = useCountryFromCoordinates(countryProbe);
-  const { data: brandData } = useBrandSuggest(debouncedQuery, viewportCountry ?? undefined);
+  // Chains only: operators such as police forces or transit authorities are
+  // catalogued too, but nobody types their name to find a shop.
+  const { data: brandData } = useBrandSuggest(debouncedQuery, viewportCountry ?? undefined, {
+    kind: "brand",
+  });
   const { data: chipTranslations = {} } = useChipTranslations(locale);
+  const recentSearches = useRecentSearchStore((s) => s.entries);
 
-  // NLP search fires on submit when there is no unambiguous exact intent or
-  // confident place match (see handleSubmit). No keyword classifier is used.
-  // Snapshot the current viewport for the parse request. These are cheap ref
-  // reads; the hook's query key rounds the center so tiny pans don't refetch.
-  const mapCenterRaw = mapRef.current?.getCenter();
-  const mapCenter: LngLat | null = mapCenterRaw ? [mapCenterRaw.lng, mapCenterRaw.lat] : null;
   const suggestionDistanceReference: DistanceReference | null = userLocation
     ? { kind: "user_location", coordinates: userLocation }
     : mapCenter
@@ -221,26 +260,29 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // never per keystroke. Any edit to the query resets this (see handleChange).
   const [nlpSubmitted, setNlpSubmitted] = useState(false);
 
-  // Voice search dictation (see VoiceSearchButton) fills the input and, on a
-  // final result, runs through the normal submit path so voice and typed
-  // queries behave identically.
-  const [voicePendingSubmit, setVoicePendingSubmit] = useState(false);
+  // Voice dictation and recent-search rows fill the input and then run through
+  // the normal submit path, so they behave exactly like typing and Enter.
+  const [submitAfterFlush, setSubmitAfterFlush] = useState(false);
   const handleVoiceResult = useCallback(
     (transcript: string, isFinal: boolean) => {
       setNlpSubmitted(false);
       setQuery(transcript);
-      if (isFinal) setVoicePendingSubmit(true);
+      if (isFinal) setSubmitAfterFlush(true);
     },
     [setQuery],
   );
 
-  // Once the final transcript has flushed into the query, submit — deferred to
-  // an effect so the query state has updated before `requestSubmit` reads it.
+  // Once the new text has flushed into the query, submit — deferred to an
+  // effect so the query state has updated before `requestSubmit` reads it.
   useEffect(() => {
-    if (!voicePendingSubmit) return;
-    setVoicePendingSubmit(false);
+    if (!submitAfterFlush) return;
+    setSubmitAfterFlush(false);
     inputRef.current?.form?.requestSubmit();
-  }, [voicePendingSubmit]);
+  }, [submitAfterFlush]);
+
+  // Plain Enter pressed before the suggestions for the typed text arrived:
+  // the text it was pressed for, acted on once they settle (see handleSubmit).
+  const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
 
   // The natural-language parse is opt-out: when AI search is disabled in
   // Settings the parse never fires, so search falls back to plain autocomplete.
@@ -270,7 +312,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       ? "defer-to-server"
       : nlpCloudAccess;
 
-  const { data: nlpData, isFetching: nlpFetching } = useNlpSearch(
+  const {
+    data: nlpData,
+    isFetching: nlpFetching,
+    isError: nlpFailed,
+  } = useNlpSearch(
     debouncedQuery,
     mapCenter,
     mapBbox,
@@ -340,14 +386,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const { data: cityRefData } = useGeocoding(debouncedCity, locale);
 
   useEffect(() => {
-    if (query.trim().length < 2) {
-      setSuggestions([]);
-      queryClient.removeQueries({ queryKey: ["autocomplete"] });
-    } else {
-      setSuggestions(autocompleteData ?? []);
-    }
-    setHighlightedIndex(-1);
-  }, [autocompleteData, query, queryClient, setSuggestions]);
+    setSuggestions(query.trim().length < 2 ? [] : (autocompleteData ?? []));
+  }, [autocompleteData, query, setSuggestions]);
 
   useEffect(() => {
     setResults(geocodeData ?? []);
@@ -367,11 +407,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       }
 
       // Full plus code or short code without city: use map center as reference
-      if (!parsed) {
-        const raw = mapRef.current?.getCenter();
-        const mapCenter: LngLat | undefined = raw ? [raw.lng, raw.lat] : undefined;
-        parsed = parsePlusCodeInput(q, mapCenter);
-      }
+      if (!parsed) parsed = parsePlusCodeInput(q, mapCenter ?? undefined);
     }
 
     if (parsed) {
@@ -384,71 +420,33 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     }
   }
 
-  // Inject matching category suggestions at the top of the dropdown
-  // Merges POI categories (hardcoded) with data source categories (from manifests)
-  const categorySuggestions = useMemo<AutocompleteResult[]>(() => {
-    if (q.length < 1) return [];
-    const lower = q.toLowerCase();
-    const lowerNormalized = lower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-    const poiMatches = CATEGORY_DEFINITIONS.filter((cat) => {
-      if (cat.label.toLowerCase().includes(lower)) return true;
-      const tr = chipTranslations[cat.id];
-      if (!tr) return false;
-      if (
-        tr.name
-          .toLowerCase()
-          .normalize("NFD")
-          .replace(/[\u0300-\u036f]/g, "")
-          .includes(lowerNormalized)
-      ) {
-        return true;
-      }
-      return tr.terms.some((term) => term.includes(lowerNormalized));
-    }).map((cat) => ({
-      id: `category-${cat.id}`,
-      label: chipTranslations[cat.id]?.name ?? cat.label,
-      sublabel: t("searchCategory"),
-      type: "category" as const,
-      iconPath: cat.iconPath,
-    }));
-    const dsMatches = dataSourceCategories
-      .filter((ds) => ds.label.toLowerCase().includes(lower))
-      .map((ds) => ({
-        id: `category-${ds.id}`,
-        label: ds.label,
+  // Built-in POI categories plus the ones integrations register for search.
+  const categorySuggestions = useMemo<AutocompleteResult[]>(
+    () =>
+      matchCategorySuggestions({
+        query: q,
+        categories: CATEGORY_DEFINITIONS,
+        integrationCategories: dataSourceCategories,
+        chipTranslations,
         sublabel: t("searchCategory"),
-        type: "category" as const,
-        iconPath: ds.iconPath,
-      }));
-    // An integration can own the same category ID as the built-in POI list
-    // (parking does). Selection already routes that ID to the integration.
-    const seenIds = new Set<string>();
-    return [...dsMatches, ...poiMatches].filter((suggestion) => {
-      if (seenIds.has(suggestion.id)) return false;
-      seenIds.add(suggestion.id);
-      return true;
-    });
-  }, [q, t, dataSourceCategories, chipTranslations]);
+      }),
+    [q, t, dataSourceCategories, chipTranslations],
+  );
 
-  const brandSuggestions = useMemo<AutocompleteResult[]>(() => {
-    return (brandData?.matches ?? []).map((b) => ({
-      id: `brand:${b.qid}`,
-      label: b.name,
-      sublabel: b.description ?? t("searchBrand"),
-      type: "brand" as const,
-      brand: b,
-    }));
-  }, [brandData, t]);
+  const brandSuggestions = useMemo(
+    () => brandSuggestionRows(brandData?.matches ?? [], t("searchBrand")),
+    [brandData, t],
+  );
 
-  const presetSuggestions = useMemo<AutocompleteResult[]>(() => {
-    return (presetData?.matches ?? []).map((p) => ({
-      id: `category-preset:${p.id}`,
-      label: p.name,
-      sublabel: t("searchCategory"),
-      type: "category" as const,
-      presetIconKey: p.iconKey,
-    }));
-  }, [presetData, t]);
+  const recentSuggestions = useMemo(
+    () => matchRecentSearches(recentSearches, q),
+    [recentSearches, q],
+  );
+
+  const presetSuggestions = useMemo(
+    () => presetSuggestionRows(presetData?.matches ?? [], t("searchCategory")),
+    [presetData, t],
+  );
 
   // Labeled places — match against translated label name, place name, and address
   const labeledSuggestions = useMemo<AutocompleteResult[]>(
@@ -480,55 +478,48 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     [q, labeledPlaces, tSaved],
   );
 
-  const displaySuggestions = useMemo(() => {
-    // Client-side narrowing: keep items where every query token appears
-    // somewhere in label or sublabel. Substring-only matching dropped real
-    // hits like "Frankfurt am Main Airport ..." for the query "Frankfurt
-    // Airport" because the tokens weren't contiguous.
-    const narrowResults = (items: AutocompleteResult[]): AutocompleteResult[] => {
-      if (q.length < 2 || items.length === 0) return items;
-      const tokens = q.toLowerCase().match(/[\p{L}\p{N}]+/gu) ?? [];
-      if (tokens.length === 0) return items;
-      const filtered = items.filter((s) => {
-        const hay = `${s.label} ${s.sublabel ?? ""}`.toLowerCase();
-        return tokens.every((t) => hay.includes(t));
-      });
-      return filtered.length > 0 ? filtered : items;
-    };
-
-    if (syntheticResult) return [syntheticResult];
-
-    const placeSuggestions = mergeAutocompleteSuggestions(
-      [...(aggregateSearchData?.suggestions ?? []), ...narrowResults(suggestions)],
+  const rankedSuggestions = useMemo(
+    () =>
+      rankAutocompleteRows(
+        {
+          saved: labeledSuggestions,
+          recents: recentSuggestions,
+          categories: categorySuggestions,
+          presets: presetSuggestions,
+          brands: brandSuggestions,
+          // Straight from the query, not the store copy an effect writes a
+          // render later: Enter must act on the rows for the text as typed.
+          places: [
+            ...(aggregateSearchData?.suggestions ?? []),
+            ...(q.length >= 2 ? (autocompleteData ?? []) : []),
+          ],
+        },
+        { query: q, proximity: mapCenter ?? undefined, zoom: mapZoom },
+      ),
+    [
       q,
-      mapCenter ?? undefined,
-    );
-    const normalizedQuery = normalizeSearchTerm(q);
-    const isExactGeographicPlace = (suggestion: AutocompleteResult) =>
-      (suggestion.type === "region" ||
-        suggestion.type === "street" ||
-        suggestion.type === "address") &&
-      normalizeSearchTerm(suggestion.label) === normalizedQuery;
-
-    return [
-      ...labeledSuggestions,
-      ...categorySuggestions,
-      ...placeSuggestions.filter(isExactGeographicPlace),
-      ...brandSuggestions,
-      ...presetSuggestions,
-      ...placeSuggestions.filter((suggestion) => !isExactGeographicPlace(suggestion)),
-    ];
-  }, [
-    q,
-    syntheticResult,
-    labeledSuggestions,
-    categorySuggestions,
-    brandSuggestions,
-    presetSuggestions,
-    aggregateSearchData,
-    mapCenter,
-    suggestions,
-  ]);
+      labeledSuggestions,
+      recentSuggestions,
+      categorySuggestions,
+      presetSuggestions,
+      brandSuggestions,
+      aggregateSearchData,
+      autocompleteData,
+      mapCenter,
+      mapZoom,
+    ],
+  );
+  // Coordinates and plus codes name one point; nothing else is worth listing.
+  // Otherwise the plain search of the visible area comes last, for a word that
+  // names a kind of place rather than one of the rows above.
+  const displaySuggestions: AutocompleteResult[] = syntheticResult
+    ? [syntheticResult]
+    : q.length >= 2 && mapCenter
+      ? [
+          ...rankedSuggestions,
+          { id: "text-search", label: t("searchQueryInArea", { query: q }), type: "text_search" },
+        ]
+      : rankedSuggestions;
 
   // Nearby mode: the dropdown shows category suggestions (+ a free-text item)
   // anchored to the place, mirroring the old ExploreSearchBox picker.
@@ -566,6 +557,63 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     surface === "map" && isMobile && !fullScreen ? barEl : null,
   );
 
+  const effectiveSuggestions = nearbyMode ? nearbySuggestions : displaySuggestions;
+  const listIdPrefix = OBSTRUCTION_ID[surface];
+  const highlightedIndex =
+    highlightedKey === null
+      ? -1
+      : effectiveSuggestions.findIndex((row) => rowKey(row) === highlightedKey);
+
+  // Suggestions describe the text as typed only once the debounce has caught
+  // up and no request for it is still in flight or standing in as a placeholder.
+  const suggestionsSettled =
+    debouncedQuery === query &&
+    !isFetching &&
+    !autocompletePlaceholder &&
+    !aggregateSearchFetching &&
+    !aggregateSearchPlaceholder;
+  // Assigned below, where the submit logic is defined; effects run after render.
+  const runSubmitRef = useRef<() => void>(() => {});
+  useEffect(() => {
+    if (pendingSubmit === null) return;
+    if (pendingSubmit !== query) {
+      setPendingSubmit(null);
+      return;
+    }
+    if (suggestionsSettled) {
+      setPendingSubmit(null);
+      runSubmitRef.current();
+      return;
+    }
+    const timer = setTimeout(() => {
+      setPendingSubmit(null);
+      runSubmitRef.current();
+    }, SUBMIT_SETTLE_TIMEOUT_MS);
+    return () => clearTimeout(timer);
+  }, [pendingSubmit, query, suggestionsSettled]);
+
+  // Once a natural-language parse finishes without anything to offer, fall
+  // back to the plain search of the visible area rather than doing nothing.
+  // Not while the answer can still change: a cloud consent prompt or the
+  // automatic retry with cloud access (see the effect above) comes first.
+  const nlpAwaitingCloud =
+    nlpData?.cloudAvailable === true &&
+    !cloudDeclined &&
+    (nlpData.cloudConsentRequired ? !consentGranted && !storedConsent : nlpCloudAccess === "deny");
+  const nlpSettledEmpty =
+    nlpSubmitted &&
+    !nlpFetching &&
+    !waitingForConsent &&
+    !nlpAwaitingCloud &&
+    (nlpFailed || (nlpData !== undefined && !isPlausibleNlSearch(nlpData.intent)));
+  useEffect(() => {
+    if (!nlpSettledEmpty) return;
+    setNlpSubmitted(false);
+    setIsFocused(false);
+    inputRef.current?.blur();
+    launchTextSearch(mapRef.current, query);
+  }, [nlpSettledEmpty, mapRef, query, setIsFocused]);
+
   if (directionsOpen) return null;
 
   const handleActivateNlp = () => {
@@ -582,7 +630,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     inputRef.current?.blur();
   };
 
-  const effectiveSuggestions = nearbyMode ? nearbySuggestions : displaySuggestions;
   // Credit only the geocoder(s) that actually produced the suggestions on
   // screen. Each geocoded item carries its serving integration id
   // (AutocompleteResult.provider, tagged by the geocoding orchestrator);
@@ -644,7 +691,14 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       </Typography>
     </Box>
   ) : null;
-  const showDropdown = isFocused && (effectiveSuggestions.length > 0 || showNlpCard || nlpPending);
+  // While the first results load, the area-search row alone would stand in
+  // for a list; the loading skeleton shows instead until real rows arrive.
+  const awaitingFirstRows =
+    (isFetching || aggregateSearchFetching) &&
+    effectiveSuggestions.every((row) => row.type === "text_search");
+  const showDropdown =
+    isFocused &&
+    ((effectiveSuggestions.length > 0 && !awaitingFirstRows) || showNlpCard || nlpPending);
   const showEmptySearch = isFocused && !nearbyMode && q.length === 0;
 
   const tryOpenTransitStop = async (coords: LngLat, name: string): Promise<boolean> => {
@@ -689,22 +743,34 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     return false;
   };
 
+  const highlightAt = (index: number) => {
+    const row = effectiveSuggestions[index];
+    setHighlightedKey(row ? rowKey(row) : null);
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing || e.keyCode === 229 || isComposingRef.current) return;
-    if (!showDropdown) return;
+    if (!showDropdown) {
+      // Escape closed the list without leaving the input; the arrow keys bring it back.
+      if ((e.key === "ArrowDown" || e.key === "ArrowUp") && q.length > 0) {
+        e.preventDefault();
+        setIsFocused(true);
+      }
+      return;
+    }
     const count = effectiveSuggestions.length;
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setHighlightedIndex((prev) => (prev < count - 1 ? prev + 1 : 0));
+      highlightAt(highlightedIndex < count - 1 ? highlightedIndex + 1 : 0);
     } else if (e.key === "ArrowUp") {
       e.preventDefault();
-      setHighlightedIndex((prev) => (prev > 0 ? prev - 1 : count - 1));
+      highlightAt(highlightedIndex > 0 ? highlightedIndex - 1 : count - 1);
     } else if (e.key === "Enter" && highlightedIndex >= 0) {
       e.preventDefault();
       handleSelectAny(effectiveSuggestions[highlightedIndex]);
     } else if (e.key === "Escape") {
       setIsFocused(false);
-      setHighlightedIndex(-1);
+      setHighlightedKey(null);
     }
   };
 
@@ -723,18 +789,23 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     // Editing the query invalidates any pending/previous NL parse — it must be
     // re-submitted to fire again (keeps the slow parse off the keystroke path).
     if (nlpSubmitted) setNlpSubmitted(false);
+    setHighlightedKey(null);
     setQuery(newValue);
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     updateQuery(e.target.value);
+    // Typing again after Escape reopens the list.
+    setIsFocused(true);
   };
 
+  // A past search runs again, the same as typing it and pressing Enter.
   const handleSelectRecent = (recent: string) => {
     if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
     updateQuery(recent);
     setIsFocused(true);
     inputRef.current?.focus();
+    setSubmitAfterFlush(true);
   };
 
   const handleClearRecent = () => {
@@ -756,66 +827,32 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
       return;
     }
-    addRecentSearch(q);
     if (syntheticResult) {
+      addRecentSearch(q);
       inputRef.current?.blur();
       handleSelect(syntheticResult, false);
       return;
     }
-    // Plain Enter honors a complete, unambiguous category or brand intent.
-    // Category terms are local; debounced server suggestions must belong to
-    // the current input, especially when Enter follows an edit immediately.
-    const intentQuery = normalizeSearchTerm(q);
-    const exactIntents = displaySuggestions.filter((suggestion) => {
-      if (suggestion.type === "category") {
-        if (normalizeSearchTerm(suggestion.label) === intentQuery) {
-          return !suggestion.id.startsWith("category-preset:") || debouncedQuery === query;
-        }
-        if (
-          !suggestion.id.startsWith("category-") ||
-          suggestion.id.startsWith("category-preset:")
-        ) {
-          return false;
-        }
-        const categoryId = suggestion.id.slice("category-".length);
-        if (
-          CATEGORY_DEFINITIONS.some(
-            (category) =>
-              category.id === categoryId && normalizeSearchTerm(category.label) === intentQuery,
-          )
-        ) {
-          return true;
-        }
-        return (chipTranslations[categoryId]?.terms ?? []).some(
-          (term) => normalizeSearchTerm(term) === intentQuery,
-        );
-      }
-      return (
-        suggestion.type === "brand" &&
-        debouncedQuery === query &&
-        normalizeSearchTerm(suggestion.label) === intentQuery
-      );
-    });
-    // Aggregate results carry explicit evidence for aliases and official
-    // codes that cannot be inferred from the displayed place name.
-    const exactPlaces =
-      debouncedQuery === query && !aggregateSearchPlaceholder
-        ? displaySuggestions.filter((suggestion) => {
-            const match = suggestion.searchMatch;
-            return (
-              suggestion.coordinates &&
-              match &&
-              (match.kind === "authoritative_code" ||
-                match.kind === "explicit_reference" ||
-                match.kind === "explicit_alias") &&
-              normalizeSearchTerm(match.normalized) === intentQuery
-            );
-          })
-        : [];
-    const exactChoices = [...exactIntents, ...exactPlaces];
-    if (exactChoices.length === 1) {
+    // Act on the suggestions for exactly this text: wait for them to arrive
+    // rather than choosing from rows that belong to an earlier keystroke.
+    if (!suggestionsSettled) {
+      setPendingSubmit(query);
+      return;
+    }
+    runSubmit();
+  };
+
+  const runSubmit = () => {
+    if (!q) return;
+    addRecentSearch(q);
+    // Plain Enter takes the first row, as shown, when what was typed names it
+    // or starts its name. The list is ranked on one score — exact names, codes,
+    // aliases and category terms included — so the first row is the best
+    // match for this area; Enter never second-guesses it.
+    const top = displaySuggestions[0];
+    if (top && isConfidentTopRow(top, q)) {
       inputRef.current?.blur();
-      handleSelect(exactChoices[0], false);
+      handleSelect(top, false);
       return;
     }
     // Navigate straight to a place ONLY when the top geocode result confidently
@@ -823,8 +860,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     // precise location or transit stop. A low-relevance match (e.g. "Glen Park,
     // Indiana" for "Park mit See in Aachen") must NOT teleport the user — it
     // falls through to the NL parse below instead.
-    const first =
-      exactChoices.length === 0 && debouncedGeoQuery === query ? geocodeData?.[0] : undefined;
+    const first = debouncedGeoQuery === query ? geocodeData?.[0] : undefined;
     if (first) {
       const isTransit = Boolean(first.rawCategory && isTransitRawCategory(first.rawCategory));
       const isPreciseType = first.type !== "poi" || isTransit;
@@ -858,20 +894,32 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     }
     // Not a confident place match → run the NL parse and keep the dropdown open
     // (place candidates + AI card) so the user disambiguates. Never auto-navigate
-    // to a low-relevance geocode result.
-    if (mapCenter && mapBbox) {
+    // to a low-relevance geocode result. A parse with nothing to offer falls
+    // back to the search of the visible area (see nlpSettledEmpty).
+    if (aiSearchEnabled && q.length >= NLP_MIN_QUERY_LENGTH && mapCenter && mapBbox) {
       setNlpSubmitted(true);
       setIsFocused(true);
       return;
     }
-    // No viewport available yet (rare) → viewport free-text search floor.
+    // Without the AI parse, Enter searches the visible area for the text.
+    setIsFocused(false);
     inputRef.current?.blur();
-    if (q.trim().length > 0) {
-      launchTextSearch(mapRef.current, q);
-    }
+    launchTextSearch(mapRef.current, q);
   };
+  runSubmitRef.current = runSubmit;
 
   const handleSelect = (result: AutocompleteResult, recordHistory = true) => {
+    if (result.type === "recent_search") {
+      handleSelectRecent(result.label);
+      return;
+    }
+    if (result.type === "text_search") {
+      addRecentSearch(q);
+      setIsFocused(false);
+      inputRef.current?.blur();
+      launchTextSearch(mapRef.current, q);
+      return;
+    }
     if (recordHistory) addRecentSearch(result.label);
     if (result.type === "labeled_place" && result.coordinates) {
       setQuery(result.label);
@@ -1138,7 +1186,18 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                   ? t("searchNearbyName", { name: anchor.name })
                   : t("placeholder")
               }
-              inputProps={{ id: SEARCH_INPUT_ID, "aria-label": t("ariaLabel") }}
+              inputProps={{
+                id: SEARCH_INPUT_ID,
+                "aria-label": t("ariaLabel"),
+                role: "combobox",
+                "aria-autocomplete": "list",
+                "aria-expanded": showDropdown,
+                "aria-controls": showDropdown ? suggestionListboxId(listIdPrefix) : undefined,
+                "aria-activedescendant":
+                  showDropdown && highlightedIndex >= 0
+                    ? suggestionOptionId(listIdPrefix, highlightedIndex)
+                    : undefined,
+              }}
               sx={{
                 flex: 1,
                 fontSize: 16,
@@ -1333,7 +1392,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                   suggestions={effectiveSuggestions}
                   onSelect={handleSelectAny}
                   highlightedIndex={highlightedIndex}
+                  onHighlight={highlightAt}
                   distanceReference={suggestionDistanceReference}
+                  query={q}
+                  idPrefix={listIdPrefix}
                 />
                 {visibleAttributions.length > 0 && (
                   <Box sx={{ display: "flex", justifyContent: "center", px: 1, py: 0.5 }}>
@@ -1395,7 +1457,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                 suggestions={effectiveSuggestions}
                 onSelect={handleSelectAny}
                 highlightedIndex={highlightedIndex}
+                onHighlight={highlightAt}
                 distanceReference={suggestionDistanceReference}
+                query={q}
+                idPrefix={listIdPrefix}
               />
               {visibleAttributions.length > 0 && (
                 <Box sx={{ display: "flex", justifyContent: "center", px: 1, py: 1 }}>

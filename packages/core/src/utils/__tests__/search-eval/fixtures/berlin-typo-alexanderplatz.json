@@ -1,0 +1,97 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/783052052",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Berlin, Deutschland",
+      "coordinates": [13.4136358, 52.5219814],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3908141014",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Dircksenstraße 2, Berlin, Deutschland",
+      "coordinates": [13.4112804, 52.5215661],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/346206374",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Berlin, Deutschland",
+      "coordinates": [13.4131914, 52.5216438],
+      "type": "street",
+      "rawCategory": "highway/pedestrian",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/3637412",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Panoramastraße, Berlin, Deutschland",
+      "coordinates": [13.4111965, 52.521616],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/315140146",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Rathausstraße, Berlin, Deutschland",
+      "coordinates": [13.4120532, 52.5204665],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/315294362",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Berlin, Deutschland",
+      "coordinates": [13.4126278, 52.5210676],
+      "type": "street",
+      "rawCategory": "highway/elevator",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/574265352",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Dircksenstraße, Berlin, Deutschland",
+      "coordinates": [13.4113785, 52.5215799],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2094266778",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Alexanderplatz, Berlin, Deutschland",
+      "coordinates": [13.413854, 52.5217734],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2094266777",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Dircksenstraße, Berlin, Deutschland",
+      "coordinates": [13.4130283, 52.5212081],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2777153545",
+      "label": "Alexanderplatz",
+      "sublabel": "Alexanderplatz, Alexanderplatz, Berlin, Deutschland",
+      "coordinates": [13.4131913, 52.5216214],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

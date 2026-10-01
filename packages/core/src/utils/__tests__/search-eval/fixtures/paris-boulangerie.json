@@ -1,0 +1,183 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/3358726807",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Rue de Ménilmontant, Paris, France",
+      "coordinates": [2.3837105, 48.8671184],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3611368949",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Rue Saint-Dominique, Paris, France",
+      "coordinates": [2.3086753, 48.8598757],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2287705278",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Rue Lamarck, Paris, France",
+      "coordinates": [2.3308427, 48.8910933],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4363802549",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Villa Curial, Paris, France",
+      "coordinates": [2.3718439, 48.8908476],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1896380470",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Rue Montcalm, Paris, France",
+      "coordinates": [2.3379872, 48.8932962],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1896243049",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Rue Championnet, Paris, France",
+      "coordinates": [2.3435554, 48.8958876],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/3413117",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Corbie, France",
+      "coordinates": [2.5130586, 49.9266709],
+      "type": "poi",
+      "rawCategory": "waterway/river",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10678581288",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Rue Blomet, Paris, France",
+      "coordinates": [2.294716, 48.8381415],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2458086797",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Rue Linois, Paris, France",
+      "coordinates": [2.2853376, 48.8471374],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1668685256",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Place des Pianos 15, Saint-Denis, France",
+      "coordinates": [2.3426998, 48.9195043],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3479384400",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Avenue Marceau, Noisy-le-Sec, France",
+      "coordinates": [2.4590546, 48.8905008],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2319533806",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Avenue du 8 Mai 1945, Vitry-sur-Seine, France",
+      "coordinates": [2.396894, 48.7840638],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/8073933584",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Avenue d'Argenteuil, Bois-Colombes, France",
+      "coordinates": [2.2732789, 48.927129],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5798984612",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Place Elsa Triolet, Sevran, France",
+      "coordinates": [2.5488019, 48.9439207],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2290671102",
+      "label": "boulangerie",
+      "sublabel": "boulangerie, Avenue de la République, Fontenay-le-Fleury, France",
+      "coordinates": [2.0484146, 48.8075578],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5589905828",
+      "label": "Boulangerie",
+      "sublabel": "Boulangerie, Route de Versailles, Magny-les-Hameaux, France",
+      "coordinates": [2.0930208, 48.7245015],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q98383422",
+      "name": "Boulangerie Ange",
+      "description": "French bakery chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q127591514",
+      "name": "Boulangerie Louise",
+      "description": "artisanal bakery chain in France",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q136205449",
+      "name": "Feuillette",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q62082410",
+      "name": "Marie Blachère",
+      "description": "French bakery chain",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": []
+}

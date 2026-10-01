@@ -139,6 +139,7 @@ export { buildHotelOpenUrl } from "./hotelLink";
 export { bareDomain } from "./httpUrl";
 export { formatAddress, legalConfig } from "./legalConfig";
 export { isLodging } from "./lodgingPlace";
+export { type MatchRange, matchRanges } from "./matchRanges";
 export { normalizeConnector } from "./normalize-connector";
 export { matchesAnyOperator, normalizeOperator, operatorKeyMatches } from "./normalize-operator";
 export { validObservedAt } from "./observationTime";
@@ -261,9 +262,13 @@ export {
 export {
   compareSearchSuggestions,
   isUppercaseAcronymIntent,
+  localityScore,
+  MIN_SUGGESTION_TEXT_SCORE,
   mergeAutocompleteSuggestions,
   normalizeSearchTerm,
-  searchMatchTier,
+  type SuggestionScoreContext,
+  suggestionScore,
+  textMatchScore,
 } from "./searchSuggestion";
 export { sectionSlug } from "./sectionSlug";
 export {
@@ -293,6 +298,17 @@ export {
   selectArrowLinks,
 } from "./streetLevelLinks";
 export { formatStreetLevelRef, parseStreetLevelRef } from "./streetLevelRef";
+export {
+  type AutocompleteCandidates,
+  type AutocompleteRowLimits,
+  brandSuggestionRows,
+  DEFAULT_AUTOCOMPLETE_ROW_LIMITS,
+  isConfidentTopRow,
+  matchCategorySuggestions,
+  matchRecentSearches,
+  presetSuggestionRows,
+  rankAutocompleteRows,
+} from "./suggestionRanking";
 export type { TideExtremaOptions, TideExtreme, TideSample } from "./tideExtrema";
 export { despikeSeries, findTideExtrema } from "./tideExtrema";
 export {

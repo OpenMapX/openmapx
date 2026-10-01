@@ -1,0 +1,97 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/7515426",
+      "label": "Musée du Louvre",
+      "sublabel": "Musée du Louvre, Place du Carrousel, Paris, France",
+      "coordinates": [2.3380277, 48.8611473],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/530587",
+      "label": "Louvres",
+      "sublabel": "Louvres, France",
+      "coordinates": [2.5096751, 49.0449139],
+      "type": "region",
+      "rawCategory": "place/town",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11898915481",
+      "label": "Louvre - Rivoli",
+      "sublabel": "Louvre - Rivoli, Rue de Rivoli, Paris, France",
+      "coordinates": [2.3411316, 48.860809],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/563528256",
+      "label": "Louvre",
+      "sublabel": "Louvre, Place du Musée du Louvre, Paris, France",
+      "coordinates": [2.3369745, 48.8607339],
+      "type": "poi",
+      "rawCategory": "shop/books",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4532598859",
+      "label": "Louvre",
+      "sublabel": "Louvre, Port du Louvre, Paris, France",
+      "coordinates": [2.3316205, 48.8600998],
+      "type": "poi",
+      "rawCategory": "amenity/ferry_terminal",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2921238689",
+      "label": "Louvre",
+      "sublabel": "Louvre, Place André Malraux, Paris, France",
+      "coordinates": [2.3351782, 48.8634279],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3497428593",
+      "label": "Louvres",
+      "sublabel": "Louvres, Place de la Gare, Louvres, France",
+      "coordinates": [2.502078, 49.0495594],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/2966074",
+      "label": "Louvrechy",
+      "sublabel": "Louvrechy, France",
+      "coordinates": [2.39422, 49.73298],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/3262297",
+      "label": "Palais du Louvre",
+      "sublabel": "Palais du Louvre, Place du Carrousel, Paris, France",
+      "coordinates": [2.3368747, 48.8614725],
+      "type": "address",
+      "rawCategory": "building/castle",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9133331791",
+      "label": "Louvres",
+      "sublabel": "Louvres, Place de la Gare, Louvres, France",
+      "coordinates": [2.5021239, 49.0495747],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

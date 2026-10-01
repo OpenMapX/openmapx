@@ -1,12 +1,25 @@
+import type { BrandPresence } from "@openmapx/core";
 import type { BrandIndex } from "./loader";
 import { normalize } from "./normalize";
-import type { BrandEntry, BrandMatch } from "./types";
+import type { BrandEntry, BrandKind, BrandMatch } from "./types";
 
 export interface BrandSearchOptions {
   q: string;
   /** Lowercase ISO 3166-1 alpha-2 code of the current viewport, when known. */
   country?: string;
   limit: number;
+  /** Keep only identities catalogued with this role (e.g. chains, not operators). */
+  kind?: BrandKind;
+}
+
+/** NSI's locationSet code for "the whole world". */
+const WORLDWIDE = "001";
+
+function presenceOf(entry: BrandEntry, country: string | undefined): BrandPresence {
+  if (entry.countries.length === 0) return "unknown";
+  if (country && entry.countries.includes(country.toLowerCase())) return "here";
+  if (entry.countries.includes(WORLDWIDE)) return "global";
+  return country ? "elsewhere" : "unknown";
 }
 
 /**
@@ -22,10 +35,12 @@ export interface BrandSearchOptions {
  * between "present here" and "present somewhere else" rather than being
  * punished for missing metadata.
  */
-function countryRank(entry: BrandEntry, country: string | undefined): number {
-  if (!country || entry.countries.length === 0) return 1;
-  return entry.countries.includes(country.toLowerCase()) ? 2 : 0;
-}
+const PRESENCE_RANK: Record<BrandPresence, number> = {
+  here: 2,
+  global: 2,
+  unknown: 1,
+  elsewhere: 0,
+};
 
 interface ScoredHit {
   entry: BrandEntry;
@@ -33,8 +48,21 @@ interface ScoredHit {
   matchedOn: BrandMatch["matchedOn"];
 }
 
+/** True when `qn` starts one of the words of `name` after the first. */
+function startsLaterWord(name: string, qn: string): boolean {
+  let space = name.indexOf(" ");
+  while (space !== -1) {
+    if (name.startsWith(qn, space + 1)) return true;
+    space = name.indexOf(" ", space + 1);
+  }
+  return false;
+}
+
 /**
  * Scores `entry` against the normalized query `qn`.
+ *
+ * Only word starts count: a query inside a word ("rewe" in "brewery") is a
+ * coincidence of spelling, not a reference to the chain.
  *
  * `entry.matchNames` is generated in plain alphabetical order (see
  * `generate.ts`), not canonical-name-first, so `matchNames[0]` cannot be
@@ -54,7 +82,7 @@ function scoreEntry(entry: BrandEntry, qn: string): ScoredHit | undefined {
     let base: number;
     if (name === qn) base = 1000;
     else if (name.startsWith(qn)) base = 500;
-    else if (name.includes(qn)) base = 200;
+    else if (startsLaterWord(name, qn)) base = 300;
     else continue;
 
     const matchedOn: BrandMatch["matchedOn"] = name === canonical ? "name" : "alias";
@@ -69,18 +97,22 @@ export function searchBrands(index: BrandIndex, opts: BrandSearchOptions): Brand
   const qn = normalize(opts.q);
   if (qn.length === 0) return [];
 
-  const hits: (ScoredHit & { country: number })[] = [];
+  const hits: (ScoredHit & { presence: BrandPresence })[] = [];
   for (const entry of index.entries) {
+    if (opts.kind && !entry.kind.includes(opts.kind)) continue;
     const hit = scoreEntry(entry, qn);
     if (!hit) continue;
-    hits.push({ ...hit, country: countryRank(entry, opts.country) });
+    hits.push({ ...hit, presence: presenceOf(entry, opts.country) });
   }
 
   // Text score decides first; country and itemCount only break ties within
   // the same score, so a weaker textual match can never outrank a stronger
   // one just for being in the right country.
   hits.sort(
-    (a, b) => b.score - a.score || b.country - a.country || b.entry.itemCount - a.entry.itemCount,
+    (a, b) =>
+      b.score - a.score ||
+      PRESENCE_RANK[b.presence] - PRESENCE_RANK[a.presence] ||
+      b.entry.itemCount - a.entry.itemCount,
   );
 
   const out: BrandMatch[] = [];
@@ -91,6 +123,7 @@ export function searchBrands(index: BrandIndex, opts: BrandSearchOptions): Brand
       name: hit.entry.name,
       kind: hit.entry.kind,
       matchedOn: hit.matchedOn,
+      presence: hit.presence,
     };
     if (hit.entry.description) match.description = hit.entry.description;
     if (hit.entry.logoFile) match.logoFile = hit.entry.logoFile;

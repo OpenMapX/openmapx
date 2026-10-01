@@ -1,0 +1,143 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/1315190530",
+      "label": "Charité",
+      "sublabel": "Charité, Luisenstraße, Berlin, Deutschland",
+      "coordinates": [13.3787411, 52.5273238],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/4750929",
+      "label": "Charité Campus Virchow Klinikum",
+      "sublabel": "Charité Campus Virchow Klinikum, Westring, Berlin, Deutschland",
+      "coordinates": [13.3431236, 52.5421746],
+      "type": "poi",
+      "rawCategory": "amenity/hospital",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13111205394",
+      "label": "Charitéviertel",
+      "sublabel": "Charitéviertel, Berlin, Deutschland",
+      "coordinates": [13.3785049, 52.5280599],
+      "type": "region",
+      "rawCategory": "place/quarter",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3858919768",
+      "label": "Charité - Campus Mitte",
+      "sublabel": "Charité - Campus Mitte, Charitéplatz 1, Berlin, Deutschland",
+      "coordinates": [13.3791168, 52.5256957],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10231199971",
+      "label": "Charité Comprehensive Cancer Center",
+      "sublabel": "Charité Comprehensive Cancer Center, Invalidenstraße 80, Berlin, Deutschland",
+      "coordinates": [13.3747037, 52.5278444],
+      "type": "poi",
+      "rawCategory": "amenity/clinic",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1472925170",
+      "label": "Charitéstraße",
+      "sublabel": "Charitéstraße, Berlin, Deutschland",
+      "coordinates": [13.3792303, 52.5225625],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/17381892",
+      "label": "Charité – Campus Benjamin Franklin",
+      "sublabel": "Charité – Campus Benjamin Franklin, Hindenburgdamm 30, Berlin, Deutschland",
+      "coordinates": [13.3205439, 52.4419083],
+      "type": "poi",
+      "rawCategory": "amenity/hospital",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/26211974",
+      "label": "Charité Bettenhochhaus",
+      "sublabel": "Charité Bettenhochhaus, Luisenstraße 64, Berlin, Deutschland",
+      "coordinates": [13.3796908, 52.526564],
+      "type": "address",
+      "rawCategory": "building/hospital",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/67751847",
+      "label": "Charité-Untersuchungsstelle für Mitarbeitende",
+      "sublabel": "Charité-Untersuchungsstelle für Mitarbeitende, Mittelallee 1, Berlin, Deutschland",
+      "coordinates": [13.3459545, 52.5418745],
+      "type": "address",
+      "rawCategory": "building/hospital",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13238686401",
+      "label": "Charité Fortbildungsakademie",
+      "sublabel": "Charité Fortbildungsakademie, Buchholzweg 2, Berlin, Deutschland",
+      "coordinates": [13.31796, 52.5454657],
+      "type": "poi",
+      "rawCategory": "amenity/clinic",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/33177962",
+      "label": "Charitéplatz",
+      "sublabel": "Charitéplatz, Berlin, Deutschland",
+      "coordinates": [13.378038, 52.5236041],
+      "type": "street",
+      "rawCategory": "highway/service",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:DE-0461",
+      "ids": {
+        "oa": "DE-0461"
+      },
+      "label": "Charité Clinic Virchow Campus Heliport",
+      "sublabel": "Berlin, DE",
+      "coordinates": [13.34266, 52.54049],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Charité Clinic Virchow Campus Heliport",
+        "normalized": "charite clinic virchow campus heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0464",
+      "ids": {
+        "oa": "DE-0464"
+      },
+      "label": "Charité Clinic Benjamin Franklin Campus Heliport",
+      "sublabel": "Berlin, DE",
+      "coordinates": [13.32286, 52.44135],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Charité Clinic Benjamin Franklin Campus Heliport",
+        "normalized": "charite clinic benjamin franklin campus heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

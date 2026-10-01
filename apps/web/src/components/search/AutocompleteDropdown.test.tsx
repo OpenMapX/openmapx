@@ -30,7 +30,7 @@ describe("AutocompleteDropdown", () => {
     expect(screen.queryByText("Berlin")).not.toBe(null);
     expect(screen.queryByText("Hamburg")).not.toBe(null);
     expect(screen.getAllByText("search.resultTypeArea · Germany").length).toBe(2);
-    expect(screen.getAllByRole("button").length).toBe(2);
+    expect(screen.getAllByRole("option").length).toBe(2);
   });
 
   it("removes repeated names and address parts from the displayed place description", () => {
@@ -141,7 +141,7 @@ describe("AutocompleteDropdown", () => {
     );
 
     screen.getByText("search.resultTypeAddress · 0 m search.fromMapCenter");
-    expect(screen.getByRole("button", { name: /Unknown/ }).textContent).not.toContain(
+    expect(screen.getByRole("option", { name: /Unknown/ }).textContent).not.toContain(
       "fromMapCenter",
     );
   });
@@ -163,7 +163,7 @@ describe("AutocompleteDropdown", () => {
     );
 
     screen.getByText("search.resultTypeStreet");
-    expect(screen.getAllByRole("button")[1].querySelector("p")?.textContent).toBe(
+    expect(screen.getAllByRole("option")[1].querySelector("p")?.textContent).toBe(
       "search.resultTypePlace · Near the old bridge,  upstairs",
     );
   });
@@ -205,7 +205,7 @@ describe("AutocompleteDropdown", () => {
     });
     render(<AutocompleteDropdown suggestions={[suggestion]} onSelect={onSelect} />);
 
-    await user.click(screen.getByRole("button", { name: /Aachen Hauptbahnhof/ }));
+    await user.click(screen.getByRole("option", { name: /Aachen Hauptbahnhof/ }));
 
     expect(onSelect).toHaveBeenCalledWith(suggestion);
     expect(onSelect.mock.calls[0]?.[0]).toBe(suggestion);
@@ -238,7 +238,7 @@ describe("AutocompleteDropdown", () => {
       <AutocompleteDropdown suggestions={suggestions} onSelect={vi.fn()} highlightedIndex={1} />,
     );
 
-    const buttons = screen.getAllByRole("button");
+    const buttons = screen.getAllByRole("option");
     expect(buttons[1].className).toContain("Mui-selected");
     expect(buttons[0].className).not.toContain("Mui-selected");
   });
@@ -259,7 +259,7 @@ describe("AutocompleteDropdown", () => {
     );
 
     expect(screen.getByText("FRA").className).toContain("MuiChip-label");
-    screen.getByRole("button", { name: /Frankfurt am Main Airport.*FRA/i });
+    screen.getByRole("option", { name: /Frankfurt am Main Airport.*FRA/i });
   });
 
   it("does not render an empty or redundant badge for an ordinary result", () => {
@@ -289,9 +289,95 @@ describe("AutocompleteDropdown", () => {
     });
     render(<AutocompleteDropdown suggestions={[suggestion]} onSelect={onSelect} />);
 
-    await user.click(screen.getByRole("button", { name: /Frankfurt am Main Airport.*FRA/i }));
+    await user.click(screen.getByRole("option", { name: /Frankfurt am Main Airport.*FRA/i }));
 
     const selected = onSelect.mock.calls[0]?.[0] as AutocompleteResult;
     expect(selected.label).toBe("Frankfurt am Main Airport");
+  });
+
+  it("bolds the part of each label that the typed words start", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({ label: "Café Einstein" }),
+          makeResult({ id: "b", label: "Bar" }),
+        ]}
+        onSelect={vi.fn()}
+        query="cafe"
+      />,
+    );
+
+    const bold = [...document.querySelectorAll("strong")].map((node) => node.textContent);
+    expect(bold).toEqual(["Café"]);
+    expect(screen.getByRole("option", { name: /Café Einstein/ })).toBeInTheDocument();
+  });
+
+  it("exposes a listbox whose options the input can point at", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[makeResult({ id: "a" }), makeResult({ id: "b", label: "Two" })]}
+        onSelect={vi.fn()}
+        highlightedIndex={1}
+        idPrefix="search-bar"
+      />,
+    );
+
+    expect(screen.getByRole("listbox").id).toBe("search-bar-listbox");
+    const options = screen.getAllByRole("option");
+    expect(options.map((option) => option.id)).toEqual([
+      "search-bar-option-0",
+      "search-bar-option-1",
+    ]);
+    expect(options[1].getAttribute("aria-selected")).toBe("true");
+    expect(options[0].getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("describes airports as airports, not transit stops", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({
+            label: "Coffee Point Airstrip",
+            sublabel: "Egegik, US",
+            type: "poi",
+            rawCategory: "aeroway/aerodrome",
+          }),
+        ]}
+        onSelect={vi.fn()}
+      />,
+    );
+
+    screen.getByText("search.resultTypeAirport · Egegik, US");
+  });
+
+  it("labels recent searches and leaves the area-search row undescribed", () => {
+    render(
+      <AutocompleteDropdown
+        suggestions={[
+          makeResult({ id: "recent:x", label: "Berlin cafes", type: "recent_search" }),
+          makeResult({ id: "text-search", label: "Search in this area", type: "text_search" }),
+        ]}
+        onSelect={vi.fn()}
+        query="berlin"
+      />,
+    );
+
+    screen.getByText("search.recentSearch");
+    expect(screen.getAllByRole("option")[1].textContent).toBe("Search in this area");
+  });
+
+  it("moves the highlight with the mouse", async () => {
+    const user = userEvent.setup();
+    const onHighlight = vi.fn();
+    render(
+      <AutocompleteDropdown
+        suggestions={[makeResult({ id: "a" }), makeResult({ id: "b", label: "Two" })]}
+        onSelect={vi.fn()}
+        onHighlight={onHighlight}
+      />,
+    );
+
+    await user.hover(screen.getByRole("option", { name: /Two/ }));
+    expect(onHighlight).toHaveBeenCalledWith(1);
   });
 });

@@ -4,6 +4,7 @@ import AutoAwesomeIcon from "@mui/icons-material/AutoAwesome";
 import CategoryIcon from "@mui/icons-material/Category";
 import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import FlagIcon from "@mui/icons-material/Flag";
+import HistoryIcon from "@mui/icons-material/History";
 import HomeIcon from "@mui/icons-material/Home";
 import LocationOnIcon from "@mui/icons-material/LocationOn";
 import SearchIcon from "@mui/icons-material/Search";
@@ -19,6 +20,7 @@ import type { AutocompleteResult, DistanceReference } from "@openmapx/core";
 import {
   formatMeasurementDistance,
   isTransitRawCategory,
+  matchRanges,
   normalizeSearchTerm,
   resultDistanceMetres,
   useSettingsStore,
@@ -33,7 +35,44 @@ interface AutocompleteDropdownProps {
   suggestions: AutocompleteResult[];
   onSelect: (result: AutocompleteResult) => void;
   highlightedIndex?: number;
+  /** Mouse hover moves the keyboard highlight too, so both point at one row. */
+  onHighlight?: (index: number) => void;
   distanceReference?: DistanceReference | null;
+  /** The text typed; the part of each label it matches is shown in bold. */
+  query?: string;
+  /**
+   * Prefix for the listbox and option ids, so the search input can point at
+   * the highlighted option (`aria-activedescendant`). Unique per mounted list.
+   */
+  idPrefix?: string;
+}
+
+export function suggestionListboxId(idPrefix: string): string {
+  return `${idPrefix}-listbox`;
+}
+
+export function suggestionOptionId(idPrefix: string, index: number): string {
+  return `${idPrefix}-option-${index}`;
+}
+
+const AIRPORT_RAW_CATEGORY = "aeroway/aerodrome";
+
+function HighlightedLabel({ label, query }: { label: string; query?: string }) {
+  const ranges = query ? matchRanges(label, query) : [];
+  if (ranges.length === 0) return <>{label}</>;
+  const parts: React.ReactNode[] = [];
+  let cursor = 0;
+  for (const [start, end] of ranges) {
+    if (start > cursor) parts.push(label.slice(cursor, start));
+    parts.push(
+      <Box component="strong" key={start} sx={{ fontWeight: 600 }}>
+        {label.slice(start, end)}
+      </Box>,
+    );
+    cursor = end;
+  }
+  if (cursor < label.length) parts.push(label.slice(cursor));
+  return <>{parts}</>;
 }
 
 const labeledPlaceIcon: Record<string, React.ReactNode> = {
@@ -51,6 +90,8 @@ const iconByType: Record<AutocompleteResult["type"], React.ReactNode> = {
   labeled_place: <FlagIcon sx={{ fontSize: 20, color: BRAND }} />,
   nlp_search: <AutoAwesomeIcon sx={{ fontSize: 20, color: BRAND }} />,
   brand: <CategoryIcon sx={{ fontSize: 20, color: BRAND }} />,
+  recent_search: <HistoryIcon sx={{ fontSize: 20, color: "text.secondary" }} />,
+  text_search: <SearchIcon sx={{ fontSize: 20, color: BRAND }} />,
 };
 
 function CategorySvgIcon({ path }: { path: string }) {
@@ -115,6 +156,8 @@ function resultDescription(s: AutocompleteResult, t: (key: string) => string): s
     const action = t("searchBrand");
     return s.sublabel && s.sublabel !== action ? `${action} · ${s.sublabel}` : action;
   }
+  if (s.type === "recent_search") return t("recentSearch");
+  if (s.type === "text_search") return undefined;
 
   const typeKeys: Partial<Record<AutocompleteResult["type"], string>> = {
     address: "resultTypeAddress",
@@ -124,7 +167,11 @@ function resultDescription(s: AutocompleteResult, t: (key: string) => string): s
     transit_stop: "resultTypeStop",
   };
   const typeKey =
-    s.rawCategory && isTransitRawCategory(s.rawCategory) ? "resultTypeStop" : typeKeys[s.type];
+    s.rawCategory === AIRPORT_RAW_CATEGORY
+      ? "resultTypeAirport"
+      : s.rawCategory && isTransitRawCategory(s.rawCategory)
+        ? "resultTypeStop"
+        : typeKeys[s.type];
   if (!typeKey) return s.sublabel;
 
   const address = conciseAddress(s.label, s.sublabel);
@@ -135,7 +182,10 @@ export function AutocompleteDropdown({
   suggestions,
   onSelect,
   highlightedIndex = -1,
+  onHighlight,
   distanceReference,
+  query,
+  idPrefix,
 }: AutocompleteDropdownProps) {
   const t = useTranslations("search");
   const units = useSettingsStore((s) => s.units);
@@ -150,7 +200,13 @@ export function AutocompleteDropdown({
   if (suggestions.length === 0) return null;
 
   return (
-    <List dense disablePadding>
+    <List
+      dense
+      disablePadding
+      role="listbox"
+      id={idPrefix ? suggestionListboxId(idPrefix) : undefined}
+      aria-label={t("suggestionsLabel")}
+    >
       {suggestions.map((s, i) => {
         const matchedValue = s.searchMatch?.value.trim();
         const showMatchedValue =
@@ -169,13 +225,20 @@ export function AutocompleteDropdown({
             : null;
         return (
           <li
-            key={`${s.id}-${s.type}-${s.sublabel ?? i}`}
+            key={`${s.type}:${s.id}`}
             ref={i === highlightedIndex ? activeRef : undefined}
+            role="presentation"
             style={{ listStyle: "none" }}
           >
-            {i > 0 && <Divider />}
+            {i > 0 && <Divider aria-hidden />}
             <ListItemButton
+              role="option"
+              id={idPrefix ? suggestionOptionId(idPrefix, i) : undefined}
+              aria-selected={i === highlightedIndex}
+              // Focus stays in the search input; arrow keys move the highlight.
+              tabIndex={-1}
               onClick={() => onSelect(s)}
+              onMouseEnter={onHighlight ? () => onHighlight(i) : undefined}
               selected={i === highlightedIndex}
               sx={{ px: 2, py: 1 }}
             >
@@ -184,7 +247,11 @@ export function AutocompleteDropdown({
                 primary={
                   <Box component="span" sx={{ display: "flex", alignItems: "center", gap: 0.75 }}>
                     <Box component="span" sx={{ minWidth: 0 }}>
-                      {s.label}
+                      {s.type === "text_search" ? (
+                        s.label
+                      ) : (
+                        <HighlightedLabel label={s.label} query={query} />
+                      )}
                     </Box>
                     {showMatchedValue && (
                       <Chip

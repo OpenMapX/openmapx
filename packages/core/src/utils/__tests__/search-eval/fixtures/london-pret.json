@@ -1,0 +1,328 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/100799861",
+      "label": "Pret A Manger",
+      "sublabel": "Pret A Manger, Borough High Street 167, London, United Kingdom",
+      "coordinates": [-0.091817, 51.5026869],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/356675368",
+      "label": "Pret A Manger",
+      "sublabel": "Pret A Manger, Notting Hill Gate 67, London, United Kingdom",
+      "coordinates": [-0.1967075, 51.5088241],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/449059452",
+      "label": "Preto",
+      "sublabel": "Preto, Wilton Road 73, London, United Kingdom",
+      "coordinates": [-0.1404383, 51.4929167],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/71408539",
+      "label": "Pret A Manger",
+      "sublabel": "Pret A Manger, Villiers Street 25, London, United Kingdom",
+      "coordinates": [-0.1238101, 51.5082235],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/289660520",
+      "label": "Pret A Manger",
+      "sublabel": "Pret A Manger, Piccadilly, London, United Kingdom",
+      "coordinates": [-0.137881, 51.5089024],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1338817545",
+      "label": "Pret A Manger",
+      "sublabel": "Pret A Manger, Cambridge Street 35, Sheffield, United Kingdom",
+      "coordinates": [-1.4715343, 53.3787183],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6450234396",
+      "label": "Preto",
+      "sublabel": "Preto, The Meadows 1-3, Chelmsford, United Kingdom",
+      "coordinates": [0.4750354, 51.7319622],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/332254742",
+      "label": "Preto",
+      "sublabel": "Preto, High Street 59, Colchester, United Kingdom",
+      "coordinates": [0.9015364, 51.8895577],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13478764303",
+      "label": "Prettygate",
+      "sublabel": "Prettygate, Colchester, United Kingdom",
+      "coordinates": [0.8657725, 51.8812829],
+      "type": "region",
+      "rawCategory": "place/suburb",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/353160372",
+      "label": "Prettigate Farm",
+      "sublabel": "Prettigate Farm, Brentwood, United Kingdom",
+      "coordinates": [0.3165201, 51.5708801],
+      "type": "region",
+      "rawCategory": "landuse/farmyard",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1436410188",
+      "label": "Pretoria Road",
+      "sublabel": "Pretoria Road, London, United Kingdom",
+      "coordinates": [-0.0014577, 51.6290104],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:DE-0340",
+      "ids": {
+        "oa": "DE-0340"
+      },
+      "label": "Pretzschendorf Ultralight Airfield",
+      "sublabel": "Klingenberg, DE",
+      "coordinates": [13.531042, 50.884038],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pretzschendorf Ultralight Airfield",
+        "normalized": "pretzschendorf ultralight airfield"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CA-0538",
+      "ids": {
+        "oa": "CA-0538"
+      },
+      "label": "Pretty Estates Resort Airport",
+      "sublabel": "Harrison Mills, CA",
+      "coordinates": [-121.945846, 49.252372],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pretty Estates Resort Airport",
+        "normalized": "pretty estates resort airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-2940",
+      "ids": {
+        "oa": "US-2940"
+      },
+      "label": "Pretzer Strip",
+      "sublabel": "Eloy, US",
+      "coordinates": [-111.54253, 32.66873],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pretzer Strip",
+        "normalized": "pretzer strip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:ZA-0021",
+      "ids": {
+        "oa": "ZA-0021",
+        "iata": "HPR"
+      },
+      "label": "Pretoria Central Heliport",
+      "sublabel": "Pretoria, ZA",
+      "coordinates": [28.220600128173828, -25.65570068359375],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pretoria Central Heliport",
+        "normalized": "pretoria central heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:BR-1067",
+      "ids": {
+        "oa": "BR-1067"
+      },
+      "label": "Pretel 88 Heliport",
+      "sublabel": "Itaí, BR",
+      "coordinates": [-49.103269, -23.6905],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pretel 88 Heliport",
+        "normalized": "pretel 88 heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:BR-1669",
+      "ids": {
+        "oa": "BR-1669"
+      },
+      "label": "Curva Preta Airport",
+      "sublabel": "Curva Preta, BR",
+      "coordinates": [-42.514944, -4.01847],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Curva Preta Airport",
+        "normalized": "curva preta airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:BR-2508",
+      "ids": {
+        "oa": "BR-2508"
+      },
+      "label": "Cara Preta Airport",
+      "sublabel": "Itaituba, BR",
+      "coordinates": [-57.482498168945, -5.1061110496521],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Cara Preta Airport",
+        "normalized": "cara preta airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SIPG",
+      "ids": {
+        "oa": "SIPG"
+      },
+      "label": "Fazenda Água Preta Airport",
+      "sublabel": "Cocalinho, BR",
+      "coordinates": [-51.469531, -14.137595],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fazenda Água Preta Airport",
+        "normalized": "fazenda agua preta airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q2109109",
+      "name": "Pret a Manger",
+      "description": "international sandwich shop chain based in the United Kingdom",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q7242321",
+      "name": "Pretzelmaker",
+      "description": "US bakery chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q111448708",
+      "name": "Petit Pret",
+      "description": "Brand of Pret a Manger",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q115728208",
+      "name": "Mr. Pretzels",
+      "description": "chain of pretzel kiosks and stores",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q112673244",
+      "name": "Gato Preto",
+      "description": "interior decoration retail chain based in Portugal",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q60097339",
+      "name": "Philly Pretzel Factory",
+      "description": "American soft pretzel franchise",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q7990205",
+      "name": "Wetzel's Pretzels",
+      "description": "U.S. restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q4822010",
+      "name": "Auntie Anne's",
+      "description": "American pretzel shops",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "global"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/vending_machine/food/snacks",
+      "name": "Snack Vending Machine",
+      "tags": {
+        "amenity": "vending_machine",
+        "vending": "food",
+        "food": "snacks"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

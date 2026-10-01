@@ -97,7 +97,11 @@ export function createGeocoderSuggestionProvider(
       const box = options.coverage?.();
       if (box && query.proximity && !withinBox(query.proximity, box)) return empty();
 
-      const rows = await options.geocoder.autocomplete(query.query, query.lang);
+      const rows = await options.geocoder.autocomplete(
+        query.query,
+        query.lang,
+        query.proximity ? { proximity: query.proximity } : undefined,
+      );
       signal.throwIfAborted();
 
       const suggestions: SearchSuggestion[] = [];

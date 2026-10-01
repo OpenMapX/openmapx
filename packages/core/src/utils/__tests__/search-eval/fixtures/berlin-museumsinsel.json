@@ -1,0 +1,97 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/9082329700",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Schloßfreiheit, Berlin, Deutschland",
+      "coordinates": [13.3988844, 52.5172626],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/330840129",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Am Lustgarten, Berlin, Deutschland",
+      "coordinates": [13.3978155, 52.5200335],
+      "type": "poi",
+      "rawCategory": "tourism/attraction",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/18138763",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Schloßfreiheit, Berlin, Deutschland",
+      "coordinates": [13.3986663, 52.5172876],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7974955393",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Schloßfreiheit, Berlin, Deutschland",
+      "coordinates": [13.399394, 52.5171411],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/8321484181",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Am Zeughaus, Berlin, Deutschland",
+      "coordinates": [13.3978351, 52.5179113],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7974928190",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Schinkelplatz, Berlin, Deutschland",
+      "coordinates": [13.3981241, 52.5174146],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/8752579964",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Unter den Linden, Berlin, Deutschland",
+      "coordinates": [13.3970315, 52.5173519],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/951972983",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, München, Deutschland",
+      "coordinates": [11.5850271, 48.1309592],
+      "type": "region",
+      "rawCategory": "place/islet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3359511516",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Lüttenheid, Heide (Holstein), Deutschland",
+      "coordinates": [9.0961542, 54.1930607],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/449591367",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, München, Deutschland",
+      "coordinates": [11.5857783, 48.1318577],
+      "type": "street",
+      "rawCategory": "highway/service",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

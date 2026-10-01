@@ -1,4 +1,7 @@
-import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
+import type {
+  GeocodingBias,
+  GeocodingProvider as GeocodingProviderImpl,
+} from "@openmapx/integration-geocoding/types";
 /**
  * MapTiler Geocoding API client.
  * Requires MAPTILER_KEY env var.
@@ -39,7 +42,25 @@ interface MaptilerFeature {
   geometry: { coordinates: [number, number] };
   address?: string;
   context?: Array<{ id: string; text: string }>;
-  properties?: { categories?: string[] };
+  properties?: {
+    categories?: string[];
+    /** Settlement rank of an area ("city", "town", "hamlet"), when MapTiler knows it. */
+    place_designation?: string;
+  };
+}
+
+/**
+ * The raw category the ranking reads: a POI's category, or an area's rank as
+ * `place/<rank>` — the settlement designation when present, else the place
+ * type. Without it Munich (a "county" to MapTiler) and a hamlet named Coffee
+ * would look equally prominent.
+ */
+function rawCategoryOf(f: MaptilerFeature): string | undefined {
+  const category = f.properties?.categories?.[0];
+  if (category) return category;
+  const placeType = f.place_type[0];
+  if (!placeType || placeType === "poi" || placeType === "address") return undefined;
+  return `place/${f.properties?.place_designation ?? placeType}`;
 }
 
 interface MaptilerResponse {
@@ -128,12 +149,18 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
     return { address: feature.place_name, city: [cityName, region].filter(Boolean).join(", ") };
   },
 
-  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
-    const data = await fetchMaptiler(
-      query,
-      { limit: "6", autocomplete: "true", types: SEARCH_TYPES },
-      lang,
-    );
+  async autocomplete(
+    query: string,
+    lang?: string,
+    bias?: GeocodingBias,
+  ): Promise<AutocompleteResult[]> {
+    const params: Record<string, string> = {
+      limit: "6",
+      autocomplete: "true",
+      types: SEARCH_TYPES,
+    };
+    if (bias) params.proximity = `${bias.proximity[0]},${bias.proximity[1]}`;
+    const data = await fetchMaptiler(query, params, lang);
     return data.features.map((f) => {
       const category = f.properties?.categories?.[0];
       return {
@@ -143,7 +170,7 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
         coordinates: f.geometry.coordinates,
         type: mapType(f.place_type),
         iconPath: category ? resolvePoiIconPath(category) : undefined,
-        rawCategory: category,
+        rawCategory: rawCategoryOf(f),
       };
     });
   },

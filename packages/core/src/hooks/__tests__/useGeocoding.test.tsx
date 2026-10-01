@@ -2,7 +2,7 @@ import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
-import { createQueryWrapper } from "../../test/queryWrapper";
+import { createQueryWrapper, createTestQueryClient } from "../../test/queryWrapper";
 import { useGeocoding } from "../useGeocoding";
 
 describe("useGeocoding", () => {
@@ -38,6 +38,28 @@ describe("useGeocoding", () => {
       { q: "Berlin" },
       expect.objectContaining({ signal: expect.anything(), timeoutMs: 8_000 }),
     );
+  });
+
+  it("sends the proximity rounded to 2 dp and keys on it", async () => {
+    const spy = vi.spyOn(apiClient, "get").mockResolvedValue([] as never);
+
+    const queryClient = createTestQueryClient();
+    const { result } = renderHook(() => useGeocoding("coffee", "de", [13.40471, 52.52049]), {
+      wrapper: createQueryWrapper(queryClient),
+    });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    expect(spy).toHaveBeenCalledWith(
+      API_ENDPOINTS.geocode,
+      { q: "coffee", lang: "de", lat: "52.52", lng: "13.40" },
+      expect.objectContaining({ signal: expect.anything() }),
+    );
+    expect(
+      queryClient.getQueryCache().find({
+        queryKey: ["geocode", "coffee", "de", "52.52", "13.40"],
+        exact: true,
+      }),
+    ).toBeDefined();
   });
 
   it("does not fire for a query shorter than 3 characters", () => {

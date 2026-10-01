@@ -1,5 +1,6 @@
 export type {
   AutocompleteResult,
+  GeocodingBias,
   GeocodingProvider,
   ReverseGeocodingResult,
   SearchResult,

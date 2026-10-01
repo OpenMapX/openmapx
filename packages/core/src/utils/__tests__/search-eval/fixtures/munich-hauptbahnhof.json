@@ -1,0 +1,259 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/1061193856",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofplatz, München, Deutschland",
+      "coordinates": [11.5612445, 48.1399167],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/43338416",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofplatz, München, Deutschland",
+      "coordinates": [11.5612098, 48.140175],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/107975495",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofplatz, München, Deutschland",
+      "coordinates": [11.5611554, 48.1399924],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2665022805",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofplatz, München, Deutschland",
+      "coordinates": [11.5611002, 48.1400169],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3278115861",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofplatz, München, Deutschland",
+      "coordinates": [11.5610962, 48.1401455],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9331589410",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofplatz, München, Deutschland",
+      "coordinates": [11.5612095, 48.1399762],
+      "type": "poi",
+      "rawCategory": "railway/tram_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1387235817",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Place de la Gare, Straßburg, Frankreich",
+      "coordinates": [7.7352284, 48.585004],
+      "type": "poi",
+      "rawCategory": "railway/tram_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/30478830",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Place de la Gare, Straßburg, Frankreich",
+      "coordinates": [7.7351989, 48.5849738],
+      "type": "poi",
+      "rawCategory": "railway/tram_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/4257415",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Wilsonova, Prag, Tschechien",
+      "coordinates": [14.434411, 50.0834519],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/233444291",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bismarckallee 7, Freiburg im Breisgau, Deutschland",
+      "coordinates": [7.8423399, 47.9982505],
+      "type": "poi",
+      "rawCategory": "amenity/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/192231442",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Hegelstraße, Tübingen, Deutschland",
+      "coordinates": [9.0550751, 48.5150847],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/28697572",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofstraße 20, Bayreuth, Deutschland",
+      "coordinates": [11.5794644, 49.9495761],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/24569897",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Wilsonova 8, Prag, Tschechien",
+      "coordinates": [14.4341259, 50.0835035],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/8024103",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofstraße 3, Reutlingen, Deutschland",
+      "coordinates": [9.2095559, 48.4960354],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/208757644",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Hauptbahnhof 1, Freudenstadt, Deutschland",
+      "coordinates": [8.4286711, 48.4605227],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2293773566",
+      "label": "HBF",
+      "sublabel": "HBF, Bahnhofplatz, Ulm, Deutschland",
+      "coordinates": [9.9833788, 48.4012167],
+      "type": "poi",
+      "rawCategory": "amenity/car_sharing",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/976510431",
+      "label": "Hbf",
+      "sublabel": "Hbf, Am Bahnhof, Zwickau, Deutschland",
+      "coordinates": [12.4770561, 50.7153765],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11090742481",
+      "label": "HBF",
+      "sublabel": "HBF, The West Deck, Perth, Australien",
+      "coordinates": [115.777324, -31.8773309],
+      "type": "poi",
+      "rawCategory": "office/insurance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3673691118",
+      "label": "HBF",
+      "sublabel": "HBF, Bahnhofstraße, Chemnitz, Deutschland",
+      "coordinates": [12.929283, 50.8370761],
+      "type": "poi",
+      "rawCategory": "amenity/car_sharing",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2305245154",
+      "label": "Hbf",
+      "sublabel": "Hbf, Willy-Brandt-Platz, Erfurt, Deutschland",
+      "coordinates": [11.0381318, 50.9731439],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11801318854",
+      "label": "hbf",
+      "sublabel": "hbf, شارع الاسكان - الاشتراكي, البلدية الثالثة, Irak",
+      "coordinates": [44.3506678, 32.0053363],
+      "type": "poi",
+      "rawCategory": "shop/mall",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/17249621",
+      "label": "Hbf Ffm (tief), Gleise 101+102",
+      "sublabel": "Hbf Ffm (tief), Gleise 101+102, Frankfurt am Main, Deutschland",
+      "coordinates": [8.662391, 50.1070834],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1579651884",
+      "label": "Hbf Landshut",
+      "sublabel": "Hbf Landshut, Bahnhofplatz 1, Landshut, Deutschland",
+      "coordinates": [12.1363604, 48.5470517],
+      "type": "poi",
+      "rawCategory": "amenity/atm",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/661071244",
+      "label": "HBF Süd/Arcaden",
+      "sublabel": "HBF Süd/Arcaden, Galgenbergbrücke, Regensburg, Deutschland",
+      "coordinates": [12.1019631, 49.010528],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6764130464",
+      "label": "hbf GmbH Unternehmensberatung, Softwareentwicklung",
+      "sublabel": "hbf GmbH Unternehmensberatung, Softwareentwicklung, Beim Alten Wasen 21, Nagold, Deutschland",
+      "coordinates": [8.7293627, 48.5577218],
+      "type": "poi",
+      "rawCategory": "office/it",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3721847042",
+      "label": "HBF/Kanalstraße",
+      "sublabel": "HBF/Kanalstraße, Kanalstraße, Coburg, Deutschland",
+      "coordinates": [10.9598443, 50.2630228],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2725563940",
+      "label": "Pirna",
+      "sublabel": "Pirna, Bahnhofstraße, Pirna, Deutschland",
+      "coordinates": [13.9283908, 50.9625036],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": [
+    {
+      "id": "building/train_station",
+      "name": "Bahnhofsgebäude",
+      "tags": {
+        "building": "train_station"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

@@ -6,7 +6,10 @@ import {
 } from "@motis-project/motis-client";
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import { formatAddress } from "@openmapx/integration-geocoding/format-address";
-import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
+import type {
+  GeocodingBias,
+  GeocodingProvider as GeocodingProviderImpl,
+} from "@openmapx/integration-geocoding/types";
 import { uniqueModes } from "./mode-map.js";
 
 // MOTIS declares array query params (here the geocode `language` list) as
@@ -143,16 +146,20 @@ export const motisGeocodingService: GeocodingProviderImpl = {
     }
   },
 
-  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
+  async autocomplete(
+    query: string,
+    lang?: string,
+    bias?: GeocodingBias,
+  ): Promise<AutocompleteResult[]> {
+    const geocodeQuery = {
+      text: query,
+      language: lang ? [lang] : undefined,
+      // MOTIS biases towards `place` ("lat,lon"); it has no zoom-scaled radius.
+      place: bias ? `${bias.proximity[1]},${bias.proximity[0]}` : undefined,
+    };
     const instance = await preferredMotisClient();
     try {
-      const { data } = await motisGeocode({
-        client: instance.client,
-        query: {
-          text: query,
-          language: lang ? [lang] : undefined,
-        },
-      });
+      const { data } = await motisGeocode({ client: instance.client, query: geocodeQuery });
       const results = (data ?? []).map((m) => matchToAutocompleteResult(m, instance));
       if (results.length > 0 || instance === transitousInstance) return results;
     } catch {
@@ -162,10 +169,7 @@ export const motisGeocodingService: GeocodingProviderImpl = {
     try {
       const { data } = await motisGeocode({
         client: transitousInstance.client,
-        query: {
-          text: query,
-          language: lang ? [lang] : undefined,
-        },
+        query: geocodeQuery,
       });
       return (data ?? []).map((m) => matchToAutocompleteResult(m, transitousInstance));
     } catch {

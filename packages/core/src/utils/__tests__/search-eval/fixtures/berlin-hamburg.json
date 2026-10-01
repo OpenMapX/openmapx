@@ -1,0 +1,366 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/1860480265",
+      "label": "Hamburger Bahnhof - Nationalgalerie der Gegenwart",
+      "sublabel": "Hamburger Bahnhof - Nationalgalerie der Gegenwart, Invalidenstraße 50-51, Berlin, Deutschland",
+      "coordinates": [13.3720386, 52.52844],
+      "type": "poi",
+      "rawCategory": "tourism/gallery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/175464203",
+      "label": "Hamburger Bahnhof",
+      "sublabel": "Hamburger Bahnhof, Invalidenstraße 50-51, Berlin, Deutschland",
+      "coordinates": [13.3718665, 52.5286316],
+      "type": "address",
+      "rawCategory": "building/civic",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9623204649",
+      "label": "Hamburger Platz",
+      "sublabel": "Hamburger Platz, Berlin, Deutschland",
+      "coordinates": [13.4391466, 52.5555382],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/420036064",
+      "label": "Hamburger Platz",
+      "sublabel": "Hamburger Platz, Gustav-Adolf-Straße, Berlin, Deutschland",
+      "coordinates": [13.438107, 52.5551516],
+      "type": "street",
+      "rawCategory": "highway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4200225209",
+      "label": "Hamburger Platz",
+      "sublabel": "Hamburger Platz, Gustav-Adolf-Straße, Berlin, Deutschland",
+      "coordinates": [13.4381951, 52.55512],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1317772544",
+      "label": "Hamburger Platz",
+      "sublabel": "Hamburger Platz, Gustav-Adolf-Straße, Berlin, Deutschland",
+      "coordinates": [13.4400428, 52.5560051],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/62782",
+      "label": "Hamburg",
+      "sublabel": "Hamburg, Deutschland",
+      "coordinates": [10.0013165, 53.5501721],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/118113147",
+      "label": "Hamburg",
+      "sublabel": "Hamburg, Neuwerk, Deutschland",
+      "coordinates": [10.872879, 51.7526988],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/846969812",
+      "label": "Hamburg",
+      "sublabel": "Hamburg, Neuwerk, Deutschland",
+      "coordinates": [10.8724303, 51.7534405],
+      "type": "street",
+      "rawCategory": "highway/tertiary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10202530820",
+      "label": "Hamburg",
+      "sublabel": "Hamburg, Gnutz, Deutschland",
+      "coordinates": [9.8139455, 54.1257263],
+      "type": "region",
+      "rawCategory": "place/isolated_dwelling",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2459919677",
+      "label": "Hamburg Hauptbahnhof",
+      "sublabel": "Hamburg Hauptbahnhof, Südsteg, Hamburg, Deutschland",
+      "coordinates": [10.0075644, 53.5526959],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1921672607",
+      "label": "Hamburg",
+      "sublabel": "Hamburg, Moskevská, Aussig, Tschechien",
+      "coordinates": [14.0324734, 50.6626129],
+      "type": "poi",
+      "rawCategory": "amenity/pub",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13701769124",
+      "label": "Hamburg",
+      "sublabel": "Hamburg, Hamburg, Neuwerk, Deutschland",
+      "coordinates": [10.8736985, 51.752673],
+      "type": "poi",
+      "rawCategory": "information/board",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/147122729",
+      "label": "Hamburger Flughafen Helmut Schmidt",
+      "sublabel": "Hamburger Flughafen Helmut Schmidt, Semnonenweg, Hamburg, Deutschland",
+      "coordinates": [9.9945501, 53.6363621],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:EDDH",
+      "ids": {
+        "oa": "EDDH",
+        "iata": "HAM",
+        "icao": "EDDH"
+      },
+      "label": "Hamburg Helmut Schmidt Airport",
+      "sublabel": "Hamburg, DE",
+      "coordinates": [9.98823, 53.630402],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hamburg Helmut Schmidt Airport",
+        "normalized": "hamburg helmut schmidt airport"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:EDHI",
+      "ids": {
+        "oa": "EDHI",
+        "iata": "XFW",
+        "icao": "EDHI"
+      },
+      "label": "Hamburg-Finkenwerder Airport",
+      "sublabel": "Hamburg, DE",
+      "coordinates": [9.835556, 53.535278],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hamburg-Finkenwerder Airport",
+        "normalized": "hamburg finkenwerder airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:4G2",
+      "ids": {
+        "oa": "4G2"
+      },
+      "label": "Hamburg Inc Airport",
+      "sublabel": "Hamburg, US",
+      "coordinates": [-78.91480255126953, 42.70090103149414],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hamburg Inc Airport",
+        "normalized": "hamburg inc airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CA-1037",
+      "ids": {
+        "oa": "CA-1037"
+      },
+      "label": "Hamburg Airport",
+      "sublabel": "Manning, CA",
+      "coordinates": [-119.76531, 57.355285],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hamburg Airport",
+        "normalized": "hamburg airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0492",
+      "ids": {
+        "oa": "DE-0492"
+      },
+      "label": "Hamburg Military Hospital Helipad",
+      "sublabel": "Hamburg, DE",
+      "coordinates": [10.077857, 53.596875],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hamburg Military Hospital Helipad",
+        "normalized": "hamburg military hospital helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SSNV",
+      "ids": {
+        "oa": "SSNV"
+      },
+      "label": "Fazenda Novo Hamburgo Airport",
+      "sublabel": "Corumbá, BR",
+      "coordinates": [-57.029720306396484, -19.233055114746094],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fazenda Novo Hamburgo Airport",
+        "normalized": "fazenda novo hamburgo airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SSNH",
+      "ids": {
+        "oa": "SSNH",
+        "iata": "QHV"
+      },
+      "label": "Novo Hamburgo Airport",
+      "sublabel": "Novo Hamburgo, BR",
+      "coordinates": [-51.08169937133789, -29.69610023498535],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Novo Hamburgo Airport",
+        "normalized": "novo hamburgo airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-3774",
+      "ids": {
+        "oa": "US-3774"
+      },
+      "label": "Baptist Health Hamburg Heliport",
+      "sublabel": "Lexington, US",
+      "coordinates": [-84.418583, 38.033833],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Baptist Health Hamburg Heliport",
+        "normalized": "baptist health hamburg heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q1573140",
+      "name": "Hamburger Sparkasse",
+      "description": "Savings Bank in Germany",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q4703422",
+      "name": "Hamburguesas El Corral",
+      "description": "Colombian restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q1151671",
+      "name": "DAK-Gesundheit",
+      "description": "German health insurance company",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "here"
+    },
+    {
+      "qid": "Q1231375",
+      "name": "Sparda-Bank Hamburg",
+      "description": "cooperative bank headquartered in Hamburg, Germany",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q17061887",
+      "name": "Nation's Giant Hamburgers",
+      "description": "American restaurant chain founded in California",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q2326366",
+      "name": "StadtRAD Hamburg",
+      "description": "bicycle-sharing system in Hamburg, Germany",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q6860268",
+      "name": "Milo's Hamburgers",
+      "description": "fast food chain in Alabama, US",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q16828673",
+      "name": "Byron Hamburgers",
+      "description": "British restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/fast_food/burger",
+      "name": "Burger Fast Food",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "burger"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/restaurant",
+      "name": "Restaurant",
+      "tags": {
+        "amenity": "restaurant"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

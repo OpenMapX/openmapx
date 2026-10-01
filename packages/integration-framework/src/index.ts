@@ -70,6 +70,7 @@ export type {
   DataSourceResult,
   DirectionsResult,
   ForecastAirQualityQuery,
+  GeocodingBias,
   GeocodingProvider,
   GtfsCatalogFeed,
   GtfsCatalogProvider,

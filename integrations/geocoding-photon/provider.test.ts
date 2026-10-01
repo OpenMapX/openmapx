@@ -175,6 +175,76 @@ describe("Photon geocoding provider", () => {
     expect(results[1]?.sublabel).toBeUndefined();
   });
 
+  const params = (call: number) => new URL(String(mockFetch.mock.calls[call]?.[0])).searchParams;
+  const photonFeature = (osmId: number, name: string) => ({
+    geometry: { coordinates: [13.4, 52.52] },
+    properties: { osm_id: osmId, osm_type: "N", osm_key: "amenity", osm_value: "cafe", name },
+  });
+
+  it("asks once near the map and once wide, so both nearby and famous far places come back", async () => {
+    mockFetch.mockImplementation(async () => mockOk({ features: [] }));
+
+    await photonService.autocomplete("coffee", "de", { proximity: [13.4, 52.52], zoom: 20.7 });
+
+    const local = params(0);
+    expect(local.get("lat")).toBe("52.52");
+    expect(local.get("lon")).toBe("13.4");
+    expect(local.get("zoom")).toBe("14");
+    expect(local.get("location_bias_scale")).toBe("0.2");
+    const wide = params(1);
+    expect(wide.get("lat")).toBe("52.52");
+    expect(wide.get("zoom")).toBe("10");
+    expect(wide.get("location_bias_scale")).toBe("0.5");
+    expect(wide.get("limit")).toBe("10");
+  });
+
+  it("keeps a zoomed-out map's own radius and defaults the radius without a zoom", async () => {
+    mockFetch.mockImplementation(async () => mockOk({ features: [] }));
+
+    await photonService.autocomplete("coffee", "de", { proximity: [13.4, 52.52], zoom: 6.4 });
+    await photonService.autocomplete("coffee", "de", { proximity: [13.4, 52.52] });
+
+    expect([params(0).get("zoom"), params(1).get("zoom")]).toEqual(["6", "6"]);
+    expect([params(2).get("zoom"), params(3).get("zoom")]).toEqual(["14", "10"]);
+  });
+
+  it("sends a single unbiased lookup without a location", async () => {
+    mockFetch.mockImplementation(async () => mockOk({ features: [] }));
+
+    await photonService.autocomplete("coffee", "de");
+
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(params(0).has("lat")).toBe(false);
+    expect(params(0).has("zoom")).toBe(false);
+  });
+
+  it("merges both lookups without repeating a place, nearby answers first", async () => {
+    mockFetch
+      .mockResolvedValueOnce(
+        mockOk({ features: [photonFeature(1, "Near"), photonFeature(2, "Both")] }),
+      )
+      .mockResolvedValueOnce(
+        mockOk({ features: [photonFeature(2, "Both"), photonFeature(3, "Far")] }),
+      );
+
+    const results = await photonService.autocomplete("coffee", "de", { proximity: [13.4, 52.52] });
+
+    expect(results.map((result) => result.label)).toEqual(["Near", "Both", "Far"]);
+  });
+
+  it("answers from one lookup when the other fails, and fails only when both do", async () => {
+    mockFetch
+      .mockRejectedValueOnce(new Error("timeout"))
+      .mockResolvedValueOnce(mockOk({ features: [photonFeature(3, "Far")] }));
+    const results = await photonService.autocomplete("coffee", "de", { proximity: [13.4, 52.52] });
+    expect(results.map((result) => result.label)).toEqual(["Far"]);
+
+    mockFetch.mockRejectedValue(new Error("down"));
+    await expect(
+      photonService.autocomplete("coffee", "de", { proximity: [13.4, 52.52] }),
+    ).rejects.toThrow();
+  });
+
   it("builds a reverse-geocode address with city + state", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({

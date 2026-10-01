@@ -30,6 +30,18 @@ const SEARCH_DEFAULT_LIMIT = 8;
 const NEAREST_DEFAULT_LIMIT = 5;
 const NEAREST_MAX_LIMIT = 10;
 
+/**
+ * Suggestion prominence by airport size. Only airports with scheduled traffic
+ * are destinations people search for from far away; an airstrip or heliport
+ * should surface only when it is close by or its code was typed.
+ */
+const AIRPORT_IMPORTANCE: Partial<Record<AirportType, number>> = {
+  large_airport: 0.9,
+  medium_airport: 0.7,
+  small_airport: 0.2,
+};
+const MINOR_AIRFIELD_IMPORTANCE = 0.1;
+
 interface SearchHit {
   id: number;
   ident: string;
@@ -110,8 +122,7 @@ export function createOurAirportsSuggestionProvider(
             normalized: normalizeSearchTerm(matchedValue),
             namespace,
           },
-          importance:
-            record.type === "large_airport" ? 0.9 : record.type === "medium_airport" ? 0.7 : 0.5,
+          importance: AIRPORT_IMPORTANCE[record.type] ?? MINOR_AIRFIELD_IMPORTANCE,
           provider: "knowledge-ourairports",
           contributingProviders: ["knowledge-ourairports"],
         })),

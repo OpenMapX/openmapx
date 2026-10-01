@@ -1,0 +1,141 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/23490165",
+      "label": "IKEA",
+      "sublabel": "IKEA, Sachsendamm 47, Berlin, Germany",
+      "coordinates": [13.3663219, 52.4696506],
+      "type": "poi",
+      "rawCategory": "shop/furniture",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/89793912",
+      "label": "IKEA",
+      "sublabel": "IKEA, Landsberger Allee 364, Berlin, Germany",
+      "coordinates": [13.514577, 52.5338376],
+      "type": "poi",
+      "rawCategory": "shop/furniture",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/23492513",
+      "label": "IKEA",
+      "sublabel": "IKEA, Gewerbehof 10, Berlin, Germany",
+      "coordinates": [13.21453, 52.5282537],
+      "type": "poi",
+      "rawCategory": "shop/furniture",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/454216856",
+      "label": "IKEA Planning Studio",
+      "sublabel": "IKEA Planning Studio, Breite Straße 33, Berlin, Germany",
+      "coordinates": [13.4071613, 52.5698979],
+      "type": "poi",
+      "rawCategory": "shop/furniture",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1128110268",
+      "label": "IKEA Abholbox",
+      "sublabel": "IKEA Abholbox, Berlin, Germany",
+      "coordinates": [13.3679801, 52.4697425],
+      "type": "poi",
+      "rawCategory": "amenity/parcel_locker",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12923554401",
+      "label": "IKEA Bistro",
+      "sublabel": "IKEA Bistro, Sachsendamm 47, Berlin, Germany",
+      "coordinates": [13.3671468, 52.4695641],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/23492662",
+      "label": "IKEA",
+      "sublabel": "IKEA, Am Rondell 8, Schönefeld, Germany",
+      "coordinates": [13.5556446, 52.3669092],
+      "type": "poi",
+      "rawCategory": "shop/furniture",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/61648345",
+      "label": "IKEA",
+      "sublabel": "IKEA, Babelsberger Straße 16, Potsdam, Germany",
+      "coordinates": [13.0645216, 52.3923387],
+      "type": "poi",
+      "rawCategory": "shop/furniture",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/399023273",
+      "label": "Ikea",
+      "sublabel": "Ikea, Leuna, Germany",
+      "coordinates": [12.1822186, 51.3480349],
+      "type": "street",
+      "rawCategory": "highway/pedestrian",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/889362484",
+      "label": "IKEA",
+      "sublabel": "IKEA, Białowieska 2, Szczecin, Poland",
+      "coordinates": [14.5131307, 53.4072248],
+      "type": "poi",
+      "rawCategory": "shop/furniture",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1669956914",
+      "label": "IKEA",
+      "sublabel": "IKEA, Ebendorfer Chaussee, Magdeburg, Germany",
+      "coordinates": [11.6151644, 52.1663178],
+      "type": "poi",
+      "rawCategory": "railway/tram_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1266820733",
+      "label": "IKEA",
+      "sublabel": "IKEA, Lerchenwuhne, Magdeburg, Germany",
+      "coordinates": [11.6149172, 52.1654807],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/149674683",
+      "label": "IKEA",
+      "sublabel": "IKEA, Großer Kannenstieg, Magdeburg, Germany",
+      "coordinates": [11.6153798, 52.1663465],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q54078",
+      "name": "IKEA",
+      "description": "Swedish multinational furniture store chain",
+      "kind": ["brand", "operator"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q131629951",
+      "name": "IKEA parcel point",
+      "description": "Hungarian parcel locker brand",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": []
+}

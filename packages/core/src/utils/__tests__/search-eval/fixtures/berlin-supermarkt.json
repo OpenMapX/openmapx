@@ -1,0 +1,150 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/28949703",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Denkzeichenweg, Berlin, Deutschland",
+      "coordinates": [13.229864, 52.5212279],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4766133866",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Bahnhofstraße, Berlin, Deutschland",
+      "coordinates": [13.3991349, 52.3868759],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11816936442",
+      "label": "Supermarkt Al Qubitry",
+      "sublabel": "Supermarkt Al Qubitry, Steglitzer Damm, Berlin, Deutschland",
+      "coordinates": [13.3420791, 52.4504068],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13587921011",
+      "label": "Supermarkt FamilienHaus",
+      "sublabel": "Supermarkt FamilienHaus, Johannisthaler Chaussee, Berlin, Deutschland",
+      "coordinates": [13.4391442, 52.4237681],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10215601814",
+      "label": "Supermarkt Ali Baba",
+      "sublabel": "Supermarkt Ali Baba, Dörpfeldstraße 31, Berlin, Deutschland",
+      "coordinates": [13.5471333, 52.4374569],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/434492758",
+      "label": "Supermarkt Rose",
+      "sublabel": "Supermarkt Rose, Carl-Schurz-Straße, Berlin, Deutschland",
+      "coordinates": [13.2033126, 52.5374568],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10067832973",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Krakower Chaussee, Krakow am See, Deutschland",
+      "coordinates": [12.3712144, 53.6192839],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/132999464",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Dannenbütteler Weg, Westerbeck, Deutschland",
+      "coordinates": [10.6294088, 52.5093523],
+      "type": "poi",
+      "rawCategory": "amenity/bicycle_parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/575172353",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Markt 16, Nossen, Deutschland",
+      "coordinates": [13.2991457, 51.0580302],
+      "type": "poi",
+      "rawCategory": "shop/greengrocer",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/914792734",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Neue Straße, Bischofferode, Deutschland",
+      "coordinates": [10.44439, 51.4994524],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/455562266",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Vierlindenweg, Hannover, Deutschland",
+      "coordinates": [9.788131, 52.3885735],
+      "type": "poi",
+      "rawCategory": "tourism/attraction",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13974413914",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Anton-Ulrich-Straße 26, Meiningen, Deutschland",
+      "coordinates": [10.4142245, 50.5661731],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q2200982",
+      "name": "Jan Linders Supermarkten",
+      "description": "Dutch supermarket chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q2262314",
+      "name": "Jumbo",
+      "description": "Dutch supermarket chain",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": [
+    {
+      "id": "shop/supermarket",
+      "name": "Supermarkt",
+      "tags": {
+        "shop": "supermarket"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "shop/supermarket/organic",
+      "name": "Bio-Supermarkt",
+      "tags": {
+        "shop": "supermarket",
+        "organic": "only"
+      },
+      "matchedOn": "name"
+    }
+  ]
+}

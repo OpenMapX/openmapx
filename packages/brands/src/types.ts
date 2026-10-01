@@ -1,4 +1,4 @@
-import type { BrandDetail, BrandKind, BrandSummary } from "@openmapx/core";
+import type { BrandDetail, BrandKind, BrandPresence, BrandSummary } from "@openmapx/core";
 
 /** One catalogued chain, operator, or network — keyed by its Wikidata QID. */
 export type BrandEntry = BrandDetail;
@@ -20,6 +20,8 @@ export interface BrandArtifact {
 export type BrandMatch = BrandSummary & {
   /** Which field produced the highest score. Useful for UI hints / debugging. */
   matchedOn: "name" | "alias";
+  /** Where the chain operates relative to the country searched from. */
+  presence: BrandPresence;
 };
 
 export type { BrandKind };

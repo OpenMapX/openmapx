@@ -1,0 +1,170 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/335706233",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Friedrichstrasse 142, Berlin, Germany",
+      "coordinates": [13.3863082, 52.5203292],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/578429141",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Grunerstraße 20, Berlin, Germany",
+      "coordinates": [13.4158213, 52.5183074],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5586524802",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Friedrichstrasse 207, Berlin, Germany",
+      "coordinates": [13.3902172, 52.5073218],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3097509454",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Leipziger Platz 12, Berlin, Germany",
+      "coordinates": [13.3798327, 52.51004],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/406983404",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Europaplatz 1, Berlin, Germany",
+      "coordinates": [13.3684184, 52.5257185],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/381418957",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Am Ostbahnhof, Berlin, Germany",
+      "coordinates": [13.4351278, 52.509434],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/44028017",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Mecklenburgische Straße 65-68, Berlin, Germany",
+      "coordinates": [13.3078709, 52.4773134],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/812225735",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Schloßstraße 4-5, Berlin, Germany",
+      "coordinates": [13.3271869, 52.4639805],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/390470723",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Am Juliusturm 42-46, Berlin, Germany",
+      "coordinates": [13.2191283, 52.537582],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3772689495",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Landsberger Chaussee 17, Ahrensfelde, Germany",
+      "coordinates": [13.5982371, 52.5491897],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/175357589",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Adlergestell 289A, Berlin, Germany",
+      "coordinates": [13.5470572, 52.4319144],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/76091929",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Wendenschlossstraße 2, Berlin, Germany",
+      "coordinates": [13.5929504, 52.4480808],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/33542954",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Am Lückefeld 6, Blankenfelde-Mahlow, Germany",
+      "coordinates": [13.4330271, 52.3585353],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/461899526",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Am Pechpfuhl, Schönefeld, Germany",
+      "coordinates": [13.561218, 52.367542],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/39812863",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Parkallee 2, Ludwigsfelde, Germany",
+      "coordinates": [13.3138109, 52.3082312],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/158944327",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, Fritz-Zubeil-Straße 95, Potsdam, Germany",
+      "coordinates": [13.1113036, 52.3761364],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:CA-1222",
+      "ids": {
+        "oa": "CA-1222"
+      },
+      "label": "McDonalds Corners Airstrip",
+      "sublabel": "CA",
+      "coordinates": [-76.545482, 44.952552],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "McDonalds Corners Airstrip",
+        "normalized": "mcdonalds corners airstrip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

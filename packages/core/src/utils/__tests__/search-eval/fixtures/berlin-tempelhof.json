@@ -1,0 +1,134 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/162894",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Berlin, Deutschland",
+      "coordinates": [13.3959089, 52.4649016],
+      "type": "region",
+      "rawCategory": "boundary/administrative",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1871042745",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Hoeppnerstraße, Berlin, Deutschland",
+      "coordinates": [13.3844457, 52.4709704],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5679382211",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Tempelhofer Damm, Berlin, Deutschland",
+      "coordinates": [13.3856268, 52.4695462],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/316775452",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Tempelhofer Damm, Berlin, Deutschland",
+      "coordinates": [13.3847758, 52.4708272],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3045559653",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Tempelhofer Damm, Berlin, Deutschland",
+      "coordinates": [13.385507, 52.469892],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4598092910",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Tempelhofer Damm, Berlin, Deutschland",
+      "coordinates": [13.3856007, 52.470381],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/692620569",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Polen",
+      "coordinates": [15.00239, 52.90127],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/8123222",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Polen",
+      "coordinates": [16.7461489, 52.3826666],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/158437",
+      "label": "Tempelhof-Schöneberg",
+      "sublabel": "Tempelhof-Schöneberg, Berlin, Deutschland",
+      "coordinates": [13.3893312, 52.4487714],
+      "type": "region",
+      "rawCategory": "place/borough",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5045890374",
+      "label": "Tempelhof",
+      "sublabel": "Tempelhof, Schladen-Werla, Deutschland",
+      "coordinates": [10.5872055, 52.0519458],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:DE-0456",
+      "ids": {
+        "oa": "DE-0456"
+      },
+      "label": "Berlin Tempelhof International Airport",
+      "sublabel": "Berlin, DE",
+      "coordinates": [13.404599, 52.472451],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Tempelhof International Airport",
+        "normalized": "berlin tempelhof international airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0463",
+      "ids": {
+        "oa": "DE-0463"
+      },
+      "label": "Berlin Tempelhof Heliport",
+      "sublabel": "Berlin, DE",
+      "coordinates": [13.39561, 52.48243],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Tempelhof Heliport",
+        "normalized": "berlin tempelhof heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

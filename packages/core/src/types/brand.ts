@@ -33,6 +33,12 @@ export interface BrandDetail extends BrandSummary {
   itemCount: number;
 }
 
+/**
+ * Where a chain operates relative to the country asked about: listed there,
+ * listed as worldwide, catalogued without countries, or only elsewhere.
+ */
+export type BrandPresence = "here" | "global" | "unknown" | "elsewhere";
+
 export interface BrandSuggestResponse {
-  matches: (BrandSummary & { matchedOn: "name" | "alias" })[];
+  matches: (BrandSummary & { matchedOn: "name" | "alias"; presence: BrandPresence })[];
 }

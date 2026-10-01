@@ -1,0 +1,250 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/1776221273",
+      "label": "Oslo S",
+      "sublabel": "Oslo S, Nylandsveien, Oslo, Norway",
+      "coordinates": [10.7564891, 59.9106179],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1776221282",
+      "label": "Oslo S",
+      "sublabel": "Oslo S, Nylandsveien, Oslo, Norway",
+      "coordinates": [10.7567188, 59.9108577],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1776221274",
+      "label": "Oslo S",
+      "sublabel": "Oslo S, Trelastgata, Oslo, Norway",
+      "coordinates": [10.7556583, 59.9097462],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1776221280",
+      "label": "Oslo S",
+      "sublabel": "Oslo S, Trelastgata, Oslo, Norway",
+      "coordinates": [10.7558282, 59.9099206],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1776221266",
+      "label": "Oslo S",
+      "sublabel": "Oslo S, Nylandsveien, Oslo, Norway",
+      "coordinates": [10.7560602, 59.9101623],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1776221277",
+      "label": "Oslo S",
+      "sublabel": "Oslo S, Nylandsveien, Oslo, Norway",
+      "coordinates": [10.7561934, 59.910301],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/10568134",
+      "label": "Oslo Spektrum",
+      "sublabel": "Oslo Spektrum, Lybekkergata, Oslo, Norway",
+      "coordinates": [10.7546593, 59.9129638],
+      "type": "poi",
+      "rawCategory": "amenity/theatre",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6593517802",
+      "label": "Oslo skolemuseum",
+      "sublabel": "Oslo skolemuseum, Wilses gate, Oslo, Norway",
+      "coordinates": [10.7499149, 59.9182871],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/256247617",
+      "label": "Oslo sjøflyplass, Fornebu",
+      "sublabel": "Oslo sjøflyplass, Fornebu, Martin Linges vei, Bærum, Norway",
+      "coordinates": [10.6332328, 59.8935211],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/4390875",
+      "label": "Oslo Central Station",
+      "sublabel": "Oslo Central Station, Exit towards Jernbanetorget, Oslo, Norway",
+      "coordinates": [10.7528442, 59.9109281],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/660921",
+      "label": "Oslo Central Station",
+      "sublabel": "Oslo Central Station, Main Station Hallway, Oslo, Norway",
+      "coordinates": [10.7531379, 59.9110251],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/7757342",
+      "label": "University of Oslo",
+      "sublabel": "University of Oslo, Stensberggata, Oslo, Norway",
+      "coordinates": [10.7227683, 59.9414173],
+      "type": "poi",
+      "rawCategory": "amenity/university",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/818875346",
+      "label": "Landingsstripe Oslo lufthavns rullebane FBU",
+      "sublabel": "Landingsstripe Oslo lufthavns rullebane FBU, Oksenøyveien, Høvik, Norway",
+      "coordinates": [10.5975545, 59.8896265],
+      "type": "poi",
+      "rawCategory": "historic/preserved",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/870940069",
+      "label": "Oslo katedralskole",
+      "sublabel": "Oslo katedralskole, Ullevålsveien, Oslo, Norway",
+      "coordinates": [10.7411779, 59.9210702],
+      "type": "poi",
+      "rawCategory": "amenity/school",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/33204291",
+      "label": "Oslo Cathedral",
+      "sublabel": "Oslo Cathedral, Kirkeristen, Oslo, Norway",
+      "coordinates": [10.747012, 59.9125115],
+      "type": "poi",
+      "rawCategory": "amenity/place_of_worship",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/24900009",
+      "label": "Oslo rådhus",
+      "sublabel": "Oslo rådhus, Hieronymus Heyerdahls gate, Oslo, Norway",
+      "coordinates": [10.7337247, 59.9120806],
+      "type": "poi",
+      "rawCategory": "amenity/townhall",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "nsr:StopPlace:59872",
+      "ids": {
+        "entur": "NSR:StopPlace:59872",
+        "nsr": "StopPlace:59872"
+      },
+      "label": "Oslo S",
+      "sublabel": "Oslo",
+      "coordinates": [10.753051, 59.910357],
+      "type": "transit_stop",
+      "rawCategory": "railStation",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo S",
+        "normalized": "oslo s"
+      },
+      "importance": 0.7,
+      "provider": "geocoding-entur"
+    },
+    {
+      "id": "entur:OSM:TopographicPlace:7118275595",
+      "label": "Espresso House Oslo S Hovedhallen",
+      "sublabel": "Oslo",
+      "coordinates": [10.752276, 59.911116],
+      "type": "poi",
+      "rawCategory": "cafe",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Espresso House Oslo S Hovedhallen",
+        "normalized": "espresso house oslo s hovedhallen"
+      },
+      "importance": 0.5,
+      "provider": "geocoding-entur"
+    },
+    {
+      "id": "entur:OSM:TopographicPlace:3132099332",
+      "label": "Boots Oslo S",
+      "sublabel": "Oslo",
+      "coordinates": [10.75172, 59.91145],
+      "type": "poi",
+      "rawCategory": "pharmacy",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Boots Oslo S",
+        "normalized": "boots oslo s"
+      },
+      "importance": 0.5,
+      "provider": "geocoding-entur"
+    },
+    {
+      "id": "entur:OSM:TopographicPlace:6821148278",
+      "label": "Vitusapotek Byporten (Oslo S)",
+      "sublabel": "Oslo",
+      "coordinates": [10.753069, 59.911451],
+      "type": "poi",
+      "rawCategory": "pharmacy",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Vitusapotek Byporten (Oslo S)",
+        "normalized": "vitusapotek byporten oslo s"
+      },
+      "importance": 0.5,
+      "provider": "geocoding-entur"
+    },
+    {
+      "id": "nsr:GroupOfStopPlaces:1",
+      "label": "Oslo",
+      "sublabel": "Oslo",
+      "coordinates": [10.748128, 59.911076],
+      "type": "poi",
+      "rawCategory": "GroupOfStopPlaces",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo",
+        "normalized": "oslo"
+      },
+      "importance": 0.5,
+      "provider": "geocoding-entur"
+    },
+    {
+      "id": "nsr:StopPlace:58211",
+      "ids": {
+        "entur": "NSR:StopPlace:58211",
+        "nsr": "StopPlace:58211"
+      },
+      "label": "Oslo lufthavn",
+      "sublabel": "Ullensaker, Akershus",
+      "coordinates": [11.097887, 60.193361],
+      "type": "transit_stop",
+      "rawCategory": "railStation",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo lufthavn",
+        "normalized": "oslo lufthavn"
+      },
+      "importance": 0.7,
+      "provider": "geocoding-entur"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

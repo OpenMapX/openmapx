@@ -31,12 +31,49 @@ describe("searchBrands", () => {
     expect(result.map((r) => r.qid)).toEqual(["Q1", "Q2"]);
   });
 
-  it("ranks a prefix match above a substring match", () => {
+  it("ranks a prefix match above a later-word match", () => {
     const result = searchBrands(
-      index([entry({ qid: "Q1", name: "Superstar" }), entry({ qid: "Q2", name: "Starbucks" })]),
+      index([entry({ qid: "Q1", name: "Super Star" }), entry({ qid: "Q2", name: "Starbucks" })]),
       { q: "star", limit: 10 },
     );
     expect(result.map((r) => r.qid)).toEqual(["Q2", "Q1"]);
+  });
+
+  it("does not match text in the middle of a word", () => {
+    const result = searchBrands(
+      index([entry({ qid: "Q1", name: "Palmers Brewery" }), entry({ qid: "Q2", name: "REWE" })]),
+      { q: "rewe", limit: 10 },
+    );
+    expect(result.map((r) => r.qid)).toEqual(["Q2"]);
+  });
+
+  it("keeps only entries with the requested role", () => {
+    const result = searchBrands(
+      index([
+        entry({ qid: "Q1", name: "Brandenburg Police", kind: ["operator"] }),
+        entry({ qid: "Q2", name: "Brandenburger Hof", kind: ["brand", "operator"] }),
+      ]),
+      { q: "brandenb", limit: 10, kind: "brand" },
+    );
+    expect(result.map((r) => r.qid)).toEqual(["Q2"]);
+  });
+
+  it("reports where the chain operates relative to the requested country", () => {
+    const result = searchBrands(
+      index([
+        entry({ qid: "Q1", name: "Star One", countries: ["de"] }),
+        entry({ qid: "Q2", name: "Star Two", countries: ["001"] }),
+        entry({ qid: "Q3", name: "Star Three", countries: [] }),
+        entry({ qid: "Q4", name: "Star Four", countries: ["us"] }),
+      ]),
+      { q: "star", country: "de", limit: 10 },
+    );
+    expect(Object.fromEntries(result.map((r) => [r.qid, r.presence]))).toEqual({
+      Q1: "here",
+      Q2: "global",
+      Q3: "unknown",
+      Q4: "elsewhere",
+    });
   });
 
   it("matches case- and diacritic-insensitively", () => {
@@ -122,13 +159,12 @@ describe("searchBrands", () => {
   });
 
   it("never lets a country match outrank a stronger text tier from a different country", () => {
-    // Q1 is only a substring match ("superstar" contains "star") but sits in
-    // the requested country; Q2 is an exact match but in a different
-    // country. Text tier must decide first — country only breaks ties within
-    // the same tier.
+    // Q1 is only a later-word match ("super star") but sits in the requested
+    // country; Q2 is an exact match but in a different country. Text tier
+    // must decide first — country only breaks ties within the same tier.
     const result = searchBrands(
       index([
-        entry({ qid: "Q1", name: "Superstar", countries: ["de"] }),
+        entry({ qid: "Q1", name: "Super Star", countries: ["de"] }),
         entry({ qid: "Q2", name: "Star", countries: ["us"] }),
       ]),
       { q: "star", country: "de", limit: 10 },

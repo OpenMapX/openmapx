@@ -1,0 +1,134 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/55747",
+      "label": "Tegel",
+      "sublabel": "Tegel, Berlin, Deutschland",
+      "coordinates": [13.2790461, 52.5873891],
+      "type": "region",
+      "rawCategory": "place/suburb",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2568020195",
+      "label": "Tegel",
+      "sublabel": "Tegel, Berlin, Deutschland",
+      "coordinates": [13.2896968, 52.5881913],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13265650186",
+      "label": "Tegel",
+      "sublabel": "Tegel, Flughafen Tegel 1, Berlin, Deutschland",
+      "coordinates": [13.2970107, 52.5562439],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/27176711",
+      "label": "Tegel",
+      "sublabel": "Tegel, Berlin, Deutschland",
+      "coordinates": [13.2898709, 52.5881388],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1929586905",
+      "label": "Tegel",
+      "sublabel": "Tegel, Berlin, Deutschland",
+      "coordinates": [13.2896504, 52.5880882],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/6087813",
+      "label": "Tegel",
+      "sublabel": "Tegel, Berlin, Deutschland",
+      "coordinates": [13.289912, 52.5878954],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12890451004",
+      "label": "Tegel",
+      "sublabel": "Tegel, Durchfahrt Hauptpier Nord, Schönefeld, Deutschland",
+      "coordinates": [13.5060803, 52.3662379],
+      "type": "poi",
+      "rawCategory": "amenity/lounge",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/26027556",
+      "label": "Tegel",
+      "sublabel": "Tegel, Bordesholm, Deutschland",
+      "coordinates": [10.0084546, 54.1825984],
+      "type": "street",
+      "rawCategory": "highway/living_street",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/451908",
+      "label": "Tegeler See",
+      "sublabel": "Tegeler See, Berlin, Deutschland",
+      "coordinates": [13.2550024, 52.574558],
+      "type": "poi",
+      "rawCategory": "water/lake",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/10961383",
+      "label": "Tegeler Fließ",
+      "sublabel": "Tegeler Fließ, Deutschland",
+      "coordinates": [13.3413973, 52.6233189],
+      "type": "poi",
+      "rawCategory": "waterway/stream",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:DE-0876",
+      "ids": {
+        "oa": "DE-0876"
+      },
+      "label": "Berlin-Tegel Otto Lilienthal International Airport",
+      "sublabel": "Berlin, DE",
+      "coordinates": [13.29185, 52.557675],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin-Tegel Otto Lilienthal International Airport",
+        "normalized": "berlin tegel otto lilienthal international airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:27WI",
+      "ids": {
+        "oa": "27WI"
+      },
+      "label": "Tegeler Airport",
+      "sublabel": "Prescott, US",
+      "coordinates": [-92.71379852294922, 44.807701110839844],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tegeler Airport",
+        "normalized": "tegeler airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

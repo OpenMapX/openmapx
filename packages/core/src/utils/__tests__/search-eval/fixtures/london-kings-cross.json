@@ -1,0 +1,106 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/119274464",
+      "label": "King's Cross St Pancras",
+      "sublabel": "King's Cross St Pancras, Pancras Road, London, United Kingdom",
+      "coordinates": [-0.1239491, 51.530609],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7159162454",
+      "label": "London King's Cross",
+      "sublabel": "London King's Cross, Euston Road, London, United Kingdom",
+      "coordinates": [-0.1230224, 51.5323954],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/260720558",
+      "label": "London King's Cross Railway Station",
+      "sublabel": "London King's Cross Railway Station, Euston Road, London, United Kingdom",
+      "coordinates": [-0.1236057, 51.5320734],
+      "type": "poi",
+      "rawCategory": "historic/railway_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3936965089",
+      "label": "King's Cross",
+      "sublabel": "King's Cross, London, United Kingdom",
+      "coordinates": [-0.1224129, 51.5291076],
+      "type": "region",
+      "rawCategory": "place/suburb",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/260720557",
+      "label": "King's Cross Square",
+      "sublabel": "King's Cross Square, London, United Kingdom",
+      "coordinates": [-0.1236699, 51.5305848],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/425548224",
+      "label": "King's Cross Road",
+      "sublabel": "King's Cross Road, London, United Kingdom",
+      "coordinates": [-0.1156058, 51.5281234],
+      "type": "street",
+      "rawCategory": "highway/primary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/4958827",
+      "label": "Kings Cross Lane",
+      "sublabel": "Kings Cross Lane, Tandridge, United Kingdom",
+      "coordinates": [-0.1409544, 51.2261436],
+      "type": "street",
+      "rawCategory": "highway/unclassified",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1068358104",
+      "label": "King's Cross Road",
+      "sublabel": "King's Cross Road, London, United Kingdom",
+      "coordinates": [-0.1134271, 51.5265175],
+      "type": "street",
+      "rawCategory": "highway/primary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1065218270",
+      "label": "King's Cross Bridge",
+      "sublabel": "King's Cross Bridge, London, United Kingdom",
+      "coordinates": [-0.1210173, 51.5304349],
+      "type": "street",
+      "rawCategory": "highway/primary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1101475690",
+      "label": "King's Cross Road",
+      "sublabel": "King's Cross Road, London, United Kingdom",
+      "coordinates": [-0.1197601, 51.530923],
+      "type": "street",
+      "rawCategory": "highway/trunk",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/648551913",
+      "label": "King's Cross Road",
+      "sublabel": "King's Cross Road, London, United Kingdom",
+      "coordinates": [-0.1194897, 51.5308796],
+      "type": "street",
+      "rawCategory": "highway/trunk",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

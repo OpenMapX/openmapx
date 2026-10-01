@@ -1,0 +1,282 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/62400",
+      "label": "Frankfurt am Main",
+      "sublabel": "Frankfurt am Main, Deutschland",
+      "coordinates": [8.6820917, 50.1106444],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/262894309",
+      "label": "Frankfurt",
+      "sublabel": "Frankfurt, Markt Taschendorf, Deutschland",
+      "coordinates": [10.5267235, 49.6806061],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6793856047",
+      "label": "Frankfurt",
+      "sublabel": "Frankfurt, Åtvidabergs kommun, Schweden",
+      "coordinates": [16.1586571, 58.2373359],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/86367778",
+      "label": "Frankfurt",
+      "sublabel": "Frankfurt, Bautzen, Deutschland",
+      "coordinates": [14.4210197, 51.1882061],
+      "type": "street",
+      "rawCategory": "highway/living_street",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/446002047",
+      "label": "Frankfurt",
+      "sublabel": "Frankfurt, Pipersgatan, Stockholm, Schweden",
+      "coordinates": [18.0464502, 59.3315908],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13546853000",
+      "label": "Frankfurt",
+      "sublabel": "Frankfurt, Avinguda de Pau Casals, Llançà, Spanien",
+      "coordinates": [3.1575157, 42.3688384],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/62523",
+      "label": "Frankfurt (Oder)",
+      "sublabel": "Frankfurt (Oder), Deutschland",
+      "coordinates": [14.549452, 52.3412273],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/86367781",
+      "label": "Frankfurt",
+      "sublabel": "Frankfurt, Bautzen, Deutschland",
+      "coordinates": [14.4233558, 51.1894531],
+      "type": "street",
+      "rawCategory": "highway/service",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/205364328",
+      "label": "Frankfurt (Main) Hauptbahnhof",
+      "sublabel": "Frankfurt (Main) Hauptbahnhof, Mannheimer Straße, Frankfurt am Main, Deutschland",
+      "coordinates": [8.6625808, 50.1066539],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5808989909",
+      "label": "Frankfurt",
+      "sublabel": "Frankfurt, Carrer Sol i Padrís, Sabadell, Spanien",
+      "coordinates": [2.1192501, 41.5355477],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13203703301",
+      "label": "Frankfurt",
+      "sublabel": "Frankfurt, Passatge del Riu Mogent, Badalona, Spanien",
+      "coordinates": [2.2338508, 41.4495077],
+      "type": "poi",
+      "rawCategory": "amenity/pub",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:EDDF",
+      "ids": {
+        "oa": "EDDF",
+        "iata": "FRA",
+        "icao": "EDDF"
+      },
+      "label": "Frankfurt Main Airport",
+      "sublabel": "Frankfurt am Main, DE",
+      "coordinates": [8.55835, 50.026706],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt Main Airport",
+        "normalized": "frankfurt main airport"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:EDFH",
+      "ids": {
+        "oa": "EDFH",
+        "iata": "HHN",
+        "icao": "EDFH"
+      },
+      "label": "Frankfurt-Hahn Airport",
+      "sublabel": "Frankfurt am Main (Lautzenhausen), DE",
+      "coordinates": [7.261734, 49.946353],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt-Hahn Airport",
+        "normalized": "frankfurt hahn airport"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:EDFE",
+      "ids": {
+        "oa": "EDFE",
+        "icao": "EDFE"
+      },
+      "label": "Frankfurt-Egelsbach Airport",
+      "sublabel": "Egelsbach, DE",
+      "coordinates": [8.643043, 49.96],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt-Egelsbach Airport",
+        "normalized": "frankfurt egelsbach airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0019",
+      "ids": {
+        "oa": "DE-0019"
+      },
+      "label": "Frankfurt am Main Accident Hospital Ground Helipad",
+      "sublabel": "Frankfurt am Main, DE",
+      "coordinates": [8.7096, 50.1441],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt am Main Accident Hospital Ground Helipad",
+        "normalized": "frankfurt am main accident hospital ground helipad"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0018",
+      "ids": {
+        "oa": "DE-0018"
+      },
+      "label": "Frankfurt am Main Accident Hospital Roof Helipad (CHX2)",
+      "sublabel": "Frankfurt am Main, DE",
+      "coordinates": [8.710111, 50.145424],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt am Main Accident Hospital Roof Helipad (CHX2)",
+        "normalized": "frankfurt am main accident hospital roof helipad chx2"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0922",
+      "ids": {
+        "oa": "DE-0922"
+      },
+      "label": "Frankfurt am Main Accident Hospital Roof Helipad",
+      "sublabel": "Frankfurt, DE",
+      "coordinates": [8.708981, 50.145472],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt am Main Accident Hospital Roof Helipad",
+        "normalized": "frankfurt am main accident hospital roof helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0070",
+      "ids": {
+        "oa": "DE-0070"
+      },
+      "label": "Frankfurt am Main Police Headquarters Heliport",
+      "sublabel": "Frankfurt am Main, DE",
+      "coordinates": [8.67318, 50.13276],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt am Main Police Headquarters Heliport",
+        "normalized": "frankfurt am main police headquarters heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0643",
+      "ids": {
+        "oa": "DE-0643"
+      },
+      "label": "Frankfurt Höchst Hospital Heliport",
+      "sublabel": "Frankfurt am Main, DE",
+      "coordinates": [8.54714, 50.10987],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt Höchst Hospital Heliport",
+        "normalized": "frankfurt hochst hospital heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q1445030",
+      "name": "Frankfurter Sparkasse",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q1445057",
+      "name": "Frankfurter Volksbank",
+      "description": "German bank",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/fast_food/hot_dog",
+      "name": "Hot-Dog-Stand",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "hot_dog"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

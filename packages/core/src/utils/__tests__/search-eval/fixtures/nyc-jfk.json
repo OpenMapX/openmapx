@@ -1,0 +1,173 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/5915194224",
+      "label": "JFK",
+      "sublabel": "JFK, JFK Access road, New York, United States",
+      "coordinates": [-73.7872686, 40.6532713],
+      "type": "poi",
+      "rawCategory": "tourism/attraction",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/158042008",
+      "label": "John F. Kennedy International Airport",
+      "sublabel": "John F. Kennedy International Airport, JFK Access road, New York, United States",
+      "coordinates": [-73.7793734, 40.6429479],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6164576285",
+      "label": "JFK Boulevard at 23rd Street",
+      "sublabel": "JFK Boulevard at 23rd Street, John F. Kennedy Boulevard, Union City, United States",
+      "coordinates": [-74.0384482, 40.7699],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7903610636",
+      "label": "JFK Boulevard at 15th Street",
+      "sublabel": "JFK Boulevard at 15th Street, John F. Kennedy Boulevard, Union City, United States",
+      "coordinates": [-74.0422327, 40.7635535],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6164575278",
+      "label": "JFK Boulevard at 17th Street",
+      "sublabel": "JFK Boulevard at 17th Street, John F. Kennedy Boulevard, Union City, United States",
+      "coordinates": [-74.0422494, 40.7654014],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6175888088",
+      "label": "Jfk Blvd At Poplar St",
+      "sublabel": "Jfk Blvd At Poplar St, John F. Kennedy Boulevard, Jersey City, United States",
+      "coordinates": [-74.047386, 40.7549269],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/38613862",
+      "label": "JFK Expressway",
+      "sublabel": "JFK Expressway, New York, United States",
+      "coordinates": [-73.788498, 40.6656062],
+      "type": "street",
+      "rawCategory": "highway/motorway",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/991964735",
+      "label": "JFK Expressway",
+      "sublabel": "JFK Expressway, New York, United States",
+      "coordinates": [-73.7916524, 40.6608182],
+      "type": "street",
+      "rawCategory": "highway/motorway",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/5710113",
+      "label": "JFK Expressway",
+      "sublabel": "JFK Expressway, New York, United States",
+      "coordinates": [-73.7834482, 40.6667598],
+      "type": "street",
+      "rawCategory": "highway/motorway",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/46932177",
+      "label": "JFK Expressway",
+      "sublabel": "JFK Expressway, New York, United States",
+      "coordinates": [-73.7870782, 40.6464986],
+      "type": "street",
+      "rawCategory": "highway/construction",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:KJFK",
+      "ids": {
+        "oa": "KJFK",
+        "iata": "JFK",
+        "icao": "KJFK"
+      },
+      "label": "John F. Kennedy International Airport",
+      "sublabel": "New York, US",
+      "coordinates": [-73.779317, 40.639447],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "authoritative_code",
+        "value": "JFK",
+        "normalized": "jfk",
+        "namespace": "iata"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:IT-0110",
+      "ids": {
+        "oa": "IT-0110"
+      },
+      "label": "Dovera Airfield",
+      "sublabel": "Dovera (CR), IT",
+      "coordinates": [9.534945, 45.380312],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK Dovera",
+        "normalized": "jfk dovera"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-7020",
+      "ids": {
+        "oa": "US-7020"
+      },
+      "label": "JFK Heliport",
+      "sublabel": "White Sands, US",
+      "coordinates": [-106.4728, 32.3809],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK Heliport",
+        "normalized": "jfk heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:1FD3",
+      "ids": {
+        "oa": "1FD3"
+      },
+      "label": "HCA Florida JFK Hospital Heliport",
+      "sublabel": "Atlantis, US",
+      "coordinates": [-80.09222, 26.597891],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "HCA Florida JFK Hospital Heliport",
+        "normalized": "hca florida jfk hospital heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

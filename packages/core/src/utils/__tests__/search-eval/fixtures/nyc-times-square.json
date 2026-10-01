@@ -1,0 +1,188 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/702540318",
+      "label": "Times Square",
+      "sublabel": "Times Square, New York, United States",
+      "coordinates": [-73.9858998, 40.7572614],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/14942838",
+      "label": "Times Square",
+      "sublabel": "Times Square, New York, United States",
+      "coordinates": [-73.9859724, 40.7570095],
+      "type": "street",
+      "rawCategory": "highway/pedestrian",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/11171765",
+      "label": "Times Square–42nd Street/Port Authority Bus Terminal",
+      "sublabel": "Times Square–42nd Street/Port Authority Bus Terminal, Broadway, New York, United States",
+      "coordinates": [-73.9904575, 40.7562821],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7618672833",
+      "label": "Times Square–42nd Street",
+      "sublabel": "Times Square–42nd Street, West 41st Street, New York, United States",
+      "coordinates": [-73.9885826, 40.7559109],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5111464765",
+      "label": "Times Square–42nd Street",
+      "sublabel": "Times Square–42nd Street, 7th Avenue, New York, United States",
+      "coordinates": [-73.9870031, 40.7557743],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5111464772",
+      "label": "Times Square–42nd Street",
+      "sublabel": "Times Square–42nd Street, 7th Avenue, New York, United States",
+      "coordinates": [-73.9880388, 40.7545994],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7613305940",
+      "label": "Times Square",
+      "sublabel": "Times Square, West 42nd Street, New York, United States",
+      "coordinates": [-73.9858388, 40.7555923],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/109285745",
+      "label": "Times Square Tower",
+      "sublabel": "Times Square Tower, Times Square 7, New York, United States",
+      "coordinates": [-73.9869028, 40.7555015],
+      "type": "address",
+      "rawCategory": "building/commercial",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/266155269",
+      "label": "Times Square Church",
+      "sublabel": "Times Square Church, West 51st Street 237, New York, United States",
+      "coordinates": [-73.9843361, 40.7625849],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2052618477",
+      "label": "Times Square–42nd Street",
+      "sublabel": "Times Square–42nd Street, Broadway, New York, United States",
+      "coordinates": [-73.9867299, 40.7547445],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:KR-0861",
+      "ids": {
+        "oa": "KR-0861"
+      },
+      "label": "Times Square Heliport",
+      "sublabel": "Seoul, KR",
+      "coordinates": [126.902626, 37.517573],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Times Square Heliport",
+        "normalized": "times square heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CN-0456",
+      "ids": {
+        "oa": "CN-0456"
+      },
+      "label": "Times Square Excellence Heliport",
+      "sublabel": "Shenzhen (Futian), CN",
+      "coordinates": [114.05186, 22.53697],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Times Square Excellence Heliport",
+        "normalized": "times square excellence heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SJIG",
+      "ids": {
+        "oa": "SJIG"
+      },
+      "label": "Edifício Times Square Business Helipad",
+      "sublabel": "Ribeirão Preto, BR",
+      "coordinates": [-47.810558, -21.206323],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Edifício Times Square Business Helipad",
+        "normalized": "edificio times square business helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:JP-0155",
+      "ids": {
+        "oa": "JP-0155"
+      },
+      "label": "Takashimaya Times Square Helipad",
+      "sublabel": "Shibuya, Tokyo, JP",
+      "coordinates": [139.7022, 35.68693],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Takashimaya Times Square Helipad",
+        "normalized": "takashimaya times square helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:VN-0083",
+      "ids": {
+        "oa": "VN-0083"
+      },
+      "label": "Saigon Times Square Heliport",
+      "sublabel": "Ho Chi Minh City, VN",
+      "coordinates": [106.704695, 10.773857],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Saigon Times Square Heliport",
+        "normalized": "saigon times square heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

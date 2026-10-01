@@ -1,0 +1,343 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/11309276604",
+      "label": "Cafe A",
+      "sublabel": "Cafe A, Marchstraße, Berlin, Germany",
+      "coordinates": [13.3231469, 52.514108],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1412218896",
+      "label": "Cafe Einstein",
+      "sublabel": "Cafe Einstein, Unter den Linden 42, Berlin, Germany",
+      "coordinates": [13.3859461, 52.517102],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1320420",
+      "label": "Café Moskau",
+      "sublabel": "Café Moskau, Karl-Marx-Allee 34, Berlin, Germany",
+      "coordinates": [13.4224291, 52.5195432],
+      "type": "poi",
+      "rawCategory": "amenity/events_venue",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/421816026",
+      "label": "Café",
+      "sublabel": "Café, Hardenbergstraße, Berlin, Germany",
+      "coordinates": [13.3324771, 52.5060185],
+      "type": "poi",
+      "rawCategory": "shop/coffee",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2542846158",
+      "label": "Cafés",
+      "sublabel": "Cafés, Oranienstraße 56, Berlin, Germany",
+      "coordinates": [13.4090016, 52.5037732],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5839757276",
+      "label": "Café µ",
+      "sublabel": "Café µ, Libauer Straße 2, Berlin, Germany",
+      "coordinates": [13.4545025, 52.5097682],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4867749421",
+      "label": "Cafe",
+      "sublabel": "Cafe, Am Stadtrand, Guben, Germany",
+      "coordinates": [14.6797946, 51.9510992],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/397829511",
+      "label": "Cafe",
+      "sublabel": "Cafe, Dessauer Chaussee 100, Aken (Elbe), Germany",
+      "coordinates": [12.0662127, 51.8527317],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/499642967",
+      "label": "Cafe",
+      "sublabel": "Cafe, Aleja Piastów, Szczecin, Poland",
+      "coordinates": [14.5373126, 53.426582],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1857545872",
+      "label": "Cafe P.",
+      "sublabel": "Cafe P., Eichhorster Weg 1, Groß Schönebeck, Germany",
+      "coordinates": [13.706173, 52.9104781],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/243648728",
+      "label": "Café",
+      "sublabel": "Café, Malche 1, Bad Freienwalde (Oder), Germany",
+      "coordinates": [13.9924812, 52.7916867],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/989698751",
+      "label": "Café Achteck",
+      "sublabel": "Café Achteck, Kirchhofstraße, Berlin, Germany",
+      "coordinates": [13.4415091, 52.4716619],
+      "type": "poi",
+      "rawCategory": "amenity/toilets",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:SS3D",
+      "ids": {
+        "oa": "SS3D"
+      },
+      "label": "Cafe Buriti Airport",
+      "sublabel": "Passagem Franca, BR",
+      "coordinates": [-43.71555, -5.998742],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Cafe Buriti Airport",
+        "normalized": "cafe buriti airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:BR-1185",
+      "ids": {
+        "oa": "BR-1185"
+      },
+      "label": "Fazenda Cafenápolis Airport",
+      "sublabel": "Eunápolis, BR",
+      "coordinates": [-39.5175, -16.195423],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fazenda Cafenápolis Airport",
+        "normalized": "fazenda cafenapolis airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SIR8",
+      "ids": {
+        "oa": "SIR8"
+      },
+      "label": "Fazenda Cafelândia Airport",
+      "sublabel": "Eunápolis, BR",
+      "coordinates": [-39.553869, -16.392782],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fazenda Cafelândia Airport",
+        "normalized": "fazenda cafelandia airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:VE-0439",
+      "ids": {
+        "oa": "VE-0439"
+      },
+      "label": "Bomberos de El Cafetal HLS",
+      "sublabel": "Caracas, VE",
+      "coordinates": [-66.827808, 10.457769],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bomberos de El Cafetal HLS",
+        "normalized": "bomberos de el cafetal hls"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CO-0024",
+      "ids": {
+        "oa": "CO-0024"
+      },
+      "label": "Banco Cafetero Heliport",
+      "sublabel": "Manizales, CO",
+      "coordinates": [-75.528889, 5.070278],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Banco Cafetero Heliport",
+        "normalized": "banco cafetero heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q43247503",
+      "name": "Cafe Amazon",
+      "description": "Thai multinational coffeehouse chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q1025499",
+      "name": "Cafe & Bar Celona",
+      "description": "German catering company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q1025505",
+      "name": "Cafe extrablatt",
+      "description": "German company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q105076734",
+      "name": "Café Coton",
+      "description": "French clothing brand and chain of men's shirt stores",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q17310688",
+      "name": "Cafe Del Sol",
+      "description": "German restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q5017235",
+      "name": "Café Coffee Day",
+      "description": "Indian coffee company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q2933012",
+      "name": "Café du Monde",
+      "description": "New Orleans café, famous for its beignets",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q48816450",
+      "name": "Café Yumm!",
+      "description": "American fast casual restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/fast_food/cafeteria",
+      "name": "Cafeteria",
+      "tags": {
+        "amenity": "fast_food",
+        "fast_food": "cafeteria"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/cafe/bubble_tea",
+      "name": "Bubble Tea Cafe",
+      "tags": {
+        "amenity": "cafe",
+        "cuisine": "bubble_tea"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/internet_cafe",
+      "name": "Internet Cafe",
+      "tags": {
+        "amenity": "internet_cafe"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/cafe/coffee_shop",
+      "name": "Coffeehouse",
+      "tags": {
+        "amenity": "cafe",
+        "cuisine": "coffee_shop"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/fast_food/donut",
+      "name": "Donut Fast Food",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "donut"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/fast_food/fish_and_chips",
+      "name": "Fish & Chips Fast Food",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "fish_and_chips"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/fast_food/juice",
+      "name": "Juice Fast Food",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "juice"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/fast_food/kebab",
+      "name": "Kebab Fast Food",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "kebab"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

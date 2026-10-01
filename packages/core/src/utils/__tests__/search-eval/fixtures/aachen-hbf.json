@@ -1,0 +1,187 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/547530842",
+      "label": "Aachen Hbf ESTW-A",
+      "sublabel": "Aachen Hbf ESTW-A, Reumontstraße, Aachen, Deutschland",
+      "coordinates": [6.0869306, 50.7663719],
+      "type": "poi",
+      "rawCategory": "railway/signal_box",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10548860645",
+      "label": "Flinkster Station HBF-Aachen",
+      "sublabel": "Flinkster Station HBF-Aachen, Lagerhausstraße 20, Aachen, Deutschland",
+      "coordinates": [6.0892059, 50.7680345],
+      "type": "poi",
+      "rawCategory": "amenity/car_sharing",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/82103140",
+      "label": "B&B Hotel Aachen-Hbf",
+      "sublabel": "B&B Hotel Aachen-Hbf, Zollernstraße 2, Aachen, Deutschland",
+      "coordinates": [6.0955707, 50.7690316],
+      "type": "poi",
+      "rawCategory": "tourism/hotel",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/262619907",
+      "label": "Stolberg (Rheinl) Hbf",
+      "sublabel": "Stolberg (Rheinl) Hbf, Gustav-Wassilkowitsch-Platz, Stolberg, Deutschland",
+      "coordinates": [6.2173543, 50.7944455],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4681181438",
+      "label": "Stolberg (Rheinl) Hbf",
+      "sublabel": "Stolberg (Rheinl) Hbf, Gustav-Wassilkowitsch-Platz, Stolberg, Deutschland",
+      "coordinates": [6.2178493, 50.7945029],
+      "type": "poi",
+      "rawCategory": "railway/halt",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4681181439",
+      "label": "Stolberg (Rheinl) Hbf",
+      "sublabel": "Stolberg (Rheinl) Hbf, Gustav-Wassilkowitsch-Platz, Stolberg, Deutschland",
+      "coordinates": [6.2188507, 50.794325],
+      "type": "poi",
+      "rawCategory": "railway/halt",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4032752144",
+      "label": "Eschweiler Hbf",
+      "sublabel": "Eschweiler Hbf, Reigate & Banstead-Platz 1, Eschweiler, Deutschland",
+      "coordinates": [6.2518779, 50.8134744],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/76882190",
+      "label": "Aachen Af",
+      "sublabel": "Aachen Af, Burtscheider Straße, Aachen, Deutschland",
+      "coordinates": [6.0872677, 50.7664223],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3256760446",
+      "label": "Stolberg (Rheinl) Hbf",
+      "sublabel": "Stolberg (Rheinl) Hbf, Gustav-Wassilkowitsch-Platz, Stolberg, Deutschland",
+      "coordinates": [6.2172968, 50.794293],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/58777356",
+      "label": "Stolberg (Rheinl) Hbf",
+      "sublabel": "Stolberg (Rheinl) Hbf, Gustav-Wassilkowitsch-Platz, Stolberg, Deutschland",
+      "coordinates": [6.2188582, 50.7943231],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3070631211",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Bahnhofstraße 2a, Aachen, Deutschland",
+      "coordinates": [6.0913818, 50.7677663],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/595757964",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Lagerhausstraße, Aachen, Deutschland",
+      "coordinates": [6.090004, 50.7685394],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/5151599",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Zollamtstraße, Aachen, Deutschland",
+      "coordinates": [6.0890791, 50.7668934],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/215971391",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Hackländerstraße, Aachen, Deutschland",
+      "coordinates": [6.0918973, 50.7680298],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/215971279",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Hackländerstraße, Aachen, Deutschland",
+      "coordinates": [6.0918862, 50.768089],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/215971430",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Aachen, Deutschland",
+      "coordinates": [6.0919854, 50.7678063],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/215971485",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Kasinostraße, Aachen, Deutschland",
+      "coordinates": [6.0920772, 50.7676169],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/80120429",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Bahnhofplatz 2a, Aachen, Deutschland",
+      "coordinates": [6.0910019, 50.7681261],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/33170523",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Zollamtstraße, Aachen, Deutschland",
+      "coordinates": [6.0911591, 50.7679989],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/215971403",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Hackländerstraße, Aachen, Deutschland",
+      "coordinates": [6.0919489, 50.7679284],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

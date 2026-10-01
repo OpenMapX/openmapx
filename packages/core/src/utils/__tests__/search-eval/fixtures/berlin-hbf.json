@@ -1,0 +1,234 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/2293773566",
+      "label": "HBF",
+      "sublabel": "HBF, Bahnhofplatz, Ulm, Deutschland",
+      "coordinates": [9.9833788, 48.4012167],
+      "type": "poi",
+      "rawCategory": "amenity/car_sharing",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11090742481",
+      "label": "HBF",
+      "sublabel": "HBF, The West Deck, Perth, Australien",
+      "coordinates": [115.777324, -31.8773309],
+      "type": "poi",
+      "rawCategory": "office/insurance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/976510431",
+      "label": "Hbf",
+      "sublabel": "Hbf, Am Bahnhof, Zwickau, Deutschland",
+      "coordinates": [12.4770561, 50.7153765],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3673691118",
+      "label": "HBF",
+      "sublabel": "HBF, Bahnhofstraße, Chemnitz, Deutschland",
+      "coordinates": [12.929283, 50.8370761],
+      "type": "poi",
+      "rawCategory": "amenity/car_sharing",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2305245154",
+      "label": "Hbf",
+      "sublabel": "Hbf, Willy-Brandt-Platz, Erfurt, Deutschland",
+      "coordinates": [11.0381318, 50.9731439],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11801318854",
+      "label": "hbf",
+      "sublabel": "hbf, شارع الاسكان - الاشتراكي, البلدية الثالثة, Irak",
+      "coordinates": [44.3506678, 32.0053363],
+      "type": "poi",
+      "rawCategory": "shop/mall",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/17249621",
+      "label": "Hbf Ffm (tief), Gleise 101+102",
+      "sublabel": "Hbf Ffm (tief), Gleise 101+102, Frankfurt am Main, Deutschland",
+      "coordinates": [8.662391, 50.1070834],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/31310817",
+      "label": "Hbf / Raschplatz",
+      "sublabel": "Hbf / Raschplatz, Raschplatzhochstraße, Hannover, Deutschland",
+      "coordinates": [9.7461217, 52.3787895],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7874457740",
+      "label": "Hbf Lummerland",
+      "sublabel": "Hbf Lummerland, Dornbachgrund 1, Saalburg, Deutschland",
+      "coordinates": [11.74678, 50.4999981],
+      "type": "poi",
+      "rawCategory": "tourism/attraction",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13408494163",
+      "label": "HBF/Steintordamm",
+      "sublabel": "HBF/Steintordamm, Steintordamm, Hamburg, Deutschland",
+      "coordinates": [10.0069588, 53.5519791],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/278844612",
+      "label": "HBF/Mönckebergstraße",
+      "sublabel": "HBF/Mönckebergstraße, Mönckebergstraße, Hamburg, Deutschland",
+      "coordinates": [10.0041463, 53.5515032],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/337301295",
+      "label": "HBF/Spitalerstraße",
+      "sublabel": "HBF/Spitalerstraße, Steintorwall, Hamburg, Deutschland",
+      "coordinates": [10.0053352, 53.5524501],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2088354767",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Friedrich-List-Ufer, Berlin, Deutschland",
+      "coordinates": [13.370949, 52.5241153],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/86379623",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Europaplatz, Berlin, Deutschland",
+      "coordinates": [13.3701211, 52.5253038],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3856100108",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Europaplatz 1, Berlin, Deutschland",
+      "coordinates": [13.3701242, 52.5252819],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4294764767",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Europaplatz, Berlin, Deutschland",
+      "coordinates": [13.3699199, 52.5257073],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2813070486",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Eingangsebene, Berlin, Deutschland",
+      "coordinates": [13.3692007, 52.525275],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/390962614",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Invalidenstraße, Berlin, Deutschland",
+      "coordinates": [13.3694193, 52.5267897],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/23148539",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Hans-Dietrich-Genscher-Platz 1, Halle (Saale), Deutschland",
+      "coordinates": [11.9876105, 51.477129],
+      "type": "poi",
+      "rawCategory": "historic/railway_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/14348717",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofsvorplatz, Dessau, Deutschland",
+      "coordinates": [12.2354564, 51.839811],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/4257415",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Wilsonova, Prag, Tschechien",
+      "coordinates": [14.434411, 50.0834519],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/24569897",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Wilsonova 8, Prag, Tschechien",
+      "coordinates": [14.4341259, 50.0835035],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2459919676",
+      "label": "Hauptbahnhof (Tunnel)",
+      "sublabel": "Hauptbahnhof (Tunnel), Friedrich-List-Ufer, Berlin, Deutschland",
+      "coordinates": [13.3706843, 52.5252949],
+      "type": "poi",
+      "rawCategory": "railway/proposed",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:MX-0162",
+      "ids": {
+        "oa": "MX-0162"
+      },
+      "label": "Helipuerto Centro Operativo de BBVA Bancomer",
+      "sublabel": "Miguel Hidalgo, MX",
+      "coordinates": [-99.18399, 19.44145],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "authoritative_code",
+        "value": "HBF",
+        "normalized": "hbf",
+        "namespace": "local_code"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

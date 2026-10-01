@@ -4,7 +4,7 @@ import { API_ENDPOINTS } from "../api/endpoints";
 import { apiQueryRequestOptions, RAPID_QUERY_POLICY } from "../api/queryPolicy";
 import type { LngLat } from "../types/geometry";
 import type { SearchSuggestionsResponse } from "../types/searchSuggestion";
-import { normalizeSearchTerm } from "../utils/searchSuggestion";
+import { isUppercaseAcronymIntent, normalizeSearchTerm } from "../utils/searchSuggestion";
 
 function roundedCoordinate(value: number): string {
   return value.toFixed(2);
@@ -22,8 +22,12 @@ export function useSearchSuggestions(
     ? ([Number(roundedCoordinate(proximity[0])), Number(roundedCoordinate(proximity[1]))] as LngLat)
     : null;
 
+  // The server answers uppercase input with generated acronyms too ("BER"),
+  // so the case of the text is part of what the answer depends on.
+  const acronymIntent = isUppercaseAcronymIntent(query);
+
   return useQuery<SearchSuggestionsResponse>({
-    queryKey: ["search-suggestions", normalizedQuery, lang, roundedProximity, limit],
+    queryKey: ["search-suggestions", normalizedQuery, acronymIntent, lang, roundedProximity, limit],
     queryFn: ({ signal }) =>
       apiClient.get<SearchSuggestionsResponse>(
         API_ENDPOINTS.searchSuggestions,

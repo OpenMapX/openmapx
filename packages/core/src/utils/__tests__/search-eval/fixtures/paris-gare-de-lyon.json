@@ -1,0 +1,97 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/26824135",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Place Louis Armand, Paris, France",
+      "coordinates": [2.3737743, 48.8446832],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1161318094",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Rue Van Gogh 4, Paris, France",
+      "coordinates": [2.3748001, 48.8443818],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1309031698",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Allée de Bercy, Paris, France",
+      "coordinates": [2.3744869, 48.8436635],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5228032209",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Place Louis Armand, Paris, France",
+      "coordinates": [2.3725553, 48.8451709],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7064892032",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Boulevard Diderot, Paris, France",
+      "coordinates": [2.3737786, 48.8458762],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7064892033",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Boulevard Diderot, Paris, France",
+      "coordinates": [2.3737852, 48.845849],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5979563853",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Rue de Bercy, Paris, France",
+      "coordinates": [2.3737281, 48.8436741],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11405200474",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Rue de Bercy, Paris, France",
+      "coordinates": [2.3739771, 48.8434146],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1656938775",
+      "label": "Gare de Lyon",
+      "sublabel": "Gare de Lyon, Rue de Bercy, Paris, France",
+      "coordinates": [2.3739596, 48.8434008],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5406749961",
+      "label": "Gare de Lyon - Van Gogh",
+      "sublabel": "Gare de Lyon - Van Gogh, Rue de Bercy, Paris, France",
+      "coordinates": [2.3716168, 48.8448979],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

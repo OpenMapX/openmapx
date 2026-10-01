@@ -169,6 +169,20 @@ describe("autocomplete", () => {
     const results = await motisGeocodingService.autocomplete("Berlin");
     expect(results).toEqual([]);
   });
+
+  it("sends the location bias as place=lat,lon", async () => {
+    mockMotisGeocode.mockResolvedValue({ data: [] });
+    const { motisGeocodingService } = await loadModule();
+
+    await motisGeocodingService.autocomplete("Hbf", "de", { proximity: [13.37, 52.52], zoom: 12 });
+    await motisGeocodingService.autocomplete("Hbf", "de");
+
+    expect(mockMotisGeocode.mock.calls[0][0].query).toMatchObject({
+      text: "Hbf",
+      place: "52.52,13.37",
+    });
+    expect(mockMotisGeocode.mock.calls[1][0].query.place).toBeUndefined();
+  });
 });
 
 // reverseGeocode

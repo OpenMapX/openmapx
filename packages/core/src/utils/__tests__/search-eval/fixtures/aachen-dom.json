@@ -1,0 +1,16 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/20470246",
+      "label": "Aachener Dom",
+      "sublabel": "Aachener Dom, Domhof 1, Aachen, Deutschland",
+      "coordinates": [6.0839856, 50.7747551],
+      "type": "poi",
+      "rawCategory": "amenity/place_of_worship",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

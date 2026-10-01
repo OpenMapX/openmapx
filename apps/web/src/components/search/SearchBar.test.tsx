@@ -121,6 +121,7 @@ beforeEach(() => {
   resolveStopAsPlaceMock.mockReset();
   useMediaQueryMock.mockReset().mockReturnValue(false);
   flyToMock.mockReset();
+  fakeMap.state.center = { lng: 0, lat: 0 };
   launchExploreFromPlace.mockReset();
   launchExploreTextSearch.mockReset();
   launchTextSearch.mockReset();
@@ -190,11 +191,11 @@ describe("SearchBar", () => {
     fireEvent.change(input, { target: { value: "parking" } });
 
     await waitFor(() => {
-      expect(screen.getAllByRole("button", { name: "Parking search.searchCategory" })).toHaveLength(
+      expect(screen.getAllByRole("option", { name: "Parking search.searchCategory" })).toHaveLength(
         1,
       );
     });
-    fireEvent.click(screen.getByRole("button", { name: "Parking search.searchCategory" }));
+    fireEvent.click(screen.getByRole("option", { name: "Parking search.searchCategory" }));
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DATASOURCE);
   });
 
@@ -227,7 +228,7 @@ describe("SearchBar", () => {
     expect(screen.getByText("search.emptyStateSignedOut")).toBeInTheDocument();
   });
 
-  it("shows and recalls a recent query on desktop without navigating to a stored result", () => {
+  it("runs a recent query again on desktop without navigating to a stored result", async () => {
     useRecentSearchStore.getState().add("Berlin cafes");
     renderBar();
     const input = screen.getByLabelText("search.ariaLabel") as HTMLInputElement;
@@ -236,8 +237,22 @@ describe("SearchBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Berlin cafes" }));
 
     expect(input.value).toBe("Berlin cafes");
-    expect(useSearchStore.getState().isFocused).toBe(true);
     expect(flyToMock).not.toHaveBeenCalled();
+    // Nothing in the list names it, so the query goes to the natural-language parse.
+    await waitFor(() => expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(true));
+  });
+
+  it("offers a matching recent query while typing and runs it when picked", async () => {
+    useRecentSearchStore.getState().add("Berlin cafes");
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel") as HTMLInputElement;
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "berl" } });
+
+    fireEvent.click(await screen.findByRole("option", { name: /Berlin cafes/ }));
+
+    expect(input.value).toBe("Berlin cafes");
+    await waitFor(() => expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(true));
   });
 
   it("lets the user clear recent queries without leaving mobile search", async () => {
@@ -297,7 +312,23 @@ describe("SearchBar", () => {
     // the timer-control APIs, so the 150ms debounce is awaited for real here.
     await waitFor(() => {
       const lastCall = useAutocompleteMock.mock.calls.at(-1);
-      expect(lastCall).toEqual(["berlin", "en"]);
+      expect(lastCall?.slice(0, 2)).toEqual(["berlin", "en"]);
+    });
+  });
+
+  it("biases place suggestions and the Enter geocode towards the map view", async () => {
+    fakeMap.state.center = { lng: 13.405, lat: 52.52 };
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.change(input, { target: { value: "coffee" } });
+
+    await waitFor(() => {
+      expect(useAutocompleteMock.mock.calls.at(-1)?.[2]).toEqual({
+        proximity: [13.405, 52.52],
+        zoom: 10,
+      });
+      const geocodeCall = useGeocodingMock.mock.calls.find((call) => call[0] === "coffee");
+      expect(geocodeCall?.[2]).toEqual([13.405, 52.52]);
     });
   });
 
@@ -316,7 +347,7 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "berlin hbf" } });
 
-    await screen.findByText("Berlin Hbf");
+    await screen.findByRole("option", { name: /Berlin Hbf/ });
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
     fireEvent.keyDown(input, { key: "Enter" });
@@ -329,14 +360,184 @@ describe("SearchBar", () => {
     expect(useRecentSearchStore.getState().entries).toEqual(["Berlin Hbf"]);
   });
 
-  it("records an explicitly submitted query without storing every keystroke", () => {
+  it("records an explicitly submitted query without storing every keystroke", async () => {
     renderBar();
     const input = screen.getByLabelText("search.ariaLabel");
     fireEvent.change(input, { target: { value: "Quiet cafés" } });
     expect(useRecentSearchStore.getState().entries).toEqual([]);
 
     fireEvent.submit(input.closest("form") as HTMLFormElement);
-    expect(useRecentSearchStore.getState().entries).toEqual(["Quiet cafés"]);
+    await waitFor(() => expect(useRecentSearchStore.getState().entries).toEqual(["Quiet cafés"]));
+  });
+
+  it("waits for the typed text's suggestions before acting on Enter", async () => {
+    const stale: AutocompleteResult = {
+      id: "osm:old",
+      label: "Berlin",
+      type: "region",
+      coordinates: [13.4, 52.5],
+    };
+    const current: AutocompleteResult = {
+      id: "osm:new",
+      label: "Bernau bei Berlin",
+      type: "region",
+      coordinates: [13.59, 52.68],
+    };
+    // Query results keep their identity between renders, as TanStack's do.
+    const staleResult = { data: [stale], isFetching: false };
+    const currentResult = { data: [current], isFetching: false };
+    useAutocompleteMock.mockImplementation((...args: unknown[]) =>
+      args[0] === "bernau" ? currentResult : staleResult,
+    );
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "bernau" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    expect(usePlaceStore.getState().selectedPlace).toBeNull();
+    await waitFor(() =>
+      expect(usePlaceStore.getState().selectedPlace?.name).toBe("Bernau bei Berlin"),
+    );
+  });
+
+  it("plain Enter opens the top-ranked city rather than a foreign chain of the same name", async () => {
+    fakeMap.state.center = { lng: 13.405, lat: 52.52 };
+    useBrandSuggestMock.mockReturnValue({
+      data: {
+        matches: [
+          { qid: "Q6", name: "París", kind: ["brand"], matchedOn: "name", presence: "elsewhere" },
+        ],
+      },
+    });
+    useAutocompleteMock.mockReturnValue({
+      data: [
+        {
+          id: "osm:paris",
+          label: "Paris",
+          type: "region",
+          rawCategory: "place/city",
+          coordinates: [2.35, 48.86],
+        },
+      ],
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "paris" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    await waitFor(() => expect(usePlaceStore.getState().selectedPlace?.name).toBe("Paris"));
+    expect(useCategorySearchStore.getState().activeBrand).toBeNull();
+  });
+
+  it("searches the visible area when Enter matches no row and AI search is off", async () => {
+    useSettingsStore.setState({ aiSearchEnabled: false });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "quiet cafes" } });
+    fireEvent.submit(input.closest("form") as HTMLFormElement);
+
+    await waitFor(() => expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, "quiet cafes"));
+    expect(useSearchStore.getState().isFocused).toBe(false);
+  });
+
+  it("offers the area search as the last row", async () => {
+    useAutocompleteMock.mockReturnValue({
+      data: [{ id: "geo:1", label: "Pizza Max", type: "poi", coordinates: [0, 0] }],
+      isFetching: false,
+    });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "pizza" } });
+
+    const areaSearch = await screen.findByRole("option", { name: "search.searchQueryInArea" });
+    const options = screen.getAllByRole("option");
+    expect(options.at(-1)).toBe(areaSearch);
+    fireEvent.click(areaSearch);
+    expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, "pizza");
+  });
+
+  it("reopens the list when typing or pressing an arrow key after Escape", async () => {
+    useAutocompleteMock.mockReturnValue({
+      data: [{ id: "geo:1", label: "Pizza Max", type: "poi", coordinates: [0, 0] }],
+      isFetching: false,
+    });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "pizza" } });
+    await screen.findByRole("listbox");
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    expect(screen.queryByRole("listbox")).toBeNull();
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+
+    fireEvent.keyDown(input, { key: "Escape" });
+    fireEvent.change(input, { target: { value: "pizza m" } });
+    expect(screen.getByRole("listbox")).toBeInTheDocument();
+  });
+
+  it("points the combobox at the highlighted option", async () => {
+    useAutocompleteMock.mockReturnValue({
+      data: [{ id: "geo:1", label: "Pizza Max", type: "poi", coordinates: [0, 0] }],
+      isFetching: false,
+    });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "pizza" } });
+    const listbox = await screen.findByRole("listbox");
+
+    expect(input.getAttribute("role")).toBe("combobox");
+    expect(input.getAttribute("aria-expanded")).toBe("true");
+    expect(input.getAttribute("aria-controls")).toBe(listbox.id);
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+    expect(input.getAttribute("aria-activedescendant")).toBe(screen.getAllByRole("option")[0].id);
+  });
+
+  it("keeps the highlight on the same row when later results reorder the list", async () => {
+    const pizzeria: AutocompleteResult = {
+      id: "geo:pizzeria",
+      label: "Pizzeria Uno",
+      type: "poi",
+      coordinates: [0, 0],
+    };
+    useAutocompleteMock.mockReturnValue({ data: [pizzeria], isFetching: false });
+    const { rerender } = renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "pizza" } });
+    await screen.findByRole("option", { name: /Pizzeria Uno/ });
+    fireEvent.keyDown(input, { key: "ArrowDown" });
+
+    // An exact-name place arrives later and ranks first.
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          id: "osm:pizza",
+          label: "Pizza",
+          coordinates: [0, 0],
+          searchMatch: { kind: "name", value: "Pizza", normalized: "pizza" },
+        }),
+      ]),
+      isFetching: false,
+    });
+    rerender(
+      <IntegrationDisclosuresProvider value={[]}>
+        <SearchBar />
+      </IntegrationDisclosuresProvider>,
+    );
+
+    const selected = await screen.findByRole("option", { selected: true });
+    expect(selected.textContent).toContain("Pizzeria Uno");
+    expect(screen.getAllByRole("option")[0].textContent).toContain("Pizza");
   });
 
   it("keeps keyboard selection aligned across category, brand, and place suggestions", async () => {
@@ -366,25 +567,19 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "caf" } });
 
-    const categoryRow = (await screen.findByText("Cafes")).closest('[role="button"]');
-    const brandRow = screen.getByText("Cafe Chain").closest('[role="button"]');
-    const placeRow = screen.getByText("Cafe Central").closest('[role="button"]');
-    expect(categoryRow).not.toBeNull();
-    expect(brandRow).not.toBeNull();
-    expect(placeRow).not.toBeNull();
-    const rows = screen.getAllByRole("button");
-    expect(rows.indexOf(categoryRow as HTMLElement)).toBeLessThan(
-      rows.indexOf(brandRow as HTMLElement),
-    );
-    expect(rows.indexOf(brandRow as HTMLElement)).toBeLessThan(
-      rows.indexOf(placeRow as HTMLElement),
-    );
+    const categoryRow = await screen.findByRole("option", { name: /Cafes/ });
+    const brandRow = screen.getByRole("option", { name: /Cafe Chain/ });
+    const placeRow = screen.getByRole("option", { name: /Cafe Central/ });
+    const rows = screen.getAllByRole("option");
+    expect(rows.indexOf(categoryRow)).toBe(0);
 
     fireEvent.keyDown(input, { key: "ArrowDown" });
-    expect(categoryRow?.className).toContain("Mui-selected");
-    fireEvent.keyDown(input, { key: "ArrowDown" });
-    expect(brandRow?.className).toContain("Mui-selected");
-    expect(placeRow?.className).not.toContain("Mui-selected");
+    expect(categoryRow.className).toContain("Mui-selected");
+    for (let step = 0; step < rows.indexOf(brandRow); step += 1) {
+      fireEvent.keyDown(input, { key: "ArrowDown" });
+    }
+    expect(brandRow.className).toContain("Mui-selected");
+    expect(placeRow.className).not.toContain("Mui-selected");
     fireEvent.keyDown(input, { key: "Enter" });
 
     expect(useCategorySearchStore.getState().activeBrand?.qid).toBe("Q123");
@@ -419,14 +614,53 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "Aachen" } });
 
-    const placeRow = (await screen.findByText(/search\.resultTypeArea/)).closest('[role="button"]');
-    const brandRow = screen.getByText("Aachener Verkehrsverbund").closest('[role="button"]');
-    expect(screen.getAllByRole("button").indexOf(placeRow as HTMLElement)).toBeLessThan(
-      screen.getAllByRole("button").indexOf(brandRow as HTMLElement),
+    const placeRow = (await screen.findByText(/search\.resultTypeArea/)).closest('[role="option"]');
+    const brandRow = screen.getByRole("option", { name: /Aachener Verkehrsverbund/ });
+    expect(screen.getAllByRole("option").indexOf(placeRow as HTMLElement)).toBeLessThan(
+      screen.getAllByRole("option").indexOf(brandRow),
     );
   });
 
-  it("plain Enter uses an exact category search term ahead of a geocoded region", () => {
+  it("ranks a nearby place above a far area of the same name and caps chain rows", async () => {
+    fakeMap.state.center = { lng: 13.405, lat: 52.52 };
+    useBrandSuggestMock.mockReturnValue({
+      data: {
+        matches: ["Coffee Lab", "Coffee Culture", "Coffee Company"].map((name, i) => ({
+          qid: `Q${i}`,
+          name,
+          kind: ["brand"],
+          matchedOn: "name",
+          presence: "elsewhere",
+        })),
+      },
+    });
+    useAutocompleteMock.mockReturnValue({
+      data: [
+        {
+          id: "osm:county",
+          label: "Coffee",
+          type: "region",
+          rawCategory: "place/county",
+          coordinates: [-86.07, 35.49],
+        },
+        { id: "osm:cafe", label: "Coffee Circle", type: "poi", coordinates: [13.4, 52.52] },
+      ],
+      isFetching: false,
+    });
+
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "coffee" } });
+
+    const cafe = await screen.findByRole("option", { name: /Coffee Circle/ });
+    const county = screen.getByRole("option", { name: /search\.resultTypeArea/ });
+    const options = screen.getAllByRole("option");
+    expect(options.indexOf(cafe)).toBeLessThan(options.indexOf(county));
+    expect(screen.getAllByRole("option", { name: /search\.searchBrand/ })).toHaveLength(2);
+  });
+
+  it("plain Enter uses an exact category search term ahead of a geocoded region", async () => {
     useChipTranslationsMock.mockReturnValue({
       data: { cafes: { name: "Cafes", terms: ["coffee"] } },
     });
@@ -448,13 +682,13 @@ describe("SearchBar", () => {
     fireEvent.change(input, { target: { value: "coffee" } });
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
-    expect(useCategorySearchStore.getState().activeCategory).toBe("cafes");
+    await waitFor(() => expect(useCategorySearchStore.getState().activeCategory).toBe("cafes"));
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
     expect(usePlaceStore.getState().selectedPlace).toBeNull();
     expect(flyToMock).not.toHaveBeenCalled();
   });
 
-  it("plain Enter accepts the canonical category label when the dropdown is localized", () => {
+  it("plain Enter accepts the canonical category label when the dropdown is localized", async () => {
     useChipTranslationsMock.mockReturnValue({
       data: { cafes: { name: "Kaffees", terms: ["kaffee"] } },
     });
@@ -465,7 +699,7 @@ describe("SearchBar", () => {
     fireEvent.change(input, { target: { value: "Cafes" } });
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
-    expect(useCategorySearchStore.getState().activeCategory).toBe("cafes");
+    await waitFor(() => expect(useCategorySearchStore.getState().activeCategory).toBe("cafes"));
   });
 
   it("does not open Coffee County for a current coffee query without category data", () => {
@@ -631,7 +865,7 @@ describe("SearchBar", () => {
     expect(usePlaceStore.getState().selectedPlace?.name).toBe("Saint Xavier University");
   });
 
-  it("leaves ambiguous exact intents for the user to choose", async () => {
+  it("plain Enter takes the top-ranked row when several exact intents compete", async () => {
     useChipTranslationsMock.mockReturnValue({
       data: { cafes: { name: "Cafes", terms: ["coffee"] } },
     });
@@ -654,12 +888,13 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "coffee" } });
     await waitFor(() => expect(useBrandSuggestMock.mock.calls.at(-1)?.[0]).toBe("coffee"));
+    const top = screen.getAllByRole("option")[0];
+    expect(top.textContent).toContain("Cafes");
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
-    expect(useCategorySearchStore.getState().activeCategory).toBeNull();
+    await waitFor(() => expect(useCategorySearchStore.getState().activeCategory).toBe("cafes"));
     expect(useCategorySearchStore.getState().activeBrand).toBeNull();
     expect(usePlaceStore.getState().selectedPlace).toBeNull();
-    expect(useSearchStore.getState().isFocused).toBe(true);
   });
 
   it("does not submit a stale geocode result immediately after editing", () => {
@@ -717,8 +952,8 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "FRA" } });
 
-    await screen.findByRole("button", { name: /Frankfurt am Main Airport.*FRA/i });
-    expect(screen.getAllByText("Frankfurt am Main Airport")).toHaveLength(1);
+    await screen.findByRole("option", { name: /Frankfurt am Main Airport.*FRA/i });
+    expect(screen.getAllByRole("option", { name: /Frankfurt am Main Airport/ })).toHaveLength(1);
     screen.getByText("OurAirports");
   });
 
@@ -744,7 +979,7 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "FRA" } });
 
-    await screen.findByText("Frankfurt am Main Airport");
+    await screen.findByRole("option", { name: /Frankfurt am Main Airport/ });
     screen.getByText("OurAirports");
   });
 
@@ -777,7 +1012,7 @@ describe("SearchBar", () => {
     );
   });
 
-  it("places a generated acronym below a normal geocoder hit and selects its stable OSM id", async () => {
+  it("places a generated acronym below a geocoder hit named by the text and selects its stable OSM id", async () => {
     useSearchSuggestionsMock.mockReturnValue({
       data: aggregateResponse([
         aggregateSuggestion({
@@ -792,8 +1027,8 @@ describe("SearchBar", () => {
     useAutocompleteMock.mockReturnValue({
       data: [
         {
-          id: "geo:unc",
-          label: "UNC Charlotte",
+          id: "geo:uncc-arena",
+          label: "UNCC Arena",
           coordinates: [-80.73, 35.3],
           type: "region",
           provider: "geocoding-test",
@@ -807,7 +1042,7 @@ describe("SearchBar", () => {
     fireEvent.focus(input);
     fireEvent.change(input, { target: { value: "UNCC" } });
 
-    const normal = await screen.findByText("UNC Charlotte");
+    const normal = await screen.findByRole("option", { name: /UNCC Arena/ });
     const generated = screen.getByText("University of North Carolina at Charlotte");
     expect(normal.compareDocumentPosition(generated) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(
       0,
@@ -866,21 +1101,21 @@ describe("SearchBar", () => {
   it("keeps geocoder, brand, and category suggestions when aggregate search fails", async () => {
     useSearchSuggestionsMock.mockReturnValue({ data: undefined, isFetching: false, isError: true });
     useAutocompleteMock.mockReturnValue({
-      data: [{ id: "geo:berlin", label: "Berlin", coordinates: [13.4, 52.5], type: "region" }],
+      data: [{ id: "geo:bari", label: "Bari", coordinates: [16.87, 41.12], type: "region" }],
       isFetching: false,
     });
     useBrandSuggestMock.mockReturnValue({
-      data: { matches: [{ qid: "Q1", name: "Berliner Coffee", tags: {} }] },
+      data: { matches: [{ qid: "Q1", name: "Bar Louie", tags: {} }] },
     });
 
     renderBar();
     const input = screen.getByLabelText("search.ariaLabel");
     fireEvent.focus(input);
-    fireEvent.change(input, { target: { value: "ber" } });
+    fireEvent.change(input, { target: { value: "bar" } });
 
-    await screen.findByText("Berlin");
-    screen.getByText("Berliner Coffee");
-    screen.getByText("Hairdressers & Barbers");
+    await screen.findByRole("option", { name: /Bari/ });
+    screen.getByRole("option", { name: /Bar Louie/ });
+    screen.getByRole("option", { name: /Bars & Pubs/ });
   });
 
   it("submitting a natural-language query enables NLP parsing; activating the card writes the NLP stores", async () => {
@@ -907,7 +1142,7 @@ describe("SearchBar", () => {
     fireEvent.submit(input.closest("form") as HTMLFormElement);
 
     // 4th positional arg is the enabled flag (nlpSubmitted && aiSearchEnabled).
-    expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(true);
+    await waitFor(() => expect(useNlpSearchMock.mock.calls.at(-1)?.[3]).toBe(true));
 
     await screen.findByText("Cafés with WiFi");
 

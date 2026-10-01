@@ -1,0 +1,187 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/3856100103",
+      "label": "Berlin Hauptbahnhof",
+      "sublabel": "Berlin Hauptbahnhof, Europaplatz 1, Berlin, Deutschland",
+      "coordinates": [13.3696614, 52.5249451],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/3600565",
+      "label": "Berlin Hauptbahnhof",
+      "sublabel": "Berlin Hauptbahnhof, Eingangsebene, Berlin, Deutschland",
+      "coordinates": [13.369448, 52.5250175],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2459919675",
+      "label": "Berlin Hauptbahnhof (tief)",
+      "sublabel": "Berlin Hauptbahnhof (tief), Europaplatz 1, Berlin, Deutschland",
+      "coordinates": [13.369861, 52.5246361],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2813070481",
+      "label": "Berlin Hauptbahnhof",
+      "sublabel": "Berlin Hauptbahnhof, Eingangsebene, Berlin, Deutschland",
+      "coordinates": [13.3695626, 52.524742],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/918697",
+      "label": "Berlin Hauptbahnhof",
+      "sublabel": "Berlin Hauptbahnhof, Clara-Jaschke-Straße, Berlin, Deutschland",
+      "coordinates": [13.3672021, 52.524591],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3856100101",
+      "label": "Berlin Hauptbahnhof (Tief)",
+      "sublabel": "Berlin Hauptbahnhof (Tief), Eingangsebene, Berlin, Deutschland",
+      "coordinates": [13.3699098, 52.5248933],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3856100095",
+      "label": "Berlin Hauptbahnhof (Tief)",
+      "sublabel": "Berlin Hauptbahnhof (Tief), Eingangsebene, Berlin, Deutschland",
+      "coordinates": [13.3690176, 52.5247546],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2813070493",
+      "label": "Berlin Hauptbahnhof (tief)",
+      "sublabel": "Berlin Hauptbahnhof (tief), Invalidenstraße, Berlin, Deutschland",
+      "coordinates": [13.3690013, 52.5260578],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3856100102",
+      "label": "Berlin Hauptbahnhof (Tief)",
+      "sublabel": "Berlin Hauptbahnhof (Tief), Eingangsebene, Berlin, Deutschland",
+      "coordinates": [13.3701329, 52.5249157],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2813070494",
+      "label": "Berlin Hauptbahnhof (tief)",
+      "sublabel": "Berlin Hauptbahnhof (tief), Invalidenstraße, Berlin, Deutschland",
+      "coordinates": [13.3692707, 52.5261436],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2231321435",
+      "label": "Grillstand HBF",
+      "sublabel": "Grillstand HBF, Tunnel Tiergarten Spreebogen, Berlin, Deutschland",
+      "coordinates": [13.3681395, 52.5245138],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2397306450",
+      "label": "Hagen Hbf",
+      "sublabel": "Hagen Hbf, Berliner Platz 1, Hagen, Deutschland",
+      "coordinates": [7.4606062, 51.36296],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1024305784",
+      "label": "Castrop-Rauxel Hbf",
+      "sublabel": "Castrop-Rauxel Hbf, Berliner Platz, Castrop-Rauxel, Deutschland",
+      "coordinates": [7.3040977, 51.5735198],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/236421384",
+      "label": "Parkplatz Hbf West",
+      "sublabel": "Parkplatz Hbf West, Berliner Platz, Braunschweig, Deutschland",
+      "coordinates": [10.5383656, 52.251819],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/968980606",
+      "label": "Hagen Hbf",
+      "sublabel": "Hagen Hbf, Berliner Platz, Hagen, Deutschland",
+      "coordinates": [7.4598398, 51.3627936],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/139433081",
+      "label": "Radstation Münster Hbf. - Eingang Hbf",
+      "sublabel": "Radstation Münster Hbf. - Eingang Hbf, Berliner Platz 27, Münster, Deutschland",
+      "coordinates": [7.6344333, 51.9566493],
+      "type": "poi",
+      "rawCategory": "amenity/bicycle_parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4071727486",
+      "label": "Münster (Westf) Hbf",
+      "sublabel": "Münster (Westf) Hbf, Berliner Platz, Münster, Deutschland",
+      "coordinates": [7.6347785, 51.9555048],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/969003266",
+      "label": "Hagen Hbf",
+      "sublabel": "Hagen Hbf, Berliner Platz, Hagen, Deutschland",
+      "coordinates": [7.4610475, 51.363195],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/968824743",
+      "label": "Hagen Hbf",
+      "sublabel": "Hagen Hbf, Berliner Platz, Hagen, Deutschland",
+      "coordinates": [7.460334, 51.3634061],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/4491628",
+      "label": "Hagen Hbf",
+      "sublabel": "Hagen Hbf, Berliner Platz, Hagen, Deutschland",
+      "coordinates": [7.460486, 51.3630804],
+      "type": "poi",
+      "rawCategory": "railway/construction",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

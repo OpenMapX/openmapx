@@ -1,4 +1,7 @@
-import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
+import type {
+  GeocodingBias,
+  GeocodingProvider as GeocodingProviderImpl,
+} from "@openmapx/integration-geocoding/types";
 /**
  * Photon geocoding client (by Komoot).
  * Backed by OSM data. No API key required.
@@ -20,6 +23,32 @@ let PHOTON_URL = "https://photon.komoot.io";
 /** Update the Photon base URL (called from setup() when service registry resolves it). */
 export function setPhotonUrl(url: string): void {
   PHOTON_URL = url;
+}
+
+// A search box needs both nearby places and famous far ones, and no single
+// Photon bias returns both. Photon's location bias is a radius, set by a map
+// zoom it takes as an integer, plus a weight for prominence against distance.
+// With a tight radius at the default weight (0.2), "paris" from Berlin returned
+// only Pariser Platz and "frankfurt" only Frankfurter Allee; with a wide radius
+// and prominence weighted up, "fernsehturm" returned a dozen towers named
+// exactly that and not the Berliner Fernsehturm next door. A biased lookup
+// therefore asks both ways at once and merges them; the client ranks the
+// mix for the actual zoom.
+const LOCAL_BIAS = { maxZoom: 14, scale: 0.2, limit: 6 } as const;
+const WIDE_BIAS = { maxZoom: 10, scale: 0.5, limit: 10 } as const;
+const UNBIASED_LIMIT = "10";
+
+function biasParams(
+  bias: GeocodingBias,
+  { maxZoom, scale, limit }: { maxZoom: number; scale: number; limit: number },
+): Record<string, string> {
+  return {
+    lat: String(bias.proximity[1]),
+    lon: String(bias.proximity[0]),
+    zoom: String(Math.min(maxZoom, Math.max(0, Math.floor(bias.zoom ?? maxZoom)))),
+    location_bias_scale: String(scale),
+    limit: String(limit),
+  };
 }
 
 interface PhotonProperties {
@@ -128,9 +157,36 @@ export const photonService: GeocodingProviderImpl = {
     return { address: buildLabel(p), city };
   },
 
-  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
-    const data = await fetchPhoton({ q: query, limit: "6", lang: lang ?? "en" }, "/api", lang);
-    return data.features.map((f) => {
+  async autocomplete(
+    query: string,
+    lang?: string,
+    bias?: GeocodingBias,
+  ): Promise<AutocompleteResult[]> {
+    const base = { q: query, lang: lang ?? "en" };
+    let features: PhotonFeature[];
+    if (bias) {
+      const lookups = await Promise.allSettled([
+        fetchPhoton({ ...base, ...biasParams(bias, LOCAL_BIAS) }, "/api", lang),
+        fetchPhoton({ ...base, ...biasParams(bias, WIDE_BIAS) }, "/api", lang),
+      ]);
+      const answered = lookups.flatMap((lookup) =>
+        lookup.status === "fulfilled" ? [lookup.value] : [],
+      );
+      // One lookup failing still leaves a useful answer; only both failing is an error.
+      if (answered.length === 0 && lookups[0].status === "rejected") throw lookups[0].reason;
+      const seen = new Set<string>();
+      features = answered
+        .flatMap((data) => data.features)
+        .filter((f) => {
+          const id = makeId(f.properties);
+          if (seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        });
+    } else {
+      features = (await fetchPhoton({ ...base, limit: UNBIASED_LIMIT }, "/api", lang)).features;
+    }
+    return features.map((f) => {
       const short = f.properties.name ?? buildLabel(f.properties);
       const full = buildLabel(f.properties);
       return {

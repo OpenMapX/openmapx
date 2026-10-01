@@ -134,10 +134,10 @@ export function createSearchSuggestionsOrchestrator(ctx: IntegrationContext): {
               : [suggestion.provider || entry.integrationId],
         })),
       );
-      const merged = mergeAutocompleteSuggestions(suggestions, query.query, query.proximity).slice(
-        0,
-        query.limit,
-      ) as SearchSuggestion[];
+      const merged = mergeAutocompleteSuggestions(suggestions, {
+        query: query.query,
+        proximity: query.proximity,
+      }).slice(0, query.limit) as SearchSuggestion[];
       const contributing = new Set(
         merged.flatMap((suggestion) => suggestion.contributingProviders ?? [suggestion.provider]),
       );

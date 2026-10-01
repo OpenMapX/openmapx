@@ -1,0 +1,377 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/2853050594",
+      "label": "Coffeed",
+      "sublabel": "Coffeed, Northern Boulevard 37-18, New York, United States",
+      "coordinates": [-73.9255705, 40.7519896],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5266896777",
+      "label": "Coffee Inn",
+      "sublabel": "Coffee Inn, 1st Avenue 1314, New York, United States",
+      "coordinates": [-73.9564674, 40.7667545],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10828054932",
+      "label": "Coffee Rx",
+      "sublabel": "Coffee Rx, West 3rd Street 123, New York, United States",
+      "coordinates": [-74.0004563, 40.7306933],
+      "type": "poi",
+      "rawCategory": "shop/coffee",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4944843921",
+      "label": "Coffee Project NY",
+      "sublabel": "Coffee Project NY, East 5th Street 239, New York, United States",
+      "coordinates": [-73.9893826, 40.7270679],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13878485101",
+      "label": "Coffee Check",
+      "sublabel": "Coffee Check, Green Street 65A, New York, United States",
+      "coordinates": [-73.959421, 40.7333653],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9501459860",
+      "label": "Coffee Project New York",
+      "sublabel": "Coffee Project New York, 51st Avenue, New York, United States",
+      "coordinates": [-73.9489553, 40.7408478],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1073783",
+      "label": "Coffee",
+      "sublabel": "Coffee, United States",
+      "coordinates": [-82.8405691, 31.5301809],
+      "type": "region",
+      "rawCategory": "place/county",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1848171",
+      "label": "Coffee",
+      "sublabel": "Coffee, United States",
+      "coordinates": [-86.069633, 35.4906115],
+      "type": "region",
+      "rawCategory": "place/county",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1850801",
+      "label": "Coffee",
+      "sublabel": "Coffee, United States",
+      "coordinates": [-85.9870669, 31.3629619],
+      "type": "region",
+      "rawCategory": "place/county",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12849374337",
+      "label": "Coffee Co.",
+      "sublabel": "Coffee Co., East Main Street 504, New Holland, United States",
+      "coordinates": [-76.0760017, 40.1049146],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4638400530",
+      "label": "Coffee Co.",
+      "sublabel": "Coffee Co., Lititz Pike 1639, Manheim Township, United States",
+      "coordinates": [-76.3054368, 40.067589],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11961064414",
+      "label": "Coffee For Sasquatch",
+      "sublabel": "Coffee For Sasquatch, Broome Street 384, New York, United States",
+      "coordinates": [-73.9965666, 40.7205273],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7177751484",
+      "label": "Coffee Project New York",
+      "sublabel": "Coffee Project New York, Rockwell Place 78, New York, United States",
+      "coordinates": [-73.9793247, 40.6876887],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2567093845",
+      "label": "Coffee Land",
+      "sublabel": "Coffee Land, Franklin Avenue 833, New York, United States",
+      "coordinates": [-73.9580715, 40.6699471],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2525593698",
+      "label": "Coffee Mob",
+      "sublabel": "Coffee Mob, Newkirk Avenue 1514, New York, United States",
+      "coordinates": [-73.9623411, 40.6358633],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:US-8530",
+      "ids": {
+        "oa": "US-8530"
+      },
+      "label": "Coffee Cup Ranch Airport",
+      "sublabel": "Marfa, US",
+      "coordinates": [-103.88087, 29.81793],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Coffee Cup Ranch Airport",
+        "normalized": "coffee cup ranch airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-3340",
+      "ids": {
+        "oa": "US-3340"
+      },
+      "label": "Coffee Point Airstrip",
+      "sublabel": "Egegik, US",
+      "coordinates": [-157.436654, 58.21393],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Coffee Point Airstrip",
+        "normalized": "coffee point airstrip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-11089",
+      "ids": {
+        "oa": "US-11089"
+      },
+      "label": "Eliza Coffee Memorial Hospital Heliport",
+      "sublabel": "Florence, US",
+      "coordinates": [-87.683199, 34.793783],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Eliza Coffee Memorial Hospital Heliport",
+        "normalized": "eliza coffee memorial hospital heliport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-5127",
+      "ids": {
+        "oa": "US-5127"
+      },
+      "label": "Bud Coffee Field",
+      "sublabel": "Modesto, US",
+      "coordinates": [-121.00133, 37.62425],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bud Coffee Field",
+        "normalized": "bud coffee field"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:BR-1257",
+      "ids": {
+        "oa": "BR-1257"
+      },
+      "label": "Fazendas Apóstolo Simão Coffee Airport",
+      "sublabel": "Rio Pardo de Minas, BR",
+      "coordinates": [-42.406305, -15.720262],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fazendas Apóstolo Simão Coffee Airport",
+        "normalized": "fazendas apostolo simao coffee airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:58AR",
+      "ids": {
+        "oa": "58AR"
+      },
+      "label": "Sugar Creek Airport",
+      "sublabel": "Bentonville, US",
+      "coordinates": [-94.175277, 36.405833],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Price Coffee Airfield",
+        "normalized": "price coffee airfield"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q5140923",
+      "name": "Coffee Republic",
+      "description": "British coffee bar and deli franchise",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q5140932",
+      "name": "Coffee Time",
+      "description": "Canadian chain of snack and coffee shops",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q873767",
+      "name": "Coffeeshop Company",
+      "description": "coffee franchise company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q130545230",
+      "name": "Coffee Culture",
+      "description": "Canadian coffee shop chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q100272682",
+      "name": "Coffee Culture",
+      "description": "coffee shop chain located in New Zealand",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q108927063",
+      "name": "Coffee Company",
+      "description": "Dutch cafe chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q109568497",
+      "name": "Coffee Lab",
+      "description": "coffee shop / cafe chain based in Athens, Greece",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q115323784",
+      "name": "Coffee Berry",
+      "description": "Greek coffeehouse company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/cafe/coffee_shop",
+      "name": "Coffeehouse",
+      "tags": {
+        "amenity": "cafe",
+        "cuisine": "coffee_shop"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/vending_machine/coffee",
+      "name": "Coffee Vending Machine",
+      "tags": {
+        "amenity": "vending_machine",
+        "vending": "coffee"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "shop/coffee",
+      "name": "Coffee Store",
+      "tags": {
+        "shop": "coffee"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/fast_food/donut",
+      "name": "Donut Fast Food",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "donut"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/internet_cafe",
+      "name": "Internet Cafe",
+      "tags": {
+        "amenity": "internet_cafe"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/restaurant",
+      "name": "Restaurant",
+      "tags": {
+        "amenity": "restaurant"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/restaurant/american",
+      "name": "American Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "american"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

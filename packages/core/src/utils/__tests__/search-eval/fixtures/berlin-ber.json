@@ -1,0 +1,389 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/62422",
+      "label": "Berlin",
+      "sublabel": "Berlin, Germany",
+      "coordinates": [13.3951309, 52.5173885],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13277221839",
+      "label": "Berlin Wall",
+      "sublabel": "Berlin Wall, Bernauer Straße, Berlin, Germany",
+      "coordinates": [13.3894002, 52.534059],
+      "type": "poi",
+      "rawCategory": "historic/citywalls",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13456106083",
+      "label": "Berlin Wall",
+      "sublabel": "Berlin Wall, Alexanderufer, Berlin, Germany",
+      "coordinates": [13.3735293, 52.5242131],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13456118964",
+      "label": "Berlin Wall",
+      "sublabel": "Berlin Wall, Alexanderufer, Berlin, Germany",
+      "coordinates": [13.3735305, 52.5241276],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/15976892",
+      "label": "Berlin State Opera",
+      "sublabel": "Berlin State Opera, Unter den Linden 7, Berlin, Germany",
+      "coordinates": [13.3947383, 52.5167029],
+      "type": "poi",
+      "rawCategory": "amenity/theatre",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/549366121",
+      "label": "Berlin-Brandenburg Academy of Sciences and Humanities",
+      "sublabel": "Berlin-Brandenburg Academy of Sciences and Humanities, Jägerstraße, Berlin, Germany",
+      "coordinates": [13.3942876, 52.5139563],
+      "type": "poi",
+      "rawCategory": "office/research",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/38862723",
+      "label": "Berlin Olympic Stadium",
+      "sublabel": "Berlin Olympic Stadium, Olympischer Platz 3, Berlin, Germany",
+      "coordinates": [13.2398144, 52.5145846],
+      "type": "poi",
+      "rawCategory": "leisure/stadium",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/14720811",
+      "label": "Berlin University of the Arts",
+      "sublabel": "Berlin University of the Arts, Metropole-Passage, Berlin, Germany",
+      "coordinates": [13.327792, 52.5096672],
+      "type": "poi",
+      "rawCategory": "amenity/university",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1318337",
+      "label": "Bernau bei Berlin",
+      "sublabel": "Bernau bei Berlin, Germany",
+      "coordinates": [13.5881114, 52.6787254],
+      "type": "region",
+      "rawCategory": "place/town",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2459919675",
+      "label": "Berlin Hauptbahnhof (tief)",
+      "sublabel": "Berlin Hauptbahnhof (tief), Europaplatz 1, Berlin, Germany",
+      "coordinates": [13.369861, 52.5246361],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:EDDB",
+      "ids": {
+        "oa": "EDDB",
+        "iata": "BER",
+        "icao": "EDDB"
+      },
+      "label": "Berlin Brandenburg Airport",
+      "sublabel": "Berlin, DE",
+      "coordinates": [13.502341, 52.361738],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "authoritative_code",
+        "value": "BER",
+        "normalized": "ber",
+        "namespace": "iata"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:ENBR",
+      "ids": {
+        "oa": "ENBR",
+        "iata": "BGO",
+        "icao": "ENBR"
+      },
+      "label": "Bergen Airport, Flesland",
+      "sublabel": "Bergen, NO",
+      "coordinates": [5.21814, 60.2934],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bergen Airport, Flesland",
+        "normalized": "bergen airport flesland"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:EES",
+      "ids": {
+        "oa": "EES",
+        "iata": "EES",
+        "icao": "HEBR"
+      },
+      "label": "Berenice International Airport / Banas Cape Air Base",
+      "sublabel": "Berenice Troglodytica, EG",
+      "coordinates": [35.460277, 23.980437],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berenice International Airport / Banas Cape Air Base",
+        "normalized": "berenice international airport banas cape air base"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:ENBV",
+      "ids": {
+        "oa": "ENBV",
+        "iata": "BVG",
+        "icao": "ENBV"
+      },
+      "label": "Berlevåg Airport",
+      "sublabel": "Berlevåg, NO",
+      "coordinates": [29.034097, 70.871517],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlevåg Airport",
+        "normalized": "berlevag airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:FEFT",
+      "ids": {
+        "oa": "FEFT",
+        "iata": "BBT",
+        "icao": "FEFT"
+      },
+      "label": "Berbérati Airport",
+      "sublabel": "Berbérati, CF",
+      "coordinates": [15.786399841308594, 4.2215800285339355],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berbérati Airport",
+        "normalized": "berberati airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:HCMI",
+      "ids": {
+        "oa": "HCMI",
+        "iata": "BBO",
+        "icao": "HCMI"
+      },
+      "label": "Berbera Airport",
+      "sublabel": "Berbera, SO",
+      "coordinates": [44.936723, 10.385035],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berbera Airport",
+        "normalized": "berbera airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:KBTM",
+      "ids": {
+        "oa": "KBTM",
+        "iata": "BTM",
+        "icao": "KBTM"
+      },
+      "label": "Bert Mooney Airport",
+      "sublabel": "Butte, US",
+      "coordinates": [-112.49700164794922, 45.95479965209961],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bert Mooney Airport",
+        "normalized": "bert mooney airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:ID-0008",
+      "ids": {
+        "oa": "ID-0008"
+      },
+      "label": "Berau Airport",
+      "sublabel": "Sokan-Borneo Island, ID",
+      "coordinates": [117.68699646, 2.16350007057],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berau Airport",
+        "normalized": "berau airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q821960",
+      "name": "Berlitz Corporation",
+      "description": "language education franchise with headquarters in Princeton, New Jersey",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q827258",
+      "name": "Bershka",
+      "description": "Spanish clothing retailer",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q48976878",
+      "name": "Berkshire Bank",
+      "description": "bank in the Northeastern United States",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q821855",
+      "name": "Berliner Volksbank",
+      "description": "regional cooperative bank in Germany",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q106575365",
+      "name": "Beryl",
+      "description": "British company making bike lights and bike sharing systems",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q118594324",
+      "name": "Berkot's Super Foods",
+      "description": "supermarket chain in Northern Illinois and Southern Wisconsin",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q121742717",
+      "name": "Berkman",
+      "description": "Dutch chain of petrol stations",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q4153367",
+      "name": "Bereke Bank",
+      "description": "bank in Kazakhstan",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": [
+    {
+      "id": "craft/plumber",
+      "name": "Plumber",
+      "tags": {
+        "craft": "plumber"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "leisure/marina_no_facilities",
+      "name": "Yacht Berths",
+      "tags": {
+        "seamark:harbour:category": "marina_no_facilities"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "shop/hairdresser/barber",
+      "name": "Barber",
+      "tags": {
+        "shop": "hairdresser",
+        "hairdresser": "barber"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/internet_cafe",
+      "name": "Internet Cafe",
+      "tags": {
+        "amenity": "internet_cafe"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/monastery",
+      "name": "Monastery Grounds",
+      "tags": {
+        "amenity": "monastery"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/place_of_worship",
+      "name": "Place of Worship",
+      "tags": {
+        "amenity": "place_of_worship"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/place_of_worship/christian",
+      "name": "Christian Church",
+      "tags": {
+        "amenity": "place_of_worship",
+        "religion": "christian"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "craft/sawmill",
+      "name": "Sawmill",
+      "tags": {
+        "craft": "sawmill"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

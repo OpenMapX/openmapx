@@ -3,10 +3,14 @@ import type { AutocompleteResult } from "../../types/geocoding";
 import {
   compareSearchSuggestions,
   isUppercaseAcronymIntent,
+  localityScore,
   mergeAutocompleteSuggestions,
   normalizeSearchTerm,
-  searchMatchTier,
+  suggestionScore,
+  textMatchScore,
 } from "../searchSuggestion";
+
+const BERLIN: [number, number] = [13.405, 52.52];
 
 describe("search suggestion primitives", () => {
   it("normalizes case, Latin diacritics, punctuation, and whitespace", () => {
@@ -22,13 +26,144 @@ describe("search suggestion primitives", () => {
     expect(isUppercaseAcronymIntent("ABCDEFGHI")).toBe(false);
   });
 
-  it("keeps the approved tier ordering and equal explicit tiers", () => {
-    expect(searchMatchTier("authoritative_code")).toBe(400);
-    expect(searchMatchTier("explicit_reference")).toBe(300);
-    expect(searchMatchTier("explicit_alias")).toBe(300);
-    expect(searchMatchTier("name")).toBe(200);
-    expect(searchMatchTier()).toBe(200);
-    expect(searchMatchTier("generated_acronym")).toBe(100);
+  it("scores text from official codes down to provider-only matches", () => {
+    const row = (label: string, sublabel?: string): AutocompleteResult => ({
+      id: label,
+      label,
+      sublabel,
+      type: "poi",
+    });
+    const code: AutocompleteResult = {
+      ...row("Frankfurt am Main Airport"),
+      searchMatch: { kind: "authoritative_code", value: "FRA", normalized: "fra" },
+    };
+    const alias: AutocompleteResult = {
+      ...row("Frankfurt am Main Airport"),
+      searchMatch: { kind: "explicit_alias", value: "Rhein-Main", normalized: "rhein main" },
+    };
+    const acronym: AutocompleteResult = {
+      ...row("University of North Carolina at Charlotte"),
+      searchMatch: { kind: "generated_acronym", value: "UNCC", normalized: "uncc" },
+    };
+
+    expect(textMatchScore(code, "FRA")).toBe(1.4);
+    expect(textMatchScore(alias, "Rhein-Main")).toBe(1.3);
+    expect(textMatchScore(acronym, "uncc")).toBe(0.7);
+    expect(textMatchScore(row("Café Einstein"), "cafe einstein")).toBe(1);
+    expect(textMatchScore(row("Coffee Circle"), "coffee")).toBe(0.8);
+    expect(textMatchScore(row("Berlin Coffee Lab"), "coffee")).toBe(0.7);
+    expect(textMatchScore(row("Einstein", "Unter den Linden, Berlin"), "einstein linden")).toBe(
+      0.5,
+    );
+    expect(textMatchScore(row("Palmers Brewery"), "rewe")).toBe(0.3);
+    expect(textMatchScore(row("Alexanderplatz"), "alexnderplatz")).toBe(0.15);
+    expect(textMatchScore(row("King's Cross"), "kings cross")).toBe(1);
+    expect(textMatchScore(row("Anything"), "")).toBe(0);
+  });
+
+  it("keeps a famous area ahead of a nearby same-named village at country zoom", () => {
+    const city: AutocompleteResult = {
+      id: "frankfurt-main",
+      label: "Frankfurt am Main",
+      coordinates: [8.68, 50.11],
+      type: "region",
+      rawCategory: "place/city",
+    };
+    const village: AutocompleteResult = {
+      id: "frankfurt-village",
+      label: "Frankfurt",
+      coordinates: [12.55, 52.0],
+      type: "region",
+      rawCategory: "place/village",
+    };
+    const context = { query: "frankfurt", proximity: [10.45, 51.16] as [number, number], zoom: 6 };
+    expect(compareSearchSuggestions(city, village, context)).toBeLessThan(0);
+  });
+
+  it("lets nearby credit fade with distance faster the further the map is zoomed in", () => {
+    const cafe: AutocompleteResult = {
+      id: "cafe",
+      label: "Coffee Circle",
+      coordinates: [13.405, 52.565],
+      type: "poi",
+    };
+    const city = localityScore(cafe, { query: "coffee", proximity: BERLIN, zoom: 16 });
+    const region = localityScore(cafe, { query: "coffee", proximity: BERLIN, zoom: 10 });
+    expect(city).toBeLessThan(region);
+    expect(localityScore(cafe, { query: "coffee" })).toBe(0);
+  });
+
+  it("ranks nearby cafés above a far county that shares the typed name", () => {
+    const county: AutocompleteResult = {
+      id: "coffee-county",
+      label: "Coffee",
+      coordinates: [-86.07, 35.49],
+      type: "region",
+      rawCategory: "place/county",
+    };
+    const cafe: AutocompleteResult = {
+      id: "coffee-circle",
+      label: "Coffee Circle",
+      coordinates: [13.39, 52.53],
+      type: "poi",
+    };
+    const context = { query: "coffee", proximity: BERLIN, zoom: 14 };
+    expect(compareSearchSuggestions(cafe, county, context)).toBeLessThan(0);
+  });
+
+  it("keeps a far prominent place of the exact name ahead of a nearby partial match", () => {
+    const paris: AutocompleteResult = {
+      id: "paris",
+      label: "Paris",
+      coordinates: [2.35, 48.86],
+      type: "region",
+      rawCategory: "place/city",
+    };
+    const parisBar: AutocompleteResult = {
+      id: "paris-bar",
+      label: "Paris Bar",
+      coordinates: [13.32, 52.5],
+      type: "poi",
+    };
+    for (const zoom of [8, 12, 16]) {
+      const context = { query: "paris", proximity: parisBar.coordinates, zoom };
+      expect(compareSearchSuggestions(paris, parisBar, context)).toBeLessThan(0);
+    }
+  });
+
+  it("puts the nearby square ahead of far places of the same name", () => {
+    const berlin: AutocompleteResult = {
+      id: "berlin",
+      label: "Alexanderplatz",
+      coordinates: [13.413, 52.522],
+      type: "transit_stop",
+      importance: 0.7,
+    };
+    const elsewhere: AutocompleteResult = {
+      id: "hoehr",
+      label: "Alexanderplatz",
+      coordinates: [7.66, 50.43],
+      type: "region",
+      rawCategory: "place/square",
+    };
+    const context = { query: "alexanderplatz", proximity: BERLIN, zoom: 14 };
+    expect(compareSearchSuggestions(berlin, elsewhere, context)).toBeLessThan(0);
+  });
+
+  it("scores chains by whether they operate in the map's country", () => {
+    const chain = (brandPresence: AutocompleteResult["brandPresence"]): AutocompleteResult => ({
+      id: `chain-${brandPresence}`,
+      label: "Coffee Fellows",
+      type: "brand",
+      brandPresence,
+    });
+    const context = { query: "coffee fellows" };
+    expect(suggestionScore(chain("here"), context)).toBeGreaterThan(
+      suggestionScore(chain("unknown"), context),
+    );
+    expect(suggestionScore(chain("unknown"), context)).toBeGreaterThan(
+      suggestionScore(chain("elsewhere"), context),
+    );
   });
 
   it("keeps match evidence and exact text ahead of local preference", () => {
@@ -48,13 +183,14 @@ describe("search suggestion primitives", () => {
       searchMatch: { kind: "explicit_alias", value: "Fraser", normalized: "fraser" },
       importance: 1,
     };
-    expect(compareSearchSuggestions(exact, prefix, "FRA", [8.5, 50])).toBeLessThan(0);
+    const context = { query: "FRA", proximity: [8.5, 50] as [number, number] };
+    expect(compareSearchSuggestions(exact, prefix, context)).toBeLessThan(0);
 
     const important = { ...exact, id: "important", importance: 0.9 };
-    expect(compareSearchSuggestions(important, exact, "FRA", [8.5, 50])).toBeLessThan(0);
+    expect(compareSearchSuggestions(important, exact, context)).toBeLessThan(0);
 
     const nearby = { ...exact, id: "nearby", coordinates: [8.5, 50] as [number, number] };
-    expect(compareSearchSuggestions(nearby, exact, "FRA", [8.5, 50])).toBeLessThan(0);
+    expect(compareSearchSuggestions(nearby, exact, context)).toBeLessThan(0);
   });
 
   it("promotes a nearby equally matching place over a more prominent distant one", () => {
@@ -72,32 +208,16 @@ describe("search suggestion primitives", () => {
       importance: 0.3,
     };
 
-    expect(compareSearchSuggestions(nearby, distant, "Central Cafe", [6.084, 50.775])).toBeLessThan(
-      0,
-    );
-    expect(compareSearchSuggestions(distant, nearby, "Central Cafe")).toBeLessThan(0);
+    expect(
+      compareSearchSuggestions(nearby, distant, {
+        query: "Central Cafe",
+        proximity: [6.084, 50.775],
+      }),
+    ).toBeLessThan(0);
+    expect(compareSearchSuggestions(distant, nearby, { query: "Central Cafe" })).toBeLessThan(0);
   });
 
-  it("keeps an exact distant place ahead of a nearby prefix match", () => {
-    const distant: AutocompleteResult = {
-      id: "paris-france",
-      label: "Paris",
-      coordinates: [2.35, 48.86],
-      type: "region",
-      importance: 0.9,
-    };
-    const nearby: AutocompleteResult = {
-      id: "paris-cafe",
-      label: "Paris Cafe",
-      coordinates: [6.084, 50.775],
-      type: "poi",
-      importance: 0.1,
-    };
-
-    expect(compareSearchSuggestions(distant, nearby, "Paris", [6.084, 50.775])).toBeLessThan(0);
-  });
-
-  it("keeps a closer exact destination ahead when both are outside the nearby boost", () => {
+  it("keeps a closer exact destination ahead when neither is near", () => {
     const france: AutocompleteResult = {
       id: "z-france",
       label: "Paris",
@@ -111,7 +231,9 @@ describe("search suggestion primitives", () => {
       type: "region",
     };
 
-    expect(compareSearchSuggestions(france, texas, "Paris", [6.084, 50.775])).toBeLessThan(0);
+    expect(
+      compareSearchSuggestions(france, texas, { query: "Paris", proximity: [6.084, 50.775] }),
+    ).toBeLessThan(0);
   });
 
   it("deduplicates a geocoder and catalog result without losing the stronger match", () => {
@@ -135,7 +257,7 @@ describe("search suggestion primitives", () => {
           provider: "knowledge-ourairports",
         },
       ],
-      "FRA",
+      { query: "FRA" },
     );
     expect(merged).toHaveLength(1);
     expect(merged[0]).toMatchObject({
@@ -169,7 +291,7 @@ describe("search suggestion primitives", () => {
           provider: "search-osm-aliases",
         },
       ],
-      "8011160",
+      { query: "8011160" },
     );
     expect(merged).toHaveLength(1);
     expect(merged[0].ids).toEqual({ uic: "8011160", osm: "node/123", transit: "one" });
@@ -195,10 +317,40 @@ describe("search suggestion primitives", () => {
           provider: "geocoder",
         },
       ],
-      "oslo",
+      { query: "oslo" },
     );
     expect(merged).toHaveLength(1);
     expect(merged[0].contributingProviders).toEqual(["geocoding-entur", "geocoder"]);
+  });
+
+  it("keeps a station apart from the same-named square it serves", () => {
+    const merged = mergeAutocompleteSuggestions(
+      [
+        {
+          id: "square",
+          label: "Alexanderplatz",
+          coordinates: [13.4133, 52.5219],
+          type: "region",
+          rawCategory: "place/square",
+        },
+        {
+          id: "station",
+          label: "Alexanderplatz",
+          coordinates: [13.4114, 52.5215],
+          type: "poi",
+          rawCategory: "railway/station",
+        },
+        {
+          id: "stop",
+          label: "Alexanderplatz",
+          coordinates: [13.4118, 52.5217],
+          type: "poi",
+          rawCategory: "highway/bus_stop",
+        },
+      ],
+      { query: "alexanderplatz" },
+    );
+    expect(merged.map((row) => row.id).sort()).toEqual(["square", "station"]);
   });
 
   it("keeps same-named places apart beyond a kilometre", () => {
@@ -207,7 +359,7 @@ describe("search suggestion primitives", () => {
         { id: "one", label: "Bahnhofstraße", coordinates: [7, 50], type: "street" },
         { id: "two", label: "Bahnhofstraße", coordinates: [7.02, 50], type: "street" },
       ],
-      "bahnhof",
+      { query: "bahnhof" },
     );
     expect(merged).toHaveLength(2);
   });
@@ -218,7 +370,7 @@ describe("search suggestion primitives", () => {
         { id: "one", label: "Central Hotel", coordinates: [7, 50], type: "poi" },
         { id: "two", label: "Central Station", coordinates: [7, 50], type: "poi" },
       ],
-      "central",
+      { query: "central" },
     );
     expect(merged).toHaveLength(2);
   });

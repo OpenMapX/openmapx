@@ -1,0 +1,233 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/427818536",
+      "label": "Central Park",
+      "sublabel": "Central Park, New York, United States",
+      "coordinates": [-73.9653627, 40.7827725],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/661227257",
+      "label": "Central Park West",
+      "sublabel": "Central Park West, New York, United States",
+      "coordinates": [-73.9778302, 40.7736652],
+      "type": "street",
+      "rawCategory": "highway/secondary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1271523180",
+      "label": "Central Park West",
+      "sublabel": "Central Park West, New York, United States",
+      "coordinates": [-73.9699718, 40.7844546],
+      "type": "street",
+      "rawCategory": "highway/secondary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1271523185",
+      "label": "Central Park West",
+      "sublabel": "Central Park West, New York, United States",
+      "coordinates": [-73.9673598, 40.7880241],
+      "type": "street",
+      "rawCategory": "highway/secondary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1271523199",
+      "label": "Central Park West",
+      "sublabel": "Central Park West, New York, United States",
+      "coordinates": [-73.9587306, 40.7998426],
+      "type": "street",
+      "rawCategory": "highway/secondary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1024425032",
+      "label": "Central Park West",
+      "sublabel": "Central Park West, New York, United States",
+      "coordinates": [-73.9814551, 40.7686849],
+      "type": "street",
+      "rawCategory": "highway/secondary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/802292178",
+      "label": "Central Park West",
+      "sublabel": "Central Park West, New York, United States",
+      "coordinates": [-73.9793616, 40.7715678],
+      "type": "street",
+      "rawCategory": "highway/secondary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/195743156",
+      "label": "Central Park West",
+      "sublabel": "Central Park West, New York, United States",
+      "coordinates": [-73.972928, 40.7803996],
+      "type": "street",
+      "rawCategory": "highway/secondary",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:US-3626",
+      "ids": {
+        "oa": "US-3626"
+      },
+      "label": "Central Park Airport",
+      "sublabel": "Birmingham, US",
+      "coordinates": [-86.8903, 33.4777],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Central Park Airport",
+        "normalized": "central park airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-11048",
+      "ids": {
+        "oa": "US-11048"
+      },
+      "label": "Central Park Helistop",
+      "sublabel": "Oklahoma City, US",
+      "coordinates": [-97.500604, 35.533383],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Central Park Helistop",
+        "normalized": "central park helistop"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:MX-2282",
+      "ids": {
+        "oa": "MX-2282"
+      },
+      "label": "Peninsula Lifestyle Helipad",
+      "sublabel": "Guadalajara, MX",
+      "coordinates": [-103.400214, 20.677928],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Central Park Residential",
+        "normalized": "central park residential"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:JP-1999",
+      "ids": {
+        "oa": "JP-1999"
+      },
+      "label": "Central Park Tower La Tour Shinjuku Helipad",
+      "sublabel": "Shinjuku, Tokyo, JP",
+      "coordinates": [139.68856, 35.69222],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Central Park Tower La Tour Shinjuku Helipad",
+        "normalized": "central park tower la tour shinjuku helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:BR-1020",
+      "ids": {
+        "oa": "BR-1020"
+      },
+      "label": "ITC Central Park I Helipad",
+      "sublabel": "Fortaleza, BR",
+      "coordinates": [-38.473306, -3.739282],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "ITC Central Park I Helipad",
+        "normalized": "itc central park i helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:JP-2369",
+      "ids": {
+        "oa": "JP-2369"
+      },
+      "label": "Kamimine Central Park Emergency Helipad",
+      "sublabel": "Kamimine, JP",
+      "coordinates": [130.42514, 33.31061],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kamimine Central Park Emergency Helipad",
+        "normalized": "kamimine central park emergency helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-8702",
+      "ids": {
+        "oa": "US-8702"
+      },
+      "label": "401 Rockefeller Helipad",
+      "sublabel": "Irvine, US",
+      "coordinates": [-117.84795, 33.67754],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Astoria at Central Park West",
+        "normalized": "astoria at central park west"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-8701",
+      "ids": {
+        "oa": "US-8701"
+      },
+      "label": "405 Rockefeller Helipad",
+      "sublabel": "Irvine, US",
+      "coordinates": [-117.84851, 33.67731],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Astoria at Central Park West",
+        "normalized": "astoria at central park west"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q7598289",
+      "name": "SP+",
+      "description": "American parking facility operator",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "here"
+    }
+  ],
+  "presets": []
+}

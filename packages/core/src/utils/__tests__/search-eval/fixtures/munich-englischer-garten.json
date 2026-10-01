@@ -1,0 +1,115 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/159075298",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, München, Deutschland",
+      "coordinates": [11.6064042, 48.164861],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/47930762",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, München, Deutschland",
+      "coordinates": [11.5952634, 48.1506781],
+      "type": "street",
+      "rawCategory": "highway/unclassified",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/235912727",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, München, Deutschland",
+      "coordinates": [11.5917974, 48.1561427],
+      "type": "street",
+      "rawCategory": "highway/unclassified",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/424275424",
+      "label": "Englischer Garten - Südteil",
+      "sublabel": "Englischer Garten - Südteil, Max-Planck-Straße, München, Deutschland",
+      "coordinates": [11.5960132, 48.1363121],
+      "type": "poi",
+      "rawCategory": "information/map",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4322350340",
+      "label": "Englischer Garten - Südteil",
+      "sublabel": "Englischer Garten - Südteil, Wilhelm-Hausenstein-Weg, München, Deutschland",
+      "coordinates": [11.5976506, 48.1428395],
+      "type": "poi",
+      "rawCategory": "information/map",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4318666271",
+      "label": "Englischer Garten - Südteil",
+      "sublabel": "Englischer Garten - Südteil, Carl-Theodor-Straße, München, Deutschland",
+      "coordinates": [11.5917532, 48.1523878],
+      "type": "poi",
+      "rawCategory": "information/map",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/184641407",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, München, Deutschland",
+      "coordinates": [11.5942263, 48.1513286],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/23210565",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, Neuburg an der Donau, Deutschland",
+      "coordinates": [11.2054836, 48.7402027],
+      "type": "region",
+      "rawCategory": "landuse/forest",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/33898264",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, Landsberg am Lech, Deutschland",
+      "coordinates": [10.8756645, 48.0433548],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/32063651",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, Innsbruck, Österreich",
+      "coordinates": [11.3950515, 47.2718315],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/33907270",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, Landsberg am Lech, Deutschland",
+      "coordinates": [10.8754712, 48.0428018],
+      "type": "street",
+      "rawCategory": "highway/path",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/32396681",
+      "label": "Englischer Garten",
+      "sublabel": "Englischer Garten, Thannhausen, Deutschland",
+      "coordinates": [10.472473, 48.2845508],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

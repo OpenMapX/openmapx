@@ -1,0 +1,143 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/219650177",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Hottenrothstraße, Dresden, Deutschland",
+      "coordinates": [13.8390964, 51.0400713],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/556435241",
+      "label": "Berliner Fernsehturm",
+      "sublabel": "Berliner Fernsehturm, Panoramastraße 1a, Berlin, Deutschland",
+      "coordinates": [13.4094214, 52.5208279],
+      "type": "address",
+      "rawCategory": "building/tower",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/127184907",
+      "label": "Fernsehturm Müggelberge",
+      "sublabel": "Fernsehturm Müggelberge, Kammweg, Berlin, Deutschland",
+      "coordinates": [13.636739, 52.4165698],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/128468650",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Klein Gastrose, Klein Gastrose, Deutschland",
+      "coordinates": [14.6803896, 51.8972761],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/9290940",
+      "label": "Wasserkaskaden am Fernsehturm",
+      "sublabel": "Wasserkaskaden am Fernsehturm, Berlin, Deutschland",
+      "coordinates": [13.4083209, 52.5201093],
+      "type": "region",
+      "rawCategory": "natural/water",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1475419199",
+      "label": "Karl-Liebknecht-Straße/Berliner Fernsehturm",
+      "sublabel": "Karl-Liebknecht-Straße/Berliner Fernsehturm, Karl-Liebknecht-Straße, Berlin, Deutschland",
+      "coordinates": [13.4077148, 52.5213191],
+      "type": "poi",
+      "rawCategory": "amenity/mobility_hub",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3194624834",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Fernsehturmstraße, Dresden, Deutschland",
+      "coordinates": [13.8446046, 51.0398515],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3194624835",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Oberwachwitzer Weg, Dresden, Deutschland",
+      "coordinates": [13.8434901, 51.0401458],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/276714170",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Bürgermeister-Adolf-Meyer-Straße, Buchholz in der Nordheide, Deutschland",
+      "coordinates": [9.8886868, 53.326411],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/148932365",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Sauerbruchstraße, Wolfsburg, Deutschland",
+      "coordinates": [10.7743013, 52.414198],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/91868384",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Am Reineberg, Hüllhorst, Deutschland",
+      "coordinates": [8.6411411, 52.2920755],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3982223281",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Bergedorfer Landstraße, Ganderkesee, Deutschland",
+      "coordinates": [8.4541212, 53.0397042],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/471868418",
+      "label": "Fernsehturm Calau",
+      "sublabel": "Fernsehturm Calau, Am Funkturm, Calau, Deutschland",
+      "coordinates": [13.9419887, 51.741873],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/30172671",
+      "label": "Fernsehturm",
+      "sublabel": "Fernsehturm, Weißenbrunn, Deutschland",
+      "coordinates": [11.3322782, 50.2137139],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": [
+    {
+      "id": "man_made/mast/communication",
+      "name": "Funkmast",
+      "tags": {
+        "man_made": "mast",
+        "tower:type": "communication"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

@@ -153,6 +153,52 @@ describe("MapTiler geocoding provider", () => {
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("autocomplete=true");
   });
 
+  it("reports an area's settlement rank so ranking can tell a city from a hamlet", async () => {
+    const area = (id: string, placeType: string, designation?: string) => ({
+      id,
+      text: id,
+      place_name: id,
+      place_type: [placeType],
+      relevance: 1,
+      geometry: { coordinates: [0, 0] },
+      properties: designation ? { place_designation: designation } : {},
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        features: [
+          area("Munich", "county", "city"),
+          area("Coffee", "county", "hamlet"),
+          area("Bavaria", "region"),
+          area("Hauptstraße 1", "address"),
+        ],
+      }),
+    );
+
+    const results = await maptilerGeocodingService.autocomplete("m");
+
+    expect(results.map((result) => result.rawCategory)).toEqual([
+      "place/city",
+      "place/hamlet",
+      "place/region",
+      undefined,
+    ]);
+  });
+
+  it("sends the autocomplete bias as proximity=lng,lat and omits it when absent", async () => {
+    mockFetch.mockImplementation(async () => mockOk({ features: [] }));
+
+    await maptilerGeocodingService.autocomplete("coffee", "de", {
+      proximity: [13.4, 52.52],
+      zoom: 14,
+    });
+    await maptilerGeocodingService.autocomplete("coffee", "de");
+
+    const biased = new URL(String(mockFetch.mock.calls[0]?.[0])).searchParams;
+    expect(biased.get("proximity")).toBe("13.4,52.52");
+    const unbiased = new URL(String(mockFetch.mock.calls[1]?.[0])).searchParams;
+    expect(unbiased.has("proximity")).toBe(false);
+  });
+
   it("extracts city + region from reverse-geocode context", async () => {
     mockFetch.mockResolvedValueOnce(
       mockOk({

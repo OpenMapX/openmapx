@@ -1,5 +1,5 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { getGeocodingProvider, setConfiguredProviderList } from "../orchestrator.js";
 import type { GeocodingProvider, SearchResult } from "../types.js";
 
@@ -48,6 +48,22 @@ describe("geocoding orchestrator served-provider tagging", () => {
     const ctx = ctxWith([["geocoding-maptiler", provider([result("a")])]]);
     const suggestions = await getGeocodingProvider(ctx).autocomplete("q");
     expect(suggestions.every((s) => s.provider === "geocoding-maptiler")).toBe(true);
+  });
+
+  it("forwards the location bias through the fallback chain", async () => {
+    setConfiguredProviderList("maptiler,photon");
+    const empty = provider([]);
+    const served = provider([result("b")]);
+    const emptySpy = vi.spyOn(empty, "autocomplete");
+    const servedSpy = vi.spyOn(served, "autocomplete");
+    const ctx = ctxWith([
+      ["geocoding-maptiler", empty],
+      ["geocoding-photon", served],
+    ]);
+    const bias = { proximity: [13.4, 52.52] as [number, number], zoom: 12 };
+    await getGeocodingProvider(ctx).autocomplete("coffee", "de", bias);
+    expect(emptySpy).toHaveBeenCalledWith("coffee", "de", bias);
+    expect(servedSpy).toHaveBeenCalledWith("coffee", "de", bias);
   });
 
   it("tags reverse-geocode results with the serving integration id", async () => {
