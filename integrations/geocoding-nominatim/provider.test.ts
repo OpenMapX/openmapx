@@ -31,7 +31,7 @@ describe("Nominatim geocoding provider", () => {
           lon: "6.9582814",
           display_name: "Köln Hauptbahnhof, Köln, Germany",
           name: "Köln Hauptbahnhof",
-          class: "railway",
+          category: "railway",
           type: "station",
           importance: 0.62,
         },
@@ -42,7 +42,7 @@ describe("Nominatim geocoding provider", () => {
           lat: "50.94",
           lon: "6.95",
           display_name: "Domkloster, Köln, Germany",
-          class: "highway",
+          category: "highway",
           type: "residential",
           importance: 0.3,
         },
@@ -53,7 +53,7 @@ describe("Nominatim geocoding provider", () => {
           lat: "50.93",
           lon: "6.96",
           display_name: "Köln, Germany",
-          class: "boundary",
+          category: "boundary",
           type: "administrative",
           importance: 0.7,
         },
@@ -103,7 +103,7 @@ describe("Nominatim geocoding provider", () => {
           lon: "0",
           display_name: "A Cafe",
           name: "A Cafe",
-          class: "amenity",
+          category: "amenity",
           type: "cafe",
           importance: 0.1,
         },
@@ -112,6 +112,34 @@ describe("Nominatim geocoding provider", () => {
 
     const [result] = await nominatimService.geocode("cafe");
     expect(result?.type).toBe("poi");
+  });
+
+  it("ranks a city mapped as its boundary as the city, with Nominatim's importance", async () => {
+    mockFetch.mockResolvedValueOnce(
+      mockOk([
+        {
+          place_id: 1,
+          osm_type: "relation",
+          osm_id: 62578,
+          lat: "50.94",
+          lon: "6.96",
+          display_name: "Köln, Nordrhein-Westfalen, Deutschland",
+          name: "Köln",
+          category: "boundary",
+          type: "administrative",
+          addresstype: "city",
+          importance: 0.76,
+        },
+      ]),
+    );
+
+    const [result] = await nominatimService.autocomplete("köln");
+
+    expect(result).toMatchObject({
+      type: "region",
+      rawCategory: "place/city",
+      importance: 0.76,
+    });
   });
 
   it("derives a street line for unnamed address features in autocomplete", async () => {
@@ -124,7 +152,7 @@ describe("Nominatim geocoding provider", () => {
           lat: "51.96",
           lon: "7.62",
           display_name: "40, Kinderhauser Straße, Münster, Germany",
-          class: "place",
+          category: "place",
           type: "house",
           importance: 0.2,
           address: {
@@ -158,7 +186,7 @@ describe("Nominatim geocoding provider", () => {
           lon: "6.95",
           display_name: "Köln Hauptbahnhof, Köln, Germany",
           name: "Köln Hauptbahnhof",
-          class: "railway",
+          category: "railway",
           type: "station",
           importance: 0.6,
         },

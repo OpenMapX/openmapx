@@ -11,7 +11,7 @@ function makeBerlinResult(overrides: Record<string, unknown> = {}) {
     lat: "52.5200",
     lon: "13.3700",
     display_name: "Berlin, Germany",
-    class: "place",
+    category: "place",
     type: "city",
     importance: 0.87,
     ...overrides,
@@ -51,7 +51,7 @@ describe("geocode", () => {
   });
 
   it('maps class "highway" to "street"', async () => {
-    const result = makeBerlinResult({ class: "highway", type: "residential" });
+    const result = makeBerlinResult({ category: "highway", type: "residential" });
     mockFetch.mockResolvedValueOnce(mockOk([result]));
     const { nominatimService } = await loadModule();
 
@@ -60,7 +60,7 @@ describe("geocode", () => {
   });
 
   it('maps class "place" + type "house" to "address"', async () => {
-    const result = makeBerlinResult({ class: "place", type: "house" });
+    const result = makeBerlinResult({ category: "place", type: "house" });
     mockFetch.mockResolvedValueOnce(mockOk([result]));
     const { nominatimService } = await loadModule();
 
@@ -69,7 +69,7 @@ describe("geocode", () => {
   });
 
   it('maps class "amenity" to "poi"', async () => {
-    const result = makeBerlinResult({ class: "amenity", type: "cafe" });
+    const result = makeBerlinResult({ category: "amenity", type: "cafe" });
     mockFetch.mockResolvedValueOnce(mockOk([result]));
     const { nominatimService } = await loadModule();
 
@@ -78,7 +78,7 @@ describe("geocode", () => {
   });
 
   it('maps class "shop" to "poi"', async () => {
-    const result = makeBerlinResult({ class: "shop", type: "supermarket" });
+    const result = makeBerlinResult({ category: "shop", type: "supermarket" });
     mockFetch.mockResolvedValueOnce(mockOk([result]));
     const { nominatimService } = await loadModule();
 
@@ -87,7 +87,7 @@ describe("geocode", () => {
   });
 
   it('maps class "tourism" to "poi"', async () => {
-    const result = makeBerlinResult({ class: "tourism", type: "museum" });
+    const result = makeBerlinResult({ category: "tourism", type: "museum" });
     mockFetch.mockResolvedValueOnce(mockOk([result]));
     const { nominatimService } = await loadModule();
 
@@ -96,7 +96,7 @@ describe("geocode", () => {
   });
 
   it('maps class "leisure" to "poi"', async () => {
-    const result = makeBerlinResult({ class: "leisure", type: "park" });
+    const result = makeBerlinResult({ category: "leisure", type: "park" });
     mockFetch.mockResolvedValueOnce(mockOk([result]));
     const { nominatimService } = await loadModule();
 
@@ -105,7 +105,7 @@ describe("geocode", () => {
   });
 
   it('maps unknown class to "region"', async () => {
-    const result = makeBerlinResult({ class: "boundary", type: "administrative" });
+    const result = makeBerlinResult({ category: "boundary", type: "administrative" });
     mockFetch.mockResolvedValueOnce(mockOk([result]));
     const { nominatimService } = await loadModule();
 
@@ -262,7 +262,7 @@ describe("autocomplete", () => {
   });
 
   it("maps all fields correctly for autocomplete", async () => {
-    const result = makeBerlinResult({ class: "amenity", type: "restaurant" });
+    const result = makeBerlinResult({ category: "amenity", type: "restaurant" });
     mockFetch.mockResolvedValueOnce(mockOk([result]));
     const { nominatimService } = await loadModule();
 

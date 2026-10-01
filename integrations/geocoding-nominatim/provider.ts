@@ -36,8 +36,12 @@ interface NominatimResult {
   display_name: string;
   /** Empty for unnamed address/building features; a POI name otherwise. */
   name?: string;
-  class: string;
+  /** The OSM key, e.g. "boundary" (jsonv2 calls it `category`; json called it `class`). */
+  category: string;
   type: string;
+  /** The place's rank as an address part ("city", "town", "village", "suburb"). */
+  addresstype?: string;
+  /** Wikipedia-based for places with an article, else derived from the place's rank. */
   importance: number;
   address?: {
     road?: string;
@@ -127,6 +131,18 @@ function makeId(r: NominatimResult): string {
   return `osm:${r.osm_type}/${r.osm_id}`;
 }
 
+/**
+ * The raw category ranking reads: `class/value`, except that a city mapped as
+ * its boundary ("boundary/administrative", Köln) reports its rank as
+ * `place/<addresstype>`, so it ranks as the city it is.
+ */
+function rawCategoryOf(r: NominatimResult): string {
+  if (r.category === "boundary" && r.type === "administrative" && r.addresstype) {
+    return `place/${r.addresstype}`;
+  }
+  return `${r.category}/${r.type}`;
+}
+
 export const nominatimService: GeocodingProviderImpl = {
   async geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]> {
     const params: Record<string, string> = { q: query, limit: "10" };
@@ -141,9 +157,9 @@ export const nominatimService: GeocodingProviderImpl = {
       id: makeId(r),
       label: r.display_name,
       coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
-      type: mapType(r.class, r.type),
+      type: mapType(r.category, r.type),
       confidence: r.importance,
-      rawCategory: `${r.class}/${r.type}`,
+      rawCategory: rawCategoryOf(r),
     }));
   },
 
@@ -205,9 +221,10 @@ export const nominatimService: GeocodingProviderImpl = {
         label: short,
         sublabel: r.display_name,
         coordinates: [Number.parseFloat(r.lon), Number.parseFloat(r.lat)],
-        type: mapType(r.class, r.type),
+        type: mapType(r.category, r.type),
         iconPath: resolvePoiIconPath(r.type),
-        rawCategory: `${r.class}/${r.type}`,
+        rawCategory: rawCategoryOf(r),
+        ...(Number.isFinite(r.importance) ? { importance: r.importance } : {}),
       };
     });
   },
