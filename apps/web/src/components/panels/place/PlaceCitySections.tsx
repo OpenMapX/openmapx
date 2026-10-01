@@ -30,8 +30,8 @@ interface Props {
 }
 
 const MAX_HOTEL_CARDS = 10;
-/** Half-span (degrees) of the fallback search box when a place has no bbox. */
-const FALLBACK_HALF_SPAN = 0.05;
+/** Half-span (degrees) of a city's centre, where its hotels are looked for: about 3 km each way. */
+const CENTRE_HALF_SPAN = 0.03;
 
 const LODGING_TYPE_KEYS: Record<string, "hotel" | "hostel" | "motel" | "guestHouse" | "apartment"> =
   {
@@ -42,19 +42,29 @@ const LODGING_TYPE_KEYS: Record<string, "hotel" | "hostel" | "motel" | "guestHou
     apartment: "apartment",
   };
 
-/** City bounding box for hotel search, derived from the admin boundary bbox. */
-function cityBoundingBox(place: Place): BoundingBox {
-  if (place.boundingBox) {
-    const [west, south, east, north] = place.boundingBox;
-    return { south, west, north, east };
-  }
+/**
+ * Where a city's hotels are looked for: its centre, within its boundary. A
+ * large municipality's whole box (Rome's reaches the sea) holds thousands of
+ * lodgings, more than Overpass lists in time, for a row of ten.
+ */
+export function hotelSearchBox(place: Place): BoundingBox {
   const [lng, lat] = place.coordinates;
-  return {
-    south: lat - FALLBACK_HALF_SPAN,
-    north: lat + FALLBACK_HALF_SPAN,
-    west: lng - FALLBACK_HALF_SPAN,
-    east: lng + FALLBACK_HALF_SPAN,
+  const centre = {
+    south: lat - CENTRE_HALF_SPAN,
+    north: lat + CENTRE_HALF_SPAN,
+    west: lng - CENTRE_HALF_SPAN,
+    east: lng + CENTRE_HALF_SPAN,
   };
+  if (!place.boundingBox) return centre;
+  const [west, south, east, north] = place.boundingBox;
+  const inside = {
+    south: Math.max(south, centre.south),
+    north: Math.min(north, centre.north),
+    west: Math.max(west, centre.west),
+    east: Math.min(east, centre.east),
+  };
+  // A point outside its own boundary leaves no overlap; its centre will do.
+  return inside.south < inside.north && inside.west < inside.east ? inside : centre;
 }
 
 /** Best-effort photo URL from an OSM POI's image tags. */
@@ -99,7 +109,7 @@ function QuickFacts({ place, onNavigateToInfo }: Props) {
 function Hotels({ place }: { place: Place }) {
   const t = useTranslations("place");
   const locale = useLocale();
-  const bbox = cityBoundingBox(place);
+  const bbox = hotelSearchBox(place);
   const { data } = useCategorySearch("hotels", bbox, locale);
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
   const { setActiveCategory, setSearchBbox } = useCategorySearchStore();
