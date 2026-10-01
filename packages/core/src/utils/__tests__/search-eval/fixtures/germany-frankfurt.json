@@ -102,31 +102,52 @@
   ],
   "aggregate": [
     {
-      "id": "oa:EDDF",
+      "id": "wikidata:Q1794",
+      "ids": {
+        "wikidata": "Q1794"
+      },
+      "label": "Frankfurt am Main",
+      "sublabel": "bevölkerungsreichste Stadt in Hessen, Deutschland",
+      "coordinates": [8.682222, 50.110556],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Frankfurt",
+        "normalized": "frankfurt"
+      },
+      "importance": 0.9329430248193162,
+      "fame": 0.9329430248193162,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q46033",
       "ids": {
         "oa": "EDDF",
         "iata": "FRA",
-        "icao": "EDDF"
+        "icao": "EDDF",
+        "wikidata": "Q46033"
       },
-      "label": "Frankfurt Main Airport",
-      "sublabel": "Frankfurt am Main, DE",
-      "coordinates": [8.55835, 50.026706],
+      "label": "Flughafen Frankfurt Main",
+      "sublabel": "größter deutscher Flughafen in Hessen",
+      "coordinates": [8.570456, 50.033305],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Frankfurt Main Airport",
-        "normalized": "frankfurt main airport"
+        "value": "Frankfurt",
+        "normalized": "frankfurt"
       },
-      "importance": 0.9,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7653084273315548,
+      "fame": 0.7653084273315548,
+      "provider": "search-notable-places"
     },
     {
       "id": "oa:EDFH",
       "ids": {
-        "oa": "EDFH",
+        "wikidata": "Q158211",
         "iata": "HHN",
-        "icao": "EDFH"
+        "icao": "EDFH",
+        "oa": "EDFH"
       },
       "label": "Frankfurt-Hahn Airport",
       "sublabel": "Frankfurt am Main (Lautzenhausen), DE",
@@ -139,6 +160,7 @@
         "normalized": "frankfurt hahn airport"
       },
       "importance": 0.9,
+      "fame": 0.6108445258152586,
       "provider": "knowledge-ourairports"
     },
     {
@@ -161,94 +183,76 @@
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:DE-0019",
+      "id": "wikidata:Q157273",
       "ids": {
-        "oa": "DE-0019"
+        "wikidata": "Q157273"
       },
-      "label": "Frankfurt am Main Accident Hospital Ground Helipad",
-      "sublabel": "Frankfurt am Main, DE",
-      "coordinates": [8.7096, 50.1441],
+      "label": "Frankfurt Arena",
+      "sublabel": "Fußballstadion in Frankfurt am Main, Hessen",
+      "coordinates": [8.645278, 50.068611],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Frankfurt am Main Accident Hospital Ground Helipad",
-        "normalized": "frankfurt am main accident hospital ground helipad"
+        "value": "Frankfurt Arena",
+        "normalized": "frankfurt arena"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6688062955825198,
+      "fame": 0.6688062955825198,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:DE-0018",
+      "id": "wikidata:Q57293",
       "ids": {
-        "oa": "DE-0018"
+        "wikidata": "Q57293"
       },
-      "label": "Frankfurt am Main Accident Hospital Roof Helipad (CHX2)",
-      "sublabel": "Frankfurt am Main, DE",
-      "coordinates": [8.710111, 50.145424],
+      "label": "Frankfurter Buchmesse",
+      "sublabel": "internationale Buchmesse, die seit 1949 jährlich in Frankfurt am Main stattfindet",
+      "coordinates": [8.648333, 50.111389],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Frankfurt am Main Accident Hospital Roof Helipad (CHX2)",
-        "normalized": "frankfurt am main accident hospital roof helipad chx2"
+        "value": "Frankfurt Book Fair",
+        "normalized": "frankfurt book fair"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6615171828647772,
+      "fame": 0.6615171828647772,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:DE-0922",
+      "id": "wikidata:Q156198",
       "ids": {
-        "oa": "DE-0922"
+        "wikidata": "Q156198"
       },
-      "label": "Frankfurt am Main Accident Hospital Roof Helipad",
-      "sublabel": "Frankfurt, DE",
-      "coordinates": [8.708981, 50.145472],
+      "label": "Frankfurter Messeturm",
+      "sublabel": "Wolkenkratzer in Frankfurt am Main",
+      "coordinates": [8.652778, 50.112222],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Frankfurt am Main Accident Hospital Roof Helipad",
-        "normalized": "frankfurt am main accident hospital roof helipad"
+        "value": "Frankfurter Messeturm",
+        "normalized": "frankfurter messeturm"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6108445258152586,
+      "fame": 0.6108445258152586,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:DE-0070",
+      "id": "wikidata:Q164050",
       "ids": {
-        "oa": "DE-0070"
+        "wikidata": "Q164050"
       },
-      "label": "Frankfurt am Main Police Headquarters Heliport",
-      "sublabel": "Frankfurt am Main, DE",
-      "coordinates": [8.67318, 50.13276],
+      "label": "U-Bahn Frankfurt",
+      "sublabel": "Stadtbahn von Frankfurt am Main",
+      "coordinates": [8.679722, 50.113611],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Frankfurt am Main Police Headquarters Heliport",
-        "normalized": "frankfurt am main police headquarters heliport"
+        "value": "Frankfurt U-Bahn",
+        "normalized": "frankfurt u bahn"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:DE-0643",
-      "ids": {
-        "oa": "DE-0643"
-      },
-      "label": "Frankfurt Höchst Hospital Heliport",
-      "sublabel": "Frankfurt am Main, DE",
-      "coordinates": [8.54714, 50.10987],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Frankfurt Höchst Hospital Heliport",
-        "normalized": "frankfurt hochst hospital heliport"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5736900948874171,
+      "fame": 0.5736900948874171,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

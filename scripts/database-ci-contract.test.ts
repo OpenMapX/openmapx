@@ -50,6 +50,7 @@ describe("required database test gate", () => {
       "services/data-manager/__tests__/poi-ingest/e2e-bnetza.test.ts",
       "services/data-manager/__tests__/search-index/schema-postgres.test.ts",
       "services/data-manager/__tests__/search-index/build-postgres.test.ts",
+      "services/data-manager/__tests__/notable-places/build-postgres.test.ts",
       "services/data-manager/__tests__/overture/schema-postgres.test.ts",
       "services/data-manager/__tests__/overture/runtime-postgres.test.ts",
     ];

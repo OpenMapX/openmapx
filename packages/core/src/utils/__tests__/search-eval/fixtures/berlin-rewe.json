@@ -64,15 +64,6 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:way/381418960",
-      "label": "REWE",
-      "sublabel": "REWE, Am Ostbahnhof 9, Berlin, Germany",
-      "coordinates": [13.4351398, 52.5096516],
-      "type": "poi",
-      "rawCategory": "shop/supermarket",
-      "provider": "geocoding-photon"
-    },
-    {
       "id": "osm:node/9167471817",
       "label": "REWE",
       "sublabel": "REWE, Kurfürstenstraße 46, Berlin, Germany",
@@ -82,10 +73,10 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:way/739645090",
+      "id": "osm:node/6146723586",
       "label": "REWE",
-      "sublabel": "REWE, Tamara-Danz-Straße 11, Berlin, Germany",
-      "coordinates": [13.4476385, 52.5060399],
+      "sublabel": "REWE, Brüsseler Straße, Berlin, Germany",
+      "coordinates": [13.3537392, 52.5488014],
       "type": "poi",
       "rawCategory": "shop/supermarket",
       "provider": "geocoding-photon"
@@ -100,15 +91,6 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/13857918270",
-      "label": "Rewe",
-      "sublabel": "Rewe, Frankfurter Allee 113-117, Berlin, Germany",
-      "coordinates": [13.4763047, 52.5138548],
-      "type": "poi",
-      "rawCategory": "shop/supermarket",
-      "provider": "geocoding-photon"
-    },
-    {
       "id": "osm:way/874269152",
       "label": "REWE",
       "sublabel": "REWE, Gotlindestraße 40A, Berlin, Germany",
@@ -118,10 +100,10 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:way/34418406",
+      "id": "osm:node/308019560",
       "label": "REWE",
-      "sublabel": "REWE, Weitlingstraße 59-60, Berlin, Germany",
-      "coordinates": [13.4962746, 52.5054065],
+      "sublabel": "REWE, Alfred-Kowalke-Straße 2, Berlin, Germany",
+      "coordinates": [13.5150175, 52.5048235],
       "type": "poi",
       "rawCategory": "shop/supermarket",
       "provider": "geocoding-photon"
@@ -136,16 +118,53 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/1493309776",
+      "id": "osm:node/1094096941",
       "label": "REWE",
-      "sublabel": "REWE, Hauptstraße 70, Berlin, Germany",
-      "coordinates": [13.4324718, 52.6039283],
+      "sublabel": "REWE, Helene-Weigel-Platz 1, Berlin, Germany",
+      "coordinates": [13.5383825, 52.5274856],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9018077984",
+      "label": "REWE",
+      "sublabel": "REWE, Gorkistraße 11-21, Berlin, Germany",
+      "coordinates": [13.2866659, 52.5904846],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/223541745",
+      "label": "REWE",
+      "sublabel": "REWE, Schnellerstraße 74, Berlin, Germany",
+      "coordinates": [13.5297687, 52.4514528],
       "type": "poi",
       "rawCategory": "shop/supermarket",
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q4391673",
+      "ids": {
+        "wikidata": "Q4391673"
+      },
+      "label": "Rewet",
+      "sublabel": "river in the Republic of Bashkortostan, Russia, flows into the Maly Inzer",
+      "coordinates": [57.621111, 54.186944],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rewet",
+        "normalized": "rewet"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [
     {
       "qid": "Q16968817",

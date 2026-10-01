@@ -35,11 +35,28 @@ the things you might type without a separate mode:
 | "Home" / "Work" or a saved label   | Your own labeled places, surfaced near the top                                  |
 
 Suggestions arrive **as you type**: the bar debounces your input, fetches
-autocomplete results, and ranks them locally so the closest match floats to the
-top. Pressing Enter on a precise match (an address, street, or region) flies
-straight there; a broader, name-only query opens a results panel scoped to what
-you can currently see on the map. Coordinates and Plus Codes are detected client
-side and resolved without a round trip to a geocoder at all.
+autocomplete results, and ranks them locally by how well the name matches, how
+near the place is, and how well known it is. Pressing Enter opens a place only
+when the text plainly names it: "paris" opens Paris and "louvre" the museum in
+Paris, while a word that names a kind of place nearby ("vegan", "döner") or a
+chain's branches ("aldi") search what you can currently see on the map. When
+several equally known places far away share the name ("springfield"), the list
+stays open with the first one highlighted, and a second Enter takes it.
+Coordinates and Plus Codes are detected client side and resolved without a
+round trip to a geocoder at all.
+
+### Famous places far away
+
+A geocoder tells which of several namesakes is famous only if it has data on
+fame, which the public Photon instance does not. OpenMapX keeps its own index
+of places covered by many Wikipedias, built from Wikidata, so "colosseum" from
+Berlin finds the one in Rome and "big ben" the tower in London, whichever
+geocoder is configured. The index carries names in eight languages plus
+Wikidata's language-independent label ("Colosseo", "Tour Eiffel"), and holds
+the cities known worldwide as well, so "rom" or "münchen" typed with the app
+in English opens Rome or Munich rather than a village of that name. It is
+maintained by the data-manager; see
+[Notable places for search](../install/configuration.md#notable-places-for-search).
 
 ### Codes, aliases, and acronyms
 

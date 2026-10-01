@@ -93,6 +93,96 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q626926",
+      "ids": {
+        "wikidata": "Q626926"
+      },
+      "label": "V-J Day in Times Square",
+      "sublabel": "1945 photograph by Alfred Eisenstaedt",
+      "coordinates": [-73.985639, 40.757778],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Times Square Kiss",
+        "normalized": "times square kiss"
+      },
+      "importance": 0.5200687002083025,
+      "fame": 0.5200687002083025,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1058395",
+      "ids": {
+        "wikidata": "Q1058395"
+      },
+      "label": "Times Square Ball",
+      "sublabel": "time ball located in New York City's Times Square",
+      "coordinates": [-73.9865, 40.7564],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Times Square Ball",
+        "normalized": "times square ball"
+      },
+      "importance": 0.46706436216622105,
+      "fame": 0.46706436216622105,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q11265",
+      "ids": {
+        "wikidata": "Q11265"
+      },
+      "label": "Times Square–42nd Street/Port Authority Bus Terminal",
+      "sublabel": "New York City Subway station",
+      "coordinates": [-73.987, 40.756],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Times Square – 42nd Street",
+        "normalized": "times square 42nd street"
+      },
+      "importance": 0.45662189673896547,
+      "fame": 0.45662189673896547,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1580807",
+      "ids": {
+        "wikidata": "Q1580807"
+      },
+      "label": "Times Square Tower",
+      "sublabel": "skyscraper in New York City",
+      "coordinates": [-73.9867, 40.7555],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Times Square Tower",
+        "normalized": "times square tower"
+      },
+      "importance": 0.4455824028205204,
+      "fame": 0.4455824028205204,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q836051",
+      "ids": {
+        "wikidata": "Q836051"
+      },
+      "label": "Times Square",
+      "sublabel": "shopping mall in Hong Kong",
+      "coordinates": [114.182, 22.2783],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Times Square",
+        "normalized": "times square"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:KR-0861",
       "ids": {
         "oa": "KR-0861"
@@ -142,42 +232,6 @@
         "kind": "name",
         "value": "Edifício Times Square Business Helipad",
         "normalized": "edificio times square business helipad"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:JP-0155",
-      "ids": {
-        "oa": "JP-0155"
-      },
-      "label": "Takashimaya Times Square Helipad",
-      "sublabel": "Shibuya, Tokyo, JP",
-      "coordinates": [139.7022, 35.68693],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Takashimaya Times Square Helipad",
-        "normalized": "takashimaya times square helipad"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:VN-0083",
-      "ids": {
-        "oa": "VN-0083"
-      },
-      "label": "Saigon Times Square Heliport",
-      "sublabel": "Ho Chi Minh City, VN",
-      "coordinates": [106.704695, 10.773857],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Saigon Times Square Heliport",
-        "normalized": "saigon times square heliport"
       },
       "importance": 0.1,
       "provider": "knowledge-ourairports"

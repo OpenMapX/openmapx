@@ -7,6 +7,11 @@
       "coordinates": [-0.4587801, 51.467739],
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "London Heathrow Airport",
+        "normalized": "london heathrow airport"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -106,29 +111,35 @@
       "coordinates": [-0.4336445, 51.4812278],
       "type": "poi",
       "rawCategory": "tourism/hotel",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Best Western London Heathrow Ariel Hotel",
+        "normalized": "best western london heathrow ariel hotel"
+      },
       "provider": "geocoding-photon"
     }
   ],
   "aggregate": [
     {
-      "id": "oa:EGLL",
+      "id": "wikidata:Q8691",
       "ids": {
         "oa": "EGLL",
         "iata": "LHR",
-        "icao": "EGLL"
+        "icao": "EGLL",
+        "wikidata": "Q8691"
       },
       "label": "London Heathrow Airport",
-      "sublabel": "London, GB",
-      "coordinates": [-0.459909, 51.470748],
+      "sublabel": "main airport serving London, England, United Kingdom",
+      "coordinates": [-0.461389, 51.4775],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "London Heathrow Airport",
-        "normalized": "london heathrow airport"
+        "value": "London Heathrow",
+        "normalized": "london heathrow"
       },
-      "importance": 0.9,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7839136792942962,
+      "fame": 0.7839136792942962,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [],

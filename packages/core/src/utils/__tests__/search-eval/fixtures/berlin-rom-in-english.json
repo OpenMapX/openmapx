@@ -1,0 +1,481 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/333136586",
+      "label": "Roma",
+      "sublabel": "Roma, Friedrichstrasse 129, Berlin, Germany",
+      "coordinates": [13.3871462, 52.5250993],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4006983305",
+      "label": "Romanian Cultural Institute Berlin",
+      "sublabel": "Romanian Cultural Institute Berlin, Reinhardtstraße 14, Berlin, Germany",
+      "coordinates": [13.3854387, 52.5236474],
+      "type": "poi",
+      "rawCategory": "amenity/community_centre",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12732495548",
+      "label": "Romeo's",
+      "sublabel": "Romeo's, Lausitzer Straße 47, Berlin, Germany",
+      "coordinates": [13.4293443, 52.4976889],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3792702579",
+      "label": "Roman- & Comicladen",
+      "sublabel": "Roman- & Comicladen, Ebertystraße 22, Berlin, Germany",
+      "coordinates": [13.4542516, 52.5218619],
+      "type": "poi",
+      "rawCategory": "shop/books",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3826455884",
+      "label": "Romeo und Romeo",
+      "sublabel": "Romeo und Romeo, Motzstraße 20, Berlin, Germany",
+      "coordinates": [13.3493772, 52.4983295],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5734336763",
+      "label": "RomaniPhen",
+      "sublabel": "RomaniPhen, Karl-Kunger-Straße 17, Berlin, Germany",
+      "coordinates": [13.4478364, 52.4907056],
+      "type": "poi",
+      "rawCategory": "office/ngo",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/449898",
+      "label": "Rom",
+      "sublabel": "Rom, Germany",
+      "coordinates": [11.9494091, 53.4444081],
+      "type": "region",
+      "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rom",
+        "normalized": "rom"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/41485",
+      "label": "Rome",
+      "sublabel": "Rome, Italy",
+      "coordinates": [12.4829321, 41.8933203],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Roma",
+        "normalized": "roma"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4226839474",
+      "label": "Rom",
+      "sublabel": "Rom, Parchimer Straße, Rom, Germany",
+      "coordinates": [11.9542418, 53.445668],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rom",
+        "normalized": "rom"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/34513155",
+      "label": "Rom",
+      "sublabel": "Rom, Drei Gleichen, Germany",
+      "coordinates": [10.7711931, 50.8912198],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rom",
+        "normalized": "rom"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2460304385",
+      "label": "Romanówek",
+      "sublabel": "Romanówek, Lubrza, Poland",
+      "coordinates": [15.4264047, 52.3118518],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Romanówek",
+        "normalized": "romanowek"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/5178496",
+      "label": "Rømø",
+      "sublabel": "Rømø, Denmark",
+      "coordinates": [8.513829, 55.135133],
+      "type": "region",
+      "rawCategory": "place/island",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1470111",
+      "label": "Römnitz",
+      "sublabel": "Römnitz, Germany",
+      "coordinates": [10.7690035, 53.7113771],
+      "type": "region",
+      "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Römnitz",
+        "normalized": "romnitz"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12996171546",
+      "label": "Róm",
+      "sublabel": "Róm, Karlovice, Czechia",
+      "coordinates": [15.1778808, 50.5528221],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Róm",
+        "normalized": "rom"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1271532",
+      "label": "Römhild",
+      "sublabel": "Römhild, Germany",
+      "coordinates": [10.5678277, 50.3927584],
+      "type": "region",
+      "rawCategory": "place/municipality",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Römhild",
+        "normalized": "romhild"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1460230",
+      "label": "Römstedt",
+      "sublabel": "Römstedt, Germany",
+      "coordinates": [10.6495665, 53.0956912],
+      "type": "region",
+      "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Römstedt",
+        "normalized": "romstedt"
+      },
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q220",
+      "ids": {
+        "wikidata": "Q220"
+      },
+      "label": "Rome",
+      "sublabel": "capital and largest city of Italy",
+      "coordinates": [12.482778, 41.893056],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rom",
+        "normalized": "rom"
+      },
+      "importance": 1,
+      "fame": 1,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q315379",
+      "ids": {
+        "wikidata": "Q315379"
+      },
+      "label": "Romanisches Café",
+      "sublabel": "historic place",
+      "coordinates": [13.3345, 52.5053],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Romanisches Café",
+        "normalized": "romanisches cafe"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q649250",
+      "ids": {
+        "wikidata": "Q649250"
+      },
+      "label": "Royal Ontario Museum",
+      "sublabel": "museum of world culture and natural history in Toronto, Ontario, Canada",
+      "coordinates": [-79.394683, 43.667572],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "ROM",
+        "normalized": "rom"
+      },
+      "importance": 0.6009378126402927,
+      "fame": 0.6009378126402927,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "oa:LIRF",
+      "ids": {
+        "oa": "LIRF",
+        "iata": "FCO",
+        "icao": "LIRF"
+      },
+      "label": "Rome–Fiumicino Leonardo da Vinci International Airport",
+      "sublabel": "Rome, IT",
+      "coordinates": [12.251998, 41.804532],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rome–Fiumicino Leonardo da Vinci International Airport",
+        "normalized": "rome fiumicino leonardo da vinci international airport"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:PTRO",
+      "ids": {
+        "oa": "PTRO",
+        "iata": "ROR",
+        "icao": "PTRO"
+      },
+      "label": "Roman Tmetuchl International Airport",
+      "sublabel": "Babelthuap Island, PW",
+      "coordinates": [134.544085, 7.366965],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Roman Tmetuchl International Airport",
+        "normalized": "roman tmetuchl international airport"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q688171",
+      "ids": {
+        "wikidata": "Q688171"
+      },
+      "label": "Rom",
+      "sublabel": "river in Switzerland and Italy",
+      "coordinates": [10.544508, 46.670491],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rom",
+        "normalized": "rom"
+      },
+      "importance": 0.4214085732365982,
+      "fame": 0.4214085732365982,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "oa:LIRU",
+      "ids": {
+        "oa": "LIRU",
+        "icao": "LIRU"
+      },
+      "label": "Rome Urbe Airport",
+      "sublabel": "Rome, IT",
+      "coordinates": [12.502231, 41.952096],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rome Urbe Airport",
+        "normalized": "rome urbe airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SBAX",
+      "ids": {
+        "oa": "SBAX",
+        "iata": "AAX",
+        "icao": "SBAX"
+      },
+      "label": "Romeu Zema Airport",
+      "sublabel": "Araxá, BR",
+      "coordinates": [-46.9604, -19.5632],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Romeu Zema Airport",
+        "normalized": "romeu zema airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q126075497",
+      "name": "Romantik Hotels & Restaurants",
+      "description": "global chain of hotels and restaurants",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q113562519",
+      "name": "Romans",
+      "description": "UK letting and estate agent",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q1788862",
+      "name": "Rompetrol",
+      "description": "Romanian oil and gas company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q130570318",
+      "name": "Roma",
+      "description": "Austrian hairdresser supply shop",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q65079427",
+      "name": "Roman's Pizza",
+      "description": "pizza takeaway chain in South Africa",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q7362714",
+      "name": "Romano's Macaroni Grill",
+      "description": "American casual dining restaurant chain specializing in Italian-American cuisine",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q94579553",
+      "name": "Roman Originals",
+      "description": "Fashion retailer in the United Kingdom",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q26921",
+      "name": "Alfa Romeo",
+      "description": "Italian automotive manufacturer",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    }
+  ],
+  "presets": [
+    {
+      "id": "aeroway/spaceport",
+      "name": "Spaceport",
+      "tags": {
+        "aeroway": "spaceport"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "aeroway/terminal",
+      "name": "Airport Terminal",
+      "tags": {
+        "aeroway": "terminal"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/love_hotel",
+      "name": "Love Hotel",
+      "tags": {
+        "amenity": "love_hotel"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/place_of_worship/christian",
+      "name": "Christian Church",
+      "tags": {
+        "amenity": "place_of_worship",
+        "religion": "christian"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "healthcare/alternative",
+      "name": "Alternative Medicine",
+      "tags": {
+        "healthcare": "alternative"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "highway/footway",
+      "name": "Foot Path",
+      "tags": {
+        "highway": "footway"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "landuse/military/airfield",
+      "name": "Military Airfield",
+      "tags": {
+        "military": "airfield"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "leisure/fitness_station/hyperextension",
+      "name": "Hyperextension Station",
+      "tags": {
+        "leisure": "fitness_station",
+        "fitness_station": "hyperextension"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

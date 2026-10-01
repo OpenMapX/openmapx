@@ -256,6 +256,10 @@ Overture Maps POI datasets:
 pnpm openmapx data search-index build [region]
 pnpm openmapx data search-index status
 
+# Rebuild or check the Wikidata index of famous places (refreshed monthly on its own)
+pnpm openmapx data notable-places build
+pnpm openmapx data notable-places status
+
 # Regional Overture Places synchronization and conflation
 pnpm openmapx data overture-sync [region]     # end-to-end pull, ingest, and conflation
 pnpm openmapx data overture-pull [region]     # pull Parquet partitions from STAC catalog

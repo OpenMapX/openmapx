@@ -109,7 +109,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q260223",
+      "ids": {
+        "wikidata": "Q260223"
+      },
+      "label": "Englischer Garten",
+      "sublabel": "Parkanlage in München",
+      "coordinates": [11.591944, 48.152778],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Englischer Garten",
+        "normalized": "englischer garten"
+      },
+      "importance": 0.6292525969920059,
+      "fame": 0.6292525969920059,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

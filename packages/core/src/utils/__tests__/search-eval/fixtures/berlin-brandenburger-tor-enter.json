@@ -1,0 +1,158 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/3862767512",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Friedrich-Wilhelm-Stadt, Mitte, Berlin, 10117, Germany",
+      "coordinates": [13.3809897, 52.5166047],
+      "type": "region",
+      "rawCategory": "railway/station",
+      "importance": 0.425772933155395,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/30353086",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Friedrich-Wilhelm-Stadt, Mitte, Berlin, 10117, Germany",
+      "coordinates": [13.3818418, 52.5164415],
+      "type": "region",
+      "rawCategory": "railway/halt",
+      "importance": 0.425772933155395,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:relation/11762778",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Wilhelmstraße, Friedrich-Wilhelm-Stadt, Mitte, Berlin, 10117, Germany",
+      "coordinates": [13.3818959, 52.5164419],
+      "type": "region",
+      "rawCategory": "railway/platform",
+      "importance": 0.00008875486381318407,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/322796388",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Dorotheenstadt, Mitte, Berlin, 10117, Germany",
+      "coordinates": [13.3827482, 52.5164463],
+      "type": "region",
+      "rawCategory": "railway/stop",
+      "importance": 0.00008875486381318407,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/7057285550",
+      "label": "Brandenburger Tor",
+      "sublabel": "Brandenburger Tor, Unter den Linden, Friedrich-Wilhelm-Stadt, Mitte, Berlin, 10117, Germany",
+      "coordinates": [13.3811753, 52.5165428],
+      "type": "region",
+      "rawCategory": "railway/stop",
+      "importance": 0.00008875486381318407,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:way/518071791",
+      "label": "Brandenburg Gate",
+      "sublabel": "Brandenburg Gate, 1, Pariser Platz, Friedrich-Wilhelm-Stadt, Mitte, Berlin, 10117, Germany",
+      "coordinates": [13.3777034, 52.5162699],
+      "type": "region",
+      "rawCategory": "building/gate",
+      "importance": 0.5504719991549523,
+      "provider": "geocoding-nominatim"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q82425",
+      "ids": {
+        "wikidata": "Q82425"
+      },
+      "label": "Brandenburger Tor",
+      "sublabel": "triumphal arch in Berlin, Germany",
+      "coordinates": [13.377722, 52.516272],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.7586858849496683,
+      "fame": 0.7586858849496683,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q477185",
+      "ids": {
+        "wikidata": "Q477185"
+      },
+      "label": "Berlin Brandenburger Tor station",
+      "sublabel": "Berlin S-Bahn station",
+      "coordinates": [13.380833, 52.516389],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.4455824028205204,
+      "fame": 0.4455824028205204,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q695045",
+      "ids": {
+        "wikidata": "Q695045"
+      },
+      "label": "Brandenburger Tor",
+      "sublabel": "triumphal arch in Potsdam, Germany",
+      "coordinates": [13.048, 52.3995],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.45662189673896547,
+      "fame": 0.45662189673896547,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q4373316",
+      "ids": {
+        "wikidata": "Q4373316"
+      },
+      "label": "Brandenburger Tor",
+      "sublabel": "historical city gate in Szczecin, Poland",
+      "coordinates": [14.55041, 53.42497],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q555977",
+      "ids": {
+        "wikidata": "Q555977"
+      },
+      "label": "Brandenburger Tor (Kaliningrad)",
+      "sublabel": "city gate in Kaliningrad, Russia",
+      "coordinates": [20.494722, 54.697222],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.3937702819166341,
+      "fame": 0.3937702819166341,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

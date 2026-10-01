@@ -1,48 +1,44 @@
 {
   "autocomplete": [
     {
-      "id": "osm:node/2057303383",
-      "label": "Friedrichstraße 100, Berlin, Deutschland",
-      "coordinates": [13.3884072, 52.5204347],
-      "type": "region",
-      "rawCategory": "place/house",
-      "provider": "geocoding-photon"
+      "id": "osm:node/1349696699",
+      "label": "dm",
+      "sublabel": "dm, 100, Friedrichstraße, Dorotheenstadt, Mitte, Berlin, 10117, Deutschland",
+      "coordinates": [13.3884483, 52.520494],
+      "type": "poi",
+      "rawCategory": "shop/chemist",
+      "importance": 0.00008875486381318407,
+      "provider": "geocoding-nominatim"
     },
     {
-      "id": "osm:node/4168287364",
-      "label": "PERSICON AG",
-      "sublabel": "PERSICON AG, Friedrichstraße 100, Berlin, Deutschland",
-      "coordinates": [13.3884553, 52.5204348],
-      "type": "poi",
-      "rawCategory": "office/company",
-      "provider": "geocoding-photon"
+      "id": "osm:node/2057303383",
+      "label": "Friedrichstraße 100",
+      "sublabel": "100, Friedrichstraße, Dorotheenstadt, Mitte, Berlin, 10117, Deutschland",
+      "coordinates": [13.3884072, 52.5204347],
+      "type": "address",
+      "rawCategory": "place/house",
+      "importance": 0.00008875486381318407,
+      "provider": "geocoding-nominatim"
     },
     {
       "id": "osm:node/1349696691",
       "label": "BLOCK HOUSE",
-      "sublabel": "BLOCK HOUSE, Friedrichstraße 100, Berlin, Deutschland",
+      "sublabel": "BLOCK HOUSE, 100, Friedrichstraße, Dorotheenstadt, Mitte, Berlin, 10117, Deutschland",
       "coordinates": [13.3884623, 52.5203975],
       "type": "poi",
       "rawCategory": "amenity/restaurant",
-      "provider": "geocoding-photon"
+      "importance": 0.00008875486381318407,
+      "provider": "geocoding-nominatim"
     },
     {
-      "id": "osm:node/1349696699",
-      "label": "dm",
-      "sublabel": "dm, Friedrichstraße 100, Berlin, Deutschland",
-      "coordinates": [13.3884483, 52.520494],
-      "type": "poi",
-      "rawCategory": "shop/chemist",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/13439673901",
-      "label": "Institut für Geschichtswissenschaften der Humboldt Universität zu Berlin",
-      "sublabel": "Institut für Geschichtswissenschaften der Humboldt Universität zu Berlin, Friedrichstraße 191-193a, Berlin, Deutschland",
-      "coordinates": [13.3896377, 52.5106997],
-      "type": "poi",
-      "rawCategory": "amenity/university",
-      "provider": "geocoding-photon"
+      "id": "osm:node/4168287364",
+      "label": "PERSICON AG",
+      "sublabel": "PERSICON AG, 100, Friedrichstraße, Dorotheenstadt, Mitte, Berlin, 10117, Deutschland",
+      "coordinates": [13.3884553, 52.5204348],
+      "type": "region",
+      "rawCategory": "office/company",
+      "importance": 0.00008875486381318407,
+      "provider": "geocoding-nominatim"
     }
   ],
   "aggregate": [],

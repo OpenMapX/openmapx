@@ -16,6 +16,17 @@ import { convertPbfToBz2, convertPbfToBz2ForRegion } from "./jobs/convert-overpa
 import { downloadFonts } from "./jobs/download-fonts.js";
 import { downloadOsm } from "./jobs/download-osm.js";
 import { applyHardlinkPlan, type HardlinkEntry } from "./jobs/link.js";
+import {
+  type BuildNotablePlacesOptions,
+  buildNotablePlaces,
+  type NotablePlacesBuildResult,
+} from "./jobs/notable-places/build.js";
+import { notablePlacesSettings } from "./jobs/notable-places/schedule.js";
+import {
+  createNotablePlacesRuntimeState,
+  getNotablePlacesStatus,
+  type NotablePlacesRuntimeState,
+} from "./jobs/notable-places/state.js";
 import { extractOsmPois } from "./jobs/overture/extract-osm-pois.js";
 import { ingestOverture } from "./jobs/overture/ingest.js";
 import { withOvertureOperationLock } from "./jobs/overture/operation-lock.js";
@@ -27,7 +38,11 @@ import {
   buildOsmSearchIndex,
   type SearchIndexBuildResult,
 } from "./jobs/search-index/build.js";
-import { createSearchIndexOperationLock } from "./jobs/search-index/operation-lock.js";
+import {
+  createNotablePlacesOperationLock,
+  createSearchIndexOperationLock,
+  type SearchIndexOperationLock,
+} from "./jobs/search-index/operation-lock.js";
 import {
   createSearchIndexRuntimeState,
   fingerprintDataset,
@@ -108,6 +123,16 @@ export interface ApiOptions {
   searchIndexSql?: postgres.Sql;
   /** Test seam for the country-scale OSM search-index build. */
   buildSearchIndex?: (opts: BuildOsmSearchIndexOptions) => Promise<SearchIndexBuildResult>;
+  /**
+   * Build state and lock shared with the scheduled refresh, so a build started
+   * here and one started by the schedule never overlap. Created here when the
+   * process entrypoint supplies none (route tests).
+   */
+  notablePlaces?: {
+    runtimeState: NotablePlacesRuntimeState;
+    operationLock: SearchIndexOperationLock;
+    build?: (opts: BuildNotablePlacesOptions) => Promise<NotablePlacesBuildResult>;
+  };
   /** Process startup readiness; omitted by isolated route tests, which are ready immediately. */
   readiness?: () => DataManagerReadinessSnapshot;
   /** Process-wide one-run relay shared with the Transitous pipeline. */
@@ -468,6 +493,10 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
   const searchIndexSql = opts.searchIndexSql ?? sql;
   const searchIndexRuntimeState = createSearchIndexRuntimeState();
   const searchIndexOperationLock = createSearchIndexOperationLock(searchIndexSql);
+  const notablePlaces = opts.notablePlaces ?? {
+    runtimeState: createNotablePlacesRuntimeState(),
+    operationLock: createNotablePlacesOperationLock(searchIndexSql),
+  };
   const operationsPolicy =
     opts.operationsPolicy ??
     resolveOperationsProfileFromEnv(process.env, { allowEmptyRegional: true });
@@ -939,6 +968,36 @@ export function registerApi(app: FastifyInstance, opts: ApiOptions = {}): void {
         sql: searchIndexSql,
         runtimeState: searchIndexRuntimeState,
         operationLock: searchIndexOperationLock,
+        onProgress: (progress) => stream.writeLine({ event: "progress", ...progress }),
+      });
+      stream.writeLine({ event: "done", ok: true, ...result });
+    } catch (error) {
+      stream.writeLine({ event: "error", message: (error as Error).message });
+    } finally {
+      stream.end();
+    }
+  });
+
+  app.get("/notable-places/status", async (_req, reply) => {
+    const status = await getNotablePlacesStatus({
+      sql: searchIndexSql,
+      runtimeState: notablePlaces.runtimeState,
+    });
+    if (!status) {
+      return reply.code(404).send({ ok: false, error: "notable_places index not built" });
+    }
+    return reply.send({ ok: true, ...status });
+  });
+
+  app.post("/notable-places/build", async (_req, reply) => {
+    const stream = openNdjsonStream(reply);
+    try {
+      const build = notablePlaces.build ?? buildNotablePlaces;
+      const result = await build({
+        sql: searchIndexSql,
+        runtimeState: notablePlaces.runtimeState,
+        operationLock: notablePlaces.operationLock,
+        ...notablePlacesSettings(),
         onProgress: (progress) => stream.writeLine({ event: "progress", ...progress }),
       });
       stream.writeLine({ event: "done", ok: true, ...result });

@@ -52,6 +52,11 @@
       "coordinates": [6.959974, 50.938361],
       "type": "region",
       "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln",
+        "normalized": "koln"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -61,6 +66,11 @@
       "coordinates": [13.5419154, 52.4032355],
       "type": "region",
       "rawCategory": "place/quarter",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kölner Viertel",
+        "normalized": "kolner viertel"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -70,6 +80,11 @@
       "coordinates": [21.9312439, 53.4109383],
       "type": "region",
       "rawCategory": "place/town",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kolno",
+        "normalized": "kolno"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -79,6 +94,11 @@
       "coordinates": [16.35976, 53.35478],
       "type": "region",
       "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kolno",
+        "normalized": "kolno"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -88,6 +108,11 @@
       "coordinates": [15.95688, 52.59492],
       "type": "region",
       "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kolno",
+        "normalized": "kolno"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -97,6 +122,11 @@
       "coordinates": [21.9360834, 53.4016867],
       "type": "region",
       "rawCategory": "boundary/administrative",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kolno",
+        "normalized": "kolno"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -106,6 +136,11 @@
       "coordinates": [18.1024, 52.22327],
       "type": "region",
       "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kolno",
+        "normalized": "kolno"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -115,6 +150,11 @@
       "coordinates": [18.5020843, 53.3863877],
       "type": "region",
       "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kolno",
+        "normalized": "kolno"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -124,6 +164,11 @@
       "coordinates": [14.5665273, 49.0596763],
       "type": "region",
       "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kolný",
+        "normalized": "kolny"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -133,16 +178,41 @@
       "coordinates": [15.6074742, 52.2088874],
       "type": "region",
       "rawCategory": "natural/peak",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kolno",
+        "normalized": "kolno"
+      },
       "provider": "geocoding-photon"
     }
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q365",
+      "ids": {
+        "wikidata": "Q365"
+      },
+      "label": "Köln",
+      "sublabel": "Millionenmetropole am Rhein und bevölkerungsreichste Stadt Nordrhein-Westfalens",
+      "coordinates": [6.957778, 50.942222],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln",
+        "normalized": "koln"
+      },
+      "importance": 0.9117823384555512,
+      "fame": 0.9117823384555512,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:EDDK",
       "ids": {
-        "oa": "EDDK",
+        "wikidata": "Q157741",
         "iata": "CGN",
-        "icao": "EDDK"
+        "icao": "EDDK",
+        "oa": "EDDK"
       },
       "label": "Cologne Bonn Airport",
       "sublabel": "Köln (Cologne), DE",
@@ -155,61 +225,117 @@
         "normalized": "koln"
       },
       "importance": 0.9,
+      "fame": 0.6335929720801525,
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:DE-0535",
+      "id": "wikidata:Q4176",
       "ids": {
-        "oa": "DE-0535"
+        "wikidata": "Q4176"
       },
-      "label": "Köln University Hospital Heliport",
-      "sublabel": "Köln (Cologne), DE",
-      "coordinates": [6.91981, 50.92398],
+      "label": "Kölner Dom",
+      "sublabel": "Kirche in Köln, Deutschland",
+      "coordinates": [6.958333, 50.941389],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Köln University Hospital Heliport",
-        "normalized": "koln university hospital heliport"
+        "value": "Kölner Dom",
+        "normalized": "kolner dom"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7586858849496683,
+      "fame": 0.7586858849496683,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:DE-0448",
+      "id": "wikidata:Q54096",
       "ids": {
-        "oa": "DE-0448"
+        "wikidata": "Q54096"
       },
-      "label": "Köln-Sülz Balloonport",
-      "sublabel": "Köln (Cologne), DE",
-      "coordinates": [6.89627, 50.91305],
+      "label": "Universität zu Köln",
+      "sublabel": "Hochschule in Köln (gegründet 1388)",
+      "coordinates": [6.928611, 50.928056],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Köln-Sülz Balloonport",
-        "normalized": "koln sulz balloonport"
+        "value": "Kölner Universität",
+        "normalized": "kolner universitat"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6826077772070487,
+      "fame": 0.6826077772070487,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:DE-0820",
+      "id": "wikidata:Q7927",
       "ids": {
-        "oa": "DE-0820"
+        "wikidata": "Q7927"
       },
-      "label": "Congress Center East Kölnmesse Heliport",
-      "sublabel": "Köln, DE",
-      "coordinates": [6.98101, 50.94327],
+      "label": "Regierungsbezirk Köln",
+      "sublabel": "südlicher der beiden nordrheinischen Regierungsbezirke; südlichste Region in Nordrhein-Westfalen und westlichster Teil Deutschlands",
+      "coordinates": [6.92, 50.83],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Congress Center East Kölnmesse Heliport",
-        "normalized": "congress center east kolnmesse heliport"
+        "value": "Köln (Bezirk)",
+        "normalized": "koln bezirk"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.615613621530287,
+      "fame": 0.615613621530287,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q310525",
+      "ids": {
+        "wikidata": "Q310525"
+      },
+      "label": "Kölnarena",
+      "sublabel": "Veranstaltungsstätte und Eishockeystadion in Köln",
+      "coordinates": [6.9829, 50.93843],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kölnarena",
+        "normalized": "kolnarena"
+      },
+      "importance": 0.5616150029751907,
+      "fame": 0.5616150029751907,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1954",
+      "ids": {
+        "wikidata": "Q1954",
+        "iata": "QKL"
+      },
+      "label": "Köln Hauptbahnhof",
+      "sublabel": "Knotenpunkt im deutschen Personenverkehrs-Eisenbahnnetz",
+      "coordinates": [6.958056, 50.9425],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln Hbf",
+        "normalized": "koln hbf"
+      },
+      "importance": 0.5552820237106698,
+      "fame": 0.5552820237106698,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q311661",
+      "ids": {
+        "wikidata": "Q311661"
+      },
+      "label": "Schnellfahrstrecke Köln–Rhein/Main",
+      "sublabel": "deutsche Eisenbahn-Hochgeschwindigkeitsstrecke",
+      "coordinates": [7.82563, 50.4448],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln–Frankfurt high-speed rail line",
+        "normalized": "koln frankfurt high speed rail line"
+      },
+      "importance": 0.5121843988435543,
+      "fame": 0.5121843988435543,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

@@ -93,6 +93,25 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q64",
+      "ids": {
+        "wikidata": "Q64"
+      },
+      "label": "Berlin",
+      "sublabel": "Hauptstadt und bevölkerungsreichste Stadt der Bundesrepublik Deutschland",
+      "coordinates": [13.383333, 52.516667],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin",
+        "normalized": "berlin"
+      },
+      "importance": 1,
+      "fame": 1,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:EDDB",
       "ids": {
         "oa": "EDDB",
@@ -113,132 +132,112 @@
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:DE-0456",
+      "id": "wikidata:Q1866688",
       "ids": {
-        "oa": "DE-0456"
+        "wikidata": "Q1866688"
       },
-      "label": "Berlin Tempelhof International Airport",
-      "sublabel": "Berlin, DE",
-      "coordinates": [13.404599, 52.472451],
+      "label": "Berlin",
+      "sublabel": "Station der Métro Paris",
+      "coordinates": [2.326945, 48.879722],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Berlin Tempelhof International Airport",
-        "normalized": "berlin tempelhof international airport"
+        "value": "Berlin",
+        "normalized": "berlin"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.47697107534118705,
+      "fame": 0.47697107534118705,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:KBML",
+      "id": "wikidata:Q384286",
       "ids": {
-        "oa": "KBML",
-        "iata": "BML",
-        "icao": "KBML"
+        "wikidata": "Q384286"
       },
-      "label": "Berlin Regional Airport",
-      "sublabel": "Berlin, US",
-      "coordinates": [-71.17590332, 44.57540131],
+      "label": "Berlin Historic District",
+      "sublabel": "Kulturdenkmal im US-Bundesstaat Nevada",
+      "coordinates": [-117.607222, 38.882222],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Berlin Regional Airport",
-        "normalized": "berlin regional airport"
+        "value": "Berlin",
+        "normalized": "berlin"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-12369",
+      "id": "wikidata:Q5086",
       "ids": {
-        "oa": "US-12369"
+        "wikidata": "Q5086"
       },
-      "label": "Berlin Armory Heliport",
-      "sublabel": "Berlin, US",
-      "coordinates": [-72.565697, 44.220901],
+      "label": "Berliner Mauer",
+      "sublabel": "ehemaliges Grenzbefestigungssystem der DDR in Berlin von 1961 bis 1989",
+      "coordinates": [13.441111, 52.504444],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Berlin Armory Heliport",
-        "normalized": "berlin armory heliport"
+        "value": "Berlin Wall",
+        "normalized": "berlin wall"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.8528013654624067,
+      "fame": 0.8528013654624067,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-11618",
+      "id": "wikidata:Q130871",
       "ids": {
-        "oa": "US-11618"
+        "wikidata": "Q130871"
       },
-      "label": "Berlin Lndg Area",
-      "sublabel": "Berlin, US",
-      "coordinates": [-71.641701, 42.367595],
+      "label": "Internationale Filmfestspiele Berlin",
+      "sublabel": "jährliches Filmfestival in Berlin, Deutschland",
+      "coordinates": [13.38, 52.52],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Berlin Lndg Area",
-        "normalized": "berlin lndg area"
+        "value": "Berlinale",
+        "normalized": "berlinale"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.756426928635779,
+      "fame": 0.756426928635779,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-11994",
+      "id": "wikidata:Q152087",
       "ids": {
-        "oa": "US-11994"
+        "wikidata": "Q152087"
       },
-      "label": "Berlin Station Landing Strip",
-      "sublabel": "Delaware, US",
-      "coordinates": [-83.011803, 40.2589],
+      "label": "Humboldt-Universität zu Berlin",
+      "sublabel": "Universität in Deutschland",
+      "coordinates": [13.393333, 52.518055],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Berlin Station Landing Strip",
-        "normalized": "berlin station landing strip"
+        "value": "Berliner Humboldt-Universität",
+        "normalized": "berliner humboldt universitat"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7471172439520025,
+      "fame": 0.7471172439520025,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:31WN",
+      "id": "wikidata:Q154182",
       "ids": {
-        "oa": "31WN"
+        "wikidata": "Q154182"
       },
-      "label": "Berlin Field LLC",
-      "sublabel": "Berlin, US",
-      "coordinates": [-88.961968, 43.991368],
+      "label": "Schlacht um Berlin",
+      "sublabel": "Schlacht des Zweiten Weltkriegs",
+      "coordinates": [13.376111, 52.518611],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Berlin Field LLC",
-        "normalized": "berlin field llc"
+        "value": "Berliner Operation",
+        "normalized": "berliner operation"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:US-7975",
-      "ids": {
-        "oa": "US-7975"
-      },
-      "label": "Berlin Airport",
-      "sublabel": "Austin, US",
-      "coordinates": [-117.62651, 38.90125],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Berlin Airport",
-        "normalized": "berlin airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7296605961923694,
+      "fame": 0.7296605961923694,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

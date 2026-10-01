@@ -15,6 +15,12 @@ const UNKNOWN_PROXIMITY_METERS = Number.MAX_SAFE_INTEGER;
  * station) collapse; the label check keeps distinct neighbours apart.
  */
 const SAME_PLACE_MAX_METERS = 1_000;
+/**
+ * Sources put a city's point kilometres apart: Wikidata has Tokyo in
+ * Shinjuku, OpenStreetMap at the Imperial Palace, 7 km east. A famous city's
+ * notable-places row joins a geocoder's row of the same name this far off.
+ */
+const SAME_CITY_MAX_METERS = 15_000;
 
 /**
  * How well the typed text matches, before location is considered. Provider
@@ -99,6 +105,8 @@ const STATION_RAW_CATEGORIES = new Set([
  * fame signal left. Small enough that nearness still decides nearby.
  */
 const PROVIDER_ORDER_WEIGHT = 0.08;
+/** Share of a place's fame its name counts with while only partly typed. */
+const PARTIAL_NAME_FAME_SHARE = 0.5;
 /**
  * An official code or alias typed out in full names one place outright, as a
  * destination from anywhere: its prominence starts here, and the place's own
@@ -393,13 +401,14 @@ export function tripReach(item: AutocompleteResult, context: SuggestionScoreCont
   return distanceFactor(item, context.proximity, context.zoom, TRIP_REACH);
 }
 
-/** Whether two rows are one destination: the same name in the same spot. */
+/**
+ * Whether two rows are one destination to go to, whatever each is called: a
+ * square and its station, the Louvre museum and palace, a gate and the stop
+ * named after it all lie within a short walk of each other.
+ */
 export function isSameDestination(a: AutocompleteResult, b: AutocompleteResult): boolean {
   if (!a.coordinates || !b.coordinates) return false;
-  return (
-    matchKey(a.label) === matchKey(b.label) &&
-    haversineDistance(a.coordinates, b.coordinates) < SAME_PLACE_MAX_METERS
-  );
+  return haversineDistance(a.coordinates, b.coordinates) < SAME_PLACE_MAX_METERS;
 }
 
 /**
@@ -436,10 +445,14 @@ function rawCategoryValue(rawCategory?: string): string | undefined {
 
 /**
  * How much of a destination a place is on its own, 0–1, wherever the map is:
- * areas by settlement or admin rank, airports by size, other places by a
- * provider's importance, discounted.
+ * its `fame` where known, else areas by settlement or admin rank, airports by
+ * size, other places by a provider's importance, discounted.
  */
-function prominence(item: AutocompleteResult): number {
+export function prominence(item: AutocompleteResult): number {
+  return Math.max(rankedProminence(item), item.fame ?? 0);
+}
+
+function rankedProminence(item: AutocompleteResult): number {
   if (item.type === "region") {
     const byRank = AREA_PROMINENCE[rawCategoryValue(item.rawCategory) ?? ""];
     return item.importance ?? byRank ?? unrankedAreaProminence(item.rawCategory);
@@ -501,7 +514,12 @@ export function suggestionScore(item: RankedSuggestion, context: SuggestionScore
 
 /** Prominence, raised for an official code or alias typed out in full. */
 function fame(item: AutocompleteResult, text: number): number {
-  const own = prominence(item);
+  // Fame earned by a name only partly typed counts half: "paris" means Paris
+  // before it means Pariser Platz, however well known the square.
+  const own =
+    text >= TEXT_SCORE.exact
+      ? prominence(item)
+      : Math.max(rankedProminence(item), (item.fame ?? 0) * PARTIAL_NAME_FAME_SHARE);
   return text >= TEXT_SCORE.exactExplicit
     ? EXPLICIT_MATCH_PROMINENCE + (1 - EXPLICIT_MATCH_PROMINENCE) * own
     : own;
@@ -549,7 +567,21 @@ function hasSameCanonicalLocation(a: AutocompleteResult, b: AutocompleteResult):
   // from the square; merging them hid the station for "alexanderplatz".
   const kinds = new Set([transitKind(a), transitKind(b)]);
   if (kinds.has("transit") && kinds.has("other")) return false;
-  return haversineDistance(a.coordinates, b.coordinates) < SAME_PLACE_MAX_METERS;
+  const maxMeters = isCityFromTwoSources(a, b) ? SAME_CITY_MAX_METERS : SAME_PLACE_MAX_METERS;
+  return haversineDistance(a.coordinates, b.coordinates) < maxMeters;
+}
+
+/**
+ * Two areas of one name, only one of them tied to a Wikidata item: a city
+ * as the notable-places index knows it, and a geocoder's record of it. Two
+ * geocoder rows keep the short distance, so namesake villages stay apart.
+ */
+function isCityFromTwoSources(a: AutocompleteResult, b: AutocompleteResult): boolean {
+  return (
+    a.type === "region" &&
+    b.type === "region" &&
+    Boolean(a.ids?.wikidata) !== Boolean(b.ids?.wikidata)
+  );
 }
 
 function sameSuggestion(a: AutocompleteResult, b: AutocompleteResult): boolean {
@@ -565,15 +597,32 @@ function providerIds(item: AutocompleteResult): string[] {
 function mergeDuplicate(
   stronger: AutocompleteResult,
   weaker: AutocompleteResult,
+  query: string,
 ): AutocompleteResult {
   const contributingProviders = [...providerIds(stronger)];
   for (const provider of providerIds(weaker)) {
     if (!contributingProviders.includes(provider)) contributingProviders.push(provider);
   }
+  // A geocoder's row for the Louvre and the notable-places row are one place;
+  // it keeps the fame either of them knew.
+  const fame = Math.max(stronger.fame ?? 0, weaker.fame ?? 0);
+  // The name it was found by, for a row that says nothing of it and only
+  // matches by its label less well: a geocoder's Rome only starts with
+  // "rom", which is Rome's German name. A row's own match stays: an airport
+  // matched by its code is not matched by the same code as a name.
+  const searchMatch =
+    !stronger.searchMatch &&
+    weaker.searchMatch &&
+    textMatchScore({ ...stronger, searchMatch: weaker.searchMatch }, query) >
+      textMatchScore(stronger, query)
+      ? weaker.searchMatch
+      : stronger.searchMatch;
   return {
     ...stronger,
+    ...(searchMatch ? { searchMatch } : {}),
     ids:
       stronger.ids || weaker.ids ? { ...(weaker.ids ?? {}), ...(stronger.ids ?? {}) } : undefined,
+    ...(fame > 0 ? { fame } : {}),
     contributingProviders: contributingProviders.length > 0 ? contributingProviders : undefined,
   };
 }
@@ -592,7 +641,13 @@ export function mergeAutocompleteSuggestions(
     };
     const duplicateIndex = merged.findIndex((candidate) => sameSuggestion(candidate, item));
     if (duplicateIndex === -1) merged.push(normalizedItem);
-    else merged[duplicateIndex] = mergeDuplicate(merged[duplicateIndex], normalizedItem);
+    else {
+      merged[duplicateIndex] = mergeDuplicate(
+        merged[duplicateIndex],
+        normalizedItem,
+        context.query,
+      );
+    }
   }
 
   return merged;

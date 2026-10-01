@@ -1,0 +1,33 @@
+{
+  "id": "search-notable-places",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
+  "domains": ["search-suggestions"],
+  "backend": { "routes": false },
+  "quality": "built-in",
+  "category": "Geocoding",
+  "requires": [{ "service": "postgis", "optional": true }],
+  "dataSources": [
+    {
+      "sourceId": "wikidata",
+      "name": "Wikidata",
+      "url": "https://www.wikidata.org/",
+      "license": "CC0 1.0",
+      "licenseUrl": "https://www.wikidata.org/wiki/Wikidata:Licensing",
+      "commercialUse": "yes",
+      "providerCountry": "US",
+      "providerPrivacyUrl": "https://foundation.wikimedia.org/wiki/Policy:Privacy_policy",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    }
+  ]
+}

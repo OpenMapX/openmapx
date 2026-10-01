@@ -100,7 +100,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q639887",
+      "ids": {
+        "wikidata": "Q639887"
+      },
+      "label": "Mauerpark",
+      "sublabel": "Parkanlage in Berlin-Prenzlauer Berg",
+      "coordinates": [13.403333, 52.543611],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Mauerpark",
+        "normalized": "mauerpark"
+      },
+      "importance": 0.37831094836948276,
+      "fame": 0.37831094836948276,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

@@ -11,6 +11,7 @@ import {
   MIN_SUGGESTION_TEXT_SCORE,
   mergeAutocompleteSuggestions,
   normalizeSearchTerm,
+  prominence,
   queryNamesLocation,
   type RankedSuggestion,
   type SuggestionScoreContext,
@@ -142,6 +143,12 @@ const MIN_DESTINATION_PLAUSIBILITY = 0.3;
 const RIVAL_SCORE_MARGIN = 0.35;
 /** A place this far within a trip of the map is in the area being searched. */
 const IN_AREA_REACH = 0.5;
+/**
+ * A place this much more famous than a namesake is the one meant: Big Ben in
+ * London (fame 0.8) over the volcano on Heard Island (0.5), a museum over a
+ * bar, but not one city over another of its rank.
+ */
+const RIVAL_FAME_GAP = 0.25;
 
 /** Areas, addresses and everything else are not alternatives to each other. */
 function placeKind(row: AutocompleteResult): "area" | "address" | "place" {
@@ -205,9 +212,11 @@ export function enterAction(
   if (!isPlausibleDestination(top, context)) return undecided();
 
   // A rival is another destination of the same kind, named as well and nearly
-  // as likely: a city is not rivalled by its own airport, nor a station near
-  // the map by an unknown park of the same name 200 km away.
+  // as likely: a city is not rivalled by its own airport, a station near the
+  // map not by an unknown park of the same name 200 km away, and the Louvre
+  // not by a bar called Louvre.
   const topScore = suggestionScore(top, context);
+  const topFame = prominence(top);
   const rivalled = places.some(
     (row) =>
       row !== top &&
@@ -215,6 +224,7 @@ export function enterAction(
       text(row) >= topText &&
       !isSameDestination(row, top) &&
       isPlausibleDestination(row, context) &&
+      topFame - prominence(row) < RIVAL_FAME_GAP &&
       topScore - suggestionScore(row, context) < RIVAL_SCORE_MARGIN,
   );
   return rivalled ? undecided() : { kind: "open", row: top };

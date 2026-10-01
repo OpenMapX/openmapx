@@ -487,6 +487,68 @@ export function registerDataCommands(program: Command): void {
       }
     });
 
+  const notablePlaces = data
+    .command("notable-places")
+    .description("Build and inspect the Wikidata index of places known beyond their town");
+
+  notablePlaces
+    .command("build")
+    .description("Fetch the notable places from Wikidata and publish them for search")
+    .action(async () => {
+      try {
+        const result = await new DataManagerClient({
+          baseUrl: DEFAULT_DM_URL,
+        }).buildNotablePlaces((message) => log.dim(message));
+        if (!result.ok) {
+          log.err(`notable-places build failed: ${result.message ?? "unknown error"}`);
+          process.exit(1);
+          return;
+        }
+        log.ok(
+          `Notable places published: ${result.placeCount ?? 0} places, ${result.nameCount ?? 0} names` +
+            (result.epoch ? ` (epoch ${result.epoch})` : ""),
+        );
+      } catch (err) {
+        log.err(`notable-places build failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
+  notablePlaces
+    .command("status")
+    .description("Show the published notable-places snapshot")
+    .action(async () => {
+      try {
+        const status = await new DataManagerClient({
+          baseUrl: DEFAULT_DM_URL,
+        }).notablePlacesStatus();
+        console.log(
+          table(
+            [
+              { key: "field", header: "Field" },
+              { key: "value", header: "Value" },
+            ],
+            [
+              { field: "Status", value: status.status },
+              { field: "Building", value: status.building ? "yes" : "no" },
+              { field: "Places", value: String(status.placeCount) },
+              { field: "Names", value: String(status.nameCount) },
+              { field: "Min sitelinks", value: String(status.minSitelinks ?? "—") },
+              { field: "Source", value: status.source ?? "—" },
+              { field: "Epoch", value: status.epoch ?? "—" },
+              { field: "Published", value: status.publishedAt ?? "—" },
+              { field: "Last error", value: status.lastError ?? "—" },
+            ],
+          ),
+        );
+      } catch (err) {
+        log.err(`notable-places status failed: ${(err as Error).message}`);
+        dataManagerHint();
+        process.exit(1);
+      }
+    });
+
   const source = data.command("source").description("Manage desired transit source state");
 
   source

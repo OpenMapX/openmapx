@@ -154,12 +154,12 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/390962614",
+      "id": "osm:node/446289301",
       "label": "Hauptbahnhof",
-      "sublabel": "Hauptbahnhof, Invalidenstraße, Berlin, Deutschland",
-      "coordinates": [13.3694193, 52.5267897],
+      "sublabel": "Hauptbahnhof, Friedrich-List-Ufer, Berlin, Deutschland",
+      "coordinates": [13.3702857, 52.5252589],
       "type": "poi",
-      "rawCategory": "railway/subway_entrance",
+      "rawCategory": "railway/stop",
       "provider": "geocoding-photon"
     },
     {
@@ -206,27 +206,53 @@
       "type": "poi",
       "rawCategory": "railway/proposed",
       "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/390962614",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Invalidenstraße, Berlin, Deutschland",
+      "coordinates": [13.3694193, 52.5267897],
+      "type": "poi",
+      "rawCategory": "railway/subway_entrance",
+      "provider": "geocoding-photon"
     }
   ],
   "aggregate": [
     {
-      "id": "oa:MX-0162",
+      "id": "wikidata:Q978904",
       "ids": {
-        "oa": "MX-0162"
+        "wikidata": "Q978904"
       },
-      "label": "Helipuerto Centro Operativo de BBVA Bancomer",
-      "sublabel": "Miguel Hidalgo, MX",
-      "coordinates": [-99.18399, 19.44145],
+      "label": "HBF Park",
+      "sublabel": "Sportstadion in Perth, Australien",
+      "coordinates": [115.869924, -31.945751],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "authoritative_code",
-        "value": "HBF",
-        "normalized": "hbf",
-        "namespace": "local_code"
+        "kind": "name",
+        "value": "HBF Park",
+        "normalized": "hbf park"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.4863943375425593,
+      "fame": 0.4863943375425593,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q7684362",
+      "ids": {
+        "wikidata": "Q7684362"
+      },
+      "label": "Hbf Taoyuan",
+      "sublabel": "Bahnhof in der Taiwan (Republik China)",
+      "coordinates": [121.313, 24.9895],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hbf Taoyuan",
+        "normalized": "hbf taoyuan"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [],

@@ -73,3 +73,32 @@ describe("GET /data-manager/search-index/status", () => {
     expect(res.json()).toEqual({ ok: false, error: "osm_search index not built" });
   });
 });
+
+describe("GET /data-manager/notable-places/status", () => {
+  it("requires an admin session and rejects a service token", async () => {
+    const res = await app.inject({
+      method: "GET",
+      url: "/data-manager/notable-places/status",
+      headers: { authorization: "Bearer service-token" },
+    });
+
+    expect(res.statusCode).toBe(403);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("proxies status, and the 404 of an index never built", async () => {
+    fetchMock.mockResolvedValueOnce(Response.json({ status: "ready", placeCount: 150_000 }));
+    const ready = await app.inject({ method: "GET", url: "/data-manager/notable-places/status" });
+    expect(ready.statusCode).toBe(200);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "https://data-manager.test:4000/notable-places/status",
+      expect.objectContaining({ method: "GET" }),
+    );
+
+    fetchMock.mockResolvedValueOnce(
+      Response.json({ ok: false, error: "notable_places index not built" }, { status: 404 }),
+    );
+    const absent = await app.inject({ method: "GET", url: "/data-manager/notable-places/status" });
+    expect(absent.statusCode).toBe(404);
+  });
+});

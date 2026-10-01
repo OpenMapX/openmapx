@@ -69,6 +69,13 @@ export interface AutocompleteResult {
   searchMatch?: SearchSuggestionMatch;
   /** Provider-normalized prominence in the inclusive range 0–1. */
   importance?: number;
+  /**
+   * How widely known the place is, 0–1, from evidence beyond the provider's
+   * own ranking: how many Wikipedia language editions cover it, or OSM's
+   * `importance` and World Heritage tags. Unlike `importance`, which some
+   * providers set by category alone, ranking takes it at face value.
+   */
+  fame?: number;
   /** All providers retained when equivalent suggestions are conflated. */
   contributingProviders?: string[];
   /**

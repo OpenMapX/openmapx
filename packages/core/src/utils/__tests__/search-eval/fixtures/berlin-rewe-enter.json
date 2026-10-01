@@ -145,7 +145,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q4391673",
+      "ids": {
+        "wikidata": "Q4391673"
+      },
+      "label": "Rewet",
+      "sublabel": "Fluss in Baschkortostan, Russland, Zufluss des Maly Inser",
+      "coordinates": [57.621111, 54.186944],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rewet",
+        "normalized": "rewet"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [
     {
       "qid": "Q16968817",

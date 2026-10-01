@@ -7,6 +7,11 @@
       "coordinates": [13.3015715, 52.5187432],
       "type": "poi",
       "rawCategory": "amenity/bar",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bar",
+        "normalized": "bar"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -16,6 +21,11 @@
       "coordinates": [13.3688321, 52.5142805],
       "type": "poi",
       "rawCategory": "tourism/artwork",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bär",
+        "normalized": "bar"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -34,6 +44,11 @@
       "coordinates": [13.4522244, 52.512662],
       "type": "poi",
       "rawCategory": "tourism/artwork",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bär",
+        "normalized": "bar"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -61,6 +76,11 @@
       "coordinates": [13.6771933, 52.8019322],
       "type": "region",
       "rawCategory": "boundary/administrative",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Barnim",
+        "normalized": "barnim"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -70,6 +90,11 @@
       "coordinates": [13.5019022, 52.0462945],
       "type": "region",
       "rawCategory": "place/town",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Baruth/Mark",
+        "normalized": "baruth mark"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -79,6 +104,11 @@
       "coordinates": [11.8860511, 51.9666473],
       "type": "region",
       "rawCategory": "place/town",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Barby",
+        "normalized": "barby"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -88,6 +118,11 @@
       "coordinates": [13.6951005, 52.6301382],
       "type": "region",
       "rawCategory": "place/natural_region",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Barnim",
+        "normalized": "barnim"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -102,11 +137,66 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q666828",
+      "ids": {
+        "wikidata": "Q666828"
+      },
+      "label": "Bard College Berlin",
+      "sublabel": "German Liberal Arts University",
+      "coordinates": [13.393889, 52.584167],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bard College Berlin",
+        "normalized": "bard college berlin"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1817620",
+      "ids": {
+        "wikidata": "Q1817620"
+      },
+      "label": "Bar",
+      "sublabel": "river in the Ardennes department, northern France, mouth in Meuse river",
+      "coordinates": [4.840833, 49.697222],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bar",
+        "normalized": "bar"
+      },
+      "importance": 0.43387345047407155,
+      "fame": 0.43387345047407155,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q679141",
+      "ids": {
+        "wikidata": "Q679141"
+      },
+      "label": "Swiss Federal Archives",
+      "sublabel": "national archives of Switzerland, based in Bern",
+      "coordinates": [7.446389, 46.940556],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "BAR",
+        "normalized": "bar"
+      },
+      "importance": 0.4214085732365982,
+      "fame": 0.4214085732365982,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:ZJQH",
       "ids": {
-        "oa": "ZJQH",
+        "wikidata": "Q7267894",
         "iata": "BAR",
-        "icao": "ZJQH"
+        "icao": "ZJQH",
+        "oa": "ZJQH"
       },
       "label": "Qionghai Bo'ao Airport",
       "sublabel": "Qionghai (Basuo), CN",
@@ -120,133 +210,80 @@
         "namespace": "iata"
       },
       "importance": 0.7,
+      "fame": 0.3,
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:2P4",
+      "id": "wikidata:Q7343",
       "ids": {
-        "oa": "2P4"
+        "wikidata": "Q7343"
       },
-      "label": "Baraga Airport",
-      "sublabel": "Baraga, US",
-      "coordinates": [-88.577797, 46.784901],
+      "label": "Great Barrier Reef",
+      "sublabel": "over 2300 km long coral reef off Australia's northeast coast, UNESCO World Heritage Site",
+      "coordinates": [145.8, -16.4],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Baraga Airport",
-        "normalized": "baraga airport"
+        "value": "Barrier-Riff",
+        "normalized": "barrier riff"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.87616197884235,
+      "fame": 0.87616197884235,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:2WY8",
+      "id": "wikidata:Q45823",
       "ids": {
-        "oa": "2WY8"
+        "wikidata": "Q45823"
       },
-      "label": "Bar Flying E Airport",
-      "sublabel": "Cody, US",
-      "coordinates": [-109.28199768066406, 44.40439987182617],
+      "label": "Barents Sea",
+      "sublabel": "marginal sea of the Arctic Ocean, located off the northern coasts of Norway and Russia",
+      "coordinates": [40, 75],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bar Flying E Airport",
-        "normalized": "bar flying e airport"
+        "value": "Barents",
+        "normalized": "barents"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.8164812276811202,
+      "fame": 0.8164812276811202,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:1TS2",
+      "id": "wikidata:Q12514",
       "ids": {
-        "oa": "1TS2"
+        "wikidata": "Q12514"
       },
-      "label": "Bar 16 Airport",
-      "sublabel": "Hubbard, US",
-      "coordinates": [-96.77850341796875, 31.82430076599121],
+      "label": "barrage des Trois-Gorges",
+      "sublabel": "hydroelectric dam that spans the Yangtze River by the town of Sandouping, China",
+      "coordinates": [111.00367, 30.82386],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bar 16 Airport",
-        "normalized": "bar 16 airport"
+        "value": "barrage des Trois-Gorges",
+        "normalized": "barrage des trois gorges"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7990695743452447,
+      "fame": 0.7990695743452447,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:0XA7",
+      "id": "wikidata:Q38891",
       "ids": {
-        "oa": "0XA7"
+        "wikidata": "Q38891"
       },
-      "label": "Bar 3 Ranch Airport",
-      "sublabel": "Georgetown, US",
-      "coordinates": [-97.62276, 30.662345],
+      "label": "Barragem de Assuã",
+      "sublabel": "dam in Aswan, Egypt",
+      "coordinates": [32.880192, 23.971431],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bar 3 Ranch Airport",
-        "normalized": "bar 3 ranch airport"
+        "value": "Barragem de Assuã",
+        "normalized": "barragem de assua"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:9TX1",
-      "ids": {
-        "oa": "9TX1"
-      },
-      "label": "Bar S Ranch Airport",
-      "sublabel": "Giddings, US",
-      "coordinates": [-96.856159, 30.143181],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Bar S Ranch Airport",
-        "normalized": "bar s ranch airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:54XS",
-      "ids": {
-        "oa": "54XS"
-      },
-      "label": "Bar C Ranch Airport",
-      "sublabel": "Del Rio, US",
-      "coordinates": [-100.686307, 29.944988],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Bar C Ranch Airport",
-        "normalized": "bar c ranch airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:AR-0058",
-      "ids": {
-        "oa": "AR-0058"
-      },
-      "label": "Baradero Airport",
-      "sublabel": "Baradero, AR",
-      "coordinates": [-59.492806, -33.821693],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Baradero Airport",
-        "normalized": "baradero airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7878156011564457,
+      "fame": 0.7878156011564457,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

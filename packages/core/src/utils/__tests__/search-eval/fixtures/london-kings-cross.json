@@ -61,6 +61,11 @@
       "coordinates": [-0.1409544, 51.2261436],
       "type": "street",
       "rawCategory": "highway/unclassified",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kings Cross Lane",
+        "normalized": "kings cross lane"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -100,7 +105,44 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q219867",
+      "ids": {
+        "wikidata": "Q219867"
+      },
+      "label": "Kings Cross",
+      "sublabel": "railway station in the London Borough of Camden, England, UK",
+      "coordinates": [-0.123333, 51.530972],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kings Cross",
+        "normalized": "kings cross"
+      },
+      "importance": 0.6419916241166814,
+      "fame": 0.6419916241166814,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q826120",
+      "ids": {
+        "wikidata": "Q826120"
+      },
+      "label": "Kings Cross St. Pancras tube station",
+      "sublabel": "London Underground station",
+      "coordinates": [-0.1241, 51.5302],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kings Cross St. Pancras tube station",
+        "normalized": "kings cross st pancras tube station"
+      },
+      "importance": 0.5957871457182979,
+      "fame": 0.5957871457182979,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

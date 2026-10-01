@@ -268,7 +268,10 @@ explicit aliases/references, and conservative acronyms. Its provider contract
 returns normalized match evidence, stable/cross-source identifiers,
 importance, and per-result attribution. The built-in providers adapt
 OurAirports, the configured transit orchestrator, and the independently built
-`osm_search` PostGIS schema. This domain deliberately does not replace the
+`osm_search` and `notable_places` PostGIS schemas. The second holds places
+covered by many Wikipedias, with a `fame` value the ranker takes at face value,
+so far-away landmarks outrank nearby namesakes whatever geocoder runs. This
+domain deliberately does not replace the
 geocoding fallback chain; `SearchBar` merges both responses after each has
 applied its own semantics.
 
@@ -276,7 +279,9 @@ The OSM alias index is an ODbL-derived data product owned by `data-manager`.
 The manager streams a selected PBF through Osmium into an
 `osm_search__staging` schema, validates it, and atomically swaps it into
 `osm_search`. Publication epochs invalidate provider caches without key scans,
-and a failed rebuild leaves the previous live schema queryable.
+and a failed rebuild leaves the previous live schema queryable. The
+`notable_places` schema follows the same staging-and-swap pattern, filled from
+a Wikidata SPARQL endpoint (CC0) instead of a PBF.
 
 ## The integration host lifecycle
 

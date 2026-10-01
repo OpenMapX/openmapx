@@ -1723,6 +1723,13 @@ export function createAdministrativeRuntime(
     });
     return { completed: true, resourceId: operation.regionId };
   };
+  runtime["data.notablePlacesBuild"] = async (_operation, context) => {
+    await runFixedCli(["data", "notable-places", "build"], {
+      signal: context.signal,
+      emitLog: context.emitLog,
+    });
+    return { completed: true };
+  };
   runtime["system.diagnostics"] = async (_operation, context) => {
     await runFixedCli(["check"], {
       signal: context.signal,

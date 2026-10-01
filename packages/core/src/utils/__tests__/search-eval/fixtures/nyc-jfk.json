@@ -7,6 +7,11 @@
       "coordinates": [-73.7872686, 40.6532713],
       "type": "poi",
       "rawCategory": "tourism/attraction",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK",
+        "normalized": "jfk"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -61,6 +66,11 @@
       "coordinates": [-73.788498, 40.6656062],
       "type": "street",
       "rawCategory": "highway/motorway",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK Expressway",
+        "normalized": "jfk expressway"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -70,6 +80,11 @@
       "coordinates": [-73.7916524, 40.6608182],
       "type": "street",
       "rawCategory": "highway/motorway",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK Expressway",
+        "normalized": "jfk expressway"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -79,6 +94,11 @@
       "coordinates": [-73.7834482, 40.6667598],
       "type": "street",
       "rawCategory": "highway/motorway",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK Expressway",
+        "normalized": "jfk expressway"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -88,6 +108,11 @@
       "coordinates": [-73.7870782, 40.6464986],
       "type": "street",
       "rawCategory": "highway/construction",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK Expressway",
+        "normalized": "jfk expressway"
+      },
       "provider": "geocoding-photon"
     }
   ],
@@ -95,9 +120,10 @@
     {
       "id": "oa:KJFK",
       "ids": {
-        "oa": "KJFK",
+        "wikidata": "Q8685",
         "iata": "JFK",
-        "icao": "KJFK"
+        "icao": "KJFK",
+        "oa": "KJFK"
       },
       "label": "John F. Kennedy International Airport",
       "sublabel": "New York, US",
@@ -111,7 +137,62 @@
         "namespace": "iata"
       },
       "importance": 0.9,
+      "fame": 0.7471172439520025,
       "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q1631981",
+      "ids": {
+        "wikidata": "Q1631981"
+      },
+      "label": "JFK Center",
+      "sublabel": "performing arts center in Washington, D.C., United States",
+      "coordinates": [-77.055463, 38.895834],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK Center",
+        "normalized": "jfk center"
+      },
+      "importance": 0.5552820237106698,
+      "fame": 0.5552820237106698,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2007919",
+      "ids": {
+        "wikidata": "Q2007919"
+      },
+      "label": "JFK Library",
+      "sublabel": "presidential library and museum for U.S. President John F. Kennedy in Boston, Massachusetts",
+      "coordinates": [-71.033333, 42.313611],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFK Library",
+        "normalized": "jfk library"
+      },
+      "importance": 0.5121843988435543,
+      "fame": 0.5121843988435543,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q648730",
+      "ids": {
+        "wikidata": "Q648730"
+      },
+      "label": "JFKSWCS",
+      "sublabel": "military unit",
+      "coordinates": [-78.999167, 35.139167],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "JFKSWCS",
+        "normalized": "jfkswcs"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
     },
     {
       "id": "oa:US-7020",

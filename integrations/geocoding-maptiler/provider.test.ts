@@ -153,6 +153,37 @@ describe("MapTiler geocoding provider", () => {
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("autocomplete=true");
   });
 
+  it("passes on a place's Wikidata item and how widely its tags say it is known", async () => {
+    const poi = (id: string, wikidata: string | undefined, tags: Record<string, unknown>) => ({
+      id,
+      text: id,
+      place_name: id,
+      place_type: ["poi"],
+      relevance: 1,
+      geometry: { coordinates: [0, 0] },
+      properties: { ...(wikidata ? { wikidata } : {}), feature_tags: tags },
+    });
+    mockFetch.mockResolvedValueOnce(
+      mockOk({
+        features: [
+          poi("Colosseum", "Q10285", { importance: "international", heritage: "1" }),
+          poi("Sagrada Família", "Q48435", { heritage: "1" }),
+          poi("Rathaus", "Q123", { importance: "regional" }),
+          poi("Louvre bar", undefined, { amenity: "bar" }),
+        ],
+      }),
+    );
+
+    const results = await maptilerGeocodingService.autocomplete("x");
+
+    expect(results.map((result) => [result.ids?.wikidata, result.fame])).toEqual([
+      ["Q10285", 0.85],
+      ["Q48435", 0.8],
+      ["Q123", 0.45],
+      [undefined, undefined],
+    ]);
+  });
+
   it("reports an area's settlement rank so ranking can tell a city from a hamlet", async () => {
     const area = (id: string, placeType: string, designation?: string) => ({
       id,

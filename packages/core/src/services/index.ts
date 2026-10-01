@@ -33,6 +33,8 @@ export {
   type DataManagerClientOptions,
   type DataManagerCoverageEvidencePage,
   DataManagerHttpError,
+  type NotablePlacesBuildResult,
+  type NotablePlacesStatus,
   type SearchIndexBuildResult,
   type SearchIndexStatus,
   validateDataManagerBaseUrl,

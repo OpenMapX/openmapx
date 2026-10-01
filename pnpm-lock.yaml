@@ -1665,6 +1665,18 @@ importers:
         specifier: 4.23.15
         version: 4.23.15
 
+  integrations/search-notable-places:
+    dependencies:
+      '@openmapx/core':
+        specifier: workspace:^
+        version: link:../../packages/core
+      '@openmapx/integration-framework':
+        specifier: workspace:^
+        version: link:../../packages/integration-framework
+      '@openmapx/mobility-core':
+        specifier: workspace:^
+        version: link:../../packages/mobility-core
+
   integrations/search-osm-aliases:
     dependencies:
       '@openmapx/core':

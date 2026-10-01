@@ -224,6 +224,19 @@ transaction. Extraction, validation, or publication failure keeps the prior
 snapshot live. During a rebuild the existing snapshot remains searchable;
 after a new PBF the stale snapshot also remains available until replaced.
 
+### Notable places index
+
+The **Notable places** card shows the Wikidata index that tells search which
+of several namesakes is famous: place and name counts, the sitelink threshold,
+when it was published, and the last error. Unlike the OSM index it needs no
+download: the data-manager builds it from a Wikidata SPARQL endpoint the first
+time it starts without one, then refreshes it monthly (see
+[configuration](../install/configuration.md#notable-places-for-search)).
+**Rebuild now**, or `openmapx data notable-places build`, refreshes it at once.
+A build takes about two minutes and stages, validates, and swaps the
+`notable_places` schema in one transaction, so a failed refresh keeps the
+previous snapshot searchable.
+
 Plan temporary disk for the source PBF, staging tables and indexes, and the
 previous live schema during publication. The feature initially supports one
 active extract or `planet`, not overlapping regional unions. All derived rows

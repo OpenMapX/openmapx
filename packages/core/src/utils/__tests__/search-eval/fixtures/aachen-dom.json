@@ -10,7 +10,44 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q5908",
+      "ids": {
+        "wikidata": "Q5908"
+      },
+      "label": "Aachener Dom",
+      "sublabel": "Bischofskirche des Bistums Aachen",
+      "coordinates": [6.083922, 50.77475],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Aachener Dom",
+        "normalized": "aachener dom"
+      },
+      "importance": 0.7016203514222146,
+      "fame": 0.7016203514222146,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q15106167",
+      "ids": {
+        "wikidata": "Q15106167"
+      },
+      "label": "Aachener Domschatzkammer",
+      "sublabel": "Museum des Aachener Domkapitels",
+      "coordinates": [6.082817, 50.775036],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Aachener Domschatzkammer",
+        "normalized": "aachener domschatzkammer"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

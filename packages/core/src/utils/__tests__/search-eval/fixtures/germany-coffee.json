@@ -93,6 +93,42 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q27960",
+      "ids": {
+        "wikidata": "Q27960"
+      },
+      "label": "Colombian coffee growing axis",
+      "sublabel": "region of Colombia known for growing coffee",
+      "coordinates": [-75.617015, 4.902633],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Coffee Cultural Landscape of Colombia",
+        "normalized": "coffee cultural landscape of colombia"
+      },
+      "importance": 0.5276437323907057,
+      "fame": 0.5276437323907057,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q797948",
+      "ids": {
+        "wikidata": "Q797948"
+      },
+      "label": "coffee production in Colombia",
+      "sublabel": "UNESCO World Heritage Site in Colombia",
+      "coordinates": [-75.681667, 5.471667],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "coffee production in Colombia",
+        "normalized": "coffee production in colombia"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:US-3340",
       "ids": {
         "oa": "US-3340"

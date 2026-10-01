@@ -188,11 +188,31 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q365",
+      "ids": {
+        "wikidata": "Q365"
+      },
+      "label": "Cologne",
+      "sublabel": "most populous city in North Rhine-Westphalia, Germany",
+      "coordinates": [6.957778, 50.942222],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln",
+        "normalized": "koln"
+      },
+      "importance": 0.9117823384555512,
+      "fame": 0.9117823384555512,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:EDDK",
       "ids": {
-        "oa": "EDDK",
+        "wikidata": "Q157741",
         "iata": "CGN",
-        "icao": "EDDK"
+        "icao": "EDDK",
+        "oa": "EDDK"
       },
       "label": "Cologne Bonn Airport",
       "sublabel": "Köln (Cologne), DE",
@@ -205,61 +225,117 @@
         "normalized": "koln"
       },
       "importance": 0.9,
+      "fame": 0.6335929720801525,
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:DE-0535",
+      "id": "wikidata:Q4176",
       "ids": {
-        "oa": "DE-0535"
+        "wikidata": "Q4176"
       },
-      "label": "Köln University Hospital Heliport",
-      "sublabel": "Köln (Cologne), DE",
-      "coordinates": [6.91981, 50.92398],
+      "label": "Kölner Dom",
+      "sublabel": "Roman-Catholic cathedral in Cologne, Germany",
+      "coordinates": [6.958333, 50.941389],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Köln University Hospital Heliport",
-        "normalized": "koln university hospital heliport"
+        "value": "Kölner Dom",
+        "normalized": "kolner dom"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7586858849496683,
+      "fame": 0.7586858849496683,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:DE-0448",
+      "id": "wikidata:Q54096",
       "ids": {
-        "oa": "DE-0448"
+        "wikidata": "Q54096"
       },
-      "label": "Köln-Sülz Balloonport",
-      "sublabel": "Köln (Cologne), DE",
-      "coordinates": [6.89627, 50.91305],
+      "label": "Universität zu Köln",
+      "sublabel": "university in Germany",
+      "coordinates": [6.928611, 50.928056],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Köln-Sülz Balloonport",
-        "normalized": "koln sulz balloonport"
+        "value": "Kölner Universität",
+        "normalized": "kolner universitat"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6826077772070487,
+      "fame": 0.6826077772070487,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:DE-0820",
+      "id": "wikidata:Q7927",
       "ids": {
-        "oa": "DE-0820"
+        "wikidata": "Q7927"
       },
-      "label": "Congress Center East Kölnmesse Heliport",
-      "sublabel": "Köln, DE",
-      "coordinates": [6.98101, 50.94327],
+      "label": "Regierungsbezirk Köln",
+      "sublabel": "government region of North Rhine-Westphalia, Germany",
+      "coordinates": [6.92, 50.83],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Congress Center East Kölnmesse Heliport",
-        "normalized": "congress center east kolnmesse heliport"
+        "value": "Köln (Bezirk)",
+        "normalized": "koln bezirk"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.615613621530287,
+      "fame": 0.615613621530287,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q310525",
+      "ids": {
+        "wikidata": "Q310525"
+      },
+      "label": "Kölnarena",
+      "sublabel": "music venue and hockey stadium in Cologne, Germany",
+      "coordinates": [6.9829, 50.93843],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Kölnarena",
+        "normalized": "kolnarena"
+      },
+      "importance": 0.5616150029751907,
+      "fame": 0.5616150029751907,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1954",
+      "ids": {
+        "wikidata": "Q1954",
+        "iata": "QKL"
+      },
+      "label": "Köln Hauptbahnhof",
+      "sublabel": "Central railway station of Cologne, the 4th largest city of Germany",
+      "coordinates": [6.958056, 50.9425],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln Hbf",
+        "normalized": "koln hbf"
+      },
+      "importance": 0.5552820237106698,
+      "fame": 0.5552820237106698,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q311661",
+      "ids": {
+        "wikidata": "Q311661"
+      },
+      "label": "Köln–Frankfurt high-speed rail line",
+      "sublabel": "German high-speed rail line",
+      "coordinates": [7.82563, 50.4448],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln–Frankfurt high-speed rail line",
+        "normalized": "koln frankfurt high speed rail line"
+      },
+      "importance": 0.5121843988435543,
+      "fame": 0.5121843988435543,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

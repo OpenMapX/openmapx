@@ -136,6 +136,7 @@ const samples: Record<(typeof OPS_OPERATION_KINDS)[number], OpsOperation> = {
     kind: "data.searchIndexBuild",
     regionId: "europe/germany",
   },
+  "data.notablePlacesBuild": { kind: "data.notablePlacesBuild" },
   "motis.staging.restart": { kind: "motis.staging.restart" },
   "motis.staging.stop": { kind: "motis.staging.stop" },
   "motis.primary.restart": { kind: "motis.primary.restart" },

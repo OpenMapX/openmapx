@@ -75,148 +75,148 @@
   ],
   "aggregate": [
     {
-      "id": "oa:US-3626",
+      "id": "wikidata:Q160409",
       "ids": {
-        "oa": "US-3626"
+        "wikidata": "Q160409"
       },
-      "label": "Central Park Airport",
-      "sublabel": "Birmingham, US",
-      "coordinates": [-86.8903, 33.4777],
+      "label": "Central Park",
+      "sublabel": "public park at the center of Manhattan in New York City, New York, United States",
+      "coordinates": [-73.966111, 40.7825],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Central Park Airport",
-        "normalized": "central park airport"
+        "value": "Central Park",
+        "normalized": "central park"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7609187255765315,
+      "fame": 0.7609187255765315,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-11048",
+      "id": "wikidata:Q2631701",
       "ids": {
-        "oa": "US-11048"
+        "wikidata": "Q2631701"
       },
-      "label": "Central Park Helistop",
-      "sublabel": "Oklahoma City, US",
-      "coordinates": [-97.500604, 35.533383],
+      "label": "Central Park Tower",
+      "sublabel": "Residential skyscraper in Manhattan, New York",
+      "coordinates": [-73.980944, 40.766333],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Central Park Helistop",
-        "normalized": "central park helistop"
+        "value": "Central Park Tower",
+        "normalized": "central park tower"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5419568396471481,
+      "fame": 0.5419568396471481,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:JP-1999",
+      "id": "wikidata:Q954207",
       "ids": {
-        "oa": "JP-1999"
+        "wikidata": "Q954207"
       },
-      "label": "Central Park Tower La Tour Shinjuku Helipad",
-      "sublabel": "Shinjuku, Tokyo, JP",
-      "coordinates": [139.68856, 35.69222],
+      "label": "Central Park Zoo",
+      "sublabel": "zoo in New York City, New York, USA",
+      "coordinates": [-73.971667, 40.767778],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Central Park Tower La Tour Shinjuku Helipad",
-        "normalized": "central park tower la tour shinjuku helipad"
+        "value": "Central Park Zoo",
+        "normalized": "central park zoo"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.503964496068378,
+      "fame": 0.503964496068378,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:JP-2369",
+      "id": "wikidata:Q2944433",
       "ids": {
-        "oa": "JP-2369"
+        "wikidata": "Q2944433"
       },
-      "label": "Kamimine Central Park Emergency Helipad",
-      "sublabel": "Kamimine, JP",
-      "coordinates": [130.42514, 33.31061],
+      "label": "Central Park Place",
+      "sublabel": "residential skyscraper in Manhattan, New York",
+      "coordinates": [-73.983, 40.767083],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Kamimine Central Park Emergency Helipad",
-        "normalized": "kamimine central park emergency helipad"
+        "value": "Central Park Place",
+        "normalized": "central park place"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:BR-1020",
+      "id": "wikidata:Q2585611",
       "ids": {
-        "oa": "BR-1020"
+        "wikidata": "Q2585611"
       },
-      "label": "ITC Central Park I Helipad",
-      "sublabel": "Fortaleza, BR",
-      "coordinates": [-38.473306, -3.739282],
+      "label": "Central Park",
+      "sublabel": "skyscraper in Perth, Western Australia",
+      "coordinates": [115.855611, -31.953667],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "ITC Central Park I Helipad",
-        "normalized": "itc central park i helipad"
+        "value": "Central Park",
+        "normalized": "central park"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.45662189673896547,
+      "fame": 0.45662189673896547,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:MX-2282",
+      "id": "wikidata:Q3041034",
       "ids": {
-        "oa": "MX-2282"
+        "wikidata": "Q3041034"
       },
-      "label": "Peninsula Lifestyle Helipad",
-      "sublabel": "Guadalajara, MX",
-      "coordinates": [-103.400214, 20.677928],
+      "label": "Central Park",
+      "sublabel": "park in Helsinki, Finland",
+      "coordinates": [24.919167, 60.223056],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "keyword",
-        "value": "Central Park Residential",
-        "normalized": "central park residential"
+        "kind": "name",
+        "value": "Central Park",
+        "normalized": "central park"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.37831094836948276,
+      "fame": 0.37831094836948276,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-8702",
+      "id": "wikidata:Q491218",
       "ids": {
-        "oa": "US-8702"
+        "wikidata": "Q491218"
       },
-      "label": "401 Rockefeller Helipad",
-      "sublabel": "Irvine, US",
-      "coordinates": [-117.84795, 33.67754],
+      "label": "Central Park Station",
+      "sublabel": "metro station",
+      "coordinates": [126.63459, 37.39303],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "keyword",
-        "value": "Astoria at Central Park West",
-        "normalized": "astoria at central park west"
+        "kind": "name",
+        "value": "Central Park",
+        "normalized": "central park"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-8701",
+      "id": "wikidata:Q1053931",
       "ids": {
-        "oa": "US-8701"
+        "wikidata": "Q1053931"
       },
-      "label": "405 Rockefeller Helipad",
-      "sublabel": "Irvine, US",
-      "coordinates": [-117.84851, 33.67731],
+      "label": "Central Park, Cowdenbeath",
+      "sublabel": "football stadium in Cowdenbeath, Scotland",
+      "coordinates": [-3.347097, 56.108739],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "keyword",
-        "value": "Astoria at Central Park West",
-        "normalized": "astoria at central park west"
+        "kind": "name",
+        "value": "Central Park",
+        "normalized": "central park"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

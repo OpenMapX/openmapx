@@ -118,7 +118,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q765221",
+      "ids": {
+        "wikidata": "Q765221"
+      },
+      "label": "Starbucks Center",
+      "sublabel": "world headquarters of coffee chain Starbucks in Seattle, Washington",
+      "coordinates": [-122.335555, 47.580833],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Starbucks Center",
+        "normalized": "starbucks center"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [
     {
       "qid": "Q37158",

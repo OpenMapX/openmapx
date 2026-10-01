@@ -109,7 +109,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q1848828",
+      "ids": {
+        "wikidata": "Q1848828"
+      },
+      "label": "Tankstelle Skovshoved",
+      "sublabel": "historische Tankstelle in Dänemark",
+      "coordinates": [12.59948, 55.76325],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tankstelle Skovshoved",
+        "normalized": "tankstelle skovshoved"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [
     {
       "qid": "Q565734",

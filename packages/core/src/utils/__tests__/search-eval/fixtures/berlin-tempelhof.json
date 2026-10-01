@@ -93,6 +93,98 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q9686",
+      "ids": {
+        "wikidata": "Q9686",
+        "iata": "THF",
+        "icao": "EDDI"
+      },
+      "label": "Flughafen Berlin-Tempelhof",
+      "sublabel": "ehemaliger Berliner Flughafen",
+      "coordinates": [13.401667, 52.473611],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tempelhof",
+        "normalized": "tempelhof"
+      },
+      "importance": 0.6009378126402927,
+      "fame": 0.6009378126402927,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q571405",
+      "ids": {
+        "wikidata": "Q571405"
+      },
+      "label": "Bahnhof Berlin-Tempelhof",
+      "sublabel": "S- und U-Bahnhof im Berliner Ortsteil Tempelhof",
+      "coordinates": [13.3854, 52.4708],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tempelhof",
+        "normalized": "tempelhof"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q19474703",
+      "ids": {
+        "wikidata": "Q19474703"
+      },
+      "label": "Tempelhof Airport Street Circuit",
+      "sublabel": "temporärer Flugplatzkurs in Berlin",
+      "coordinates": [13.389167, 52.479167],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tempelhof Airport Street Circuit",
+        "normalized": "tempelhof airport street circuit"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q523663",
+      "ids": {
+        "wikidata": "Q523663"
+      },
+      "label": "Tempelhofer Berg",
+      "sublabel": "Hügel im nach ihm benannten Berliner Ortsteil",
+      "coordinates": [13.3814, 52.4878],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tempelhofer Berg",
+        "normalized": "tempelhofer berg"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2402748",
+      "ids": {
+        "wikidata": "Q2402748"
+      },
+      "label": "Tempelhofer Feld",
+      "sublabel": "öffentlicher Park und Freizeitfläche in Berlin",
+      "coordinates": [13.4014, 52.4733],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tempelhofer Feld",
+        "normalized": "tempelhofer feld"
+      },
+      "importance": 0.3937702819166341,
+      "fame": 0.3937702819166341,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:DE-0456",
       "ids": {
         "oa": "DE-0456"

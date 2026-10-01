@@ -129,24 +129,62 @@
   ],
   "aggregate": [
     {
-      "id": "oa:EDDH",
+      "id": "wikidata:Q1055",
+      "ids": {
+        "wikidata": "Q1055"
+      },
+      "label": "Hamburg",
+      "sublabel": "Stadt und Land der Bundesrepublik Deutschland",
+      "coordinates": [10, 53.55],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hamburg",
+        "normalized": "hamburg"
+      },
+      "importance": 0.9486824723577081,
+      "fame": 0.9486824723577081,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q584756",
+      "ids": {
+        "wikidata": "Q584756"
+      },
+      "label": "Hamburger Bahnhof – Nationalgalerie der Gegenwart",
+      "sublabel": "Kunstmuseum in Berlin",
+      "coordinates": [13.372222, 52.528333],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hamburger Bahnhof",
+        "normalized": "hamburger bahnhof"
+      },
+      "importance": 0.49537914651793424,
+      "fame": 0.49537914651793424,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q27706",
       "ids": {
         "oa": "EDDH",
         "iata": "HAM",
-        "icao": "EDDH"
+        "icao": "EDDH",
+        "wikidata": "Q27706"
       },
-      "label": "Hamburg Helmut Schmidt Airport",
-      "sublabel": "Hamburg, DE",
-      "coordinates": [9.98823, 53.630402],
+      "label": "Flughafen Hamburg",
+      "sublabel": "Flughafen in Hamburg-Fuhlsbüttel",
+      "coordinates": [9.988228, 53.630389],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Hamburg Helmut Schmidt Airport",
-        "normalized": "hamburg helmut schmidt airport"
+        "value": "Hamburg",
+        "normalized": "hamburg"
       },
-      "importance": 0.9,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6615171828647772,
+      "fame": 0.6615171828647772,
+      "provider": "search-notable-places"
     },
     {
       "id": "oa:EDHI",
@@ -169,113 +207,76 @@
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:4G2",
+      "id": "wikidata:Q156725",
       "ids": {
-        "oa": "4G2"
+        "wikidata": "Q156725"
       },
-      "label": "Hamburg Inc Airport",
-      "sublabel": "Hamburg, US",
-      "coordinates": [-78.91480255126953, 42.70090103149414],
+      "label": "Universität Hamburg",
+      "sublabel": "Hochschule in der Freien und Hansestadt Hamburg",
+      "coordinates": [9.984776, 53.565651],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Hamburg Inc Airport",
-        "normalized": "hamburg inc airport"
+        "value": "Hamburg University",
+        "normalized": "hamburg university"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.685909371503169,
+      "fame": 0.685909371503169,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:CA-1037",
+      "id": "wikidata:Q150933",
       "ids": {
-        "oa": "CA-1037"
+        "wikidata": "Q150933"
       },
-      "label": "Hamburg Airport",
-      "sublabel": "Manning, CA",
-      "coordinates": [-119.76531, 57.355285],
+      "label": "Hamburg Arena",
+      "sublabel": "Fußballstadion in Hamburg",
+      "coordinates": [9.898611, 53.586944],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Hamburg Airport",
-        "normalized": "hamburg airport"
+        "value": "Hamburg Arena",
+        "normalized": "hamburg arena"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6688062955825198,
+      "fame": 0.6688062955825198,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:DE-0492",
+      "id": "wikidata:Q6445",
       "ids": {
-        "oa": "DE-0492"
+        "wikidata": "Q6445"
       },
-      "label": "Hamburg Military Hospital Helipad",
-      "sublabel": "Hamburg, DE",
-      "coordinates": [10.077857, 53.596875],
+      "label": "U-Bahn Hamburg",
+      "sublabel": "U-Bahn-System in Hamburg",
+      "coordinates": [10.033333, 53.566667],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Hamburg Military Hospital Helipad",
-        "normalized": "hamburg military hospital helipad"
+        "value": "Hamburg U-Bahn",
+        "normalized": "hamburg u bahn"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6059546807601883,
+      "fame": 0.6059546807601883,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:SSNV",
+      "id": "wikidata:Q3964",
       "ids": {
-        "oa": "SSNV"
+        "wikidata": "Q3964"
       },
-      "label": "Fazenda Novo Hamburgo Airport",
-      "sublabel": "Corumbá, BR",
-      "coordinates": [-57.029720306396484, -19.233055114746094],
+      "label": "Hamburger Hafen",
+      "sublabel": "offener Tidehafen an der Unterelbe in Hamburg",
+      "coordinates": [9.982778, 53.54],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Fazenda Novo Hamburgo Airport",
-        "normalized": "fazenda novo hamburgo airport"
+        "value": "Hamburger Hafen",
+        "normalized": "hamburger hafen"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:SSNH",
-      "ids": {
-        "oa": "SSNH",
-        "iata": "QHV"
-      },
-      "label": "Novo Hamburgo Airport",
-      "sublabel": "Novo Hamburgo, BR",
-      "coordinates": [-51.08169937133789, -29.69610023498535],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Novo Hamburgo Airport",
-        "normalized": "novo hamburgo airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:US-3774",
-      "ids": {
-        "oa": "US-3774"
-      },
-      "label": "Baptist Health Hamburg Heliport",
-      "sublabel": "Lexington, US",
-      "coordinates": [-84.418583, 38.033833],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Baptist Health Hamburg Heliport",
-        "normalized": "baptist health hamburg heliport"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5850544645142637,
+      "fame": 0.5850544645142637,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

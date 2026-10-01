@@ -127,7 +127,152 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q151356",
+      "ids": {
+        "wikidata": "Q151356"
+      },
+      "label": "Berliner Fernsehturm",
+      "sublabel": "Sende- und Aussichtsturm in Berlin",
+      "coordinates": [13.409444, 52.520833],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fernsehturm",
+        "normalized": "fernsehturm"
+      },
+      "importance": 0.6826077772070487,
+      "fame": 0.6826077772070487,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q134883",
+      "ids": {
+        "wikidata": "Q134883"
+      },
+      "label": "Fernsehturm von Toronto",
+      "sublabel": "Fernsehturm in Toronto, Kanada",
+      "coordinates": [-79.387147, 43.642753],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fernsehturm von Toronto",
+        "normalized": "fernsehturm von toronto"
+      },
+      "importance": 0.7447179762893301,
+      "fame": 0.7447179762893301,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q181324",
+      "ids": {
+        "wikidata": "Q181324"
+      },
+      "label": "Fernsehturm Ostankino",
+      "sublabel": "Fernsehturm in Moskau",
+      "coordinates": [37.611667, 55.819722],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fernsehturm Ostankino",
+        "normalized": "fernsehturm ostankino"
+      },
+      "importance": 0.6891554741847413,
+      "fame": 0.6891554741847413,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1413217",
+      "ids": {
+        "wikidata": "Q1413217"
+      },
+      "label": "Prager Fernsehturm",
+      "sublabel": "öffentlich zugänglicher Fernsehturm in Prag",
+      "coordinates": [14.451389, 50.080833],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fernsehturm Žižkov",
+        "normalized": "fernsehturm zizkov"
+      },
+      "importance": 0.5487343267329772,
+      "fame": 0.5487343267329772,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q223207",
+      "ids": {
+        "wikidata": "Q223207"
+      },
+      "label": "Fernsehturm Shanghai",
+      "sublabel": "Fernsehturm in Shanghai, Volksrepublik China",
+      "coordinates": [121.494717, 31.241669],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fernsehturm Shanghai",
+        "normalized": "fernsehturm shanghai"
+      },
+      "importance": 0.6615171828647772,
+      "fame": 0.6615171828647772,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q830319",
+      "ids": {
+        "wikidata": "Q830319"
+      },
+      "label": "Fernsehturm Riga",
+      "sublabel": "Fernsehturm in Riga, Lettland",
+      "coordinates": [24.136944, 56.923889],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fernsehturm Riga",
+        "normalized": "fernsehturm riga"
+      },
+      "importance": 0.5794558532945919,
+      "fame": 0.5794558532945919,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1407274",
+      "ids": {
+        "wikidata": "Q1407274"
+      },
+      "label": "Fernsehturm Baku",
+      "sublabel": "a free standing concrete telecommunications tower in Baku, Azerbaijan",
+      "coordinates": [49.823333, 40.351389],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fernsehturm Baku",
+        "normalized": "fernsehturm baku"
+      },
+      "importance": 0.6108445258152586,
+      "fame": 0.6108445258152586,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1369185",
+      "ids": {
+        "wikidata": "Q1369185"
+      },
+      "label": "Fernsehturm Kiew",
+      "sublabel": "Fernsehturm in Kiew, Ukraine",
+      "coordinates": [30.453333, 50.471111],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Fernsehturm Kiew",
+        "normalized": "fernsehturm kiew"
+      },
+      "importance": 0.5736900948874171,
+      "fame": 0.5736900948874171,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": [
     {

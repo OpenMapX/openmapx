@@ -1,0 +1,66 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/9194723",
+      "label": "Basilica of the Holy Family",
+      "sublabel": "Basilica of the Holy Family, Carrer de Mallorca, la Sagrada Família, l'Eixample, Barcelona, Barcelonès, Barcelona, Catalonia, 08013, Spain",
+      "coordinates": [2.1744283, 41.4035046],
+      "type": "poi",
+      "rawCategory": "amenity/place_of_worship",
+      "importance": 0.5397707924352323,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:relation/242721",
+      "label": "Sagrada Família",
+      "sublabel": "Sagrada Família, Rio Grande do Sul, South Region, Brazil",
+      "coordinates": [-53.1364113, -27.7085454],
+      "type": "region",
+      "rawCategory": "place/village",
+      "importance": 0.525616767572948,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:relation/1902990",
+      "label": "Sagrada Família",
+      "sublabel": "Sagrada Família, Alfredo Chaves, Espírito Santo, Southeast Region, Brazil",
+      "coordinates": [-40.6985161, -20.5789219],
+      "type": "region",
+      "rawCategory": "place/village",
+      "importance": 0.525616767572948,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:relation/541829",
+      "label": "Sagrada Familia",
+      "sublabel": "Sagrada Familia, Provincia de Curicó, Maule Region, 3400000, Chile",
+      "coordinates": [-71.3817116, -34.9990365],
+      "type": "region",
+      "rawCategory": "place/town",
+      "importance": 0.38288639822487014,
+      "provider": "geocoding-nominatim"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q48435",
+      "ids": {
+        "wikidata": "Q48435"
+      },
+      "label": "Sagrada Família",
+      "sublabel": "basilica under construction since 1882 in Barcelona, Spain",
+      "coordinates": [2.17433, 41.40369],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Sagrada Família",
+        "normalized": "sagrada familia"
+      },
+      "importance": 0.8044598375801966,
+      "fame": 0.8044598375801966,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

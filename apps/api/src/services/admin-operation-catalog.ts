@@ -26,7 +26,8 @@ export type AdminOperationId =
   | "generate-api-keys"
   | "overture-sync"
   | "overture-conflate"
-  | "search-index-build";
+  | "search-index-build"
+  | "notable-places-build";
 
 export type AdminOperationGroup = "osm" | "build" | "overture" | "search" | "transit";
 export type AdminOperationRisk = "normal" | "destructive";
@@ -314,6 +315,20 @@ export const ADMIN_OPERATIONS: readonly AnyAdminOperationDefinition[] = [
     example: { region: "europe/germany" },
     effect: (input) => ({ kind: "data.searchIndexBuild", regionId: input.region }),
     preview: (input) => [`Build the search index for ${input.region}`],
+  }),
+  defineOperation({
+    id: "notable-places-build",
+    version: 1,
+    group: "search",
+    title: "Notable Places Build",
+    description:
+      "Fetches the places Wikipedia covers in many languages from Wikidata, so search knows which of several namesakes is famous.",
+    risk: "normal",
+    input: z.strictObject({}),
+    fields: [],
+    defaults: {},
+    effect: () => ({ kind: "data.notablePlacesBuild" }),
+    preview: () => ["Rebuild the notable-places index from Wikidata"],
   }),
 ];
 

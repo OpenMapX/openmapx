@@ -1,0 +1,400 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/12732495548",
+      "label": "Romeo's",
+      "sublabel": "Romeo's, Lausitzer Straße 47, Berlin, Germany",
+      "coordinates": [13.4293443, 52.4976889],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3826455884",
+      "label": "Romeo und Romeo",
+      "sublabel": "Romeo und Romeo, Motzstraße 20, Berlin, Germany",
+      "coordinates": [13.3493772, 52.4983295],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1139465419",
+      "label": "Romero",
+      "sublabel": "Romero, Fasanenstraße 81a, Berlin, Germany",
+      "coordinates": [13.328134, 52.5047787],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/310667839",
+      "label": "Römerteich",
+      "sublabel": "Römerteich, Berlin, Germany",
+      "coordinates": [13.4088121, 52.4457538],
+      "type": "poi",
+      "rawCategory": "water/pond",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/42700775",
+      "label": "Römerweg",
+      "sublabel": "Römerweg, Berlin, Germany",
+      "coordinates": [13.5215708, 52.492278],
+      "type": "street",
+      "rawCategory": "highway/construction",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1468797879",
+      "label": "Römerweg",
+      "sublabel": "Römerweg, Berlin, Germany",
+      "coordinates": [13.5227774, 52.4921465],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/41485",
+      "label": "Rome",
+      "sublabel": "Rome, Italy",
+      "coordinates": [12.4829321, 41.8933203],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/251904108",
+      "label": "Rome",
+      "sublabel": "Rome, Galleria Termini, Rome, Italy",
+      "coordinates": [12.5025272, 41.9005815],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/172225849",
+      "label": "Rome",
+      "sublabel": "Rome, Koszalin, Poland",
+      "coordinates": [16.2013985, 54.2170153],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/172225841",
+      "label": "Rome",
+      "sublabel": "Rome, Koszalin, Poland",
+      "coordinates": [16.2010891, 54.2165409],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/34223060",
+      "label": "Römer",
+      "sublabel": "Römer, Römerberg 21, Frankfurt, Germany",
+      "coordinates": [8.6816587, 50.1104684],
+      "type": "poi",
+      "rawCategory": "amenity/townhall",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Römer",
+        "normalized": "romer"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/449898",
+      "label": "Rom",
+      "sublabel": "Rom, Germany",
+      "coordinates": [11.9494091, 53.4444081],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/569749888",
+      "label": "Roemer- und Pelizaeus-Museum",
+      "sublabel": "Roemer- und Pelizaeus-Museum, Am Steine 1-2, Hildesheim, Germany",
+      "coordinates": [9.9441505, 52.1493268],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2522143943",
+      "label": "Römer",
+      "sublabel": "Römer, Fischmarkt, Erfurt, Germany",
+      "coordinates": [11.0286944, 50.9777471],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Römer",
+        "normalized": "romer"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/25575782",
+      "label": "Römerschanze",
+      "sublabel": "Römerschanze, Heinrich-Heine-Weg, Potsdam, Germany",
+      "coordinates": [13.0623345, 52.4418733],
+      "type": "poi",
+      "rawCategory": "historic/archaeological_site",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Römerschanze",
+        "normalized": "romerschanze"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/61327162",
+      "label": "Römergraben",
+      "sublabel": "Römergraben, Liebenwalde, Germany",
+      "coordinates": [13.4849161, 52.8379259],
+      "type": "poi",
+      "rawCategory": "waterway/stream",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Römergraben",
+        "normalized": "romergraben"
+      },
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q220",
+      "ids": {
+        "wikidata": "Q220"
+      },
+      "label": "Rome",
+      "sublabel": "capital and largest city of Italy",
+      "coordinates": [12.482778, 41.893056],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rome",
+        "normalized": "rome"
+      },
+      "importance": 1,
+      "fame": 1,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q567806",
+      "ids": {
+        "wikidata": "Q567806"
+      },
+      "label": "Rome",
+      "sublabel": "Paris Métro station",
+      "coordinates": [2.32194, 48.8825],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rome",
+        "normalized": "rome"
+      },
+      "importance": 0.47697107534118705,
+      "fame": 0.47697107534118705,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "oa:LIRF",
+      "ids": {
+        "wikidata": "Q19101",
+        "iata": "FCO",
+        "icao": "LIRF",
+        "oa": "LIRF"
+      },
+      "label": "Rome–Fiumicino Leonardo da Vinci International Airport",
+      "sublabel": "Rome, IT",
+      "coordinates": [12.251998, 41.804532],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rome–Fiumicino Leonardo da Vinci International Airport",
+        "normalized": "rome fiumicino leonardo da vinci international airport"
+      },
+      "importance": 0.9,
+      "fame": 0.7075635453614886,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q1558632",
+      "ids": {
+        "wikidata": "Q1558632"
+      },
+      "label": "Rome",
+      "sublabel": "former French department in Italy (1809-1814)",
+      "coordinates": [12.5, 41.9],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rome",
+        "normalized": "rome"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "oa:LIRU",
+      "ids": {
+        "oa": "LIRU",
+        "icao": "LIRU"
+      },
+      "label": "Rome Urbe Airport",
+      "sublabel": "Rome, IT",
+      "coordinates": [12.502231, 41.952096],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Rome Urbe Airport",
+        "normalized": "rome urbe airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SBAX",
+      "ids": {
+        "oa": "SBAX",
+        "iata": "AAX",
+        "icao": "SBAX"
+      },
+      "label": "Romeu Zema Airport",
+      "sublabel": "Araxá, BR",
+      "coordinates": [-46.9604, -19.5632],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Romeu Zema Airport",
+        "normalized": "romeu zema airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q146924",
+      "ids": {
+        "wikidata": "Q146924"
+      },
+      "label": "Römerwall",
+      "sublabel": "border defence or delimiting system of Ancient Rome",
+      "coordinates": [10.578366, 49.102369],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Römerwall",
+        "normalized": "romerwall"
+      },
+      "importance": 0.6758302901212196,
+      "fame": 0.6758302901212196,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q185103",
+      "ids": {
+        "wikidata": "Q185103"
+      },
+      "label": "Romeinse provincie Britannia",
+      "sublabel": "Britain under Roman rule (43 AD - c.410 AD)",
+      "coordinates": [-0.57, 52.22],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Romeinse provincie Britannia",
+        "normalized": "romeinse provincie britannia"
+      },
+      "importance": 0.6954884534492622,
+      "fame": 0.6954884534492622,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q26921",
+      "name": "Alfa Romeo",
+      "description": "Italian automotive manufacturer",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q25060394",
+      "name": "Cooperative Credit Bank of Rome",
+      "description": "Italian cooperative bank based in Rome",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "aeroway/spaceport",
+      "name": "Spaceport",
+      "tags": {
+        "aeroway": "spaceport"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "aeroway/terminal",
+      "name": "Airport Terminal",
+      "tags": {
+        "aeroway": "terminal"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "highway/footway",
+      "name": "Foot Path",
+      "tags": {
+        "highway": "footway"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "landuse/military/airfield",
+      "name": "Military Airfield",
+      "tags": {
+        "military": "airfield"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "leisure/track/cycling",
+      "name": "Cycling Track",
+      "tags": {
+        "leisure": "track",
+        "sport": "cycling"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "man_made/pier",
+      "name": "Pier",
+      "tags": {
+        "man_made": "pier"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "man_made/pier/floating",
+      "name": "Floating Pier",
+      "tags": {
+        "man_made": "pier",
+        "floating": "yes"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

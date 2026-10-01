@@ -3,68 +3,44 @@
     {
       "id": "osm:way/142038726",
       "label": "Schloss Sanssouci",
-      "sublabel": "Schloss Sanssouci, Im Park Sanssouci 3, Potsdam, Deutschland",
+      "sublabel": "Schloss Sanssouci, 3, Ehrenhof, Auf dem Kiewitt, Brandenburger Vorstadt, Potsdam, Brandenburg, 14469, Deutschland",
       "coordinates": [13.0392969, 52.4043474],
       "type": "poi",
       "rawCategory": "tourism/attraction",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/1756616494",
-      "label": "Schloss Sanssouci",
-      "sublabel": "Schloss Sanssouci, Zur Historischen Mühle, Potsdam, Deutschland",
-      "coordinates": [13.0370688, 52.4046415],
-      "type": "street",
-      "rawCategory": "highway/bus_stop",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:way/1022289973",
-      "label": "Schloss Sanssouci",
-      "sublabel": "Schloss Sanssouci, Zur Historischen Mühle, Potsdam, Deutschland",
-      "coordinates": [13.036943, 52.4046099],
-      "type": "street",
-      "rawCategory": "highway/platform",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/1348210845",
-      "label": "Schloss Sanssouci/Bornstedter Straße",
-      "sublabel": "Schloss Sanssouci/Bornstedter Straße, Bornstedter Straße, Potsdam, Deutschland",
-      "coordinates": [13.0409434, 52.4050142],
-      "type": "street",
-      "rawCategory": "highway/bus_stop",
-      "provider": "geocoding-photon"
+      "importance": 0.5095909172663791,
+      "provider": "geocoding-nominatim"
     },
     {
       "id": "osm:way/212275315",
       "label": "Schloss Sanssouci",
-      "sublabel": "Schloss Sanssouci, Lichtenstein/Sachsen, Deutschland",
+      "sublabel": "Schloss Sanssouci, Lichtenstein/Sachsen, Rund um den Auersberg, Zwickau, Sachsen, Deutschland",
       "coordinates": [12.6408222, 50.7620213],
       "type": "poi",
       "rawCategory": "leisure/park",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/8632467952",
-      "label": "Stiftung Preussische Schlösser und Gärten Berlin-Brandenburg",
-      "sublabel": "Stiftung Preussische Schlösser und Gärten Berlin-Brandenburg, Allee nach Sanssouci 5, Potsdam, Deutschland",
-      "coordinates": [13.0446484, 52.4003704],
-      "type": "poi",
-      "rawCategory": "office/foundation",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/6934757536",
-      "label": "Eingang Schlossküche",
-      "sublabel": "Eingang Schlossküche, Im Park Sanssouci 3, Potsdam, Deutschland",
-      "coordinates": [13.0392135, 52.4043315],
-      "type": "poi",
-      "rawCategory": "shop/gift",
-      "provider": "geocoding-photon"
+      "importance": 0.08005000152590216,
+      "provider": "geocoding-nominatim"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q151330",
+      "ids": {
+        "wikidata": "Q151330"
+      },
+      "label": "Schloss Sanssouci",
+      "sublabel": "Schloss in Brandenburg, Deutschland",
+      "coordinates": [13.038626, 52.403257],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Schloss Sanssouci",
+        "normalized": "schloss sanssouci"
+      },
+      "importance": 0.6651961238711732,
+      "fame": 0.6651961238711732,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

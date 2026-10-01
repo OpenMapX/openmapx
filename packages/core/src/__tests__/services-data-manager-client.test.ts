@@ -210,6 +210,36 @@ describe("DataManagerClient", () => {
     expect(new Headers(init.headers).get("Authorization")).toBe("Bearer search-secret");
   });
 
+  it("posts an authenticated notable-places build and reads its status", async () => {
+    const ndjson = [
+      { event: "progress", stage: "names", message: "Fetching labels in en" },
+      { event: "done", ok: true, epoch: "e1", placeCount: 150_000, nameCount: 790_000 },
+    ]
+      .map((event) => JSON.stringify(event))
+      .join("\n");
+    const fakeFetch = vi.fn(async (input: RequestInfo | URL, _init?: RequestInit) =>
+      String(input).endsWith("/status")
+        ? Response.json({ ok: true, status: "ready", placeCount: 150_000 })
+        : new Response(ndjson, { status: 200 }),
+    );
+    const client = new DataManagerClient({
+      baseUrl: "http://localhost:4000",
+      fetch: fakeFetch as unknown as typeof globalThis.fetch,
+      authToken: "notable-secret",
+    });
+
+    const progress: string[] = [];
+    await expect(
+      client.buildNotablePlaces((message) => progress.push(message)),
+    ).resolves.toMatchObject({ ok: true, placeCount: 150_000, nameCount: 790_000 });
+    expect(progress).toEqual(["Fetching labels in en"]);
+    const init = fakeFetch.mock.calls[0]?.[1] as RequestInit;
+    expect(fakeFetch.mock.calls[0]?.[0]).toBe("http://localhost:4000/notable-places/build");
+    expect(init.method).toBe("POST");
+    expect(new Headers(init.headers).get("Authorization")).toBe("Bearer notable-secret");
+    await expect(client.notablePlacesStatus()).resolves.toMatchObject({ status: "ready" });
+  });
+
   it("preserves an absent search index as an HTTP 404 failure", async () => {
     const fakeFetch = vi.fn(async () =>
       Response.json({ ok: false, error: "osm_search index not built" }, { status: 404 }),

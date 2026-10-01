@@ -64,21 +64,21 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:way/132999464",
-      "label": "Supermarkt",
-      "sublabel": "Supermarkt, Dannenbütteler Weg, Westerbeck, Deutschland",
-      "coordinates": [10.6294088, 52.5093523],
-      "type": "poi",
-      "rawCategory": "amenity/bicycle_parking",
-      "provider": "geocoding-photon"
-    },
-    {
       "id": "osm:node/575172353",
       "label": "Supermarkt",
       "sublabel": "Supermarkt, Markt 16, Nossen, Deutschland",
       "coordinates": [13.2991457, 51.0580302],
       "type": "poi",
       "rawCategory": "shop/greengrocer",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/132999464",
+      "label": "Supermarkt",
+      "sublabel": "Supermarkt, Dannenbütteler Weg, Westerbeck, Deutschland",
+      "coordinates": [10.6294088, 52.5093523],
+      "type": "poi",
+      "rawCategory": "amenity/bicycle_parking",
       "provider": "geocoding-photon"
     },
     {

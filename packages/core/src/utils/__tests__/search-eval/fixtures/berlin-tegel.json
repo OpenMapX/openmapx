@@ -93,6 +93,26 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q9688",
+      "ids": {
+        "wikidata": "Q9688",
+        "iata": "TXL",
+        "icao": "EDDT"
+      },
+      "label": "Flughafen Berlin-Tegel",
+      "sublabel": "ehemaliger Flughafen in Berlin-Reinickendorf",
+      "coordinates": [13.287778, 52.559722],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tegel",
+        "normalized": "tegel"
+      },
+      "importance": 0.6723502218591213,
+      "fame": 0.6723502218591213,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:DE-0876",
       "ids": {
         "oa": "DE-0876"
@@ -109,6 +129,96 @@
       },
       "importance": 0.2,
       "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q697916",
+      "ids": {
+        "wikidata": "Q697916"
+      },
+      "label": "Tegeler See",
+      "sublabel": "See in Deutschland",
+      "coordinates": [13.266667, 52.583333],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tegelsee",
+        "normalized": "tegelsee"
+      },
+      "importance": 0.43387345047407155,
+      "fame": 0.43387345047407155,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1602019",
+      "ids": {
+        "wikidata": "Q1602019"
+      },
+      "label": "Justizvollzugsanstalt Tegel",
+      "sublabel": "Justizvollzugsanstalt in Berlin, Deutschland",
+      "coordinates": [13.2933, 52.5731],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tegel Prison",
+        "normalized": "tegel prison"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q651833",
+      "ids": {
+        "wikidata": "Q651833"
+      },
+      "label": "Schloss Tegel",
+      "sublabel": "Schloss in Deutschland",
+      "coordinates": [13.276389, 52.595],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tegeler Schloss",
+        "normalized": "tegeler schloss"
+      },
+      "importance": 0.37831094836948276,
+      "fame": 0.37831094836948276,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q3294735",
+      "ids": {
+        "wikidata": "Q3294735"
+      },
+      "label": "Tegelkiosk",
+      "sublabel": "Museumsgebäude in der Türkei",
+      "coordinates": [28.981198, 41.01203],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tegelkiosk",
+        "normalized": "tegelkiosk"
+      },
+      "importance": 0.4455824028205204,
+      "fame": 0.4455824028205204,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q896656",
+      "ids": {
+        "wikidata": "Q896656"
+      },
+      "label": "Tegelberg",
+      "sublabel": "Berg in den Alpen",
+      "coordinates": [10.7785, 47.5595],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Tegelberg",
+        "normalized": "tegelberg"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
     },
     {
       "id": "oa:27WI",

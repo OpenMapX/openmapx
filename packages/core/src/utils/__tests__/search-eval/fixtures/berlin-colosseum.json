@@ -1,0 +1,92 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/215801333",
+      "label": "Colosseum",
+      "sublabel": "Colosseum, Celio, Municipio Roma I, Rome, Roma Capitale, Lazio, 00184, Italy",
+      "coordinates": [12.491903, 41.8909421],
+      "type": "street",
+      "rawCategory": "highway/pedestrian",
+      "importance": 0.5846893264327375,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:relation/1834818",
+      "label": "Colosseum",
+      "sublabel": "Colosseum, Piazza del Colosseo, Celio, Municipio Roma I, Rome, Roma Capitale, Lazio, 00184, Italy",
+      "coordinates": [12.4923841, 41.8902572],
+      "type": "region",
+      "rawCategory": "building/amphitheatre",
+      "importance": 0.5846893264327375,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:relation/11678094",
+      "label": "Colosseum",
+      "sublabel": "Colosseum, Queensland, Australia",
+      "coordinates": [151.5585252, -24.4317155],
+      "type": "region",
+      "rawCategory": "place/city_district",
+      "importance": 0.2869812649426343,
+      "provider": "geocoding-nominatim"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q10285",
+      "ids": {
+        "wikidata": "Q10285"
+      },
+      "label": "Colosseum",
+      "sublabel": "ancient Roman amphitheatre, a landmark of Rome, Italy",
+      "coordinates": [12.492222, 41.890278],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Colosseum",
+        "normalized": "colosseum"
+      },
+      "importance": 0.863534046666441,
+      "fame": 0.863534046666441,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2914326",
+      "ids": {
+        "wikidata": "Q2914326"
+      },
+      "label": "Colosseum van Thysdrus",
+      "sublabel": "Carthagian amphitheatre in Tunisia",
+      "coordinates": [10.706944, 35.296389],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Colosseum van Thysdrus",
+        "normalized": "colosseum van thysdrus"
+      },
+      "importance": 0.615613621530287,
+      "fame": 0.615613621530287,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q5149126",
+      "ids": {
+        "wikidata": "Q5149126"
+      },
+      "label": "Colosseum Ridge",
+      "sublabel": "ridge in Antarctica",
+      "coordinates": [156.333, -79.7833],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Colosseum Ridge",
+        "normalized": "colosseum ridge"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

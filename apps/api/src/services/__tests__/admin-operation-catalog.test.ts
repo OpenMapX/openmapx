@@ -50,6 +50,7 @@ describe("validateAdminOperationCatalog", () => {
       "overture-sync",
       "overture-conflate",
       "search-index-build",
+      "notable-places-build",
     ]);
   });
 
@@ -149,6 +150,7 @@ describe("shipped operation effects", () => {
       { region: "europe/germany" },
       { kind: "data.searchIndexBuild", regionId: "europe/germany" },
     ],
+    ["notable-places-build", {}, { kind: "data.notablePlacesBuild" }],
   ])("%s maps %j to a typed agent operation", (id, raw, expected) => {
     const operation = getAdminOperation(id);
     if (!operation) throw new Error(`missing ${id}`);
@@ -164,6 +166,7 @@ describe("shipped operation effects", () => {
     ["overture-sync", {}],
     ["overture-sync", { region: "../etc" }],
     ["search-index-build", { region: "Europe/Germany" }],
+    ["notable-places-build", { endpoint: "https://attacker.example/sparql" }],
     ["download-fonts", { region: "europe/germany" }],
     ["generate-api-keys", { repoUrl: "https://attacker.example", output: "/etc/passwd" }],
     ["update", { region: "europe/germany", argv: ["--privileged"] }],

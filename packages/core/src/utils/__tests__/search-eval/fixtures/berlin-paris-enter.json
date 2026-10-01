@@ -120,6 +120,62 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q90",
+      "ids": {
+        "wikidata": "Q90",
+        "iata": "PAR"
+      },
+      "label": "Paris",
+      "sublabel": "capital and most populous city in France",
+      "coordinates": [2.352222, 48.856667],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris",
+        "normalized": "paris"
+      },
+      "importance": 1,
+      "fame": 1,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q156716",
+      "ids": {
+        "wikidata": "Q156716"
+      },
+      "label": "Pariser Platz",
+      "sublabel": "town square in Berlin, Germany",
+      "coordinates": [13.378889, 52.516389],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pariser Platz",
+        "normalized": "pariser platz"
+      },
+      "importance": 0.5794558532945919,
+      "fame": 0.5794558532945919,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q691491",
+      "ids": {
+        "wikidata": "Q691491"
+      },
+      "label": "Paris Las Vegas",
+      "sublabel": "hotel and casino located on the Las Vegas Strip",
+      "coordinates": [-115.170672, 36.112223],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris",
+        "normalized": "paris"
+      },
+      "importance": 0.503964496068378,
+      "fame": 0.503964496068378,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:LFPB",
       "ids": {
         "oa": "LFPB",
@@ -160,112 +216,60 @@
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:50TN",
+      "id": "wikidata:Q1576192",
       "ids": {
-        "oa": "50TN"
+        "wikidata": "Q1576192"
       },
-      "label": "Paris Landing Airpark",
-      "sublabel": "Paris, US",
-      "coordinates": [-88.350492, 36.352339],
+      "label": "París",
+      "sublabel": "municipality and town in Huila Department, Colombia",
+      "coordinates": [-74.801944, 3.375],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Paris Landing Airpark",
-        "normalized": "paris landing airpark"
+        "value": "París",
+        "normalized": "paris"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.4863943375425593,
+      "fame": 0.4863943375425593,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:7M6",
+      "id": "wikidata:Q6922657",
       "ids": {
-        "oa": "7M6"
+        "wikidata": "Q6922657"
       },
-      "label": "Paris Municipal Airport",
-      "sublabel": "Paris, US",
-      "coordinates": [-93.681702, 35.299],
+      "label": "Mount Paris",
+      "sublabel": "mountain in Antarctica",
+      "coordinates": [-70.8333, -68.9833],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Paris Municipal Airport",
-        "normalized": "paris municipal airport"
+        "value": "Paris",
+        "normalized": "paris"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:LFPI",
+      "id": "wikidata:Q46280",
       "ids": {
-        "oa": "LFPI"
+        "wikidata": "Q46280",
+        "iata": "CDG",
+        "icao": "LFPG"
       },
-      "label": "Paris Issy-les-Moulineaux Heliport",
-      "sublabel": "Issy-les-Moulineaux, Hauts-de-Seine, FR",
-      "coordinates": [2.273043, 48.832987],
+      "label": "Paris-Charles de Gaulle Airport",
+      "sublabel": "international airport serving Paris, France",
+      "coordinates": [2.547778, 49.009722],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Paris Issy-les-Moulineaux Heliport",
-        "normalized": "paris issy les moulineaux heliport"
+        "value": "Paris CDG Airport",
+        "normalized": "paris cdg airport"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:US-5164",
-      "ids": {
-        "oa": "US-5164"
-      },
-      "label": "Paris Regional Medical Center Heliport",
-      "sublabel": "Paris, US",
-      "coordinates": [-95.54837, 33.6893],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Paris Regional Medical Center Heliport",
-        "normalized": "paris regional medical center heliport"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:XA60",
-      "ids": {
-        "oa": "XA60"
-      },
-      "label": "Paris Regional Medical Center Heliport",
-      "sublabel": "Paris, US",
-      "coordinates": [-95.54650115966797, 33.659698486328125],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Paris Regional Medical Center Heliport",
-        "normalized": "paris regional medical center heliport"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:KACP",
-      "ids": {
-        "oa": "KACP"
-      },
-      "label": "Allen Parish Airport",
-      "sublabel": "Oakdale, US",
-      "coordinates": [-92.688301, 30.750299],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Allen Parish Airport",
-        "normalized": "allen parish airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7717113970165211,
+      "fame": 0.7717113970165211,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

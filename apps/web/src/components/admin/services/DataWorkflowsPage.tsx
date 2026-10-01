@@ -32,6 +32,7 @@ import {
 } from "../operations/adminOperationsApi";
 import { AdminPageHeader } from "../shared/AdminPageHeader";
 import { useAdminToast } from "../shared/AdminToast";
+import { NotablePlacesMaintenance } from "./NotablePlacesMaintenance";
 import { OvertureMaintenance } from "./OvertureMaintenance";
 import { SearchIndexMaintenance } from "./SearchIndexMaintenance";
 import { TransitSourcesSection } from "./TransitSourcesSection";
@@ -715,6 +716,7 @@ export function DataWorkflowsPage() {
         <OsmSection osm={data.osm} />
         <OvertureMaintenance apiUrl={apiUrl} />
         <SearchIndexMaintenance apiUrl={apiUrl} />
+        <NotablePlacesMaintenance apiUrl={apiUrl} />
         <TransitSourcesSection apiUrl={apiUrl} />
         <MotisTransitousSection status={data.motisTransitous} />
         <SharedMobilityPolicySection apiUrl={apiUrl} />

@@ -118,7 +118,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q25063953",
+      "ids": {
+        "wikidata": "Q25063953"
+      },
+      "label": "IKEA Museum",
+      "sublabel": "museum in Älmhult, Sweden",
+      "coordinates": [14.134639, 56.552],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "IKEA Museum",
+        "normalized": "ikea museum"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [
     {
       "qid": "Q54078",

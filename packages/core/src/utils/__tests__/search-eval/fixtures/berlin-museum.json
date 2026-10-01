@@ -129,148 +129,148 @@
   ],
   "aggregate": [
     {
-      "id": "oa:US-11620",
+      "id": "wikidata:Q688353",
       "ids": {
-        "oa": "US-11620"
+        "wikidata": "Q688353"
       },
-      "label": "Museum of Science Heliport",
-      "sublabel": "Boston, US",
-      "coordinates": [-71.071702, 42.367595],
+      "label": "Ethnological Museum Berlin",
+      "sublabel": "museum in Berlin (part of Berlin State Museums)",
+      "coordinates": [13.402778, 52.5175],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Museum of Science Heliport",
-        "normalized": "museum of science heliport"
+        "value": "Museum Berlijn",
+        "normalized": "museum berlijn"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.46706436216622105,
+      "fame": 0.46706436216622105,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:JP-2044",
+      "id": "wikidata:Q1954632",
       "ids": {
-        "oa": "JP-2044"
+        "wikidata": "Q1954632"
       },
-      "label": "Museum Tower Helipad",
-      "sublabel": "Kobe, JP",
-      "coordinates": [135.19788, 34.68912],
+      "label": "Museum of Islamic Art",
+      "sublabel": "museum in Berlin, Germany",
+      "coordinates": [13.3964, 52.5208],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Museum Tower Helipad",
-        "normalized": "museum tower helipad"
+        "value": "Museum of Islamic Art",
+        "normalized": "museum of islamic art"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.43387345047407155,
+      "fame": 0.43387345047407155,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-2624",
+      "id": "wikidata:Q233098",
       "ids": {
-        "oa": "US-2624"
+        "wikidata": "Q233098"
       },
-      "label": "Museum Tower Helipad",
-      "sublabel": "Los Angeles, US",
-      "coordinates": [-118.249851, 34.053175],
+      "label": "Museum für Naturkunde - Leibniz Institute for Evolution and Biodiversity Science",
+      "sublabel": "natural history museum in Berlin, Germany",
+      "coordinates": [13.3792, 52.5302],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Museum Tower Helipad",
-        "normalized": "museum tower helipad"
+        "value": "Museum für Naturkunde",
+        "normalized": "museum fur naturkunde"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5736900948874171,
+      "fame": 0.5736900948874171,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:8NC9",
+      "id": "wikidata:Q382575",
       "ids": {
-        "oa": "8NC9"
+        "wikidata": "Q382575"
       },
-      "label": "Western North Carolina Air Museum Airport",
-      "sublabel": "Hendersonville, US",
-      "coordinates": [-82.434263, 35.307855],
+      "label": "Wall Museum",
+      "sublabel": "museum in Berlin, Germany",
+      "coordinates": [13.3906, 52.5078],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Western North Carolina Air Museum Airport",
-        "normalized": "western north carolina air museum airport"
+        "value": "Museum Haus am Checkpoint Charlie",
+        "normalized": "museum haus am checkpoint charlie"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.4455824028205204,
+      "fame": 0.4455824028205204,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:CN-0434",
+      "id": "wikidata:Q584756",
       "ids": {
-        "oa": "CN-0434"
+        "wikidata": "Q584756"
       },
-      "label": "China Aviation Museum Airfield",
-      "sublabel": "Changping, Beijing, CN",
-      "coordinates": [116.360309, 40.186433],
+      "label": "Museum für Gegenwart",
+      "sublabel": "museum of contemporary art located in a former railway station in Berlin-Moabit",
+      "coordinates": [13.372222, 52.528333],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "China Aviation Museum Airfield",
-        "normalized": "china aviation museum airfield"
+        "value": "Museum für Gegenwart",
+        "normalized": "museum fur gegenwart"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.49537914651793424,
+      "fame": 0.49537914651793424,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:CO58",
+      "id": "wikidata:Q706530",
       "ids": {
-        "oa": "CO58"
+        "wikidata": "Q706530"
       },
-      "label": "Wings N Things Airpark & Museum Airport",
-      "sublabel": "Longmont, US",
-      "coordinates": [-104.955002, 40.105801],
+      "label": "German Museum of Technology",
+      "sublabel": "museum in Berlin, Germany",
+      "coordinates": [13.3775, 52.498611],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Wings N Things Airpark & Museum Airport",
-        "normalized": "wings n things airpark museum airport"
+        "value": "Museum für Verkehr und Technik",
+        "normalized": "museum fur verkehr und technik"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5419568396471481,
+      "fame": 0.5419568396471481,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-12473",
+      "id": "wikidata:Q7877613",
       "ids": {
-        "oa": "US-12473"
+        "wikidata": "Q7877613"
       },
-      "label": "Texas Air Museum Airport",
-      "sublabel": "Rio Hondo, US",
-      "coordinates": [-97.560799, 26.228701],
+      "label": "Uganda Museum",
+      "sublabel": "museum in Kampala, Uganda",
+      "coordinates": [32.582578, 0.335857],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Texas Air Museum Airport",
-        "normalized": "texas air museum airport"
+        "value": "Museum",
+        "normalized": "museum"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-1285",
+      "id": "wikidata:Q1041205",
       "ids": {
-        "oa": "US-1285"
+        "wikidata": "Q1041205"
       },
-      "label": "1000 Museum Heliport",
-      "sublabel": "Miami, US",
-      "coordinates": [-80.190046, 25.784189],
+      "label": "Museum",
+      "sublabel": "subway station on Line 1 Yonge–University in Toronto, Ontario, Canada",
+      "coordinates": [-79.393351, 43.666846],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "1000 Museum Heliport",
-        "normalized": "1000 museum heliport"
+        "value": "Museum",
+        "normalized": "museum"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [],

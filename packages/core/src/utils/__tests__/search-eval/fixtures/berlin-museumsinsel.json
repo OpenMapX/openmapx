@@ -21,7 +21,7 @@
     {
       "id": "osm:relation/18138763",
       "label": "Museumsinsel",
-      "sublabel": "Museumsinsel, Schloßfreiheit, Berlin, Deutschland",
+      "sublabel": "Museumsinsel, Schinkelplatz, Berlin, Deutschland",
       "coordinates": [13.3986663, 52.5172876],
       "type": "poi",
       "rawCategory": "railway/platform",
@@ -91,7 +91,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q1459924",
+      "ids": {
+        "wikidata": "Q1459924"
+      },
+      "label": "U-Bahnhof Museumsinsel",
+      "sublabel": "U-Bahnhof in Berlin",
+      "coordinates": [13.3982, 52.5174],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Museumsinsel",
+        "normalized": "museumsinsel"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

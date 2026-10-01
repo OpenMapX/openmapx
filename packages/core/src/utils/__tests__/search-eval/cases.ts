@@ -44,6 +44,7 @@ const MUNICH: LngLat = [11.575, 48.137];
 const PARIS: LngLat = [2.3522, 48.8566];
 const NEW_YORK: LngLat = [-73.9855, 40.758];
 const LONDON: LngLat = [-0.1276, 51.5072];
+const ROME: LngLat = [12.4829, 41.8933];
 const AACHEN: LngLat = [6.084, 50.775];
 const OSLO: LngLat = [10.752, 59.911];
 const GERMANY: LngLat = [10.45, 51.16];
@@ -551,6 +552,25 @@ export const EVAL_CASES: EvalCase[] = [
     expect: [{ within: 1, label: "^cologne$", type: "region" }],
     enter: { open: { label: "^cologne$", type: "region" } },
   },
+  // Rome's German name, typed with the app in English: a village called Rom
+  // two hours away is no match for it.
+  {
+    id: "berlin-rom-in-english",
+    query: "rom",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "^rome$", type: "region", nearKm: 20, near: ROME }],
+    enter: { open: { label: "^rome$", type: "region", nearKm: 20, near: ROME } },
+  },
+  // The city, not ancient Rome, which Wikidata gives a coordinate too.
+  {
+    id: "berlin-rome",
+    query: "rome",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "^rome$", type: "region", nearKm: 20, near: ROME }],
+    enter: { open: { label: "^rome$", type: "region", nearKm: 20, near: ROME } },
+  },
   {
     id: "berlin-munchen-in-english",
     query: "münchen",
@@ -582,7 +602,64 @@ export const EVAL_CASES: EvalCase[] = [
     lang: "en",
     ...berlin,
     expect: [{ within: 1, label: "eiffel tower", nearKm: 5, near: PARIS }],
-    enter: "choose",
+    enter: { open: { label: "eiffel tower", nearKm: 5, near: PARIS } },
+  },
+  // Famous places far away, against namesakes nearby or obscure ones abroad:
+  // the notable-places index knows which is meant.
+  {
+    id: "berlin-louvre",
+    query: "louvre",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "louvre", nearKm: 3, near: PARIS }],
+    enter: { open: { label: "louvre", nearKm: 3, near: PARIS } },
+  },
+  {
+    id: "berlin-colosseum",
+    query: "colosseum",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "colosseum", nearKm: 3, near: [12.4922, 41.8902] }],
+    enter: { open: { label: "colosseum", nearKm: 3, near: [12.4922, 41.8902] } },
+  },
+  {
+    id: "berlin-sagrada-familia",
+    query: "sagrada familia",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "sagrada fam", nearKm: 3, near: [2.1744, 41.4036] }],
+    enter: { open: { label: "sagrada fam", nearKm: 3, near: [2.1744, 41.4036] } },
+  },
+  {
+    id: "berlin-big-ben",
+    query: "big ben",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "big ben", nearKm: 3, near: LONDON }],
+    enter: { open: { label: "big ben", nearKm: 3, near: LONDON } },
+  },
+  {
+    id: "berlin-neuschwanstein",
+    query: "neuschwanstein",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, label: "neuschwanstein", nearKm: 3, near: [10.7498, 47.5576] }],
+    enter: { open: { label: "neuschwanstein", nearKm: 3, near: [10.7498, 47.5576] } },
+  },
+  {
+    id: "berlin-colosseo-in-english",
+    query: "colosseo",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "colosseo", nearKm: 3, near: [12.4922, 41.8902] }],
+  },
+  {
+    id: "berlin-brandenburger-tor-enter",
+    query: "brandenburger tor",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "brandenburg", nearKm: 3 }],
+    enter: { open: { label: "brandenburg", nearKm: 3 } },
   },
   {
     id: "berlin-sanssouci",

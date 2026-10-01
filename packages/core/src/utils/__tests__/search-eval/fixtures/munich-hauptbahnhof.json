@@ -46,10 +46,10 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/9331589410",
+      "id": "osm:node/3796695311",
       "label": "Hauptbahnhof",
       "sublabel": "Hauptbahnhof, Bahnhofplatz, München, Deutschland",
-      "coordinates": [11.5612095, 48.1399762],
+      "coordinates": [11.561126, 48.1401869],
       "type": "poi",
       "rawCategory": "railway/tram_stop",
       "provider": "geocoding-photon"
@@ -142,6 +142,11 @@
       "coordinates": [9.9833788, 48.4012167],
       "type": "poi",
       "rawCategory": "amenity/car_sharing",
+      "searchMatch": {
+        "kind": "name",
+        "value": "HBF",
+        "normalized": "hbf"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -151,6 +156,11 @@
       "coordinates": [12.4770561, 50.7153765],
       "type": "poi",
       "rawCategory": "amenity/taxi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hbf",
+        "normalized": "hbf"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -169,6 +179,11 @@
       "coordinates": [12.929283, 50.8370761],
       "type": "poi",
       "rawCategory": "amenity/car_sharing",
+      "searchMatch": {
+        "kind": "name",
+        "value": "HBF",
+        "normalized": "hbf"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -178,6 +193,11 @@
       "coordinates": [11.0381318, 50.9731439],
       "type": "poi",
       "rawCategory": "amenity/taxi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hbf",
+        "normalized": "hbf"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -196,6 +216,11 @@
       "coordinates": [8.662391, 50.1070834],
       "type": "poi",
       "rawCategory": "railway/platform",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hbf Ffm (tief), Gleise 101+102",
+        "normalized": "hbf ffm tief gleise 101 102"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -205,6 +230,11 @@
       "coordinates": [12.1363604, 48.5470517],
       "type": "poi",
       "rawCategory": "amenity/atm",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hbf Landshut",
+        "normalized": "hbf landshut"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -214,6 +244,11 @@
       "coordinates": [12.1019631, 49.010528],
       "type": "street",
       "rawCategory": "highway/bus_stop",
+      "searchMatch": {
+        "kind": "name",
+        "value": "HBF Süd/Arcaden",
+        "normalized": "hbf sud arcaden"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -223,6 +258,11 @@
       "coordinates": [8.7293627, 48.5577218],
       "type": "poi",
       "rawCategory": "office/it",
+      "searchMatch": {
+        "kind": "name",
+        "value": "hbf GmbH Unternehmensberatung, Softwareentwicklung",
+        "normalized": "hbf gmbh unternehmensberatung softwareentwicklung"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -232,6 +272,11 @@
       "coordinates": [10.9598443, 50.2630228],
       "type": "street",
       "rawCategory": "highway/bus_stop",
+      "searchMatch": {
+        "kind": "name",
+        "value": "HBF/Kanalstraße",
+        "normalized": "hbf kanalstraße"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -244,7 +289,155 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q254647",
+      "ids": {
+        "wikidata": "Q254647",
+        "iata": "ZMU"
+      },
+      "label": "München Hauptbahnhof",
+      "sublabel": "zentraler Kopfbahnhof in der bayerischen Landeshauptstadt München",
+      "coordinates": [11.555, 48.140833],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hauptbahnhof München",
+        "normalized": "hauptbahnhof munchen"
+      },
+      "importance": 0.5677469009481431,
+      "fame": 0.5677469009481431,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q97970193",
+      "ids": {
+        "wikidata": "Q97970193"
+      },
+      "label": "Südtiroler Platz-Hauptbahnhof",
+      "sublabel": "U-Bahnhof in Wien",
+      "coordinates": [16.3735, 48.187],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hauptbahnhof",
+        "normalized": "hauptbahnhof"
+      },
+      "importance": 0.37831094836948276,
+      "fame": 0.37831094836948276,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q871012",
+      "ids": {
+        "wikidata": "Q871012"
+      },
+      "label": "Hauptbahnhof",
+      "sublabel": "unterirdische S-Bahnsteige im Hauptbahnhof von Frankfurt (Main)",
+      "coordinates": [8.6625, 50.1069],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hauptbahnhof",
+        "normalized": "hauptbahnhof"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q224494",
+      "ids": {
+        "wikidata": "Q224494"
+      },
+      "label": "Zürich Hauptbahnhof",
+      "sublabel": "grösster Bahnhof der Schweiz",
+      "coordinates": [8.540178, 47.37817],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hauptbahnhof Zürich",
+        "normalized": "hauptbahnhof zurich"
+      },
+      "importance": 0.5736900948874171,
+      "fame": 0.5736900948874171,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1097",
+      "ids": {
+        "wikidata": "Q1097",
+        "iata": "QPP"
+      },
+      "label": "Berlin Hauptbahnhof",
+      "sublabel": "größter Turmbahnhof Europas und wichtigster Eisenbahnknoten Berlins",
+      "coordinates": [13.369389, 52.525083],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hauptbahnhof Berlin",
+        "normalized": "hauptbahnhof berlin"
+      },
+      "importance": 0.6460578493176259,
+      "fame": 0.6460578493176259,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q801193",
+      "ids": {
+        "wikidata": "Q801193"
+      },
+      "label": "Hauptbahnhof Mailand",
+      "sublabel": "Hauptbahnhof in Mailand",
+      "coordinates": [9.203988, 45.485658],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hauptbahnhof Mailand",
+        "normalized": "hauptbahnhof mailand"
+      },
+      "importance": 0.6059546807601883,
+      "fame": 0.6059546807601883,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q697300",
+      "ids": {
+        "wikidata": "Q697300"
+      },
+      "label": "Wien Hauptbahnhof",
+      "sublabel": "Hauptbahnhof der österreichischen Hauptstadt Wien",
+      "coordinates": [16.377778, 48.185],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hauptbahnhof Wien",
+        "normalized": "hauptbahnhof wien"
+      },
+      "importance": 0.5957871457182979,
+      "fame": 0.5957871457182979,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q165368",
+      "ids": {
+        "wikidata": "Q165368",
+        "iata": "ZRB"
+      },
+      "label": "Frankfurt (Main) Hauptbahnhof",
+      "sublabel": "Bahnhof in Deutschland",
+      "coordinates": [8.662616, 50.107256],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hauptbahnhof Frankfurt",
+        "normalized": "hauptbahnhof frankfurt"
+      },
+      "importance": 0.5736900948874171,
+      "fame": 0.5736900948874171,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": [
     {

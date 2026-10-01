@@ -91,6 +91,15 @@
       "provider": "geocoding-photon"
     },
     {
+      "id": "osm:way/392132709",
+      "label": "Charité - Campus Benjamin Franklin",
+      "sublabel": "Charité - Campus Benjamin Franklin, Hindenburgdamm, Berlin, Deutschland",
+      "coordinates": [13.316401, 52.4406289],
+      "type": "street",
+      "rawCategory": "highway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
       "id": "osm:way/33177962",
       "label": "Charitéplatz",
       "sublabel": "Charitéplatz, Berlin, Deutschland",
@@ -101,6 +110,24 @@
     }
   ],
   "aggregate": [
+    {
+      "id": "wikidata:Q162684",
+      "ids": {
+        "wikidata": "Q162684"
+      },
+      "label": "Charité",
+      "sublabel": "Krankenhaus und bedeutende Lehr- und Forschungsstätte in Berlin",
+      "coordinates": [13.377222, 52.526944],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Charité",
+        "normalized": "charite"
+      },
+      "importance": 0.6108445258152586,
+      "fame": 0.6108445258152586,
+      "provider": "search-notable-places"
+    },
     {
       "id": "oa:DE-0461",
       "ids": {
@@ -136,6 +163,24 @@
       },
       "importance": 0.1,
       "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q1643043",
+      "ids": {
+        "wikidata": "Q1643043"
+      },
+      "label": "Hôpital de la Charité",
+      "sublabel": "Krankenhaus",
+      "coordinates": [2.34127, 48.850795],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Charité (Parijs)",
+        "normalized": "charite parijs"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [],

@@ -93,6 +93,60 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q41225",
+      "ids": {
+        "wikidata": "Q41225"
+      },
+      "label": "Big Ben",
+      "sublabel": "tower of the Palace of Westminster, London containing the bell Big Ben",
+      "coordinates": [-0.12457, 51.50067],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Ben",
+        "normalized": "big ben"
+      },
+      "importance": 0.7631260474660775,
+      "fame": 0.7631260474660775,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q858516",
+      "ids": {
+        "wikidata": "Q858516"
+      },
+      "label": "Big Ben",
+      "sublabel": "volcano on Heard Island",
+      "coordinates": [73.517778, -53.104444],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Ben",
+        "normalized": "big ben"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q3494060",
+      "ids": {
+        "wikidata": "Q3494060"
+      },
+      "label": "Big Bend",
+      "sublabel": "geographic region in the western part of the state of Texas in the United States",
+      "coordinates": [-103, 30],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend",
+        "normalized": "big bend"
+      },
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:US-0120",
       "ids": {
         "oa": "US-0120"
@@ -178,60 +232,6 @@
         "kind": "name",
         "value": "Big Bend Valley Airport",
         "normalized": "big bend valley airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:US-3T9",
-      "ids": {
-        "oa": "US-3T9"
-      },
-      "label": "Big Bend Ranch State Park Airport",
-      "sublabel": "Redford, US",
-      "coordinates": [-103.936899, 29.471037],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Big Bend Ranch State Park Airport",
-        "normalized": "big bend ranch state park airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:US-4151",
-      "ids": {
-        "oa": "US-4151"
-      },
-      "label": "Big Ben Airstrip",
-      "sublabel": "Animas, US",
-      "coordinates": [-108.81648, 31.9407],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Big Ben Airstrip",
-        "normalized": "big ben airstrip"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:FDBS",
-      "ids": {
-        "oa": "FDBS"
-      },
-      "label": "Big Bend Sugar E Airport",
-      "sublabel": "Big Bend, SZ",
-      "coordinates": [31.92, -26.836111],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Big Bend Sugar E Airport",
-        "normalized": "big bend sugar e airport"
       },
       "importance": 0.2,
       "provider": "knowledge-ourairports"

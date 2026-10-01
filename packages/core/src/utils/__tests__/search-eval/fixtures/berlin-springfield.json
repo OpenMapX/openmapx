@@ -93,6 +93,61 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q28515",
+      "ids": {
+        "wikidata": "Q28515"
+      },
+      "label": "Springfield",
+      "sublabel": "capital city of the U.S. state of Illinois and county seat of Sangamon County",
+      "coordinates": [-89.645, 39.7975],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield",
+        "normalized": "springfield"
+      },
+      "importance": 0.8472027542427352,
+      "fame": 0.8472027542427352,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1193204",
+      "ids": {
+        "wikidata": "Q1193204"
+      },
+      "label": "Springfield Armory",
+      "sublabel": "center for the manufacture of U.S. military firearms from 1777 until its closing in 1968",
+      "coordinates": [-72.581667, 42.108056],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield",
+        "normalized": "springfield"
+      },
+      "importance": 0.46706436216622105,
+      "fame": 0.46706436216622105,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2809940",
+      "ids": {
+        "wikidata": "Q2809940"
+      },
+      "label": "Springfield College",
+      "sublabel": "private college in Springfield, Massachusetts",
+      "coordinates": [-72.5551, 42.1043],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield",
+        "normalized": "springfield"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:KSGH",
       "ids": {
         "oa": "KSGH",
@@ -115,9 +170,10 @@
     {
       "id": "oa:KSGF",
       "ids": {
-        "oa": "KSGF",
+        "wikidata": "Q7580920",
         "iata": "SGF",
-        "icao": "KSGF"
+        "icao": "KSGF",
+        "oa": "KSGF"
       },
       "label": "Springfield Branson National Airport",
       "sublabel": "Springfield, US",
@@ -130,6 +186,7 @@
         "normalized": "springfield branson national airport"
       },
       "importance": 0.7,
+      "fame": 0.3430976248671155,
       "provider": "knowledge-ourairports"
     },
     {
@@ -182,61 +239,6 @@
         "kind": "name",
         "value": "Springfield Municipal Airport",
         "normalized": "springfield municipal airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:US-6067",
-      "ids": {
-        "oa": "US-6067"
-      },
-      "label": "Springfield Airport",
-      "sublabel": "Springfield, US",
-      "coordinates": [-122.99022, 44.05787],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Springfield Airport",
-        "normalized": "springfield airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:YSPF",
-      "ids": {
-        "oa": "YSPF"
-      },
-      "label": "Springfield Airport",
-      "sublabel": "Isisford, AU",
-      "coordinates": [144.878313, -24.297984],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Springfield Airport",
-        "normalized": "springfield airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:NZSF",
-      "ids": {
-        "oa": "NZSF",
-        "icao": "NZSF"
-      },
-      "label": "Springfield Airport",
-      "sublabel": "Springfield, NZ",
-      "coordinates": [171.911266, -43.383575],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Springfield Airport",
-        "normalized": "springfield airport"
       },
       "importance": 0.2,
       "provider": "knowledge-ourairports"

@@ -129,6 +129,132 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q3048853",
+      "ids": {
+        "wikidata": "Q3048853"
+      },
+      "label": "Restaurant ?",
+      "sublabel": "tavern in Belgrade, Serbia",
+      "coordinates": [20.4525, 44.8177],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Restaurant ?",
+        "normalized": "restaurant"
+      },
+      "importance": 0.4214085732365982,
+      "fame": 0.4214085732365982,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q10651272",
+      "ids": {
+        "wikidata": "Q10651272"
+      },
+      "label": "Umeå University School of Restaurant and Culinary Arts",
+      "sublabel": "department of Umeå University",
+      "coordinates": [20.3013, 63.8212],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Restauranthogeschool van Umeå",
+        "normalized": "restauranthogeschool van umea"
+      },
+      "importance": 0.4214085732365982,
+      "fame": 0.4214085732365982,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1143412",
+      "ids": {
+        "wikidata": "Q1143412"
+      },
+      "label": "Restaurant Institute of Connecticut",
+      "sublabel": "cooking school",
+      "coordinates": [-73.933333, 41.745833],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Restaurant Institute of Connecticut",
+        "normalized": "restaurant institute of connecticut"
+      },
+      "importance": 0.43387345047407155,
+      "fame": 0.43387345047407155,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q752482",
+      "ids": {
+        "wikidata": "Q752482"
+      },
+      "label": "Restaurant Gundel",
+      "sublabel": "restaurant in Budapest",
+      "coordinates": [19.077306, 47.517417],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Restaurant Gundel",
+        "normalized": "restaurant gundel"
+      },
+      "importance": 0.37831094836948276,
+      "fame": 0.37831094836948276,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1640215",
+      "ids": {
+        "wikidata": "Q1640215"
+      },
+      "label": "restaurant Fournaise",
+      "sublabel": "art museum in Chatou, France",
+      "coordinates": [2.1633, 48.8896],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "restaurant Fournaise",
+        "normalized": "restaurant fournaise"
+      },
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q708628",
+      "ids": {
+        "wikidata": "Q708628"
+      },
+      "label": "restaurant Okryu",
+      "sublabel": "restaurant in Pyongyang, North Korea",
+      "coordinates": [125.758569, 39.028686],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "restaurant Okryu",
+        "normalized": "restaurant okryu"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q3040039",
+      "ids": {
+        "wikidata": "Q3040039"
+      },
+      "label": "Restaurant Drouant",
+      "sublabel": "famous restaurant in Paris, founded in 1880",
+      "coordinates": [2.33439, 48.8688],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Restaurant Drouant",
+        "normalized": "restaurant drouant"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:BR-1780",
       "ids": {
         "oa": "BR-1780"
@@ -142,116 +268,6 @@
         "kind": "name",
         "value": "Restaurante Dalmo Heliport",
         "normalized": "restaurante dalmo heliport"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:BH-0018",
-      "ids": {
-        "oa": "BH-0018"
-      },
-      "label": "Momento Restaurant Helipad North",
-      "sublabel": "Al Areen, BH",
-      "coordinates": [50.515947, 26.003185],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Momento Restaurant Helipad North",
-        "normalized": "momento restaurant helipad north"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:BH-0019",
-      "ids": {
-        "oa": "BH-0019"
-      },
-      "label": "Momento Restaurant Helipad South",
-      "sublabel": "Al Areen, BH",
-      "coordinates": [50.515619, 26.002679],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Momento Restaurant Helipad South",
-        "normalized": "momento restaurant helipad south"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:US-12185",
-      "ids": {
-        "oa": "US-12185"
-      },
-      "label": "McGehee Catfish Restaurant Airport",
-      "sublabel": "Marietta, US",
-      "coordinates": [-97.170782, 33.898638],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "McGehee Catfish Restaurant Airport",
-        "normalized": "mcgehee catfish restaurant airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:US-1021",
-      "ids": {
-        "oa": "US-1021"
-      },
-      "label": "D I's Cajun Restaurant Airport",
-      "sublabel": "Iota, US",
-      "coordinates": [-92.583028, 30.368708],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "D I's Cajun Restaurant Airport",
-        "normalized": "d i s cajun restaurant airport"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:ZA-0355",
-      "ids": {
-        "oa": "ZA-0355",
-        "icao": "FAAA"
-      },
-      "label": "Atlantic Aerodrome",
-      "sublabel": "City of Cape Town, ZA",
-      "coordinates": [18.618235, -33.588163],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "keyword",
-        "value": "restaurant",
-        "normalized": "restaurant"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:NZOS",
-      "ids": {
-        "oa": "NZOS",
-        "icao": "NZOS"
-      },
-      "label": "Otehei Bay Helibarge",
-      "sublabel": "Otehei Bay, NZ",
-      "coordinates": [174.230833, -35.22242],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "keyword",
-        "value": "Otehei Bay Restaurant",
-        "normalized": "otehei bay restaurant"
       },
       "importance": 0.1,
       "provider": "knowledge-ourairports"

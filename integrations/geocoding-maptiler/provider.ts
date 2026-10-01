@@ -46,7 +46,36 @@ interface MaptilerFeature {
     categories?: string[];
     /** Settlement rank of an area ("city", "town", "hamlet"), when MapTiler knows it. */
     place_designation?: string;
+    /** Wikidata item of the place, e.g. "Q243" for the Eiffel Tower. */
+    wikidata?: string;
+    /** A selection of the place's OSM tags. */
+    feature_tags?: Record<string, unknown>;
   };
+}
+
+/** OSM `importance=*`: how far a place's significance reaches. */
+const IMPORTANCE_TAG_FAME: Record<string, number> = {
+  international: 0.85,
+  national: 0.65,
+  regional: 0.45,
+};
+
+/** OSM `heritage=*`: 1 is World Heritage, 2 national heritage. */
+const HERITAGE_TAG_FAME: Record<string, number> = { "1": 0.8, "2": 0.5 };
+
+/**
+ * How widely known the place is, from the OSM tags MapTiler passes along:
+ * `importance=international` on the Louvre and the Colosseum, World Heritage
+ * on the Sagrada Família. Undefined when the tags say nothing, which is most
+ * places: fame is evidence, not a default.
+ */
+export function fameOf(f: MaptilerFeature): number | undefined {
+  const tags = f.properties?.feature_tags ?? {};
+  const fame = Math.max(
+    IMPORTANCE_TAG_FAME[String(tags.importance)] ?? 0,
+    HERITAGE_TAG_FAME[String(tags.heritage)] ?? 0,
+  );
+  return fame > 0 ? fame : undefined;
 }
 
 /**
@@ -163,6 +192,8 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
     const data = await fetchMaptiler(query, params, lang);
     return data.features.map((f) => {
       const category = f.properties?.categories?.[0];
+      const wikidata = f.properties?.wikidata;
+      const fame = fameOf(f);
       return {
         id: `maptiler:${f.id}`,
         label: f.text,
@@ -171,6 +202,9 @@ export const maptilerGeocodingService: GeocodingProviderImpl = {
         type: mapType(f.place_type),
         iconPath: category ? resolvePoiIconPath(category) : undefined,
         rawCategory: rawCategoryOf(f),
+        // The Wikidata item joins this row to the notable-places row for the same place.
+        ...(wikidata && /^Q\d+$/.test(wikidata) ? { ids: { wikidata } } : {}),
+        ...(fame !== undefined ? { fame } : {}),
       };
     });
   },

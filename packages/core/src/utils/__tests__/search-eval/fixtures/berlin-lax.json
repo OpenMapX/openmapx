@@ -7,6 +7,11 @@
       "coordinates": [8.1195682, 46.3888757],
       "type": "region",
       "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Lax",
+        "normalized": "lax"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -25,6 +30,11 @@
       "coordinates": [8.1170895, 46.3870036],
       "type": "poi",
       "rawCategory": "railway/station",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Lax",
+        "normalized": "lax"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -43,6 +53,11 @@
       "coordinates": [9.5335633, 46.7945656],
       "type": "region",
       "rawCategory": "place/hamlet",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Lax",
+        "normalized": "lax"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -61,6 +76,11 @@
       "coordinates": [9.6792202, 50.8695192],
       "type": "street",
       "rawCategory": "highway/bus_stop",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Lax",
+        "normalized": "lax"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -70,6 +90,11 @@
       "coordinates": [9.5334829, 46.7944162],
       "type": "street",
       "rawCategory": "highway/residential",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Lax",
+        "normalized": "lax"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -79,6 +104,11 @@
       "coordinates": [8.1168919, 46.3867246],
       "type": "poi",
       "rawCategory": "railway/stop",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Lax",
+        "normalized": "lax"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -88,6 +118,11 @@
       "coordinates": [6.1522232, 48.6848709],
       "type": "region",
       "rawCategory": "place/town",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxou",
+        "normalized": "laxou"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -97,6 +132,11 @@
       "coordinates": [16.3561206, 48.0686831],
       "type": "region",
       "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxenburg",
+        "normalized": "laxenburg"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -106,6 +146,11 @@
       "coordinates": [13.9063073, 51.9729327],
       "type": "region",
       "rawCategory": "place/locality",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Lax Luch",
+        "normalized": "lax luch"
+      },
       "provider": "geocoding-photon"
     }
   ],
@@ -113,9 +158,10 @@
     {
       "id": "oa:KLAX",
       "ids": {
-        "oa": "KLAX",
+        "wikidata": "Q8731",
         "iata": "LAX",
-        "icao": "KLAX"
+        "icao": "KLAX",
+        "oa": "KLAX"
       },
       "label": "Los Angeles International Airport",
       "sublabel": "Los Angeles, US",
@@ -129,7 +175,80 @@
         "namespace": "iata"
       },
       "importance": 0.9,
+      "fame": 0.7133293037686635,
       "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q2426584",
+      "ids": {
+        "wikidata": "Q2426584"
+      },
+      "label": "Laxminarayan Temple",
+      "sublabel": "Hindu temple in Delhi",
+      "coordinates": [77.198889, 28.632778],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxminarayan Temple",
+        "normalized": "laxminarayan temple"
+      },
+      "importance": 0.49537914651793424,
+      "fame": 0.49537914651793424,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q380298",
+      "ids": {
+        "wikidata": "Q380298"
+      },
+      "label": "Laxenburg castles",
+      "sublabel": "building in Laxenburg, Austria",
+      "coordinates": [16.3581, 48.0647],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxenburg castles",
+        "normalized": "laxenburg castles"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1801200",
+      "ids": {
+        "wikidata": "Q1801200"
+      },
+      "label": "Laxmana Temple, Khajuraho",
+      "sublabel": "10th century Vishnu temple in Khajuraho, India",
+      "coordinates": [79.9218, 24.85222],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxmana Temple, Khajuraho",
+        "normalized": "laxmana temple khajuraho"
+      },
+      "importance": 0.4214085732365982,
+      "fame": 0.4214085732365982,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q3360979",
+      "ids": {
+        "wikidata": "Q3360979"
+      },
+      "label": "Laxmi Vilas Palace",
+      "sublabel": "Palace of Vadodara, Gujarat, India",
+      "coordinates": [73.1914, 22.2939],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Laxmi Vilas Palace",
+        "normalized": "laxmi vilas palace"
+      },
+      "importance": 0.37831094836948276,
+      "fame": 0.37831094836948276,
+      "provider": "search-notable-places"
     },
     {
       "id": "oa:ESSH",
@@ -150,58 +269,40 @@
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:CA-0740",
+      "id": "wikidata:Q2689560",
       "ids": {
-        "oa": "CA-0740"
+        "wikidata": "Q2689560"
       },
-      "label": "Lax Kw'alaams Heliport",
-      "sublabel": "Lax Kw'alaams, CA",
-      "coordinates": [-130.42957, 54.55985],
+      "label": "Laxman Jhula",
+      "sublabel": "footbridge in India",
+      "coordinates": [78.329889, 30.126361],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Lax Kw'alaams Heliport",
-        "normalized": "lax kw alaams heliport"
+        "value": "Laxman Jhula",
+        "normalized": "laxman jhula"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:JP-1725",
+      "id": "wikidata:Q1432653",
       "ids": {
-        "oa": "JP-1725"
+        "wikidata": "Q1432653"
       },
-      "label": "Laxa Osaka Helipad",
-      "sublabel": "Osaka, JP",
-      "coordinates": [135.48748, 34.69688],
+      "label": "Laxiwa Dam",
+      "sublabel": "dam",
+      "coordinates": [101.187222, 36.071667],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Laxa Osaka Helipad",
-        "normalized": "laxa osaka helipad"
+        "value": "Laxiwa",
+        "normalized": "laxiwa"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:JP-1726",
-      "ids": {
-        "oa": "JP-1726"
-      },
-      "label": "Laxa Osaka Residences Helipad",
-      "sublabel": "Osaka, JP",
-      "coordinates": [135.4884, 34.697],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Laxa Osaka Residences Helipad",
-        "normalized": "laxa osaka residences helipad"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [],

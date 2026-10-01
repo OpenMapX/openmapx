@@ -61,6 +61,11 @@
       "coordinates": [10.7546593, 59.9129638],
       "type": "poi",
       "rawCategory": "amenity/theatre",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo Spektrum",
+        "normalized": "oslo spektrum"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -70,6 +75,11 @@
       "coordinates": [10.7499149, 59.9182871],
       "type": "poi",
       "rawCategory": "tourism/museum",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo skolemuseum",
+        "normalized": "oslo skolemuseum"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -79,6 +89,11 @@
       "coordinates": [10.6332328, 59.8935211],
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo sjøflyplass, Fornebu",
+        "normalized": "oslo sjøflyplass fornebu"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -88,6 +103,11 @@
       "coordinates": [10.7528442, 59.9109281],
       "type": "address",
       "rawCategory": "building/train_station",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo sentralstasjon (Oslo S)",
+        "normalized": "oslo sentralstasjon oslo s"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -97,6 +117,11 @@
       "coordinates": [10.7531379, 59.9110251],
       "type": "poi",
       "rawCategory": "railway/station",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo S",
+        "normalized": "oslo s"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -147,6 +172,24 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q1410317",
+      "ids": {
+        "wikidata": "Q1410317"
+      },
+      "label": "Oslo Sentralstasjon",
+      "sublabel": "railway station in Oslo, Norway",
+      "coordinates": [10.752536, 59.910949],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo S",
+        "normalized": "oslo s"
+      },
+      "importance": 0.5419568396471481,
+      "fame": 0.5419568396471481,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "nsr:StopPlace:59872",
       "ids": {
         "entur": "NSR:StopPlace:59872",
@@ -166,6 +209,96 @@
       "provider": "geocoding-entur"
     },
     {
+      "id": "wikidata:Q24492",
+      "ids": {
+        "wikidata": "Q24492"
+      },
+      "label": "Oslo subway",
+      "sublabel": "rapid transit system of Oslo, Norway",
+      "coordinates": [10.73367, 59.91183],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo subway",
+        "normalized": "oslo subway"
+      },
+      "importance": 0.6378379465424496,
+      "fame": 0.6378379465424496,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q909158",
+      "ids": {
+        "wikidata": "Q909158"
+      },
+      "label": "Oslo Stock Exchange",
+      "sublabel": "stock exchange located in Oslo, Norway",
+      "coordinates": [10.747877, 59.908976],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo Stock Exchange",
+        "normalized": "oslo stock exchange"
+      },
+      "importance": 0.5487343267329772,
+      "fame": 0.5487343267329772,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1508325",
+      "ids": {
+        "wikidata": "Q1508325"
+      },
+      "label": "Oslo Spektrum",
+      "sublabel": "multi-use indoor arena in Oslo, Norway",
+      "coordinates": [10.754714, 59.913001],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo Spektrum",
+        "normalized": "oslo spektrum"
+      },
+      "importance": 0.43387345047407155,
+      "fame": 0.43387345047407155,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q745748",
+      "ids": {
+        "wikidata": "Q745748"
+      },
+      "label": "Oslo Synagogue",
+      "sublabel": "Jüdisches Gotteshaus in Oslo, Norwegen",
+      "coordinates": [10.743288, 59.925805],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo Synagogue",
+        "normalized": "oslo synagogue"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q4579140",
+      "ids": {
+        "wikidata": "Q4579140"
+      },
+      "label": "Oslo School of Architecture and Design",
+      "sublabel": "Architecture school in Oslo, Norway",
+      "coordinates": [10.751425, 59.924386],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Oslo School of Architecture and Design",
+        "normalized": "oslo school of architecture and design"
+      },
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "entur:OSM:TopographicPlace:7118275595",
       "label": "Espresso House Oslo S Hovedhallen",
       "sublabel": "Oslo",
@@ -178,70 +311,6 @@
         "normalized": "espresso house oslo s hovedhallen"
       },
       "importance": 0.5,
-      "provider": "geocoding-entur"
-    },
-    {
-      "id": "entur:OSM:TopographicPlace:3132099332",
-      "label": "Boots Oslo S",
-      "sublabel": "Oslo",
-      "coordinates": [10.75172, 59.91145],
-      "type": "poi",
-      "rawCategory": "pharmacy",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Boots Oslo S",
-        "normalized": "boots oslo s"
-      },
-      "importance": 0.5,
-      "provider": "geocoding-entur"
-    },
-    {
-      "id": "entur:OSM:TopographicPlace:6821148278",
-      "label": "Vitusapotek Byporten (Oslo S)",
-      "sublabel": "Oslo",
-      "coordinates": [10.753069, 59.911451],
-      "type": "poi",
-      "rawCategory": "pharmacy",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Vitusapotek Byporten (Oslo S)",
-        "normalized": "vitusapotek byporten oslo s"
-      },
-      "importance": 0.5,
-      "provider": "geocoding-entur"
-    },
-    {
-      "id": "nsr:GroupOfStopPlaces:1",
-      "label": "Oslo",
-      "sublabel": "Oslo",
-      "coordinates": [10.748128, 59.911076],
-      "type": "poi",
-      "rawCategory": "GroupOfStopPlaces",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Oslo",
-        "normalized": "oslo"
-      },
-      "importance": 0.5,
-      "provider": "geocoding-entur"
-    },
-    {
-      "id": "nsr:StopPlace:58211",
-      "ids": {
-        "entur": "NSR:StopPlace:58211",
-        "nsr": "StopPlace:58211"
-      },
-      "label": "Oslo lufthavn",
-      "sublabel": "Ullensaker, Akershus",
-      "coordinates": [11.097887, 60.193361],
-      "type": "transit_stop",
-      "rawCategory": "railStation",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Oslo lufthavn",
-        "normalized": "oslo lufthavn"
-      },
-      "importance": 0.7,
       "provider": "geocoding-entur"
     }
   ],

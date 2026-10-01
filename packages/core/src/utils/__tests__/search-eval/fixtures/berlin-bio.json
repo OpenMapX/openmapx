@@ -140,9 +140,10 @@
     {
       "id": "oa:LEBB",
       "ids": {
-        "oa": "LEBB",
+        "wikidata": "Q598197",
         "iata": "BIO",
-        "icao": "LEBB"
+        "icao": "LEBB",
+        "oa": "LEBB"
       },
       "label": "Bilbao Airport",
       "sublabel": "Bilbao, ES",
@@ -156,133 +157,134 @@
         "namespace": "iata"
       },
       "importance": 0.9,
+      "fame": 0.5794558532945919,
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:SDBE",
+      "id": "wikidata:Q93360",
       "ids": {
-        "oa": "SDBE"
+        "wikidata": "Q93360"
       },
-      "label": "Biopalma Airport",
-      "sublabel": "Moju, BR",
-      "coordinates": [-48.8146, -2.208],
+      "label": "Río Bío Bío",
+      "sublabel": "Fluss in Chile",
+      "coordinates": [-71.2575, -38.688889],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Biopalma Airport",
-        "normalized": "biopalma airport"
+        "value": "Biobío",
+        "normalized": "biobio"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7322530990518568,
+      "fame": 0.7322530990518568,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-3385",
+      "id": "wikidata:Q752181",
       "ids": {
-        "oa": "US-3385"
+        "wikidata": "Q752181"
       },
-      "label": "Biosphere Two Landing Field",
-      "sublabel": "Oracle, US",
-      "coordinates": [-110.85411, 32.58957],
+      "label": "Biosphärenreservat Río Plátano",
+      "sublabel": "Nationalpark in Honduras",
+      "coordinates": [-84.73, 15.25],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Biosphere Two Landing Field",
-        "normalized": "biosphere two landing field"
+        "value": "Biosphärenreservat Río Plátano",
+        "normalized": "biospharenreservat rio platano"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6378379465424496,
+      "fame": 0.6378379465424496,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:AR-0531",
+      "id": "wikidata:Q864741",
       "ids": {
-        "oa": "AR-0531"
+        "wikidata": "Q864741"
       },
-      "label": "Biondi Airport",
-      "sublabel": "Isla Verde, AR",
-      "coordinates": [-62.4046, -33.2232],
+      "label": "Biosphärenreservat Karpaten",
+      "sublabel": "Biosphärenreservat in der Ukraine",
+      "coordinates": [24.12, 48.03],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Biondi Airport",
-        "normalized": "biondi airport"
+        "value": "Biosphärenreservat Karpaten",
+        "normalized": "biospharenreservat karpaten"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5736900948874171,
+      "fame": 0.5736900948874171,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:SNBH",
+      "id": "wikidata:Q707004",
       "ids": {
-        "oa": "SNBH"
+        "wikidata": "Q707004"
       },
-      "label": "Biocor Helipad",
-      "sublabel": "Nova Lima, BR",
-      "coordinates": [-43.944905, -19.981481],
+      "label": "Biosphärenreservat Pfälzerwald",
+      "sublabel": "deutsches Mittelgebirge",
+      "coordinates": [7.875, 49.29],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Biocor Helipad",
-        "normalized": "biocor helipad"
+        "value": "Biosphärenreservat Pfälzerwald",
+        "normalized": "biospharenreservat pfalzerwald"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5419568396471481,
+      "fame": 0.5419568396471481,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:SNC4",
+      "id": "wikidata:Q708096",
       "ids": {
-        "oa": "SNC4"
+        "wikidata": "Q708096"
       },
-      "label": "Itapecuru Bioenergia Airport",
-      "sublabel": "Aldeias Altas, BR",
-      "coordinates": [-43.506733, -4.661431],
+      "label": "Biosfeerreservaat Askania-Nova",
+      "sublabel": "ukrainisches Naturschutzgebiet",
+      "coordinates": [33.880833, 46.451944],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Itapecuru Bioenergia Airport",
-        "normalized": "itapecuru bioenergia airport"
+        "value": "Biosfeerreservaat Askania-Nova",
+        "normalized": "biosfeerreservaat askania nova"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5794558532945919,
+      "fame": 0.5794558532945919,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:AR-0207",
+      "id": "wikidata:Q845817",
       "ids": {
-        "oa": "AR-0207"
+        "wikidata": "Q845817"
       },
-      "label": "Don Hector Biondi Airport",
-      "sublabel": "Isla Verde, AR",
-      "coordinates": [-62.4167, -33.2464],
+      "label": "Bioko Sur",
+      "sublabel": "province of Equatorial Guinea",
+      "coordinates": [8.64, 3.44],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Don Hector Biondi Airport",
-        "normalized": "don hector biondi airport"
+        "value": "Bioko Sur",
+        "normalized": "bioko sur"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.590495347213037,
+      "fame": 0.590495347213037,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:25TT",
+      "id": "wikidata:Q864456",
       "ids": {
-        "oa": "25TT"
+        "wikidata": "Q864456"
       },
-      "label": "American Bio Source Heliport",
-      "sublabel": "Decatur, US",
-      "coordinates": [-97.617229, 33.271024],
+      "label": "Biokovo-Gebirge",
+      "sublabel": "Gebirgsgruppe der Dinariden",
+      "coordinates": [17.004775, 43.345156],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "American Bio Source Heliport",
-        "normalized": "american bio source heliport"
+        "value": "Biokovo",
+        "normalized": "biokovo"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5552820237106698,
+      "fame": 0.5552820237106698,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

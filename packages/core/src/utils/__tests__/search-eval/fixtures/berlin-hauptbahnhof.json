@@ -181,7 +181,27 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q1097",
+      "ids": {
+        "wikidata": "Q1097",
+        "iata": "QPP"
+      },
+      "label": "Berlin Hauptbahnhof",
+      "sublabel": "größter Turmbahnhof Europas und wichtigster Eisenbahnknoten Berlins",
+      "coordinates": [13.369389, 52.525083],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Hauptbahnhof",
+        "normalized": "berlin hauptbahnhof"
+      },
+      "importance": 0.6460578493176259,
+      "fame": 0.6460578493176259,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

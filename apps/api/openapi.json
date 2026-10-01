@@ -2047,6 +2047,20 @@
         "x-openmapx-auth": "public"
       }
     },
+    "/api/data-manager/notable-places/status": {
+      "get": {
+        "operationId": "getApiDataManagerNotablePlacesStatus",
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        },
+        "tags": [
+          "data-manager"
+        ],
+        "x-openmapx-auth": "service"
+      }
+    },
     "/api/data-manager/overture/status": {
       "get": {
         "operationId": "getApiDataManagerOvertureStatus",

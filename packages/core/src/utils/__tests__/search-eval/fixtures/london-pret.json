@@ -102,149 +102,150 @@
   ],
   "aggregate": [
     {
-      "id": "oa:DE-0340",
+      "id": "wikidata:Q604444",
       "ids": {
-        "oa": "DE-0340"
+        "wikidata": "Q604444"
       },
-      "label": "Pretzschendorf Ultralight Airfield",
-      "sublabel": "Klingenberg, DE",
-      "coordinates": [13.531042, 50.884038],
+      "label": "University of Pretoria",
+      "sublabel": "university in South Africa",
+      "coordinates": [28.2297, -25.7536],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Pretzschendorf Ultralight Airfield",
-        "normalized": "pretzschendorf ultralight airfield"
+        "value": "Pret",
+        "normalized": "pret"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.590495347213037,
+      "fame": 0.590495347213037,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:CA-0538",
+      "id": "wikidata:Q181185",
       "ids": {
-        "oa": "CA-0538"
+        "wikidata": "Q181185"
       },
-      "label": "Pretty Estates Resort Airport",
-      "sublabel": "Harrison Mills, CA",
-      "coordinates": [-121.945846, 49.252372],
+      "label": "Pretpark Disneyland",
+      "sublabel": "American theme park in California owned by The Walt Disney Company",
+      "coordinates": [-117.919, 33.809],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Pretty Estates Resort Airport",
-        "normalized": "pretty estates resort airport"
+        "value": "Pretpark Disneyland",
+        "normalized": "pretpark disneyland"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.7398281312342601,
+      "fame": 0.7398281312342601,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:US-2940",
+      "id": "wikidata:Q659272",
       "ids": {
-        "oa": "US-2940"
+        "wikidata": "Q659272"
       },
-      "label": "Pretzer Strip",
-      "sublabel": "Eloy, US",
-      "coordinates": [-111.54253, 32.66873],
+      "label": "Prettigovia Davos",
+      "sublabel": "former district in Switzerland",
+      "coordinates": [9.816667, 46.8],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Pretzer Strip",
-        "normalized": "pretzer strip"
+        "value": "Prettigovia Davos",
+        "normalized": "prettigovia davos"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.503964496068378,
+      "fame": 0.503964496068378,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:ZA-0021",
+      "id": "wikidata:Q522379",
       "ids": {
-        "oa": "ZA-0021",
-        "iata": "HPR"
+        "wikidata": "Q522379"
       },
-      "label": "Pretoria Central Heliport",
-      "sublabel": "Pretoria, ZA",
-      "coordinates": [28.220600128173828, -25.65570068359375],
+      "label": "prêtre de Saint-Sulpice",
+      "sublabel": "society of apostolic life",
+      "coordinates": [2.326389, 48.848889],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Pretoria Central Heliport",
-        "normalized": "pretoria central heliport"
+        "value": "prêtre de Saint-Sulpice",
+        "normalized": "pretre de saint sulpice"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:BR-1067",
+      "id": "wikidata:Q1183068",
       "ids": {
-        "oa": "BR-1067"
+        "wikidata": "Q1183068"
       },
-      "label": "Pretel 88 Heliport",
-      "sublabel": "Itaí, BR",
-      "coordinates": [-49.103269, -23.6905],
+      "label": "Prêtres du Sacré-Cœur de Saint-Quentin",
+      "sublabel": "institute of consecrated life",
+      "coordinates": [12.460611, 41.901361],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Pretel 88 Heliport",
-        "normalized": "pretel 88 heliport"
+        "value": "Prêtres du Sacré-Cœur de Saint-Quentin",
+        "normalized": "pretres du sacre cœur de saint quentin"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.43387345047407155,
+      "fame": 0.43387345047407155,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:BR-1669",
+      "id": "wikidata:Q676447",
       "ids": {
-        "oa": "BR-1669"
+        "wikidata": "Q676447"
       },
-      "label": "Curva Preta Airport",
-      "sublabel": "Curva Preta, BR",
-      "coordinates": [-42.514944, -4.01847],
+      "label": "Prettigovia",
+      "sublabel": "valley formed by the Landquart River and its side streams, in the canton of Grisons in eastern Switzerland",
+      "coordinates": [9.853719, 46.9165],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Curva Preta Airport",
-        "normalized": "curva preta airport"
+        "value": "Prettigovia",
+        "normalized": "prettigovia"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.3937702819166341,
+      "fame": 0.3937702819166341,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:BR-2508",
+      "id": "wikidata:Q139875",
       "ids": {
-        "oa": "BR-2508"
+        "wikidata": "Q139875",
+        "iata": "QAQ",
+        "icao": "LIAP"
       },
-      "label": "Cara Preta Airport",
-      "sublabel": "Itaituba, BR",
-      "coordinates": [-57.482498168945, -5.1061110496521],
+      "label": "L'Aquila Preturo Airport",
+      "sublabel": "airport in Aquila, central Italy",
+      "coordinates": [13.310278, 42.380555],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Cara Preta Airport",
-        "normalized": "cara preta airport"
+        "value": "Preturo Airport",
+        "normalized": "preturo airport"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.3937702819166341,
+      "fame": 0.3937702819166341,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:SIPG",
+      "id": "wikidata:Q1139958",
       "ids": {
-        "oa": "SIPG"
+        "wikidata": "Q1139958"
       },
-      "label": "Fazenda Água Preta Airport",
-      "sublabel": "Cocalinho, BR",
-      "coordinates": [-51.469531, -14.137595],
+      "label": "Pretoria Zoo",
+      "sublabel": "zoo in Pretoria, Gauteng, South Africa",
+      "coordinates": [28.189167, -25.738333],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Fazenda Água Preta Airport",
-        "normalized": "fazenda agua preta airport"
+        "value": "Pretoria Zoo",
+        "normalized": "pretoria zoo"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

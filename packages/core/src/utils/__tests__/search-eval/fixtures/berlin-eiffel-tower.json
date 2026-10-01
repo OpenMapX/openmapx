@@ -127,7 +127,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q243",
+      "ids": {
+        "wikidata": "Q243"
+      },
+      "label": "Eiffel Tower",
+      "sublabel": "tower located on the Champ de Mars in Paris, France",
+      "coordinates": [2.294479, 48.858296],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Eiffel Tower",
+        "normalized": "eiffel tower"
+      },
+      "importance": 0.9127961915086311,
+      "fame": 0.9127961915086311,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

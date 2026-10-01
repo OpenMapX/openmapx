@@ -1,0 +1,11 @@
+{
+  "name": "Notable places search",
+  "description": "Places covered by many Wikipedias, from Wikidata, so search can tell a famous place from its namesakes",
+  "dataSources": {
+    "wikidata": {
+      "purpose": "Rank famous places above their namesakes in search, and find them by their names in other languages",
+      "dataSent": "Nothing from searches — autocomplete queries stay on the OpenMapX server and use the local PostGIS index. The monthly refresh sends only fixed SPARQL queries to the configured Wikidata endpoint (QLever, University of Freiburg, by default)",
+      "dataReceived": "Wikidata item IDs, names and aliases in eight languages plus Wikidata's language-independent label, short descriptions, coordinates, airport codes, and the number of Wikipedia editions covering each place"
+    }
+  }
+}

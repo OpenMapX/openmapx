@@ -170,6 +170,52 @@ describe("data-manager API", () => {
     rmSync(dataDir, { recursive: true, force: true });
   });
 
+  it("GET /notable-places/status returns 404 until a first snapshot is published", async () => {
+    const app = Fastify();
+    const unsafe = vi.fn().mockResolvedValue([{ exists: false }]);
+    registerApi(app, {
+      dataDir: "/tmp/openmapx-dm-notable-absent",
+      searchIndexSql: { unsafe, reserve: vi.fn() } as never,
+    });
+    const res = await app.inject({ method: "GET", url: "/notable-places/status" });
+    expect(res.statusCode).toBe(404);
+    expect(res.json()).toEqual({ ok: false, error: "notable_places index not built" });
+    await app.close();
+  });
+
+  it("POST /notable-places/build streams progress and the published snapshot", async () => {
+    const app = Fastify();
+    const build = vi.fn(async (options: { onProgress?: (event: object) => void }) => {
+      options.onProgress?.({ stage: "names", message: "Fetching labels in en" });
+      return {
+        epoch: "e1",
+        source: "https://sparql.test",
+        minSitelinks: 8,
+        placeCount: 5,
+        nameCount: 9,
+      };
+    });
+    registerApi(app, {
+      dataDir: "/tmp/openmapx-dm-notable-build",
+      searchIndexSql: { reserve: vi.fn() } as never,
+      notablePlaces: {
+        runtimeState: { building: false, failure: null },
+        operationLock: { inFlight: false, run: (operation) => operation() },
+        build: build as never,
+      },
+    });
+    const res = await app.inject({ method: "POST", url: "/notable-places/build" });
+    const events = res.body
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(events).toEqual([
+      expect.objectContaining({ event: "progress", stage: "names" }),
+      expect.objectContaining({ event: "done", ok: true, placeCount: 5, nameCount: 9 }),
+    ]);
+    await app.close();
+  });
+
   it("keeps a successful OSM download when search-index fingerprint persistence fails", async () => {
     const dataDir = mkdtempSync(join(tmpdir(), "openmapx-dm-download-fingerprint-"));
     writeFileSync(

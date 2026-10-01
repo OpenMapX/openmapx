@@ -7,6 +7,11 @@ import { registerApi } from "./api.js";
 import { registerAuth, resolveAuthToken } from "./auth.js";
 import { awaitInflightSync, type CronHandles, setupCron } from "./cron.js";
 import { sql } from "./db/index.js";
+import {
+  type NotablePlacesSchedule,
+  scheduleNotablePlaces,
+} from "./jobs/notable-places/schedule.js";
+import { createNotablePlacesRuntimeState } from "./jobs/notable-places/state.js";
 import { registerPoiIngestApi } from "./jobs/poi-ingest/api.js";
 import { runBootstrap } from "./jobs/poi-ingest/bootstrap.js";
 import { createDriftGuard, type DriftGuard } from "./jobs/poi-ingest/drift-guard.js";
@@ -19,6 +24,7 @@ import {
 import { type PoiSchedulerHandles, setupPoiIngestCron } from "./jobs/poi-ingest/scheduler.js";
 import { createPoiSingleFlight } from "./jobs/poi-ingest/single-flight.js";
 import { reconcileOrphanedJobs } from "./jobs/reconcile.js";
+import { createNotablePlacesOperationLock } from "./jobs/search-index/operation-lock.js";
 import { bakePredicted } from "./jobs/traffic/bake-predicted.js";
 import { fetchCoveredWayIds } from "./jobs/traffic/covered-ways.js";
 import { resolveOperationsProfileFromEnv } from "./jobs/transitous/operations-profile.js";
@@ -70,12 +76,19 @@ const operationsPolicy = resolveOperationsProfileFromEnv();
 // OpenConditions is configured at registration time.
 const openConditionsUrl = process.env.OPENCONDITIONS_URL?.trim() ?? "";
 
+// Shared by the build route and the scheduled refresh so the two never overlap.
+const notablePlaces = {
+  runtimeState: createNotablePlacesRuntimeState(),
+  operationLock: createNotablePlacesOperationLock(sql),
+};
+
 registerApi(app, {
   dataDir,
   offlinePackages,
   repoRoot,
   singleFlight,
   operationsPolicy,
+  notablePlaces,
   readiness: () => readiness.snapshot(),
   ...(openConditionsUrl && {
     bakePredicted: () =>
@@ -135,6 +148,7 @@ const host = process.env.HOST ?? "127.0.0.1";
 // Track cron handles so the SIGTERM hook can stop them cleanly.
 let cronHandles: CronHandles | null = null;
 let poiHandles: PoiSchedulerHandles | null = null;
+let notablePlacesSchedule: NotablePlacesSchedule | null = null;
 
 // Single authenticated Redis client for the POI ingest pipeline. Defined at module
 // scope so `shutdown()` can disconnect it explicitly — otherwise SIGTERM
@@ -255,6 +269,8 @@ async function start(): Promise<void> {
   // These maintenance operations already contain/log their own failures and
   // do not affect whether the registered HTTP and scheduled work is safe.
   void cronHandles.runTrafficExtractStartupNow();
+  notablePlacesSchedule = scheduleNotablePlaces({ sql, logger: app.log, ...notablePlaces });
+  void notablePlacesSchedule.buildIfMissing();
   if ((process.env.OVERTURE_ENABLED || "").trim().toLowerCase() === "true") {
     void cronHandles.runOvertureConflationRetryNow();
   }
@@ -298,6 +314,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   app.log.info({ signal }, "data-manager: shutdown requested");
   cronHandles?.stop();
   poiHandles?.stop();
+  notablePlacesSchedule?.stop();
   try {
     redis.disconnect();
   } catch {

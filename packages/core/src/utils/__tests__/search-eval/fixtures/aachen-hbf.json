@@ -7,6 +7,11 @@
       "coordinates": [6.0869306, 50.7663719],
       "type": "poi",
       "rawCategory": "railway/signal_box",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Aachen Hbf ESTW-A",
+        "normalized": "aachen hbf estw a"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -16,6 +21,11 @@
       "coordinates": [6.0892059, 50.7680345],
       "type": "poi",
       "rawCategory": "amenity/car_sharing",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Flinkster Station HBF-Aachen",
+        "normalized": "flinkster station hbf aachen"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -25,6 +35,11 @@
       "coordinates": [6.0955707, 50.7690316],
       "type": "poi",
       "rawCategory": "tourism/hotel",
+      "searchMatch": {
+        "kind": "name",
+        "value": "B&B Hotel Aachen-Hbf",
+        "normalized": "b b hotel aachen hbf"
+      },
       "provider": "geocoding-photon"
     },
     {
@@ -181,7 +196,27 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q300706",
+      "ids": {
+        "wikidata": "Q300706",
+        "iata": "XHJ"
+      },
+      "label": "Aachen Hbf",
+      "sublabel": "größter der vier Aachener Bahnhöfe",
+      "coordinates": [6.091382, 50.767766],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Aachen Hbf",
+        "normalized": "aachen hbf"
+      },
+      "importance": 0.37831094836948276,
+      "fame": 0.37831094836948276,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

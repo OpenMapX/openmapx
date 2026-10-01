@@ -235,7 +235,44 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q978904",
+      "ids": {
+        "wikidata": "Q978904"
+      },
+      "label": "HBF Park",
+      "sublabel": "Sportstadion in Perth, Australien",
+      "coordinates": [115.869924, -31.945751],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "HBF Park",
+        "normalized": "hbf park"
+      },
+      "importance": 0.4863943375425593,
+      "fame": 0.4863943375425593,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q7684362",
+      "ids": {
+        "wikidata": "Q7684362"
+      },
+      "label": "Hbf Taoyuan",
+      "sublabel": "Bahnhof in der Taiwan (Republik China)",
+      "coordinates": [121.313, 24.9895],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Hbf Taoyuan",
+        "normalized": "hbf taoyuan"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

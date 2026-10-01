@@ -95,9 +95,10 @@
     {
       "id": "oa:EDDB",
       "ids": {
-        "oa": "EDDB",
+        "wikidata": "Q160556",
         "iata": "BER",
-        "icao": "EDDB"
+        "icao": "EDDB",
+        "oa": "EDDB"
       },
       "label": "Berlin Brandenburg Airport",
       "sublabel": "Berlin, DE",
@@ -111,7 +112,116 @@
         "namespace": "iata"
       },
       "importance": 0.9,
+      "fame": 0.6723502218591213,
       "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q152087",
+      "ids": {
+        "wikidata": "Q152087"
+      },
+      "label": "Humboldt-Universität zu Berlin",
+      "sublabel": "public research university in Berlin, Germany",
+      "coordinates": [13.393333, 52.518055],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berliner Humboldt-Universität",
+        "normalized": "berliner humboldt universitat"
+      },
+      "importance": 0.7471172439520025,
+      "fame": 0.7471172439520025,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q130871",
+      "ids": {
+        "wikidata": "Q130871"
+      },
+      "label": "Berlin International Film Festival",
+      "sublabel": "annual film festival held in Berlin, Germany",
+      "coordinates": [13.38, 52.52],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlinale",
+        "normalized": "berlinale"
+      },
+      "importance": 0.756426928635779,
+      "fame": 0.756426928635779,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q151356",
+      "ids": {
+        "wikidata": "Q151356"
+      },
+      "label": "Fernsehturm Berlin",
+      "sublabel": "television tower in Berlin",
+      "coordinates": [13.409444, 52.520833],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berliner Fernsehturm",
+        "normalized": "berliner fernsehturm"
+      },
+      "importance": 0.6826077772070487,
+      "fame": 0.6826077772070487,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q13582",
+      "ids": {
+        "wikidata": "Q13582"
+      },
+      "label": "Berlin Conference",
+      "sublabel": "international conference that regulated the distribution of European colonization and trade in Africa",
+      "coordinates": [13.38253, 52.51245],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Conference",
+        "normalized": "berlin conference"
+      },
+      "importance": 0.7216675150088596,
+      "fame": 0.7216675150088596,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q154182",
+      "ids": {
+        "wikidata": "Q154182"
+      },
+      "label": "Battle of Berlin",
+      "sublabel": "1945 last major offensive of the European theatre of World War Il",
+      "coordinates": [13.376111, 52.518611],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berliner Operation",
+        "normalized": "berliner operation"
+      },
+      "importance": 0.7296605961923694,
+      "fame": 0.7296605961923694,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q5086",
+      "ids": {
+        "wikidata": "Q5086"
+      },
+      "label": "Berlin Wall",
+      "sublabel": "barrier constructed by the German Democratic Republic, enclosing West Berlin (1961–1989)",
+      "coordinates": [13.441111, 52.504444],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Berlin Wall",
+        "normalized": "berlin wall"
+      },
+      "importance": 0.8528013654624067,
+      "fame": 0.8528013654624067,
+      "provider": "search-notable-places"
     },
     {
       "id": "oa:ENBR",
@@ -131,124 +241,6 @@
         "normalized": "bergen airport flesland"
       },
       "importance": 0.9,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:EES",
-      "ids": {
-        "oa": "EES",
-        "iata": "EES",
-        "icao": "HEBR"
-      },
-      "label": "Berenice International Airport / Banas Cape Air Base",
-      "sublabel": "Berenice Troglodytica, EG",
-      "coordinates": [35.460277, 23.980437],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Berenice International Airport / Banas Cape Air Base",
-        "normalized": "berenice international airport banas cape air base"
-      },
-      "importance": 0.9,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:ENBV",
-      "ids": {
-        "oa": "ENBV",
-        "iata": "BVG",
-        "icao": "ENBV"
-      },
-      "label": "Berlevåg Airport",
-      "sublabel": "Berlevåg, NO",
-      "coordinates": [29.034097, 70.871517],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Berlevåg Airport",
-        "normalized": "berlevag airport"
-      },
-      "importance": 0.7,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:FEFT",
-      "ids": {
-        "oa": "FEFT",
-        "iata": "BBT",
-        "icao": "FEFT"
-      },
-      "label": "Berbérati Airport",
-      "sublabel": "Berbérati, CF",
-      "coordinates": [15.786399841308594, 4.2215800285339355],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Berbérati Airport",
-        "normalized": "berberati airport"
-      },
-      "importance": 0.7,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:HCMI",
-      "ids": {
-        "oa": "HCMI",
-        "iata": "BBO",
-        "icao": "HCMI"
-      },
-      "label": "Berbera Airport",
-      "sublabel": "Berbera, SO",
-      "coordinates": [44.936723, 10.385035],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Berbera Airport",
-        "normalized": "berbera airport"
-      },
-      "importance": 0.7,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:KBTM",
-      "ids": {
-        "oa": "KBTM",
-        "iata": "BTM",
-        "icao": "KBTM"
-      },
-      "label": "Bert Mooney Airport",
-      "sublabel": "Butte, US",
-      "coordinates": [-112.49700164794922, 45.95479965209961],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Bert Mooney Airport",
-        "normalized": "bert mooney airport"
-      },
-      "importance": 0.7,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:ID-0008",
-      "ids": {
-        "oa": "ID-0008"
-      },
-      "label": "Berau Airport",
-      "sublabel": "Sokan-Borneo Island, ID",
-      "coordinates": [117.68699646, 2.16350007057],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Berau Airport",
-        "normalized": "berau airport"
-      },
-      "importance": 0.2,
       "provider": "knowledge-ourairports"
     }
   ],

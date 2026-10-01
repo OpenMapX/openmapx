@@ -1,0 +1,66 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/221601969",
+      "label": "Schloss Neuschwanstein",
+      "sublabel": "Schloss Neuschwanstein, Neuschwansteinstraße, Hohenschwangau, Schwangau, Landkreis Ostallgäu, Bayern, 87645, Deutschland",
+      "coordinates": [10.7496959, 47.5575522],
+      "type": "region",
+      "rawCategory": "historic/castle",
+      "importance": 0.5084878927227335,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/5552887207",
+      "label": "Neuschwanstein",
+      "sublabel": "Neuschwanstein, Poznańska, Trzebaw, gmina Stęszew, Landkreis Posen, Woiwodschaft Großpolen, 62-052, Polen",
+      "coordinates": [16.7559116, 52.2959401],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "importance": 0.00005212710765235397,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/274859235",
+      "label": "Festspielhaus Neuschwanstein",
+      "sublabel": "Festspielhaus Neuschwanstein, 1, Im See, Hopfener Dreieck, Achmühle, Eschach, Füssen, Landkreis Ostallgäu, Bayern, 87629, Deutschland",
+      "coordinates": [10.7088022, 47.5863194],
+      "type": "poi",
+      "rawCategory": "amenity/theatre",
+      "importance": 0.2647815871063118,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:way/209812017",
+      "label": "64: Schloss Neuschwanstein",
+      "sublabel": "64: Schloss Neuschwanstein, Deffingen, Leinheim, Günzburg, Landkreis Günzburg, Bayern, Deutschland",
+      "coordinates": [10.3018326, 48.4246447],
+      "type": "region",
+      "rawCategory": "landuse/greenfield",
+      "importance": 0.0800592133974212,
+      "provider": "geocoding-nominatim"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q4152",
+      "ids": {
+        "wikidata": "Q4152"
+      },
+      "label": "Schloss Neuschwanstein",
+      "sublabel": "Schloss in Bayern",
+      "coordinates": [10.749442, 47.557489],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Neuschwanstein",
+        "normalized": "neuschwanstein"
+      },
+      "importance": 0.773799401818745,
+      "fame": 0.773799401818745,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

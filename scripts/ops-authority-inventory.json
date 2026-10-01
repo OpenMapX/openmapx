@@ -40,6 +40,7 @@
       "data.generateApiKeys",
       "data.inspect",
       "data.link",
+      "data.notablePlacesBuild",
       "data.overtureConflate",
       "data.overtureSync",
       "data.searchIndexBuild",
@@ -127,7 +128,8 @@
       "generate-api-keys",
       "overture-sync",
       "overture-conflate",
-      "search-index-build"
+      "search-index-build",
+      "notable-places-build"
     ],
     "apps/api/src/services/admin-job-handlers.ts#BackupOperation": ["create", "restore", "delete"],
     "apps/api/src/services/admin-job-handlers.ts#BulkServiceAction": [
@@ -154,6 +156,7 @@
         "data.overtureSync",
         "data.overtureConflate",
         "data.searchIndexBuild",
+        "data.notablePlacesBuild",
         "data.inspect"
       ]
     },

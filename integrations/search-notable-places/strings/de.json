@@ -1,0 +1,11 @@
+{
+  "name": "Suche nach bekannten Orten",
+  "description": "Orte, die viele Wikipedias behandeln, aus Wikidata, damit die Suche einen berühmten Ort von seinen Namensvettern unterscheidet",
+  "dataSources": {
+    "wikidata": {
+      "purpose": "Berühmte Orte in der Suche vor ihren Namensvettern einordnen und sie über ihre Namen in anderen Sprachen finden",
+      "dataSent": "Nichts aus Suchanfragen – Autovervollständigungsanfragen verbleiben auf dem OpenMapX-Server und verwenden den lokalen PostGIS-Index. Die monatliche Aktualisierung sendet nur feste SPARQL-Abfragen an den konfigurierten Wikidata-Endpunkt (standardmäßig QLever, Universität Freiburg)",
+      "dataReceived": "Wikidata-Kennungen, Namen und Aliasse in acht Sprachen sowie das sprachunabhängige Wikidata-Label, Kurzbeschreibungen, Koordinaten, Flughafencodes und die Zahl der Wikipedia-Sprachversionen, die jeden Ort behandeln"
+    }
+  }
+}

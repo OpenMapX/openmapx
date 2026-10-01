@@ -91,7 +91,152 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q19675",
+      "ids": {
+        "wikidata": "Q19675"
+      },
+      "label": "Louvre Museum",
+      "sublabel": "art and archeology museum in Paris, France",
+      "coordinates": [2.335833, 48.861111],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Louvre",
+        "normalized": "louvre"
+      },
+      "importance": 0.8891609152554829,
+      "fame": 0.8891609152554829,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1075988",
+      "ids": {
+        "wikidata": "Q1075988"
+      },
+      "label": "Louvre Palace",
+      "sublabel": "former royal palace, now hosting the Louvre Museum in Paris, France",
+      "coordinates": [2.335886, 48.861028],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Louvre",
+        "normalized": "louvre"
+      },
+      "importance": 0.6009378126402927,
+      "fame": 0.6009378126402927,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1461794",
+      "ids": {
+        "wikidata": "Q1461794"
+      },
+      "label": "Louvre - Rivoli",
+      "sublabel": "Paris Métro station",
+      "coordinates": [2.341, 48.860538],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Louvre",
+        "normalized": "louvre"
+      },
+      "importance": 0.503964496068378,
+      "fame": 0.503964496068378,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1319378",
+      "ids": {
+        "wikidata": "Q1319378"
+      },
+      "label": "Louvre",
+      "sublabel": "museum of the decorative arts and design located in the Louvre's northwest wing, Paris",
+      "coordinates": [2.333716, 48.863034],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Louvre",
+        "normalized": "louvre"
+      },
+      "importance": 0.4863943375425593,
+      "fame": 0.4863943375425593,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q13397",
+      "ids": {
+        "wikidata": "Q13397"
+      },
+      "label": "Louvre Pyramid",
+      "sublabel": "glass and metal pyramid in the main courtyard of the Louvre Palace",
+      "coordinates": [2.335861, 48.861],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Louvre Pyramid",
+        "normalized": "louvre pyramid"
+      },
+      "importance": 0.6248124344755968,
+      "fame": 0.6248124344755968,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2984289",
+      "ids": {
+        "wikidata": "Q2984289"
+      },
+      "label": "Louvre Colonnade",
+      "sublabel": "east façade of the Palais du Louvre",
+      "coordinates": [2.339625, 48.860139],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Louvre Colonnade",
+        "normalized": "louvre colonnade"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q15992417",
+      "ids": {
+        "wikidata": "Q15992417"
+      },
+      "label": "Louvre Castle",
+      "sublabel": "demolished castle in Paris, France",
+      "coordinates": [2.338, 48.8602],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Louvre Castle",
+        "normalized": "louvre castle"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2716584",
+      "ids": {
+        "wikidata": "Q2716584"
+      },
+      "label": "Louvres",
+      "sublabel": "railway station in Louvres, France",
+      "coordinates": [2.50194, 49.04917],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Louvres",
+        "normalized": "louvres"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

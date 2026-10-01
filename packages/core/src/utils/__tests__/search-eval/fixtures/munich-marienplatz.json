@@ -28,7 +28,44 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q252648",
+      "ids": {
+        "wikidata": "Q252648"
+      },
+      "label": "Marienplatz",
+      "sublabel": "zentraler Platz der Münchner Innenstadt",
+      "coordinates": [11.575278, 48.137222],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Marienplatz",
+        "normalized": "marienplatz"
+      },
+      "importance": 0.6108445258152586,
+      "fame": 0.6108445258152586,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q455649",
+      "ids": {
+        "wikidata": "Q455649"
+      },
+      "label": "München Marienplatz",
+      "sublabel": "Münchner S-Bahnhof",
+      "coordinates": [11.575278, 48.137222],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Marienplatz",
+        "normalized": "marienplatz"
+      },
+      "importance": 0.37831094836948276,
+      "fame": 0.37831094836948276,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

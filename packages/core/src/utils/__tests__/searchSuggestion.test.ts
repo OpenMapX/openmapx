@@ -94,6 +94,61 @@ describe("search suggestion primitives", () => {
     expect(textMatchScore(row("Potsdamer Platz"), "potsdamr plaz")).toBe(0.75);
   });
 
+  it("takes a place's fame at face value, and half of it for a name only partly typed", () => {
+    const context = { query: "louvre", proximity: BERLIN, zoom: 14 };
+    const bar: AutocompleteResult = {
+      id: "bar",
+      label: "Louvre",
+      type: "poi",
+      coordinates: [13.36, 52.5],
+    };
+    const museum: AutocompleteResult = {
+      id: "museum",
+      label: "Louvre",
+      type: "poi",
+      coordinates: [2.336, 48.861],
+      fame: 0.89,
+    };
+    // Four kilometres away and named exactly, the bar still loses to the museum in Paris.
+    expect(suggestionScore(museum, context)).toBeGreaterThan(suggestionScore(bar, context));
+
+    const paris: AutocompleteResult = {
+      id: "paris",
+      label: "Paris",
+      type: "region",
+      rawCategory: "place/city",
+      coordinates: [2.35, 48.86],
+    };
+    const square: AutocompleteResult = {
+      id: "square",
+      label: "Pariser Platz",
+      type: "poi",
+      coordinates: [13.379, 52.516],
+      fame: 0.55,
+    };
+    const parisQuery = { query: "paris", proximity: BERLIN, zoom: 14 };
+    expect(suggestionScore(paris, parisQuery)).toBeGreaterThan(suggestionScore(square, parisQuery));
+  });
+
+  it("keeps the fame either of two merged rows knew", () => {
+    const merged = mergeAutocompleteSuggestions(
+      [
+        { id: "photon", label: "Eiffel Tower", type: "poi", coordinates: [2.2945, 48.8584] },
+        {
+          id: "wikidata:Q243",
+          label: "Eiffel Tower",
+          type: "poi",
+          coordinates: [2.2944, 48.8583],
+          ids: { wikidata: "Q243" },
+          fame: 0.91,
+        },
+      ],
+      { query: "eiffel tower", proximity: BERLIN, zoom: 14 },
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0]).toMatchObject({ fame: 0.91, ids: { wikidata: "Q243" } });
+  });
+
   it("gives an area fame by its rank, and a meadow or peak none", () => {
     const area = (label: string, rawCategory: string): AutocompleteResult => ({
       id: label,
@@ -320,6 +375,73 @@ describe("search suggestion primitives", () => {
       searchMatch: { kind: "authoritative_code" },
       contributingProviders: ["knowledge-ourairports", "geocoder"],
     });
+  });
+
+  it("joins a famous city's Wikidata row to a geocoder's row kilometres away, keeping the name it matched", () => {
+    const tokyo = mergeAutocompleteSuggestions(
+      [
+        {
+          id: "osm:relation/1543125",
+          label: "Tokyo",
+          coordinates: [139.7639, 35.6769],
+          type: "region",
+          rawCategory: "place/city",
+          provider: "geocoding-photon",
+        },
+        {
+          id: "wikidata:Q1490",
+          ids: { wikidata: "Q1490" },
+          label: "Tokyo",
+          coordinates: [139.6922, 35.6897],
+          type: "region",
+          rawCategory: "place/city",
+          searchMatch: { kind: "name", value: "Tōkyō", normalized: "tokyo" },
+          fame: 1,
+          provider: "search-notable-places",
+        },
+      ],
+      { query: "tokyo" },
+    );
+    expect(tokyo).toHaveLength(1);
+    expect(tokyo[0]).toMatchObject({ fame: 1, ids: { wikidata: "Q1490" } });
+
+    const rome = mergeAutocompleteSuggestions(
+      [
+        {
+          id: "osm:relation/41485",
+          label: "Rome",
+          coordinates: [12.4829, 41.8933],
+          type: "region",
+          rawCategory: "place/city",
+          importance: 0.9,
+        },
+        {
+          id: "wikidata:Q220",
+          ids: { wikidata: "Q220" },
+          label: "Rome",
+          coordinates: [12.4828, 41.8931],
+          type: "region",
+          rawCategory: "place/city",
+          searchMatch: { kind: "name", value: "Rom", normalized: "rom" },
+          fame: 1,
+        },
+      ],
+      { query: "rom" },
+    );
+    expect(rome).toHaveLength(1);
+    expect(rome[0].searchMatch).toMatchObject({ normalized: "rom" });
+    expect(textMatchScore(rome[0], "rom")).toBe(1);
+  });
+
+  it("keeps two villages of one name a few kilometres apart", () => {
+    const merged = mergeAutocompleteSuggestions(
+      [
+        { id: "osm:a", label: "Neuenkirchen", coordinates: [8.0, 52.0], type: "region" },
+        { id: "osm:b", label: "Neuenkirchen", coordinates: [8.05, 52.03], type: "region" },
+      ],
+      { query: "neuenkirchen" },
+    );
+    expect(merged).toHaveLength(2);
   });
 
   it("deduplicates shared external identities and unions identifiers and providers", () => {

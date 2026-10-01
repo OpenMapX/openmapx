@@ -55,6 +55,15 @@
       "provider": "geocoding-photon"
     },
     {
+      "id": "osm:way/381240737",
+      "label": "McDonald's",
+      "sublabel": "McDonald's, General-Pape-Straße 1, Berlin, Germany",
+      "coordinates": [13.3662635, 52.4747651],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
       "id": "osm:way/44028017",
       "label": "McDonald's",
       "sublabel": "McDonald's, Mecklenburgische Straße 65-68, Berlin, Germany",
@@ -68,15 +77,6 @@
       "label": "McDonald's",
       "sublabel": "McDonald's, Schloßstraße 4-5, Berlin, Germany",
       "coordinates": [13.3271869, 52.4639805],
-      "type": "poi",
-      "rawCategory": "amenity/fast_food",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/390470723",
-      "label": "McDonald's",
-      "sublabel": "McDonald's, Am Juliusturm 42-46, Berlin, Germany",
-      "coordinates": [13.2191283, 52.537582],
       "type": "poi",
       "rawCategory": "amenity/fast_food",
       "provider": "geocoding-photon"
@@ -146,6 +146,24 @@
     }
   ],
   "aggregate": [
+    {
+      "id": "wikidata:Q1000206",
+      "ids": {
+        "wikidata": "Q1000206"
+      },
+      "label": "McDonalds University",
+      "sublabel": "training facility of McDonald's Corporation",
+      "coordinates": [-87.653679, 41.883698],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "McDonalds University",
+        "normalized": "mcdonalds university"
+      },
+      "importance": 0.46706436216622105,
+      "fame": 0.46706436216622105,
+      "provider": "search-notable-places"
+    },
     {
       "id": "oa:CA-1222",
       "ids": {

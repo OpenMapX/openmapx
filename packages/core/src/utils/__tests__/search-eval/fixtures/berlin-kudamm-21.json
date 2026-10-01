@@ -36,15 +36,6 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/6848436877",
-      "label": "Coffee & Greek Bakery",
-      "sublabel": "Coffee & Greek Bakery, Kurfürstendamm 21, Berlin, Deutschland",
-      "coordinates": [13.3299169, 52.5039266],
-      "type": "poi",
-      "rawCategory": "amenity/cafe",
-      "provider": "geocoding-photon"
-    },
-    {
       "id": "osm:node/9910954656",
       "label": "SKW Schwarz",
       "sublabel": "SKW Schwarz, Kurfürstendamm 21, Berlin, Deutschland",
@@ -54,11 +45,12 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/4111759313",
-      "label": "Kurfürstendamm 21, Berlin, Deutschland",
-      "coordinates": [13.329894, 52.5037625],
-      "type": "region",
-      "rawCategory": "place/house",
+      "id": "osm:node/6848436877",
+      "label": "Coffee & Greek Bakery",
+      "sublabel": "Coffee & Greek Bakery, Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.3299169, 52.5039266],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
       "provider": "geocoding-photon"
     },
     {
@@ -68,6 +60,14 @@
       "coordinates": [13.3299412, 52.5037701],
       "type": "poi",
       "rawCategory": "shop/gift",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4111759313",
+      "label": "Kurfürstendamm 21, Berlin, Deutschland",
+      "coordinates": [13.329894, 52.5037625],
+      "type": "region",
+      "rawCategory": "place/house",
       "provider": "geocoding-photon"
     },
     {

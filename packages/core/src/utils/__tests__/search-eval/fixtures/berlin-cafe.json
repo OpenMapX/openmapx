@@ -111,94 +111,148 @@
   ],
   "aggregate": [
     {
-      "id": "oa:SS3D",
+      "id": "wikidata:Q3048853",
       "ids": {
-        "oa": "SS3D"
+        "wikidata": "Q3048853"
       },
-      "label": "Cafe Buriti Airport",
-      "sublabel": "Passagem Franca, BR",
-      "coordinates": [-43.71555, -5.998742],
+      "label": "Café ?",
+      "sublabel": "tavern in Belgrade, Serbia",
+      "coordinates": [20.4525, 44.8177],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Cafe Buriti Airport",
-        "normalized": "cafe buriti airport"
+        "value": "Café ?",
+        "normalized": "cafe"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.4214085732365982,
+      "fame": 0.4214085732365982,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:BR-1185",
+      "id": "wikidata:Q694757",
       "ids": {
-        "oa": "BR-1185"
+        "wikidata": "Q694757"
       },
-      "label": "Fazenda Cafenápolis Airport",
-      "sublabel": "Eunápolis, BR",
-      "coordinates": [-39.5175, -16.195423],
+      "label": "Café Central",
+      "sublabel": "building in Vienna, Austria",
+      "coordinates": [16.365278, 48.210278],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Fazenda Cafenápolis Airport",
-        "normalized": "fazenda cafenapolis airport"
+        "value": "Café Central",
+        "normalized": "cafe central"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5200687002083025,
+      "fame": 0.5200687002083025,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:SIR8",
+      "id": "wikidata:Q1025693",
       "ids": {
-        "oa": "SIR8"
+        "wikidata": "Q1025693"
       },
-      "label": "Fazenda Cafelândia Airport",
-      "sublabel": "Eunápolis, BR",
-      "coordinates": [-39.553869, -16.392782],
+      "label": "Café de la Régence",
+      "sublabel": "café in Paris, important European centre of chess in the 18th and 19th centuries",
+      "coordinates": [2.342579, 48.859863],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Fazenda Cafelândia Airport",
-        "normalized": "fazenda cafelandia airport"
+        "value": "Café de la Régence",
+        "normalized": "cafe de la regence"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5419568396471481,
+      "fame": 0.5419568396471481,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:VE-0439",
+      "id": "wikidata:Q1025686",
       "ids": {
-        "oa": "VE-0439"
+        "wikidata": "Q1025686"
       },
-      "label": "Bomberos de El Cafetal HLS",
-      "sublabel": "Caracas, VE",
-      "coordinates": [-66.827808, 10.457769],
+      "label": "Café de Flore",
+      "sublabel": "notable café in Paris",
+      "coordinates": [2.3325, 48.853889],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bomberos de El Cafetal HLS",
-        "normalized": "bomberos de el cafetal hls"
+        "value": "Café flore",
+        "normalized": "cafe flore"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5349328451084482,
+      "fame": 0.5349328451084482,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:CO-0024",
+      "id": "wikidata:Q751293",
       "ids": {
-        "oa": "CO-0024"
+        "wikidata": "Q751293"
       },
-      "label": "Banco Cafetero Heliport",
-      "sublabel": "Manizales, CO",
-      "coordinates": [-75.528889, 5.070278],
+      "label": "Café Procope",
+      "sublabel": "restaurant in rue de l'Ancienne Comédie, 6th arrondissement of Paris",
+      "coordinates": [2.33875, 48.853056],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Banco Cafetero Heliport",
-        "normalized": "banco cafetero heliport"
+        "value": "Café Procope",
+        "normalized": "cafe procope"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.503964496068378,
+      "fame": 0.503964496068378,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q960610",
+      "ids": {
+        "wikidata": "Q960610"
+      },
+      "label": "Café Florian",
+      "sublabel": "coffeehouse in San Marco, Italy",
+      "coordinates": [12.338208, 45.433675],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Café Florian",
+        "normalized": "cafe florian"
+      },
+      "importance": 0.49537914651793424,
+      "fame": 0.49537914651793424,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1025695",
+      "ids": {
+        "wikidata": "Q1025695"
+      },
+      "label": "Café du Dôme",
+      "sublabel": "restaurant in Paris",
+      "coordinates": [2.3291, 48.8419],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Café du Dôme",
+        "normalized": "cafe du dome"
+      },
+      "importance": 0.46706436216622105,
+      "fame": 0.46706436216622105,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q572570",
+      "ids": {
+        "wikidata": "Q572570"
+      },
+      "label": "Café del Mar",
+      "sublabel": "bar in Ibiza, Spain",
+      "coordinates": [1.2964, 38.9807],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Café del Mar",
+        "normalized": "cafe del mar"
+      },
+      "importance": 0.4863943375425593,
+      "fame": 0.4863943375425593,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

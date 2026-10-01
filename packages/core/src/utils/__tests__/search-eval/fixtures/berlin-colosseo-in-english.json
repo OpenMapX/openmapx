@@ -1,0 +1,104 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/1834818",
+      "label": "Colosseum",
+      "sublabel": "Colosseum, Piazza del Colosseo, Celio, Municipio Roma I, Rome, Roma Capitale, Lazio, 00184, Italy",
+      "coordinates": [12.4923841, 41.8902572],
+      "type": "region",
+      "rawCategory": "historic/archaeological_site",
+      "importance": 0.5846893264327375,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:way/215801333",
+      "label": "Colosseum",
+      "sublabel": "Colosseum, Celio, Municipio Roma I, Rome, Roma Capitale, Lazio, 00184, Italy",
+      "coordinates": [12.491903, 41.8909421],
+      "type": "street",
+      "rawCategory": "highway/pedestrian",
+      "importance": 0.5846893264327375,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/11599863852",
+      "label": "Colosseo",
+      "sublabel": "Colosseo, Piazza del Colosseo, Monti, Municipio Roma I, Rome, Roma Capitale, Lazio, 00184, Italy",
+      "coordinates": [12.4913087, 41.8912684],
+      "type": "region",
+      "rawCategory": "railway/station",
+      "importance": 0.410690382019838,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/2213773860",
+      "label": "Colosseo – Fori Imperiali",
+      "sublabel": "Colosseo – Fori Imperiali, Via dei Fori Imperiali, Campitelli, Municipio Roma I, Rome, Roma Capitale, Lazio, 00184, Italy",
+      "coordinates": [12.4902082, 41.8915659],
+      "type": "region",
+      "rawCategory": "railway/stop",
+      "importance": 0.410690382019838,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/623250473",
+      "label": "Colosseo – Fori Imperiali",
+      "sublabel": "Colosseo – Fori Imperiali, Clivo di Acilio, Monti, Municipio Roma I, Rome, Roma Capitale, Lazio, 00184, Italy",
+      "coordinates": [12.4902877, 41.8917087],
+      "type": "region",
+      "rawCategory": "railway/stop",
+      "importance": 0.22489365626900393,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/2468038927",
+      "label": "Colosseo",
+      "sublabel": "Colosseo, San Silvestro, Cassino, Frosinone, Lazio, 03040, Italy",
+      "coordinates": [13.8217124, 41.4799487],
+      "type": "region",
+      "rawCategory": "place/quarter",
+      "importance": 0.13339446021210039,
+      "provider": "geocoding-nominatim"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q10285",
+      "ids": {
+        "wikidata": "Q10285"
+      },
+      "label": "Colosseo",
+      "sublabel": "ancient Roman amphitheatre, a landmark of Rome, Italy",
+      "coordinates": [12.492222, 41.890278],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Colosseo",
+        "normalized": "colosseo"
+      },
+      "importance": 0.863534046666441,
+      "fame": 0.863534046666441,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1283476",
+      "ids": {
+        "wikidata": "Q1283476"
+      },
+      "label": "Colosseo quadrato",
+      "sublabel": "palazzo",
+      "coordinates": [12.465309, 41.836684],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Colosseo quadrato",
+        "normalized": "colosseo quadrato"
+      },
+      "importance": 0.4214085732365982,
+      "fame": 0.4214085732365982,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

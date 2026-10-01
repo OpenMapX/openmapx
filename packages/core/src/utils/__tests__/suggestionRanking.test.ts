@@ -293,6 +293,55 @@ describe("enterAction", () => {
     ).toEqual({ kind: "choose" });
   });
 
+  it("opens a famous place over a namesake far less known", () => {
+    // Big Ben in London over the volcano of that name; the Louvre over a bar.
+    expect(
+      decide(
+        [
+          place("ben", "Big Ben", [-0.1246, 51.5007], { fame: 0.81 }),
+          place("volcano", "Big Ben", [73.5, -53.1], { fame: 0.52 }),
+        ],
+        at("big ben"),
+      ),
+    ).toMatchObject({ kind: "open", row: { id: "ben" } });
+    expect(
+      decide(
+        [
+          place("museum", "Louvre", [2.336, 48.861], { fame: 0.89 }),
+          place("bar", "Louvre", [13.36, 52.5]),
+        ],
+        at("louvre"),
+      ),
+    ).toMatchObject({ kind: "open", row: { id: "museum" } });
+  });
+
+  it("counts places a short walk apart as one destination, whatever they are called", () => {
+    // The Brandenburg Gate and the station named after it are not alternatives.
+    expect(
+      decide(
+        [
+          place("gate", "Brandenburg Gate", [13.3777, 52.5163], {
+            fame: 0.76,
+            searchMatch: {
+              kind: "name",
+              value: "Brandenburger Tor",
+              normalized: "brandenburger tor",
+            },
+          }),
+          place("station", "Berlin Brandenburger Tor station", [13.3811, 52.5169], {
+            fame: 0.45,
+            searchMatch: {
+              kind: "name",
+              value: "Brandenburger Tor",
+              normalized: "brandenburger tor",
+            },
+          }),
+        ],
+        at("brandenburger tor"),
+      ),
+    ).toMatchObject({ kind: "open", row: { id: "gate" } });
+  });
+
   it("opens a famous city far away, not rivalled by its own airport", () => {
     expect(
       decide(

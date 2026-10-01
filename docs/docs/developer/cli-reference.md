@@ -136,6 +136,8 @@ hardlinks, authenticated feeds — lives in
 | `data overture-extract [region]`   | Stream OSM POIs from the local PBF and atomically replace `overture_places.osm_pois` (diagnostic/manual use).                                                                                    |
 | `data search-index build [region]` | Stream the selected OSM PBF into a staged alias/reference/acronym index, validate it, and publish it atomically.                                                                                 |
 | `data search-index status`         | Show the active index region, health/staleness, epoch, row counts, fingerprints, timestamps, and last build error.                                                                               |
+| `data notable-places build`        | Fetch the places many Wikipedias cover from Wikidata and publish them atomically for search ranking.                                                                                             |
+| `data notable-places status`       | Show the published notable-places snapshot: counts, sitelink threshold, source endpoint, epoch, and last error.                                                                                  |
 
 `data download osm`, `data build`, `data convert`, and `data update` fall back to
 `$OPENMAPX_REGION` when you omit the region; without either, the region-bearing

@@ -91,7 +91,152 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q747541",
+      "ids": {
+        "wikidata": "Q747541"
+      },
+      "label": "Paris Gare de Lyon",
+      "sublabel": "train station in Paris, France",
+      "coordinates": [2.373611, 48.844722],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Gare de Lyon",
+        "normalized": "gare de lyon"
+      },
+      "importance": 0.6108445258152586,
+      "fame": 0.6108445258152586,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q614049",
+      "ids": {
+        "wikidata": "Q614049"
+      },
+      "label": "Gare de Lyon",
+      "sublabel": "Paris Métro station",
+      "coordinates": [2.374066, 48.844705],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Gare de Lyon",
+        "normalized": "gare de lyon"
+      },
+      "importance": 0.503964496068378,
+      "fame": 0.503964496068378,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2008",
+      "ids": {
+        "wikidata": "Q2008"
+      },
+      "label": "Gare de Lyon-Part-Dieu",
+      "sublabel": "railway station in Lyon, France",
+      "coordinates": [4.859444, 45.760556],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Gare de Lyon-Part-Dieu",
+        "normalized": "gare de lyon part dieu"
+      },
+      "importance": 0.46706436216622105,
+      "fame": 0.46706436216622105,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q801144",
+      "ids": {
+        "wikidata": "Q801144"
+      },
+      "label": "Gare de Lyon Saint-Exupéry",
+      "sublabel": "railway station",
+      "coordinates": [5.076111, 45.721111],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Gare de Lyon Saint-Exupéry",
+        "normalized": "gare de lyon saint exupery"
+      },
+      "importance": 0.46706436216622105,
+      "fame": 0.46706436216622105,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1992",
+      "ids": {
+        "wikidata": "Q1992"
+      },
+      "label": "Gare de Lyon-Perrache",
+      "sublabel": "railway station in Lyon, France",
+      "coordinates": [4.825556, 45.748333],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Gare de Lyon-Perrache",
+        "normalized": "gare de lyon perrache"
+      },
+      "importance": 0.45662189673896547,
+      "fame": 0.45662189673896547,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q8437",
+      "ids": {
+        "wikidata": "Q8437"
+      },
+      "label": "Gare de Lyon-Jean Macé",
+      "sublabel": "railway station in the 7th arrondissement of Lyon, France",
+      "coordinates": [4.8416, 45.7451],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Gare de Lyon-Jean Macé",
+        "normalized": "gare de lyon jean mace"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2011",
+      "ids": {
+        "wikidata": "Q2011"
+      },
+      "label": "Gare de Lyon-Vaise",
+      "sublabel": "railway station in Lyon, France",
+      "coordinates": [4.803781, 45.780136],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Gare de Lyon-Vaise",
+        "normalized": "gare de lyon vaise"
+      },
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q2016",
+      "ids": {
+        "wikidata": "Q2016"
+      },
+      "label": "Gare de Lyon-Saint Paul",
+      "sublabel": "railway station in Lyon, France",
+      "coordinates": [4.826947, 45.766022],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Gare de Lyon-Saint Paul",
+        "normalized": "gare de lyon saint paul"
+      },
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

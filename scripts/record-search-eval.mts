@@ -46,6 +46,7 @@ const PLACE_FIELDS = [
   "rawCategory",
   "searchMatch",
   "importance",
+  "fame",
   "provider",
 ] as const;
 

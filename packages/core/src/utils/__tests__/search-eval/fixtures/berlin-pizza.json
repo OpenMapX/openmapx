@@ -138,6 +138,60 @@
   ],
   "aggregate": [
     {
+      "id": "wikidata:Q1140457",
+      "ids": {
+        "wikidata": "Q1140457"
+      },
+      "label": "Pizza Hut Park",
+      "sublabel": "stadium in Texas",
+      "coordinates": [-96.835158, 33.154458],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pizza Hut Park",
+        "normalized": "pizza hut park"
+      },
+      "importance": 0.5276437323907057,
+      "fame": 0.5276437323907057,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q6980248",
+      "ids": {
+        "wikidata": "Q6980248"
+      },
+      "label": "Pizzas d'Anarosa",
+      "sublabel": "mountain of the Swiss Lepontine Alps",
+      "coordinates": [9.315722, 46.598944],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pizzas d’Anarosa",
+        "normalized": "pizzas d anarosa"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q969648",
+      "ids": {
+        "wikidata": "Q969648"
+      },
+      "label": "Pizza Grandiosa",
+      "sublabel": "frozen pizza",
+      "coordinates": [6.94559, 62.31278],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Pizza Grandiosa",
+        "normalized": "pizza grandiosa"
+      },
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "oa:2TA4",
       "ids": {
         "oa": "2TA4"

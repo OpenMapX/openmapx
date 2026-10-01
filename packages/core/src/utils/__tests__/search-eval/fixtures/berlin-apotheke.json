@@ -145,7 +145,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q850207",
+      "ids": {
+        "wikidata": "Q850207"
+      },
+      "label": "Apothekenmuseum Brukenthal",
+      "sublabel": "Museum in Sibiu, Siebenbürgen, Rumänien",
+      "coordinates": [24.150611, 45.7965],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Apothekenmuseum Brukenthal",
+        "normalized": "apothekenmuseum brukenthal"
+      },
+      "importance": 0.43387345047407155,
+      "fame": 0.43387345047407155,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": [
     {

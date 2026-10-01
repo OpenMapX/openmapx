@@ -95,6 +95,28 @@ export interface SearchIndexBuildResult {
   message?: string;
 }
 
+export interface NotablePlacesStatus {
+  source: string | null;
+  minSitelinks: number | null;
+  epoch: string | null;
+  status: "building" | "ready" | "failed";
+  placeCount: number;
+  nameCount: number;
+  startedAt: string | null;
+  publishedAt: string | null;
+  updatedAt: string;
+  lastError: string | null;
+  building: boolean;
+}
+
+export interface NotablePlacesBuildResult {
+  ok: boolean;
+  epoch?: string;
+  placeCount?: number;
+  nameCount?: number;
+  message?: string;
+}
+
 export interface DataManagerCoverageEvidencePage {
   schemaVersion: 1;
   snapshotId: string;
@@ -746,6 +768,33 @@ export class DataManagerClient {
       throw new DataManagerHttpError(`search-index/status failed: HTTP ${res.status}`, res.status);
     }
     return this.readJson(res, "search-index/status response");
+  }
+
+  async buildNotablePlaces(
+    onProgress?: (message: string) => void,
+  ): Promise<NotablePlacesBuildResult> {
+    const res = await this.request(
+      `${this.baseUrl}/notable-places/build`,
+      this.authed({ method: "POST" }),
+      true,
+    );
+    return readNdjsonOperationStream(
+      res,
+      "notable-places/build",
+      onProgress,
+      this.streamLimits(),
+    ) as Promise<NotablePlacesBuildResult>;
+  }
+
+  async notablePlacesStatus(): Promise<NotablePlacesStatus> {
+    const res = await this.request(`${this.baseUrl}/notable-places/status`, this.authed());
+    if (!res.ok) {
+      throw new DataManagerHttpError(
+        `notable-places/status failed: HTTP ${res.status}`,
+        res.status,
+      );
+    }
+    return this.readJson(res, "notable-places/status response");
   }
 }
 

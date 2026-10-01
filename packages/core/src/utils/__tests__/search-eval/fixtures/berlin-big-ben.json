@@ -1,0 +1,212 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/5288252680",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Emmaville, New South Wales, 2371, Australia",
+      "coordinates": [151.6580014, -29.4844624],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "importance": 0.16004842526894025,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/3019436529",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, New South Wales, Australia",
+      "coordinates": [151.8355531, -32.1538672],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "importance": 0.16004579766536964,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/2844263526",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Queensland, Australia",
+      "coordinates": [144.5130556, -19.5194444],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "importance": 0.16004481651026167,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/10703902818",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Taupō District, Hawke's Bay, New Zealand",
+      "coordinates": [176.386533, -39.084224],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "importance": 0.16000999999999999,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/1553411249",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Selwyn District, Canterbury, New Zealand",
+      "coordinates": [171.6894051, -43.3995537],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "importance": 0.16000999999999999,
+      "provider": "geocoding-nominatim"
+    },
+    {
+      "id": "osm:node/10653911346",
+      "label": "Big Ben",
+      "sublabel": "Big Ben, Waitaki District, Canterbury, New Zealand",
+      "coordinates": [170.407222, -44.830056],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "importance": 0.16000999999999999,
+      "provider": "geocoding-nominatim"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q41225",
+      "ids": {
+        "wikidata": "Q41225"
+      },
+      "label": "Big Ben",
+      "sublabel": "tower of the Palace of Westminster, London containing the bell Big Ben",
+      "coordinates": [-0.12457, 51.50067],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Ben",
+        "normalized": "big ben"
+      },
+      "importance": 0.7631260474660775,
+      "fame": 0.7631260474660775,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q858516",
+      "ids": {
+        "wikidata": "Q858516"
+      },
+      "label": "Big Ben",
+      "sublabel": "volcano on Heard Island",
+      "coordinates": [73.517778, -53.104444],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Ben",
+        "normalized": "big ben"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q3494060",
+      "ids": {
+        "wikidata": "Q3494060"
+      },
+      "label": "Big Bend",
+      "sublabel": "geographic region in the western part of the state of Texas in the United States",
+      "coordinates": [-103, 30],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend",
+        "normalized": "big bend"
+      },
+      "importance": 0.3430976248671155,
+      "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "oa:US-0120",
+      "ids": {
+        "oa": "US-0120"
+      },
+      "label": "Big Bend Airport",
+      "sublabel": "Mercer, US",
+      "coordinates": [-80.280899, 41.280602],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Airport",
+        "normalized": "big bend airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CEM4",
+      "ids": {
+        "oa": "CEM4"
+      },
+      "label": "Big Bend Airport",
+      "sublabel": "Innisfail, CA",
+      "coordinates": [-114.027, 52.078602],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Airport",
+        "normalized": "big bend airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-7855",
+      "ids": {
+        "oa": "US-7855"
+      },
+      "label": "Big Bend Landing Strip",
+      "sublabel": "Fort Thompson, US",
+      "coordinates": [-99.464979, 44.069767],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Landing Strip",
+        "normalized": "big bend landing strip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-8236",
+      "ids": {
+        "oa": "US-8236"
+      },
+      "label": "Big Bend Airport",
+      "sublabel": "Agness, US",
+      "coordinates": [-124.04415, 42.64028],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Airport",
+        "normalized": "big bend airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:FDBS",
+      "ids": {
+        "oa": "FDBS"
+      },
+      "label": "Big Bend Sugar E Airport",
+      "sublabel": "Big Bend, SZ",
+      "coordinates": [31.92, -26.836111],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Big Bend Sugar E Airport",
+        "normalized": "big bend sugar e airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

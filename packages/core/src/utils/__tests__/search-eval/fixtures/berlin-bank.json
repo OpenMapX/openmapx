@@ -1,60 +1,6 @@
 {
   "autocomplete": [
     {
-      "id": "osm:node/78252154",
-      "label": "Bank für Sozialwirtschaft",
-      "sublabel": "Bank für Sozialwirtschaft, Oranienburger Straße 13, Berlin, Deutschland",
-      "coordinates": [13.3986266, 52.5237445],
-      "type": "poi",
-      "rawCategory": "amenity/atm",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:way/315255133",
-      "label": "Bankhaus Mendelssohn",
-      "sublabel": "Bankhaus Mendelssohn, Jägerstraße, Berlin, Deutschland",
-      "coordinates": [13.3954178, 52.5144851],
-      "type": "address",
-      "rawCategory": "building/office",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/4104554190",
-      "label": "Bankos Brunch",
-      "sublabel": "Bankos Brunch, Torstraße 178, Berlin, Deutschland",
-      "coordinates": [13.3943594, 52.528431],
-      "type": "poi",
-      "rawCategory": "amenity/cafe",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/3614955201",
-      "label": "Bankhaus Lenz",
-      "sublabel": "Bankhaus Lenz, Danziger Straße, Berlin, Deutschland",
-      "coordinates": [13.4149111, 52.5408557],
-      "type": "poi",
-      "rawCategory": "amenity/atm",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/5538558495",
-      "label": "Bankhaus August Lenz",
-      "sublabel": "Bankhaus August Lenz, Oppelner Straße, Berlin, Deutschland",
-      "coordinates": [13.44087, 52.5000737],
-      "type": "poi",
-      "rawCategory": "amenity/atm",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/4815962792",
-      "label": "Bankhaus August Lenz",
-      "sublabel": "Bankhaus August Lenz, Winterfeldtstraße, Berlin, Deutschland",
-      "coordinates": [13.3602053, 52.4961896],
-      "type": "poi",
-      "rawCategory": "amenity/atm",
-      "provider": "geocoding-photon"
-    },
-    {
       "id": "osm:node/13240737993",
       "label": "Bank",
       "sublabel": "Bank, Mühlenweg, Trebbin, Deutschland",
@@ -147,149 +93,148 @@
   ],
   "aggregate": [
     {
-      "id": "oa:GB-0602",
+      "id": "wikidata:Q806704",
       "ids": {
-        "oa": "GB-0602"
+        "wikidata": "Q806704"
       },
-      "label": "Bankwood Farm Airstrip",
-      "sublabel": "Thurgarton, GB",
-      "coordinates": [-0.997581, 53.045801],
+      "label": "Bank und Monument",
+      "sublabel": "Station der London Underground",
+      "coordinates": [-0.088, 51.513],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bankwood Farm Airstrip",
-        "normalized": "bankwood farm airstrip"
+        "value": "Bank",
+        "normalized": "bank"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.5736900948874171,
+      "fame": 0.5736900948874171,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:ME5",
+      "id": "wikidata:Q162222",
       "ids": {
-        "oa": "ME5"
+        "wikidata": "Q162222"
       },
-      "label": "Banks Airport",
-      "sublabel": "Swans Island, US",
-      "coordinates": [-68.42780303955078, 44.165401458740234],
+      "label": "Deutsche Bundesbank",
+      "sublabel": "Zentralbank der Bundesrepublik Deutschland",
+      "coordinates": [8.659722, 50.133889],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Banks Airport",
-        "normalized": "banks airport"
+        "value": "Bank of Germany",
+        "normalized": "bank of germany"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6500402288202247,
+      "fame": 0.6500402288202247,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:62AR",
+      "id": "wikidata:Q309195",
       "ids": {
-        "oa": "62AR"
+        "wikidata": "Q309195"
       },
-      "label": "Banks Ranch Airport",
-      "sublabel": "Busch, US",
-      "coordinates": [-93.859866, 36.457222],
+      "label": "Bank für Internationalen Zahlungsausgleich",
+      "sublabel": "internationale Organisation des Finanzwesens auf der Ebene der Zentralbanken",
+      "coordinates": [7.59155, 47.5482],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Banks Ranch Airport",
-        "normalized": "banks ranch airport"
+        "value": "Bank for International Settlements",
+        "normalized": "bank for international settlements"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6758302901212196,
+      "fame": 0.6758302901212196,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:PG-0045",
+      "id": "wikidata:Q806950",
       "ids": {
-        "oa": "PG-0045",
-        "icao": "AYBJ"
+        "wikidata": "Q806950"
       },
-      "label": "Bank Airstrip",
-      "sublabel": "Bank, PG",
-      "coordinates": [144.690471, -5.364716],
+      "label": "Bank of France",
+      "sublabel": "Zentralbank von Frankreich",
+      "coordinates": [2.339281, 48.864469],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bank Airstrip",
-        "normalized": "bank airstrip"
+        "value": "Bank of France",
+        "normalized": "bank of france"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6108445258152586,
+      "fame": 0.6108445258152586,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:AU-0119",
+      "id": "wikidata:Q564652",
       "ids": {
-        "oa": "AU-0119"
+        "wikidata": "Q564652"
       },
-      "label": "Banka Banka Airstrip",
-      "sublabel": "Tablelands, AU",
-      "coordinates": [134.039619, -18.79853],
+      "label": "Schwedische Zentralbank",
+      "sublabel": "central bank of Sweden",
+      "coordinates": [18.07, 59.329722],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Banka Banka Airstrip",
-        "normalized": "banka banka airstrip"
+        "value": "Bank Szwedzki",
+        "normalized": "bank szwedzki"
       },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6059546807601883,
+      "fame": 0.6059546807601883,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:CL19",
+      "id": "wikidata:Q214855",
       "ids": {
-        "oa": "CL19"
+        "wikidata": "Q214855"
       },
-      "label": "Bank of America Glendale Heliport",
-      "sublabel": "Glendale, US",
-      "coordinates": [-118.257008, 34.155373],
+      "label": "Bank of China Tower",
+      "sublabel": "Wolkenkratzer in Hongkong",
+      "coordinates": [114.161389, 22.279167],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bank of America Glendale Heliport",
-        "normalized": "bank of america glendale heliport"
+        "value": "Bank of China Tower",
+        "normalized": "bank of china tower"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6335929720801525,
+      "fame": 0.6335929720801525,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:62CA",
+      "id": "wikidata:Q333101",
       "ids": {
-        "oa": "62CA"
+        "wikidata": "Q333101"
       },
-      "label": "Bank of America Data Center Heliport",
-      "sublabel": "Los Angeles, US",
-      "coordinates": [-118.253183, 34.053668],
+      "label": "Bank of Japan",
+      "sublabel": "japanische Zentralbank",
+      "coordinates": [139.771541, 35.686563],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bank of America Data Center Heliport",
-        "normalized": "bank of america data center heliport"
+        "value": "Bank Japonii",
+        "normalized": "bank japonii"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6335929720801525,
+      "fame": 0.6335929720801525,
+      "provider": "search-notable-places"
     },
     {
-      "id": "oa:CO-0499",
+      "id": "wikidata:Q328505",
       "ids": {
-        "oa": "CO-0499"
+        "wikidata": "Q328505"
       },
-      "label": "Bank of Bogotá Helistop",
-      "sublabel": "Bogotá, CO",
-      "coordinates": [-74.067449, 4.623],
+      "label": "Bank of America Tower",
+      "sublabel": "Wolkenkratzer in New York City",
+      "coordinates": [-73.984167, 40.755278],
       "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
         "kind": "name",
-        "value": "Bank of Bogotá Helistop",
-        "normalized": "bank of bogota helistop"
+        "value": "Bank of America Tower",
+        "normalized": "bank of america tower"
       },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
+      "importance": 0.6202677880166308,
+      "fame": 0.6202677880166308,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [

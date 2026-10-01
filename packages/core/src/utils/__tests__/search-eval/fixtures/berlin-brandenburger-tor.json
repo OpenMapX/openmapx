@@ -46,10 +46,10 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/4946539237",
+      "id": "osm:node/253846340",
       "label": "Brandenburger Tor",
       "sublabel": "Brandenburger Tor, Unter den Linden, Berlin, Deutschland",
-      "coordinates": [13.3809354, 52.5164367],
+      "coordinates": [13.3811634, 52.516664],
       "type": "poi",
       "rawCategory": "railway/stop",
       "provider": "geocoding-photon"
@@ -64,10 +64,10 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/253846340",
+      "id": "osm:node/4946539237",
       "label": "Brandenburger Tor",
       "sublabel": "Brandenburger Tor, Unter den Linden, Berlin, Deutschland",
-      "coordinates": [13.3811634, 52.516664],
+      "coordinates": [13.3809354, 52.5164367],
       "type": "poi",
       "rawCategory": "railway/stop",
       "provider": "geocoding-photon"
@@ -91,7 +91,98 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q82425",
+      "ids": {
+        "wikidata": "Q82425"
+      },
+      "label": "Brandenburger Tor",
+      "sublabel": "klassizistisches Triumphtor in Berlin",
+      "coordinates": [13.377722, 52.516272],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.7586858849496683,
+      "fame": 0.7586858849496683,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q477185",
+      "ids": {
+        "wikidata": "Q477185"
+      },
+      "label": "S-Bahnhof Brandenburger Tor",
+      "sublabel": "Station der S-Bahn Berlin",
+      "coordinates": [13.380833, 52.516389],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.4455824028205204,
+      "fame": 0.4455824028205204,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q695045",
+      "ids": {
+        "wikidata": "Q695045"
+      },
+      "label": "Brandenburger Tor",
+      "sublabel": "Tor in Potsdam",
+      "coordinates": [13.048, 52.3995],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.45662189673896547,
+      "fame": 0.45662189673896547,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q4373316",
+      "ids": {
+        "wikidata": "Q4373316"
+      },
+      "label": "Brandenburger Tor",
+      "sublabel": "Stadttor in Stettin",
+      "coordinates": [14.55041, 53.42497],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q555977",
+      "ids": {
+        "wikidata": "Q555977"
+      },
+      "label": "Brandenburger Tor (Kaliningrad)",
+      "sublabel": "city gate in Kaliningrad, Russia",
+      "coordinates": [20.494722, 54.697222],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Brandenburger Tor",
+        "normalized": "brandenburger tor"
+      },
+      "importance": 0.3937702819166341,
+      "fame": 0.3937702819166341,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

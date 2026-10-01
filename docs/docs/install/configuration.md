@@ -477,6 +477,26 @@ Integrations** to return Overture search results and `knowledge-overture` to
 enrich matched OSM place cards. `OVERTURE_ENABLED` maintains the data but does
 not silently enable either runtime integration.
 
+## Notable places for search
+
+The data-manager keeps an index of places that many Wikipedias cover, fetched
+from Wikidata, so search can tell the Louvre in Paris from a bar called Louvre
+nearby without a self-hosted geocoder. About 1,000 cities known worldwide (100
+or more language editions) are indexed too, so a city is found by its name in
+other languages: "rom" finds Rome. Things Wikidata gives a coordinate but that
+are no place to go to (events, languages, historical states, sports clubs,
+craters on the Moon) are left out. It builds the index once when none is
+published and refreshes it on a schedule; a failed refresh keeps the previous
+snapshot, and a busy endpoint is retried for a few minutes first.
+**Admin → Data workflows → Notable places** shows the snapshot and rebuilds it
+on demand.
+
+| Variable                       | Description                                                                                                         | Required / Default                                      |
+| ------------------------------ | ------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
+| `NOTABLE_PLACES_REFRESH_CRON`  | Cron schedule for the refresh. `off` disables both the refresh and the first build, and no request leaves the host. | Optional. Default `0 2 1 * *` (monthly, 1st, 02:00 UTC) |
+| `NOTABLE_PLACES_SPARQL_URL`    | Wikidata SPARQL endpoint that supports QLever's per-language label predicates.                                      | Optional. Default `https://qlever.dev/api/wikidata`     |
+| `NOTABLE_PLACES_MIN_SITELINKS` | Wikipedia language editions a place needs to be indexed. Smaller settlements are left out; geocoders rank them.     | Optional. Default `8` (about 135,000 places, ~280 MB)   |
+
 ## Natural-language search
 
 [Natural-language search](../features/natural-language-search.md) (the

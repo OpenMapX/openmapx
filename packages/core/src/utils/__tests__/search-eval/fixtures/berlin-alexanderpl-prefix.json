@@ -91,7 +91,44 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q152783",
+      "ids": {
+        "wikidata": "Q152783"
+      },
+      "label": "Alexanderplatz",
+      "sublabel": "square in Berlin, Germany",
+      "coordinates": [13.413611, 52.521667],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Alexanderplatz",
+        "normalized": "alexanderplatz"
+      },
+      "importance": 0.6500402288202247,
+      "fame": 0.6500402288202247,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q698497",
+      "ids": {
+        "wikidata": "Q698497"
+      },
+      "label": "Berlin Alexanderplatz station",
+      "sublabel": "German train station",
+      "coordinates": [13.411944, 52.521389],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Alexanderplatz",
+        "normalized": "alexanderplatz"
+      },
+      "importance": 0.5121843988435543,
+      "fame": 0.5121843988435543,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }
