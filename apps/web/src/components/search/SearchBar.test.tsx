@@ -170,6 +170,23 @@ describe("SearchBar", () => {
     screen.getByLabelText("search.ariaLabel");
   });
 
+  it("asks for no suggestions while the box is not in use, then for the text once focused", async () => {
+    // The opened place's name stays in the box while the map flies to it.
+    useSearchStore.setState({ query: "Louvre Museum", isFocused: false });
+    renderBar();
+    await act(() => new Promise((resolve) => setTimeout(resolve, 500)));
+
+    for (const hook of [useAutocompleteMock, useSearchSuggestionsMock, useGeocodingMock]) {
+      expect(hook.mock.calls.every((call) => call[0] === "")).toBe(true);
+    }
+
+    fireEvent.focus(screen.getByLabelText("search.ariaLabel"));
+    await waitFor(() => {
+      expect(useAutocompleteMock.mock.calls.at(-1)?.[0]).toBe("Louvre Museum");
+      expect(useSearchSuggestionsMock.mock.calls.at(-1)?.[0]).toBe("Louvre Museum");
+    });
+  });
+
   it("shows a shared integration and POI category only once", async () => {
     const registry = new IntegrationRegistry([
       {

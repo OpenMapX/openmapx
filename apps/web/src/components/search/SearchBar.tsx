@@ -181,6 +181,16 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const shortcutPlatform = useHydrated() ? getPlatform() : "other";
   const debouncedQuery = useAdaptiveDebounce(query, 150, 50);
   const debouncedGeoQuery = useDebounce(query, 400);
+  // Plain Enter pressed before the suggestions for the typed text arrived:
+  // the text it was pressed for, acted on once they settle (see handleSubmit).
+  const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
+  // Suggestions are only fetched while someone can see them or an Enter waits
+  // on them. The text stays in the box after a place opens, and the map then
+  // flies there; following the moving centre would request a fresh batch for
+  // nobody at every step of the flight.
+  const suggesting = isFocused || pendingSubmit !== null;
+  const suggestQuery = suggesting ? debouncedQuery : "";
+  const geocodeQuery = suggesting ? debouncedGeoQuery : "";
 
   // Snapshot of the viewport, read from the map on each render (cheap ref
   // reads). Suggestions are biased towards it and ranked by distance from it;
@@ -205,22 +215,22 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     data: autocompleteData,
     isFetching,
     isPlaceholderData: autocompletePlaceholder,
-  } = useAutocomplete(debouncedQuery, locale, suggestionBias);
-  const { data: geocodeData } = useGeocoding(debouncedGeoQuery, locale, mapCenter);
-  const { data: presetData } = usePresetSuggest(debouncedQuery, locale);
+  } = useAutocomplete(suggestQuery, locale, suggestionBias);
+  const { data: geocodeData } = useGeocoding(geocodeQuery, locale, mapCenter);
+  const { data: presetData } = usePresetSuggest(suggestQuery, locale);
   // One country lookup per ~1° cell: the value only steers brand ranking, so a
   // coarse cell is plenty and keeps the query cache from churning while panning.
   const countryProbe = useMemo<[number, number] | null>(
     () =>
-      mapCenterLng !== undefined && mapCenterLat !== undefined
+      suggesting && mapCenterLng !== undefined && mapCenterLat !== undefined
         ? [Math.round(mapCenterLng), Math.round(mapCenterLat)]
         : null,
-    [mapCenterLng, mapCenterLat],
+    [suggesting, mapCenterLng, mapCenterLat],
   );
   const { data: viewportCountry } = useCountryFromCoordinates(countryProbe);
   // Chains only: operators such as police forces or transit authorities are
   // catalogued too, but nobody types their name to find a shop.
-  const { data: brandData } = useBrandSuggest(debouncedQuery, viewportCountry ?? undefined, {
+  const { data: brandData } = useBrandSuggest(suggestQuery, viewportCountry ?? undefined, {
     kind: "brand",
   });
   const { data: chipTranslations = {} } = useChipTranslations(locale);
@@ -235,7 +245,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     data: aggregateSearchData,
     isFetching: aggregateSearchFetching,
     isPlaceholderData: aggregateSearchPlaceholder,
-  } = useSearchSuggestions(debouncedQuery, locale, mapCenter, 8);
+  } = useSearchSuggestions(suggestQuery, locale, mapCenter, 8);
   const mapBoundsRaw = mapRef.current?.getBounds();
   const mapBbox: BoundingBox | null = mapBoundsRaw
     ? {
@@ -280,10 +290,6 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     setSubmitAfterFlush(false);
     inputRef.current?.form?.requestSubmit();
   }, [submitAfterFlush]);
-
-  // Plain Enter pressed before the suggestions for the typed text arrived:
-  // the text it was pressed for, acted on once they settle (see handleSubmit).
-  const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
 
   // The natural-language parse is opt-out: when AI search is disabled in
   // Settings the parse never fires, so search falls back to plain autocomplete.
@@ -568,6 +574,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // Suggestions describe the text as typed only once the debounce has caught
   // up and no request for it is still in flight or standing in as a placeholder.
   const suggestionsSettled =
+    suggesting &&
     debouncedQuery === query &&
     !isFetching &&
     !autocompletePlaceholder &&
