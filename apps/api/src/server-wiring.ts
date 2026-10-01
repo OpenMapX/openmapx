@@ -68,6 +68,25 @@ export function registerControlledRequestLogging(
   });
 
   server.addHook("onError", (request, reply, error, done) => {
+    // A client that hung up (a map cancelling tiles, a search superseded by
+    // the next keystroke) aborts the handler, which then throws. Nothing is
+    // sent, so it is not a server failure.
+    if (reply.raw.destroyed) {
+      request.log.info(
+        {
+          event: "request.aborted",
+          requestId: controlledRequestId(request),
+          method: controlledMethod(request),
+          route: matchedRoutePattern(request),
+          durationMs: duration(request),
+          errorClass: safeErrorClass(error),
+        },
+        "Client closed the request",
+      );
+      starts.delete(request);
+      done();
+      return;
+    }
     request.log.error(
       {
         event: "request.error",

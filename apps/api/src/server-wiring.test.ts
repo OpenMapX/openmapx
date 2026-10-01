@@ -1,3 +1,5 @@
+import { get as httpGet } from "node:http";
+import type { AddressInfo } from "node:net";
 import { Writable } from "node:stream";
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -560,6 +562,37 @@ describe("controlled request lifecycle logging", () => {
     ]) {
       expect(output).not.toContain(marker);
     }
+  });
+
+  it("logs a handler failing after the client hung up as aborted, not as a server error", async () => {
+    const capture = captureLogger();
+    const app = Fastify(controlledRequestLoggingOptions(capture.logger));
+    registerControlledRequestLogging(app, { now: () => 1 });
+    app.setErrorHandler(uniformErrorHandler);
+    let failed!: () => void;
+    const handlerFailed = new Promise<void>((resolve) => {
+      failed = resolve;
+    });
+    app.get("/search", async (_request, reply) => {
+      await new Promise((resolve) => reply.raw.once("close", resolve));
+      setImmediate(failed);
+      throw new DOMException("This operation was aborted", "AbortError");
+    });
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const { port } = app.server.address() as AddressInfo;
+
+    const request = httpGet(`http://127.0.0.1:${port}/search`);
+    request.on("error", () => {});
+    request.on("socket", (socket) =>
+      socket.on("connect", () => setTimeout(() => request.destroy(), 20)),
+    );
+    await handlerFailed;
+    await app.close();
+
+    const records = capture.records().filter((record) => record.event);
+    expect(records.map((record) => record.event)).toEqual(["request.start", "request.aborted"]);
+    expect(records[1]).toMatchObject({ level: 30, route: "/search" });
+    expect(records[1]).not.toHaveProperty("statusCode");
   });
 
   it("uses an unmatched sentinel rather than a raw not-found URL", async () => {
