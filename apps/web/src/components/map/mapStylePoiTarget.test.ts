@@ -42,11 +42,13 @@ describe("mapStylePoiTarget", () => {
           { id: "road-label", type: "symbol", "source-layer": "transportation_name" },
           { id: "poi-circle", type: "circle", "source-layer": "poi" },
           { id: "category-results-labels", type: "symbol", "source-layer": "poi" },
+          { id: "poi-transit-stop-labels", type: "symbol", source: "transit-stop-labels" },
         ],
       }),
     } as unknown as MaplibreMap;
 
-    expect(getStylePoiLayerIds(map)).toEqual(["poi-label"]);
+    // The stop labels re-publish basemap stops, so a click on a name opens the stop.
+    expect(getStylePoiLayerIds(map)).toEqual(["poi-label", "poi-transit-stop-labels"]);
   });
 
   it("maps the top named point to the shared target shape", () => {

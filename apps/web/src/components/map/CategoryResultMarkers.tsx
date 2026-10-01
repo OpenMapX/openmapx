@@ -10,6 +10,7 @@ import {
   PANEL,
   poiCategoryIconPath,
   proxyImageUrl,
+  resolvePoiCategoryId,
   resolveStopAsPlace,
   useCategorySearchStore,
   usePlaceStore,
@@ -143,9 +144,36 @@ export async function loadBrandMarkerImage(
   }
 }
 
+const TEXT_MARKER_IMAGE_ID = "category-marker-text";
+const CATEGORY_MARKER_PREFIX = "category-marker-";
+
+export function categoryMarkerImageId(categoryId: string): string {
+  return `${CATEGORY_MARKER_PREFIX}${categoryId}`;
+}
+
+/**
+ * A text-search result's pin carries its own category's glyph, so a search
+ * that turns up cafés and restaurants shows a cup and a fork rather than a
+ * magnifier on every pin. Places of no known category keep the magnifier.
+ */
+export function textResultImageId(place: CategoryPlace): string {
+  const tags = place.osmTags ?? {};
+  for (const candidate of [place.category, tags.amenity, tags.shop, tags.tourism]) {
+    const categoryId = candidate ? resolvePoiCategoryId(candidate) : undefined;
+    if (categoryId) return categoryMarkerImageId(categoryId);
+  }
+  return TEXT_MARKER_IMAGE_ID;
+}
+
+function markerIconPath(imageId: string): string {
+  return imageId === TEXT_MARKER_IMAGE_ID
+    ? TEXT_MARKER_ICON_PATH
+    : poiCategoryIconPath(imageId.slice(CATEGORY_MARKER_PREFIX.length));
+}
+
 export function buildGeoJson(
   results: CategoryPlace[],
-  fallbackImageId: string,
+  markerImageFor: (place: CategoryPlace) => string,
   brandImageIds: ReadonlySet<string>,
 ) {
   return {
@@ -164,7 +192,7 @@ export function buildGeoJson(
           phone: place.phone ?? "",
           website: place.website ?? "",
           openingHours: place.openingHours ?? "",
-          imageId: branded && qid !== undefined ? brandImageId(qid) : fallbackImageId,
+          imageId: branded && qid !== undefined ? brandImageId(qid) : markerImageFor(place),
         },
       };
     }),
@@ -311,11 +339,17 @@ export function CategoryResultMarkers() {
     };
   }, [mapRef, mapReady, styleVersion, focusFilter]);
 
-  const fallbackImageId =
-    mode === "text" ? "category-marker-text" : `category-marker-${activeCategory}`;
+  const markerImageFor = useMemo(
+    () => (mode === "text" ? textResultImageId : () => categoryMarkerImageId(activeCategory ?? "")),
+    [mode, activeCategory],
+  );
   const categoryGeojson = useMemo(
-    () => buildGeoJson(results ?? [], fallbackImageId, new Set()),
-    [results, fallbackImageId],
+    () => buildGeoJson(results ?? [], markerImageFor, new Set()),
+    [results, markerImageFor],
+  );
+  const markerImageIds = useMemo(
+    () => [...new Set((results ?? []).map(markerImageFor))],
+    [results, markerImageFor],
   );
   const qids = useMemo(() => distinctBrandQids(results ?? []), [results]);
   const transitModes = useMemo(
@@ -454,29 +488,28 @@ export function CategoryResultMarkers() {
         return;
       }
 
-      const iconPath =
-        mode === "text" ? TEXT_MARKER_ICON_PATH : poiCategoryIconPath(activeCategory ?? "");
-
-      // First paint uses only the fallback icon — this is the entire branded
-      // vs. unbranded distinction of the pre-brand code, unchanged. Brand
-      // logos are layered on afterward so a slow or empty logo fetch never
-      // delays markers from appearing at all.
+      // First paint uses only the category icons. Brand logos are layered on
+      // afterward so a slow or empty logo fetch never delays markers from
+      // appearing at all.
       const existing = map.getSource(SOURCE_ID);
       if (!existing || !initialized.has(existing)) categoryData = categoryGeojson;
       const source = publish(map, SOURCE_ID, categoryData);
       initialized.add(source);
 
-      // Load image then add layers (image may already be cached)
+      // Load images then add layers (images may already be cached)
       if (
         !markerPending.has(source) &&
-        (!map.getLayer(LAYER_ID) || !map.getLayer(LABEL_LAYER_ID) || !map.hasImage(fallbackImageId))
+        (!map.getLayer(LAYER_ID) ||
+          !map.getLayer(LABEL_LAYER_ID) ||
+          !markerImageIds.every((imageId) => map.hasImage(imageId)))
       ) {
         markerPending.add(source);
-        void loadMarkerImage(
-          map,
-          fallbackImageId,
-          iconPath,
-          () => !cancelled && map.getSource(SOURCE_ID) === source && map.isStyleLoaded() === true,
+        const isCurrent = () =>
+          !cancelled && map.getSource(SOURCE_ID) === source && map.isStyleLoaded() === true;
+        void Promise.all(
+          markerImageIds.map((imageId) =>
+            loadMarkerImage(map, imageId, markerIconPath(imageId), isCurrent),
+          ),
         ).then(() => {
           markerPending.delete(source);
           if (cancelled || map.getSource(SOURCE_ID) !== source || !map.isStyleLoaded()) return;
@@ -516,7 +549,9 @@ export function CategoryResultMarkers() {
                   "text-ignore-placement": false,
                 },
                 paint: {
-                  "text-color": "#17212B",
+                  // The pin's red, deepened for text, so a result's name reads
+                  // apart from the basemap's own category-coloured labels.
+                  "text-color": "#B3261E",
                   "text-halo-color": "#FFFFFF",
                   "text-halo-width": 2,
                 },
@@ -565,7 +600,7 @@ export function CategoryResultMarkers() {
           const revision = [...brandImageIds].join(",");
           if (brandImageIds.size === 0 || brandPublished.get(source) === revision) return;
           brandPublished.set(source, revision);
-          categoryData = buildGeoJson(results, fallbackImageId, brandImageIds);
+          categoryData = buildGeoJson(results, markerImageFor, brandImageIds);
           publish(map, SOURCE_ID, categoryData);
         });
       }
@@ -582,7 +617,8 @@ export function CategoryResultMarkers() {
     qids,
     transitModes,
     transitGeojson,
-    fallbackImageId,
+    markerImageFor,
+    markerImageIds,
     results,
     activeCategory,
     mode,

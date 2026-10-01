@@ -128,12 +128,29 @@ const MUI_FALLBACK_PATHS: Readonly<Record<string, string>> = {
 export function resolvePoiIconPath(category: string): string | undefined {
   if (!category) return undefined;
 
-  const normalized = category.trim().toLowerCase().replace(/[\s-]/g, "_");
-
-  const categoryId = CATEGORY_TO_ID[normalized];
+  const categoryId = resolvePoiCategoryId(category);
   if (categoryId) {
     return CATEGORY_DEFINITIONS.find((d) => d.id === categoryId)?.iconPath;
   }
 
-  return MUI_FALLBACK_PATHS[normalized];
+  return MUI_FALLBACK_PATHS[normalizeCategory(category)];
+}
+
+function normalizeCategory(category: string): string {
+  return category.trim().toLowerCase().replace(/[\s-]/g, "_");
+}
+
+/**
+ * The CATEGORY_DEFINITIONS id a raw geocoder or OSM category belongs to, if
+ * any. A qualified category falls back to its head word, so Overture's
+ * `vegan_restaurant` is a restaurant.
+ */
+export function resolvePoiCategoryId(category: string): CategoryId | undefined {
+  if (!category) return undefined;
+  const words = normalizeCategory(category).split("_");
+  for (let start = 0; start < words.length; start++) {
+    const categoryId = CATEGORY_TO_ID[words.slice(start).join("_")];
+    if (categoryId) return categoryId;
+  }
+  return undefined;
 }

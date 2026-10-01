@@ -15,6 +15,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { poiIconGroups } from "./poi-icon-registry.mjs";
 
 const STYLES = fileURLToPath(new URL("../public/styles/", import.meta.url));
 const SRC = `${STYLES}openmapx-streets.json`;
@@ -95,6 +96,8 @@ const textMap = {
   "#80868b": "#aab0b6",
   "#4a89b8": "#7fb0cc", // water labels
   "#ffffff": "#e8eaed",
+  // POI labels in their category colour
+  ...Object.fromEntries(poiIconGroups.map((group) => [group.text, group.darkText])),
 };
 
 // Text halos (white -> dark, so light labels stay legible on the dark base)

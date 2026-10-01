@@ -7,6 +7,7 @@ import {
   buildGeoJson,
   distinctBrandQids,
   loadBrandMarkerImage,
+  textResultImageId,
 } from "../CategoryResultMarkers";
 
 function place(id: string, osmTags?: Record<string, string>): CategoryPlace {
@@ -54,11 +55,39 @@ describe("brandImageId", () => {
   });
 });
 
+describe("textResultImageId", () => {
+  it("gives a text-search result the pin of its own category", () => {
+    expect(textResultImageId({ ...place("a"), category: "restaurant" })).toBe(
+      "category-marker-restaurants",
+    );
+    expect(textResultImageId(place("b", { amenity: "cafe" }))).toBe("category-marker-cafes");
+  });
+
+  it("keeps the search pin for a place of no known category", () => {
+    expect(textResultImageId({ ...place("a"), category: "bus_station" })).toBe(
+      "category-marker-text",
+    );
+    expect(textResultImageId(place("b"))).toBe("category-marker-text");
+  });
+});
+
 describe("buildGeoJson", () => {
   const FALLBACK = "category-marker-supermarket";
 
+  it("asks for each place's own marker", () => {
+    const geojson = buildGeoJson(
+      [{ ...place("a"), category: "cafe" }, place("b")],
+      textResultImageId,
+      new Set(),
+    );
+    expect(geojson.features.map((feature) => feature.properties.imageId)).toEqual([
+      "category-marker-cafes",
+      "category-marker-text",
+    ]);
+  });
+
   it("uses the fallback image for a place with no brand identity", () => {
-    const geojson = buildGeoJson([place("a")], FALLBACK, new Set(["brand-marker-Q1"]));
+    const geojson = buildGeoJson([place("a")], () => FALLBACK, new Set(["brand-marker-Q1"]));
     expect(geojson.features[0].properties.imageId).toBe(FALLBACK);
   });
 
@@ -69,7 +98,7 @@ describe("buildGeoJson", () => {
     // must degrade to the fallback marker exactly like "no brand" does.
     const geojson = buildGeoJson(
       [place("a", { "brand:wikidata": "Q1" })],
-      FALLBACK,
+      () => FALLBACK,
       new Set(["brand-marker-Q2"]),
     );
     expect(geojson.features[0].properties.imageId).toBe(FALLBACK);
@@ -78,7 +107,7 @@ describe("buildGeoJson", () => {
   it("uses the resolved brand image for a place whose QID is in brandImageIds", () => {
     const geojson = buildGeoJson(
       [place("a", { "brand:wikidata": "Q1" })],
-      FALLBACK,
+      () => FALLBACK,
       new Set([brandImageId("Q1")]),
     );
     expect(geojson.features[0].properties.imageId).toBe(brandImageId("Q1"));

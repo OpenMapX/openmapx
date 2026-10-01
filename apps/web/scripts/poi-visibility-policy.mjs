@@ -124,7 +124,28 @@ export const poiVisibilityGroups = [
 
 const fallbackLimits = [0, 0, 0, 0, 10, 50, all];
 
-export function poiRankLimit(poiClass, zoom) {
+// Bus and tram stops are many small points that mostly repeat a nearby
+// station's name. They arrive as icons from z16; their names come from the
+// merged stop-label layer rather than from every platform.
+export const transitStopLimits = [0, 0, 4, 10, 30, all, all];
+
+export function isTransitStop(poiClass, subclass) {
+  return (poiClass === "bus" && subclass !== "bus_station") || subclass === "tram_stop";
+}
+
+export function transitStopExpression() {
+  return [
+    "any",
+    [
+      "all",
+      ["==", ["get", "class"], "bus"],
+      ["!=", ["coalesce", ["get", "subclass"], ""], "bus_station"],
+    ],
+    ["==", ["get", "subclass"], "tram_stop"],
+  ];
+}
+
+export function poiRankLimit(poiClass, zoom, subclass) {
   if (
     ["waste_basket", "bicycle_parking", "bollard", "motorcycle_parking", "cycle_barrier"].includes(
       poiClass,
@@ -132,6 +153,7 @@ export function poiRankLimit(poiClass, zoom) {
   )
     return 0;
   const index = Math.max(0, Math.min(zooms.length - 1, Math.floor(zoom) - zooms[0]));
+  if (isTransitStop(poiClass, subclass)) return transitStopLimits[index];
   return (poiVisibilityGroups.find((group) => group.classes.includes(poiClass))?.limits ??
     fallbackLimits)[index];
 }
@@ -140,12 +162,82 @@ function zoomStep(limits) {
   return ["step", ["zoom"], 0, ...zooms.flatMap((zoom, index) => [zoom, limits[index]])];
 }
 
+export function transitStopRankLimitExpression() {
+  return zoomStep(transitStopLimits);
+}
+
 export function poiRankLimitExpression() {
   return [
-    "match",
-    ["get", "class"],
-    ...poiVisibilityGroups.flatMap(({ classes, limits }) => [classes, zoomStep(limits)]),
-    zoomStep(fallbackLimits),
+    "case",
+    transitStopExpression(),
+    transitStopRankLimitExpression(),
+    [
+      "match",
+      ["get", "class"],
+      ...poiVisibilityGroups.flatMap(({ classes, limits }) => [classes, zoomStep(limits)]),
+      zoomStep(fallbackLimits),
+    ],
+  ];
+}
+
+// How many languages a POI has a name in is a usable proxy for fame: the
+// Brandenburg Gate or a cathedral carries names in fifteen or twenty
+// languages, a local fountain or a clock in two or three. English and German
+// are left out because local mappers add those to ordinary places.
+export const notabilityLanguages = [
+  "ar",
+  "cs",
+  "da",
+  "el",
+  "es",
+  "fa",
+  "fi",
+  "fr",
+  "he",
+  "hu",
+  "it",
+  "ja",
+  "ko",
+  "nl",
+  "no",
+  "pl",
+  "pt",
+  "ro",
+  "ru",
+  "sv",
+  "tr",
+  "uk",
+  "zh",
+];
+
+export const landmarkClasses = [
+  "attraction",
+  "castle",
+  "monument",
+  "museum",
+  "place_of_worship",
+  "theatre",
+  "library",
+  "art_gallery",
+  "zoo",
+  "aquarium",
+  "stadium",
+  "theme_park",
+  "amusement_park",
+  "viewpoint",
+];
+
+export const landmarkMinLanguages = 6;
+
+export function notabilityExpression() {
+  return ["+", ...notabilityLanguages.map((code) => ["case", ["has", `name:${code}`], 1, 0])];
+}
+
+export function landmarkExpression() {
+  return [
+    "all",
+    ["in", ["get", "class"], ["literal", landmarkClasses]],
+    [">=", notabilityExpression(), landmarkMinLanguages],
   ];
 }
 

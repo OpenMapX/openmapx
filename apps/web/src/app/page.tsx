@@ -48,6 +48,7 @@ import { SearchInAreaChip } from "@/components/map/SearchInAreaChip";
 import { SelectedPlaceMarker } from "@/components/map/SelectedPlaceMarker";
 import { StreetLevelViewer } from "@/components/map/StreetLevelViewer";
 import { TopRightControls } from "@/components/map/TopRightControls";
+import { TransitStopLabels } from "@/components/map/TransitStopLabels";
 import { UserLocationMarker } from "@/components/map/UserLocationMarker";
 import { WaypointMarkers } from "@/components/map/WaypointMarkers";
 import { HamburgerMenu } from "@/components/menu/HamburgerMenu";
@@ -142,6 +143,7 @@ export default function HomePage() {
             <GarageSyncBridge />
             <MapClickHandler />
             <MapStylePoiClickHandler />
+            <TransitStopLabels />
             <MapContextMenu />
             <UserLocationMarker />
             <SelectedPlaceMarker />

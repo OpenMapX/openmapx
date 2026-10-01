@@ -136,7 +136,10 @@ describe("bundled basemap POI sprites", () => {
 
         const railway = style.layers.find((candidate) => candidate.id === "poi-railway");
         if (!railway) throw new Error(`poi-railway missing from ${styleName}`);
-        expect(resolvedIcon(railway, "railway", availableImages)).toBe("railway_11");
+        // Stations wear the same badge as every other POI, not the old 11px glyph.
+        expect(resolvedIcon(railway, "railway", availableImages, "station")).toBe(
+          "poi-railway-station",
+        );
 
         const streetFixtures = style.layers.find(
           (candidate) => candidate.id === "poi-street-fixtures",

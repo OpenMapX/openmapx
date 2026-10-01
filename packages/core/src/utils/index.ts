@@ -222,7 +222,12 @@ export {
   plusCodeUrl,
   shortenPlusCode,
 } from "./plusCode";
-export { AD_HOC_ICON_PATH, poiCategoryIconPath, resolvePoiIconPath } from "./poi-icon";
+export {
+  AD_HOC_ICON_PATH,
+  poiCategoryIconPath,
+  resolvePoiCategoryId,
+  resolvePoiIconPath,
+} from "./poi-icon";
 export {
   assignConflationPairs,
   type ConflationMethod,

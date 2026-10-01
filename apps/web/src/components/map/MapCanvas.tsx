@@ -30,6 +30,7 @@ import {
   selectOnlineFirstOpenMapXStyle,
   setOfflinePackageActive,
 } from "@/lib/offlineAreas";
+import { localizeTextField } from "./localizeTextField";
 
 /** The main map uses its camera-aware 3D layer instead of basemap extrusions. */
 function withoutNativeBuildingExtrusions(style: Record<string, unknown>): Record<string, unknown> {
@@ -406,15 +407,13 @@ export function MapCanvas() {
         if (layer.type !== "symbol") continue;
         const tf = layer.layout?.["text-field"];
         if (!tf) continue;
-        // Only override layers whose text-field actually references "name".
-        // Skip road shields, route refs, house numbers, etc.
-        const serialized = JSON.stringify(tf);
-        if (!serialized.includes("name")) continue;
-        map.setLayoutProperty(layer.id, "text-field", [
-          "coalesce",
-          ["get", `name:${locale}`],
-          ["get", "name"],
-        ]);
+        const localized = localizeTextField(tf, locale);
+        if (JSON.stringify(localized) === JSON.stringify(tf)) continue;
+        map.setLayoutProperty(
+          layer.id,
+          "text-field",
+          localized as maplibregl.DataDrivenPropertyValueSpecification<string>,
+        );
       }
     };
 

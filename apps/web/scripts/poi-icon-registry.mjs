@@ -1,10 +1,14 @@
 // OpenMapTiles POI class defaults plus meaningful subclass overrides.
 // A key is either `class` or `class/subclass`. Library names refer to the
 // Maki and Temaki SVGs already used for preset icons in this app.
+// `text` and `darkText` are the badge colour shifted until a label reaches
+// 5:1 contrast on the light map and 6:1 on the dark one.
 export const poiIconGroups = [
   {
     category: "food",
     colour: "#ad633d",
+    text: "#9a5836",
+    darkText: "#ce9273",
     icons: {
       restaurant: "maki:restaurant",
       cafe: "maki:cafe",
@@ -24,6 +28,8 @@ export const poiIconGroups = [
   {
     category: "shopping",
     colour: "#8a638e",
+    text: "#815d85",
+    darkText: "#b397b6",
     icons: {
       shop: "maki:shop",
       "shop/convenience": "maki:convenience",
@@ -67,6 +73,8 @@ export const poiIconGroups = [
   {
     category: "transport",
     colour: "#477aa1",
+    text: "#3f6d8f",
+    darkText: "#7aa4c4",
     icons: {
       bus: "maki:bus",
       "bus/bus_station": "temaki:board_bus",
@@ -97,6 +105,8 @@ export const poiIconGroups = [
   {
     category: "civic",
     colour: "#64816e",
+    text: "#57705f",
+    darkText: "#8ca695",
     icons: {
       school: "maki:school",
       college: "maki:college",
@@ -129,6 +139,8 @@ export const poiIconGroups = [
   {
     category: "health",
     colour: "#b65b65",
+    text: "#a84b55",
+    darkText: "#ce9097",
     icons: {
       hospital: "maki:hospital",
       "hospital/clinic": "maki:hospital",
@@ -144,6 +156,8 @@ export const poiIconGroups = [
   {
     category: "culture",
     colour: "#756ba0",
+    text: "#6d6299",
+    darkText: "#a09abe",
     icons: {
       attraction: "maki:attraction",
       "attraction/viewpoint": "maki:viewpoint",
@@ -173,6 +187,8 @@ export const poiIconGroups = [
   {
     category: "outdoors",
     colour: "#568575",
+    text: "#4a7265",
+    darkText: "#7aa999",
     icons: {
       garden: "maki:garden",
       playground: "maki:playground",
@@ -218,6 +234,8 @@ export const poiIconGroups = [
   {
     category: "utility",
     colour: "#738087",
+    text: "#606b71",
+    darkText: "#96a0a6",
     icons: {
       toilets: "maki:toilet",
       recycling: "maki:recycling",
@@ -234,3 +252,25 @@ export const poiIconGroups = [
     },
   },
 ];
+
+// Classes the registry does not know keep the neutral grey all labels used to have.
+export const poiFallbackTextColour = "#5f6368";
+
+/** A label takes its badge's category colour; a subclass override wins over its class. */
+export function poiTextColourExpression() {
+  const subclassBranches = [];
+  const classBranches = [];
+  for (const group of poiIconGroups) {
+    const keys = Object.keys(group.icons);
+    const subclassKeys = keys.filter((key) => key.includes("/"));
+    const classKeys = keys.filter((key) => !key.includes("/"));
+    if (subclassKeys.length > 0) subclassBranches.push(subclassKeys, group.text);
+    if (classKeys.length > 0) classBranches.push(classKeys, group.text);
+  }
+  return [
+    "match",
+    ["concat", ["get", "class"], "/", ["coalesce", ["get", "subclass"], ""]],
+    ...subclassBranches,
+    ["match", ["get", "class"], ...classBranches, poiFallbackTextColour],
+  ];
+}

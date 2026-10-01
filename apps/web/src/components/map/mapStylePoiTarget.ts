@@ -1,8 +1,11 @@
 import { haversineDistance } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import type { FilterSpecification, MapGeoJSONFeature, StyleSpecification } from "maplibre-gl";
+import { STOP_LABEL_LAYER_ID } from "./stopLabelPoints";
 
 const POI_SOURCE_LAYERS = new Set(["poi"]);
+// Basemap POIs the app re-publishes through the style's own GeoJSON sources.
+const REPUBLISHED_POI_LAYER_IDS = new Set([STOP_LABEL_LAYER_ID]);
 const OWN_STYLE_POI_LAYER_IDS = new Set([
   "category-results-layer",
   "category-results-labels",
@@ -27,6 +30,7 @@ export function getStylePoiLayerIds(map: maplibregl.Map): string[] {
   return (layers as StyleLayer[])
     .filter((layer) => {
       if (layer.type !== "symbol" || OWN_STYLE_POI_LAYER_IDS.has(layer.id)) return false;
+      if (REPUBLISHED_POI_LAYER_IDS.has(layer.id)) return true;
       const sourceLayer = (layer as { "source-layer"?: string })["source-layer"];
       return sourceLayer !== undefined && POI_SOURCE_LAYERS.has(sourceLayer);
     })
