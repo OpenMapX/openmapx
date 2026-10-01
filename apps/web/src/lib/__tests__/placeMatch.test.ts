@@ -1,6 +1,6 @@
 import type { SearchResult } from "@integrations/geocoding/types";
 import { describe, expect, it } from "vitest";
-import { isConfidentPlaceMatch } from "../placeMatch";
+import { isConfidentPlaceMatch, typedAddressIn } from "../placeMatch";
 
 const r = (label: string, type: SearchResult["type"] = "region"): SearchResult => ({
   id: "x",
@@ -55,5 +55,29 @@ describe("isConfidentPlaceMatch", () => {
   it("does not commit a single-word prefix of a named place", () => {
     expect(isConfidentPlaceMatch("hotel", r("Hotel California", "address"))).toBe(false);
     expect(isConfidentPlaceMatch("Hotel California", r("Hotel California", "address"))).toBe(true);
+  });
+});
+
+describe("typedAddressIn", () => {
+  it("finds the typed street and number in a label led by what stands there", () => {
+    expect(
+      typedAddressIn(
+        "unter den linden 77",
+        "Adlon Kempinski, Unter den Linden 77, Berlin, Germany",
+      ),
+    ).toBe("Unter den Linden 77");
+    expect(typedAddressIn("torstraße 1", "Soho House Berlin, Torstraße 1, Berlin, Germany")).toBe(
+      "Torstraße 1",
+    );
+  });
+
+  it("needs a house number, and that number on the typed street", () => {
+    expect(typedAddressIn("unter den linden", "Adlon Kempinski, Unter den Linden 77")).toBe(
+      undefined,
+    );
+    expect(typedAddressIn("unter den linden 12", "Adlon Kempinski, Unter den Linden 77")).toBe(
+      undefined,
+    );
+    expect(typedAddressIn("hauptstraße 77", "Café 77, Bahnhofstraße 3, Köln")).toBe(undefined);
   });
 });

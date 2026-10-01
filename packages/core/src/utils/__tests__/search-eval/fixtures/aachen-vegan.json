@@ -1,0 +1,168 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/154109484",
+      "label": "Vegan",
+      "sublabel": "Vegan, United States",
+      "coordinates": [-80.1136908, 38.9639901],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9921872308",
+      "label": "Vegan",
+      "sublabel": "Vegan, Heim, Norway",
+      "coordinates": [9.0060557, 63.3304768],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/29400717",
+      "label": "Vegan",
+      "sublabel": "Vegan, Älvdalens kommun, Sweden",
+      "coordinates": [12.7880223, 61.8015193],
+      "type": "poi",
+      "rawCategory": "waterway/river",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11800160184",
+      "label": "Veganland Cigköfte Alsdorf",
+      "sublabel": "Veganland Cigköfte Alsdorf, Bahnhofstraße 48, Alsdorf, Germany",
+      "coordinates": [6.1599672, 50.8722942],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9125323967",
+      "label": "Vegan",
+      "sublabel": "Vegan, Avenida Borgoño, Concón, Chile",
+      "coordinates": [-71.5089583, -32.9206595],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6269100387",
+      "label": "Vegan",
+      "sublabel": "Vegan, Quốc lộ 20, Dầu Giây, Vietnam",
+      "coordinates": [107.140469, 10.9602958],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6343343019",
+      "label": "Vegan Revolution",
+      "sublabel": "Vegan Revolution, Venloer Straße 456, Cologne, Germany",
+      "coordinates": [6.9107666, 50.9542003],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3759306915",
+      "label": "Vegan & Bio",
+      "sublabel": "Vegan & Bio, Westring 15-25, Wesseling, Germany",
+      "coordinates": [6.9766402, 50.8234889],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1643520980",
+      "label": "Veganland Cigköfte",
+      "sublabel": "Veganland Cigköfte, Zülpicher Straße 32, Cologne, Germany",
+      "coordinates": [6.9375959, 50.9294648],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10788487809",
+      "label": "Veganland Cigköfte",
+      "sublabel": "Veganland Cigköfte, Bahnhofstraße 24, Leverkusen, Germany",
+      "coordinates": [7.0059934, 51.0665855],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9055595722",
+      "label": "Veganland Cigköfte",
+      "sublabel": "Veganland Cigköfte, Kalker Hauptstraße 176, Cologne, Germany",
+      "coordinates": [7.0056057, 50.9382033],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9001658252",
+      "label": "Veganland Çiğköfte",
+      "sublabel": "Veganland Çiğköfte, Keupstraße 38, Cologne, Germany",
+      "coordinates": [7.0089521, 50.9657399],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9001658310",
+      "label": "Veganland Çiğköfte",
+      "sublabel": "Veganland Çiğköfte, Keupstraße 71, Cologne, Germany",
+      "coordinates": [7.0109834, 50.9645412],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/410140836",
+      "label": "Veganland Cigköfte",
+      "sublabel": "Veganland Cigköfte, Körnerstraße, Cologne, Germany",
+      "coordinates": [6.9216501, 50.9479248],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4953129340",
+      "label": "VeganLand",
+      "sublabel": "VeganLand, Bonner Straße 40, Cologne, Germany",
+      "coordinates": [6.9600856, 50.9189022],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q106351886",
+      "name": "Veganista",
+      "description": "Austrian vegan ice cream parlor chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q111358494",
+      "name": "Oowee Vegan",
+      "description": "plant based fast food chain in the UK",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "shop/health_food",
+      "name": "Health Food Store",
+      "tags": {
+        "shop": "health_food"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

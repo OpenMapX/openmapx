@@ -311,18 +311,30 @@ export function MapCanvas() {
     // If location permission is already granted, move to the user's location
     // (zoom 14) and show the marker when it arrives — without prompting. Opening
     // the map is not a moment to spend somebody's one permission prompt.
+    // A view the page opened on (a shared link, a reload) or a move the user
+    // made while the fix was on its way wins: the fix then only places the
+    // marker. A slow fix used to pull a linked view, and what was being
+    // searched there, over to the user's own town.
+    let cameraTaken = new URLSearchParams(window.location.search).has("map");
     const recenter = (lngLat: LngLat) =>
       void mapInitialization.then((map) => {
         if (!isActive() || attemptFailed || !map || mapRef.current !== map) return;
         setUserLocation(lngLat);
+        if (cameraTaken) return;
         map.jumpTo({ center: lngLat, zoom: 14 }, { programmatic: true });
       });
 
-    const takeFix = () =>
+    const takeFix = () => {
+      void mapInitialization.then((map) =>
+        map?.on("movestart", (event: { originalEvent?: unknown }) => {
+          if (event.originalEvent) cameraTaken = true;
+        }),
+      );
       void requestFix().then((result) => {
         if (!isActive() || attemptFailed || result.status !== "ok") return;
         recenter([result.fix.lng, result.fix.lat]);
       });
+    };
 
     if (locationAuthority === "native") {
       // The shell already told us what the OS granted it, so no query is needed

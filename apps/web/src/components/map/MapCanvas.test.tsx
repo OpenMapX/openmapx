@@ -437,6 +437,66 @@ describe("MapCanvas", () => {
     );
   });
 
+  describe("a location fix arriving after the view is set", () => {
+    function grantSlowFix() {
+      let positionSuccess: PositionCallback | undefined;
+      vi.stubGlobal("navigator", {
+        ...navigator,
+        geolocation: {
+          getCurrentPosition: vi.fn((...args: unknown[]) => {
+            positionSuccess = args[0] as PositionCallback;
+          }),
+        },
+        permissions: { query: vi.fn().mockResolvedValue({ state: "granted" }) },
+      });
+      return {
+        arrive: () =>
+          positionSuccess?.({
+            coords: { latitude: 50.78, longitude: 6.08 },
+          } as GeolocationPosition),
+        asked: () => positionSuccess !== undefined,
+      };
+    }
+
+    afterEach(() => {
+      window.history.replaceState(null, "", "/");
+    });
+
+    it("keeps a linked view and only places the marker", async () => {
+      maplibreTest.reset();
+      window.history.replaceState(null, "", "/?map=52.52,13.405,14,0,0");
+      useMapStore.setState({ center: [13.405, 52.52], userLocation: null, zoom: 14 });
+      const fix = grantSlowFix();
+
+      render(<MapCanvas />);
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      await waitFor(() => expect(fix.asked()).toBe(true));
+      act(() => fix.arrive());
+
+      await waitFor(() => expect(useMapStore.getState().userLocation).toEqual([6.08, 50.78]));
+      expect(maplibreTest.instances[0]?.jumpTo).not.toHaveBeenCalled();
+    });
+
+    it("keeps where the user moved the map while the fix was on its way", async () => {
+      maplibreTest.reset();
+      useMapStore.setState({ center: [13.405, 52.52], userLocation: null, zoom: 14 });
+      const fix = grantSlowFix();
+
+      render(<MapCanvas />);
+      await waitFor(() => expect(maplibreTest.instances).toHaveLength(1));
+      await waitFor(() => expect(fix.asked()).toBe(true));
+      const map = maplibreTest.instances[0];
+      const moveStart = map?.on.mock.calls.find(
+        ([event]: unknown[]) => event === "movestart",
+      )?.[1] as ((event: { originalEvent?: unknown }) => void) | undefined;
+      act(() => moveStart?.({ originalEvent: new MouseEvent("mousedown") }));
+      act(() => fix.arrive());
+
+      await waitFor(() => expect(useMapStore.getState().userLocation).toEqual([6.08, 50.78]));
+      expect(map?.jumpTo).not.toHaveBeenCalled();
+    });
+  });
+
   it("removes a partially constructed map when initialization setup fails", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();

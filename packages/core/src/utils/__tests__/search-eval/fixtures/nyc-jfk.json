@@ -114,24 +114,6 @@
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:IT-0110",
-      "ids": {
-        "oa": "IT-0110"
-      },
-      "label": "Dovera Airfield",
-      "sublabel": "Dovera (CR), IT",
-      "coordinates": [9.534945, 45.380312],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "JFK Dovera",
-        "normalized": "jfk dovera"
-      },
-      "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
       "id": "oa:US-7020",
       "ids": {
         "oa": "US-7020"
@@ -165,6 +147,24 @@
         "normalized": "hca florida jfk hospital heliport"
       },
       "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:IT-0110",
+      "ids": {
+        "oa": "IT-0110"
+      },
+      "label": "Dovera Airfield",
+      "sublabel": "Dovera (CR), IT",
+      "coordinates": [9.534945, 45.380312],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "keyword",
+        "value": "JFK Dovera",
+        "normalized": "jfk dovera"
+      },
+      "importance": 0.2,
       "provider": "knowledge-ourairports"
     }
   ],

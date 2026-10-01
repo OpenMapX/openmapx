@@ -1,0 +1,235 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/8036572",
+      "label": "Kölner Straße",
+      "sublabel": "Kölner Straße, Berlin, Deutschland",
+      "coordinates": [13.308158, 52.5563352],
+      "type": "street",
+      "rawCategory": "highway/unclassified",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/4674813",
+      "label": "Kölner Straße",
+      "sublabel": "Kölner Straße, Berlin, Deutschland",
+      "coordinates": [13.3095411, 52.5558244],
+      "type": "street",
+      "rawCategory": "highway/service",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1135871917",
+      "label": "Kölner Damm",
+      "sublabel": "Kölner Damm, Berlin, Deutschland",
+      "coordinates": [13.4469959, 52.4269077],
+      "type": "street",
+      "rawCategory": "highway/tertiary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/172443843",
+      "label": "Kölner Damm",
+      "sublabel": "Kölner Damm, Berlin, Deutschland",
+      "coordinates": [13.4468836, 52.4269954],
+      "type": "street",
+      "rawCategory": "highway/tertiary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/979502650",
+      "label": "Korn",
+      "sublabel": "Korn, Ramlerstraße 38, Berlin, Deutschland",
+      "coordinates": [13.3894984, 52.5472791],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/62578",
+      "label": "Köln",
+      "sublabel": "Köln, Deutschland",
+      "coordinates": [6.959974, 50.938361],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13087304309",
+      "label": "Kölner Viertel",
+      "sublabel": "Kölner Viertel, Berlin, Deutschland",
+      "coordinates": [13.5419154, 52.4032355],
+      "type": "region",
+      "rawCategory": "place/quarter",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/2805567",
+      "label": "Kolno",
+      "sublabel": "Kolno, Polen",
+      "coordinates": [21.9312439, 53.4109383],
+      "type": "region",
+      "rawCategory": "place/town",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/692611748",
+      "label": "Eckartsberge",
+      "sublabel": "Eckartsberge, Polen",
+      "coordinates": [16.35976, 53.35478],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/692613091",
+      "label": "Kolno",
+      "sublabel": "Kolno, Polen",
+      "coordinates": [15.95688, 52.59492],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1754622",
+      "label": "Kolno",
+      "sublabel": "Kolno, Kolno, Polen",
+      "coordinates": [21.9360834, 53.4016867],
+      "type": "region",
+      "rawCategory": "boundary/administrative",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/31621488",
+      "label": "Kolno",
+      "sublabel": "Kolno, Polen",
+      "coordinates": [18.1024, 52.22327],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/31588690",
+      "label": "Kolno",
+      "sublabel": "Kolno, Polen",
+      "coordinates": [18.5020843, 53.3863877],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/20799271",
+      "label": "Kolný",
+      "sublabel": "Kolný, Lissowa, Tschechien",
+      "coordinates": [14.5665273, 49.0596763],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2599051629",
+      "label": "Kolno",
+      "sublabel": "Kolno, Jeziory, Polen",
+      "coordinates": [15.6074742, 52.2088874],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:EDDK",
+      "ids": {
+        "oa": "EDDK",
+        "iata": "CGN",
+        "icao": "EDDK"
+      },
+      "label": "Cologne Bonn Airport",
+      "sublabel": "Köln (Cologne), DE",
+      "coordinates": [7.14274, 50.865898],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "keyword",
+        "value": "Köln",
+        "normalized": "koln"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0535",
+      "ids": {
+        "oa": "DE-0535"
+      },
+      "label": "Köln University Hospital Heliport",
+      "sublabel": "Köln (Cologne), DE",
+      "coordinates": [6.91981, 50.92398],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln University Hospital Heliport",
+        "normalized": "koln university hospital heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0448",
+      "ids": {
+        "oa": "DE-0448"
+      },
+      "label": "Köln-Sülz Balloonport",
+      "sublabel": "Köln (Cologne), DE",
+      "coordinates": [6.89627, 50.91305],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Köln-Sülz Balloonport",
+        "normalized": "koln sulz balloonport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0820",
+      "ids": {
+        "oa": "DE-0820"
+      },
+      "label": "Congress Center East Kölnmesse Heliport",
+      "sublabel": "Köln, DE",
+      "coordinates": [6.98101, 50.94327],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Congress Center East Kölnmesse Heliport",
+        "normalized": "congress center east kolnmesse heliport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q41680844",
+      "name": "Volksbank Cologne Bonn",
+      "description": "German cooperative banking institution",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "traffic_calming/mini_bumps",
+      "name": "Bremsschwelle (kleine Teller)",
+      "tags": {
+        "traffic_calming": "mini_bumps"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

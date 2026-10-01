@@ -38,8 +38,9 @@ import {
   createPlace,
   decodeShortPlusCode,
   detectShortPlusCodeCity,
+  enterAction,
   idsFromPrimaryOrCoords,
-  isConfidentTopRow,
+  isPlausibleDestination,
   isTransitRawCategory,
   matchCategorySuggestions,
   matchRecentSearches,
@@ -98,7 +99,7 @@ import {
   launchTextSearch,
 } from "@/lib/launchExplore";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
-import { isConfidentPlaceMatch } from "@/lib/placeMatch";
+import { isConfidentPlaceMatch, typedAddressIn } from "@/lib/placeMatch";
 import { useHydrated } from "@/lib/useHydrated";
 import { useRecentSearchStore } from "@/stores/recentSearchStore";
 import {
@@ -845,26 +846,49 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const runSubmit = () => {
     if (!q) return;
     addRecentSearch(q);
-    // Plain Enter takes the first row, as shown, when what was typed names it
-    // or starts its name. The list is ranked on one score — exact names, codes,
-    // aliases and category terms included — so the first row is the best
-    // match for this area; Enter never second-guesses it.
-    const top = displaySuggestions[0];
-    if (top && isConfidentTopRow(top, q)) {
+    // Plain Enter opens the first row only when it is plainly the one meant
+    // (see `enterAction`): a chain's branches or a word many names start with
+    // search the area instead, and equal answers far apart are shown to pick from.
+    const context = { query: q, proximity: mapCenter ?? undefined, zoom: mapZoom };
+    const action = enterAction(rankedSuggestions, context);
+    if (action.kind === "open") {
       inputRef.current?.blur();
-      handleSelect(top, false);
+      handleSelect(action.row, false);
+      return;
+    }
+    if (action.kind === "choose") {
+      // Several places far apart answer equally: show them, the first
+      // highlighted, so a second Enter takes it and an arrow key another.
+      setIsFocused(true);
+      const top = rankedSuggestions[0];
+      setHighlightedKey(top ? rowKey(top) : null);
       return;
     }
     // Navigate straight to a place ONLY when the top geocode result confidently
-    // matches the query (its label covers most of what was typed) and is a
-    // precise location or transit stop. A low-relevance match (e.g. "Glen Park,
-    // Indiana" for "Park mit See in Aachen") must NOT teleport the user — it
-    // falls through to the NL parse below instead.
-    const first = debouncedGeoQuery === query ? geocodeData?.[0] : undefined;
+    // matches the query (its label covers most of what was typed), is a
+    // precise location or transit stop, and is plausibly the one meant. A
+    // low-relevance match (e.g. "Glen Park, Indiana" for "Park mit See in
+    // Aachen") must NOT teleport the user — it falls through to the NL parse
+    // below instead.
+    const first = action.weak && debouncedGeoQuery === query ? geocodeData?.[0] : undefined;
     if (first) {
       const isTransit = Boolean(first.rawCategory && isTransitRawCategory(first.rawCategory));
-      const isPreciseType = first.type !== "poi" || isTransit;
-      if (isPreciseType && isConfidentPlaceMatch(query.trim(), first)) {
+      // A house number typed and found in the result pins the address, whatever
+      // stands there: "unter den linden 77" is the Adlon's address.
+      const address = typedAddressIn(query, first.label);
+      const isPreciseType = first.type !== "poi" || isTransit || address !== undefined;
+      const asRow = {
+        id: first.id,
+        label: first.label,
+        coordinates: first.coordinates,
+        type: first.type,
+        rawCategory: first.rawCategory,
+      };
+      if (
+        isPreciseType &&
+        isConfidentPlaceMatch(query.trim(), first) &&
+        isPlausibleDestination(asRow, context)
+      ) {
         inputRef.current?.blur();
         // Area results (cities/regions/countries) are framed by PlaceBoundaryLayer,
         // which fits the map to the admin boundary — flying to a fixed zoom first
@@ -872,7 +896,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         if (first.type !== "region") flyTo(first.coordinates, 15);
         const firstPlace = createPlace({
           ...idsFromPrimaryOrCoords(first.id, first.coordinates),
-          name: first.label,
+          name: address ?? first.label,
           address: first.label,
           coordinates: first.coordinates,
           category: first.type,

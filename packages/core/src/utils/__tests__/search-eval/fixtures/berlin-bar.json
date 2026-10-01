@@ -1,0 +1,387 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/6501792285",
+      "label": "Bar",
+      "sublabel": "Bar, Otto-Suhr-Allee, Berlin, Germany",
+      "coordinates": [13.3015715, 52.5187432],
+      "type": "poi",
+      "rawCategory": "amenity/bar",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7650006209",
+      "label": "Bär",
+      "sublabel": "Bär, Baumschulenweg, Berlin, Germany",
+      "coordinates": [13.3688321, 52.5142805],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/702232719",
+      "label": "Bär",
+      "sublabel": "Bär, Wichertstraße, Berlin, Germany",
+      "coordinates": [13.4217852, 52.548927],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5292020622",
+      "label": "Bär",
+      "sublabel": "Bär, Grünberger Straße, Berlin, Germany",
+      "coordinates": [13.4522244, 52.512662],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7489816294",
+      "label": "Bär",
+      "sublabel": "Bär, Hardenbergplatz 8, Berlin, Germany",
+      "coordinates": [13.3354916, 52.5063248],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6467775273",
+      "label": "Bär",
+      "sublabel": "Bär, Eichenstraße, Berlin, Germany",
+      "coordinates": [13.4544955, 52.4962134],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/62553",
+      "label": "Barnim",
+      "sublabel": "Barnim, Germany",
+      "coordinates": [13.6771933, 52.8019322],
+      "type": "region",
+      "rawCategory": "boundary/administrative",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/422443",
+      "label": "Baruth/Mark",
+      "sublabel": "Baruth/Mark, Germany",
+      "coordinates": [13.5019022, 52.0462945],
+      "type": "region",
+      "rawCategory": "place/town",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/389267",
+      "label": "Barby",
+      "sublabel": "Barby, Germany",
+      "coordinates": [11.8860511, 51.9666473],
+      "type": "region",
+      "rawCategory": "place/town",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/2218269",
+      "label": "Barnim",
+      "sublabel": "Barnim, Germany",
+      "coordinates": [13.6951005, 52.6301382],
+      "type": "region",
+      "rawCategory": "place/natural_region",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/3011895",
+      "label": "Mieszkowice",
+      "sublabel": "Mieszkowice, Poland",
+      "coordinates": [14.4954296, 52.785412],
+      "type": "region",
+      "rawCategory": "place/town",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:ZJQH",
+      "ids": {
+        "oa": "ZJQH",
+        "iata": "BAR",
+        "icao": "ZJQH"
+      },
+      "label": "Qionghai Bo'ao Airport",
+      "sublabel": "Qionghai (Basuo), CN",
+      "coordinates": [110.452766, 19.140951],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "authoritative_code",
+        "value": "BAR",
+        "normalized": "bar",
+        "namespace": "iata"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:2P4",
+      "ids": {
+        "oa": "2P4"
+      },
+      "label": "Baraga Airport",
+      "sublabel": "Baraga, US",
+      "coordinates": [-88.577797, 46.784901],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Baraga Airport",
+        "normalized": "baraga airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:2WY8",
+      "ids": {
+        "oa": "2WY8"
+      },
+      "label": "Bar Flying E Airport",
+      "sublabel": "Cody, US",
+      "coordinates": [-109.28199768066406, 44.40439987182617],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bar Flying E Airport",
+        "normalized": "bar flying e airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:1TS2",
+      "ids": {
+        "oa": "1TS2"
+      },
+      "label": "Bar 16 Airport",
+      "sublabel": "Hubbard, US",
+      "coordinates": [-96.77850341796875, 31.82430076599121],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bar 16 Airport",
+        "normalized": "bar 16 airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:0XA7",
+      "ids": {
+        "oa": "0XA7"
+      },
+      "label": "Bar 3 Ranch Airport",
+      "sublabel": "Georgetown, US",
+      "coordinates": [-97.62276, 30.662345],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bar 3 Ranch Airport",
+        "normalized": "bar 3 ranch airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:9TX1",
+      "ids": {
+        "oa": "9TX1"
+      },
+      "label": "Bar S Ranch Airport",
+      "sublabel": "Giddings, US",
+      "coordinates": [-96.856159, 30.143181],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bar S Ranch Airport",
+        "normalized": "bar s ranch airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:54XS",
+      "ids": {
+        "oa": "54XS"
+      },
+      "label": "Bar C Ranch Airport",
+      "sublabel": "Del Rio, US",
+      "coordinates": [-100.686307, 29.944988],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bar C Ranch Airport",
+        "normalized": "bar c ranch airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:AR-0058",
+      "ids": {
+        "oa": "AR-0058"
+      },
+      "label": "Baradero Airport",
+      "sublabel": "Baradero, AR",
+      "coordinates": [-59.492806, -33.821693],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Baradero Airport",
+        "normalized": "baradero airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q15148996",
+      "name": "Barceló Group",
+      "description": "global hotel chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q245343",
+      "name": "Barclays",
+      "description": "British bank",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q111207452",
+      "name": "Barnes",
+      "description": "French real estate company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q807766",
+      "name": "Barbarossa Bäckerei",
+      "description": "German regional bakery chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q808353",
+      "name": "Barmenia",
+      "description": "German insurance company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q808361",
+      "name": "Barmer Ersatzkasse",
+      "description": "statutory health insurance in Germany",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q96373178",
+      "name": "Barry's",
+      "description": "American fitness brand",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q99510166",
+      "name": "Bären-Treff",
+      "description": "German gummy-bear store chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/bar",
+      "name": "Bar",
+      "tags": {
+        "amenity": "bar"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/bbq",
+      "name": "Barbecue / Grill",
+      "tags": {
+        "amenity": "bbq"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/barbecue",
+      "name": "Barbecue Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "barbecue"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/townhall/barangay-PH",
+      "name": "Barangay Hall",
+      "tags": {
+        "amenity": "townhall",
+        "townhall:type": "barangay"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "landuse/military/barracks",
+      "name": "Barracks",
+      "tags": {
+        "military": "barracks"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "natural/bare_rock",
+      "name": "Bare Rock",
+      "tags": {
+        "natural": "bare_rock"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "shop/bbq",
+      "name": "Barbecue Shop",
+      "tags": {
+        "shop": "bbq"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "shop/hairdresser/barber",
+      "name": "Barber",
+      "tags": {
+        "shop": "hairdresser",
+        "hairdresser": "barber"
+      },
+      "matchedOn": "name"
+    }
+  ]
+}

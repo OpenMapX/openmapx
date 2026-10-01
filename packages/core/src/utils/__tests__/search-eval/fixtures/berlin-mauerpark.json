@@ -1,0 +1,106 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/233994267",
+      "label": "Mauerpark",
+      "sublabel": "Mauerpark, Berlin, Deutschland",
+      "coordinates": [13.4019327, 52.5437161],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1094209683",
+      "label": "Mauerparkwiese",
+      "sublabel": "Mauerparkwiese, Berlin, Deutschland",
+      "coordinates": [13.4024653, 52.542773],
+      "type": "region",
+      "rawCategory": "landuse/grass",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/467903672",
+      "label": "Boule-Platz im Mauerpark",
+      "sublabel": "Boule-Platz im Mauerpark, Schwedter Straße, Berlin, Deutschland",
+      "coordinates": [13.4020908, 52.5446472],
+      "type": "poi",
+      "rawCategory": "leisure/pitch",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5357470034",
+      "label": "Tierarztpraxis am Mauerpark",
+      "sublabel": "Tierarztpraxis am Mauerpark, Gleimstraße, Berlin, Deutschland",
+      "coordinates": [13.4082736, 52.5470756],
+      "type": "poi",
+      "rawCategory": "amenity/veterinary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3901335166",
+      "label": "Freizeithaus am Mauerpark",
+      "sublabel": "Freizeithaus am Mauerpark, Schwedter Straße 234, Berlin, Deutschland",
+      "coordinates": [13.4053118, 52.5380506],
+      "type": "poi",
+      "rawCategory": "amenity/community_centre",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/321052453",
+      "label": "Freie Schule am Mauerpark",
+      "sublabel": "Freie Schule am Mauerpark, Wolliner Straße 25-26, Berlin, Deutschland",
+      "coordinates": [13.4013883, 52.5406759],
+      "type": "poi",
+      "rawCategory": "amenity/school",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1422744701",
+      "label": "Mauerpark",
+      "sublabel": "Mauerpark, Rechlin, Deutschland",
+      "coordinates": [12.7224487, 53.3334318],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1324152771",
+      "label": "2. Bauabschnitt Mauerpark-Sanierung",
+      "sublabel": "2. Bauabschnitt Mauerpark-Sanierung, Berlin, Deutschland",
+      "coordinates": [13.4028988, 52.542775],
+      "type": "region",
+      "rawCategory": "landuse/construction",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/467903674",
+      "label": "Boule-Platz im Mauerpark",
+      "sublabel": "Boule-Platz im Mauerpark, Schwedter Straße, Berlin, Deutschland",
+      "coordinates": [13.4023704, 52.5446975],
+      "type": "poi",
+      "rawCategory": "leisure/pitch",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5354951058",
+      "label": "Frauenärzte am Mauerpark",
+      "sublabel": "Frauenärzte am Mauerpark, Gleimstraße, Berlin, Deutschland",
+      "coordinates": [13.4101831, 52.5475578],
+      "type": "poi",
+      "rawCategory": "amenity/doctors",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/991853654",
+      "label": "Flohmarkt am Mauerpark",
+      "sublabel": "Flohmarkt am Mauerpark, Bernauer Straße, Berlin, Deutschland",
+      "coordinates": [13.4023137, 52.5415157],
+      "type": "poi",
+      "rawCategory": "amenity/marketplace",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

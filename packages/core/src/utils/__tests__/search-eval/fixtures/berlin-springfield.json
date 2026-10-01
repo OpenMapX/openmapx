@@ -1,0 +1,264 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/1181618",
+      "label": "Springfield",
+      "sublabel": "Springfield, Springfield, United States",
+      "coordinates": [-72.5886727, 42.1018764],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/126326",
+      "label": "Springfield",
+      "sublabel": "Springfield, United States",
+      "coordinates": [-89.6439575, 39.7990175],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/141244",
+      "label": "Springfield",
+      "sublabel": "Springfield, United States",
+      "coordinates": [-93.2922715, 37.2081729],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/182868",
+      "label": "Springfield",
+      "sublabel": "Springfield, United States",
+      "coordinates": [-83.810138, 39.9234046],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/186721",
+      "label": "Springfield",
+      "sublabel": "Springfield, United States",
+      "coordinates": [-123.0220289, 44.0462362],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/2027202",
+      "label": "Springfield",
+      "sublabel": "Springfield, United States",
+      "coordinates": [-72.4817747, 43.2988213],
+      "type": "region",
+      "rawCategory": "place/town",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/3180630",
+      "label": "Springfield",
+      "sublabel": "Springfield, Chelmsford, United Kingdom",
+      "coordinates": [0.4969225, 51.7510122],
+      "type": "region",
+      "rawCategory": "place/suburb",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/130835",
+      "label": "Springfield",
+      "sublabel": "Springfield, United States",
+      "coordinates": [-85.2221819, 37.6853413],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/119535",
+      "label": "Springfield",
+      "sublabel": "Springfield, United States",
+      "coordinates": [-81.3114988, 32.3724131],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/158396042",
+      "label": "Springfield",
+      "sublabel": "Springfield, United States",
+      "coordinates": [-77.1861196, 38.7791227],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:KSGH",
+      "ids": {
+        "oa": "KSGH",
+        "iata": "SGH",
+        "icao": "KSGH"
+      },
+      "label": "Springfield-Beckley Municipal Airport",
+      "sublabel": "Springfield, US",
+      "coordinates": [-83.840202331543, 39.840301513672],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield-Beckley Municipal Airport",
+        "normalized": "springfield beckley municipal airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:KSGF",
+      "ids": {
+        "oa": "KSGF",
+        "iata": "SGF",
+        "icao": "KSGF"
+      },
+      "label": "Springfield Branson National Airport",
+      "sublabel": "Springfield, US",
+      "coordinates": [-93.388596, 37.245047],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield Branson National Airport",
+        "normalized": "springfield branson national airport"
+      },
+      "importance": 0.7,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:GB-0358",
+      "ids": {
+        "oa": "GB-0358"
+      },
+      "label": "Springfield Farm Airstrip",
+      "sublabel": "Ettington, GB",
+      "coordinates": [-1.617233, 52.14962],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield Farm Airstrip",
+        "normalized": "springfield farm airstrip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-10781",
+      "ids": {
+        "oa": "US-10781"
+      },
+      "label": "Springfield Community Hospital Heliport",
+      "sublabel": "Springfield, US",
+      "coordinates": [-93.279404, 37.152],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield Community Hospital Heliport",
+        "normalized": "springfield community hospital heliport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:K8V7",
+      "ids": {
+        "oa": "K8V7"
+      },
+      "label": "Springfield Municipal Airport",
+      "sublabel": "Springfield, US",
+      "coordinates": [-102.617996, 37.458698],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield Municipal Airport",
+        "normalized": "springfield municipal airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-6067",
+      "ids": {
+        "oa": "US-6067"
+      },
+      "label": "Springfield Airport",
+      "sublabel": "Springfield, US",
+      "coordinates": [-122.99022, 44.05787],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield Airport",
+        "normalized": "springfield airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:YSPF",
+      "ids": {
+        "oa": "YSPF"
+      },
+      "label": "Springfield Airport",
+      "sublabel": "Isisford, AU",
+      "coordinates": [144.878313, -24.297984],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield Airport",
+        "normalized": "springfield airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:NZSF",
+      "ids": {
+        "oa": "NZSF",
+        "icao": "NZSF"
+      },
+      "label": "Springfield Airport",
+      "sublabel": "Springfield, NZ",
+      "coordinates": [171.911266, -43.383575],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Springfield Airport",
+        "normalized": "springfield airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q958209",
+      "name": "Springfield",
+      "description": "Spanish clothing company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q109859496",
+      "name": "Echo Electric",
+      "description": "American electronics distribution company",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "unknown"
+    }
+  ],
+  "presets": []
+}

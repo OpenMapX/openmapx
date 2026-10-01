@@ -47,18 +47,72 @@ describe("search suggestion primitives", () => {
     };
 
     expect(textMatchScore(code, "FRA")).toBe(1.4);
+    // Typed in lower case a code reads as a word first ("bar", "art", "spa").
+    expect(textMatchScore(code, "fra")).toBe(0.9);
     expect(textMatchScore(alias, "Rhein-Main")).toBe(1.3);
     expect(textMatchScore(acronym, "uncc")).toBe(0.7);
     expect(textMatchScore(row("Café Einstein"), "cafe einstein")).toBe(1);
     expect(textMatchScore(row("Coffee Circle"), "coffee")).toBe(0.8);
+    expect(textMatchScore(row("Alexanderplatz"), "alexnderplatz")).toBe(0.75);
     expect(textMatchScore(row("Berlin Coffee Lab"), "coffee")).toBe(0.7);
-    expect(textMatchScore(row("Einstein", "Unter den Linden, Berlin"), "einstein linden")).toBe(
+    expect(textMatchScore(row("Einstein", "Unter den Linden, Berlin"), "linden einstein")).toBe(
       0.5,
     );
     expect(textMatchScore(row("Palmers Brewery"), "rewe")).toBe(0.3);
-    expect(textMatchScore(row("Alexanderplatz"), "alexnderplatz")).toBe(0.15);
+    expect(textMatchScore(row("Alexanderplatz"), "alxndrplatz")).toBe(0.15);
     expect(textMatchScore(row("King's Cross"), "kings cross")).toBe(1);
     expect(textMatchScore(row("Anything"), "")).toBe(0);
+  });
+
+  it("reads one name the ways people write it", () => {
+    const row = (label: string, sublabel?: string): AutocompleteResult => ({
+      id: label,
+      label,
+      sublabel,
+      type: "poi",
+    });
+    expect(textMatchScore(row("Friedrichstrasse 100"), "friedrichstraße 100")).toBe(1);
+    expect(textMatchScore(row("Friedrichstraße 100"), "friedrichstr 100")).toBe(1);
+    expect(textMatchScore(row("Aachen Hauptbahnhof", "Bahnhofplatz, Aachen"), "aachen hbf")).toBe(
+      1,
+    );
+    // Said in its own town, a station drops the town's name.
+    expect(textMatchScore(row("Aachen Hauptbahnhof", "Bahnhofplatz, Aachen"), "hbf")).toBe(1);
+    expect(
+      textMatchScore(row("New York Bagel Bar", "New York Bagel Bar, Berlin"), "york bagel bar"),
+    ).toBe(0.7);
+    // The name, then where it is.
+    expect(textMatchScore(row("10115", "10115, Berlin, Germany"), "10115 berlin")).toBe(1);
+    expect(textMatchScore(row("Einstein", "Unter den Linden, Berlin"), "einstein linden")).toBe(1);
+  });
+
+  it("allows one slip in a longer word but not in a short one", () => {
+    const row = (label: string): AutocompleteResult => ({ id: label, label, type: "poi" });
+    expect(textMatchScore(row("Potsdamer Platz"), "potsdamer plaz")).toBe(0.75);
+    expect(textMatchScore(row("Brandenburger Tor"), "brandenbrger tor")).toBe(0.75);
+    expect(textMatchScore(row("Band"), "bank")).toBe(0.15);
+    expect(textMatchScore(row("Potsdamer Platz"), "potsdamr plaz")).toBe(0.75);
+  });
+
+  it("gives an area fame by its rank, and a meadow or peak none", () => {
+    const area = (label: string, rawCategory: string): AutocompleteResult => ({
+      id: label,
+      label,
+      rawCategory,
+      type: "region",
+      coordinates: [2.35, 48.86],
+    });
+    const far = { query: "x", proximity: BERLIN, zoom: 14 };
+    const score = (row: AutocompleteResult) => suggestionScore(row, { ...far, query: row.label });
+    expect(score(area("Paris", "place/city"))).toBeGreaterThan(
+      score(area("Paris", "place/square")),
+    );
+    expect(score(area("Paris", "place/square"))).toBeGreaterThan(
+      score(area("Paris", "natural/peak")),
+    );
+    expect(score(area("Paris", "boundary/administrative"))).toBeGreaterThan(
+      score(area("Paris", "landuse/grass")),
+    );
   });
 
   it("keeps a famous area ahead of a nearby same-named village at country zoom", () => {

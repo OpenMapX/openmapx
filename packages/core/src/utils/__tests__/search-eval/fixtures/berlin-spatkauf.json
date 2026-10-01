@@ -1,0 +1,124 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/2756495812",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Johannisstraße, Berlin, Deutschland",
+      "coordinates": [13.39243, 52.5244792],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/12176945401",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Köpenicker Straße 79, Berlin, Deutschland",
+      "coordinates": [13.4160764, 52.5112073],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1928636123",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Choriner Straße 11, Berlin, Deutschland",
+      "coordinates": [13.4070136, 52.5328558],
+      "type": "poi",
+      "rawCategory": "tourism/guest_house",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3036814107",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Hedemannstraße 30, Berlin, Deutschland",
+      "coordinates": [13.3862356, 52.502723],
+      "type": "poi",
+      "rawCategory": "shop/kiosk",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1251129216",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Choriner Straße, Berlin, Deutschland",
+      "coordinates": [13.4111971, 52.5375585],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7229104069",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Sanderstraße, Berlin, Deutschland",
+      "coordinates": [13.4236297, 52.4923657],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3712223331",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Potsdamer Straße 117/119, Berlin, Deutschland",
+      "coordinates": [13.3626548, 52.4986146],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1778043114",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Urbanstraße, Berlin, Deutschland",
+      "coordinates": [13.4195684, 52.4902161],
+      "type": "poi",
+      "rawCategory": "shop/kiosk",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2335083233",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Grünberger Straße 35, Berlin, Deutschland",
+      "coordinates": [13.4540704, 52.5123328],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6825107608",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Goebenstraße, Berlin, Deutschland",
+      "coordinates": [13.3650984, 52.4934561],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4436486384",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Badstraße, Berlin, Deutschland",
+      "coordinates": [13.3804693, 52.5528933],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2402905128",
+      "label": "Spätkauf",
+      "sublabel": "Spätkauf, Kurfürstenstraße, Berlin, Deutschland",
+      "coordinates": [13.3435149, 52.5042531],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": [
+    {
+      "id": "shop/convenience",
+      "name": "Minimarkt",
+      "tags": {
+        "shop": "convenience"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

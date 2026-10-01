@@ -232,6 +232,30 @@ describe("Photon geocoding provider", () => {
     expect(results.map((result) => result.label)).toEqual(["Near", "Both", "Far"]);
   });
 
+  it("records the native name an exonym answer was found by", async () => {
+    mockFetch
+      .mockResolvedValueOnce(mockOk({ features: [photonFeature(1, "Kölner Straße")] }))
+      .mockResolvedValueOnce(mockOk({ features: [photonFeature(2, "Cologne")] }))
+      .mockResolvedValueOnce(
+        mockOk({ features: [photonFeature(2, "Köln"), photonFeature(4, "Kölsch Bar")] }),
+      );
+
+    const results = await photonService.autocomplete("köln", "en", { proximity: [13.4, 52.52] });
+
+    expect(params(2).get("lang")).toBe("default");
+    expect(params(2).get("zoom")).toBe("10");
+    const cologne = results.find((result) => result.label === "Cologne");
+    expect(cologne?.searchMatch).toEqual({ kind: "name", value: "Köln", normalized: "koln" });
+    // Already carrying the words typed, a place needs no evidence.
+    expect(results.find((result) => result.label === "Kölner Straße")?.searchMatch).toBeUndefined();
+  });
+
+  it("asks for native names only when some answer lacks the words typed", async () => {
+    mockFetch.mockImplementation(async () => mockOk({ features: [photonFeature(1, "Café Köln")] }));
+    await photonService.autocomplete("café", "en", { proximity: [13.4, 52.52] });
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
   it("answers from one lookup when the other fails, and fails only when both do", async () => {
     mockFetch
       .mockRejectedValueOnce(new Error("timeout"))

@@ -1,0 +1,241 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/2293773566",
+      "label": "HBF",
+      "sublabel": "HBF, Bahnhofplatz, Ulm, Deutschland",
+      "coordinates": [9.9833788, 48.4012167],
+      "type": "poi",
+      "rawCategory": "amenity/car_sharing",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11090742481",
+      "label": "HBF",
+      "sublabel": "HBF, The West Deck, Perth, Australien",
+      "coordinates": [115.777324, -31.8773309],
+      "type": "poi",
+      "rawCategory": "office/insurance",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/976510431",
+      "label": "Hbf",
+      "sublabel": "Hbf, Am Bahnhof, Zwickau, Deutschland",
+      "coordinates": [12.4770561, 50.7153765],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3673691118",
+      "label": "HBF",
+      "sublabel": "HBF, Bahnhofstraße, Chemnitz, Deutschland",
+      "coordinates": [12.929283, 50.8370761],
+      "type": "poi",
+      "rawCategory": "amenity/car_sharing",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2305245154",
+      "label": "Hbf",
+      "sublabel": "Hbf, Willy-Brandt-Platz, Erfurt, Deutschland",
+      "coordinates": [11.0381318, 50.9731439],
+      "type": "poi",
+      "rawCategory": "amenity/taxi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11801318854",
+      "label": "hbf",
+      "sublabel": "hbf, شارع الاسكان - الاشتراكي, البلدية الثالثة, Irak",
+      "coordinates": [44.3506678, 32.0053363],
+      "type": "poi",
+      "rawCategory": "shop/mall",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/17249621",
+      "label": "Hbf Ffm (tief), Gleise 101+102",
+      "sublabel": "Hbf Ffm (tief), Gleise 101+102, Frankfurt am Main, Deutschland",
+      "coordinates": [8.662391, 50.1070834],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13243763362",
+      "label": "HBF / Europaplatz",
+      "sublabel": "HBF / Europaplatz, Europaplatz, Mönchengladbach, Deutschland",
+      "coordinates": [6.4453361, 51.1974048],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6269252846",
+      "label": "Hbf. Mülheim an der Ruhr",
+      "sublabel": "Hbf. Mülheim an der Ruhr, Rheinische Bahn RS1, Mülheim an der Ruhr, Deutschland",
+      "coordinates": [6.8839412, 51.4306175],
+      "type": "poi",
+      "rawCategory": "information/guidepost",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6269252847",
+      "label": "Hbf. Mülheim an der Ruhr",
+      "sublabel": "Hbf. Mülheim an der Ruhr, Rheinische Bahn RS1, Mülheim an der Ruhr, Deutschland",
+      "coordinates": [6.8841743, 51.4307079],
+      "type": "poi",
+      "rawCategory": "information/map",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6283464704",
+      "label": "Hbf. Duisburg",
+      "sublabel": "Hbf. Duisburg, Portsmouthplatz, Duisburg, Deutschland",
+      "coordinates": [6.7733935, 51.430243],
+      "type": "poi",
+      "rawCategory": "information/map",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/285310769",
+      "label": "Hbf/Rh. Industriemuseum",
+      "sublabel": "Hbf/Rh. Industriemuseum, Hansastraße, Oberhausen, Deutschland",
+      "coordinates": [6.8494123, 51.4749091],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/597286578",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Lagerhausstraße 20, Aachen, Deutschland",
+      "coordinates": [6.089225, 50.7680077],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/48755613",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Düren, Deutschland",
+      "coordinates": [6.480911, 50.8085718],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/748304095",
+      "label": "Hauptbahnhof (Bus)",
+      "sublabel": "Hauptbahnhof (Bus), Reigate & Banstead-Platz, Eschweiler, Deutschland",
+      "coordinates": [6.2518941, 50.8138772],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3070631211",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Bahnhofstraße 2a, Aachen, Deutschland",
+      "coordinates": [6.0913818, 50.7677663],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/5151599",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Zollamtstraße, Aachen, Deutschland",
+      "coordinates": [6.0890791, 50.7668934],
+      "type": "poi",
+      "rawCategory": "railway/platform",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/80120429",
+      "label": "Aachen Hauptbahnhof",
+      "sublabel": "Aachen Hauptbahnhof, Bahnhofplatz 2a, Aachen, Deutschland",
+      "coordinates": [6.0910019, 50.7681261],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1387235817",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Place de la Gare, Straßburg, Frankreich",
+      "coordinates": [7.7352284, 48.585004],
+      "type": "poi",
+      "rawCategory": "railway/tram_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/30478830",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Place de la Gare, Straßburg, Frankreich",
+      "coordinates": [7.7351989, 48.5849738],
+      "type": "poi",
+      "rawCategory": "railway/tram_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/233444291",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bismarckallee 7, Freiburg im Breisgau, Deutschland",
+      "coordinates": [7.8423399, 47.9982505],
+      "type": "poi",
+      "rawCategory": "amenity/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/302643880",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Fruchtschuppenstraße, Zweibrücken, Deutschland",
+      "coordinates": [7.3572003, 49.2473023],
+      "type": "poi",
+      "rawCategory": "amenity/bus_station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5424713348",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Prins Hendrikkade, Amsterdam, Niederlande",
+      "coordinates": [4.9009578, 52.3774316],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/767185754",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Am Hauptbahnhof, Frankfurt am Main, Deutschland",
+      "coordinates": [8.6637933, 50.1077355],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/113083654",
+      "label": "Hauptbahnhof",
+      "sublabel": "Hauptbahnhof, Bahnhofstraße 15, Solingen, Deutschland",
+      "coordinates": [7.0820924, 51.1641413],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/28238027",
+      "label": "Hauptbahnhof Neuss",
+      "sublabel": "Hauptbahnhof Neuss, Marienkirchplatz, Neuss, Deutschland",
+      "coordinates": [6.6842955, 51.2043703],
+      "type": "address",
+      "rawCategory": "building/train_station",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

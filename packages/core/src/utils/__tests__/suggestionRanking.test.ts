@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { CATEGORY_DEFINITIONS } from "../../types/category";
 import type { AutocompleteResult } from "../../types/geocoding";
 import {
-  isConfidentTopRow,
+  enterAction,
   matchCategorySuggestions,
   matchRecentSearches,
   rankAutocompleteRows,
@@ -199,17 +199,137 @@ describe("matchRecentSearches", () => {
   });
 });
 
-describe("isConfidentTopRow", () => {
-  it("accepts exact and prefix matches but not address-only or action rows", () => {
-    expect(isConfidentTopRow(place("a", "Alexanderplatz", BERLIN), "alexanderpl")).toBe(true);
-    expect(
-      isConfidentTopRow(
-        place("b", "Einstein", BERLIN, { sublabel: "Unter den Linden 42" }),
-        "linden",
-      ),
-    ).toBe(false);
-    expect(isConfidentTopRow({ id: "s", label: "Search", type: "text_search" }, "search")).toBe(
-      false,
+describe("enterAction", () => {
+  const AACHEN: [number, number] = [6.084, 50.775];
+  const at = (query: string, proximity: [number, number] = BERLIN, zoom = 14) => ({
+    query,
+    proximity,
+    zoom,
+  });
+  const area = (
+    id: string,
+    label: string,
+    coordinates: [number, number],
+    rawCategory: string,
+  ): AutocompleteResult => ({ id, label, coordinates, type: "region", rawCategory });
+  const decide = (places: AutocompleteResult[], context: ReturnType<typeof at>, extra = {}) =>
+    enterAction(rankAutocompleteRows({ places, ...extra }, context), context);
+
+  it("opens a place the text names, counting a square and its station as one", () => {
+    const action = decide(
+      [
+        area("square", "Alexanderplatz", [13.4132, 52.5219], "place/square"),
+        place("station", "Alexanderplatz", [13.4115, 52.5219], {
+          rawCategory: "railway/station",
+        }),
+      ],
+      at("alexanderpl"),
     );
+    expect(action).toMatchObject({ kind: "open", row: { label: "Alexanderplatz" } });
+  });
+
+  it("searches the area when several nearby places answer as well", () => {
+    // A chain's branches.
+    expect(
+      decide(
+        [
+          place("a1", "Aldi", [13.39, 52.51], { rawCategory: "shop/supermarket" }),
+          place("a2", "Aldi", [13.42, 52.53], { rawCategory: "shop/supermarket" }),
+        ],
+        at("aldi"),
+      ),
+    ).toEqual({ kind: "search", weak: false });
+    // A word many names start with.
+    expect(
+      decide(
+        [
+          place("v1", "Vegang", [13.41, 52.53], { rawCategory: "amenity/restaurant" }),
+          place("v2", "Vegan Haus", [13.42, 52.54], { rawCategory: "amenity/restaurant" }),
+        ],
+        at("vegan"),
+      ),
+    ).toEqual({ kind: "search", weak: false });
+  });
+
+  it("opens the chain when its branches tie and it trades in the map's country", () => {
+    const branches = [
+      place("a1", "Aldi", [13.39, 52.51], { rawCategory: "shop/supermarket" }),
+      place("a2", "Aldi", [13.42, 52.53], { rawCategory: "shop/supermarket" }),
+    ];
+    expect(
+      decide(branches, at("aldi"), { brands: [brand("Q125054", "Aldi", "here")] }),
+    ).toMatchObject({ kind: "open", row: { type: "brand" } });
+    expect(decide(branches, at("aldi"), { brands: [brand("Q1", "Aldi", "elsewhere")] })).toEqual({
+      kind: "search",
+      weak: false,
+    });
+  });
+
+  it("never opens an obscure namesake far away", () => {
+    const hamlets = [
+      area("no", "Vegan", [9.7, 59.3], "place/hamlet"),
+      area("us", "Vegan", [-84.0, 34.8], "place/hamlet"),
+    ];
+    // Something nearby starts with the word: search here.
+    expect(
+      decide(
+        [...hamlets, place("v", "Veganland", [6.15, 50.86], { rawCategory: "amenity/fast_food" })],
+        at("vegan", AACHEN),
+      ),
+    ).toEqual({ kind: "search", weak: false });
+    // Nothing nearby: show what there is.
+    expect(decide(hamlets, at("vegan", AACHEN))).toEqual({ kind: "choose" });
+  });
+
+  it("asks which of several equally famous places far away is meant", () => {
+    expect(
+      decide(
+        [
+          area("il", "Springfield", [-89.65, 39.8], "place/city"),
+          area("mo", "Springfield", [-93.29, 37.21], "place/city"),
+        ],
+        at("springfield"),
+      ),
+    ).toEqual({ kind: "choose" });
+  });
+
+  it("opens a famous city far away, not rivalled by its own airport", () => {
+    expect(
+      decide(
+        [
+          area("koeln", "Köln", [6.96, 50.94], "place/city"),
+          place("cgn", "Cologne Bonn Airport", [7.14, 50.87], {
+            rawCategory: "aeroway/aerodrome",
+            importance: 0.9,
+            searchMatch: { kind: "name", value: "Köln", normalized: "koln" },
+          }),
+        ],
+        at("köln"),
+      ),
+    ).toMatchObject({ kind: "open", row: { label: "Köln" } });
+  });
+
+  it("opens an address with the house number typed, wherever it is", () => {
+    expect(
+      decide(
+        [{ ...place("h", "Hauptstraße 5, Köln", [6.96, 50.94]), type: "address" }],
+        at("hauptstraße 5 köln"),
+      ),
+    ).toMatchObject({ kind: "open" });
+  });
+
+  it("opens a category or other shortcut the text names", () => {
+    const context = at("coffee");
+    expect(enterAction(rankAutocompleteRows({ categories: [cafes] }, context), context)).toEqual({
+      kind: "open",
+      row: cafes,
+    });
+  });
+
+  it("leaves a weak match to the geocoder and the area search", () => {
+    expect(
+      decide([place("b", "Einstein", BERLIN, { sublabel: "Unter den Linden 42" })], at("linden")),
+    ).toEqual({ kind: "search", weak: true });
+    expect(enterAction([], at("anything"))).toEqual({ kind: "search", weak: true });
   });
 });

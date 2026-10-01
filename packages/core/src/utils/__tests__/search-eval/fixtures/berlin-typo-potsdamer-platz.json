@@ -1,0 +1,97 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:relation/3200536",
+      "label": "Potsdamer Platz",
+      "sublabel": "Potsdamer Platz, Berlin, Deutschland",
+      "coordinates": [13.3755898, 52.5098014],
+      "type": "street",
+      "rawCategory": "highway/footway",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3854590996",
+      "label": "Potsdamer Platz",
+      "sublabel": "Potsdamer Platz, Potsdamer Platz, Berlin, Deutschland",
+      "coordinates": [13.3766399, 52.5094035],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3493177833",
+      "label": "Berlin Potsdamer Platz",
+      "sublabel": "Berlin Potsdamer Platz, Potsdamer Platz, Berlin, Deutschland",
+      "coordinates": [13.3759366, 52.5092044],
+      "type": "poi",
+      "rawCategory": "railway/halt",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1336883756",
+      "label": "Theater am Potsdamer Platz",
+      "sublabel": "Theater am Potsdamer Platz, Marlene-Dietrich-Platz 1, Berlin, Deutschland",
+      "coordinates": [13.3721193, 52.5072208],
+      "type": "poi",
+      "rawCategory": "amenity/theatre",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3854591000",
+      "label": "U Potsdamer Platz",
+      "sublabel": "U Potsdamer Platz, Leipziger Platz, Berlin, Deutschland",
+      "coordinates": [13.3782147, 52.5091586],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/11845212",
+      "label": "Potsdamer Platz",
+      "sublabel": "Potsdamer Platz, Berlin, Deutschland",
+      "coordinates": [13.37703, 52.5087556],
+      "type": "street",
+      "rawCategory": "highway/secondary",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/617638470",
+      "label": "ehemaliger Standort der Potsdamer Synagoge",
+      "sublabel": "ehemaliger Standort der Potsdamer Synagoge, Platz der Einheit, Potsdam, Deutschland",
+      "coordinates": [13.0601681, 52.3981132],
+      "type": "poi",
+      "rawCategory": "historic/memorial",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1228469487",
+      "label": "Potsdamer Platz",
+      "sublabel": "Potsdamer Platz, Berlin, Deutschland",
+      "coordinates": [13.3770363, 52.5085451],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/61214284",
+      "label": "Potsdamer Platz",
+      "sublabel": "Potsdamer Platz, Schwielowsee, Deutschland",
+      "coordinates": [12.9310145, 52.3124892],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1302141787",
+      "label": "Potsdamer Platz",
+      "sublabel": "Potsdamer Platz, Rüdersdorf bei Berlin, Deutschland",
+      "coordinates": [13.8101309, 52.4658085],
+      "type": "region",
+      "rawCategory": "landuse/village_green",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

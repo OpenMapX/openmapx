@@ -1,0 +1,133 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/5013364",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, Avenue Anatole France 5, Paris, France",
+      "coordinates": [2.2945006, 48.8582599],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2689315641",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, Canada",
+      "coordinates": [-116.235, 51.3336],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/909515324",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, United States",
+      "coordinates": [-77.4452828, 37.8399146],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/354915873",
+      "label": "Eiffel Tower Park",
+      "sublabel": "Eiffel Tower Park, Paris, United States",
+      "coordinates": [-88.3007407, 36.2870954],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1051308117",
+      "label": "Eiffel Tower Park",
+      "sublabel": "Eiffel Tower Park, Paris, United States",
+      "coordinates": [-88.305595, 36.2870171],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1422964661",
+      "label": "Eiffel Tower Park Bharia Town",
+      "sublabel": "Eiffel Tower Park Bharia Town, Karachi, Pakistan",
+      "coordinates": [67.349969, 25.1366204],
+      "type": "poi",
+      "rawCategory": "leisure/park",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1364458526",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, Billund, Denmark",
+      "coordinates": [9.1284022, 55.7349874],
+      "type": "poi",
+      "rawCategory": "leisure/garden",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/629397144",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, Avenue de Bouchout - Boechoutlaan, Brussels, Belgium",
+      "coordinates": [4.3392174, 50.8942907],
+      "type": "address",
+      "rawCategory": "building/miniature",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5230713820",
+      "label": "Eiffel tower",
+      "sublabel": "Eiffel tower, Kapitulna Street, Uzhhorod, Ukraine",
+      "coordinates": [22.3016106, 48.6229181],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3422228434",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, Avenue Anatole France 5, Paris, France",
+      "coordinates": [2.2943909, 48.8587851],
+      "type": "poi",
+      "rawCategory": "information/screen",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5589969421",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, Quai Jacques Chirac, Paris, France",
+      "coordinates": [2.2939989, 48.8585238],
+      "type": "poi",
+      "rawCategory": "information/office",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5358627021",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, вуліца Казлова, Salihorsk, Belarus",
+      "coordinates": [27.5338931, 52.7833456],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7308805064",
+      "label": "Eiffel Tower",
+      "sublabel": "Eiffel Tower, вулиця Михайла Грушевського, Malyn, Ukraine",
+      "coordinates": [29.2441978, 50.7708362],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3713638592",
+      "label": "Eiffel Tower (mini)",
+      "sublabel": "Eiffel Tower (mini), Žemaitijos g., Mažeikiai, Lithuania",
+      "coordinates": [22.3543728, 56.3000009],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

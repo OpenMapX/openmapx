@@ -1,0 +1,97 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/2972682325",
+      "label": "Vegetarisch",
+      "sublabel": "Vegetarisch, ถนนทรงวาด, Bangkok, Thailand",
+      "coordinates": [100.5067127, 13.7378692],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1268132771",
+      "label": "Vegetarisch",
+      "sublabel": "Vegetarisch, Maasbreesestraat, Venlo, Niederlande",
+      "coordinates": [6.1518018, 51.3648514],
+      "type": "poi",
+      "rawCategory": "amenity/shelf",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6805613486",
+      "label": "Vegetarisches Restaurant",
+      "sublabel": "Vegetarisches Restaurant, ถนนขุขันธ์, ศรีสะเกษ, Thailand",
+      "coordinates": [104.3291277, 15.1201486],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6516242500",
+      "label": "Vegetarische Küche Shoshazan Juryō-in",
+      "sublabel": "Vegetarische Küche Shoshazan Juryō-in, 書写 2968, Himeji, Japan",
+      "coordinates": [134.6589558, 34.8896525],
+      "type": "poi",
+      "rawCategory": "information/board",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6811902685",
+      "label": "Vegetarisches Restaurant",
+      "sublabel": "Vegetarisches Restaurant, ถนนวีระเทพ, บ้านบกใต้พัฒนา, Thailand",
+      "coordinates": [104.6469594, 14.6395528],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5433297724",
+      "label": "Vegetarisches Restaurant",
+      "sublabel": "Vegetarisches Restaurant, ถนนประจักษ์ศิลปคม, หนองคาย, Thailand",
+      "coordinates": [102.7547898, 17.8862845],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4643487789",
+      "label": "vegetarisches Restaurant",
+      "sublabel": "vegetarisches Restaurant, ถนนท่าทอง, Surat Thani, Thailand",
+      "coordinates": [99.3313429, 9.1439064],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2785528581",
+      "label": "Het Vegetarisch Restaurant",
+      "sublabel": "Het Vegetarisch Restaurant, Donaustraat 183, Lelystad, Niederlande",
+      "coordinates": [5.4942497, 52.4892617],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/8496253484",
+      "label": "Pontes Vegetarische Küche",
+      "sublabel": "Pontes Vegetarische Küche, Kirchenstraße 7, Osterholz-Scharmbeck, Deutschland",
+      "coordinates": [8.785054, 53.2290978],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3089768740",
+      "label": "LoLu - Vegane Vegetarische Küche",
+      "sublabel": "LoLu - Vegane Vegetarische Küche, Claubergstraße 12, Duisburg, Deutschland",
+      "coordinates": [6.7677657, 51.4322845],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

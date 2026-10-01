@@ -73,18 +73,43 @@ describe("OurAirports search index", () => {
     expect(results.some((r) => r.iata === "FKB")).toBe(true);
   });
 
-  it("classifies a keyword typed out in full as an explicit alias", () => {
+  it("reports a keyword match as a keyword, not as the airport's name", () => {
+    // Keywords hold city names ("Köln") and plain tags ("restaurant") too.
     expect(index.queryMatches("Söllingen")[0]).toMatchObject({
       record: { iata: "FKB" },
-      kind: "explicit_alias",
+      kind: "keyword",
       matchedValue: "Söllingen",
     });
   });
 
-  it("treats the start of a keyword as an ordinary name match", () => {
+  it("matches only codes people type, not GPS or local filing codes", () => {
+    const strip: AirportRecord = {
+      id: 4,
+      ident: "PG-0045",
+      type: "small_airport",
+      icao: "AYBJ",
+      localCode: "BANK",
+      gpsCode: "AYBJ",
+      scheduledService: false,
+      lat: -6,
+      lng: 145,
+      name: "Bank Airstrip",
+      keywords: "",
+    };
+    const withStrip = buildSearchIndex([fra, strip]);
+    expect(withStrip.queryMatches("bank")[0]).toMatchObject({ kind: "name" });
+    expect(withStrip.queryMatches("AYBJ")[0]).toMatchObject({
+      kind: "authoritative_code",
+      namespace: "icao",
+    });
+    // Looking a known code up directly still works for every code.
+    expect(withStrip.byCode("BANK")?.id).toBe(4);
+  });
+
+  it("reports the start of a keyword as a keyword match too", () => {
     expect(index.queryMatches("Söll")[0]).toMatchObject({
       record: { iata: "FKB" },
-      kind: "name",
+      kind: "keyword",
       matchedValue: "Söllingen",
     });
   });

@@ -1,0 +1,142 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/1119707279",
+      "label": "Wifi",
+      "sublabel": "Wifi, Lac-Delage, Canada",
+      "coordinates": [-71.4086358, 46.973063],
+      "type": "street",
+      "rawCategory": "highway/path",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5535976298",
+      "label": "WiFi",
+      "sublabel": "WiFi, Tlokweng Road, Gaborone, Botswana",
+      "coordinates": [25.9350908, -24.6758964],
+      "type": "poi",
+      "rawCategory": "shop/hifi",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11780320486",
+      "label": "Wifi",
+      "sublabel": "Wifi, Manglburg, Grieskirchen, Austria",
+      "coordinates": [13.8242181, 48.2347294],
+      "type": "poi",
+      "rawCategory": "office/government",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/146604005",
+      "label": "WiFi",
+      "sublabel": "WiFi, Bambergstraße 25, Kirchdorf an der Krems, Austria",
+      "coordinates": [14.1205791, 47.9054707],
+      "type": "poi",
+      "rawCategory": "office/educational_institution",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4640616691",
+      "label": "Wifi",
+      "sublabel": "Wifi, Abdon Calderon, Tarifa, Ecuador",
+      "coordinates": [-79.7574462, -1.9793532],
+      "type": "poi",
+      "rawCategory": "office/telecommunication",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/103240591",
+      "label": "WIFI",
+      "sublabel": "WIFI, Estermannstraße 9, Linz, Austria",
+      "coordinates": [14.32155, 48.3055071],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/29754008",
+      "label": "WIFI",
+      "sublabel": "WIFI, Dr.-Thomas-Senn-Straße, Ried im Innkreis, Austria",
+      "coordinates": [13.4889192, 48.2065691],
+      "type": "poi",
+      "rawCategory": "office/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/312109543",
+      "label": "WIFI",
+      "sublabel": "WIFI, Dr.-Koss-Straße, Wels, Austria",
+      "coordinates": [14.0205741, 48.1591309],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/853406897",
+      "label": "WIFI",
+      "sublabel": "WIFI, Gentzgasse, Vienna, Austria",
+      "coordinates": [16.3489206, 48.2264299],
+      "type": "poi",
+      "rawCategory": "amenity/atm",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/93185416",
+      "label": "WIFI",
+      "sublabel": "WIFI, Robert-Kunz-Straße, Vöcklabruck, Austria",
+      "coordinates": [13.6502562, 48.0014594],
+      "type": "poi",
+      "rawCategory": "amenity/college",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/288769784",
+      "label": "Wifi",
+      "sublabel": "Wifi, Grabenstraße, Graz, Austria",
+      "coordinates": [15.436607, 47.086317],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1430190371",
+      "label": "WiFi",
+      "sublabel": "WiFi, Piazza Vittorio Emanuele Terzo, Cannobio, Italy",
+      "coordinates": [8.7004511, 46.0634987],
+      "type": "poi",
+      "rawCategory": "information/office",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1207648207",
+      "label": "WIFI-C",
+      "sublabel": "WIFI-C, Semperstraße 32-36, Vienna, Austria",
+      "coordinates": [16.3489111, 48.2276915],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q490323",
+      "name": "ETECSA",
+      "description": "Cuban telecommunication company",
+      "kind": ["brand", "operator"],
+      "matchedOn": "alias",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": [
+    {
+      "id": "internet_access/wlan",
+      "name": "Wi-Fi Hotspot",
+      "tags": {
+        "internet_access": "wlan"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

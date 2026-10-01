@@ -8,6 +8,7 @@
  * Re-record after changing a provider, the geocoding chain, or a case's query
  * or location; the fixtures are what the eval scores.
  */
+import { execFileSync } from "node:child_process";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -129,6 +130,8 @@ async function main() {
       `${evalCase.id}: ${recorded.autocomplete.length} geocoder, ${recorded.aggregate.length} aggregate, ${recorded.brands.length} chains, ${recorded.presets.length} presets`,
     );
   }
+  // Written as the repository formats JSON, so a re-record passes `biome check`.
+  execFileSync("pnpm", ["exec", "biome", "format", "--write", FIXTURE_DIR], { stdio: "ignore" });
 }
 
 await main();

@@ -1,0 +1,310 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/1436455833",
+      "label": "Münchener Straße",
+      "sublabel": "Münchener Straße, Berlin, Germany",
+      "coordinates": [13.3418183, 52.4949263],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/4583385",
+      "label": "Münchener Straße",
+      "sublabel": "Münchener Straße, Berlin, Germany",
+      "coordinates": [13.3419416, 52.4913317],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Münchener Straße",
+        "normalized": "munchener straße"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/62428",
+      "label": "Munich",
+      "sublabel": "Munich, Germany",
+      "coordinates": [11.5753822, 48.1371079],
+      "type": "region",
+      "rawCategory": "place/city",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München",
+        "normalized": "munchen"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/392410378",
+      "label": "München",
+      "sublabel": "München, Uebigau-Wahrenbrück, Germany",
+      "coordinates": [13.3125927, 51.6066028],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München",
+        "normalized": "munchen"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/16879052",
+      "label": "München",
+      "sublabel": "München, Uebigau-Wahrenbrück, Germany",
+      "coordinates": [13.3121574, 51.6073396],
+      "type": "region",
+      "rawCategory": "boundary/administrative",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München",
+        "normalized": "munchen"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/2883256",
+      "label": "München",
+      "sublabel": "München, Bad Berka, Germany",
+      "coordinates": [11.2535193, 50.8699757],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München",
+        "normalized": "munchen"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/333153731",
+      "label": "München",
+      "sublabel": "München, Hirschbach, Germany",
+      "coordinates": [11.580791, 49.5560714],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München",
+        "normalized": "munchen"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1276703136",
+      "label": "München",
+      "sublabel": "München, Hutthurm, Germany",
+      "coordinates": [13.4635084, 48.6970972],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München",
+        "normalized": "munchen"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/2804468",
+      "label": "Münchenbernsdorf",
+      "sublabel": "Münchenbernsdorf, Germany",
+      "coordinates": [11.9330185, 50.8206082],
+      "type": "region",
+      "rawCategory": "place/village",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Münchenbernsdorf",
+        "normalized": "munchenbernsdorf"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2153555725",
+      "label": "München (EE)",
+      "sublabel": "München (EE), Weidenweg, Uebigau-Wahrenbrück, Germany",
+      "coordinates": [13.3138328, 51.6066932],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München (EE)",
+        "normalized": "munchen ee"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/2908941",
+      "label": "Münchenbernsdorf",
+      "sublabel": "Münchenbernsdorf, Germany",
+      "coordinates": [11.9641382, 50.8264778],
+      "type": "region",
+      "rawCategory": "boundary/administrative",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Münchenbernsdorf",
+        "normalized": "munchenbernsdorf"
+      },
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:DE-0849",
+      "ids": {
+        "oa": "DE-0849"
+      },
+      "label": "München North Railyard West Helipad 2",
+      "sublabel": "München, DE",
+      "coordinates": [11.47368, 48.20183],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München North Railyard West Helipad 2",
+        "normalized": "munchen north railyard west helipad 2"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0848",
+      "ids": {
+        "oa": "DE-0848"
+      },
+      "label": "München North Railyard Northeast Helipad",
+      "sublabel": "München, DE",
+      "coordinates": [11.50915, 48.19426],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München North Railyard Northeast Helipad",
+        "normalized": "munchen north railyard northeast helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0850",
+      "ids": {
+        "oa": "DE-0850"
+      },
+      "label": "München North Railyard West Helipad 1",
+      "sublabel": "München, DE",
+      "coordinates": [11.48255, 48.19838],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München North Railyard West Helipad 1",
+        "normalized": "munchen north railyard west helipad 1"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0472",
+      "ids": {
+        "oa": "DE-0472"
+      },
+      "label": "München Bogenhausen Hospital Heliport",
+      "sublabel": "München, DE",
+      "coordinates": [11.626185, 48.154309],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München Bogenhausen Hospital Heliport",
+        "normalized": "munchen bogenhausen hospital heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0474",
+      "ids": {
+        "oa": "DE-0474"
+      },
+      "label": "München South Surgical Hospital Heliport",
+      "sublabel": "München, DE",
+      "coordinates": [11.548246, 48.103039],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "München South Surgical Hospital Heliport",
+        "normalized": "munchen south surgical hospital heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0901",
+      "ids": {
+        "oa": "DE-0901"
+      },
+      "label": "Flughafen München-Riem",
+      "sublabel": "Munich, DE",
+      "coordinates": [11.6903, 48.137798],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Flughafen München-Riem",
+        "normalized": "flughafen munchen riem"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0473",
+      "ids": {
+        "oa": "DE-0473"
+      },
+      "label": "Deutsches Herzzentrum München Heliport",
+      "sublabel": "München, DE",
+      "coordinates": [11.548548, 48.152786],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Deutsches Herzzentrum München Heliport",
+        "normalized": "deutsches herzzentrum munchen heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:DE-0593",
+      "ids": {
+        "oa": "DE-0593"
+      },
+      "label": "Asklepios Hospital München-Gauting Heliport",
+      "sublabel": "Gauting, DE",
+      "coordinates": [11.35257, 48.06684],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Asklepios Hospital München-Gauting Heliport",
+        "normalized": "asklepios hospital munchen gauting heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q1151671",
+      "name": "DAK-Gesundheit",
+      "description": "German health insurance company",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "here"
+    }
+  ],
+  "presets": []
+}

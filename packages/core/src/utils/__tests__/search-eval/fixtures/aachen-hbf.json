@@ -136,19 +136,19 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/215971430",
+      "id": "osm:node/215971485",
       "label": "Aachen Hauptbahnhof",
-      "sublabel": "Aachen Hauptbahnhof, Aachen, Deutschland",
-      "coordinates": [6.0919854, 50.7678063],
+      "sublabel": "Aachen Hauptbahnhof, Kasinostraße, Aachen, Deutschland",
+      "coordinates": [6.0920772, 50.7676169],
       "type": "poi",
       "rawCategory": "railway/stop",
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/215971485",
+      "id": "osm:node/215971430",
       "label": "Aachen Hauptbahnhof",
-      "sublabel": "Aachen Hauptbahnhof, Kasinostraße, Aachen, Deutschland",
-      "coordinates": [6.0920772, 50.7676169],
+      "sublabel": "Aachen Hauptbahnhof, Aachen, Deutschland",
+      "coordinates": [6.0919854, 50.7678063],
       "type": "poi",
       "rawCategory": "railway/stop",
       "provider": "geocoding-photon"

@@ -15,7 +15,7 @@ import type {
   ReverseGeocodingResult,
   SearchResult,
 } from "@openmapx/core";
-import { fetchJson, resolvePoiIconPath } from "@openmapx/core";
+import { fetchJson, normalizeSearchTerm, resolvePoiIconPath } from "@openmapx/core";
 
 // Populated by setup(ctx); see setPhotonUrl.
 let PHOTON_URL = "https://photon.komoot.io";
@@ -37,6 +37,8 @@ export function setPhotonUrl(url: string): void {
 const LOCAL_BIAS = { maxZoom: 14, scale: 0.2, limit: 6 } as const;
 const WIDE_BIAS = { maxZoom: 10, scale: 0.5, limit: 10 } as const;
 const UNBIASED_LIMIT = "10";
+/** Photon's language for each place's own name, as mapped locally. */
+const NATIVE_LANG = "default";
 
 function biasParams(
   bias: GeocodingBias,
@@ -186,9 +188,14 @@ export const photonService: GeocodingProviderImpl = {
     } else {
       features = (await fetchPhoton({ ...base, limit: UNBIASED_LIMIT }, "/api", lang)).features;
     }
+    const nativeNames = await nativeNamesFor(features, query, {
+      ...base,
+      ...(bias ? biasParams(bias, WIDE_BIAS) : { limit: UNBIASED_LIMIT }),
+    });
     return features.map((f) => {
       const short = f.properties.name ?? buildLabel(f.properties);
       const full = buildLabel(f.properties);
+      const native = nativeNames.get(makeId(f.properties));
       return {
         id: makeId(f.properties),
         label: short,
@@ -197,7 +204,48 @@ export const photonService: GeocodingProviderImpl = {
         type: mapType(f.properties.osm_key),
         iconPath: resolvePoiIconPath(f.properties.osm_value),
         rawCategory: `${f.properties.osm_key}/${f.properties.osm_value}`,
-      };
+        ...(native
+          ? {
+              searchMatch: { kind: "name", value: native, normalized: normalizeSearchTerm(native) },
+            }
+          : {}),
+      } satisfies AutocompleteResult;
     });
   },
 };
+
+/** Whether every word typed starts a word of `name`, ignoring case and accents. */
+function nameStartsWith(name: string | undefined, query: string): boolean {
+  const nameWords = normalizeSearchTerm(name ?? "").split(" ");
+  return normalizeSearchTerm(query)
+    .split(" ")
+    .every((token) => nameWords.some((word) => word.startsWith(token)));
+}
+
+/**
+ * Photon matches every name a place has but answers in the language asked
+ * for: "köln" finds the city labelled "Cologne", "münchen" the one labelled
+ * "Munich", and nothing in the answer says why. When some answer does not
+ * carry the words typed, ask once more for places' own names and keep, by
+ * place, the native name that does: the match the ranking can see.
+ */
+async function nativeNamesFor(
+  features: readonly PhotonFeature[],
+  query: string,
+  params: Record<string, string>,
+): Promise<Map<string, string>> {
+  const names = new Map<string, string>();
+  if (params.lang === NATIVE_LANG) return names;
+  if (features.every((f) => nameStartsWith(f.properties.name, query))) return names;
+  try {
+    const native = await fetchPhoton({ ...params, lang: NATIVE_LANG }, "/api", NATIVE_LANG);
+    for (const f of native.features) {
+      if (f.properties.name && nameStartsWith(f.properties.name, query)) {
+        names.set(makeId(f.properties), f.properties.name);
+      }
+    }
+  } catch {
+    // The labels still stand; only the evidence of an exonym match is lost.
+  }
+  return names;
+}

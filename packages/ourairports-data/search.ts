@@ -22,9 +22,9 @@ export interface SearchIndex {
 
 export interface AirportSearchMatch {
   record: AirportRecord;
-  kind: "authoritative_code" | "name" | "explicit_alias";
+  kind: "authoritative_code" | "name" | "keyword";
   matchedValue: string;
-  namespace?: "iata" | "icao" | "ident" | "gps_code" | "local_code";
+  namespace?: "iata" | "icao" | "ident";
 }
 
 const TYPE_RANK: Record<string, number> = {
@@ -64,11 +64,17 @@ interface IndexEntry {
 
 export function buildSearchIndex(records: AirportRecord[]): SearchIndex {
   const byCodeMap = new Map<string, AirportRecord>();
+  // Codes someone types to mean an airport. GPS and local codes are filing
+  // identifiers of small fields, and many are ordinary words ("BANK", "HBF").
+  const byTypedCodeMap = new Map<string, AirportRecord>();
   const entries: IndexEntry[] = [];
   for (const r of records) {
     if (r.iata) byCodeMap.set(r.iata, r);
     if (r.icao) byCodeMap.set(r.icao, r);
     if (r.ident && !byCodeMap.has(r.ident)) byCodeMap.set(r.ident, r);
+    for (const code of [r.iata, r.icao, r.ident]) {
+      if (code && !byTypedCodeMap.has(code)) byTypedCodeMap.set(code, r);
+    }
     if (r.gpsCode && !byCodeMap.has(r.gpsCode)) byCodeMap.set(r.gpsCode, r);
     if (r.localCode && !byCodeMap.has(r.localCode)) byCodeMap.set(r.localCode, r);
     entries.push({
@@ -90,14 +96,12 @@ export function buildSearchIndex(records: AirportRecord[]): SearchIndex {
     }> = [];
     const seen = new Set<number>();
 
-    const exact = byCodeMap.get(queryUpper);
+    const exact = byTypedCodeMap.get(queryUpper);
     if (exact) {
       const codeFields = [
         ["iata", exact.iata],
         ["icao", exact.icao],
         ["ident", exact.ident],
-        ["gps_code", exact.gpsCode],
-        ["local_code", exact.localCode],
       ] as const;
       const evidence = codeFields.find(([, value]) => value?.toUpperCase() === queryUpper);
       ranked.push({
@@ -116,7 +120,6 @@ export function buildSearchIndex(records: AirportRecord[]): SearchIndex {
     for (const entry of entries) {
       if (seen.has(entry.record.id)) continue;
       let rank: number | null = null;
-      let kind: AirportSearchMatch["kind"] = "name";
       let matchedValue = entry.record.name;
       if (entry.nameLower.startsWith(queryLower)) {
         rank = RANK_NAME_PREFIX;
@@ -127,19 +130,23 @@ export function buildSearchIndex(records: AirportRecord[]): SearchIndex {
           ?.split(",")
           .map((value) => value.trim())
           .find((value) => startsAWord(value.toLowerCase(), queryLower));
+        // Keywords are a loose mix of former names, city names and plain
+        // tags ("Köln" on Cologne Bonn, "restaurant" on a Cape Town strip),
+        // so even one typed out in full does not name the airport.
         if (keyword) {
           rank = RANK_KEYWORD_MATCH;
           matchedValue = keyword;
-          // Only a keyword typed out in full is an alias of the airport; the
-          // start of one is an ordinary name match.
-          if (keyword.toLowerCase() === queryLower) kind = "explicit_alias";
         }
       }
       if (rank !== null) {
         ranked.push({
           rank,
           typeRank: TYPE_RANK[entry.record.type] ?? 99,
-          match: { record: entry.record, kind, matchedValue },
+          match: {
+            record: entry.record,
+            kind: rank === RANK_KEYWORD_MATCH ? "keyword" : "name",
+            matchedValue,
+          },
         });
         seen.add(entry.record.id);
       }

@@ -8,6 +8,8 @@ export type SearchMatchKind =
   | "explicit_reference"
   | "explicit_alias"
   | "name"
+  /** A loose tag the source attaches (OurAirports keywords: city names, "restaurant"), not a name. */
+  | "keyword"
   | "generated_acronym";
 
 export interface SearchSuggestionMatch {

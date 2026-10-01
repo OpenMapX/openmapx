@@ -1,0 +1,123 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/987852792",
+      "label": "Vegang",
+      "sublabel": "Vegang, Oderberger Straße 52, Berlin, Germany",
+      "coordinates": [13.4087221, 52.5387397],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3922659057",
+      "label": "Vegang",
+      "sublabel": "Vegang, Kantstraße 33, Berlin, Germany",
+      "coordinates": [13.3166064, 52.5063056],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/560145221",
+      "label": "Vegan Haus",
+      "sublabel": "Vegan Haus, Stargarder Straße 65, Berlin, Germany",
+      "coordinates": [13.4198648, 52.545963],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/282430006",
+      "label": "Vegan Garden",
+      "sublabel": "Vegan Garden, Frankfurter Allee 21, Berlin, Germany",
+      "coordinates": [13.458543, 52.5158783],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5718697037",
+      "label": "Vegan Land",
+      "sublabel": "Vegan Land, Potsdamer Straße 172, Berlin, Germany",
+      "coordinates": [13.3607959, 52.4946502],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5678335990",
+      "label": "Vegan Vibes",
+      "sublabel": "Vegan Vibes, Niederbarnimstraße 16, Berlin, Germany",
+      "coordinates": [13.4585512, 52.5132912],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3294052245",
+      "label": "Vegan Dimo",
+      "sublabel": "Vegan Dimo, Bölschestraße 104, Berlin, Germany",
+      "coordinates": [13.6245364, 52.4517673],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2482565197",
+      "label": "Vegana",
+      "sublabel": "Vegana, Königstraße 41, Lübeck, Germany",
+      "coordinates": [10.6883978, 53.8680786],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/296032977",
+      "label": "Vegano",
+      "sublabel": "Vegano, Vor dem Steintor 14, Bremen, Germany",
+      "coordinates": [8.8239336, 53.073138],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2612202013",
+      "label": "Vegano Mezo",
+      "sublabel": "Vegano Mezo, Rigaer Straße 2, Berlin, Germany",
+      "coordinates": [13.4543682, 52.5181923],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q106351886",
+      "name": "Veganista",
+      "description": "Austrian vegan ice cream parlor chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q111358494",
+      "name": "Oowee Vegan",
+      "description": "plant based fast food chain in the UK",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "shop/health_food",
+      "name": "Health Food Store",
+      "tags": {
+        "shop": "health_food"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

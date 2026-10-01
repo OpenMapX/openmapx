@@ -1,0 +1,165 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/3442702061",
+      "label": "Döner",
+      "sublabel": "Döner, Hubertusdamm, Berlin, Deutschland",
+      "coordinates": [13.4703351, 52.6145291],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7713037875",
+      "label": "Döner",
+      "sublabel": "Döner, Clayallee 223, Berlin, Deutschland",
+      "coordinates": [13.2699166, 52.4502488],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/837695994",
+      "label": "Döner",
+      "sublabel": "Döner, Merlitzstraße, Berlin, Deutschland",
+      "coordinates": [13.5354084, 52.4332087],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2073820376",
+      "label": "Döner Inn",
+      "sublabel": "Döner Inn, Alexanderplatz 8, Berlin, Deutschland",
+      "coordinates": [13.4118277, 52.5230052],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/602315665",
+      "label": "Döner Curry",
+      "sublabel": "Döner Curry, Dircksenstraße, Berlin, Deutschland",
+      "coordinates": [13.4128261, 52.5205059],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1110370899",
+      "label": "Döner Point",
+      "sublabel": "Döner Point, Leipziger Straße 45, Berlin, Deutschland",
+      "coordinates": [13.3964109, 52.5104947],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9355794303",
+      "label": "Döner",
+      "sublabel": "Döner, Hohenzollernplatz 8, Berlin, Deutschland",
+      "coordinates": [13.1933568, 52.4301523],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3715461825",
+      "label": "Döner",
+      "sublabel": "Döner, Havelplatz, Hennigsdorf, Deutschland",
+      "coordinates": [13.199442, 52.63628],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3338510195",
+      "label": "Döner",
+      "sublabel": "Döner, Prenzlauer Chaussee 181, Wandlitz, Deutschland",
+      "coordinates": [13.4735064, 52.7582332],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/733630783",
+      "label": "Döner",
+      "sublabel": "Döner, Obere Mühlenstraße 15, Templin, Deutschland",
+      "coordinates": [13.5025857, 53.1189708],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/305907194",
+      "label": "Döner",
+      "sublabel": "Döner, Spitzkrugring, Frankfurt (Oder), Deutschland",
+      "coordinates": [14.5240021, 52.3619375],
+      "type": "poi",
+      "rawCategory": "amenity/fast_food",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [
+    {
+      "qid": "Q119437091",
+      "name": "Döner Market",
+      "description": "Ukrainian fast food chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q108923682",
+      "name": "The Döner Company",
+      "description": "Dutch fast food chain",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q133461235",
+      "name": "Haus des Döners",
+      "description": "German fast food restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q126723224",
+      "name": "Usta Dönerci",
+      "description": "fast food chain in Turkey",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q112913418",
+      "name": "German Doner Kebab",
+      "description": "kebab chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q126195313",
+      "name": "Berlin Döner Kebap",
+      "description": "chain of kebab fast food shops in Poland",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/fast_food/kebab",
+      "name": "Kebab Fast Food",
+      "tags": {
+        "amenity": "fast_food",
+        "cuisine": "kebab"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

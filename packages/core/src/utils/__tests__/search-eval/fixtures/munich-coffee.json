@@ -10,15 +10,6 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/447786276",
-      "label": "Coffee Fellows",
-      "sublabel": "Coffee Fellows, Tal 33, Munich, Germany",
-      "coordinates": [11.5810691, 48.1356194],
-      "type": "poi",
-      "rawCategory": "amenity/cafe",
-      "provider": "geocoding-photon"
-    },
-    {
       "id": "osm:node/12684827601",
       "label": "Coffee Lunch",
       "sublabel": "Coffee Lunch, Lindwurmstraße, Munich, Germany",
@@ -55,6 +46,15 @@
       "provider": "geocoding-photon"
     },
     {
+      "id": "osm:node/5745536622",
+      "label": "Coffee Lulu",
+      "sublabel": "Coffee Lulu, Belgradstraße 9, Munich, Germany",
+      "coordinates": [11.574686, 48.1613451],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
       "id": "osm:node/4483113931",
       "label": "Coffee",
       "sublabel": "Coffee, Břetislavova, Domažlice, Czechia",
@@ -86,15 +86,6 @@
       "label": "COFFEE!N",
       "sublabel": "COFFEE!N, Grüne Meile, Heidelberg, Germany",
       "coordinates": [8.6694622, 49.4032827],
-      "type": "poi",
-      "rawCategory": "amenity/cafe",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/5745536622",
-      "label": "Coffee Lulu",
-      "sublabel": "Coffee Lulu, Belgradstraße 9, Munich, Germany",
-      "coordinates": [11.574686, 48.1613451],
       "type": "poi",
       "rawCategory": "amenity/cafe",
       "provider": "geocoding-photon"
@@ -211,7 +202,7 @@
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "name",
+        "kind": "keyword",
         "value": "Price Coffee Airfield",
         "normalized": "price coffee airfield"
       },

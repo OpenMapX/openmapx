@@ -111,24 +111,6 @@
       "provider": "knowledge-ourairports"
     },
     {
-      "id": "oa:MX-2282",
-      "ids": {
-        "oa": "MX-2282"
-      },
-      "label": "Peninsula Lifestyle Helipad",
-      "sublabel": "Guadalajara, MX",
-      "coordinates": [-103.400214, 20.677928],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "Central Park Residential",
-        "normalized": "central park residential"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
       "id": "oa:JP-1999",
       "ids": {
         "oa": "JP-1999"
@@ -142,24 +124,6 @@
         "kind": "name",
         "value": "Central Park Tower La Tour Shinjuku Helipad",
         "normalized": "central park tower la tour shinjuku helipad"
-      },
-      "importance": 0.1,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:BR-1020",
-      "ids": {
-        "oa": "BR-1020"
-      },
-      "label": "ITC Central Park I Helipad",
-      "sublabel": "Fortaleza, BR",
-      "coordinates": [-38.473306, -3.739282],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "name",
-        "value": "ITC Central Park I Helipad",
-        "normalized": "itc central park i helipad"
       },
       "importance": 0.1,
       "provider": "knowledge-ourairports"
@@ -183,6 +147,42 @@
       "provider": "knowledge-ourairports"
     },
     {
+      "id": "oa:BR-1020",
+      "ids": {
+        "oa": "BR-1020"
+      },
+      "label": "ITC Central Park I Helipad",
+      "sublabel": "Fortaleza, BR",
+      "coordinates": [-38.473306, -3.739282],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "ITC Central Park I Helipad",
+        "normalized": "itc central park i helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:MX-2282",
+      "ids": {
+        "oa": "MX-2282"
+      },
+      "label": "Peninsula Lifestyle Helipad",
+      "sublabel": "Guadalajara, MX",
+      "coordinates": [-103.400214, 20.677928],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "keyword",
+        "value": "Central Park Residential",
+        "normalized": "central park residential"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
       "id": "oa:US-8702",
       "ids": {
         "oa": "US-8702"
@@ -193,7 +193,7 @@
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "name",
+        "kind": "keyword",
         "value": "Astoria at Central Park West",
         "normalized": "astoria at central park west"
       },
@@ -211,7 +211,7 @@
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "name",
+        "kind": "keyword",
         "value": "Astoria at Central Park West",
         "normalized": "astoria at central park west"
       },

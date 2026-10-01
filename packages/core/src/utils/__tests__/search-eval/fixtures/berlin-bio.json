@@ -1,0 +1,402 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/565649878",
+      "label": "Bio Company",
+      "sublabel": "Bio Company, Dircksenstraße 145-147, Berlin, Deutschland",
+      "coordinates": [13.4041367, 52.523162],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1860405870",
+      "label": "Bio-Konditorei Tillmann",
+      "sublabel": "Bio-Konditorei Tillmann, Auguststraße 63, Berlin, Deutschland",
+      "coordinates": [13.3978767, 52.5272941],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2464138931",
+      "label": "Bio Company",
+      "sublabel": "Bio Company, Friedrichstraße 136, Berlin, Deutschland",
+      "coordinates": [13.3875704, 52.5229073],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5545056560",
+      "label": "Bio Company",
+      "sublabel": "Bio Company, Rudi-Dutschke-Straße 17, Berlin, Deutschland",
+      "coordinates": [13.3941121, 52.5067343],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3898818522",
+      "label": "Bio Company",
+      "sublabel": "Bio Company, Greifswalder Straße 212, Berlin, Deutschland",
+      "coordinates": [13.4277612, 52.5320465],
+      "type": "poi",
+      "rawCategory": "shop/supermarket",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/122238",
+      "label": "Bio",
+      "sublabel": "Bio, Frankreich",
+      "coordinates": [1.7842037, 44.7831651],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6463199080",
+      "label": "BIO",
+      "sublabel": "BIO, Stanisława Ignacego Witkiewicza, Stettin, Polen",
+      "coordinates": [14.5101155, 53.433129],
+      "type": "poi",
+      "rawCategory": "shop/bakery",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1067975",
+      "label": "Biosphärenreservat Oberlausitzer Heide- und Teichlandschaft",
+      "sublabel": "Biosphärenreservat Oberlausitzer Heide- und Teichlandschaft, Deutschland",
+      "coordinates": [14.5544858, 51.3386172],
+      "type": "region",
+      "rawCategory": "boundary/protected_area",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1092214601",
+      "label": "BIO Hof Schmergow GmbH",
+      "sublabel": "BIO Hof Schmergow GmbH, Ketziner Siedlung 13, Groß Kreutz (Havel), Deutschland",
+      "coordinates": [12.8368326, 52.4535985],
+      "type": "region",
+      "rawCategory": "landuse/farmyard",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/553989547",
+      "label": "Biotopverbund Welsengraben",
+      "sublabel": "Biotopverbund Welsengraben, Gransee, Deutschland",
+      "coordinates": [13.2358521, 53.0131438],
+      "type": "region",
+      "rawCategory": "boundary/protected_area",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/108052319",
+      "label": "Biomasseheizkraftwerk Berlin-Neukölln",
+      "sublabel": "Biomasseheizkraftwerk Berlin-Neukölln, Ernst-Ruska-Ufer, Berlin, Deutschland",
+      "coordinates": [13.5173778, 52.4256639],
+      "type": "address",
+      "rawCategory": "building/industrial",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/5869622",
+      "label": "Biotopverbund Spreeaue",
+      "sublabel": "Biotopverbund Spreeaue, Dissen-Striesow, Deutschland",
+      "coordinates": [14.3774851, 51.7029981],
+      "type": "region",
+      "rawCategory": "boundary/protected_area",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/231107094",
+      "label": "Biotronik SE & Co. KG",
+      "sublabel": "Biotronik SE & Co. KG, Berlin, Deutschland",
+      "coordinates": [13.4465967, 52.4619737],
+      "type": "region",
+      "rawCategory": "landuse/industrial",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/231106907",
+      "label": "Biotronik SE & Co. KG",
+      "sublabel": "Biotronik SE & Co. KG, Berlin, Deutschland",
+      "coordinates": [13.4513345, 52.4629542],
+      "type": "region",
+      "rawCategory": "landuse/industrial",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/231106061",
+      "label": "Biotronik SE & Co. KG",
+      "sublabel": "Biotronik SE & Co. KG, Berlin, Deutschland",
+      "coordinates": [13.4486824, 52.4614041],
+      "type": "region",
+      "rawCategory": "landuse/industrial",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:LEBB",
+      "ids": {
+        "oa": "LEBB",
+        "iata": "BIO",
+        "icao": "LEBB"
+      },
+      "label": "Bilbao Airport",
+      "sublabel": "Bilbao, ES",
+      "coordinates": [-2.91061, 43.301102],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "authoritative_code",
+        "value": "BIO",
+        "normalized": "bio",
+        "namespace": "iata"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SDBE",
+      "ids": {
+        "oa": "SDBE"
+      },
+      "label": "Biopalma Airport",
+      "sublabel": "Moju, BR",
+      "coordinates": [-48.8146, -2.208],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Biopalma Airport",
+        "normalized": "biopalma airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-3385",
+      "ids": {
+        "oa": "US-3385"
+      },
+      "label": "Biosphere Two Landing Field",
+      "sublabel": "Oracle, US",
+      "coordinates": [-110.85411, 32.58957],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Biosphere Two Landing Field",
+        "normalized": "biosphere two landing field"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:AR-0531",
+      "ids": {
+        "oa": "AR-0531"
+      },
+      "label": "Biondi Airport",
+      "sublabel": "Isla Verde, AR",
+      "coordinates": [-62.4046, -33.2232],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Biondi Airport",
+        "normalized": "biondi airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SNBH",
+      "ids": {
+        "oa": "SNBH"
+      },
+      "label": "Biocor Helipad",
+      "sublabel": "Nova Lima, BR",
+      "coordinates": [-43.944905, -19.981481],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Biocor Helipad",
+        "normalized": "biocor helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:SNC4",
+      "ids": {
+        "oa": "SNC4"
+      },
+      "label": "Itapecuru Bioenergia Airport",
+      "sublabel": "Aldeias Altas, BR",
+      "coordinates": [-43.506733, -4.661431],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Itapecuru Bioenergia Airport",
+        "normalized": "itapecuru bioenergia airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:AR-0207",
+      "ids": {
+        "oa": "AR-0207"
+      },
+      "label": "Don Hector Biondi Airport",
+      "sublabel": "Isla Verde, AR",
+      "coordinates": [-62.4167, -33.2464],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Don Hector Biondi Airport",
+        "normalized": "don hector biondi airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:25TT",
+      "ids": {
+        "oa": "25TT"
+      },
+      "label": "American Bio Source Heliport",
+      "sublabel": "Decatur, US",
+      "coordinates": [-97.617229, 33.271024],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "American Bio Source Heliport",
+        "normalized": "american bio source heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q48883773",
+      "name": "BioMarkt",
+      "description": "German organic supermarket chain",
+      "kind": ["brand", "operator"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q864179",
+      "name": "Bio Company",
+      "description": "German organic supermarket chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q106731038",
+      "name": "Biofutur",
+      "description": "French group of medical biology laboratories",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q106731141",
+      "name": "Biopath",
+      "description": "French group of medical biology laboratories located in the Hauts-de-France region",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q106767560",
+      "name": "Biopath Unilabs",
+      "description": "French group of medical biology laboratories located in the Île-de-France region",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q106768328",
+      "name": "Bioclinic",
+      "description": "group of medical labs in France",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q106834179",
+      "name": "Biosites",
+      "description": "group of French medical biology laboratories located mainly in Maine-et-Loire",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q106834697",
+      "name": "Biolaris",
+      "description": "French group of medical biology laboratories",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/recycling/container/green_waste",
+      "name": "Biomüllcontainer",
+      "tags": {
+        "amenity": "recycling",
+        "recycling_type": "container",
+        "recycling:green_waste": "yes"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "shop/supermarket/organic",
+      "name": "Bio-Supermarkt",
+      "tags": {
+        "shop": "supermarket",
+        "organic": "only"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "power/plant/source/gas",
+      "name": "Gaskraftwerk",
+      "tags": {
+        "power": "plant",
+        "plant:source": "gas"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "type/boundary/protected_area",
+      "name": "Schutzgebiet",
+      "tags": {
+        "type": "boundary",
+        "boundary": "protected_area"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/vending_machine/fuel",
+      "name": "Tankautomat",
+      "tags": {
+        "amenity": "vending_machine",
+        "vending": "fuel"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

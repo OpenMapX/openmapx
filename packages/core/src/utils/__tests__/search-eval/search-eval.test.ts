@@ -7,6 +7,8 @@ import type { ChipTranslation, PresetMatch } from "../../../types/presetMatch";
 import { haversineDistance } from "../../coordinates";
 import {
   brandSuggestionRows,
+  type EnterAction,
+  enterAction,
   type IntegrationSearchCategory,
   matchCategorySuggestions,
   presetSuggestionRows,
@@ -77,33 +79,54 @@ function describeRows(rows: AutocompleteResult[]): string {
     .join("; ");
 }
 
+function describeAction(action: EnterAction): string {
+  return action.kind === "open" ? `open ${action.row.label} (${action.row.type})` : action.kind;
+}
+
+/** Whether Enter does what the case asks; true when it asks nothing. */
+function enterAsExpected(action: EnterAction, evalCase: EvalCase): boolean {
+  const wanted = evalCase.enter;
+  if (wanted === undefined) return true;
+  if (wanted === "search" || wanted === "choose") return action.kind === wanted;
+  return action.kind === "open" && matches(action.row, { within: 1, ...wanted.open }, evalCase);
+}
+
 const results = EVAL_CASES.map((evalCase) => {
   const rows = rankCase(evalCase);
   const ranks = evalCase.expect.map((expectation) => rankOf(rows, expectation, evalCase));
-  const passed = evalCase.expect.every((expectation, i) => {
-    const rank = ranks[i];
-    return rank !== null && rank <= expectation.within;
+  const action = enterAction(rows, {
+    query: evalCase.query,
+    proximity: evalCase.center,
+    zoom: evalCase.zoom,
   });
-  return { evalCase, rows, ranks, passed };
+  const passed =
+    evalCase.expect.every((expectation, i) => {
+      const rank = ranks[i];
+      return rank !== null && rank <= expectation.within;
+    }) && enterAsExpected(action, evalCase);
+  return { evalCase, rows, ranks, action, passed };
 });
 
 describe("search ranking eval", () => {
-  for (const { evalCase, rows, ranks, passed } of results) {
+  for (const { evalCase, rows, ranks, action, passed } of results) {
     const title = `${evalCase.id}: “${evalCase.query}”`;
+    const report = `ranks ${JSON.stringify(ranks)}; Enter: ${describeAction(action)}; ${describeRows(rows)}`;
     if (evalCase.knownGap) {
       it(`${title} is still a known gap (${evalCase.knownGap})`, () => {
         // Passing now means the gap is fixed: drop `knownGap` so it is guarded.
-        expect(passed, `ranks ${JSON.stringify(ranks)}; ${describeRows(rows)}`).toBe(false);
+        expect(passed, report).toBe(false);
       });
     } else {
       it(title, () => {
-        expect(passed, `ranks ${JSON.stringify(ranks)}; ${describeRows(rows)}`).toBe(true);
+        expect(passed, report).toBe(true);
       });
     }
   }
 
   it("keeps the first expectation at rank 1 for most cases", () => {
-    const asserted = results.filter(({ evalCase }) => !evalCase.knownGap);
+    const asserted = results.filter(
+      ({ evalCase }) => !evalCase.knownGap && evalCase.expect.length > 0,
+    );
     const hitAt1 = asserted.filter(({ ranks }) => ranks[0] === 1).length / asserted.length;
     const reciprocalRank =
       asserted.reduce((sum, { ranks }) => sum + (ranks[0] ? 1 / ranks[0] : 0), 0) / asserted.length;

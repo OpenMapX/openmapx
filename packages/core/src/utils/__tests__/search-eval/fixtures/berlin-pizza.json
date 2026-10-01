@@ -185,7 +185,7 @@
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "name",
+        "kind": "keyword",
         "value": "Shakey's Pizza",
         "normalized": "shakey s pizza"
       },

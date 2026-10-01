@@ -1,0 +1,304 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/1214140783",
+      "label": "MUSEUM",
+      "sublabel": "MUSEUM, Historische Ladestraße, Berlin, Germany",
+      "coordinates": [13.3793227, 52.4986245],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/9082329700",
+      "label": "Museumsinsel",
+      "sublabel": "Museumsinsel, Schloßfreiheit, Berlin, Germany",
+      "coordinates": [13.3988844, 52.5172626],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7030044299",
+      "label": "Museum",
+      "sublabel": "Museum, Eichgestell, Berlin, Germany",
+      "coordinates": [13.550263, 52.4609528],
+      "type": "poi",
+      "rawCategory": "railway/stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/184592746",
+      "label": "Museum für Architekturzeichnung",
+      "sublabel": "Museum für Architekturzeichnung, Christinenstraße 18a, Berlin, Germany",
+      "coordinates": [13.41001, 52.53207],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6880841995",
+      "label": "Museum Pankow",
+      "sublabel": "Museum Pankow, Prenzlauer Allee 227/228, Berlin, Germany",
+      "coordinates": [13.4202437, 52.5333155],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/132555271",
+      "label": "Museum in der Kulturbrauerei",
+      "sublabel": "Museum in der Kulturbrauerei, Knaackstraße 97, Berlin, Germany",
+      "coordinates": [13.4140783, 52.5402922],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5460545203",
+      "label": "Museum",
+      "sublabel": "Museum, Muzejní oáza, Prague, Czechia",
+      "coordinates": [14.4316586, 50.0794841],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5460590598",
+      "label": "Museum",
+      "sublabel": "Museum, Wilsonova, Prague, Czechia",
+      "coordinates": [14.4311389, 50.0802724],
+      "type": "poi",
+      "rawCategory": "railway/station",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/138662865",
+      "label": "Museum",
+      "sublabel": "Museum, Jägerstieg 2, Kleinmachnow, Germany",
+      "coordinates": [13.2297504, 52.4130708],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/907950397",
+      "label": "Museum",
+      "sublabel": "Museum, Wilsonova, Prague, Czechia",
+      "coordinates": [14.4312433, 50.0802442],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/87646457",
+      "label": "Museum Berggruen",
+      "sublabel": "Museum Berggruen, Schloßstraße 1, Berlin, Germany",
+      "coordinates": [13.2952975, 52.5191025],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3755207008",
+      "label": "Museum of European Cultures",
+      "sublabel": "Museum of European Cultures, Arnimallee, Berlin, Germany",
+      "coordinates": [13.292635, 52.45556],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/290220610",
+      "label": "Museum Berlin-Karlshorst",
+      "sublabel": "Museum Berlin-Karlshorst, Regener Straße, Berlin, Germany",
+      "coordinates": [13.5398453, 52.4861367],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/10672271",
+      "label": "Museum der Staatlichen Münze Berlin",
+      "sublabel": "Museum der Staatlichen Münze Berlin, Ollenhauerstraße 97, Berlin, Germany",
+      "coordinates": [13.3303222, 52.5727546],
+      "type": "poi",
+      "rawCategory": "tourism/museum",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:US-11620",
+      "ids": {
+        "oa": "US-11620"
+      },
+      "label": "Museum of Science Heliport",
+      "sublabel": "Boston, US",
+      "coordinates": [-71.071702, 42.367595],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Museum of Science Heliport",
+        "normalized": "museum of science heliport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:JP-2044",
+      "ids": {
+        "oa": "JP-2044"
+      },
+      "label": "Museum Tower Helipad",
+      "sublabel": "Kobe, JP",
+      "coordinates": [135.19788, 34.68912],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Museum Tower Helipad",
+        "normalized": "museum tower helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-2624",
+      "ids": {
+        "oa": "US-2624"
+      },
+      "label": "Museum Tower Helipad",
+      "sublabel": "Los Angeles, US",
+      "coordinates": [-118.249851, 34.053175],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Museum Tower Helipad",
+        "normalized": "museum tower helipad"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:8NC9",
+      "ids": {
+        "oa": "8NC9"
+      },
+      "label": "Western North Carolina Air Museum Airport",
+      "sublabel": "Hendersonville, US",
+      "coordinates": [-82.434263, 35.307855],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Western North Carolina Air Museum Airport",
+        "normalized": "western north carolina air museum airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CN-0434",
+      "ids": {
+        "oa": "CN-0434"
+      },
+      "label": "China Aviation Museum Airfield",
+      "sublabel": "Changping, Beijing, CN",
+      "coordinates": [116.360309, 40.186433],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "China Aviation Museum Airfield",
+        "normalized": "china aviation museum airfield"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CO58",
+      "ids": {
+        "oa": "CO58"
+      },
+      "label": "Wings N Things Airpark & Museum Airport",
+      "sublabel": "Longmont, US",
+      "coordinates": [-104.955002, 40.105801],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Wings N Things Airpark & Museum Airport",
+        "normalized": "wings n things airpark museum airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-12473",
+      "ids": {
+        "oa": "US-12473"
+      },
+      "label": "Texas Air Museum Airport",
+      "sublabel": "Rio Hondo, US",
+      "coordinates": [-97.560799, 26.228701],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Texas Air Museum Airport",
+        "normalized": "texas air museum airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-1285",
+      "ids": {
+        "oa": "US-1285"
+      },
+      "label": "1000 Museum Heliport",
+      "sublabel": "Miami, US",
+      "coordinates": [-80.190046, 25.784189],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "1000 Museum Heliport",
+        "normalized": "1000 museum heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [],
+  "presets": [
+    {
+      "id": "tourism/museum",
+      "name": "Museum",
+      "tags": {
+        "tourism": "museum"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "tourism/museum/history",
+      "name": "History Museum",
+      "tags": {
+        "tourism": "museum",
+        "museum": "history"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/planetarium",
+      "name": "Planetarium",
+      "tags": {
+        "amenity": "planetarium"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

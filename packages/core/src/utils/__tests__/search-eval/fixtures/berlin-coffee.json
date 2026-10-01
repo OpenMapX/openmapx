@@ -46,10 +46,10 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/3061480423",
-      "label": "Coffee Corner",
-      "sublabel": "Coffee Corner, Friedrichstrasse 9, Berlin, Germany",
-      "coordinates": [13.3916123, 52.501015],
+      "id": "osm:node/4836753766",
+      "label": "Coffee & Cookies",
+      "sublabel": "Coffee & Cookies, Stresemannstraße 107, Berlin, Germany",
+      "coordinates": [13.3799037, 52.5061288],
       "type": "poi",
       "rawCategory": "amenity/cafe",
       "provider": "geocoding-photon"
@@ -64,19 +64,19 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/13753745006",
-      "label": "Coffee Circle",
-      "sublabel": "Coffee Circle, Kollwitzstraße 70, Berlin, Germany",
-      "coordinates": [13.4187861, 52.536658],
+      "id": "osm:node/3061480423",
+      "label": "Coffee Corner",
+      "sublabel": "Coffee Corner, Friedrichstrasse 9, Berlin, Germany",
+      "coordinates": [13.3916123, 52.501015],
       "type": "poi",
       "rawCategory": "amenity/cafe",
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/668953779",
-      "label": "Coffee Cult",
-      "sublabel": "Coffee Cult, Bergmannstraße 89, Berlin, Germany",
-      "coordinates": [13.3932506, 52.4893414],
+      "id": "osm:node/13753745006",
+      "label": "Coffee Circle",
+      "sublabel": "Coffee Circle, Kollwitzstraße 70, Berlin, Germany",
+      "coordinates": [13.4187861, 52.536658],
       "type": "poi",
       "rawCategory": "amenity/cafe",
       "provider": "geocoding-photon"
@@ -88,15 +88,6 @@
       "coordinates": [13.4270691, 52.4937061],
       "type": "poi",
       "rawCategory": "shop/coffee",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/5412597401",
-      "label": "Coffee Pony",
-      "sublabel": "Coffee Pony, Richard-von-Weizsäcker-Platz 4, Berlin, Germany",
-      "coordinates": [13.3574466, 52.4864674],
-      "type": "poi",
-      "rawCategory": "amenity/cafe",
       "provider": "geocoding-photon"
     },
     {
@@ -115,6 +106,24 @@
       "coordinates": [13.3463614, 52.4892928],
       "type": "poi",
       "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7846856939",
+      "label": "Coffee Pony",
+      "sublabel": "Coffee Pony, Knesebeckstraße 76, Berlin, Germany",
+      "coordinates": [13.3223998, 52.5039411],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/959231215",
+      "label": "coffee&bakery",
+      "sublabel": "coffee&bakery, Urbanstraße 133, Berlin, Germany",
+      "coordinates": [13.4143561, 52.4916744],
+      "type": "poi",
+      "rawCategory": "shop/convenience",
       "provider": "geocoding-photon"
     }
   ],
@@ -220,7 +229,7 @@
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "name",
+        "kind": "keyword",
         "value": "Price Coffee Airfield",
         "normalized": "price coffee airfield"
       },

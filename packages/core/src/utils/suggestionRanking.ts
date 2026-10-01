@@ -3,12 +3,21 @@ import type { CategoryDefinition } from "../types/category";
 import type { AutocompleteResult } from "../types/geocoding";
 import type { ChipTranslation, PresetMatch } from "../types/presetMatch";
 import {
+  CONFIDENT_TEXT_SCORE,
   compareSearchSuggestions,
+  destinationPlausibility,
+  isPlaceRow,
+  isSameDestination,
   MIN_SUGGESTION_TEXT_SCORE,
   mergeAutocompleteSuggestions,
   normalizeSearchTerm,
+  queryNamesLocation,
+  type RankedSuggestion,
   type SuggestionScoreContext,
+  suggestionScore,
   textMatchScore,
+  tripReach,
+  WORD_MATCH_TEXT_SCORE,
 } from "./searchSuggestion";
 
 /** Rows the search box may show, gathered from every source before ranking. */
@@ -46,6 +55,17 @@ export const DEFAULT_AUTOCOMPLETE_ROW_LIMITS: AutocompleteRowLimits = {
 
 type QuotaKey = Exclude<keyof AutocompleteRowLimits, "total">;
 
+/** Each row's position among the rows its provider returned, in the order given. */
+function withProviderRanks(rows: readonly AutocompleteResult[]): RankedSuggestion[] {
+  const seen = new Map<string, number>();
+  return rows.map((row) => {
+    if (!row.provider) return row;
+    const providerRank = seen.get(row.provider) ?? 0;
+    seen.set(row.provider, providerRank + 1);
+    return { ...row, providerRank };
+  });
+}
+
 function quotaOf(row: AutocompleteResult): QuotaKey | undefined {
   if (row.type === "category") return "categories";
   if (row.type === "brand") return "brands";
@@ -66,17 +86,19 @@ export function rankAutocompleteRows(
 ): AutocompleteResult[] {
   const categories = candidates.categories ?? [];
   const categoryLabels = new Set(categories.map((row) => normalizeSearchTerm(row.label)));
-  // A preset repeating a built-in category's name would open the same search.
-  const presets = (candidates.presets ?? []).filter(
-    (row) => !categoryLabels.has(normalizeSearchTerm(row.label)),
-  );
+  // A preset repeating a built-in category's name, or its singular ("Museum"
+  // beside "Museums"), offers the same search twice.
+  const presets = (candidates.presets ?? []).filter((row) => {
+    const label = normalizeSearchTerm(row.label);
+    return !categoryLabels.has(label) && !categoryLabels.has(`${label}s`);
+  });
   const shortcuts = [
     ...categories,
     ...presets,
     ...(candidates.brands ?? []),
     ...(candidates.recents ?? []),
   ].filter((row) => textMatchScore(row, context.query) >= MIN_SUGGESTION_TEXT_SCORE);
-  const places = mergeAutocompleteSuggestions(candidates.places ?? [], context);
+  const places = mergeAutocompleteSuggestions(withProviderRanks(candidates.places ?? []), context);
   const ordered = [...shortcuts, ...places].sort((a, b) => compareSearchSuggestions(a, b, context));
 
   const rows = [...(candidates.saved ?? [])];
@@ -94,28 +116,134 @@ export function rankAutocompleteRows(
 }
 
 /**
- * Whether plain Enter may act on `row` without the user picking it: the typed
- * text must name it outright or start its name, not merely appear somewhere
- * in its address.
+ * What plain Enter does with the rows shown:
+ * - `open` the row, which the text names outright;
+ * - `search` the visible area for the text, because it names a kind of place
+ *   there (several shops, a word that starts many names) or nothing in
+ *   particular (`weak`: no row is named, so a geocoder may still try);
+ * - let the user `choose`, because several places far away answer equally.
  */
-export function isConfidentTopRow(row: AutocompleteResult, query: string): boolean {
-  if (row.type === "text_search" || row.type === "nlp_search") return false;
-  return textMatchScore(row, query) >= 0.8;
+export type EnterAction =
+  | { kind: "open"; row: AutocompleteResult }
+  | { kind: "search"; weak: boolean }
+  | { kind: "choose" };
+
+/**
+ * Below this a place is an obscure namesake far from the map, not a
+ * destination: "vegan" from Aachen is not the hamlet of Vegan in Norway.
+ * A town anywhere (0.6), a large airport (0.72) or anything within a trip of
+ * the map clears it; a hamlet abroad (0.2) does not.
+ */
+const MIN_DESTINATION_PLAUSIBILITY = 0.3;
+/**
+ * Two places answering the text equally well are a toss-up unless one leads by
+ * this much: about the lead of a place on the map over one a district away.
+ */
+const RIVAL_SCORE_MARGIN = 0.35;
+/** A place this far within a trip of the map is in the area being searched. */
+const IN_AREA_REACH = 0.5;
+
+/** Areas, addresses and everything else are not alternatives to each other. */
+function placeKind(row: AutocompleteResult): "area" | "address" | "place" {
+  if (row.type === "region") return "area";
+  if (row.type === "address" || row.type === "street") return "address";
+  return "place";
+}
+
+/**
+ * Whether `place` may be opened for the text without being picked, as far as
+ * where it is goes: the text says where (a house number, "… berlin"), or the
+ * place is famous enough or close enough to be the one meant.
+ */
+export function isPlausibleDestination(
+  place: AutocompleteResult,
+  context: SuggestionScoreContext,
+): boolean {
+  return (
+    queryNamesLocation(place, context.query) ||
+    destinationPlausibility(place, context) >= MIN_DESTINATION_PLAUSIBILITY
+  );
+}
+
+/**
+ * Decides what Enter does with `rows` (ranked, without the area-search row).
+ * Enter opens a place only when it is plainly the one meant: named by the
+ * text, plausibly a destination, and not one of several equal answers. A
+ * chain's branches or a word many names start with ("aldi", "döner", "vegan")
+ * search the area; a chain row the text names exactly opens that chain.
+ */
+export function enterAction(
+  rows: readonly AutocompleteResult[],
+  context: SuggestionScoreContext,
+): EnterAction {
+  const top = rows[0];
+  if (!top || top.type === "text_search" || top.type === "nlp_search") {
+    return { kind: "search", weak: true };
+  }
+  const text = (row: AutocompleteResult) => textMatchScore(row, context.query);
+  const topText = text(top);
+  if (topText < CONFIDENT_TEXT_SCORE) return { kind: "search", weak: true };
+  if (!isPlaceRow(top)) return { kind: "open", row: top };
+
+  const places = rows.filter(isPlaceRow);
+  // Whether the area has places the text matches; a search of it then finds something.
+  const inArea = places.some(
+    (row) => text(row) >= WORD_MATCH_TEXT_SCORE && tripReach(row, context) >= IN_AREA_REACH,
+  );
+  // Only a chain with shops in the map's country: "springfield" from Berlin is
+  // not the Spanish fashion chain.
+  const exactChain = rows.find(
+    (row) => row.type === "brand" && row.brandPresence === "here" && text(row) >= 1,
+  );
+  const undecided = (): EnterAction =>
+    exactChain
+      ? { kind: "open", row: exactChain }
+      : inArea
+        ? { kind: "search", weak: false }
+        : { kind: "choose" };
+
+  if (!isPlausibleDestination(top, context)) return undecided();
+
+  // A rival is another destination of the same kind, named as well and nearly
+  // as likely: a city is not rivalled by its own airport, nor a station near
+  // the map by an unknown park of the same name 200 km away.
+  const topScore = suggestionScore(top, context);
+  const rivalled = places.some(
+    (row) =>
+      row !== top &&
+      placeKind(row) === placeKind(top) &&
+      text(row) >= topText &&
+      !isSameDestination(row, top) &&
+      isPlausibleDestination(row, context) &&
+      topScore - suggestionScore(row, context) < RIVAL_SCORE_MARGIN,
+  );
+  return rivalled ? undecided() : { kind: "open", row: top };
 }
 
 /** Floor for a category name or term to count as meant: every word typed starts one of its words. */
 const CATEGORY_MATCH_FLOOR = 0.7;
 
+/**
+ * Least share of a search term the query must cover to match it by its start.
+ * A term is a synonym, not the category's name: "coff" means coffee, but
+ * "bio" means organic, not the fuel category's "biodiesel".
+ */
+const MIN_TERM_PREFIX_SHARE = 0.5;
+
 function bestCategoryMatch(
   names: readonly (string | undefined)[],
+  terms: readonly string[],
   query: string,
 ): { value: string; score: number } | undefined {
   let best: { value: string; score: number } | undefined;
-  for (const value of names) {
-    if (!value) continue;
+  const queryLength = normalizeSearchTerm(query).length;
+  const consider = (value: string, isTerm: boolean) => {
+    if (isTerm && queryLength < normalizeSearchTerm(value).length * MIN_TERM_PREFIX_SHARE) return;
     const score = textMatchScore({ id: "", label: value, type: "category" }, query);
     if (score >= CATEGORY_MATCH_FLOOR && (!best || score > best.score)) best = { value, score };
-  }
+  };
+  for (const value of names) if (value) consider(value, false);
+  for (const value of terms) consider(value, true);
   return best;
 }
 
@@ -190,7 +318,7 @@ export function matchCategorySuggestions({
       category.id,
       translation?.name || category.label,
       category.iconPath,
-      bestCategoryMatch([category.label, translation?.name, ...(translation?.terms ?? [])], query),
+      bestCategoryMatch([category.label, translation?.name], translation?.terms ?? [], query),
     );
   }
   for (const category of categories) {
@@ -199,7 +327,7 @@ export function matchCategorySuggestions({
       category.id,
       translation?.name || category.label,
       category.iconPath,
-      bestCategoryMatch([category.label, translation?.name, ...(translation?.terms ?? [])], query),
+      bestCategoryMatch([category.label, translation?.name], translation?.terms ?? [], query),
     );
   }
   return rows;

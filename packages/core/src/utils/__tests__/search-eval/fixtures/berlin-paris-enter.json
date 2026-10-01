@@ -1,0 +1,373 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:way/38210407",
+      "label": "Pariser Platz",
+      "sublabel": "Pariser Platz, Berlin, Germany",
+      "coordinates": [13.3786828, 52.5163553],
+      "type": "region",
+      "rawCategory": "place/square",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/210668637",
+      "label": "Pariser Platz",
+      "sublabel": "Pariser Platz, Berlin, Germany",
+      "coordinates": [13.3794987, 52.5163987],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/24240315",
+      "label": "Pariser Platz",
+      "sublabel": "Pariser Platz, Berlin, Germany",
+      "coordinates": [13.3788652, 52.5163631],
+      "type": "street",
+      "rawCategory": "highway/pedestrian",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/915368062",
+      "label": "Pariser Platz",
+      "sublabel": "Pariser Platz, Berlin, Germany",
+      "coordinates": [13.3790914, 52.5168302],
+      "type": "street",
+      "rawCategory": "highway/service",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/71525",
+      "label": "Paris",
+      "sublabel": "Paris, France",
+      "coordinates": [2.3483915, 48.8534951],
+      "type": "region",
+      "rawCategory": "place/city",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/7444",
+      "label": "Paris",
+      "sublabel": "Paris, Paris, France",
+      "coordinates": [2.320041, 48.8588897],
+      "type": "region",
+      "rawCategory": "boundary/administrative",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1821259562",
+      "label": "Paris",
+      "sublabel": "Paris, Suchdol nad Lužnicí, Czechia",
+      "coordinates": [14.9176808, 48.8966883],
+      "type": "region",
+      "rawCategory": "place/hamlet",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1641193",
+      "label": "Paris",
+      "sublabel": "Paris, Paris, France",
+      "coordinates": [2.320041, 48.8588897],
+      "type": "region",
+      "rawCategory": "boundary/administrative",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/8579750682",
+      "label": "Paris",
+      "sublabel": "Paris, Theaterweg, Potsdam, Germany",
+      "coordinates": [13.026262, 52.3955556],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10760909910",
+      "label": "Paris",
+      "sublabel": "Paris, Kościelna 12, Lwówek Śląski, Poland",
+      "coordinates": [15.5835275, 51.1110786],
+      "type": "poi",
+      "rawCategory": "shop/hairdresser",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/462654238",
+      "label": "Paris",
+      "sublabel": "Paris, Pohnsdorfer Straße, Sierksdorf, Germany",
+      "coordinates": [10.771389, 54.0736475],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5650028120",
+      "label": "Paris",
+      "sublabel": "Paris, náměstí Krále Vladislava, Velvary, Czechia",
+      "coordinates": [14.2354423, 50.2823879],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/314098390",
+      "label": "Parish Church of St. Mary and St. Nicholas",
+      "sublabel": "Parish Church of St. Mary and St. Nicholas, Kirchplatz, Beelitz, Germany",
+      "coordinates": [12.977243, 52.2329398],
+      "type": "poi",
+      "rawCategory": "amenity/place_of_worship",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:LFPB",
+      "ids": {
+        "oa": "LFPB",
+        "iata": "LBG",
+        "icao": "LFPB"
+      },
+      "label": "Paris-Le Bourget International Airport",
+      "sublabel": "Paris, FR",
+      "coordinates": [2.436539, 48.962276],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris-Le Bourget International Airport",
+        "normalized": "paris le bourget international airport"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:LFPO",
+      "ids": {
+        "oa": "LFPO",
+        "iata": "ORY",
+        "icao": "LFPO"
+      },
+      "label": "Paris-Orly Airport",
+      "sublabel": "Paris (Orly, Val-de-Marne), FR",
+      "coordinates": [2.358963, 48.729499],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris-Orly Airport",
+        "normalized": "paris orly airport"
+      },
+      "importance": 0.9,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:50TN",
+      "ids": {
+        "oa": "50TN"
+      },
+      "label": "Paris Landing Airpark",
+      "sublabel": "Paris, US",
+      "coordinates": [-88.350492, 36.352339],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris Landing Airpark",
+        "normalized": "paris landing airpark"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:7M6",
+      "ids": {
+        "oa": "7M6"
+      },
+      "label": "Paris Municipal Airport",
+      "sublabel": "Paris, US",
+      "coordinates": [-93.681702, 35.299],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris Municipal Airport",
+        "normalized": "paris municipal airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:LFPI",
+      "ids": {
+        "oa": "LFPI"
+      },
+      "label": "Paris Issy-les-Moulineaux Heliport",
+      "sublabel": "Issy-les-Moulineaux, Hauts-de-Seine, FR",
+      "coordinates": [2.273043, 48.832987],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris Issy-les-Moulineaux Heliport",
+        "normalized": "paris issy les moulineaux heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-5164",
+      "ids": {
+        "oa": "US-5164"
+      },
+      "label": "Paris Regional Medical Center Heliport",
+      "sublabel": "Paris, US",
+      "coordinates": [-95.54837, 33.6893],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris Regional Medical Center Heliport",
+        "normalized": "paris regional medical center heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:XA60",
+      "ids": {
+        "oa": "XA60"
+      },
+      "label": "Paris Regional Medical Center Heliport",
+      "sublabel": "Paris, US",
+      "coordinates": [-95.54650115966797, 33.659698486328125],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Paris Regional Medical Center Heliport",
+        "normalized": "paris regional medical center heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:KACP",
+      "ids": {
+        "oa": "KACP"
+      },
+      "label": "Allen Parish Airport",
+      "sublabel": "Oakdale, US",
+      "coordinates": [-92.688301, 30.750299],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Allen Parish Airport",
+        "normalized": "allen parish airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q20812805",
+      "name": "París",
+      "description": "Chilean chain of department stores",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q62605260",
+      "name": "Paris Baguette",
+      "description": "multinational bakery chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q11354808",
+      "name": "Paris Miki Holdings",
+      "description": "Japanese optician and eyewear retail chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q124374583",
+      "name": "Paris Panini",
+      "description": "Indian restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q111972855",
+      "name": "La Parisina",
+      "description": "chain of department stores in Mexico",
+      "kind": ["brand"],
+      "matchedOn": "alias",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q16644311",
+      "name": "Riu Paris",
+      "description": "French ready-to-wear clothing store brand",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q101427858",
+      "name": "Mes Demoiselles Paris",
+      "description": "French women's ready-to-wear clothing brand",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q131469963",
+      "name": "Ici Paris",
+      "description": "Georgian cosmetic shop chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/community_centre/parish_hall",
+      "name": "Parish Hall",
+      "tags": {
+        "amenity": "community_centre",
+        "community_centre": "parish_hall"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/monastery",
+      "name": "Monastery Grounds",
+      "tags": {
+        "amenity": "monastery"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/place_of_worship",
+      "name": "Place of Worship",
+      "tags": {
+        "amenity": "place_of_worship"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/place_of_worship/christian",
+      "name": "Christian Church",
+      "tags": {
+        "amenity": "place_of_worship",
+        "religion": "christian"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

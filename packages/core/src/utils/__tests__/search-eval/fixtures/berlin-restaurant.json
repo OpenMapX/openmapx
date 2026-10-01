@@ -1,0 +1,399 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/4454838189",
+      "label": "Restaurant M",
+      "sublabel": "Restaurant M, Stauffenbergstraße 26, Berlin, Germany",
+      "coordinates": [13.3639568, 52.507343],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/86001798",
+      "label": "Restaurant Borchardt",
+      "sublabel": "Restaurant Borchardt, Französische Straße 47, Berlin, Germany",
+      "coordinates": [13.3903882, 52.5150034],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/622085173",
+      "label": "Restaurant Nolle",
+      "sublabel": "Restaurant Nolle, Georgenstraße 203, Berlin, Germany",
+      "coordinates": [13.3890697, 52.5199871],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4182951095",
+      "label": "Restaurant Quarré",
+      "sublabel": "Restaurant Quarré, Unter den Linden 77, Berlin, Germany",
+      "coordinates": [13.3798808, 52.5160887],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6815681485",
+      "label": "Restaurant im Futurium",
+      "sublabel": "Restaurant im Futurium, Alexanderufer 2, Berlin, Germany",
+      "coordinates": [13.3743059, 52.5237013],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4160102556",
+      "label": "Restaurant Grenzfall",
+      "sublabel": "Restaurant Grenzfall, Bernauer Straße 115-118, Berlin, Germany",
+      "coordinates": [13.3890182, 52.5358692],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/345569023",
+      "label": "Restaurant",
+      "sublabel": "Restaurant, Distelweg, Potsdam, Germany",
+      "coordinates": [13.0631657, 52.4213424],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/345569022",
+      "label": "Restaurant",
+      "sublabel": "Restaurant, Distelweg, Potsdam, Germany",
+      "coordinates": [13.0626073, 52.421166],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/276177048",
+      "label": "Restaurant",
+      "sublabel": "Restaurant, Berliner Straße, Nauen, Germany",
+      "coordinates": [12.8745319, 52.6047922],
+      "type": "poi",
+      "rawCategory": "amenity/parking",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4686761197",
+      "label": "Restaurant Si",
+      "sublabel": "Restaurant Si, Fischerhüttenstraße 45, Berlin, Germany",
+      "coordinates": [13.249543, 52.43863],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/356835386",
+      "label": "Restaurant",
+      "sublabel": "Restaurant, Strukkamp, Fehmarn, Germany",
+      "coordinates": [11.0975665, 54.4118647],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/898586535",
+      "label": "Restaurant",
+      "sublabel": "Restaurant, Bockhorner Landstraße 63a, Bark, Germany",
+      "coordinates": [10.1281314, 53.9182497],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/1212615738",
+      "label": "Restaurant",
+      "sublabel": "Restaurant, Porucznika Włodzimierza Suriana, Mielno, Poland",
+      "coordinates": [16.0941541, 54.2692121],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13970695921",
+      "label": "Restaurant PP",
+      "sublabel": "Restaurant PP, Budišínská, Šluknov, Czechia",
+      "coordinates": [14.4525587, 51.0249839],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:BR-1780",
+      "ids": {
+        "oa": "BR-1780"
+      },
+      "label": "Restaurante Dalmo Heliport",
+      "sublabel": "Guarujá, BR",
+      "coordinates": [-46.190443, -23.90424],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Restaurante Dalmo Heliport",
+        "normalized": "restaurante dalmo heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:BH-0018",
+      "ids": {
+        "oa": "BH-0018"
+      },
+      "label": "Momento Restaurant Helipad North",
+      "sublabel": "Al Areen, BH",
+      "coordinates": [50.515947, 26.003185],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Momento Restaurant Helipad North",
+        "normalized": "momento restaurant helipad north"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:BH-0019",
+      "ids": {
+        "oa": "BH-0019"
+      },
+      "label": "Momento Restaurant Helipad South",
+      "sublabel": "Al Areen, BH",
+      "coordinates": [50.515619, 26.002679],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Momento Restaurant Helipad South",
+        "normalized": "momento restaurant helipad south"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-12185",
+      "ids": {
+        "oa": "US-12185"
+      },
+      "label": "McGehee Catfish Restaurant Airport",
+      "sublabel": "Marietta, US",
+      "coordinates": [-97.170782, 33.898638],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "McGehee Catfish Restaurant Airport",
+        "normalized": "mcgehee catfish restaurant airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:US-1021",
+      "ids": {
+        "oa": "US-1021"
+      },
+      "label": "D I's Cajun Restaurant Airport",
+      "sublabel": "Iota, US",
+      "coordinates": [-92.583028, 30.368708],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "D I's Cajun Restaurant Airport",
+        "normalized": "d i s cajun restaurant airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:ZA-0355",
+      "ids": {
+        "oa": "ZA-0355",
+        "icao": "FAAA"
+      },
+      "label": "Atlantic Aerodrome",
+      "sublabel": "City of Cape Town, ZA",
+      "coordinates": [18.618235, -33.588163],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "keyword",
+        "value": "restaurant",
+        "normalized": "restaurant"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:NZOS",
+      "ids": {
+        "oa": "NZOS",
+        "icao": "NZOS"
+      },
+      "label": "Otehei Bay Helibarge",
+      "sublabel": "Otehei Bay, NZ",
+      "coordinates": [174.230833, -35.22242],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "keyword",
+        "value": "Otehei Bay Restaurant",
+        "normalized": "otehei bay restaurant"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q126075497",
+      "name": "Romantik Hotels & Restaurants",
+      "description": "global chain of hotels and restaurants",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q6410248",
+      "name": "Kimpton Hotels & Restaurants",
+      "description": "boutique hotel chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q111304278",
+      "name": "Lazy Dog Restaurant & Bar",
+      "description": "American restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q17022303",
+      "name": "Mo's Restaurants",
+      "description": "US restaurant chain located on the Oregon Coast",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q7190564",
+      "name": "Piccadilly Restaurants",
+      "description": "American restaurant chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q4386779",
+      "name": "Big Boy Restaurants",
+      "description": "restaurant chain founded by Bob Wian in California, United States",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q5564102",
+      "name": "Giraffe Restaurants",
+      "description": "United Kingdom restaurant and cafe chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    },
+    {
+      "qid": "Q6524851",
+      "name": "Leon Restaurants",
+      "description": "fast food chain",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "elsewhere"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/restaurant",
+      "name": "Restaurant",
+      "tags": {
+        "amenity": "restaurant"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/american",
+      "name": "American Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "american"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/asian",
+      "name": "Asian Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "asian"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/barbecue",
+      "name": "Barbecue Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "barbecue"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/chinese",
+      "name": "Chinese Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "chinese"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/french",
+      "name": "French Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "french"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/georgian",
+      "name": "Georgian Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "georgian"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/restaurant/german",
+      "name": "German Restaurant",
+      "tags": {
+        "amenity": "restaurant",
+        "cuisine": "german"
+      },
+      "matchedOn": "name"
+    }
+  ]
+}

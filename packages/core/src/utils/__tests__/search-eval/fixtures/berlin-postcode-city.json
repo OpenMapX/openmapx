@@ -1,0 +1,79 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/771225710",
+      "label": "Neuer Berliner Kunstverein",
+      "sublabel": "Neuer Berliner Kunstverein, Chausseestraße 128-129, Berlin, Deutschland",
+      "coordinates": [13.3860465, 52.5279121],
+      "type": "poi",
+      "rawCategory": "amenity/arts_centre",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/10695759505",
+      "label": "Berliner Zoll- und Akzisemauer",
+      "sublabel": "Berliner Zoll- und Akzisemauer, Hannoversche Straße 9, Berlin, Deutschland",
+      "coordinates": [13.3800763, 52.5284295],
+      "type": "poi",
+      "rawCategory": "historic/citywalls",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/1402156",
+      "label": "10115",
+      "sublabel": "10115, Berlin, Deutschland",
+      "coordinates": [13.384557071160947, 52.53219143513144],
+      "type": "region",
+      "rawCategory": "place/postcode",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/24931203",
+      "label": "Bundeswehrkrankenhaus Berlin",
+      "sublabel": "Bundeswehrkrankenhaus Berlin, Scharnhorststraße 13, Berlin, Deutschland",
+      "coordinates": [13.3713896, 52.5356697],
+      "type": "poi",
+      "rawCategory": "amenity/hospital",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/95871837",
+      "label": "Anatomisches Theater der Tierarzneischule",
+      "sublabel": "Anatomisches Theater der Tierarzneischule, Philippstraße 13, Berlin, Deutschland",
+      "coordinates": [13.3812437, 52.5250257],
+      "type": "address",
+      "rawCategory": "building/university",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/666064497",
+      "label": "Volkshochschule Berlin Mitte",
+      "sublabel": "Volkshochschule Berlin Mitte, Linienstraße 162, Berlin, Deutschland",
+      "coordinates": [13.3960922, 52.5282109],
+      "type": "poi",
+      "rawCategory": "amenity/college",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1256840401",
+      "label": "ChristusKirche Berlin-Mitte",
+      "sublabel": "ChristusKirche Berlin-Mitte, Anklamer Straße 31, Berlin, Deutschland",
+      "coordinates": [13.3995255, 52.5363614],
+      "type": "poi",
+      "rawCategory": "amenity/place_of_worship",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/283311189",
+      "label": "Promenade am Berlin-Spandauer-Schifffahrtskanal",
+      "sublabel": "Promenade am Berlin-Spandauer-Schifffahrtskanal, Berlin, Deutschland",
+      "coordinates": [13.3709378, 52.5314842],
+      "type": "street",
+      "rawCategory": "highway/footway",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [],
+  "brands": [],
+  "presets": []
+}

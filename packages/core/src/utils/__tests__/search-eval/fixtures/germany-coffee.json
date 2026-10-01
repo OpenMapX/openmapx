@@ -46,10 +46,10 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/5334180530",
+      "id": "osm:node/5334046322",
       "label": "Coffee",
-      "sublabel": "Coffee, Базарна вулиця, Zdolbuniv, Ukraine",
-      "coordinates": [26.254593, 50.5248373],
+      "sublabel": "Coffee, вулиця Лесі Українки, Zdolbuniv, Ukraine",
+      "coordinates": [26.2301281, 50.5244553],
       "type": "poi",
       "rawCategory": "shop/beverages",
       "provider": "geocoding-photon"
@@ -88,15 +88,6 @@
       "coordinates": [2.3546239, 48.8638904],
       "type": "poi",
       "rawCategory": "amenity/cafe",
-      "provider": "geocoding-photon"
-    },
-    {
-      "id": "osm:node/5334046322",
-      "label": "Coffee",
-      "sublabel": "Coffee, вулиця Лесі Українки, Zdolbuniv, Ukraine",
-      "coordinates": [26.2301281, 50.5244553],
-      "type": "poi",
-      "rawCategory": "shop/beverages",
       "provider": "geocoding-photon"
     }
   ],
@@ -202,7 +193,7 @@
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "name",
+        "kind": "keyword",
         "value": "Price Coffee Airfield",
         "normalized": "price coffee airfield"
       },

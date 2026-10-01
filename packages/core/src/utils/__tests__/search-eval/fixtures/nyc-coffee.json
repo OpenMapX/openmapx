@@ -127,10 +127,10 @@
       "provider": "geocoding-photon"
     },
     {
-      "id": "osm:node/2525593698",
-      "label": "Coffee Mob",
-      "sublabel": "Coffee Mob, Newkirk Avenue 1514, New York, United States",
-      "coordinates": [-73.9623411, 40.6358633],
+      "id": "osm:node/5494239445",
+      "label": "Coffee & Chisme",
+      "sublabel": "Coffee & Chisme, 5th Avenue, New York, United States",
+      "coordinates": [-73.9910869, 40.6638024],
       "type": "poi",
       "rawCategory": "amenity/cafe",
       "provider": "geocoding-photon"
@@ -238,7 +238,7 @@
       "type": "poi",
       "rawCategory": "aeroway/aerodrome",
       "searchMatch": {
-        "kind": "name",
+        "kind": "keyword",
         "value": "Price Coffee Airfield",
         "normalized": "price coffee airfield"
       },

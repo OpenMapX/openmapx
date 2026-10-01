@@ -23,7 +23,14 @@ export interface EvalCase {
   /** Map centre and zoom the search is typed at. */
   center: LngLat;
   zoom: number;
+  /** Rows that must be shown; may be empty when only `enter` matters. */
   expect: Expectation[];
+  /**
+   * What plain Enter must do: open a row meeting the expectation (its
+   * `within` is ignored), search the visible area, or leave the list open to
+   * choose from. Unset when it does not matter for the case.
+   */
+  enter?: { open: Omit<Expectation, "within"> } | "search" | "choose";
   /**
    * Why a case is known to fail today. Known gaps are scored but not asserted,
    * so they show up in the report without blocking; fixing one means deleting
@@ -240,8 +247,8 @@ export const EVAL_CASES: EvalCase[] = [
     query: "hbf",
     lang: "de",
     ...berlin,
-    expect: [{ within: 3, label: "hauptbahnhof|hbf", nearKm: 10 }],
-    knownGap: "“hbf” alone is not expanded to Hauptbahnhof for autocomplete",
+    expect: [{ within: 1, label: "hauptbahnhof", nearKm: 5 }],
+    enter: { open: { label: "hauptbahnhof", nearKm: 5 } },
   },
   {
     id: "munich-marienplatz",
@@ -408,6 +415,213 @@ export const EVAL_CASES: EvalCase[] = [
     query: "alexnderplatz",
     lang: "de",
     ...berlin,
-    expect: [{ within: 3, label: "alexanderplatz", nearKm: 3 }],
+    expect: [{ within: 1, label: "alexanderplatz", nearKm: 3 }],
+    enter: { open: { label: "alexanderplatz", nearKm: 3 } },
+  },
+  // What Enter does. A word that starts many names, a chain's branches or an
+  // obscure namesake far away must not be opened as if it were the place meant.
+  {
+    id: "berlin-vegan",
+    query: "vegan",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 3, label: "vegan", nearKm: 10 }],
+    enter: "search",
+  },
+  {
+    id: "aachen-vegan",
+    query: "vegan",
+    lang: "en",
+    ...at(AACHEN, 14),
+    expect: [],
+    enter: "search",
+  },
+  {
+    id: "berlin-doner",
+    query: "döner",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 3, label: "döner", nearKm: 5 }],
+    enter: "search",
+  },
+  {
+    id: "berlin-spatkauf",
+    query: "spätkauf",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 3, label: "spätkauf", nearKm: 5 }],
+    enter: "search",
+  },
+  {
+    id: "berlin-vegetarisch",
+    query: "vegetarisch",
+    lang: "de",
+    ...berlin,
+    expect: [],
+    enter: "choose",
+  },
+  {
+    id: "berlin-wifi",
+    query: "wifi",
+    lang: "en",
+    ...berlin,
+    expect: [],
+    enter: "choose",
+  },
+  {
+    id: "berlin-rewe-enter",
+    query: "rewe",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 3, label: "rewe", nearKm: 15 }],
+    enter: { open: { type: "brand", label: "^rewe$" } },
+  },
+  {
+    id: "berlin-springfield",
+    query: "springfield",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "^springfield$", type: "region" }],
+    enter: "choose",
+  },
+  // Lower-case words that are also airport codes or OurAirports keywords.
+  {
+    id: "berlin-bar",
+    query: "bar",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, type: "category", label: "^bar" }],
+    enter: { open: { type: "category" } },
+  },
+  {
+    id: "berlin-bio",
+    query: "bio",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, label: "^bio", nearKm: 5 }],
+    enter: "search",
+  },
+  {
+    id: "berlin-restaurant",
+    query: "restaurant",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, id: "category-restaurants" }],
+    enter: { open: { id: "category-restaurants" } },
+  },
+  {
+    id: "berlin-bank",
+    query: "bank",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, type: "category" }],
+    enter: { open: { type: "category" } },
+  },
+  {
+    id: "berlin-museum",
+    query: "museum",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, id: "category-museums" }],
+    enter: { open: { id: "category-museums" } },
+  },
+  {
+    id: "berlin-lax-lower",
+    query: "lax",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "los angeles", nearKm: 30, near: [-118.41, 33.94] }],
+    enter: { open: { label: "los angeles" } },
+  },
+  {
+    id: "berlin-koln",
+    query: "köln",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, label: "^köln$", type: "region" }],
+    enter: { open: { label: "^köln$", type: "region" } },
+  },
+  // A city's own name typed with the app in another language: the label is
+  // the exonym, the match is on the native name.
+  {
+    id: "berlin-koln-in-english",
+    query: "köln",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "^cologne$", type: "region" }],
+    enter: { open: { label: "^cologne$", type: "region" } },
+  },
+  {
+    id: "berlin-munchen-in-english",
+    query: "münchen",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "^munich$", nearKm: 20, near: MUNICH }],
+    enter: { open: { label: "^munich$", nearKm: 20, near: MUNICH } },
+  },
+  {
+    id: "aachen-hbf-alone",
+    query: "hbf",
+    lang: "de",
+    ...at(AACHEN, 14),
+    expect: [{ within: 1, label: "hauptbahnhof", nearKm: 3 }],
+    enter: { open: { label: "aachen hauptbahnhof" } },
+  },
+  // Far places, addresses and typos.
+  {
+    id: "berlin-paris-enter",
+    query: "paris",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "^paris$", nearKm: 30, near: PARIS }],
+    enter: { open: { label: "^paris$", nearKm: 30, near: PARIS } },
+  },
+  {
+    id: "berlin-eiffel-tower",
+    query: "eiffel tower",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "eiffel tower", nearKm: 5, near: PARIS }],
+    enter: "choose",
+  },
+  {
+    id: "berlin-sanssouci",
+    query: "schloss sanssouci",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, label: "sanssouci", nearKm: 35 }],
+    enter: { open: { label: "sanssouci", nearKm: 35 } },
+  },
+  {
+    id: "berlin-mauerpark",
+    query: "mauerpark",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, label: "^mauerpark$", nearKm: 5 }],
+    enter: { open: { label: "^mauerpark$" } },
+  },
+  {
+    id: "berlin-typo-potsdamer-platz",
+    query: "potsdamer plaz",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, label: "potsdamer platz", nearKm: 5 }],
+    enter: { open: { label: "potsdamer platz", nearKm: 5 } },
+  },
+  {
+    id: "berlin-friedrichstrasse-100",
+    query: "friedrichstraße 100 berlin",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, label: "friedrichstra(ss|ß)e 100", nearKm: 5 }],
+    enter: { open: { label: "friedrichstra(ss|ß)e 100", nearKm: 5 } },
+  },
+  {
+    id: "berlin-postcode-city",
+    query: "10115 berlin",
+    lang: "de",
+    ...berlin,
+    expect: [{ within: 1, label: "^10115$" }],
+    enter: { open: { label: "^10115$" } },
   },
 ];

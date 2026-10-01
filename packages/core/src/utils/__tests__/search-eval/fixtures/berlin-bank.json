@@ -1,0 +1,428 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/78252154",
+      "label": "Bank für Sozialwirtschaft",
+      "sublabel": "Bank für Sozialwirtschaft, Oranienburger Straße 13, Berlin, Deutschland",
+      "coordinates": [13.3986266, 52.5237445],
+      "type": "poi",
+      "rawCategory": "amenity/atm",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/315255133",
+      "label": "Bankhaus Mendelssohn",
+      "sublabel": "Bankhaus Mendelssohn, Jägerstraße, Berlin, Deutschland",
+      "coordinates": [13.3954178, 52.5144851],
+      "type": "address",
+      "rawCategory": "building/office",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4104554190",
+      "label": "Bankos Brunch",
+      "sublabel": "Bankos Brunch, Torstraße 178, Berlin, Deutschland",
+      "coordinates": [13.3943594, 52.528431],
+      "type": "poi",
+      "rawCategory": "amenity/cafe",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3614955201",
+      "label": "Bankhaus Lenz",
+      "sublabel": "Bankhaus Lenz, Danziger Straße, Berlin, Deutschland",
+      "coordinates": [13.4149111, 52.5408557],
+      "type": "poi",
+      "rawCategory": "amenity/atm",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/5538558495",
+      "label": "Bankhaus August Lenz",
+      "sublabel": "Bankhaus August Lenz, Oppelner Straße, Berlin, Deutschland",
+      "coordinates": [13.44087, 52.5000737],
+      "type": "poi",
+      "rawCategory": "amenity/atm",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4815962792",
+      "label": "Bankhaus August Lenz",
+      "sublabel": "Bankhaus August Lenz, Winterfeldtstraße, Berlin, Deutschland",
+      "coordinates": [13.3602053, 52.4961896],
+      "type": "poi",
+      "rawCategory": "amenity/atm",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13240737993",
+      "label": "Bank",
+      "sublabel": "Bank, Mühlenweg, Trebbin, Deutschland",
+      "coordinates": [13.1038448, 52.2127072],
+      "type": "poi",
+      "rawCategory": "amenity/bench",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3535969495",
+      "label": "Bank",
+      "sublabel": "Bank, Karlowitz, Tschechien",
+      "coordinates": [15.1766343, 50.553005],
+      "type": "region",
+      "rawCategory": "natural/peak",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3461729595",
+      "label": "Bank",
+      "sublabel": "Bank, Tissa, Tschechien",
+      "coordinates": [14.031, 50.794027],
+      "type": "region",
+      "rawCategory": "natural/cliff",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/484630822",
+      "label": "Bank",
+      "sublabel": "Bank, Akacjowa, Ostrów, Polen",
+      "coordinates": [15.1419918, 52.4234706],
+      "type": "address",
+      "rawCategory": "building/yes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13955886823",
+      "label": "Bank",
+      "sublabel": "Bank, Rötgesbüttel, Deutschland",
+      "coordinates": [10.4881764, 52.3995639],
+      "type": "poi",
+      "rawCategory": "amenity/bench",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/14088321270",
+      "label": "Bank",
+      "sublabel": "Bank, Magdeburger Weg, Harz (LK Goslar), Deutschland",
+      "coordinates": [10.505969, 51.8031512],
+      "type": "poi",
+      "rawCategory": "amenity/bench",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/1833523332",
+      "label": "Bank",
+      "sublabel": "Bank, Grumkiel, Insel Hiddensee, Deutschland",
+      "coordinates": [13.0749731, 54.5080946],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/14065978172",
+      "label": "Bank",
+      "sublabel": "Bank, Mokrystraße, Hamburg, Deutschland",
+      "coordinates": [9.9828401, 53.5174219],
+      "type": "poi",
+      "rawCategory": "amenity/bench",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/26036700",
+      "label": "Banka",
+      "sublabel": "Banka, Banka, Slowakei",
+      "coordinates": [17.8497077, 48.5830874],
+      "type": "region",
+      "rawCategory": "place/village",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:relation/2204239",
+      "label": "Banka",
+      "sublabel": "Banka, Slowakei",
+      "coordinates": [17.8497077, 48.5830874],
+      "type": "region",
+      "rawCategory": "place/municipality",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "oa:GB-0602",
+      "ids": {
+        "oa": "GB-0602"
+      },
+      "label": "Bankwood Farm Airstrip",
+      "sublabel": "Thurgarton, GB",
+      "coordinates": [-0.997581, 53.045801],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bankwood Farm Airstrip",
+        "normalized": "bankwood farm airstrip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:ME5",
+      "ids": {
+        "oa": "ME5"
+      },
+      "label": "Banks Airport",
+      "sublabel": "Swans Island, US",
+      "coordinates": [-68.42780303955078, 44.165401458740234],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Banks Airport",
+        "normalized": "banks airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:62AR",
+      "ids": {
+        "oa": "62AR"
+      },
+      "label": "Banks Ranch Airport",
+      "sublabel": "Busch, US",
+      "coordinates": [-93.859866, 36.457222],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Banks Ranch Airport",
+        "normalized": "banks ranch airport"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:PG-0045",
+      "ids": {
+        "oa": "PG-0045",
+        "icao": "AYBJ"
+      },
+      "label": "Bank Airstrip",
+      "sublabel": "Bank, PG",
+      "coordinates": [144.690471, -5.364716],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bank Airstrip",
+        "normalized": "bank airstrip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:AU-0119",
+      "ids": {
+        "oa": "AU-0119"
+      },
+      "label": "Banka Banka Airstrip",
+      "sublabel": "Tablelands, AU",
+      "coordinates": [134.039619, -18.79853],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Banka Banka Airstrip",
+        "normalized": "banka banka airstrip"
+      },
+      "importance": 0.2,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CL19",
+      "ids": {
+        "oa": "CL19"
+      },
+      "label": "Bank of America Glendale Heliport",
+      "sublabel": "Glendale, US",
+      "coordinates": [-118.257008, 34.155373],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bank of America Glendale Heliport",
+        "normalized": "bank of america glendale heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:62CA",
+      "ids": {
+        "oa": "62CA"
+      },
+      "label": "Bank of America Data Center Heliport",
+      "sublabel": "Los Angeles, US",
+      "coordinates": [-118.253183, 34.053668],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bank of America Data Center Heliport",
+        "normalized": "bank of america data center heliport"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "oa:CO-0499",
+      "ids": {
+        "oa": "CO-0499"
+      },
+      "label": "Bank of Bogotá Helistop",
+      "sublabel": "Bogotá, CO",
+      "coordinates": [-74.067449, 4.623],
+      "type": "poi",
+      "rawCategory": "aeroway/aerodrome",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Bank of Bogotá Helistop",
+        "normalized": "bank of bogota helistop"
+      },
+      "importance": 0.1,
+      "provider": "knowledge-ourairports"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q790068",
+      "name": "Bank of China",
+      "description": "state-owned bank in China",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q2003797",
+      "name": "Bank of Baroda",
+      "description": "Indian public sector multinational banking company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q2004439",
+      "name": "Bank of India",
+      "description": "Public sector bank in India",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "global"
+    },
+    {
+      "qid": "Q806608",
+      "name": "Bank 1 Saar",
+      "description": "German cooperative bank",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q806665",
+      "name": "Bank für Tirol und Vorarlberg",
+      "description": "public company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    },
+    {
+      "qid": "Q106499982",
+      "name": "Bank of New Hampshire",
+      "description": "bank with locations in New Hampshire and Maine, USA",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q117187407",
+      "name": "Bank of the Sierra",
+      "description": "regional bank in California",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    },
+    {
+      "qid": "Q136328060",
+      "name": "Bank of Oklahoma",
+      "description": "American financial services brand",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "unknown"
+    }
+  ],
+  "presets": [
+    {
+      "id": "amenity/bench",
+      "name": "Sitzbank",
+      "tags": {
+        "amenity": "bench"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "highway/hitchhiking",
+      "name": "Mitfahrbank",
+      "tags": {
+        "highway": "hitchhiking"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "leisure/fitness_station/hyperextension",
+      "name": "Hyperextension-Bank",
+      "tags": {
+        "leisure": "fitness_station",
+        "fitness_station": "hyperextension"
+      },
+      "matchedOn": "name"
+    },
+    {
+      "id": "amenity/lounger",
+      "name": "Liege",
+      "tags": {
+        "amenity": "lounger"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/casino",
+      "name": "Kasino",
+      "tags": {
+        "amenity": "casino"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "amenity/public_bookcase",
+      "name": "Öffentlicher Bücherschrank",
+      "tags": {
+        "amenity": "public_bookcase"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "man_made/milk_churn_stand",
+      "name": "Milchrampe",
+      "tags": {
+        "man_made": "milk_churn_stand"
+      },
+      "matchedOn": "term"
+    },
+    {
+      "id": "natural/reef",
+      "name": "Riff",
+      "tags": {
+        "natural": "reef"
+      },
+      "matchedOn": "term"
+    }
+  ]
+}

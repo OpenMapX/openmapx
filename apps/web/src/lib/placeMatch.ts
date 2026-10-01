@@ -87,3 +87,29 @@ export function isConfidentPlaceMatch(query: string, result: SearchResult): bool
   const covered = qTokens.filter((t) => haystack.includes(t)).length;
   return covered / qTokens.length >= CONFIDENT_COVERAGE;
 }
+
+/**
+ * The part of a geocoder label that is the address typed, when the query holds
+ * a house number and that number stands in the label beside the street:
+ * "unter den linden 77" in "Adlon Kempinski, Unter den Linden 77, Berlin" is
+ * "Unter den Linden 77". Undefined when the query has no number, or the label
+ * shows it in no part that carries the query's words.
+ */
+export function typedAddressIn(query: string, label: string): string | undefined {
+  // House numbers are often one digit, which `significantTokens` drops.
+  const numbers = normalize(query)
+    .split(/\s+/)
+    .filter((token) => /\d/u.test(token));
+  if (numbers.length === 0) return undefined;
+  const words = significantTokens(query).filter((token) => !/\d/u.test(token));
+  return label
+    .split(",")
+    .map((part) => part.trim())
+    .find((part) => {
+      const tokens = normalize(part).split(/\s+/);
+      return (
+        numbers.every((number) => tokens.includes(number)) &&
+        words.some((word) => tokens.some((token) => token.includes(word)))
+      );
+    });
+}
