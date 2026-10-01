@@ -3,10 +3,33 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { apiClient } from "../../api/client";
 import { API_ENDPOINTS } from "../../api/endpoints";
 import { createQueryWrapper } from "../../test/queryWrapper";
+
+const session = vi.hoisted(() => ({ value: null as { user: { id: string } } | null }));
+vi.mock("../../auth/useSession", () => ({ useSession: () => ({ data: session.value }) }));
+
 import { useIsSaved, useLabeledPlaces, useSavedListPlaces, useSavedLists } from "../useSavedPlaces";
 
 describe("useSavedPlaces", () => {
-  beforeEach(() => vi.restoreAllMocks());
+  beforeEach(() => {
+    vi.restoreAllMocks();
+    session.value = { user: { id: "u1" } };
+  });
+
+  it("fetches nothing for a signed-out visitor", () => {
+    session.value = null;
+    const spy = vi.spyOn(apiClient, "get").mockResolvedValue({} as never);
+    const wrapper = createQueryWrapper();
+
+    const lists = renderHook(() => useSavedLists(), { wrapper });
+    const labels = renderHook(() => useLabeledPlaces(), { wrapper });
+    const places = renderHook(() => useSavedListPlaces("l1"), { wrapper });
+    const saved = renderHook(() => useIsSaved("p1"), { wrapper });
+
+    for (const { result } of [lists, labels, places, saved]) {
+      expect(result.current.fetchStatus).toBe("idle");
+    }
+    expect(spy).not.toHaveBeenCalled();
+  });
 
   it("useSavedLists unwraps the lists field", async () => {
     const lists = [{ id: "l1", name: "Favourites" }];
