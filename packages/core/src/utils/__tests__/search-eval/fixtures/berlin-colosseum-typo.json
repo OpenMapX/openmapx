@@ -1,0 +1,170 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/3987051069",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Grunerstraße 20, Berlin, Germany",
+      "coordinates": [13.4163012, 52.5193255],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11224350137",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Karl-Liebknecht-Straße, Cottbus - Chóśebuz, Germany",
+      "coordinates": [14.3311222, 51.7577034],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6153021490",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Postplatz, Plauen, Germany",
+      "coordinates": [12.1359921, 50.4960776],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/161366619",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Thüringer Straße 9, Emden, Germany",
+      "coordinates": [7.1692426, 53.3617022],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/4449050604",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Rudolf-Diesel-Straße 6, Alzey, Germany",
+      "coordinates": [8.1393163, 49.7488995],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/7847430408",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Blumenstraße 1, Kehl, Germany",
+      "coordinates": [7.8118104, 48.5754155],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2395669293",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Häuersteig 2, Freiberg, Germany",
+      "coordinates": [13.3277707, 50.8957119],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3773240469",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Herrenholz, Lübeck, Germany",
+      "coordinates": [10.6279332, 53.8583778],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3472244116",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Nordhäuser Straße 73t, Erfurt, Germany",
+      "coordinates": [10.993981, 51.008293],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/666764228",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Kurt-Schumacher-Straße, Hanover, Germany",
+      "coordinates": [9.7382795, 52.3773642],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/11495801639",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Bahnhofstraße, Sonneberg, Germany",
+      "coordinates": [11.1724114, 50.3596212],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6817364793",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Macerata-Platz 1, Weiden i.d.OPf., Germany",
+      "coordinates": [12.1594191, 49.6755398],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6830498117",
+      "label": "Colloseum",
+      "sublabel": "Colloseum, Stresemannstraße, Bielefeld, Germany",
+      "coordinates": [8.5333421, 52.0252665],
+      "type": "poi",
+      "rawCategory": "shop/clothes",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q10285",
+      "ids": {
+        "wikidata": "Q10285"
+      },
+      "label": "Colosseum",
+      "sublabel": "ancient Roman amphitheatre, a landmark of Rome, Italy",
+      "coordinates": [12.492222, 41.890278],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Colosseum",
+        "normalized": "colosseum"
+      },
+      "importance": 0.863534046666441,
+      "fame": 0.863534046666441,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q929109",
+      "ids": {
+        "wikidata": "Q929109"
+      },
+      "label": "Coliseum",
+      "sublabel": "Football stadium in Getafe, Spain",
+      "coordinates": [-3.714722, 40.325556],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Coliseum",
+        "normalized": "coliseum"
+      },
+      "importance": 0.5794558532945919,
+      "fame": 0.5794558532945919,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [
+    {
+      "qid": "Q15794685",
+      "name": "Colloseum",
+      "description": "German company",
+      "kind": ["brand"],
+      "matchedOn": "name",
+      "presence": "here"
+    }
+  ],
+  "presets": []
+}

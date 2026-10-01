@@ -158,6 +158,68 @@ describe("notable-places suggestion provider", () => {
     expect(result.suggestions[1]?.label).toBe("Salvador");
   });
 
+  it("offers famous places spelled close to text that names nothing exactly", async () => {
+    const execute = readyIndex([]).mockResolvedValueOnce([
+      {
+        qid: "Q48435",
+        kind: "place",
+        lat: 41.4,
+        lng: 2.17,
+        fame: 0.8,
+        matched: "Sagrada Família",
+        normalized: "sagrada familia",
+        label: "Basilica and Expiatory Church of the Holy Family",
+        otherLabels: ["Basilica and Expiatory Church of the Holy Family", "Sagrada Família"],
+        description: "basilica in Barcelona",
+      },
+    ]);
+    const provider = createNotablePlacesSuggestionProvider(
+      createMockIntegrationContext({ db: { execute } }),
+    );
+
+    const result = await provider.searchSuggestions(
+      { query: "sagrada famila", lang: "en", limit: 8 },
+      options,
+    );
+
+    // Two slips are allowed from 8 letters on.
+    expect(execute.mock.calls[3]?.[1]).toEqual(["sagrada famila", 3, "en", 2]);
+    expect(result.suggestions).toEqual([
+      expect.objectContaining({
+        label: "Sagrada Família",
+        searchMatch: {
+          kind: "near_name",
+          value: "Sagrada Família",
+          normalized: "sagrada familia",
+        },
+      }),
+    ]);
+  });
+
+  it("looks for no near spelling when the text names a place exactly", async () => {
+    const execute = readyIndex([
+      {
+        qid: "Q243",
+        kind: "place",
+        lat: 48.858,
+        lng: 2.294,
+        fame: 0.95,
+        matched: "Eiffel Tower",
+        normalized: "eiffel tower",
+        label: "Eiffel Tower",
+        otherLabels: ["Eiffelturm", "Eiffel Tower"],
+        description: "tower in Paris",
+      },
+    ]);
+    const provider = createNotablePlacesSuggestionProvider(
+      createMockIntegrationContext({ db: { execute } }),
+    );
+
+    await provider.searchSuggestions({ query: "eiffel tower", lang: "en", limit: 8 }, options);
+
+    expect(execute).toHaveBeenCalledTimes(3);
+  });
+
   it("answers nothing until a snapshot is published, without reading the index", async () => {
     const execute = vi.fn().mockResolvedValueOnce([{ exists: false }]);
     const provider = createNotablePlacesSuggestionProvider(

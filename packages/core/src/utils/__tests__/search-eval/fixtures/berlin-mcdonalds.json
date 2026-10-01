@@ -181,6 +181,42 @@
       },
       "importance": 0.2,
       "provider": "knowledge-ourairports"
+    },
+    {
+      "id": "wikidata:Q3178685",
+      "ids": {
+        "wikidata": "Q3178685"
+      },
+      "label": "McDonald",
+      "sublabel": "lake in Flathead County, Montana",
+      "coordinates": [-113.935, 48.5692],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "McDonald",
+        "normalized": "mcdonald"
+      },
+      "importance": 0.4214085732365982,
+      "fame": 0.4214085732365982,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q6922097",
+      "ids": {
+        "wikidata": "Q6922097"
+      },
+      "label": "McDonald",
+      "sublabel": "mountain in Antarctica",
+      "coordinates": [166.6, -72.5],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "McDonald",
+        "normalized": "mcdonald"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [],

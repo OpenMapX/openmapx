@@ -1,4 +1,7 @@
 import {
+  editDistance,
+  MIN_NEAR_SPELLING_LENGTH,
+  nearSpellingEdits,
   normalizeSearchTerm,
   type SearchSuggestion,
   type SearchSuggestionProviderResult,
@@ -52,14 +55,7 @@ export const MIN_NOTABLE_QUERY_LENGTH = 3;
  * rest, fame and nearness share the say: within the limit, a moderately known
  * place near the map still makes it next to a world-famous one far away.
  */
-const SEARCH_SQL = `
-WITH matched AS (
-  SELECT DISTINCT ON (n.qid) n.qid, n.name, n.normalized
-    FROM notable_places.names AS n
-    JOIN notable_places.places AS p USING (qid)
-   WHERE n.normalized = $1 OR (n.normalized LIKE $1 || '%' AND p.kind = 'place')
-   ORDER BY n.qid, (n.normalized = $1) DESC, length(n.normalized)
-)
+const MATCHED_PLACES = `
 SELECT p.qid, p.kind, p.lat, p.lng, p.fame, p.iata, p.icao, m.name AS matched, m.normalized,
        COALESCE(own.name, mul.name, en.name, m.name) AS label,
        ARRAY(SELECT other.name FROM notable_places.labels AS other
@@ -74,7 +70,17 @@ SELECT p.qid, p.kind, p.lat, p.lng, p.fame, p.iata, p.icao, m.name AS matched, m
   LEFT JOIN notable_places.descriptions AS own_description
          ON own_description.qid = p.qid AND own_description.lang = $3
   LEFT JOIN notable_places.descriptions AS en_description
-         ON en_description.qid = p.qid AND en_description.lang = 'en'
+         ON en_description.qid = p.qid AND en_description.lang = 'en'`;
+
+const SEARCH_SQL = `
+WITH matched AS (
+  SELECT DISTINCT ON (n.qid) n.qid, n.name, n.normalized
+    FROM notable_places.names AS n
+    JOIN notable_places.places AS p USING (qid)
+   WHERE n.normalized = $1 OR (n.normalized LIKE $1 || '%' AND p.kind = 'place')
+   ORDER BY n.qid, (n.normalized = $1) DESC, length(n.normalized)
+)
+${MATCHED_PLACES}
  ORDER BY (m.normalized = $1) DESC,
           p.fame + CASE
             WHEN $4::DOUBLE PRECISION IS NULL OR $5::DOUBLE PRECISION IS NULL THEN 0
@@ -83,6 +89,48 @@ SELECT p.qid, p.kind, p.lat, p.lng, p.fame, p.iata, p.icao, m.name AS matched, m
           END DESC,
           p.qid
  LIMIT $2`;
+
+/**
+ * Places with a name spelled close to the text, for text that names none
+ * exactly: "neuschwanstien", "eifel tower", "sagrada famila". Trigrams find
+ * candidates; the edit distance, counted only for names of about the text's
+ * length, keeps the near ones. Fewest slips first, then the best known.
+ * Cities are left to the geocoders, as their name starts are.
+ */
+const NEAR_SQL = `
+WITH candidates AS (
+  SELECT n.qid, n.name, n.normalized,
+         CASE WHEN abs(length(n.normalized) - length($1)) <= $4
+              THEN levenshtein_less_equal(n.normalized, $1, $4) END AS edits
+    FROM notable_places.names AS n
+    JOIN notable_places.places AS p USING (qid)
+   WHERE n.normalized % $1 AND p.kind = 'place'
+), matched AS (
+  SELECT DISTINCT ON (c.qid) c.qid, c.name, c.normalized, c.edits
+    FROM candidates AS c
+   WHERE c.edits <= $4
+   ORDER BY c.qid, c.edits, similarity(c.normalized, $1) DESC
+)
+${MATCHED_PLACES}
+ ORDER BY m.edits, p.fame DESC, p.qid
+ LIMIT $2`;
+
+/** Near spellings offered at most, next to what the text names as typed. */
+const NEAR_LIMIT = 3;
+/** Longer text is no name typed with a slip; edit distance stops at 255 characters. */
+const MAX_NEAR_SPELLING_LENGTH = 100;
+
+/**
+ * For a near spelling, whichever of the place's names the text is close to,
+ * so the row reads as what was meant: Sagrada Família for "sagrada famila",
+ * not the basilica's long English name.
+ */
+function nearDisplayName(row: SearchRow, normalizedQuery: string): string {
+  const edits = nearSpellingEdits(normalizedQuery);
+  const near = (name: string) =>
+    editDistance(normalizeSearchTerm(name), normalizedQuery, edits) <= edits;
+  return [row.label, ...(row.otherLabels ?? [])].find(near) ?? row.matched;
+}
 
 /**
  * The place's name in the app's language, unless that leaves out what was
@@ -103,8 +151,9 @@ function displayName(row: SearchRow, normalizedQuery: string): string {
   return /^[A-Z0-9]{2,5}$/.test(row.matched) ? row.label : row.matched;
 }
 
-function mapRow(row: SearchRow, normalizedQuery: string): SearchSuggestion {
+function mapRow(row: SearchRow, normalizedQuery: string, near = false): SearchSuggestion {
   const fame = Number(row.fame);
+  const label = near ? nearDisplayName(row, normalizedQuery) : displayName(row, normalizedQuery);
   return {
     id: `wikidata:${row.qid}`,
     // Airport codes join this row to the airport catalog's row for the same place.
@@ -113,14 +162,17 @@ function mapRow(row: SearchRow, normalizedQuery: string): SearchSuggestion {
       ...(row.iata ? { iata: row.iata } : {}),
       ...(row.icao ? { icao: row.icao } : {}),
     },
-    label: displayName(row, normalizedQuery),
+    label,
     ...(row.description ? { sublabel: row.description } : {}),
     coordinates: [Number(row.lng), Number(row.lat)],
     // A city is an area like a geocoder's row for it, which it then joins.
     ...(row.kind === "settlement"
       ? { type: "region" as const, rawCategory: SETTLEMENT_RAW_CATEGORY }
       : { type: "poi" as const }),
-    searchMatch: { kind: "name", value: row.matched, normalized: row.normalized },
+    // A near spelling matched the name it shows, so no other name is shown beside it.
+    searchMatch: near
+      ? { kind: "near_name", value: label, normalized: normalizeSearchTerm(label) }
+      : { kind: "name", value: row.matched, normalized: row.normalized },
     importance: fame,
     fame,
     provider: "search-notable-places",
@@ -178,7 +230,24 @@ export function createNotablePlacesSuggestionProvider(
           [normalized, query.limit, query.lang, proximity?.[0] ?? null, proximity?.[1] ?? null],
           { signal },
         );
-        const suggestions = (rows ?? []).map((row) => mapRow(row, normalized));
+        const found = rows ?? [];
+        const suggestions = found.map((row) => mapRow(row, normalized));
+        // Text that names nothing exactly may be a famous name with a slip.
+        if (
+          normalized.length >= MIN_NEAR_SPELLING_LENGTH &&
+          normalized.length <= MAX_NEAR_SPELLING_LENGTH &&
+          !found.some((row) => row.normalized === normalized)
+        ) {
+          const nearRows = await ctx.db?.execute<SearchRow[]>(
+            NEAR_SQL,
+            [normalized, NEAR_LIMIT, query.lang, nearSpellingEdits(normalized)],
+            { signal },
+          );
+          const listed = new Set(found.map((row) => row.qid));
+          for (const row of nearRows ?? []) {
+            if (!listed.has(row.qid)) suggestions.push(mapRow(row, normalized, true));
+          }
+        }
         return {
           suggestions,
           attributions: suggestions.length > 0 ? [WIKIDATA_ATTRIBUTION] : [],

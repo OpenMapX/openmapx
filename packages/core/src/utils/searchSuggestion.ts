@@ -239,6 +239,47 @@ function withinOneEdit(a: string, b: string): boolean {
 }
 
 /**
+ * Shortest text a near spelling is looked for at: below it one letter makes
+ * a different word too easily.
+ */
+export const MIN_NEAR_SPELLING_LENGTH = 5;
+
+/**
+ * Slips a near spelling of `text` may have: one in a short name, two from
+ * 8 letters on ("colloseum" is two from Colosseum).
+ */
+export function nearSpellingEdits(text: string): number {
+  return text.length >= 8 ? 2 : 1;
+}
+
+/**
+ * Edits that turn `a` into `b` (an insertion, deletion, substitution or swap
+ * of neighbours each), counted only up to `limit + 1`.
+ */
+export function editDistance(a: string, b: string, limit: number): number {
+  if (Math.abs(a.length - b.length) > limit) return limit + 1;
+  let beforePrevious: number[] = [];
+  let previous = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const current = [i];
+    let rowMin = i;
+    for (let j = 1; j <= b.length; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      let value = Math.min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + cost);
+      if (i > 1 && j > 1 && a[i - 1] === b[j - 2] && a[i - 2] === b[j - 1]) {
+        value = Math.min(value, beforePrevious[j - 2] + 1);
+      }
+      current.push(value);
+      rowMin = Math.min(rowMin, value);
+    }
+    if (rowMin > limit) return limit + 1;
+    beforePrevious = previous;
+    previous = current;
+  }
+  return Math.min(previous[b.length], limit + 1);
+}
+
+/**
  * Whether `token` starts `word`, allowing one slip. Short words are left
  * exact: one letter changes "bank" into "band" or "bark".
  */
@@ -309,6 +350,16 @@ export function textMatchScore(item: AutocompleteResult, query: string): number 
           ? TEXT_SCORE.contextWordPrefix
           : 0;
     return Math.max(tagged, textMatchScore({ ...item, searchMatch: undefined }, query));
+  }
+  if (match?.kind === "near_name") {
+    // A typo of the name, as the provider found it; checked again here, so
+    // only the slips a typo may have count.
+    const edits = nearSpellingEdits(normalizedQuery);
+    const near = editDistance(normalizedQuery, match.normalized, edits) <= edits;
+    return Math.max(
+      near ? TEXT_SCORE.fuzzy : 0,
+      textMatchScore({ ...item, searchMatch: undefined }, query),
+    );
   }
   if (match?.normalized === normalizedQuery) {
     // "bar", "art" and "spa" are words before they are airport codes; a code

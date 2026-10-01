@@ -100,6 +100,13 @@ describe.skipIf(skipE2e)("notable-places publication", () => {
         { lang: "de", name: "Eiffelturm" },
         { lang: "en", name: "Eiffel Tower" },
       ]);
+      // Near spellings are found through the trigram index and edit distance.
+      const near = await pg.sql.unsafe<{ qid: string }[]>(
+        `SELECT qid FROM notable_places.names
+          WHERE normalized % 'eifel tower'
+            AND levenshtein_less_equal(normalized, 'eifel tower', 2) <= 2`,
+      );
+      expect(near).toEqual([{ qid: "Q243" }]);
       const [place] = await pg.sql.unsafe<{ fame: number }[]>(
         `SELECT fame FROM notable_places.places WHERE qid = 'Q243'`,
       );

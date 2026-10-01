@@ -8,6 +8,11 @@ export type SearchMatchKind =
   | "explicit_reference"
   | "explicit_alias"
   | "name"
+  /**
+   * A name spelled close to the text but not as typed: "neuschwanstien" for
+   * Neuschwanstein. The value is the name as it should be spelled.
+   */
+  | "near_name"
   /** A loose tag the source attaches (OurAirports keywords: city names, "restaurant"), not a name. */
   | "keyword"
   | "generated_acronym";

@@ -646,6 +646,39 @@ export const EVAL_CASES: EvalCase[] = [
     expect: [{ within: 1, label: "neuschwanstein", nearKm: 3, near: [10.7498, 47.5576] }],
     enter: { open: { label: "neuschwanstein", nearKm: 3, near: [10.7498, 47.5576] } },
   },
+  // Famous names misspelled: the place, not a namesake spelled that way.
+  {
+    id: "berlin-neuschwanstein-typo",
+    query: "neuschwanstien",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "neuschwanstein", nearKm: 3, near: [10.7498, 47.5576] }],
+    enter: { open: { label: "neuschwanstein", nearKm: 3, near: [10.7498, 47.5576] } },
+  },
+  {
+    id: "berlin-eiffel-tower-typo",
+    query: "eifel tower",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "eiffel tower", nearKm: 5, near: PARIS }],
+    enter: { open: { label: "eiffel tower", nearKm: 5, near: PARIS } },
+  },
+  {
+    id: "berlin-sagrada-familia-typo",
+    query: "sagrada famila",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 1, label: "sagrada fam", nearKm: 3, near: [2.1744, 41.4036] }],
+    enter: { open: { label: "sagrada fam", nearKm: 3, near: [2.1744, 41.4036] } },
+  },
+  // A shop of that very name nearby comes first; the Colosseum is still offered.
+  {
+    id: "berlin-colosseum-typo",
+    query: "colloseum",
+    lang: "en",
+    ...berlin,
+    expect: [{ within: 3, label: "colosseum", nearKm: 3, near: [12.4922, 41.8902] }],
+  },
   {
     id: "berlin-colosseo-in-english",
     query: "colosseo",

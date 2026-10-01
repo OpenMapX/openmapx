@@ -127,6 +127,24 @@
       "importance": 0.5121843988435543,
       "fame": 0.5121843988435543,
       "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q1962200",
+      "ids": {
+        "wikidata": "Q1962200"
+      },
+      "label": "Alexander",
+      "sublabel": "river in Israel and the West Bank",
+      "coordinates": [35.0946, 32.2164],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Alexander",
+        "normalized": "alexander"
+      },
+      "importance": 0.4455824028205204,
+      "fame": 0.4455824028205204,
+      "provider": "search-notable-places"
     }
   ],
   "brands": [],

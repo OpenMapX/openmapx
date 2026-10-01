@@ -1,0 +1,35 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/5552887207",
+      "label": "Neuschwanstein",
+      "sublabel": "Neuschwanstein, Poznańska, Trzebaw, Poland",
+      "coordinates": [16.7559116, 52.2959401],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q4152",
+      "ids": {
+        "wikidata": "Q4152"
+      },
+      "label": "Neuschwanstein",
+      "sublabel": "castle in Bavaria, Germany, Europe",
+      "coordinates": [10.749442, 47.557489],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Neuschwanstein",
+        "normalized": "neuschwanstein"
+      },
+      "importance": 0.773799401818745,
+      "fame": 0.773799401818745,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

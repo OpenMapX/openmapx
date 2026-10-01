@@ -54,8 +54,10 @@ Berlin finds the one in Rome and "big ben" the tower in London, whichever
 geocoder is configured. The index carries names in eight languages plus
 Wikidata's language-independent label ("Colosseo", "Tour Eiffel"), and holds
 the cities known worldwide as well, so "rom" or "münchen" typed with the app
-in English opens Rome or Munich rather than a village of that name. It is
-maintained by the data-manager; see
+in English opens Rome or Munich rather than a village of that name. A famous
+name typed with a slip or two ("neuschwanstien", "eifel tower") still finds
+the place, unless something nearby is really called that. It is maintained
+by the data-manager; see
 [Notable places for search](../install/configuration.md#notable-places-for-search).
 
 ### Codes, aliases, and acronyms

@@ -91,7 +91,46 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q1478768",
+      "ids": {
+        "wikidata": "Q1478768"
+      },
+      "label": "Vegår",
+      "sublabel": "lake in Vegårshei, Norway",
+      "coordinates": [8.858055, 58.8075],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Vegår",
+        "normalized": "vegar"
+      },
+      "importance": 0.3227484462648939,
+      "fame": 0.3227484462648939,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q4734443",
+      "ids": {
+        "wikidata": "Q4734443",
+        "iata": "IXV",
+        "icao": "VEAN"
+      },
+      "label": "VEAN",
+      "sublabel": "airport in India",
+      "coordinates": [94.801944, 28.175278],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "VEAN",
+        "normalized": "vean"
+      },
+      "importance": 0.36150569604386273,
+      "fame": 0.36150569604386273,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [
     {
       "qid": "Q106351886",

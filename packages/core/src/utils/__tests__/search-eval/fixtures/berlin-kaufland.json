@@ -100,7 +100,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q185072",
+      "ids": {
+        "wikidata": "Q185072"
+      },
+      "label": "Kurland",
+      "sublabel": "historische Landschaft Lettlands",
+      "coordinates": [22, 57],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Kurland",
+        "normalized": "kurland"
+      },
+      "importance": 0.7322530990518568,
+      "fame": 0.7322530990518568,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [
     {
       "qid": "Q685967",

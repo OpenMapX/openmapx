@@ -34,7 +34,26 @@
       "provider": "geocoding-maptiler"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q152252",
+      "ids": {
+        "wikidata": "Q152252"
+      },
+      "label": "Potsdamer Platz",
+      "sublabel": "Platz in Berlin",
+      "coordinates": [13.376333, 52.508945],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Potsdamer Platz",
+        "normalized": "potsdamer platz"
+      },
+      "importance": 0.6539421506823742,
+      "fame": 0.6539421506823742,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

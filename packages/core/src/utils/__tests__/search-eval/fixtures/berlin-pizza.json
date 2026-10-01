@@ -156,6 +156,24 @@
       "provider": "search-notable-places"
     },
     {
+      "id": "wikidata:Q1816805",
+      "ids": {
+        "wikidata": "Q1816805"
+      },
+      "label": "Pimza",
+      "sublabel": "river in Estonia and Russia",
+      "coordinates": [27.08075, 57.67572],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Pimza",
+        "normalized": "pimza"
+      },
+      "importance": 0.5736900948874171,
+      "fame": 0.5736900948874171,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "wikidata:Q6980248",
       "ids": {
         "wikidata": "Q6980248"
@@ -174,6 +192,24 @@
       "provider": "search-notable-places"
     },
     {
+      "id": "wikidata:Q304530",
+      "ids": {
+        "wikidata": "Q304530"
+      },
+      "label": "Pižma",
+      "sublabel": "river in Nizhny Novgorod Oblast, Russia",
+      "coordinates": [46.889444, 57.609722],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Pižma",
+        "normalized": "pizma"
+      },
+      "importance": 0.5121843988435543,
+      "fame": 0.5121843988435543,
+      "provider": "search-notable-places"
+    },
+    {
       "id": "wikidata:Q969648",
       "ids": {
         "wikidata": "Q969648"
@@ -189,6 +225,24 @@
       },
       "importance": 0.3430976248671155,
       "fame": 0.3430976248671155,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q577298",
+      "ids": {
+        "wikidata": "Q577298"
+      },
+      "label": "Pižma",
+      "sublabel": "river in Komi, Russia",
+      "coordinates": [50.7483, 64.7095],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Pižma",
+        "normalized": "pizma"
+      },
+      "importance": 0.46706436216622105,
+      "fame": 0.46706436216622105,
       "provider": "search-notable-places"
     },
     {
@@ -225,25 +279,6 @@
         "normalized": "nelson pizzani airport"
       },
       "importance": 0.2,
-      "provider": "knowledge-ourairports"
-    },
-    {
-      "id": "oa:OBBS",
-      "ids": {
-        "oa": "OBBS",
-        "icao": "OBBS"
-      },
-      "label": "Sheik Isa Air Base",
-      "sublabel": "Sitrah, BH",
-      "coordinates": [50.590599, 25.9184],
-      "type": "poi",
-      "rawCategory": "aeroway/aerodrome",
-      "searchMatch": {
-        "kind": "keyword",
-        "value": "Shakey's Pizza",
-        "normalized": "shakey s pizza"
-      },
-      "importance": 0.7,
       "provider": "knowledge-ourairports"
     }
   ],

@@ -91,7 +91,26 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q152783",
+      "ids": {
+        "wikidata": "Q152783"
+      },
+      "label": "Alexanderplatz",
+      "sublabel": "Zentraler Platz in Berlin",
+      "coordinates": [13.413611, 52.521667],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Alexanderplatz",
+        "normalized": "alexanderplatz"
+      },
+      "importance": 0.6500402288202247,
+      "fame": 0.6500402288202247,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [],
   "presets": []
 }

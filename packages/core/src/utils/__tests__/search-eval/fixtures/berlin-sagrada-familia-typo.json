@@ -1,0 +1,44 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/4737286345",
+      "label": "Parroquia de la Sagrada Famila",
+      "sublabel": "Parroquia de la Sagrada Famila, Calle Córdoba, Mexico",
+      "coordinates": [-99.2406414, 19.3055059],
+      "type": "poi",
+      "rawCategory": "amenity/place_of_worship",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/432571463",
+      "label": "Igreja Matriz Sagrada Famíla de Nazaré",
+      "sublabel": "Igreja Matriz Sagrada Famíla de Nazaré, Rua Doutor João Sebastiany, Cerro Largo, Brazil",
+      "coordinates": [-54.7384893, -28.1496346],
+      "type": "poi",
+      "rawCategory": "amenity/place_of_worship",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q48435",
+      "ids": {
+        "wikidata": "Q48435"
+      },
+      "label": "Sagrada Família",
+      "sublabel": "basilica under construction since 1882 in Barcelona, Spain",
+      "coordinates": [2.17433, 41.40369],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Sagrada Família",
+        "normalized": "sagrada familia"
+      },
+      "importance": 0.8044598375801966,
+      "fame": 0.8044598375801966,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

@@ -2,9 +2,11 @@ import { describe, expect, it } from "vitest";
 import type { AutocompleteResult } from "../../types/geocoding";
 import {
   compareSearchSuggestions,
+  editDistance,
   isUppercaseAcronymIntent,
   localityScore,
   mergeAutocompleteSuggestions,
+  nearSpellingEdits,
   normalizeSearchTerm,
   suggestionScore,
   textMatchScore,
@@ -13,6 +15,32 @@ import {
 const BERLIN: [number, number] = [13.405, 52.52];
 
 describe("search suggestion primitives", () => {
+  it("counts edits, a swap of neighbours as one, up to a limit", () => {
+    expect(editDistance("neuschwanstien", "neuschwanstein", 2)).toBe(1);
+    expect(editDistance("colloseum", "colosseum", 2)).toBe(2);
+    expect(editDistance("eifel tower", "eiffel tower", 2)).toBe(1);
+    expect(editDistance("berlin", "berlin", 1)).toBe(0);
+    expect(editDistance("louvre", "lourdes", 1)).toBe(2);
+    expect(editDistance("a", "abcdef", 2)).toBe(3);
+    expect(nearSpellingEdits("eifel")).toBe(1);
+    expect(nearSpellingEdits("colloseum")).toBe(2);
+  });
+
+  it("scores a provider's near spelling as a typo, only within the slips a typo may have", () => {
+    const castle = (normalized: string): AutocompleteResult => ({
+      id: "wikidata:Q4152",
+      label: "Neuschwanstein",
+      coordinates: [10.75, 47.56],
+      type: "poi",
+      searchMatch: { kind: "near_name", value: "Neuschwanstein", normalized },
+    });
+    expect(textMatchScore(castle("neuschwanstein"), "neuschwanstien")).toBe(0.75);
+    // Three slips are no typo; the label alone matches nothing either.
+    expect(textMatchScore(castle("neuschwanstein"), "neuchvanstien")).toBeLessThan(0.75);
+    // An exact name the row also carries still counts as exact.
+    expect(textMatchScore(castle("neuschwanstein"), "neuschwanstein")).toBe(1);
+  });
+
   it("normalizes case, Latin diacritics, punctuation, and whitespace", () => {
     expect(normalizeSearchTerm("  MÜNCHEN—Hbf  ")).toBe("munchen hbf");
   });

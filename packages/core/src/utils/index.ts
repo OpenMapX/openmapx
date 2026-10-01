@@ -266,10 +266,13 @@ export {
 } from "./roadRestrictionDetails";
 export {
   compareSearchSuggestions,
+  editDistance,
   isUppercaseAcronymIntent,
   localityScore,
+  MIN_NEAR_SPELLING_LENGTH,
   MIN_SUGGESTION_TEXT_SCORE,
   mergeAutocompleteSuggestions,
+  nearSpellingEdits,
   normalizeSearchTerm,
   type SuggestionScoreContext,
   suggestionScore,

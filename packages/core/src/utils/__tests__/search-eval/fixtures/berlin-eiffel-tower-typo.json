@@ -1,0 +1,140 @@
+{
+  "autocomplete": [
+    {
+      "id": "osm:node/9854847390",
+      "label": "Eifel tower",
+      "sublabel": "Eifel tower, Svobody Street, Хмельницький, Ukraine",
+      "coordinates": [26.9899644, 49.4222934],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/14294410",
+      "label": "Eifel Tower Way",
+      "sublabel": "Eifel Tower Way, Las Vegas, United States",
+      "coordinates": [-115.2496347, 36.263376],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Eifel Tower Way",
+        "normalized": "eifel tower way"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13124284921",
+      "label": "Westbound Ann after Eifel Tower",
+      "sublabel": "Westbound Ann after Eifel Tower, West Ann Road, Las Vegas, United States",
+      "coordinates": [-115.2499909, 36.2632283],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Westbound Ann after Eifel Tower",
+        "normalized": "westbound ann after eifel tower"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3391642414",
+      "label": "Mini eifel tower",
+      "sublabel": "Mini eifel tower, Grab bb, Grab, Bosnia and Herzegovina",
+      "coordinates": [17.4649073, 43.2128966],
+      "type": "poi",
+      "rawCategory": "man_made/tower",
+      "searchMatch": {
+        "kind": "name",
+        "value": "Mini eifel tower",
+        "normalized": "mini eifel tower"
+      },
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:way/43467596",
+      "label": "Am Tower",
+      "sublabel": "Am Tower, Bitburg, Germany",
+      "coordinates": [6.553904, 49.9445703],
+      "type": "street",
+      "rawCategory": "highway/residential",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/6768934385",
+      "label": "Bitburg-Flugplatz, Am Tower",
+      "sublabel": "Bitburg-Flugplatz, Am Tower, Am Tower, Bitburg, Germany",
+      "coordinates": [6.5524978, 49.9439717],
+      "type": "street",
+      "rawCategory": "highway/bus_stop",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/2895870932",
+      "label": "Tower Bistro",
+      "sublabel": "Tower Bistro, Am Tower 14, Bitburg, Germany",
+      "coordinates": [6.5579975, 49.9456324],
+      "type": "poi",
+      "rawCategory": "amenity/restaurant",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/13970957701",
+      "label": "Sabana Rawa Pening (eifel tower)",
+      "sublabel": "Sabana Rawa Pening (eifel tower), Jalan Fatmawati, Tuntang, Indonesia",
+      "coordinates": [110.4523689, -7.2812157],
+      "type": "poi",
+      "rawCategory": "tourism/viewpoint",
+      "provider": "geocoding-photon"
+    },
+    {
+      "id": "osm:node/3713638592",
+      "label": "Eiffel Tower (mini)",
+      "sublabel": "Eiffel Tower (mini), Žemaitijos g., Mažeikiai, Lithuania",
+      "coordinates": [22.3543728, 56.3000009],
+      "type": "poi",
+      "rawCategory": "tourism/artwork",
+      "provider": "geocoding-photon"
+    }
+  ],
+  "aggregate": [
+    {
+      "id": "wikidata:Q243",
+      "ids": {
+        "wikidata": "Q243"
+      },
+      "label": "Eiffel Tower",
+      "sublabel": "tower located on the Champ de Mars in Paris, France",
+      "coordinates": [2.294479, 48.858296],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Eiffel Tower",
+        "normalized": "eiffel tower"
+      },
+      "importance": 0.9127961915086311,
+      "fame": 0.9127961915086311,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q30754048",
+      "ids": {
+        "wikidata": "Q30754048"
+      },
+      "label": "Ciel Tower",
+      "sublabel": "Hotels in Dubai",
+      "coordinates": [55.14454, 25.08744],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Ciel Tower",
+        "normalized": "ciel tower"
+      },
+      "importance": 0.3,
+      "fame": 0.3,
+      "provider": "search-notable-places"
+    }
+  ],
+  "brands": [],
+  "presets": []
+}

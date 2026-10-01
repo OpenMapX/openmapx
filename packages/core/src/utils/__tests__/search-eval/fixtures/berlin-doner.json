@@ -100,7 +100,62 @@
       "provider": "geocoding-photon"
     }
   ],
-  "aggregate": [],
+  "aggregate": [
+    {
+      "id": "wikidata:Q191238",
+      "ids": {
+        "wikidata": "Q191238"
+      },
+      "label": "Donec",
+      "sublabel": "Nebenfluss des Dons",
+      "coordinates": [40.8972, 47.6006],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Donec",
+        "normalized": "donec"
+      },
+      "importance": 0.7216675150088596,
+      "fame": 0.7216675150088596,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q870315",
+      "ids": {
+        "wikidata": "Q870315"
+      },
+      "label": "Loner",
+      "sublabel": "Berg in den Alpen",
+      "coordinates": [7.6, 46.4625],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Loner",
+        "normalized": "loner"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    },
+    {
+      "id": "wikidata:Q3272303",
+      "ids": {
+        "wikidata": "Q3272303"
+      },
+      "label": "Dover",
+      "sublabel": "U-Bahnhof in Singapur",
+      "coordinates": [103.778611, 1.311389],
+      "type": "poi",
+      "searchMatch": {
+        "kind": "near_name",
+        "value": "Dover",
+        "normalized": "dover"
+      },
+      "importance": 0.4080833891730765,
+      "fame": 0.4080833891730765,
+      "provider": "search-notable-places"
+    }
+  ],
   "brands": [
     {
       "qid": "Q119437091",
