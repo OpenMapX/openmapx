@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { poiTextColourExpression } from "./poi-icon-registry.mjs";
+import { poiIconImageExpression, poiTextColourExpression } from "./poi-icon-registry.mjs";
 import {
   landmarkExpression,
   notabilityExpression,
@@ -14,6 +14,8 @@ import {
 
 const path = fileURLToPath(new URL("../public/styles/openmapx-streets.json", import.meta.url));
 const style = JSON.parse(readFileSync(path, "utf8"));
+const spritePath = fileURLToPath(new URL("../public/styles/sprite.json", import.meta.url));
+const spriteNames = Object.keys(JSON.parse(readFileSync(spritePath, "utf8")));
 const fixtureClasses = [
   "waste_basket",
   "bicycle_parking",
@@ -37,7 +39,7 @@ const halo = {
 };
 
 function iconImage() {
-  return style.layers.find((layer) => layer.id === "poi-level-1").layout["icon-image"];
+  return poiIconImageExpression(spriteNames);
 }
 
 function upsertLayer(layer, afterId) {
@@ -92,6 +94,7 @@ for (const layer of style.layers) {
     );
   }
   layer.filter = filter;
+  layer.layout["icon-image"] = iconImage();
   // Stops are drawn as small icons only; the app's TransitStopLabels names
   // each stop once however many platforms carry its name.
   layer.layout["icon-size"] = [

@@ -256,6 +256,39 @@ export const poiIconGroups = [
 // Classes the registry does not know keep the neutral grey all labels used to have.
 export const poiFallbackTextColour = "#5f6368";
 
+/**
+ * A POI's badge: its subclass's if there is one, else its class's, else the
+ * basemap's older `<class>_11` glyph, else a marker. Every image is named
+ * outright rather than tried in turn, because MapLibre warns about each name
+ * it asks the sprite for and does not find.
+ */
+export function poiIconImageExpression(glyphNames) {
+  const subclassBranches = [];
+  const classBranches = [];
+  const classes = new Set();
+  for (const group of poiIconGroups) {
+    for (const key of Object.keys(group.icons)) {
+      const image = ["image", `poi-${key.replace("/", "-")}`];
+      if (key.includes("/")) {
+        subclassBranches.push(key, image);
+      } else {
+        classBranches.push(key, image);
+        classes.add(key);
+      }
+    }
+  }
+  for (const name of glyphNames) {
+    const poiClass = name.replace(/_11$/, "");
+    if (poiClass !== name && !classes.has(poiClass)) classBranches.push(poiClass, ["image", name]);
+  }
+  return [
+    "match",
+    ["concat", ["get", "class"], "/", ["coalesce", ["get", "subclass"], ""]],
+    ...subclassBranches,
+    ["match", ["get", "class"], ...classBranches, ["image", "marker_11"]],
+  ];
+}
+
 /** A label takes its badge's category colour; a subclass override wins over its class. */
 export function poiTextColourExpression() {
   const subclassBranches = [];

@@ -71,7 +71,36 @@ function resolvedIcon(
   return image?.available ? image.name : null;
 }
 
+/** Every `["image", name]` an expression may ask the sprite for. */
+function imageLookups(expression: unknown): unknown[] {
+  if (!Array.isArray(expression)) return [];
+  const own = expression[0] === "image" ? [expression[1]] : [];
+  return [...own, ...expression.flatMap(imageLookups)];
+}
+
 describe("bundled basemap POI sprites", () => {
+  it("names only images the sprite has, so the map never warns about a missing one", () => {
+    const availableImages = new Set(Object.keys(readSprite("sprite.json")));
+    for (const styleName of ["openmapx-streets.json", "openmapx-dark.json"]) {
+      const style = readStyle(styleName);
+      for (const id of [
+        "poi-level-1",
+        "poi-level-2",
+        "poi-level-3",
+        "poi-landmark",
+        "poi-railway",
+      ]) {
+        const layer = style.layers.find((candidate) => candidate.id === id);
+        if (!layer) throw new Error(`${id} missing from ${styleName}`);
+        const lookups = imageLookups(layer.layout?.["icon-image"]);
+        expect(lookups.length).toBeGreaterThan(0);
+        // A computed name (a `concat`) could be one the sprite lacks.
+        expect(lookups.filter((name) => typeof name !== "string")).toEqual([]);
+        expect(lookups.filter((name) => !availableImages.has(name as string))).toEqual([]);
+      }
+    }
+  });
+
   for (const spriteScale of ["", "@2x"]) {
     it(`resolves broad POI classes and specific subclasses in both styles with ${spriteScale || "1x"} sprites`, () => {
       const manifest = readSprite(`sprite${spriteScale}.json`);
