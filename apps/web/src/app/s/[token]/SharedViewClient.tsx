@@ -10,6 +10,7 @@ import {
   coordinateId,
   formatDistance,
   formatDuration,
+  isSystemSavedList,
   makeId,
   useDirections,
 } from "@openmapx/core";
@@ -105,7 +106,7 @@ export function SharedViewClient({ share }: { share: PublicShare | null }) {
                 <Box sx={{ display: "flex", alignItems: "center", gap: 1 }}>
                   {resolveListIcon(share.icon, 24)}
                   <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                    {share.name.startsWith("$") ? tSaved(share.name.slice(1)) : share.name}
+                    {isSystemSavedList(share.name) ? tSaved(share.name.slice(1)) : share.name}
                   </Typography>
                 </Box>
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>

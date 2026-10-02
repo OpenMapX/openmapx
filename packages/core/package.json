@@ -86,6 +86,10 @@
       "types": "./src/types/placeIds.ts",
       "default": "./src/types/placeIds.ts"
     },
+    "./saved-lists": {
+      "types": "./src/utils/savedLists.ts",
+      "default": "./src/utils/savedLists.ts"
+    },
     "./feed-id": {
       "types": "./src/feed-id.ts",
       "default": "./src/feed-id.ts"

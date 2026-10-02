@@ -14,6 +14,7 @@ import type { Place, SavedPlace } from "@openmapx/core";
 import {
   API_ENDPOINTS,
   apiClient,
+  isSystemSavedList,
   useCreateList,
   useIsSaved,
   useRemovePlace,
@@ -35,7 +36,7 @@ interface Props {
 export function SavePlaceDialog({ open, onClose, place }: Props) {
   const t = useTranslations("saved");
 
-  const resolveListName = (name: string) => (name.startsWith("$") ? t(name.slice(1)) : name);
+  const resolveListName = (name: string) => (isSystemSavedList(name) ? t(name.slice(1)) : name);
 
   const { data: lists, isLoading: listsLoading } = useSavedLists();
   const { data: savedInListIds } = useIsSaved(open ? place.id : null);

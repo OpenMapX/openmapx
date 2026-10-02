@@ -18,6 +18,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
 });
 
 const { SharedViewClient } = await import("./SharedViewClient");
+const LEGACY_CUSTOM_LIST = "$trip";
 
 function renderShare(share: Parameters<typeof SharedViewClient>[0]["share"]) {
   return render(
@@ -32,6 +33,17 @@ afterEach(() => {
 });
 
 describe("SharedViewClient", () => {
+  it("renders a legacy custom dollar-prefixed list name literally", () => {
+    renderShare({
+      type: "list",
+      mode: "snapshot",
+      name: LEGACY_CUSTOM_LIST,
+      icon: null,
+      places: [],
+    });
+    expect(screen.getByText("$trip")).toBeInTheDocument();
+  });
+
   it("renders a list share with resolved built-in name, places, and notes", () => {
     renderShare({
       type: "list",

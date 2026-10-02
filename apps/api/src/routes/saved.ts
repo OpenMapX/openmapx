@@ -1,3 +1,4 @@
+import { isSystemSavedList } from "@openmapx/core/saved-lists";
 import { and, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
@@ -83,10 +84,13 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         },
       },
     },
-    handler: async (req, _reply) => {
+    handler: async (req, reply) => {
       const userId = getUserId(req);
 
       const body = req.body as { name: string; icon?: string; isPrivate?: boolean };
+      if (body.name.startsWith("$")) {
+        return reply.status(400).send({ error: "List names cannot start with $" });
+      }
 
       const id = crypto.randomUUID();
       const now = new Date();
@@ -127,7 +131,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         sortOrder?: number;
       };
 
-      // Check if this is a default list (name starts with $)
+      // Protect only the actual system lists, including for legacy custom names.
       const existing = await db
         .select({ name: savedList.name })
         .from(savedList)
@@ -138,7 +142,10 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
         return reply.status(404).send({ error: "List not found" });
       }
 
-      const isDefault = existing[0].name.startsWith("$");
+      const isDefault = isSystemSavedList(existing[0].name);
+      if (!isDefault && body.name?.startsWith("$")) {
+        return reply.status(400).send({ error: "List names cannot start with $" });
+      }
 
       const updates: Record<string, unknown> = {};
       if (body.name !== undefined && !isDefault) updates.name = body.name;
@@ -179,7 +186,7 @@ export const savedRoute: FastifyPluginAsync = async (fastify) => {
       return reply.status(404).send({ error: "List not found" });
     }
 
-    if (existing[0].name.startsWith("$")) {
+    if (isSystemSavedList(existing[0].name)) {
       return reply.status(400).send({ error: "Default lists cannot be deleted" });
     }
 

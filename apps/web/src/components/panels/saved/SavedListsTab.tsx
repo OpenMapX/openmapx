@@ -19,7 +19,13 @@ import Menu from "@mui/material/Menu";
 import MenuItem from "@mui/material/MenuItem";
 import Typography from "@mui/material/Typography";
 import type { SavedList } from "@openmapx/core";
-import { useCreateList, useDeleteList, useSavedLists, useSavedPlacesStore } from "@openmapx/core";
+import {
+  isSystemSavedList,
+  useCreateList,
+  useDeleteList,
+  useSavedLists,
+  useSavedPlacesStore,
+} from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import type React from "react";
 import { useState } from "react";
@@ -30,7 +36,7 @@ export function SavedListsTab() {
   const t = useTranslations("saved");
   const tCommon = useTranslations("common");
 
-  const resolveListName = (name: string) => (name.startsWith("$") ? t(name.slice(1)) : name);
+  const resolveListName = (name: string) => (isSystemSavedList(name) ? t(name.slice(1)) : name);
 
   const { data: lists, isLoading } = useSavedLists();
   const selectList = useSavedPlacesStore((s) => s.selectList);

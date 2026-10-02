@@ -1,4 +1,5 @@
 import type { PublicShare } from "@openmapx/core";
+import { isSystemSavedList } from "@openmapx/core/saved-lists";
 import { serverApiUrl } from "@openmapx/core/server-api";
 import type { Metadata } from "next";
 import { notFound } from "next/navigation";
@@ -44,7 +45,7 @@ export async function generateMetadata({
   if (result.share.type === "route") {
     return { ...base, title: `${t("sharedRoute")} · OpenMapX` };
   }
-  const name = result.share.name.startsWith("$")
+  const name = isSystemSavedList(result.share.name)
     ? tSaved(result.share.name.slice(1))
     : result.share.name;
   return {

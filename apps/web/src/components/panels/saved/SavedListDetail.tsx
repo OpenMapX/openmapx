@@ -30,6 +30,7 @@ import type { SavedPlace } from "@openmapx/core";
 import {
   createPlace,
   idsFromPrimary,
+  isSystemSavedList,
   PANEL,
   useDeleteList,
   usePlaceStore,
@@ -54,7 +55,7 @@ export function SavedListDetail() {
   const t = useTranslations("saved");
   const tCommon = useTranslations("common");
 
-  const resolveListName = (name: string) => (name.startsWith("$") ? t(name.slice(1)) : name);
+  const resolveListName = (name: string) => (isSystemSavedList(name) ? t(name.slice(1)) : name);
 
   const selectedListId = useSavedPlacesStore((s) => s.selectedListId);
   const clearSelectedList = useSavedPlacesStore((s) => s.clearSelectedList);
@@ -168,7 +169,7 @@ export function SavedListDetail() {
     return null;
   }
 
-  const isDefault = list.name.startsWith("$");
+  const isDefault = isSystemSavedList(list.name);
 
   const handleIconSelect = (emoji: string) => {
     if (!selectedListId) return;

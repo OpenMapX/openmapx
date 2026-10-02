@@ -41,6 +41,7 @@ import {
   isCityOrSmaller,
   isFoodPlace,
   isLodging,
+  isSystemSavedList,
   plusCodeUrl,
   safeHref,
   shortenPlusCode,
@@ -358,7 +359,8 @@ export function PlaceOverviewTab({
   const savedInLists = allLists?.filter((l) => savedInListIds?.includes(l.id)) ?? [];
   const existingLabel = labeledPlaces?.find((lp) => lp.placeId === place.id);
 
-  const resolveListName = (name: string) => (name.startsWith("$") ? tSaved(name.slice(1)) : name);
+  const resolveListName = (name: string) =>
+    isSystemSavedList(name) ? tSaved(name.slice(1)) : name;
 
   const handleAddLabel = () => {
     if (!session?.user) {

@@ -7,6 +7,7 @@ vi.mock("../../utils/require-auth.js", () => ({
 }));
 
 const queue: unknown[][] = [];
+const LEGACY_CUSTOM_LIST = "$trip";
 function prime(...results: unknown[][]) {
   queue.length = 0;
   queue.push(...results);
@@ -87,6 +88,82 @@ beforeEach(() => {
 });
 
 describe("saved lists", () => {
+  it("creates ordinary custom names, including a dollar sign inside the name", async () => {
+    const res = await app.inject({
+      method: "POST",
+      url: "/api/saved/lists",
+      payload: { name: "Trip $2026" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json().name).toBe("Trip $2026");
+  });
+
+  it.each(["$trip", "$favorites", "$wantToGo", "$starredPlaces"])(
+    "rejects reserved custom name %s on creation",
+    async (name) => {
+      const created = await app.inject({
+        method: "POST",
+        url: "/api/saved/lists",
+        payload: { name },
+      });
+      expect(created.statusCode).toBe(400);
+    },
+  );
+
+  it.each(["$trip", "$favorites", "$wantToGo", "$starredPlaces"])(
+    "rejects reserved custom name %s on rename",
+    async (name) => {
+      prime([{ name: "Trip" }], [{ id: "list-1" }]);
+      const renamed = await app.inject({
+        method: "PATCH",
+        url: "/api/saved/lists/list-1",
+        payload: { name },
+      });
+      expect(renamed.statusCode).toBe(400);
+    },
+  );
+
+  it("allows a legacy custom dollar-prefixed list to be renamed, updated and deleted", async () => {
+    for (const payload of [{ name: "Trip" }, { icon: "flag", isPrivate: false }]) {
+      prime([{ name: LEGACY_CUSTOM_LIST }], [{ id: "list-1" }]);
+      const res = await app.inject({ method: "PATCH", url: "/api/saved/lists/list-1", payload });
+      expect(res.statusCode).toBe(200);
+    }
+    prime([{ name: LEGACY_CUSTOM_LIST }]);
+    const deleted = await app.inject({ method: "DELETE", url: "/api/saved/lists/list-1" });
+    expect(deleted.statusCode).toBe(200);
+  });
+
+  it.each(["$favorites", "$wantToGo", "$starredPlaces"])(
+    "keeps system list %s protected",
+    async (name) => {
+      prime([{ name }]);
+      expect(
+        (
+          await app.inject({
+            method: "PATCH",
+            url: "/api/saved/lists/list-1",
+            payload: { name: "Trip", icon: "flag" },
+          })
+        ).statusCode,
+      ).toBe(400);
+      prime([{ name }]);
+      expect(
+        (await app.inject({ method: "DELETE", url: "/api/saved/lists/list-1" })).statusCode,
+      ).toBe(400);
+      prime([{ name }], [{ id: "list-1" }]);
+      expect(
+        (
+          await app.inject({
+            method: "PATCH",
+            url: "/api/saved/lists/list-1",
+            payload: { isPrivate: false, sortOrder: 4 },
+          })
+        ).statusCode,
+      ).toBe(200);
+    },
+  );
+
   it("returns existing lists", async () => {
     prime([
       {
