@@ -1,11 +1,22 @@
-import { categoryPlaceToPlace, useCategorySearchStore, usePlaceStore } from "@openmapx/core";
+import {
+  categoryPlaceToPlace,
+  type Place,
+  useCategorySearchStore,
+  usePlaceStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import { act, render } from "@testing-library/react";
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { usePinMarker } from "@/hooks/usePinMarker";
 import { createFakeMap } from "@/test";
 import { CategoryResultMarkers } from "./CategoryResultMarkers";
 
 const fake = createFakeMap({ styleLoaded: true });
+const resolveStop = vi.hoisted(() => vi.fn());
+afterEach(() => {
+  fake.setRenderedFeatures("transit-stops-layer", []);
+  resolveStop.mockReset();
+});
 const mapRef = { current: fake.map };
 let reads = 0;
 const result = {
@@ -28,7 +39,87 @@ vi.mock("@/hooks/usePinMarker", () => ({ usePinMarker: vi.fn() }));
 vi.mock("@openmapx/core", async (original) => ({
   ...(await original<Record<string, unknown>>()),
   useTransitStops: () => ({ data: transitStops }),
+  resolveStopAsPlace: (...args: unknown[]) => resolveStop(...args),
 }));
+
+function transitClick(id: string) {
+  fake.setRenderedFeatures("transit-stops-layer", [
+    {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [8, 50] },
+      properties: {
+        id: `test:${id}`,
+        name: id,
+        lat: 50,
+        lng: 8,
+        modes: '["bus"]',
+        provider: "test",
+        platformCode: "",
+        parentStationId: "",
+      },
+      layer: { id: "transit-stops-layer" },
+    } as never,
+  ]);
+  act(() => fake.emit("click", { point: { x: 0, y: 0 } }));
+}
+
+it("keeps the newer map stop when transit resolutions finish out of order", async () => {
+  let finishA!: (place: Place) => void;
+  let finishB!: (place: Place) => void;
+  const requests = [
+    new Promise<Place>((resolve) => {
+      finishA = resolve;
+    }),
+    new Promise<Place>((resolve) => {
+      finishB = resolve;
+    }),
+  ];
+  resolveStop.mockReset();
+  resolveStop.mockImplementation(() => requests.shift());
+  fake.map.setStyle({} as never);
+  usePlaceStore.getState().setSelectedPlace(null);
+  const view = render(<CategoryResultMarkers />);
+  transitClick("A");
+  transitClick("B");
+  const placeB = categoryPlaceToPlace({ id: "osm:node/2", name: "B", coordinates: [9, 51] });
+  await act(async () => {
+    finishB(placeB);
+  });
+  expect(usePlaceStore.getState().selectedPlace?.id).toBe("osm:node/2");
+  await act(async () => {
+    finishA(categoryPlaceToPlace({ id: "osm:node/1", name: "A", coordinates: [8, 50] }));
+  });
+  expect(usePlaceStore.getState().selectedPlace).toBe(placeB);
+  view.unmount();
+});
+
+it.each(["dismiss", "unmount"])("does not publish a pending map stop after %s", async (action) => {
+  let finish!: (place: Place) => void;
+  resolveStop.mockReset().mockReturnValue(
+    new Promise<Place>((resolve) => {
+      finish = resolve;
+    }),
+  );
+  fake.map.setStyle({} as never);
+  usePlaceStore.getState().setSelectedPlace(null);
+  useSidebarStore.setState({ activeSidebarId: null, activeDetailId: null });
+  const view = render(<CategoryResultMarkers />);
+  transitClick("A");
+  if (action === "dismiss")
+    act(() => {
+      usePlaceStore.getState().setSelectedPlace(null);
+      useSidebarStore.getState().closeAll();
+    });
+  else view.unmount();
+  const selected = usePlaceStore.getState().selectedPlace;
+  const { activeSidebarId, activeDetailId } = useSidebarStore.getState();
+  await act(async () => {
+    finish(categoryPlaceToPlace({ id: "osm:node/1", name: "A", coordinates: [8, 50] }));
+  });
+  expect(usePlaceStore.getState().selectedPlace).toBe(selected);
+  expect(useSidebarStore.getState()).toMatchObject({ activeSidebarId, activeDetailId });
+  view.unmount();
+});
 it("reuses category data across style events and restores it after replacement", async () => {
   useCategorySearchStore.setState({ activeCategory: "restaurant" });
   const view = render(<CategoryResultMarkers />);

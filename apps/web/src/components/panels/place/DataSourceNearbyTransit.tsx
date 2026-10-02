@@ -17,15 +17,16 @@ import type { LngLat } from "@openmapx/core";
 import {
   formatDistance,
   haversineMeters,
+  makeSyntheticStopPlace,
   PANEL,
   resolveStopAsPlace,
-  usePlaceStore,
   useSidebarStore,
   useStopsNearby,
 } from "@openmapx/core";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import { useTranslations } from "next-intl";
 import { useMemo } from "react";
+import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 
@@ -78,7 +79,7 @@ export function DataSourceNearbyTransit({
 }: DataSourceNearbyTransitProps) {
   const t = useTranslations();
   const { data: stops, isLoading } = useStopsNearby(coordinates, radiusMeters);
-  const { setSelectedPlace } = usePlaceStore();
+  const { selectWithEnrichment } = usePlaceEnrichment();
   const { flyTo } = useMap();
 
   const rows = useMemo(() => {
@@ -105,23 +106,18 @@ export function DataSourceNearbyTransit({
 
   const handleOpen = (stop: TransitStop) => {
     flyTo([stop.lng, stop.lat], 16);
-    // Resolve the stop to a Place via OSM reverse geocoding when available
-    // (ids.osm), falling back to a synthetic stop-backed Place. Matches the
-    // pattern used by SearchBar's transit result handler.
-    void resolveStopAsPlace(stop).then((place) => {
-      setSelectedPlace(place);
-      // Match the map-click behaviour in MapStylePoiClickHandler: if the
-      // sidebar is empty or already showing a place, take it over; otherwise
-      // (category results, directions …) keep that panel and show the
-      // floating detail card only, so we never render the same place twice.
-      const sidebarId = useSidebarStore.getState().activeSidebarId;
-      if (!sidebarId || sidebarId === PANEL.PLACE) {
-        useSidebarStore.getState().closeDetail();
-        useSidebarStore.getState().openSidebar(PANEL.PLACE);
-      } else {
-        useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-      }
+    // Selecting the stop replaces this parking detail and unmounts the selector.
+    selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop), {
+      continueOnUnmount: true,
     });
+    // Preserve the existing panel placement for the user's selection.
+    const sidebarId = useSidebarStore.getState().activeSidebarId;
+    if (!sidebarId || sidebarId === PANEL.PLACE) {
+      useSidebarStore.getState().closeDetail();
+      useSidebarStore.getState().openSidebar(PANEL.PLACE);
+    } else {
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
+    }
   };
 
   if (isLoading && !stops) {

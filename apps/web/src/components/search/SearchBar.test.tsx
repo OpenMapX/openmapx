@@ -16,6 +16,13 @@ const usePresetSuggestMock = vi.fn();
 const useChipTranslationsMock = vi.fn();
 const resolveStopAsPlaceMock = vi.fn();
 const useMediaQueryMock = vi.fn();
+let voiceResult: ((transcript: string, isFinal: boolean) => void) | undefined;
+vi.mock("./VoiceSearchButton", () => ({
+  VoiceSearchButton: ({ onResult }: { onResult: typeof voiceResult }) => {
+    voiceResult = onResult;
+    return null;
+  },
+}));
 vi.mock("@mui/material/useMediaQuery", () => ({
   default: (...args: unknown[]) => useMediaQueryMock(...args),
 }));
@@ -84,6 +91,7 @@ import type {
   SearchSuggestionsResponse,
 } from "@openmapx/core";
 import {
+  apiClient,
   PANEL,
   useCategorySearchStore,
   useDirectionsStore,
@@ -1228,6 +1236,183 @@ describe("SearchBar", () => {
     expect(resolveStopAsPlaceMock).toHaveBeenCalledWith(transitStop);
     await waitFor(() => expect(usePlaceStore.getState().selectedPlace?.id).toBe("db:8000207"));
   });
+
+  it.each(["query", "voice", "Escape", "directions", "blur"])(
+    "respects %s while a selected stop is being enriched",
+    async (action) => {
+      const stop: TransitStop = {
+        id: "db:8000207",
+        name: "Hamburg Hbf",
+        lat: 53.55,
+        lng: 10,
+        modes: ["rail"],
+        provider: "transit-db-vendo",
+      };
+      let finish!: (place: Place) => void;
+      resolveStopAsPlaceMock.mockReturnValue(
+        new Promise<Place>((resolve) => {
+          finish = resolve;
+        }),
+      );
+      useSearchSuggestionsMock.mockReturnValue({
+        data: aggregateResponse([
+          aggregateSuggestion({
+            id: stop.id,
+            label: stop.name,
+            coordinates: [10, 53.55],
+            type: "transit_stop",
+            transitStop: stop,
+            searchMatch: { kind: "authoritative_code", value: "8000207", normalized: "8000207" },
+          }),
+        ]),
+        isFetching: false,
+      });
+      renderBar();
+      const input = screen.getByLabelText("search.ariaLabel");
+      fireEvent.focus(input);
+      fireEvent.change(input, { target: { value: "8000207" } });
+      fireEvent.click(await screen.findByText("Hamburg Hbf"));
+      const provisional = usePlaceStore.getState().selectedPlace;
+      expect(provisional?.ids.db).toBe("8000207");
+      if (action === "query") fireEvent.change(input, { target: { value: "Museum" } });
+      if (action === "voice") act(() => voiceResult?.("Museum", false));
+      if (action === "Escape") fireEvent.keyDown(input, { key: "Escape" });
+      if (action === "directions") act(() => useDirectionsStore.getState().open());
+      if (action === "blur") fireEvent.blur(input);
+      const enriched = {
+        ...provisional,
+        id: "osm:node/7",
+        primaryScheme: "osm",
+        ids: { osm: "node/7", db: "8000207" },
+      } as Place;
+      await act(async () => {
+        finish(enriched);
+      });
+      expect(usePlaceStore.getState().selectedPlace).toBe(
+        action === "blur" ? enriched : provisional,
+      );
+    },
+  );
+
+  it("preserves a newer ordinary selection after pending transit enrichment", async () => {
+    const stop: TransitStop = {
+      id: "db:8000207",
+      name: "Hamburg Hbf",
+      lat: 53.55,
+      lng: 10,
+      modes: ["rail"],
+      provider: "transit-db-vendo",
+    };
+    let finish!: (place: Place) => void;
+    resolveStopAsPlaceMock.mockReturnValue(
+      new Promise<Place>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    useSearchSuggestionsMock.mockReturnValue({
+      data: aggregateResponse([
+        aggregateSuggestion({
+          id: stop.id,
+          label: stop.name,
+          coordinates: [10, 53.55],
+          type: "transit_stop",
+          transitStop: stop,
+          searchMatch: { kind: "authoritative_code", value: "8000207", normalized: "8000207" },
+        }),
+      ]),
+      isFetching: false,
+    });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "8000207" } });
+    fireEvent.click(await screen.findByText("Hamburg Hbf"));
+    useAutocompleteMock.mockReturnValue({
+      data: [{ id: "osm:node/42", label: "Museum B", coordinates: [9, 51], type: "poi" }],
+      isFetching: false,
+    });
+    useSearchSuggestionsMock.mockReturnValue({ data: undefined, isFetching: false });
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Museum B" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Museum B/ }));
+    const selected = usePlaceStore.getState().selectedPlace;
+    expect(selected?.id).toBe("osm:node/42");
+    await act(async () => {
+      finish({
+        id: "osm:node/7",
+        primaryScheme: "osm",
+        ids: { osm: "node/7", db: "8000207" },
+        name: "Hamburg Hbf",
+        coordinates: [10, 53.55],
+        address: "Hamburg Hbf",
+      } as Place);
+    });
+    expect(usePlaceStore.getState().selectedPlace).toBe(selected);
+  });
+
+  it.each([true, false])(
+    "does not publish stale transit discovery or its fallback (match=%s)",
+    async (match) => {
+      let finish!: (stops: TransitStop[]) => void;
+      const lookup = vi.spyOn(apiClient, "get").mockReturnValue(
+        new Promise<TransitStop[]>((resolve) => {
+          finish = resolve;
+        }) as never,
+      );
+      resolveStopAsPlaceMock.mockResolvedValue({
+        id: "test:A",
+        primaryScheme: "test",
+        ids: { test: "A" },
+        name: "Station A",
+        coordinates: [8, 50],
+        address: "Station A",
+      } as Place);
+      try {
+        useAutocompleteMock.mockReturnValue({
+          data: [
+            {
+              id: "osm:node/1",
+              label: "Station A",
+              coordinates: [8, 50],
+              type: "poi",
+              rawCategory: "railway/station",
+            },
+          ],
+          isFetching: false,
+        });
+        renderBar();
+        const input = screen.getByLabelText("search.ariaLabel");
+        fireEvent.focus(input);
+        fireEvent.change(input, { target: { value: "Station A" } });
+        fireEvent.click(await screen.findByRole("option", { name: /Station A/ }));
+        expect(lookup).toHaveBeenCalled();
+        act(() => {
+          usePlaceStore.getState().setSelectedPlace(null);
+          useSidebarStore.getState().closeAll();
+        });
+        await act(async () => {
+          finish(
+            match
+              ? [
+                  {
+                    id: "test:A",
+                    name: "Station A",
+                    lat: 50,
+                    lng: 8,
+                    modes: ["rail"],
+                    provider: "test",
+                  },
+                ]
+              : [],
+          );
+        });
+        expect(usePlaceStore.getState().selectedPlace).toBeNull();
+        expect(useSidebarStore.getState().activeSidebarId).toBeNull();
+      } finally {
+        lookup.mockRestore();
+      }
+    },
+  );
 
   it("keeps geocoder, brand, and category suggestions when aggregate search fails", async () => {
     useSearchSuggestionsMock.mockReturnValue({ data: undefined, isFetching: false, isError: true });

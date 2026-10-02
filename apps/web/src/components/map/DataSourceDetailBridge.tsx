@@ -10,12 +10,33 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 export function DataSourceDetailBridge() {
   const selectedItem = useDataSourceStore((s) => s.selectedItem);
   const setSelectedPlace = usePlaceStore((s) => s.setSelectedPlace);
+  const placeRevision = usePlaceStore((s) => s.selectionRevision);
   const { data: sourcesData } = useDataSources();
+  const selectionRevision = useRef<number | null>(null);
+  const previousPlaceRevision = useRef<number | null>(null);
+  const needsSelection = useRef(false);
+  const ownedItem = useRef<typeof selectedItem | undefined>(undefined);
+
+  // A fresh data-source choice owns its detail request. Retained metadata or
+  // refetches must not reclaim the place after another user selection.
+  useEffect(() => {
+    if (ownedItem.current === selectedItem) return;
+    ownedItem.current = selectedItem;
+    const revision = usePlaceStore.getState().selectionRevision;
+    // Marker/list clicks already published a preview. Context clicks only
+    // selectItem, so even choosing the same item must start a fresh session.
+    needsSelection.current = previousPlaceRevision.current === revision;
+    selectionRevision.current = selectedItem ? revision : null;
+  }, [selectedItem]);
+
+  useEffect(() => {
+    previousPlaceRevision.current = placeRevision;
+  }, [placeRevision]);
 
   const sourceMeta = useMemo(() => {
     if (!selectedItem || !sourcesData?.sources) return null;
@@ -29,6 +50,7 @@ export function DataSourceDetailBridge() {
 
   useEffect(() => {
     if (!detail || !selectedItem) return;
+    if (selectionRevision.current !== usePlaceStore.getState().selectionRevision) return;
 
     // Skip fallback details with invalid coordinates (station not in cache)
     if (detail.coordinates[0] === 0 && detail.coordinates[1] === 0) return;
@@ -57,7 +79,15 @@ export function DataSourceDetailBridge() {
       dataSourceDetail: detail,
     });
 
-    setSelectedPlace(place);
+    const current = usePlaceStore.getState();
+    if (!needsSelection.current && current.selectedPlace?.ids[scheme] === detail.id) {
+      // Preview resolution and refetch enrich the same detail session.
+      current.enrichSelectedPlace(current.selectionRevision, place);
+    } else {
+      setSelectedPlace(place);
+      selectionRevision.current = usePlaceStore.getState().selectionRevision;
+    }
+    needsSelection.current = false;
     useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
   }, [detail, selectedItem, setSelectedPlace, sourceMeta]);
 

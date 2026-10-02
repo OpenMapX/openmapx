@@ -1,6 +1,7 @@
-import type { Place } from "@openmapx/core";
+import { createPlace, type Place, usePlaceStore } from "@openmapx/core";
+import type { MergedDeparture } from "@openmapx/mobility-core/transit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -37,6 +38,25 @@ beforeEach(() => {
 
 vi.mock("./PlacePhotoGallery", () => ({
   PlacePhotoGallery: () => null,
+}));
+
+vi.mock("../transit/TripDetailView", () => ({
+  TripDetailView: () => <span>Selected trip</span>,
+}));
+vi.mock("../transit/LineDetail", () => ({
+  LineDetail: () => <span>Selected line</span>,
+}));
+vi.mock("../transit/StopInfrastructureSection", () => ({ StopInfrastructureSection: () => null }));
+vi.mock("../transit/PlaceTransitSection", () => ({
+  PlaceTransitSection: ({
+    onOpenLineDetail,
+  }: {
+    onOpenLineDetail: (route: { id: string }) => void;
+  }) => (
+    <button type="button" onClick={() => onOpenLineDetail({ id: "line" })}>
+      Open line
+    </button>
+  ),
 }));
 
 // Lets individual tests drive `useSheetSentinel`'s `passed` flag directly
@@ -79,6 +99,60 @@ function renderAtDetent(detent: "peek" | "mid" | "full", selectedPlace = place) 
     </QueryClientProvider>,
   );
 }
+
+describe("selected detail enrichment", () => {
+  it.each(["trip", "line"])(
+    "preserves the visible %s across identity promotion and resets it on reselection",
+    (action) => {
+      const provisional = createPlace({
+        primaryScheme: "db",
+        ids: { db: "A" },
+        name: "Station A",
+        address: "",
+        coordinates: [8, 50],
+        rawCategory: "transit_stop",
+      });
+      const enriched = createPlace({
+        primaryScheme: "osm",
+        ids: { osm: "node/1", db: "A" },
+        name: "Station A",
+        address: "",
+        coordinates: [8, 50],
+        rawCategory: "transit_stop",
+      });
+      usePlaceStore.getState().setSelectedPlace(provisional);
+      function SelectedDetail() {
+        const selected = usePlaceStore((state) => state.selectedPlace);
+        return selected && <PlaceDetailContent place={selected} isLoading={false} />;
+      }
+      const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const view = render(
+        <QueryClientProvider client={client}>
+          <SelectedDetail />
+        </QueryClientProvider>,
+      );
+      if (action === "trip") {
+        act(() =>
+          usePlaceStore.getState().setActiveTripDep({ route: { id: "line" } } as MergedDeparture),
+        );
+      } else {
+        fireEvent.click(screen.getByText("Open line"));
+      }
+      const label = action === "trip" ? "Selected trip" : "Selected line";
+      expect(screen.getByText(label)).toBeVisible();
+      act(() =>
+        usePlaceStore
+          .getState()
+          .enrichSelectedPlace(usePlaceStore.getState().selectionRevision, enriched),
+      );
+      expect(screen.getByText(label)).toBeVisible();
+      act(() => usePlaceStore.getState().setSelectedPlace(enriched));
+      expect(screen.queryByText(label)).toBeNull();
+      view.unmount();
+      usePlaceStore.getState().setSelectedPlace(null);
+    },
+  );
+});
 
 describe("PlaceDetailContent per detent", () => {
   it("keeps the title at peek", () => {

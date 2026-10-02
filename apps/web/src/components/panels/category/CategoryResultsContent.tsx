@@ -26,6 +26,7 @@ import {
   categoryPlaceToPlace,
   formatMeasurementDistance,
   isAreaTooLarge,
+  makeSyntheticStopPlace,
   PANEL,
   proxyImageUrl,
   resolveStopAsPlace,
@@ -50,6 +51,7 @@ import { PhotoAttribution } from "@/components/panels/place/PhotoAttribution";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
+import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
 import { attributionsForSources } from "@/lib/attributionForProviders";
@@ -437,6 +439,7 @@ export function CategoryResultsContent() {
   // panning offers "search this area" + the auto-refresh toggle.
   const isViewportText = mode === "text" && anchor === null;
   const { setSelectedPlace } = usePlaceStore();
+  const { selectWithEnrichment } = usePlaceEnrichment();
   const { flyTo, mapRef, mapReady, zoomIn, zoomOut } = useMap();
   const expandOnBackgroundTap = useExpandOnBackgroundTap();
   const registry = useIntegrationRegistry();
@@ -601,10 +604,8 @@ export function CategoryResultsContent() {
 
   const handleSelectStop = (s: TransitStop) => {
     flyTo([s.lng, s.lat], 16);
-    void resolveStopAsPlace(s).then((place) => {
-      setSelectedPlace(place);
-      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-    });
+    selectWithEnrichment(makeSyntheticStopPlace(s), () => resolveStopAsPlace(s));
+    useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
   };
 
   return (

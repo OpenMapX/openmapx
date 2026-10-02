@@ -10,6 +10,8 @@ export interface TransitMapFocus {
 
 interface PlaceState {
   selectedPlace: Place | null;
+  /** Advances on explicit selection/clear, including reselecting the same place. */
+  selectionRevision: number;
   /** Route currently shown in LineDetail or TripDetailView — shared with map layers. */
   activeRouteId: string | null;
   /** Departure currently shown in TripDetailView. */
@@ -17,6 +19,8 @@ interface PlaceState {
   /** Selection-bound transit map detail shown for the current place. */
   transitMapFocus: TransitMapFocus | null;
   setSelectedPlace: (place: Place | null) => void;
+  /** Enrichment belongs to the existing selection and preserves its detail state. */
+  enrichSelectedPlace: (revision: number, place: Place) => boolean;
   setActiveRouteId: (routeId: string | null) => void;
   setActiveTripDep: (dep: MergedDeparture | null) => void;
   focusTransitMapFeature: (
@@ -26,13 +30,25 @@ interface PlaceState {
   clearTransitMapFocus: () => void;
 }
 
-export const usePlaceStore = create<PlaceState>((set) => ({
+export const usePlaceStore = create<PlaceState>((set, get) => ({
   selectedPlace: null,
+  selectionRevision: 0,
   activeRouteId: null,
   activeTripDep: null,
   transitMapFocus: null,
   setSelectedPlace: (selectedPlace) =>
-    set({ selectedPlace, activeRouteId: null, activeTripDep: null, transitMapFocus: null }),
+    set((state) => ({
+      selectedPlace,
+      selectionRevision: state.selectionRevision + 1,
+      activeRouteId: null,
+      activeTripDep: null,
+      transitMapFocus: null,
+    })),
+  enrichSelectedPlace: (revision, selectedPlace) => {
+    if (get().selectionRevision !== revision || get().selectedPlace === null) return false;
+    set({ selectedPlace });
+    return true;
+  },
   setActiveRouteId: (activeRouteId) => set({ activeRouteId }),
   setActiveTripDep: (activeTripDep) => set({ activeTripDep }),
   focusTransitMapFeature: (focus, options) =>

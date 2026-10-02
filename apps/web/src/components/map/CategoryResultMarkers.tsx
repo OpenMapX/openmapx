@@ -7,6 +7,7 @@ import {
   categoryPlaceToPlace,
   commonsLogoUrl,
   firstBrandIdentity,
+  makeSyntheticStopPlace,
   PANEL,
   poiCategoryIconPath,
   proxyImageUrl,
@@ -21,6 +22,7 @@ import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit
 import type { FilterSpecification, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { usePinMarker } from "@/hooks/usePinMarker";
+import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -275,6 +277,7 @@ export function CategoryResultMarkers() {
   const hoveredCategoryPlaceId = useCategorySearchStore((s) => s.hoveredCategoryPlaceId);
   const setHoveredCategoryPlaceId = useCategorySearchStore((s) => s.setHoveredCategoryPlaceId);
   const { setSelectedPlace } = usePlaceStore();
+  const { selectWithEnrichment } = usePlaceEnrichment();
   const selectedPlace = usePlaceStore((state) => state.selectedPlace);
 
   const { filtered: results, isTransitCategory } = useExploreReachResults();
@@ -729,10 +732,8 @@ export function CategoryResultMarkers() {
         parentStationId: props.parentStationId || undefined,
       };
       flyTo([stop.lng, stop.lat], 16);
-      void resolveStopAsPlace(stop).then((place) => {
-        setSelectedPlace(place);
-        useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-      });
+      selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop));
+      useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
     };
 
     map.on("mousemove", onMouseMove);
@@ -748,11 +749,11 @@ export function CategoryResultMarkers() {
     mapReady,
     styleVersion,
     mapRef,
-    setSelectedPlace,
     flyTo,
     setHoveredCategoryPlaceId,
     results,
     selectResult,
+    selectWithEnrichment,
   ]);
 
   return null;

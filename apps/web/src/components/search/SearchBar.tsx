@@ -27,6 +27,7 @@ import type {
   LabeledPlace,
   LngLat,
   NlpCloudAccess,
+  Place,
 } from "@openmapx/core";
 import {
   API_ENDPOINTS,
@@ -42,6 +43,7 @@ import {
   idsFromPrimaryOrCoords,
   isPlausibleDestination,
   isTransitRawCategory,
+  makeSyntheticStopPlace,
   matchCategorySuggestions,
   matchRecentSearches,
   PANEL,
@@ -86,6 +88,7 @@ import { SEARCH_INPUT_ID } from "@/components/command-palette/constants";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
 import { NlpConsentDialog } from "@/components/ui/NlpConsentDialog";
 import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/ui/nlpConsent";
+import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { attributionsForProviders, mergeAttributions } from "@/lib/attributionForProviders";
@@ -156,6 +159,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const isMobile = useMediaQuery(muiTheme.breakpoints.down("sm"));
   const { query, isFocused, setQuery, setIsFocused, setSuggestions, setResults } = useSearchStore();
   const { setSelectedPlace } = usePlaceStore();
+  const { selectWithEnrichment, cancelEnrichment } = usePlaceEnrichment();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
   const activeCategory = useCategorySearchStore((s) => s.activeCategory);
@@ -286,11 +290,13 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const [submitAfterFlush, setSubmitAfterFlush] = useState(false);
   const handleVoiceResult = useCallback(
     (transcript: string, isFinal: boolean) => {
+      cancelPendingSubmit();
+      cancelEnrichment();
       setNlpSubmitted(false);
       setQuery(transcript);
       if (isFinal) setSubmitAfterFlush(true);
     },
-    [setQuery],
+    [setQuery, cancelPendingSubmit, cancelEnrichment],
   );
 
   // Once the new text has flushed into the query, submit — deferred to an
@@ -641,9 +647,14 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     launchTextSearch(mapRef.current, query);
   }, [nlpSettledEmpty, mapRef, query, setIsFocused]);
 
+  useEffect(() => {
+    if (directionsOpen) cancelEnrichment();
+  }, [directionsOpen, cancelEnrichment]);
+
   if (directionsOpen) return null;
 
   const handleActivateNlp = () => {
+    cancelEnrichment();
     if (!nlpData) return;
     const { intent, resolvedBbox, provider } = nlpData;
     if (intent.filter.selectors.length === 0) return;
@@ -728,7 +739,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     ((effectiveSuggestions.length > 0 && !awaitingFirstRows) || showNlpCard || nlpPending);
   const showEmptySearch = isFocused && !nearbyMode && q.length === 0;
 
-  const tryOpenTransitStop = async (coords: LngLat, name: string): Promise<boolean> => {
+  const resolveTransitStop = async (
+    coords: LngLat,
+    name: string,
+    isCurrent: () => boolean,
+  ): Promise<Place | null> => {
     try {
       const delta = 0.005; // ~500m
       const stops = await apiClient.get<TransitStop[]>(API_ENDPOINTS.transitStops, {
@@ -737,6 +752,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         ne_lat: String(coords[1] + delta),
         ne_lng: String(coords[0] + delta),
       });
+      if (!isCurrent()) return null;
       // Require every query token to appear as a token in the stop name and
       // then pick the closest one. The previous 10-char-prefix substring
       // match was far too loose — it routed "Frankfurt Airport" to a random
@@ -755,19 +771,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                 ((b.lng - coords[0]) ** 2 + (b.lat - coords[1]) ** 2),
             )[0]
         : undefined;
-      if (match) {
-        // Reuse the shared synthetic-stop builder so the Place picks up
-        // the provider-scoped scheme (tfl, mb, dyn, …) from the stop id.
-        void resolveStopAsPlace(match).then((place) => {
-          setSelectedPlace(place);
-          useSidebarStore.getState().openSidebar(PANEL.PLACE);
-        });
-        return true;
-      }
+      if (match) return await resolveStopAsPlace(match);
     } catch {
       // Silently fall back to place panel
     }
-    return false;
+    return null;
   };
 
   const highlightAt = (index: number) => {
@@ -779,6 +787,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     if (e.nativeEvent.isComposing || e.keyCode === 229 || isComposingRef.current) return;
     if (e.key === "Escape") {
       cancelPendingSubmit();
+      cancelEnrichment();
       setIsFocused(false);
       setHighlightedKey(null);
       return;
@@ -806,6 +815,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   const updateQuery = (newValue: string) => {
     cancelPendingSubmit();
+    cancelEnrichment();
     // In nearby mode keep the anchor (don't clearCategory — that would drop it);
     // the nearby dropdown re-filters and a selection relaunches the search.
     if (!nearbyMode) {
@@ -854,6 +864,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     e.preventDefault();
     if (isComposingRef.current || !q) return;
     cancelPendingSubmit();
+    cancelEnrichment();
     if (nearbyMode) {
       inputRef.current?.blur();
       if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
@@ -936,12 +947,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
           rawCategory: first.rawCategory,
         });
         if (isTransit) {
-          void tryOpenTransitStop(first.coordinates, first.label).then((found) => {
-            if (!found) {
-              setSelectedPlace(firstPlace);
-              useSidebarStore.getState().openSidebar(PANEL.PLACE);
-            }
-          });
+          selectWithEnrichment(firstPlace, (isCurrent) =>
+            resolveTransitStop(first.coordinates, first.label, isCurrent),
+          );
+          useSidebarStore.getState().openSidebar(PANEL.PLACE);
         } else {
           setSelectedPlace(firstPlace);
           useSidebarStore.getState().openSidebar(PANEL.PLACE);
@@ -967,6 +976,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   const handleSelect = (result: AutocompleteResult, recordHistory = true) => {
     cancelPendingSubmit();
+    cancelEnrichment();
     if (result.type === "recent_search") {
       handleSelectRecent(result.label);
       return;
@@ -999,10 +1009,9 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       setQuery(result.label);
       setIsFocused(false);
       if (result.coordinates) flyTo(result.coordinates, 15);
-      void resolveStopAsPlace(result.transitStop).then((place) => {
-        setSelectedPlace(place);
-        useSidebarStore.getState().openSidebar(PANEL.PLACE);
-      });
+      const stop = result.transitStop;
+      selectWithEnrichment(makeSyntheticStopPlace(stop), () => resolveStopAsPlace(stop));
+      useSidebarStore.getState().openSidebar(PANEL.PLACE);
       return;
     }
 
@@ -1050,12 +1059,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
       // Route to a transit-stop lookup only when the geocoder itself classified
       // the result as transit infrastructure — never on a label-keyword match.
       if (result.rawCategory && isTransitRawCategory(result.rawCategory)) {
-        void tryOpenTransitStop(coords, result.label).then((found) => {
-          if (!found) {
-            setSelectedPlace(suggestionPlace);
-            useSidebarStore.getState().openSidebar(PANEL.PLACE);
-          }
-        });
+        selectWithEnrichment(suggestionPlace, (isCurrent) =>
+          resolveTransitStop(coords, result.label, isCurrent),
+        );
+        useSidebarStore.getState().openSidebar(PANEL.PLACE);
       } else {
         setSelectedPlace(suggestionPlace);
         useSidebarStore.getState().openSidebar(PANEL.PLACE);
@@ -1066,6 +1073,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // Nearby mode: route a category pick / free-text to the place-anchored search.
   const handleNearbySelect = (result: AutocompleteResult) => {
     cancelPendingSubmit();
+    cancelEnrichment();
     if (!anchor) return;
     setIsFocused(false);
     inputRef.current?.blur();
@@ -1086,6 +1094,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // place the search was started from.
   const handleCancelNearby = () => {
     cancelPendingSubmit();
+    cancelEnrichment();
     const place = anchor;
     clearCategory();
     setQuery("");
@@ -1106,12 +1115,14 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   const handleBack = () => {
     cancelPendingSubmit();
+    cancelEnrichment();
     setIsFocused(false);
     inputRef.current?.blur();
   };
 
   const handleSelectLabeledPlace = (place: LabeledPlace) => {
     cancelPendingSubmit();
+    cancelEnrichment();
     setQuery(place.label);
     setIsFocused(false);
     flyTo([place.lng, place.lat], 15);
@@ -1278,6 +1289,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                 size="small"
                 onClick={() => {
                   cancelPendingSubmit();
+                  cancelEnrichment();
                   setQuery("");
                   inputRef.current?.focus();
                 }}
@@ -1350,6 +1362,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                   sx={{ ml: 1, mr: 0.5 }}
                   onClick={() => {
                     cancelPendingSubmit();
+                    cancelEnrichment();
                     closeSidePanel();
                     setQuery("");
                   }}
@@ -1364,6 +1377,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                     sx={{ ml: 1, mr: 0.5 }}
                     onClick={() => {
                       cancelPendingSubmit();
+                      cancelEnrichment();
                       openDirections();
                       useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
                     }}

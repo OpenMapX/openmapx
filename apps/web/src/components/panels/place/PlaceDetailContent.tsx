@@ -86,7 +86,8 @@ function DockedActionBar({ place }: { place: Place }) {
 }
 
 export function PlaceDetailContent(props: Props) {
-  return <PlaceDetailContentInner key={props.place.id} {...props} />;
+  const selectionRevision = usePlaceStore((state) => state.selectionRevision);
+  return <PlaceDetailContentInner key={selectionRevision} {...props} />;
 }
 
 function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = false }: Props) {
@@ -124,9 +125,8 @@ function PlaceDetailContentInner({ place, isLoading, onClose, clearSearchBar = f
     }
   }, [activeTripDep, selectedRoute]);
 
-  // This component is keyed by place id, so its local UI state resets by
-  // remounting. The selected trip lives in an external store and needs an
-  // explicit reset for the new detail session.
+  // A new selection remounts this detail session; identity enrichment does not.
+  // The selected trip lives in an external store and needs an explicit reset.
   useEffect(() => {
     setActiveTripDep(null);
   }, [setActiveTripDep]);
