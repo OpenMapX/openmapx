@@ -1,3 +1,7 @@
+import {
+  createNavigationSessionSnapshot,
+  parseNavigationSessionSnapshot,
+} from "@openmapx/core/navigation";
 import { describe, expect, it } from "vitest";
 import { concatenateRoutes } from "../route-concat.js";
 import type { Route, RouteStep } from "../types.js";
@@ -15,10 +19,10 @@ function route(overrides: Partial<Route> & { geometry: [number, number][] }): Ro
         distance: 1000,
         duration: 600,
         geometry: overrides.geometry,
-        steps: [step("go")],
+        steps: [{ ...step("go"), coordinates: overrides.geometry }],
       },
     ],
-    steps: [step("go")],
+    steps: [{ ...step("go"), coordinates: overrides.geometry }],
     mode: "driving",
     ...overrides,
   };
@@ -121,6 +125,79 @@ describe("concatenateRoutes", () => {
     expect(merged.geometry).toHaveLength(4);
     expect(merged.segmentSpeedLimits).toEqual([50, 70, null]);
     expect(merged.segmentSpeedLimits).toHaveLength(merged.geometry.length - 1);
+  });
+
+  it("leaves connecting segments unknown across unequal joins", () => {
+    const merged = concatenateRoutes([
+      route({
+        geometry: [
+          [13.4, 52.5],
+          [13.401, 52.5],
+        ],
+        segmentSpeedLimits: [50],
+      }),
+      route({
+        geometry: [
+          [13.4012, 52.5],
+          [13.402, 52.5],
+        ],
+        segmentSpeedLimits: [30],
+      }),
+      route({
+        geometry: [
+          [13.4022, 52.5],
+          [13.403, 52.5],
+        ],
+        segmentSpeedLimits: [70],
+      }),
+    ]);
+    expect(merged.geometry).toHaveLength(6);
+    expect(merged.segmentSpeedLimits).toEqual([50, null, 30, null, 70]);
+    expect(merged.segmentSpeedLimits).toHaveLength(merged.geometry.length - 1);
+  });
+
+  it("persists and restores navigation after an unequal route join", () => {
+    const merged = concatenateRoutes([
+      route({
+        geometry: [
+          [13.4, 52.5],
+          [13.401, 52.5],
+        ],
+        segmentSpeedLimits: [50],
+      }),
+      route({
+        geometry: [
+          [13.4012, 52.5],
+          [13.402, 52.5],
+        ],
+        segmentSpeedLimits: [30],
+      }),
+    ]);
+    const snapshot = createNavigationSessionSnapshot({
+      route: merged,
+      routes: [merged],
+      activeRouteIndex: 0,
+      routeSelectionIntent: "automatic",
+      mode: "driving",
+      routeOptions: {
+        avoidHighways: false,
+        avoidTolls: false,
+        avoidFerries: false,
+        avoidClosures: false,
+      },
+      routeProvider: "osrm",
+      destinationWaypoints: [
+        [13.4, 52.5],
+        [13.402, 52.5],
+      ],
+      progress: null,
+      packageIds: [`omp2-${"a".repeat(64)}`],
+      startedAtMs: 1_000,
+      updatedAtMs: 2_000,
+    });
+    const restored = parseNavigationSessionSnapshot(JSON.parse(JSON.stringify(snapshot)));
+    expect(restored?.route.segmentSpeedLimits).toEqual([50, null, 30]);
+    expect(restored?.route.geometry).toEqual(merged.geometry);
   });
 
   it("omits segmentSpeedLimits when any leg lacks them", () => {

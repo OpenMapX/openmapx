@@ -43,19 +43,20 @@ export function concatenateRoutes(routes: Route[]): Route {
     // The shared endpoint would otherwise appear twice and introduce a
     // zero-length segment, which breaks the 1:1 `segmentSpeedLimits` alignment
     // and confuses route snapping during navigation.
-    const shape =
-      geometry.length > 0 &&
-      route.geometry.length > 0 &&
-      samePoint(geometry[geometry.length - 1], route.geometry[0])
-        ? route.geometry.slice(1)
-        : route.geometry;
+    const hasJoin = geometry.length > 0 && route.geometry.length > 0;
+    const sharedEndpoint = hasJoin && samePoint(geometry[geometry.length - 1], route.geometry[0]);
+    const shape = sharedEndpoint ? route.geometry.slice(1) : route.geometry;
     geometry.push(...shape);
     legs.push(...route.legs);
     steps.push(...route.steps);
     distance += route.distance;
     duration += route.duration;
     if (everyHasBaseline) baseline += route.baselineDuration as number;
-    if (everyHasSpeedLimits) speedLimits.push(...(route.segmentSpeedLimits as (number | null)[]));
+    if (everyHasSpeedLimits) {
+      // Unequal endpoints introduce a connecting segment with no known limit.
+      if (hasJoin && !sharedEndpoint) speedLimits.push(null);
+      speedLimits.push(...(route.segmentSpeedLimits as (number | null)[]));
+    }
     if (everyHasElevation) elevation.push(...(route.elevation as number[]));
   }
 
