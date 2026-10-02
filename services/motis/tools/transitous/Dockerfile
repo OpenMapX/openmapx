@@ -24,10 +24,11 @@ ARG MOTIS_SHA256_ARM64=eda48ad1744e7be9bdd1cb515e7229e9c7ecdc3cf82c6621a64670505
 # available inside the RUN below.
 ARG TARGETARCH
 
-# Explicitly upgrade PCRE2 inherited from the pinned base to its security fix.
+# Explicitly upgrade PCRE2 and Expat inherited from the pinned base to their
+# security fixes, including Expat's 2.5.0-1+deb12u4 update.
 RUN apt-get update -y \
     && apt-get install -y --no-install-recommends \
-      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age libpcre2-8-0 \
+      git python3-pip python3-venv curl wget bzip2 rsync openssh-client ca-certificates age libpcre2-8-0 libexpat1 \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/python3.*/EXTERNALLY-MANAGED
