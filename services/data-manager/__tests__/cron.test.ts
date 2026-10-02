@@ -520,7 +520,7 @@ describe("setupCron", () => {
       const handles = setupCron(
         baseOptions({
           trafficLiveCronExpression: "disabled",
-          openConditionsUrl: "http://openconditions-ingest:8080",
+          openConditionsUrl: "http://openconditions-ingest:4100",
         }),
       );
       expect(handles.trafficLiveCron).toBeNull();
@@ -531,7 +531,7 @@ describe("setupCron", () => {
       const handles = setupCron(
         baseOptions({
           trafficLiveCronExpression: "0 0 1 1 *",
-          openConditionsUrl: "http://openconditions-ingest:8080",
+          openConditionsUrl: "http://openconditions-ingest:4100",
         }),
       );
       expect(handles.trafficLiveCron).not.toBeNull();
@@ -559,10 +559,10 @@ describe("setupCron", () => {
       const handles = setupCron(
         baseOptions({
           trafficLiveCronExpression: "0 0 1 1 *",
-          openConditionsUrl: "http://openconditions-ingest:8080",
+          openConditionsUrl: "http://openconditions-ingest:4100",
           trafficTarPath: "/data/osm/traffic.tar",
           fetchLiveTrafficCsv,
-          fetchConditionsJson: async () => '{"conditions":[]}',
+          fetchConditionsJson: async () => '{"schema_version":2,"complete":true,"conditions":[]}',
           loadWaysToEdges,
           writeLiveTraffic,
           logger: { info: infoLog, warn: () => {}, error: () => {} },
@@ -600,10 +600,10 @@ describe("setupCron", () => {
       const ensureTrafficExtract = vi.fn().mockResolvedValue({ built: true });
       const handles = setupCron(
         baseOptions({
-          openConditionsUrl: "http://openconditions-ingest:8080",
+          openConditionsUrl: "http://openconditions-ingest:4100",
           trafficLiveCronExpression: "disabled",
           fetchLiveTrafficCsv: async () => "way_id,dir,current_kph,free_flow_kph,los\n",
-          fetchConditionsJson: async () => '{"conditions":[]}',
+          fetchConditionsJson: async () => '{"schema_version":2,"complete":true,"conditions":[]}',
           loadWaysToEdges: async () => new Map(),
           writeLiveTraffic: vi.fn().mockResolvedValue({
             written: 0,
@@ -648,7 +648,7 @@ describe("setupCron", () => {
         const refreshWaysToEdges = vi.fn().mockResolvedValue({ wayCount: 1, edgeCount: 2 });
         const handles = setupCron(
           baseOptions({
-            openConditionsUrl: "http://openconditions-ingest:8080",
+            openConditionsUrl: "http://openconditions-ingest:4100",
             ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
             getCoveredWayIds,
             refreshWaysToEdges,
@@ -670,7 +670,7 @@ describe("setupCron", () => {
       const refreshWaysToEdges = vi.fn().mockResolvedValue({ wayCount: 1, edgeCount: 2 });
       const handles = setupCron(
         baseOptions({
-          openConditionsUrl: "http://openconditions-ingest:8080",
+          openConditionsUrl: "http://openconditions-ingest:4100",
           isTrafficExtractStale: vi.fn().mockResolvedValue(false),
           ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
           getCoveredWayIds: vi.fn().mockResolvedValue(new Set([123])),
@@ -690,7 +690,7 @@ describe("setupCron", () => {
       const refreshWaysToEdges = vi.fn().mockResolvedValue({ wayCount: 1, edgeCount: 2 });
       const handles = setupCron(
         baseOptions({
-          openConditionsUrl: "http://openconditions-ingest:8080",
+          openConditionsUrl: "http://openconditions-ingest:4100",
           isTrafficExtractStale: vi.fn().mockRejectedValue(new Error("docker gone")),
           ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
           getCoveredWayIds: vi.fn().mockResolvedValue(new Set([123])),
@@ -713,7 +713,7 @@ describe("setupCron", () => {
         const refreshWaysToEdges = vi.fn();
         const handles = setupCron(
           baseOptions({
-            openConditionsUrl: "http://openconditions-ingest:8080",
+            openConditionsUrl: "http://openconditions-ingest:4100",
             ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
             getCoveredWayIds: vi.fn().mockResolvedValue(new Set([123])),
             refreshWaysToEdges,
@@ -739,7 +739,7 @@ describe("setupCron", () => {
         const refreshWaysToEdges = vi.fn().mockResolvedValue({ wayCount: 1, edgeCount: 2 });
         const handles = setupCron(
           baseOptions({
-            openConditionsUrl: "http://openconditions-ingest:8080",
+            openConditionsUrl: "http://openconditions-ingest:4100",
             ensureTrafficExtract: vi.fn().mockResolvedValue({ built: true }),
             getCoveredWayIds: vi.fn().mockResolvedValue(new Set([123])),
             refreshWaysToEdges,
@@ -763,7 +763,7 @@ describe("setupCron", () => {
         const refreshWaysToEdges = vi.fn();
         const handles = setupCron(
           baseOptions({
-            openConditionsUrl: "http://openconditions-ingest:8080",
+            openConditionsUrl: "http://openconditions-ingest:4100",
             ensureTrafficExtract: vi.fn().mockResolvedValue({ built: false }),
             refreshWaysToEdges,
           }),

@@ -1,107 +1,91 @@
-import type { RoadConditionEvent } from "../../../types/roadConditions";
-export const event = (): RoadConditionEvent => ({
-  id: "fr:1",
-  source: "fr",
-  provider: "openconditions",
-  type: "road_closure",
-  severity: "high",
-  headline: "Closed",
-  geometry: { type: "Point", coordinates: [2, 48] },
-  originKind: "feed",
-  binding: { status: "exact", directionMode: "both" },
-  routingEvidence: {
-    schema_version: 1,
-    observation_revision: "a",
-    binding_revision: "a",
-    graph_generation: "g1",
-    resolver_version: "r1",
-    source_id: "fr",
-    child_source_id: null,
-    source_license: "etalab-2.0",
-    license_url: "https://example.org/license",
-    attribution: "DIR",
-    record_url: null,
-    source_checked_at: "2026-09-11T11:59:00Z",
-    fresh_until: "2026-09-11T12:10:00Z",
-    expires_at: null,
-    valid_from: null,
-    valid_to: null,
-    next_transition_at: null,
-    direction_mode: "both",
+import type {
+  RoadConditionEffect,
+  RoadConditionEvent,
+  RoadConditionRoutingEvidence,
+} from "../../../types/roadConditions";
+
+/** One effect of the fixture situation; `fields` replaces or adds keys. */
+export const effect = (
+  id: string,
+  kind: RoadConditionEffect["kind"],
+  fields: Record<string, unknown> = {},
+): RoadConditionEffect =>
+  ({
+    id,
+    kind,
+    v: 1,
     applicability: { kind: "all" },
-    rights: {
-      commercial_use: "yes",
-      source_redistribution: "yes",
-      derived_redistribution: "yes",
-      attribution_required: "yes",
-      retention: "yes",
-      evidence_origin: "publisher",
-      evidence_version: "1",
-      reviewed_at: "2026-09-11T00:00:00Z",
-    },
-    segments: [{ segment_id: "10", direction: "forward", from_fraction: 0, to_fraction: 1 }],
-    binding_status: "exact",
-    reason_codes: [],
-    evaluated_at: "2026-09-11T12:00:00Z",
+    compliance: "mandatory",
+    normalization: "complete",
+    ...(kind === "closure" ? { scope: "road" } : {}),
+    ...fields,
+  }) as RoadConditionEffect;
+
+/** Routing evidence of one effect of the fixture situation, current at 2026-09-11T12:00Z. */
+export const evidence = (
+  effectId = "fr1/closure",
+  effectKind = "closure",
+): RoadConditionRoutingEvidence => ({
+  schema_version: 2,
+  record_class: "situation",
+  record_id: "oc:situation:fr:fr1",
+  effect_id: effectId,
+  record_revision: 3,
+  binding_revision: 3,
+  effect_kind: effectKind,
+  graph_generation: "g1",
+  resolver_version: "2.0.0",
+  source_id: "fr",
+  child_source_id: null,
+  source_license: "etalab-2.0",
+  license_url: "https://example.org/license",
+  attribution: "DIR",
+  record_url: null,
+  source_checked_at: "2026-09-11T11:59:00Z",
+  fresh_until: "2026-09-11T12:10:00Z",
+  expires_at: null,
+  valid_from: null,
+  valid_to: null,
+  next_transition_at: null,
+  direction_mode: "both",
+  applicability: { kind: "all" },
+  rights: {
+    commercial_use: "yes",
+    source_redistribution: "yes",
+    derived_redistribution: "yes",
+    attribution_required: "yes",
+    retention: "yes",
+    evidence_origin: "publisher",
+    evidence_version: "1",
+    reviewed_at: "2026-09-11T00:00:00Z",
   },
+  segments: [{ segment_id: "10", direction: "forward", from_fraction: 0, to_fraction: 1 }],
+  binding_status: "exact",
+  reason_codes: [],
+  evaluated_at: "2026-09-11T12:00:00Z",
 });
 
-/**
- * A published restriction envelope as OpenConditions emits it: source
- * semantics plus the producer's evaluation metadata. Used to prove the routing
- * gate fires on restriction evidence alone, with every other eligibility
- * condition still satisfied.
- */
-export const publishedRestriction = (): NonNullable<RoadConditionEvent["restrictionDetails"]> => ({
-  schemaVersion: 1,
-  vehicleScope: "specific",
-  completeness: "complete",
-  issues: [],
-  source: {
-    sourceId: "fi-digitraffic",
-    recordId: "GUID50465935",
-    recordVersion: "31",
-    sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
-    feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
-    publisher: "Fintraffic / Digitraffic",
-    license: "CC-BY-4.0",
-    licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-    attribution: "Fintraffic / Digitraffic",
-    modificationNotice:
-      "Normalized by OpenConditions; source units and structure may be transformed.",
-  },
-  facts: [
-    {
-      id: "GUID50465935:GUID50469933:roadwork_phase:restrictions[2]",
-      kind: "dimension",
-      dimension: "gross_weight",
-      meaning: "maximum_permitted",
-      value: 26000,
-      unit: "kg",
-      operator: "lte",
-      state: "active",
-      scope: {
-        kind: "roadwork_phase",
-        phaseId: "GUID50469933",
-        locationDescription: "Tie 104, Raasepori",
-        sourceLocationRefs: { scheme: "digitraffic_road_address", road: 104 },
-        restrictionBinding: "not_established",
-      },
-      direction: { basis: "road_reference", value: "both", description: null },
-      validFrom: "2026-07-19T21:00:00.000Z",
-      validTo: "2026-12-14T21:59:59.999Z",
-      sourceTokens: { type: "vehicle gross weight limit", quantity: 26, unit: "t" },
-      context: {
-        restrictionsLiftable: false,
-        compliance: "unknown",
-        operatorActionStatus: null,
-        validityStatus: null,
-      },
-    },
-  ],
-  evaluatedAt: "2026-09-11T12:00:00.000Z",
-  sourceCheckedAt: "2026-09-11T11:59:00.000Z",
-  freshUntil: "2026-09-11T12:09:00.000Z",
-  nextTransitionAt: "2026-12-14T21:59:59.999Z",
-  isStale: false,
+/** A full feed closure of one road, bound and with current routing evidence. */
+export const event = (): RoadConditionEvent => ({
+  id: "oc:situation:fr:fr1",
+  source: "fr",
+  provider: "road-conditions-openconditions",
+  kind: "closure",
+  type: "closure",
+  subtype: "full",
+  severity: { label: "major" },
+  certainty: "observed",
+  temporality: "live",
+  planned: false,
+  headline: [{ lang: "fr", text: "Route fermée" }],
+  geometry: { type: "Point", coordinates: [2, 48] },
+  validity: { status: "active", start: "2026-09-11T08:00:00Z" },
+  effects: [effect("fr1/closure", "closure")],
+  origin: "feed",
+  attribution: { provider: "DIR", license: "etalab-2.0" },
+  fetchedAt: "2026-09-11T11:59:00Z",
+  routingEvidence: { "fr1/closure": evidence() },
 });
+
+/** The fixture situation's one effect. */
+export const closure = (e: RoadConditionEvent = event()): RoadConditionEffect => e.effects[0]!;

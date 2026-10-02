@@ -14,61 +14,34 @@ vi.mock("../ops-client.js", () => ({
 import { type CronSetupOptions, setupCron } from "../cron.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
 import type { WriteLiveTrafficDeps, WriteLiveTrafficResult } from "../jobs/traffic/write-live.js";
-import { event } from "./fixtures/road-condition.js";
+import { conditionRow, conditionsBody } from "./fixtures/road-condition.js";
 
-function liveEvidence(startFraction = 0, wayId = 10) {
-  const evidence = event().routingEvidence;
-  if (!evidence) throw new Error("Missing fixture routing evidence");
-  return {
-    ...evidence,
-    segments: evidence.segments.map((span) => ({
-      ...span,
-      segment_id: `${wayId}:f`,
-      from_fraction: startFraction,
-    })),
-    source_checked_at: new Date(Date.now() - 60_000).toISOString(),
-    fresh_until: new Date(Date.now() + 1_200_000).toISOString(),
-  };
+/** A full closure of situation `recordId`, fresh for twenty minutes from now. */
+function liveClosure(
+  recordId: string,
+  options: { wayId?: number; startFraction?: number; geometry?: [number, number][] } = {},
+) {
+  return conditionRow(recordId, {
+    ...options,
+    evidence: {
+      source_checked_at: new Date(Date.now() - 60_000).toISOString(),
+      fresh_until: new Date(Date.now() + 1_200_000).toISOString(),
+    },
+  });
 }
 
-const OPEN_CONDITIONS_URL = "http://openconditions-ingest:8080";
+const A1 = "a:1#closure";
+const OPEN_CONDITIONS_URL = "http://openconditions-ingest:4100";
 const HEADER_ONLY_CSV = "way_id,dir,current_kph,free_flow_kph,los\n";
 
 /** One exact, feed-origin closure bound to way 10 in the forward direction. */
 function closureFeed(): string {
-  return JSON.stringify({
-    resolver_version: "r1",
-    conditions: [
-      {
-        id: "a:1",
-        type: "road_closure",
-        road_state: "closed",
-        origin_kind: "feed",
-        routing_eligible: true,
-        binding: { status: "exact" },
-        source: "fr",
-        routing_evidence: liveEvidence(),
-        segments: [{ way_id: 10, dir: "f", start_fraction: 0, end_fraction: 1, geometry: null }],
-      },
-    ],
-  });
+  return conditionsBody([liveClosure("a:1")]);
 }
 
 /** The same closure plus a second one, `a:2`, bound to way 20. */
 function twoClosureFeed(): string {
-  const first = JSON.parse(closureFeed()) as { conditions: unknown[] };
-  first.conditions.push({
-    id: "a:2",
-    type: "road_closure",
-    road_state: "closed",
-    origin_kind: "feed",
-    routing_eligible: true,
-    binding: { status: "exact" },
-    source: "fr",
-    routing_evidence: liveEvidence(0, 20),
-    segments: [{ way_id: 20, dir: "f", start_fraction: 0, end_fraction: 1, geometry: null }],
-  });
-  return JSON.stringify(first);
+  return conditionsBody([liveClosure("a:1"), liveClosure("a:2", { wayId: 20 })]);
 }
 
 function waysToEdgesWithWay10(): Map<number, WayEdge[]> {
@@ -77,36 +50,15 @@ function waysToEdgesWithWay10(): Map<number, WayEdge[]> {
 
 /** The same closure as `closureFeed`, but with the occupied geometry a trace needs. */
 function closureFeedWithGeometry(): string {
-  return JSON.stringify({
-    resolver_version: "r1",
-    conditions: [
-      {
-        id: "a:1",
-        type: "road_closure",
-        road_state: "closed",
-        origin_kind: "feed",
-        routing_eligible: true,
-        binding: { status: "exact" },
-        source: "fr",
-        routing_evidence: liveEvidence(0.5),
-        segments: [
-          {
-            way_id: 10,
-            dir: "f",
-            start_fraction: 0.5,
-            end_fraction: 1,
-            geometry: {
-              type: "LineString",
-              coordinates: [
-                [6.81, 51.2],
-                [6.82, 51.2],
-              ],
-            },
-          },
-        ],
-      },
-    ],
-  });
+  return conditionsBody([
+    liveClosure("a:1", {
+      startFraction: 0.5,
+      geometry: [
+        [6.81, 51.2],
+        [6.82, 51.2],
+      ],
+    }),
+  ]);
 }
 
 /** Way 10 runs over two forward edges, so a trace can narrow the closure to one of them. */
@@ -259,10 +211,10 @@ describe("traffic-live conditions merge", () => {
     await handles.runTrafficLiveNow();
 
     const call = writeLive.mock.calls[0]?.[0];
-    expect(call?.overrides?.get("0:1:2")).toMatchObject({ closed: true, observationId: "a:1" });
+    expect(call?.overrides?.get("0:1:2")).toMatchObject({ closed: true, observationId: A1 });
 
     const applied = handles.getTrafficConditionsApplied();
-    expect(applied.observationIds).toEqual(["a:1"]);
+    expect(applied.observationIds).toEqual([A1]);
     expect(applied.writtenAt).not.toBeNull();
     expect(applied.resolverVersion).toBe("r1");
     expect(applied).toMatchObject({
@@ -322,7 +274,7 @@ describe("traffic-live conditions merge", () => {
     vi.advanceTimersByTime(staleMs - 1);
     await handles.runTrafficLiveNow();
     expect(writeLive.mock.calls[1]?.[0].overrides?.get("0:1:2")).toMatchObject({ closed: true });
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual(["a:1"]);
+    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([A1]);
     expect(writeLive.mock.calls[1]?.[0].validUntil).toBe("2026-09-06T00:10:00.000Z");
     expect(handles.getTrafficConditionsApplied().validUntil).toBe("2026-09-06T00:10:00.000Z");
 
@@ -604,7 +556,7 @@ describe("traffic-live conditions merge", () => {
     expect(trace).toHaveBeenCalledTimes(1);
 
     // The closure is lifted: its span leaves both the file and this process.
-    feed = JSON.stringify({ resolver_version: "r1", conditions: [] });
+    feed = conditionsBody([]);
     await handles.runTrafficLiveNow();
 
     // Re-reported later, it is traced again rather than served from a cache
@@ -634,13 +586,13 @@ describe("traffic-live conditions merge", () => {
         closedEdges: 1,
         cappedEdges: 0,
         overridesUnresolved: 1,
-        appliedObservationIds: ["a:1"],
+        appliedObservationIds: [A1],
       }),
     });
 
     await handles.runTrafficLiveNow();
 
-    expect(handles.getTrafficConditionsApplied().observationIds).toEqual(["a:1"]);
+    expect(handles.getTrafficConditionsApplied().observationIds).toEqual([A1]);
 
     handles.stop();
   });
@@ -655,7 +607,7 @@ it("reconciles conditions even when the flow request fails", async () => {
     },
     fetchConditionsJson: async () => {
       checks++;
-      return JSON.stringify({ conditions: [] });
+      return conditionsBody([]);
     },
     writeLiveTraffic: async (deps) => {
       writes++;

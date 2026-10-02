@@ -1,13 +1,19 @@
 import { readFileSync } from "node:fs";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { conditionsToEdges, parseConditionsJson } from "../jobs/traffic/conditions-to-edges.js";
+import { buildTrafficReceipts } from "../jobs/traffic/receipts.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
 
-// Same JSON payload as OC's publisher golden fixture; each repository tests independently.
-const wire = readFileSync(
-  new URL("./fixtures/contracts/road-conditions-v1.json", import.meta.url),
-  "utf8",
-);
+// Pinned copies of OC's publisher golden fixtures; each repository tests independently.
+const golden = (name: string) =>
+  readFileSync(new URL(`./fixtures/contracts/${name}`, import.meta.url), "utf8");
+const wire = golden("road-conditions-v2.json");
+const speedWire = golden("road-speed-cap-v2.json");
+const restrictionsWire = golden("road-restrictions-v2.json");
+
+const CLOSURE_ID = "oc:situation:test-child:closure-1#closure-1/closure";
+const SPEED_CAP_ID = "oc:situation:test-child:speed-cap-1#speed-cap-1/speed_limit";
+
 const ways = new Map<number, WayEdge[]>([
   [
     123,
@@ -24,51 +30,101 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-describe("OpenConditions → OpenMapX road-condition wire contract v1", () => {
+describe("OpenConditions → OpenMapX road-condition wire contract v2", () => {
   it("preserves original evidence and maps only the published direction", () => {
     const parsed = parseConditionsJson(wire);
+    expect(parsed.resolverVersion).toBe("2.0.0");
     expect(parsed.conditions).toHaveLength(1);
     const condition = parsed.conditions[0];
-    expect(condition?.source).toBe("test-child");
-    const original = JSON.parse(wire) as { conditions: Array<{ routing_evidence: unknown }> };
+    expect(condition).toMatchObject({
+      id: CLOSURE_ID,
+      recordId: "oc:situation:test-child:closure-1",
+      source: "test-child",
+      origin: "feed",
+      effect: { id: "closure-1/closure", kind: "closure", scope: "road" },
+    });
+    const original = JSON.parse(wire) as {
+      conditions: Array<{ routing_evidence: unknown; effect: unknown }>;
+    };
     expect(condition?.routingEvidence).toEqual(original.conditions[0]?.routing_evidence);
+    expect(condition?.effect).toEqual(original.conditions[0]?.effect);
     expect(condition?.routingEvidence).toMatchObject({
+      schema_version: 2,
+      record_class: "situation",
       source_id: "test-parent",
       child_source_id: "test-child",
       source_license: "CC0-1.0",
       attribution: "Example road authority",
-      observation_revision: "revision-1",
-      binding_revision: "revision-1",
+      record_revision: 1,
+      binding_revision: 1,
     });
     const mapped = conditionsToEdges(parsed.conditions, ways);
     expect([...mapped.overrides.keys()]).toEqual(["2:1:0"]);
     expect(mapped.overrides.get("2:1:0")).toMatchObject({
       closed: true,
-      observationId: "contract:closure-1",
+      observationId: CLOSURE_ID,
     });
-    expect([...mapped.appliedObservationIds]).toEqual(["contract:closure-1"]);
+    expect([...mapped.appliedObservationIds]).toEqual([CLOSURE_ID]);
+  });
+
+  it("receipts the closure by effect and record revision", () => {
+    const parsed = parseConditionsJson(wire);
+    const mapped = conditionsToEdges(parsed.conditions, ways);
+    const [receipt] = buildTrafficReceipts({
+      conditions: parsed.conditions,
+      overrides: mapped.overrides,
+      appliedObservationIds: [...mapped.appliedObservationIds],
+      graphGeneration: "host-graph",
+      policyRevision: "policy-1",
+      validUntil: "2026-09-11T12:02:00.000Z",
+    });
+    expect(receipt).toMatchObject({
+      observationId: CLOSURE_ID,
+      observationRevision: "1",
+      sourceId: "test-child",
+      sourceGraphGeneration: "graph-generation-1",
+      effect: "closure",
+      edgeKeys: ["2:1:0"],
+      sourceLicense: "CC0-1.0",
+      attribution: "Example road authority",
+    });
   });
 
   it("preserves and applies the shared speed-cap fixture", () => {
-    const speedWire = readFileSync(
-      new URL("./fixtures/contracts/road-speed-cap-v1.json", import.meta.url),
-      "utf8",
-    );
     const parsed = parseConditionsJson(speedWire);
-    expect(parsed.conditions[0]?.speedLimitKph).toBe(40);
+    expect(parsed.conditions[0]?.effect).toMatchObject({
+      kind: "speed_limit",
+      limit: { value: 40, unit: "km/h" },
+    });
     const mapped = conditionsToEdges(parsed.conditions, ways);
     expect(mapped.overrides.get("2:1:0")).toMatchObject({
       closed: false,
       capKph: 40,
-      observationId: "contract:speed-cap-1",
+      observationId: SPEED_CAP_ID,
     });
-    expect(mapped.overrides.get("2:1:0")?.contributorIds).toEqual(["contract:speed-cap-1"]);
+    expect(mapped.overrides.get("2:1:0")?.contributorIds).toEqual([SPEED_CAP_ID]);
+    expect(mapped.appliedObservationIds.size).toBe(0);
+    const [receipt] = buildTrafficReceipts({
+      conditions: parsed.conditions,
+      overrides: mapped.overrides,
+      appliedObservationIds: [SPEED_CAP_ID],
+      graphGeneration: "host-graph",
+      policyRevision: "policy-1",
+      validUntil: "2026-09-11T12:02:00.000Z",
+    });
+    expect(receipt).toMatchObject({ observationId: SPEED_CAP_ID, effect: "speed_cap" });
   });
 
   it("rejects evidence naming a different directed segment", () => {
     const input = JSON.parse(wire);
     input.conditions[0].routing_evidence.segments[0].segment_id = "999:f";
     expect(() => parseConditionsJson(JSON.stringify(input))).toThrow(/disagrees/);
+  });
+
+  it("rejects a snapshot of another schema version", () => {
+    const input = JSON.parse(wire);
+    input.schema_version = 1;
+    expect(() => parseConditionsJson(JSON.stringify(input))).toThrow(/snapshot/);
   });
 
   it.each(["test-parent", "test-child"])("honours source exclusion for %s", (source) => {
@@ -92,47 +148,41 @@ describe("OpenConditions → OpenMapX road-condition wire contract v1", () => {
   });
 });
 
-describe("restriction contract v1 — no conditional record reaches the edge graph", () => {
-  const fixture = JSON.parse(
-    readFileSync(
-      new URL("./fixtures/contracts/road-restrictions-v1.json", import.meta.url),
-      "utf8",
-    ),
-  ) as {
-    fixtureVersion: 1;
-    evaluatedAt: string;
-    segmentConditions: unknown;
-    expectedConditionalIds: string[];
-  };
+describe("restriction contract v2: no vehicle-specific effect reaches the edge graph", () => {
+  const parsed = () => parseConditionsJson(restrictionsWire);
+  const restrictionIds = () =>
+    parsed()
+      .conditions.map((c) => c.id)
+      .filter((id) => id !== CLOSURE_ID);
 
   it("applies the unconditional control and nothing else", () => {
-    expect(fixture.fixtureVersion).toBe(1);
-    expect(fixture.evaluatedAt).toBe("2026-09-11T12:00:00.000Z");
-    const parsed = parseConditionsJson(JSON.stringify(fixture.segmentConditions));
-    const mapped = conditionsToEdges(parsed.conditions, ways);
-    expect([...mapped.appliedObservationIds]).toEqual(["contract:closure-1"]);
+    const mapped = conditionsToEdges(parsed().conditions, ways);
+    expect([...mapped.appliedObservationIds]).toEqual([CLOSURE_ID]);
     expect([...mapped.overrides.keys()]).toEqual(["2:1:0"]);
-    for (const id of fixture.expectedConditionalIds) {
+    expect(mapped.overrides.get("2:1:0")?.contributorIds).toEqual([CLOSURE_ID]);
+    expect(restrictionIds().length).toBeGreaterThan(0);
+    for (const id of restrictionIds()) {
       expect(mapped.appliedObservationIds.has(id), id).toBe(false);
     }
   });
 
-  it("carries no conditional record on the segment wire at all", () => {
-    const parsed = parseConditionsJson(JSON.stringify(fixture.segmentConditions));
-    const ids = parsed.conditions.map((condition) => condition.id);
-    expect(fixture.expectedConditionalIds.length).toBeGreaterThan(0);
-    for (const id of fixture.expectedConditionalIds) expect(ids, id).not.toContain(id);
+  it("neither closes nor caps an edge for a restriction even without the control", () => {
+    const restrictions = parsed().conditions.filter((c) => c.id !== CLOSURE_ID);
+    const mapped = conditionsToEdges(restrictions, ways);
+    expect(mapped.overrides.size).toBe(0);
+    expect(mapped.skipped.noEffect).toBe(restrictions.length);
   });
 
-  it("covers the Dutch height, usage and class records by name", () => {
+  it("covers the Dutch height, usage and class records and the Finnish weight limit by name", () => {
     // Named explicitly so a fixture that silently lost them cannot pass the
     // generic loops above by having nothing left to exclude.
-    expect(fixture.expectedConditionalIds).toEqual(
+    expect(restrictionIds()).toEqual(
       expect.arrayContaining([
-        "nl-ndw:RWS01_M1080891_NARROW_LANES_D2_WWA",
-        "nl-ndw:RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA",
-        "nl-ndw:NLRWS_0005382945_1",
-        "nl-ndw:NLRWS_0005406494_1",
+        "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA#RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
+        "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA#RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
+        "oc:situation:nl-ndw:NLRWS_0005382945#NLRWS_0005382945_1/closure",
+        "oc:situation:nl-ndw:NLRWS_0005406494#NLRWS_0005406494_1/closure",
+        "oc:situation:fi-digitraffic:GUID50451433#GUID50451433/dimension_limit",
       ]),
     );
   });

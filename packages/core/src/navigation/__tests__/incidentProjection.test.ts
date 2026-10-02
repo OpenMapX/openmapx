@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import type { LngLat } from "../../types/geometry";
-import type { RoadConditionEvent, RoadConditionSeverity } from "../../types/roadConditions";
+import type {
+  LocalizedText,
+  RoadConditionEvent,
+  RoadConditionSeverityLabel,
+} from "../../types/roadConditions";
 import type { RouteStep } from "../../types/routing";
 import { haversineDistance } from "../../utils/coordinates";
 import { angularDifference, bearingBetween, routeBearingAt } from "../bearing";
@@ -22,24 +26,60 @@ const route: LngLat[] = [
   [13.1, 52.0],
 ];
 
+/** The registry kind each fixture type belongs to. */
+const KIND_OF: Record<string, string> = {
+  accident: "incident",
+  works: "roadworks",
+  closure: "closure",
+  congestion: "congestion",
+  other: "other",
+};
+
+const en = (text: string): LocalizedText => [{ lang: "en", text }];
+
 function ev(
   id: string,
-  severity: RoadConditionSeverity,
+  severity: RoadConditionSeverityLabel,
   geometry: RoadConditionEvent["geometry"],
-  type: RoadConditionEvent["type"] = "accident",
+  type = "accident",
   extra: Partial<RoadConditionEvent> = {},
 ): RoadConditionEvent {
   return {
     id,
     source: "s",
     provider: "p",
+    kind: KIND_OF[type] ?? "other",
     type,
-    severity,
+    severity: { label: severity },
+    certainty: "observed",
+    temporality: "live",
+    planned: false,
     geometry,
-    headline: `${type} ${id}`,
+    headline: en(`${type} ${id}`),
+    validity: { status: "active" },
+    effects: [],
+    origin: "feed",
+    attribution: { provider: "s" },
+    fetchedAt: "2026-09-11T12:00:00Z",
     ...extra,
   };
 }
+
+/** A delay effect of `value` (seconds by default), optionally with its own validity. */
+const delay = (
+  value: number,
+  validity?: RoadConditionEvent["validity"],
+  unit = "s",
+): RoadConditionEvent["effects"][number] => ({
+  id: `delay-${value}`,
+  kind: "delay",
+  v: 1,
+  applicability: { kind: "all" },
+  compliance: "unknown",
+  normalization: "complete",
+  delay: { value, unit },
+  ...(validity ? { validity } : {}),
+});
 
 const motorwayStep = {
   instruction: "Continue on A 57",
@@ -52,37 +92,63 @@ const motorwayStep = {
 describe("projectEventsToRoute", () => {
   it("projects an on-corridor incident ahead with a severity-scaled approach window", () => {
     const out = projectEventsToRoute(
-      [ev("a", "high", { type: "Point", coordinates: [13.05, 52.00008] })], // ~9 m off
+      [ev("a", "major", { type: "Point", coordinates: [13.05, 52.00008] })], // ~9 m off
       route,
       0,
     );
     expect(out).toHaveLength(1);
     expect(out[0]?.type).toBe("traffic_incident");
+    expect(out[0]?.kind).toBe("incident");
     expect(out[0]?.eventType).toBe("accident");
-    expect(out[0]?.severity).toBe("high");
+    expect(out[0]?.severity).toBe("major");
+    expect(out[0]?.headline).toEqual(en("accident a"));
     expect(out[0]?.approach).toEqual({ leadSec: 20, minM: 400, maxM: 1500 });
     expect(out[0]?.alongMeters).toBeGreaterThan(3000);
     expect(out[0]?.alongMeters).toBeLessThan(3900);
   });
 
-  it("carries the event's delaySeconds onto the projected alert", () => {
+  it("leaves the headline off an alert whose situation has none", () => {
     const out = projectEventsToRoute(
       [
-        ev("d", "high", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
-          delaySeconds: 900,
+        ev("a", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
+          headline: undefined,
         }),
       ],
       route,
       0,
     );
-    expect(out).toHaveLength(1);
-    expect(out[0]?.delaySeconds).toBe(900);
+    expect(out[0]).not.toHaveProperty("headline");
+  });
+
+  it("carries the delay of a delay effect in force at the evaluation instant", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    const project = (effects: RoadConditionEvent["effects"]) =>
+      projectEventsToRoute(
+        [
+          ev("d", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
+            effects,
+          }),
+        ],
+        route,
+        0,
+        { now: at },
+      );
+    expect(project([delay(900)])[0]?.delaySeconds).toBe(900);
+    // An effect's own validity wins over its situation's.
+    expect(
+      project([delay(900, { status: "active", end: "2026-09-11T11:00:00Z" })])[0],
+    ).not.toHaveProperty("delaySeconds");
+    expect(
+      project([delay(900, { status: "planned", start: "2026-09-12T08:00:00Z" }), delay(300)])[0]
+        ?.delaySeconds,
+    ).toBe(300);
+    expect(project([delay(15, undefined, "min")])[0]).not.toHaveProperty("delaySeconds");
   });
 
   it("carries the display group id without changing route projection", () => {
     const out = projectEventsToRoute(
       [
-        ev("grouped", "high", { type: "Point", coordinates: [13.05, 52.00008] }, "roadworks", {
+        ev("grouped", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "works", {
           groupId: "works-42",
         }),
       ],
@@ -94,9 +160,45 @@ describe("projectEventsToRoute", () => {
     expect(out[0]?.groupId).toBe("works-42");
   });
 
+  it("flags an alert whose situation closes the road to cars at the evaluation instant", () => {
+    const at = new Date("2026-09-11T12:00:00Z");
+    const closure = (fields: Record<string, unknown> = {}): RoadConditionEvent["effects"][number] =>
+      ({
+        id: "c",
+        kind: "closure",
+        v: 1,
+        scope: "road",
+        applicability: { kind: "all" },
+        compliance: "mandatory",
+        normalization: "complete",
+        ...fields,
+      }) as RoadConditionEvent["effects"][number];
+    const closesRoad = (effects: RoadConditionEvent["effects"]) =>
+      projectEventsToRoute(
+        [
+          ev("w", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "works", {
+            effects,
+          }),
+        ],
+        route,
+        0,
+        { now: at },
+      )[0]?.closesRoad;
+    // A roadworks situation that closes the road is a closure ahead.
+    expect(closesRoad([closure()])).toBe(true);
+    expect(closesRoad([])).toBe(false);
+    expect(
+      closesRoad([closure({ applicability: { kind: "classes", include: [{ class: "hgv" }] } })]),
+    ).toBe(false);
+    expect(closesRoad([closure({ normalization: "partial" })])).toBe(false);
+    expect(
+      closesRoad([closure({ validity: { status: "planned", start: "2026-09-12T00:00:00Z" } })]),
+    ).toBe(false);
+  });
+
   it("drops incidents off the corridor", () => {
     const out = projectEventsToRoute(
-      [ev("b", "high", { type: "Point", coordinates: [13.05, 52.02] })], // ~2.2 km off
+      [ev("b", "major", { type: "Point", coordinates: [13.05, 52.02] })], // ~2.2 km off
       route,
       0,
     );
@@ -105,7 +207,7 @@ describe("projectEventsToRoute", () => {
 
   it("drops incidents behind the current position", () => {
     const out = projectEventsToRoute(
-      [ev("c", "high", { type: "Point", coordinates: [13.02, 52.0] })], // ~1.4 km along
+      [ev("c", "major", { type: "Point", coordinates: [13.02, 52.0] })], // ~1.4 km along
       route,
       5000,
     );
@@ -115,7 +217,7 @@ describe("projectEventsToRoute", () => {
   it("uses the first sustained route-overlapping portion of a line geometry", () => {
     const out = projectEventsToRoute(
       [
-        ev("d", "medium", {
+        ev("d", "moderate", {
           type: "LineString",
           coordinates: [
             [13.04, 52.00005],
@@ -134,7 +236,7 @@ describe("projectEventsToRoute", () => {
   it("sorts by along-distance and scales the approach window by severity", () => {
     const out = projectEventsToRoute(
       [
-        ev("far", "low", { type: "Point", coordinates: [13.08, 52.0] }),
+        ev("far", "minor", { type: "Point", coordinates: [13.08, 52.0] }),
         ev("near", "critical", { type: "Point", coordinates: [13.02, 52.0] }),
       ],
       route,
@@ -159,7 +261,7 @@ describe("projectEventsToRoute", () => {
               [13.055, 52.006],
             ],
           },
-          "road_closure",
+          "closure",
         ),
       ],
       route,
@@ -173,7 +275,7 @@ describe("projectEventsToRoute", () => {
       [
         ev(
           "parallel",
-          "high",
+          "major",
           {
             type: "LineString",
             coordinates: [
@@ -182,7 +284,7 @@ describe("projectEventsToRoute", () => {
             ],
           },
           "congestion",
-          { roads: [{ name: "L 9", direction: "east" }] },
+          { roads: [{ name: en("L 9") }], direction: { value: "positive", compass: "E" } },
         ),
       ],
       route,
@@ -195,7 +297,7 @@ describe("projectEventsToRoute", () => {
   it("drops the opposite carriageway and keeps the route direction", () => {
     const westbound = ev(
       "westbound",
-      "high",
+      "major",
       {
         type: "LineString",
         coordinates: [
@@ -204,11 +306,11 @@ describe("projectEventsToRoute", () => {
         ],
       },
       "congestion",
-      { roads: [{ name: "A57", direction: "west" }] },
+      { roads: [{ ref: "A57" }], direction: { value: "negative", text: "westbound" } },
     );
     const eastbound = ev(
       "eastbound",
-      "high",
+      "major",
       {
         type: "LineString",
         coordinates: [
@@ -217,7 +319,7 @@ describe("projectEventsToRoute", () => {
         ],
       },
       "congestion",
-      { roads: [{ name: "A 57", direction: "east" }] },
+      { roads: [{ name: en("A 57") }], direction: { value: "positive", compass: "E" } },
     );
     const out = projectEventsToRoute([westbound, eastbound], route, 0, {
       routeSteps: [motorwayStep],
@@ -230,11 +332,12 @@ describe("projectEventsToRoute", () => {
       [
         ev(
           "opposite-point",
-          "medium",
+          "moderate",
           { type: "Point", coordinates: [13.05, 52.0] },
           "congestion",
           {
-            roads: [{ name: "A 57", direction: "west" }],
+            roads: [{ name: en("A 57") }],
+            direction: { value: "negative", compass: "W" },
           },
         ),
       ],
@@ -249,19 +352,20 @@ describe("projectEventsToRoute", () => {
 /**
  * The pre-refactor implementation, preserved verbatim (module-private helpers
  * renamed `legacy*` to avoid colliding with the production names) as an oracle
- * for the differential suite below. It scans the whole route with
+ * for the differential suite below; only how it reads a situation's roads,
+ * direction, severity and delay follows the situation contract. It scans the whole route with
  * `snapToRoute` on every candidate coordinate instead of a prepared matcher —
  * exactly the behaviour {@link projectEventsToRoute} must still reproduce bit
  * for bit after switching to `routeMatcher.ts`.
  */
 const LEGACY_SEVERITY_APPROACH: Record<
-  RoadConditionSeverity,
+  RoadConditionSeverityLabel,
   { leadSec: number; minM: number; maxM: number }
 > = {
   critical: { leadSec: 30, minM: 600, maxM: 2500 },
-  high: { leadSec: 20, minM: 400, maxM: 1500 },
-  medium: { leadSec: 14, minM: 250, maxM: 1000 },
-  low: { leadSec: 10, minM: 150, maxM: 600 },
+  major: { leadSec: 20, minM: 400, maxM: 1500 },
+  moderate: { leadSec: 14, minM: 250, maxM: 1000 },
+  minor: { leadSec: 10, minM: 150, maxM: 600 },
   unknown: { leadSec: 12, minM: 200, maxM: 800 },
 };
 
@@ -321,7 +425,12 @@ function legacyRoadNameKeys(name: string): string[] {
 }
 
 function legacyEventRoadNames(event: RoadConditionEvent): Set<string> {
-  return new Set((event.roads ?? []).flatMap((road) => legacyRoadNameKeys(road.name)));
+  return new Set(
+    (event.roads ?? []).flatMap((road) => [
+      ...(road.name ?? []).flatMap((name) => legacyRoadNameKeys(name.text)),
+      ...(road.ref ? legacyRoadNameKeys(road.ref) : []),
+    ]),
+  );
 }
 
 function legacyRouteRoadNamesAt(steps: RouteStep[] | undefined, coord: LngLat): Set<string> {
@@ -368,21 +477,30 @@ function legacyCardinalBearing(direction: string): number | null {
   return null;
 }
 
+const LEGACY_COMPASS_BEARING: Record<string, number> = {
+  N: 0,
+  NE: 45,
+  E: 90,
+  SE: 135,
+  S: 180,
+  SW: 225,
+  W: 270,
+  NW: 315,
+};
+
 function legacyEventDirection(event: RoadConditionEvent): LegacyEventDirection {
-  const raw = (event.roads ?? [])
-    .map((road) => road.direction?.trim())
-    .filter((direction): direction is string => Boolean(direction));
-  if (raw.length === 0) return { hasDirection: false, bidirectional: false, bearings: [] };
-  if (
-    raw.some((direction) => /^(both|all|both directions|beide|beide richtungen)$/i.test(direction))
-  ) {
-    return { hasDirection: true, bidirectional: true, bearings: [] };
+  const d = event.direction;
+  if (!d || (d.value === "unknown" && !d.compass && !d.text)) {
+    return { hasDirection: false, bidirectional: false, bearings: [] };
   }
-  const bearings = raw
-    .map(legacyCardinalBearing)
-    .filter((bearing): bearing is number => bearing !== null);
-  const bidirectional = bearings.some((a) => bearings.some((b) => angularDifference(a, b) >= 120));
-  return { hasDirection: true, bidirectional, bearings };
+  if (d.value === "both") return { hasDirection: true, bidirectional: true, bearings: [] };
+  const bearing =
+    d.compass !== undefined
+      ? (LEGACY_COMPASS_BEARING[d.compass] ?? null)
+      : d.text !== undefined
+        ? legacyCardinalBearing(d.text)
+        : null;
+  return { hasDirection: true, bidirectional: false, bearings: bearing === null ? [] : [bearing] };
 }
 
 function legacyDirectionMatches(
@@ -531,18 +649,25 @@ function legacyProjectEventsToRoute(
             tolerance,
           );
     if (!candidate) continue;
+    const delay = event.effects.find(
+      (effect) => effect.kind === "delay" && effect.delay?.unit === "s",
+    );
     out.push({
       id: event.id,
       type: "traffic_incident",
       coord: candidate.coord,
       alongMeters: candidate.alongMeters,
+      kind: event.kind,
       eventType: event.type,
-      severity: event.severity,
-      headline: event.headline,
+      severity: event.severity.label,
+      ...(event.headline ? { headline: event.headline } : {}),
       ...(event.groupId ? { groupId: event.groupId } : {}),
-      ...(typeof event.delaySeconds === "number" ? { delaySeconds: event.delaySeconds } : {}),
+      ...(delay?.kind === "delay" && delay.delay ? { delaySeconds: delay.delay.value } : {}),
+      closesRoad: event.effects.some(
+        (effect) => effect.kind === "closure" && effect.applicability.kind === "all",
+      ),
       geometry: event.geometry,
-      approach: LEGACY_SEVERITY_APPROACH[event.severity] ?? LEGACY_SEVERITY_APPROACH.unknown,
+      approach: LEGACY_SEVERITY_APPROACH[event.severity.label],
     });
   }
   out.sort((a, b) => a.alongMeters - b.alongMeters);
@@ -569,15 +694,23 @@ function offsetLngLat(base: LngLat, eastMeters: number, northMeters: number): Ln
   return [base[0] + dLon, base[1] + dLat];
 }
 
-const SEVERITIES: RoadConditionSeverity[] = ["critical", "high", "medium", "low", "unknown"];
-const EVENT_TYPES: RoadConditionEvent["type"][] = [
-  "accident",
-  "roadworks",
-  "congestion",
-  "road_closure",
-  "other",
+const SEVERITIES: RoadConditionSeverityLabel[] = [
+  "critical",
+  "major",
+  "moderate",
+  "minor",
+  "unknown",
 ];
-const DIRECTIONS = ["north", "east", "south", "west", "both"];
+const EVENT_TYPES = ["accident", "works", "congestion", "closure", "other"];
+const DIRECTIONS: NonNullable<RoadConditionEvent["direction"]>[] = [
+  { value: "positive", compass: "N" },
+  { value: "positive", compass: "E" },
+  { value: "negative", text: "southbound" },
+  { value: "negative", text: "west" },
+  { value: "both" },
+  // Relative to the road only: a line's own direction stands in for it.
+  { value: "positive" },
+];
 const ROAD_NAMES = ["A 57/E 31", "A57", "B 9", "L 12"];
 
 /** A gently curving route of `points` vertices spanning about `meters`, east from `base`. */
@@ -629,14 +762,9 @@ function randomEvent(
   const along = (rand() - 0.2) * routeMeters * 1.3;
   const lateral = rand() < 0.5 ? (rand() - 0.5) * 30 : (rand() - 0.5) * 200;
   const hasRoads = rand() < 0.6;
-  const roads = hasRoads
-    ? [
-        {
-          name: ROAD_NAMES[Math.floor(rand() * ROAD_NAMES.length)],
-          direction: rand() < 0.7 ? DIRECTIONS[Math.floor(rand() * DIRECTIONS.length)] : undefined,
-        },
-      ]
-    : undefined;
+  const roadName = ROAD_NAMES[Math.floor(rand() * ROAD_NAMES.length)] as string;
+  const roads = hasRoads ? [rand() < 0.5 ? { name: en(roadName) } : { ref: roadName }] : undefined;
+  const direction = rand() < 0.5 ? DIRECTIONS[Math.floor(rand() * DIRECTIONS.length)] : undefined;
   const geometry: RoadConditionEvent["geometry"] = isLine
     ? {
         type: "LineString",
@@ -646,29 +774,26 @@ function randomEvent(
         ],
       }
     : { type: "Point", coordinates: offsetLngLat(base, along, lateral) };
-  return {
-    id,
-    source: "s",
-    provider: "p",
-    type: EVENT_TYPES[Math.floor(rand() * EVENT_TYPES.length)],
-    severity: SEVERITIES[Math.floor(rand() * SEVERITIES.length)],
-    geometry,
-    headline: `random ${id}`,
+  const type = EVENT_TYPES[Math.floor(rand() * EVENT_TYPES.length)] as string;
+  const severity = SEVERITIES[Math.floor(rand() * SEVERITIES.length)] as RoadConditionSeverityLabel;
+  return ev(id, severity, geometry, type, {
+    headline: en(`random ${id}`),
     ...(roads ? { roads } : {}),
+    ...(direction ? { direction } : {}),
     ...(rand() < 0.3 ? { groupId: `group-${Math.floor(rand() * 3)}` } : {}),
-    ...(rand() < 0.3 ? { delaySeconds: Math.floor(rand() * 1200) } : {}),
-  };
+    ...(rand() < 0.3 ? { effects: [delay(Math.floor(rand() * 1200))] } : {}),
+  });
 }
 
 describe("projectEventsToRoute matches the pre-refactor implementation exactly", () => {
   it("matches on the module's own fixtures (point, line, multi-step, opposite carriageway)", () => {
     const cases: Array<[RoadConditionEvent[], LngLat[], number, ProjectEventsOptions?]> = [
-      [[ev("a", "high", { type: "Point", coordinates: [13.05, 52.00008] })], route, 0, undefined],
-      [[ev("b", "high", { type: "Point", coordinates: [13.05, 52.02] })], route, 0, undefined],
-      [[ev("c", "high", { type: "Point", coordinates: [13.02, 52.0] })], route, 5000, undefined],
+      [[ev("a", "major", { type: "Point", coordinates: [13.05, 52.00008] })], route, 0, undefined],
+      [[ev("b", "major", { type: "Point", coordinates: [13.05, 52.02] })], route, 0, undefined],
+      [[ev("c", "major", { type: "Point", coordinates: [13.02, 52.0] })], route, 5000, undefined],
       [
         [
-          ev("d", "medium", {
+          ev("d", "moderate", {
             type: "LineString",
             coordinates: [
               [13.04, 52.00005],
@@ -682,7 +807,7 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
       ],
       [
         [
-          ev("far", "low", { type: "Point", coordinates: [13.08, 52.0] }),
+          ev("far", "minor", { type: "Point", coordinates: [13.08, 52.0] }),
           ev("near", "critical", { type: "Point", coordinates: [13.02, 52.0] }),
         ],
         route,
@@ -703,7 +828,7 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
                 [13.055, 52.006],
               ],
             },
-            "road_closure",
+            "closure",
           ),
         ],
         route,
@@ -714,7 +839,7 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
         [
           ev(
             "parallel",
-            "high",
+            "major",
             {
               type: "LineString",
               coordinates: [
@@ -723,7 +848,7 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
               ],
             },
             "congestion",
-            { roads: [{ name: "L 9", direction: "east" }] },
+            { roads: [{ name: en("L 9") }], direction: { value: "positive", compass: "E" } },
           ),
         ],
         route,
@@ -734,7 +859,7 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
         [
           ev(
             "westbound",
-            "high",
+            "major",
             {
               type: "LineString",
               coordinates: [
@@ -743,11 +868,11 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
               ],
             },
             "congestion",
-            { roads: [{ name: "A57", direction: "west" }] },
+            { roads: [{ ref: "A57" }], direction: { value: "negative", text: "westbound" } },
           ),
           ev(
             "eastbound",
-            "high",
+            "major",
             {
               type: "LineString",
               coordinates: [
@@ -756,7 +881,7 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
               ],
             },
             "congestion",
-            { roads: [{ name: "A 57", direction: "east" }] },
+            { roads: [{ name: en("A 57") }], direction: { value: "positive", compass: "E" } },
           ),
         ],
         route,
@@ -772,7 +897,7 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
   });
 
   it("matches on duplicate/degenerate geometry: zero-length line segments and repeated points", () => {
-    const degenerateLine = ev("dup-line", "medium", {
+    const degenerateLine = ev("dup-line", "moderate", {
       type: "LineString",
       coordinates: [
         [13.04, 52.00005],
@@ -784,7 +909,7 @@ describe("projectEventsToRoute matches the pre-refactor implementation exactly",
     });
     const degenerateGeometryCollection = ev(
       "dup-gc",
-      "high",
+      "major",
       {
         type: "GeometryCollection",
         geometries: [
@@ -871,15 +996,15 @@ describe("projectEventsToRoute matcher preparation", () => {
       },
     ];
     const pointEvents = Array.from({ length: 4 }, (_, i) =>
-      ev(`p${i}`, "high", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
-        roads: [{ name: "Road A" }],
+      ev(`p${i}`, "major", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
+        roads: [{ name: en("Road A") }],
       }),
     );
     // A single long segment forces many samples (well over one) so the test
     // proves the matcher isn't rebuilt per sample either.
     const lineEvent = ev(
       "line0",
-      "medium",
+      "moderate",
       {
         type: "LineString",
         coordinates: [
@@ -888,7 +1013,7 @@ describe("projectEventsToRoute matcher preparation", () => {
         ],
       },
       "congestion",
-      { roads: [{ name: "Road B" }] },
+      { roads: [{ name: en("Road B") }] },
     );
 
     resetRouteMatcherCounters();
@@ -921,7 +1046,7 @@ describe("projectEventsToRoute matcher preparation", () => {
       const along = (meters * i) / 20;
       return ev(
         `line${i}`,
-        "medium",
+        "moderate",
         {
           type: "LineString",
           coordinates: [offsetLngLat(base, along, 5), offsetLngLat(base, along + 200, 5)],

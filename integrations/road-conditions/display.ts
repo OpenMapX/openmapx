@@ -1,5 +1,8 @@
-import type { RoadConditionEvent } from "@openmapx/core";
-import { markerPoints, representativePoint } from "./markers";
+import { localizedTextFor, type RoadConditionEvent } from "@openmapx/core";
+import { isUnconfirmedCrowd } from "./evidence";
+import { markerImageIdFor, markerPoints, representativePoint } from "./markers";
+import { mostSevereEvent, SEVERITY_RANK } from "./severity";
+import { isFutureRoadCondition } from "./visual-style";
 
 export type DisplayCoordinate = [number, number];
 type LineString = Extract<RoadConditionEvent["geometry"], { type: "LineString" }>;
@@ -200,4 +203,64 @@ export function buildRoadConditionDisplayGroups(
   }
 
   return result;
+}
+
+/**
+ * The GeoJSON features drawing display groups: one marker per marker
+ * coordinate, carrying the most severe situation's look and the group's
+ * identity, and one line per rendered component set. Situations themselves
+ * stay out of the features; a click resolves them through the display ids.
+ */
+export function buildRoadConditionFeatures(
+  groups: RoadConditionDisplayGroup[],
+  locale: string,
+  atMs: number = Date.now(),
+): GeoJSON.Feature[] {
+  const future = (events: RoadConditionEvent[]) =>
+    events.every((event) => isFutureRoadCondition(event, atMs));
+  const markers = groups.flatMap((group) => {
+    const event = mostSevereEvent(group.events);
+    const properties = {
+      headline: localizedTextFor(event.headline, locale) ?? "",
+      classification: `${event.kind}.${event.type}`,
+      severity: event.severity.label,
+      _icon: markerImageIdFor(event),
+      // Keep the canonical id for ungrouped marker consumers; `_displayId` is
+      // the presentation identity used for grouping.
+      _id: group.events.length === 1 ? event.id : group.displayId,
+      _displayId: group.displayId,
+      _sev: SEVERITY_RANK[event.severity.label],
+      _unconfirmed: group.events.some(isUnconfirmedCrowd),
+      future: future(group.events),
+    };
+    return group.markerCoordinates.map(
+      (point): GeoJSON.Feature => ({
+        type: "Feature",
+        geometry: { type: "Point", coordinates: point },
+        properties,
+      }),
+    );
+  });
+  const eventsByDisplayId = new Map(groups.map((group) => [group.displayId, group.events]));
+  const lines = buildRoadConditionDisplayLines(groups).flatMap((line): GeoJSON.Feature[] => {
+    const lineEvents = line.displayIds.flatMap(
+      (displayId) => eventsByDisplayId.get(displayId) ?? [],
+    );
+    if (lineEvents.length === 0) return [];
+    return [
+      {
+        type: "Feature",
+        geometry: line.geometry,
+        properties: {
+          severity: mostSevereEvent(lineEvents).severity.label,
+          future: future(lineEvents),
+          // Keep `_displayId` for single-group consumers; `_displayIds` carries
+          // every group represented by an exact-overlap visual line.
+          _displayId: line.displayIds[0],
+          _displayIds: line.displayIds,
+        },
+      },
+    ];
+  });
+  return [...markers, ...lines];
 }

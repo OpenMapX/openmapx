@@ -1,7 +1,12 @@
 import { readFile } from "node:fs/promises";
 import { isRoutingRelevantBinding } from "@openmapx/core";
 import { atomicWriteFile } from "../../utils/atomic-write.js";
-import { type BoundCondition, type BoundSpan, spanKey } from "./conditions-to-edges.js";
+import {
+  type BoundCondition,
+  type BoundSpan,
+  conditionCanRoute,
+  spanKey,
+} from "./conditions-to-edges.js";
 import { decodeGraphId, type WayEdge } from "./ways-to-edges.js";
 
 export interface SpanEdgesDeps {
@@ -176,7 +181,7 @@ export async function resolveSpanEdges(
     // Mirrors the consumer's skip rules so no request is spent on a span whose
     // condition never reaches the override map.
     if (!isRoutingRelevantBinding(condition.bindingStatus)) continue;
-    if (condition.originKind !== "feed" && !condition.routingEligible) continue;
+    if (!conditionCanRoute(condition)) continue;
     for (const span of condition.segments) {
       const key = spanKey(
         condition.cacheGeneration ? `${condition.cacheGeneration}:${condition.id}` : condition.id,

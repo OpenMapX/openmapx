@@ -1,23 +1,41 @@
 import {
-  formatDuration,
   getRoadConditionRoutingDecision,
+  localizedTextFor,
   type RoadConditionEvent,
-  type RoadConditionType,
 } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
-import { buildStackedPopupCardItems, type PopupCardSpec } from "@/integration-api/map/popupCard";
-import { restrictionRefreshDeadline } from "./restriction-freshness";
-import { isConditionalRoadState, restrictionPopupProperties } from "./restrictions";
+import {
+  buildStackedPopupCardItems,
+  type PopupCardRow,
+  type PopupCardSpec,
+} from "@/integration-api/map/popupCard";
+import { effectLines, hasRestrictionEvidence } from "./effects";
+import { isUnconfirmedCrowd } from "./evidence";
+import { mostSevereEvent, SEVERITY_LABELS, SEVERITY_RANK } from "./severity";
 import type { RoadConditionTranslate } from "./types";
 import { isFutureRoadCondition } from "./visual-style";
 
-export const ROAD_CONDITION_SEVERITY_RANK: Record<string, number> = {
-  critical: 4,
-  high: 3,
-  medium: 2,
-  low: 1,
-  unknown: 0,
-};
+const DETAIL_ROWS: PopupCardRow[] = [
+  { field: "typeText", labelKey: "panel.type", variant: "chip" },
+  { field: "reportText", labelKey: "panel.report", variant: "chip" },
+  { field: "effectsText", labelKey: "panel.effects", variant: "block" },
+  { field: "interpretationText", labelKey: "panel.interpretation", variant: "row" },
+  { field: "roads", labelKey: "panel.roads", variant: "row" },
+  { field: "directionText", labelKey: "panel.direction", variant: "row" },
+  { field: "validity", labelKey: "panel.validity", variant: "row" },
+  { field: "startsAt", labelKey: "panel.startsAt", variant: "row" },
+];
+
+const PROVENANCE_ROWS: PopupCardRow[] = [
+  { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
+  { field: "source", labelKey: "panel.source", variant: "row" },
+  { field: "license", labelKey: "panel.license", variant: "row" },
+  { field: "updatedAtText", labelKey: "panel.updatedAt", variant: "row" },
+  { field: "checkedAtText", labelKey: "panel.checkedAt", variant: "row" },
+  { field: "freshnessText", labelKey: "panel.freshness", variant: "row" },
+  { field: "bindingText", labelKey: "panel.binding", variant: "row" },
+  { field: "applicationText", labelKey: "panel.routing", variant: "row" },
+];
 
 const POPUP_SPEC: PopupCardSpec = {
   titleField: "headline",
@@ -25,24 +43,9 @@ const POPUP_SPEC: PopupCardSpec = {
   severityLabelField: "severityText",
   attributionField: "attribution",
   rows: [
-    { field: "typeText", labelKey: "panel.type", variant: "chip" },
-    { field: "roadStateText", labelKey: "panel.roadState", variant: "chip" },
-    { field: "restrictionStateText", labelKey: "panel.restrictionState", variant: "chip" },
-    { field: "restrictionText", labelKey: "panel.restrictionText", variant: "block" },
-    { field: "roads", labelKey: "panel.roads", variant: "row" },
-    { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
-    { field: "source", labelKey: "panel.source", variant: "row" },
-    { field: "license", labelKey: "panel.license", variant: "row" },
-    { field: "updatedAtText", labelKey: "panel.updatedAt", variant: "row" },
-    { field: "checkedAtText", labelKey: "panel.checkedAt", variant: "row" },
-    { field: "bindingText", labelKey: "panel.binding", variant: "row" },
-    { field: "bindingConfidence", labelKey: "panel.bindingConfidence", variant: "row" },
-    { field: "vehicles", labelKey: "panel.vehicles", variant: "row" },
-    { field: "applicationText", labelKey: "panel.routing", variant: "row" },
-    { field: "validity", labelKey: "panel.validity", variant: "row" },
-    { field: "startsAt", labelKey: "panel.startsAt", variant: "row" },
-    { field: "delayText", labelKey: "panel.delay", variant: "row" },
+    ...DETAIL_ROWS,
     { field: "description", labelKey: "panel.description", variant: "block" },
+    ...PROVENANCE_ROWS,
   ],
 };
 
@@ -50,32 +53,8 @@ const SOURCE_DETAIL_SPEC: PopupCardSpec = {
   titleField: "headline",
   severityField: "severity",
   severityLabelField: "severityText",
-  rows: [
-    { field: "typeText", labelKey: "panel.type", variant: "chip" },
-    { field: "roadStateText", labelKey: "panel.roadState", variant: "chip" },
-    { field: "restrictionStateText", labelKey: "panel.restrictionState", variant: "chip" },
-    { field: "restrictionText", labelKey: "panel.restrictionText", variant: "block" },
-    { field: "roads", labelKey: "panel.roads", variant: "row" },
-    { field: "recordId", labelKey: "panel.sourceRecord", variant: "row" },
-    { field: "source", labelKey: "panel.source", variant: "row" },
-    { field: "license", labelKey: "panel.license", variant: "row" },
-    { field: "updatedAtText", labelKey: "panel.updatedAt", variant: "row" },
-    { field: "checkedAtText", labelKey: "panel.checkedAt", variant: "row" },
-    { field: "bindingText", labelKey: "panel.binding", variant: "row" },
-    { field: "bindingConfidence", labelKey: "panel.bindingConfidence", variant: "row" },
-    { field: "vehicles", labelKey: "panel.vehicles", variant: "row" },
-    { field: "applicationText", labelKey: "panel.routing", variant: "row" },
-    { field: "validity", labelKey: "panel.validity", variant: "row" },
-  ],
+  rows: [...DETAIL_ROWS, ...PROVENANCE_ROWS],
 };
-
-interface ScheduleEntry {
-  startTime?: string;
-  endTime?: string;
-  startDate?: string;
-  endDate?: string;
-  byDay?: string[];
-}
 
 export type { RoadConditionTranslate } from "./types";
 
@@ -86,8 +65,11 @@ export interface RoadConditionPopupInput {
   formatDateTime: (value: string | number | Date) => string;
   formatDate: (value: string | number | Date) => string;
   translate: RoadConditionTranslate;
-  /** Refresh last-good context without presenting an expired evaluation as current. */
+  /** The UI locale: picks each situation's text in the reader's language. */
+  locale: string;
+  /** Refresh last-good context without presenting it as current. */
   needsRefresh?: boolean;
+  /** The instant effects and expiry are evaluated at; default now. */
   atMs?: number;
   /** Layer refreshes must not revive withdrawn records from old hit properties. */
   requireCurrentEvents?: boolean;
@@ -99,74 +81,63 @@ export interface RoadConditionPopupContent {
   groupCount: number;
 }
 
-function formatValidity(
-  scheduleJson: unknown,
-  from: unknown,
-  to: unknown,
-  fmtDateTime: (value: string | number | Date) => string,
-  fmtDate: (value: string | number | Date) => string,
-  translate: RoadConditionTranslate,
-): string {
-  if (typeof scheduleJson === "string" && scheduleJson) {
-    try {
-      const windows = JSON.parse(scheduleJson) as ScheduleEntry[];
-      const hhmm = (time?: string) => (time ? time.slice(0, 5) : "");
-      const parts = windows
-        .map((window) => {
-          const days =
-            window.byDay && window.byDay.length > 0
-              ? window.byDay
-                  .map((day) => scheduleDayLabel(day, translate))
-                  .filter(Boolean)
-                  .join(", ")
-              : "";
-          const band =
-            window.startTime && window.endTime
-              ? `${hhmm(window.startTime)}–${hhmm(window.endTime)}`
-              : window.startTime
-                ? `${translate("schedule.from")} ${hhmm(window.startTime)}`
-                : "";
-          const range =
-            window.startDate && window.endDate
-              ? `${fmtDate(window.startDate)} – ${fmtDate(window.endDate)}`
-              : window.startDate
-                ? fmtDate(window.startDate)
-                : "";
-          return [days, band, range].filter(Boolean).join(", ");
-        })
-        .filter(Boolean);
-      if (parts.length > 0) return parts.join("; ");
-    } catch {
-      // Malformed schedule falls through to the plain validity range.
-    }
-  }
-  const f = typeof from === "string" && from ? fmtDateTime(from) : "";
-  const t = typeof to === "string" && to ? fmtDateTime(to) : "";
-  if (!f && !t) return "";
-  return `${f || "…"} – ${t || "…"}`;
-}
-
-const ROAD_CONDITION_TYPES = new Set<RoadConditionType>([
-  "accident",
+/** Registry kinds and types with a label in the catalog; anything else is humanized. */
+const KNOWN_KINDS = new Set([
+  "incident",
   "roadworks",
-  "road_closure",
-  "lane_closure",
-  "hazard",
-  "congestion",
-  "weather",
-  "event",
+  "closure",
   "restriction",
+  "weather_condition",
+  "road_condition",
+  "road_hazard",
+  "public_event",
+  "authority",
+  "equipment_fault",
+  "security",
+  "winter_operation",
+  "pass_status",
+  "congestion",
   "other",
 ]);
 
-const ROAD_CONDITION_STATES = new Set([
-  "open",
-  "closed",
-  "some_lanes_closed",
-  "single_lane_alternating",
+const KNOWN_TYPES = new Set([
+  "accident",
+  "breakdown",
+  "vehicle_hazard",
+  "obstruction",
+  "fire",
+  "works",
+  "closure",
+  "dimension",
+  "access",
+  "speed",
+  "seasonal_load",
+  "weather",
+  "surface",
+  "driving_condition",
+  "hazard",
+  "event",
+  "operation",
+  "fault",
+  "incident",
+  "chain_control",
+  "pass",
+  "congestion",
+  "other",
 ]);
 
-const ROAD_CONDITION_SEVERITIES = new Set(Object.keys(ROAD_CONDITION_SEVERITY_RANK));
+const DIRECTION_VALUES = new Set(["positive", "negative", "both", "unknown"]);
+const BINDING_STATUSES = new Set([
+  "exact",
+  "likely",
+  "ambiguous",
+  "unresolved",
+  "no_coverage",
+  "not_applicable",
+  "unattempted",
+  "obsolete",
+  "invalid",
+]);
 const SCHEDULE_WEEKDAY_CODES = new Set(["MO", "TU", "WE", "TH", "FR", "SA", "SU"]);
 
 function humanizeToken(raw: string): string {
@@ -174,23 +145,55 @@ function humanizeToken(raw: string): string {
   return value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1);
 }
 
-function localizedTokenList(
-  raw: unknown,
-  prefix: string,
-  known: ReadonlySet<string>,
-  translate: RoadConditionTranslate,
-): string | undefined {
-  if (typeof raw !== "string") return undefined;
-  const tokens = distinctNonEmpty(raw.split(","));
-  if (tokens.length === 0) return undefined;
-  return tokens
-    .map((token) => (known.has(token) ? translate(`${prefix}.${token}`) : humanizeToken(token)))
-    .join(", ");
+/** A `kind.type` classification's label: its type's, else its kind's, else the token. */
+function classificationLabel(token: string, translate: RoadConditionTranslate): string {
+  const [kind = "", type = ""] = token.split(".");
+  if (KNOWN_TYPES.has(type)) return translate(`type.${type}`);
+  if (KNOWN_KINDS.has(kind)) return translate(`kind.${kind}`);
+  return humanizeToken(type || kind);
 }
 
 function scheduleDayLabel(day: string, translate: RoadConditionTranslate): string {
   const code = day.trim().toUpperCase();
   return SCHEDULE_WEEKDAY_CODES.has(code) ? translate(`schedule.days.${code}`) : day.trim();
+}
+
+function formatValidity(
+  validity: RoadConditionEvent["validity"] | undefined,
+  input: RoadConditionPopupInput,
+): string {
+  if (!validity) return "";
+  const hhmm = (time?: string) => (time ? time.slice(0, 5) : "");
+  const windows = (validity.periods ?? [])
+    .map((window) => {
+      const days =
+        window.byDay && window.byDay.length > 0
+          ? window.byDay
+              .map((day) => scheduleDayLabel(day, input.translate))
+              .filter(Boolean)
+              .join(", ")
+          : "";
+      const band =
+        window.startTime && window.endTime
+          ? `${hhmm(window.startTime)}–${hhmm(window.endTime)}`
+          : window.startTime
+            ? `${input.translate("schedule.from")} ${hhmm(window.startTime)}`
+            : "";
+      const range =
+        window.startDate && window.endDate
+          ? `${input.formatDate(window.startDate)} – ${input.formatDate(window.endDate)}`
+          : window.startDate
+            ? input.formatDate(window.startDate)
+            : "";
+      return [days, band, range].filter(Boolean).join(", ");
+    })
+    .filter(Boolean);
+  if (windows.length > 0) return windows.join("; ");
+  const end = validity.end ?? validity.estimatedEnd;
+  const f = validity.start ? input.formatDateTime(validity.start) : "";
+  const t = end ? input.formatDateTime(end) : "";
+  if (!f && !t) return "";
+  return `${f || "…"} – ${t || "…"}`;
 }
 
 function attributionString(raw: unknown): string {
@@ -215,62 +218,77 @@ function distinctNonEmpty(values: unknown[]): string[] {
   ];
 }
 
-function roadNamesForEvents(events: RoadConditionEvent[]): string | undefined {
+/** The roads of situations as one line: refs, else names in the reader's language. */
+export function roadNamesForEvents(
+  events: RoadConditionEvent[],
+  locale: string,
+): string | undefined {
   const names = distinctNonEmpty(
     events.flatMap((event) =>
-      (event.roads ?? []).map((road) => {
-        const raw = road as unknown as { name?: unknown; ref?: unknown };
-        return String(raw.ref ?? raw.name ?? "");
-      }),
+      (event.roads ?? []).map((road) => road.ref ?? localizedTextFor(road.name, locale)),
     ),
   );
   return names.length > 0 ? names.join(", ") : undefined;
 }
 
+function directionText(
+  direction: RoadConditionEvent["direction"],
+  translate: RoadConditionTranslate,
+): string | undefined {
+  if (!direction) return undefined;
+  const parts = [
+    DIRECTION_VALUES.has(direction.value)
+      ? translate(`direction.${direction.value}`)
+      : humanizeToken(direction.value),
+    direction.compass,
+    direction.text,
+  ].filter(Boolean);
+  return parts.join(" · ");
+}
+
+/** The raw, untranslated card fields of one situation. */
 function popupProperties(
   event: RoadConditionEvent,
   displayId: string,
   includeRecordId: boolean,
+  locale: string,
+  atMs: number,
 ): Record<string, unknown> {
   const properties: Record<string, unknown> = {
-    headline: event.headline,
-    type: event.type as RoadConditionType,
-    severity: event.severity,
+    headline: localizedTextFor(event.headline, locale) ?? "",
+    classification: `${event.kind}.${event.type}`,
+    severity: event.severity.label,
     attribution: attributionString(event.attribution),
     _id: event.id,
     _displayId: displayId,
-    _sev: ROAD_CONDITION_SEVERITY_RANK[event.severity] ?? 0,
-    future: isFutureRoadCondition(event),
-    // Carried only so the formatter can read the normalized envelope; stripped
-    // again in formatPopupEntry so it never reaches the rendered card.
+    _sev: SEVERITY_RANK[event.severity.label],
+    future: isFutureRoadCondition(event, atMs),
+    // Carried only so the formatter can read effects, validity and direction;
+    // stripped again in formatPopupEntry so it never reaches the rendered card.
     _event: event,
   };
   properties.source = event.source;
-  properties.license = event.routingEvidence?.source_license ?? event.attribution?.license;
-  properties.updatedAt = event.dataUpdatedAt;
-  properties.checkedAt = event.routingEvidence?.source_checked_at;
-  properties.bindingStatus = event.routingEvidence?.binding_status ?? event.binding?.status;
-  properties.bindingConfidence = event.binding?.confidence;
-  properties.vehicles =
-    event.routingEvidence?.applicability.kind === "all"
-      ? "all"
-      : (event.routingEvidence?.applicability.classes ?? event.vehiclesAffected)?.join(", ");
-  const decision = getRoadConditionRoutingDecision(event);
-  properties.applicationReason = decision.eligible ? "candidate" : "display_only";
-  if (includeRecordId) properties.recordId = event.id;
-  if (event.roadState) properties.roadState = event.roadState;
-  // A vehicle-conditioned road state is reported event context, not an
-  // unconditional closure, so the parent state is labelled rather than shown
-  // as the headline effect.
-  if (isConditionalRoadState(event)) properties.conditionalRoadState = true;
-  if (event.validFrom) properties.validFrom = event.validFrom;
-  if (event.validTo) properties.validTo = event.validTo;
-  if (event.schedule && event.schedule.length > 0) {
-    properties.schedule = JSON.stringify(event.schedule);
+  if (event.attribution.license) properties.license = event.attribution.license;
+  if (event.updatedAt) properties.updatedAt = event.updatedAt;
+  if (event.fetchedAt) properties.checkedAt = event.fetchedAt;
+  if (event.expiresAt) properties.expiresAt = event.expiresAt;
+  if (isUnconfirmedCrowd(event)) properties.unconfirmed = true;
+  // Routing evidence is per effect and only present where the provider could
+  // read it; without it the card says nothing about routing rather than
+  // guessing.
+  const evidence = Object.values(event.routingEvidence ?? {});
+  if (evidence.length > 0) {
+    properties.bindingStatus = distinctNonEmpty(evidence.map((e) => e.binding_status)).join(",");
+    properties.applicationReason = event.effects.some(
+      (effect) => getRoadConditionRoutingDecision(event, effect, { evaluatedAt: atMs }).eligible,
+    )
+      ? "candidate"
+      : "display_only";
   }
-  if (event.description) properties.description = event.description;
-  if (typeof event.delaySeconds === "number") properties.delaySeconds = event.delaySeconds;
-  const roads = roadNamesForEvents([event]);
+  if (includeRecordId) properties.recordId = event.id;
+  const description = localizedTextFor(event.description, locale);
+  if (description) properties.description = description;
+  const roads = roadNamesForEvents([event], locale);
   if (roads) properties.roads = roads;
   return properties;
 }
@@ -289,72 +307,42 @@ export function buildRoadConditionPopupGroups(
   displayId: string,
   events: RoadConditionEvent[],
   relatedHeadline: (headline: string, count: number) => string = defaultRelatedHeadline,
+  locale = "en",
+  atMs: number = Date.now(),
 ): RoadConditionPopupGroup[] {
-  events = events.flatMap((event) => event.sourceRecords ?? [event]);
   if (events.length === 0) return [];
-  const childEntries = events.map((event) => popupProperties(event, displayId, events.length > 1));
+  const childEntries = events.map((event) =>
+    popupProperties(event, displayId, events.length > 1, locale, atMs),
+  );
   const firstEntry = childEntries[0];
   if (events.length === 1 && firstEntry) return [{ summary: firstEntry, sourceRecords: [] }];
 
-  const representative = events.reduce((best, event) => {
-    const bestRank = ROAD_CONDITION_SEVERITY_RANK[best.severity] ?? 0;
-    const eventRank = ROAD_CONDITION_SEVERITY_RANK[event.severity] ?? 0;
-    return eventRank > bestRank ? event : best;
-  });
-  const summary = popupProperties(representative, displayId, false);
+  const representative = mostSevereEvent(events);
+  const summary = popupProperties(representative, displayId, false, locale, atMs);
   summary.sourceRecordCount = events.length;
 
   const same = (field: keyof RoadConditionEvent) =>
     events.every((event) => JSON.stringify(event[field]) === JSON.stringify(events[0]?.[field]));
-  const headlines = distinctNonEmpty(events.map((event) => event.headline));
-  if (headlines.length > 1)
-    summary.headline = relatedHeadline(representative.headline, events.length);
-
-  const types = distinctNonEmpty(events.map((event) => event.type));
-  if (types.length > 0) summary.type = types.join(", ");
-  const roads = roadNamesForEvents(events);
+  const headlines = distinctNonEmpty(childEntries.map((entry) => entry.headline));
+  if (headlines.length > 1) {
+    summary.headline = relatedHeadline(String(summary.headline), events.length);
+  }
+  summary.classification = distinctNonEmpty(childEntries.map((e) => e.classification)).join(",");
+  const roads = roadNamesForEvents(events, locale);
   if (roads) summary.roads = roads;
 
   if (!same("description")) delete summary.description;
-  if (!same("validFrom")) {
-    const starts = events
-      .map((event) => event.validFrom)
-      .filter((value): value is string => typeof value === "string" && value.length > 0);
-    if (starts.length > 0) {
-      summary.validFrom = starts.reduce((earliest, value) =>
-        Date.parse(value) < Date.parse(earliest) ? value : earliest,
-      );
-    } else delete summary.validFrom;
+  // What the group does and when only reads true when every record agrees;
+  // otherwise each record's own card in the disclosure says it.
+  if (!same("effects") || !same("validity") || !same("direction")) {
+    summary._summaryOnly = true;
   }
-  if (!same("validTo")) {
-    const ends = events
-      .map((event) => event.validTo)
-      .filter((value): value is string => typeof value === "string" && value.length > 0);
-    if (ends.length > 0) {
-      summary.validTo = ends.reduce((latest, value) =>
-        Date.parse(value) > Date.parse(latest) ? value : latest,
-      );
-    } else delete summary.validTo;
-  }
-  if (!same("schedule")) delete summary.schedule;
-  if (!same("delaySeconds")) delete summary.delaySeconds;
-  if (!same("binding")) {
-    delete summary.bindingStatus;
-    delete summary.bindingConfidence;
-  }
-  if (!same("vehiclesAffected")) delete summary.vehicles;
-  if (!same("dataUpdatedAt")) delete summary.updatedAt;
   if (!same("routingEvidence")) {
-    for (const key of [
-      "bindingStatus",
-      "bindingConfidence",
-      "vehicles",
-      "checkedAt",
-      "license",
-      "applicationReason",
-    ])
-      delete summary[key];
+    delete summary.bindingStatus;
+    delete summary.applicationReason;
   }
+  if (!same("updatedAt")) delete summary.updatedAt;
+  if (!same("fetchedAt")) delete summary.checkedAt;
   if (!same("attribution")) {
     delete summary.attribution;
     delete summary.license;
@@ -367,83 +355,87 @@ export function buildRoadConditionPopupGroups(
 function formatPopupEntry(
   sourceEntry: Record<string, unknown>,
   input: RoadConditionPopupInput,
+  atMs: number,
 ): Record<string, unknown> {
-  const validity = formatValidity(
-    sourceEntry.schedule,
-    sourceEntry.validFrom,
-    sourceEntry.validTo,
-    input.formatDateTime,
-    input.formatDate,
-    input.translate,
-  );
-  const typeText = localizedTokenList(
-    sourceEntry.type,
-    "type",
-    ROAD_CONDITION_TYPES,
-    input.translate,
-  );
-  const roadStateText = localizedTokenList(
-    sourceEntry.roadState,
-    "roadState",
-    ROAD_CONDITION_STATES,
-    input.translate,
-  );
-  const severityText = localizedTokenList(
-    sourceEntry.severity,
-    "sev",
-    ROAD_CONDITION_SEVERITIES,
-    input.translate,
-  );
+  const { translate } = input;
+  const event = sourceEntry._event as RoadConditionEvent | undefined;
+  const detailed = event && sourceEntry._summaryOnly !== true ? event : undefined;
+  const classifications =
+    typeof sourceEntry.classification === "string"
+      ? distinctNonEmpty(sourceEntry.classification.split(","))
+      : [];
+  const typeText = distinctNonEmpty(
+    classifications.map((token) => classificationLabel(token, translate)),
+  ).join(", ");
+  const severityText = SEVERITY_LABELS.includes(
+    sourceEntry.severity as (typeof SEVERITY_LABELS)[number],
+  )
+    ? translate(`sev.${String(sourceEntry.severity)}`)
+    : undefined;
+  const validity = formatValidity(detailed?.validity, input);
   const startsAt =
-    sourceEntry.future === true && typeof sourceEntry.validFrom === "string"
-      ? input.formatDateTime(sourceEntry.validFrom)
+    sourceEntry.future === true && detailed?.validity.start
+      ? input.formatDateTime(detailed.validity.start)
       : undefined;
-  const delaySeconds = Number(sourceEntry.delaySeconds);
-  const delayText =
-    Number.isFinite(delaySeconds) && delaySeconds >= 60
-      ? `+${formatDuration(delaySeconds)}`
+  const effectsText = detailed
+    ? effectLines(detailed, {
+        translate,
+        locale: input.locale,
+        at: new Date(atMs),
+        formatDateTime: (value) => input.formatDateTime(value),
+      }).join("\n")
+    : "";
+  const expiresAt =
+    typeof sourceEntry.expiresAt === "string" ? Date.parse(sourceEntry.expiresAt) : Number.NaN;
+  const freshnessText = input.needsRefresh
+    ? translate("freshness.needsRefresh")
+    : Number.isFinite(expiresAt) && expiresAt <= atMs
+      ? translate("freshness.stale")
       : undefined;
   const absoluteTime = (value: unknown) =>
     typeof value === "string" && Number.isFinite(Date.parse(value))
       ? new Date(value).toISOString()
       : undefined;
-  const restrictionFields = sourceEntry._event
-    ? restrictionPopupProperties(sourceEntry._event as RoadConditionEvent, input.translate, {
-        formatDateTime: (value) => input.formatDateTime(value),
-        needsRefresh:
-          input.needsRefresh ||
-          (input.atMs !== undefined &&
-            restrictionRefreshDeadline([sourceEntry._event as RoadConditionEvent], input.atMs) <=
-              input.atMs),
-      })
-    : {};
+  const direction = directionText(detailed?.direction, translate);
+  const bindingText =
+    typeof sourceEntry.bindingStatus === "string"
+      ? distinctNonEmpty(sourceEntry.bindingStatus.split(","))
+          .map((status) =>
+            BINDING_STATUSES.has(status) ? translate(`binding.${status}`) : humanizeToken(status),
+          )
+          .join(", ")
+      : "";
+  const applicationText =
+    sourceEntry.applicationReason === "candidate"
+      ? translate("panel.routingCandidate")
+      : sourceEntry.applicationReason === "display_only"
+        ? translate("panel.routingDisplayOnly")
+        : undefined;
+  const {
+    _event: _dropEvent,
+    _summaryOnly: _dropSummary,
+    classification: _dropClassification,
+    bindingStatus: _dropBinding,
+    applicationReason: _dropApplication,
+    ...rest
+  } = sourceEntry;
   return {
-    ...sourceEntry,
-    _event: undefined,
-    ...restrictionFields,
-    roadStateText:
-      roadStateText && sourceEntry.conditionalRoadState === true
-        ? `${roadStateText} (${input.translate("restriction.reportedContext")})`
-        : roadStateText,
+    ...rest,
     updatedAtText: absoluteTime(sourceEntry.updatedAt),
     checkedAtText: absoluteTime(sourceEntry.checkedAt),
-    bindingText:
-      typeof sourceEntry.bindingStatus === "string"
-        ? input.translate(`binding.${sourceEntry.bindingStatus}`)
-        : undefined,
-    vehicles:
-      sourceEntry.vehicles === "all" ? input.translate("panel.allVehicles") : sourceEntry.vehicles,
-    applicationText:
-      sourceEntry.applicationReason === "candidate"
-        ? input.translate("panel.routingCandidate")
-        : sourceEntry.applicationReason === "display_only"
-          ? input.translate("panel.routingDisplayOnly")
-          : undefined,
     ...(typeText ? { typeText } : {}),
     ...(severityText ? { severityText } : {}),
+    ...(effectsText ? { effectsText } : {}),
+    ...(detailed && hasRestrictionEvidence(detailed)
+      ? { interpretationText: translate("interpretation.partial") }
+      : {}),
+    ...(sourceEntry.unconfirmed === true ? { reportText: translate("report.unconfirmed") } : {}),
+    ...(direction ? { directionText: direction } : {}),
     ...(validity ? { validity } : {}),
     ...(startsAt ? { startsAt } : {}),
-    ...(delayText ? { delayText } : {}),
+    ...(freshnessText ? { freshnessText } : {}),
+    ...(bindingText ? { bindingText } : {}),
+    ...(applicationText ? { applicationText } : {}),
   };
 }
 
@@ -473,6 +465,7 @@ function displayIdsForHit(properties: Record<string, unknown>): string[] {
 export function buildRoadConditionPopupHtml(
   input: RoadConditionPopupInput,
 ): RoadConditionPopupContent {
+  const atMs = input.atMs ?? Date.now();
   const seen = new Set<string>();
   const items: {
     properties: Record<string, unknown>;
@@ -489,19 +482,25 @@ export function buildRoadConditionPopupHtml(
       const childEvents = input.eventsByDisplayId.get(displayId);
       if (input.requireCurrentEvents && !childEvents?.length) continue;
       const popupGroups = childEvents?.length
-        ? buildRoadConditionPopupGroups(displayId, childEvents, (headline, count) =>
-            input.translate("panel.relatedRecords", { headline, count }),
+        ? buildRoadConditionPopupGroups(
+            displayId,
+            childEvents,
+            (headline, count) => input.translate("panel.relatedRecords", { headline, count }),
+            input.locale,
+            atMs,
           )
         : [{ summary: properties, sourceRecords: [] }];
 
       for (const group of popupGroups) {
-        const summary = formatPopupEntry(group.summary, input);
+        const summary = formatPopupEntry(group.summary, input, atMs);
         if (typeof group.summary.sourceRecordCount === "number") {
           summary.recordId = input.translate("panel.sourceRecordCount", {
             count: group.summary.sourceRecordCount,
           });
         }
-        const sourceEntries = group.sourceRecords.map((entry) => formatPopupEntry(entry, input));
+        const sourceEntries = group.sourceRecords.map((entry) =>
+          formatPopupEntry(entry, input, atMs),
+        );
         items.push({
           properties: summary,
           ...(sourceEntries.length > 0

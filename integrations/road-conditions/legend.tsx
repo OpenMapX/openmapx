@@ -8,7 +8,8 @@ import Typography from "@mui/material/Typography";
 import { useOverlayVisibilitySetter } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { OverlayLegend } from "@/integration-api/overlay/OverlayLegend";
-import { SEVERITY_COLORS, TYPE_GLYPHS } from "./markers";
+import { GLYPHS, glyphFor } from "./markers";
+import { SEVERITY_COLORS } from "./severity";
 import { type Horizon, type MinSeverity, useRoadConditionsStore } from "./store";
 import {
   ROAD_CONDITION_ACTIVE_LINE_DASHARRAY,
@@ -18,28 +19,29 @@ import {
 } from "./visual-style";
 
 /**
- * Types offered as filter chips — also the glyph legend, so the same row both
- * explains the marker icons and drives the `types` query filter. Curated to the
- * common road-event types; the rest still show when no type filter is active.
+ * Registry kinds offered as filter chips — also the glyph legend, so the same
+ * row both explains the marker icons and drives the `kinds` query filter.
+ * Curated to the common road situations; the rest still show when no kind
+ * filter is active.
  */
-const FILTER_TYPES = [
+const FILTER_KINDS = [
   "roadworks",
-  "road_closure",
-  "lane_closure",
-  "accident",
+  "closure",
+  "incident",
   "congestion",
-  "detour",
-  "hazard",
-  "obstruction",
+  "restriction",
+  "road_hazard",
+  "weather_condition",
+  "public_event",
 ] as const;
 
-/** Min-severity threshold steps (low→high), each carrying its ramp color so the
- * control doubles as the severity color key. */
+/** Min-severity threshold steps (minor→critical), each carrying its ramp color
+ * so the control doubles as the severity color key. */
 const SEVERITY_STEPS: { value: MinSeverity; color?: string }[] = [
   { value: "all" },
-  { value: "low", color: SEVERITY_COLORS.low },
-  { value: "medium", color: SEVERITY_COLORS.medium },
-  { value: "high", color: SEVERITY_COLORS.high },
+  { value: "minor", color: SEVERITY_COLORS.minor },
+  { value: "moderate", color: SEVERITY_COLORS.moderate },
+  { value: "major", color: SEVERITY_COLORS.major },
   { value: "critical", color: SEVERITY_COLORS.critical },
 ];
 
@@ -49,10 +51,10 @@ const HORIZON_STEPS: Horizon[] = ["active", "week", "all"];
 // Forward `className` so MUI's Chip can tag the svg with `.MuiChip-icon`
 // (it clones the icon element and injects the class) — otherwise the icon
 // styling, including the left-margin below, never applies.
-function Glyph({ type, className }: { type: string; className?: string }) {
+function Glyph({ kind, className }: { kind: string; className?: string }) {
   return (
     <svg className={className} width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
-      <path d={TYPE_GLYPHS[type] ?? (TYPE_GLYPHS.other as string)} fill="currentColor" />
+      <path d={GLYPHS[glyphFor(kind)] ?? (GLYPHS.other as string)} fill="currentColor" />
     </svg>
   );
 }
@@ -61,17 +63,17 @@ export function RoadConditionsLegend() {
   const t = useTranslations("roadConditions");
   const panelOpen = useRoadConditionsStore((s) => s.panelOpen);
   const layerVisible = useRoadConditionsStore((s) => s.layerVisible);
-  const types = useRoadConditionsStore((s) => s.types);
+  const kinds = useRoadConditionsStore((s) => s.kinds);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
   const horizon = useRoadConditionsStore((s) => s.horizon);
   const setLayerVisible = useOverlayVisibilitySetter("road-conditions");
-  const toggleType = useRoadConditionsStore((s) => s.toggleType);
+  const toggleKind = useRoadConditionsStore((s) => s.toggleKind);
   const setMinSeverity = useRoadConditionsStore((s) => s.setMinSeverity);
   const setHorizon = useRoadConditionsStore((s) => s.setHorizon);
   const resetFilters = useRoadConditionsStore((s) => s.resetFilters);
   const viewportFetchStatus = useRoadConditionsStore((s) => s.viewportFetchStatus);
   const routeFetchStatus = useRoadConditionsStore((s) => s.routeFetchStatus);
-  const filtersActive = types.length > 0 || minSeverity !== "all" || horizon !== "active";
+  const filtersActive = kinds.length > 0 || minSeverity !== "all" || horizon !== "active";
   const fetchStatus = [viewportFetchStatus, routeFetchStatus].includes("loading")
     ? "loading"
     : [viewportFetchStatus, routeFetchStatus].includes("error")
@@ -113,7 +115,7 @@ export function RoadConditionsLegend() {
               component="span"
               sx={{
                 width: 24,
-                borderTop: `3px solid ${SEVERITY_COLORS.medium}`,
+                borderTop: `3px solid ${SEVERITY_COLORS.moderate}`,
                 opacity: ROAD_CONDITION_ACTIVE_LINE_OPACITY,
               }}
             />
@@ -129,7 +131,7 @@ export function RoadConditionsLegend() {
               component="span"
               sx={{
                 width: 24,
-                borderTop: `3px dashed ${SEVERITY_COLORS.medium}`,
+                borderTop: `3px dashed ${SEVERITY_COLORS.moderate}`,
                 opacity: ROAD_CONDITION_FUTURE_LINE_OPACITY,
               }}
             />
@@ -145,15 +147,15 @@ export function RoadConditionsLegend() {
           {t("filterByType")}
         </Typography>
         <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5, maxWidth: 320 }}>
-          {FILTER_TYPES.map((type) => {
-            const selected = types.includes(type);
+          {FILTER_KINDS.map((kind) => {
+            const selected = kinds.includes(kind);
             return (
               <Chip
-                key={type}
+                key={kind}
                 size="small"
-                icon={<Glyph type={type} />}
-                label={t(`type.${type}`)}
-                onClick={() => toggleType(type)}
+                icon={<Glyph kind={kind} />}
+                label={t(`kind.${kind}`)}
+                onClick={() => toggleKind(kind)}
                 color={selected ? "primary" : "default"}
                 variant={selected ? "filled" : "outlined"}
                 sx={{ fontSize: 10.5, height: 24, "& .MuiChip-icon": { ml: 0.75, mr: -0.25 } }}

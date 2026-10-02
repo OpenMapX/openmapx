@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
-import { getRoadConditionRoutingDecision, readBoundedResponseText } from "@openmapx/core";
+import { readBoundedResponseText } from "@openmapx/core";
 import { envInt, envString } from "@openmapx/core/server-env";
 import { feedState } from "@openmapx/db-schema";
 import {
@@ -30,6 +30,7 @@ import {
 import {
   type BoundCondition,
   type ConditionsToEdgesResult,
+  conditionRoutingDecision,
   conditionsToEdges,
   parseConditionsJson,
   spanKey,
@@ -1293,7 +1294,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         .update(JSON.stringify([engineGeneration, [...waysToEdges]]))
         .digest("hex");
       for (const c of conditions)
-        c.cacheGeneration = `${hostGraphGeneration}:${c.routingEvidence?.graph_generation ?? "unknown"}:${c.routingEvidence?.observation_revision ?? "unknown"}`;
+        c.cacheGeneration = `${hostGraphGeneration}:${c.routingEvidence.graph_generation}:${c.routingEvidence.record_revision}`;
       // Failed partial traces remain unapplied; only complete proven spans route.
       let spans: ResolveSpanEdgesResult | null = null;
       try {
@@ -1347,14 +1348,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
         });
       }
       const conditionDeadlines = conditions
-        .map((c) =>
-          getRoadConditionRoutingDecision({
-            source: c.source ?? "",
-            routingEvidence: c.routingEvidence,
-            originKind: c.originKind === "feed" ? "feed" : "crowd",
-            routingEligible: c.routingEligible,
-          }),
-        )
+        .map((c) => conditionRoutingDecision(c))
         .flatMap((decision) =>
           decision.eligible && decision.validUntil ? [Date.parse(decision.validUntil)] : [],
         );

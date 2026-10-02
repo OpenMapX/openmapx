@@ -15,6 +15,7 @@ import {
   traceSpanEdges,
 } from "../jobs/traffic/span-edges.js";
 import type { WayEdge } from "../jobs/traffic/ways-to-edges.js";
+import { boundCondition, effect } from "./fixtures/road-condition.js";
 
 // GraphId value for {level 0, tile 1, index 7} = (7 << 25) | (1 << 3) | 0
 const gid = (level: number, tile: number, index: number): number =>
@@ -185,17 +186,7 @@ describe("traceSpanEdges", () => {
 });
 
 describe("resolveSpanEdges", () => {
-  const cond: BoundCondition = {
-    id: "a:1",
-    type: "road_closure",
-    roadState: "closed",
-    speedLimitKph: null,
-    vehiclesAffected: [],
-    originKind: "feed",
-    routingEligible: true,
-    bindingStatus: "exact",
-    segments: [span],
-  };
+  const cond: BoundCondition = boundCondition({ id: "a:1", segments: [span] });
 
   it("does not reuse persisted verdicts from the permissive trace policy", async () => {
     const oldKey = spanKey("a:1", span).replace(/^trace-v2\|/, "");
@@ -235,7 +226,7 @@ describe("resolveSpanEdges", () => {
     expect((f as unknown as ReturnType<typeof vi.fn>).mock.calls).toHaveLength(1);
   });
 
-  it("skips spans of non-routing-relevant or crowd-ineligible conditions", async () => {
+  it("skips spans of non-routing-relevant, crowd-ineligible or car-irrelevant conditions", async () => {
     const f = fetchReturning({});
     const r = await resolveSpanEdges([{ ...cond, bindingStatus: "ambiguous" }], new Map(), {
       valhallaUrl: "http://v:8002",
@@ -244,11 +235,24 @@ describe("resolveSpanEdges", () => {
     });
     expect(r.traced).toBe(0);
     const crowd = await resolveSpanEdges(
-      [{ ...cond, originKind: "crowd", routingEligible: false }],
+      [{ ...cond, origin: "crowd", routingEligible: false }],
       new Map(),
       { valhallaUrl: "http://v:8002", waysToEdges: W2E, fetch: f },
     );
     expect(crowd.traced).toBe(0);
+    const lorries = await resolveSpanEdges(
+      [
+        {
+          ...cond,
+          effect: effect("fr1/closure", "closure", {
+            applicability: { kind: "classes", include: [{ class: "hgv" }] },
+          }),
+        },
+      ],
+      new Map(),
+      { valhallaUrl: "http://v:8002", waysToEdges: W2E, fetch: f },
+    );
+    expect(lorries.traced).toBe(0);
   });
 
   it("caches a no-match trace so the next cycle does not re-trace it", async () => {

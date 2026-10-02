@@ -1,6 +1,7 @@
 import type { BBox } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { dedupeRoadConditionEvents } from "./dedupe.js";
+import { SEVERITY_RANK } from "./severity.js";
 import type {
   RoadConditionEvent,
   RoadConditionsProvider,
@@ -35,16 +36,27 @@ function coversBbox(coverage: RoadConditionsProvider["coverage"], bbox: BBox): b
 }
 
 /**
- * Whether an event is in effect within `horizonDays` days from `now`. An event
- * with no parseable start has no announced beginning, so it counts as already
- * in effect and is never filtered out — the same rule the OpenConditions SQL
- * read applies to a NULL `valid_from`.
+ * Whether a situation starts within `horizonDays` days from `now`. One with no
+ * parseable start has no announced beginning, so it counts as already in
+ * effect and is never filtered out — the same rule the OpenConditions record
+ * read applies to a situation without a validity start.
  */
 function withinHorizon(e: RoadConditionEvent, horizonDays: number, now: number): boolean {
-  if (!e.validFrom) return true;
-  const from = Date.parse(e.validFrom);
+  if (!e.validity.start) return true;
+  const from = Date.parse(e.validity.start);
   if (Number.isNaN(from)) return true;
   return from <= now + horizonDays * 86_400_000;
+}
+
+/** Every source a situation names: its own, and each effect's routing evidence's. */
+function sourceIds(e: RoadConditionEvent): string[] {
+  return [
+    e.source,
+    ...Object.values(e.routingEvidence ?? {}).flatMap((evidence) => [
+      evidence.source_id,
+      ...(evidence.child_source_id ? [evidence.child_source_id] : []),
+    ]),
+  ];
 }
 
 /**
@@ -73,12 +85,7 @@ export async function aggregateRoadConditions(
   settled.forEach((res, i) => {
     const providerId = providers[i].id;
     if (res.status === "fulfilled") {
-      for (const grouped of res.value) {
-        for (const e of grouped.sourceRecords ?? [grouped]) {
-          const { sourceRecords: _records, ...original } = e;
-          merged.push({ ...original, provider: e.provider || providerId });
-        }
-      }
+      for (const e of res.value) merged.push({ ...e, provider: e.provider || providerId });
     } else {
       ctx.log.warn(`[road-conditions] provider ${providerId} failed`, res.reason);
     }
@@ -86,23 +93,31 @@ export async function aggregateRoadConditions(
 
   const allowed =
     disallowed.size > 0
-      ? merged.filter(
-          (e) =>
-            !disallowed.has(e.source) &&
-            !disallowed.has(e.routingEvidence?.source_id ?? "") &&
-            !disallowed.has(e.routingEvidence?.child_source_id ?? ""),
-        )
+      ? merged.filter((e) => !sourceIds(e).some((id) => disallowed.has(id)))
       : merged;
 
-  const deduped = dedupeRoadConditionEvents(allowed);
-
-  // Providers that can push the horizon into their own query already have (see
-  // the OpenConditions provider); applying it again here is what guarantees the
-  // semantics for third-party providers that ignore `opts` entirely.
-  const horizonDays = opts?.horizonDays;
-  if (horizonDays == null) return deduped;
+  // Providers that can push the filters into their own query already have (see
+  // the OpenConditions provider); applying them again here is what guarantees
+  // the semantics for third-party providers that ignore `opts` entirely.
   const now = Date.now();
-  return deduped.filter((e) => withinHorizon(e, horizonDays, now));
+  return dedupeRoadConditionEvents(allowed).filter(
+    (e) =>
+      matchesClassification(e, opts) &&
+      (opts?.minSeverity == null ||
+        SEVERITY_RANK[e.severity.label] >= SEVERITY_RANK[opts.minSeverity]) &&
+      (opts?.horizonDays == null || withinHorizon(e, opts.horizonDays, now)),
+  );
+}
+
+/**
+ * Whether a situation is of a requested kind or `kind.type`. With both lists
+ * given, either may match; with neither, every situation does.
+ */
+function matchesClassification(e: RoadConditionEvent, opts?: RoadConditionsQuery): boolean {
+  const kinds = opts?.kinds ?? [];
+  const types = opts?.types ?? [];
+  if (kinds.length === 0 && types.length === 0) return true;
+  return kinds.includes(e.kind) || types.includes(`${e.kind}.${e.type}`);
 }
 
 /**

@@ -3,22 +3,25 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it } from "vitest";
 import { aggregateRoadConditions, aggregateRoadFlow, collectProviders } from "../orchestrator.js";
 import type { RoadConditionEvent, RoadConditionsProvider, RoadFlowSegment } from "../types.js";
+import { situation, text } from "./fixtures.js";
 
 const BBOX: BBox = [13.39, 52.49, 13.41, 52.51];
 
 function ev(
   over: Partial<RoadConditionEvent> & Pick<RoadConditionEvent, "id">,
 ): RoadConditionEvent {
-  return {
+  return situation({
     source: "s",
     provider: "",
-    type: "accident",
-    severity: "high",
     geometry: { type: "Point", coordinates: [13.4, 52.5] },
-    headline: "Accident on A1",
     ...over,
-  };
+  });
 }
+
+/** A situation starting at `start`, otherwise live. */
+const startingAt = (start: string): Pick<RoadConditionEvent, "validity"> => ({
+  validity: { status: "active", start },
+});
 
 function provider(
   id: string,
@@ -83,13 +86,14 @@ describe("aggregateRoadConditions", () => {
       provider("good", async () => [
         ev({
           id: "1",
-          headline: "Accident on A1",
+          headline: text("Accident on A1"),
           geometry: { type: "Point", coordinates: [13.4, 52.5] },
         }),
         ev({
           id: "2",
-          type: "roadworks",
-          headline: "Roadworks on A2",
+          kind: "roadworks",
+          type: "works",
+          headline: text("Roadworks on A2"),
           geometry: { type: "Point", coordinates: [13.405, 52.505] },
         }),
       ]),
@@ -123,22 +127,85 @@ describe("aggregateRoadConditions", () => {
     expect(out.map((e) => e.source)).toEqual(["ndw"]);
   });
 
+  it("filters out situations whose routing evidence names a disallowed source", async () => {
+    const evidence = (sourceId: string, childSourceId: string | null) =>
+      ({
+        source_id: sourceId,
+        child_source_id: childSourceId,
+      }) as NonNullable<RoadConditionEvent["routingEvidence"]>[string];
+    const ctx = ctxWith(
+      [
+        provider("p", async () => [
+          ev({ id: "1", source: "ndw", routingEvidence: { e: evidence("ndw", null) } }),
+          ev({
+            id: "2",
+            source: "child",
+            geometry: pt(13.401),
+            routingEvidence: { e: evidence("greyfeed", "child") },
+          }),
+          ev({
+            id: "3",
+            source: "ok",
+            geometry: pt(13.402),
+            routingEvidence: { e: evidence("parent", "greyfeed") },
+          }),
+        ]),
+      ],
+      { disallowed: ["greyfeed"] },
+    );
+    const out = await aggregateRoadConditions(ctx, BBOX);
+    expect(out.map((e) => e.id)).toEqual(["1"]);
+  });
+
+  it("post-filters kinds, kind.type pairs and the severity threshold", async () => {
+    const ctx = ctxWith([
+      provider("ignores-opts", async () => [
+        ev({ id: "accident", severity: { label: "critical" }, geometry: pt(13.4) }),
+        ev({
+          id: "works",
+          kind: "roadworks",
+          type: "works",
+          severity: { label: "minor" },
+          geometry: pt(13.401),
+        }),
+        ev({
+          id: "closure",
+          kind: "closure",
+          type: "closure",
+          severity: { label: "unknown" },
+          geometry: pt(13.402),
+        }),
+      ]),
+    ]);
+    const ids = async (query: Parameters<typeof aggregateRoadConditions>[2]) =>
+      (await aggregateRoadConditions(ctx, BBOX, query)).map((e) => e.id).sort();
+    expect(await ids({ kinds: ["roadworks"] })).toEqual(["works"]);
+    expect(await ids({ types: ["incident.accident"] })).toEqual(["accident"]);
+    expect(await ids({ kinds: ["closure"], types: ["incident.accident"] })).toEqual([
+      "accident",
+      "closure",
+    ]);
+    // `unknown` ranks below every label, so any threshold hides it.
+    expect(await ids({ minSeverity: "minor" })).toEqual(["accident", "works"]);
+    expect(await ids({ minSeverity: "major" })).toEqual(["accident"]);
+  });
+
   it("dedupes near-identical events across providers", async () => {
     const ctx = ctxWith([
       provider("oc", async () => [
         ev({
           id: "oc:1",
           geometry: { type: "Point", coordinates: [13.4, 52.5] },
-          headline: "Accident on the A1 northbound",
-          dataUpdatedAt: "2026-06-01T00:00:00Z",
+          headline: text("Accident on the A1 northbound"),
+          updatedAt: "2026-06-01T00:00:00Z",
         }),
       ]),
       provider("tt", async () => [
         ev({
           id: "tt:9",
           geometry: { type: "Point", coordinates: [13.4004, 52.5001] },
-          headline: "Accident A1 northbound",
-          dataUpdatedAt: "2026-06-02T00:00:00Z",
+          headline: text("Accident A1 northbound"),
+          updatedAt: "2026-06-02T00:00:00Z",
         }),
       ]),
     ]);
@@ -168,9 +235,9 @@ describe("aggregateRoadConditions", () => {
     // regardless of whether a provider pushed the filter down.
     const ctx = ctxWith([
       provider("ignores-opts", async () => [
-        ev({ id: "now", validFrom: inDays(-1), geometry: pt(13.4) }),
-        ev({ id: "soon", validFrom: inDays(2), geometry: pt(13.401) }),
-        ev({ id: "later", validFrom: inDays(10), geometry: pt(13.402) }),
+        ev({ id: "now", ...startingAt(inDays(-1)), geometry: pt(13.4) }),
+        ev({ id: "soon", ...startingAt(inDays(2)), geometry: pt(13.401) }),
+        ev({ id: "later", ...startingAt(inDays(10)), geometry: pt(13.402) }),
       ]),
     ]);
 
@@ -184,16 +251,15 @@ describe("aggregateRoadConditions", () => {
     expect(unfiltered.map((e) => e.id).sort()).toEqual(["later", "now", "soon"]);
   });
 
-  it("keeps events with a missing or unparseable validFrom at any horizon", async () => {
+  it("keeps situations with a missing or unparseable start at any horizon", async () => {
     const ctx = ctxWith([
       provider("p", async () => [
         ev({ id: "no-start", geometry: pt(13.4) }),
-        ev({ id: "null-start", validFrom: null, geometry: pt(13.401) }),
-        ev({ id: "junk-start", validFrom: "not a date", geometry: pt(13.402) }),
+        ev({ id: "junk-start", ...startingAt("not a date"), geometry: pt(13.402) }),
       ]),
     ]);
     const out = await aggregateRoadConditions(ctx, BBOX, { horizonDays: 0 });
-    expect(out.map((e) => e.id).sort()).toEqual(["junk-start", "no-start", "null-start"]);
+    expect(out.map((e) => e.id).sort()).toEqual(["junk-start", "no-start"]);
   });
 
   it("forwards horizonDays to providers that do accept it", async () => {

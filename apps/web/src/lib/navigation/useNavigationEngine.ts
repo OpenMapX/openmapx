@@ -390,8 +390,9 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
     }
   }, [navStatus]);
 
-  // Closure-ahead reroute: when avoidIncidents is on, a new road/lane closure
-  // projected ahead of the driver (not known at route-commit time) triggers an
+  // Closure-ahead reroute: when avoidIncidents is on, a new situation that
+  // closes the road to cars, projected ahead of the driver (not known at
+  // route-commit time), triggers an
   // automatic reroute. Uses the same backoff + churn guard as off-route reroutes.
   // Gated on baselineReadyRef so we never fire before the first fetch resolves —
   // closures present when the route was planned are always part of the baseline.
@@ -405,9 +406,7 @@ export function useNavigationEngine(incidentResource: NavIncidentResource): void
     if (!baselineReadyRef.current) return;
     if (incidentStatus !== "fresh") return;
     const newClosureAhead = incidents.some(
-      (a) =>
-        (a.eventType === "road_closure" || a.eventType === "lane_closure") &&
-        !knownClosureIdsRef.current.has(a.id),
+      (a) => a.closesRoad && !knownClosureIdsRef.current.has(a.id),
     );
     const tick = tickRef.current;
     const backoffMs = tick.rerouteBackoffMs || 3_000;

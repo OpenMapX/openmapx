@@ -1,15 +1,16 @@
 export type { RouteFlowInput, RouteFlowResponse, RouteFlowSpan } from "@openmapx/core";
 export type {
+  LocalizedText,
   RoadConditionAttribution,
+  RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,
-  RoadConditionSeverity,
+  RoadConditionSeverityLabel,
   RoadConditionsProvider,
   RoadConditionsQuery,
-  RoadConditionType,
+  RoadConditionValidity,
   RoadFlowQuery,
   RoadFlowSegment,
-  RoadState,
 } from "@openmapx/integration-framework";
 
 /**

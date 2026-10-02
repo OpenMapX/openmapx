@@ -17,17 +17,25 @@ describe("road-conditions overlay store", () => {
     expect(useRoadConditionsStore.getState().horizon).toBe("all");
   });
 
-  it("resetFilters restores the horizon along with types and severity", () => {
+  it("toggleKind adds and removes a kind", () => {
+    useRoadConditionsStore.getState().toggleKind("roadworks");
+    useRoadConditionsStore.getState().toggleKind("closure");
+    expect(useRoadConditionsStore.getState().kinds).toEqual(["roadworks", "closure"]);
+    useRoadConditionsStore.getState().toggleKind("roadworks");
+    expect(useRoadConditionsStore.getState().kinds).toEqual(["closure"]);
+  });
+
+  it("resetFilters restores the horizon along with kinds and severity", () => {
     const s = useRoadConditionsStore.getState();
     s.setHorizon("all");
-    s.toggleType("roadworks");
-    s.setMinSeverity("high");
+    s.toggleKind("roadworks");
+    s.setMinSeverity("major");
 
     useRoadConditionsStore.getState().resetFilters();
 
     const after = useRoadConditionsStore.getState();
     expect(after.horizon).toBe("active");
-    expect(after.types).toEqual([]);
+    expect(after.kinds).toEqual([]);
     expect(after.minSeverity).toBe("all");
   });
 

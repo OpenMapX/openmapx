@@ -7,68 +7,30 @@ import type {
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  boundEvent,
+  effect,
+  firstEffect,
+  routingEvidence,
+} from "./__tests__/support/road-condition.js";
+import {
   createRoutingHandlerEnvironment,
   createRoutingTestReply,
 } from "./__tests__/support/routing-handler-contract.js";
 import {
-  receiptCoversEvent,
+  engineEffectOf,
+  receiptCoversEffect,
   snapshotMatchesProof,
   verifyRouteTraffic,
 } from "./traffic-application.js";
 
 const NOW = Date.parse("2026-09-12T12:00:00Z");
 
-function event(overrides: Partial<RoadConditionEvent> = {}): RoadConditionEvent {
-  return {
-    id: "oc:1",
-    source: "oc-child",
-    provider: "road-conditions-openconditions",
-    type: "road_closure",
-    severity: "high",
-    geometry: { type: "Point", coordinates: [7, 50] },
-    headline: "Closed",
-    originKind: "feed",
-    routingEvidence: {
-      schema_version: 1,
-      observation_revision: "obs-1",
-      binding_revision: "obs-1",
-      graph_generation: "graph-1",
-      resolver_version: "resolver-1",
-      source_id: "oc-parent",
-      child_source_id: "oc-child",
-      source_license: "CC BY 4.0",
-      license_url: "https://example.test/license",
-      attribution: "Example road authority",
-      record_url: null,
-      source_checked_at: "2026-09-12T11:55:00Z",
-      fresh_until: "2026-09-12T12:05:00Z",
-      expires_at: "2026-09-12T12:10:00Z",
-      valid_from: "2026-09-12T11:00:00Z",
-      valid_to: "2026-09-12T13:00:00Z",
-      next_transition_at: null,
-      direction_mode: "both",
-      applicability: { kind: "all" },
-      rights: {
-        source_redistribution: "yes",
-        derived_redistribution: "yes",
-        commercial_use: "yes",
-        attribution_required: "yes",
-        retention: "yes",
-        evidence_origin: "source-catalogue",
-        evidence_version: "1",
-        reviewed_at: "2026-09-01T00:00:00Z",
-      },
-      segments: [
-        { segment_id: "way:1:f", direction: "forward", from_fraction: 0, to_fraction: 1 },
-        { segment_id: "way:1:r", direction: "reverse", from_fraction: 0, to_fraction: 1 },
-      ],
-      binding_status: "exact",
-      reason_codes: [],
-      evaluated_at: "2026-09-12T11:55:00Z",
-    },
-    ...overrides,
-  };
-}
+const event = (overrides: Partial<RoadConditionEvent> = {}): RoadConditionEvent =>
+  boundEvent({ geometry: { type: "Point", coordinates: [7, 50] }, ...overrides });
+const closureOf = firstEffect;
+const snapshotEvidence = () => routingEvidence("oc:1", "oc:1/closure");
+const speedLimit = (id: string, kph: number) =>
+  effect(id, "speed_limit", { limit: { value: kph, unit: "km/h" } });
 
 const proof: RoutingTrafficProof = {
   schemaVersion: 1,
@@ -82,8 +44,7 @@ const proof: RoutingTrafficProof = {
   costing: "auto",
 };
 function snapshot(): TrafficApplicationSnapshot {
-  const e = event().routingEvidence;
-  if (!e) throw new Error("missing fixture evidence");
+  const e = snapshotEvidence();
   return {
     schemaVersion: 1,
     mode: "active",
@@ -94,12 +55,12 @@ function snapshot(): TrafficApplicationSnapshot {
     policyRevision: "policy",
     validUntil: proof.validUntil,
     writtenAt: new Date(NOW - 1000).toISOString(),
-    observationIds: ["oc:1"],
+    observationIds: ["oc:1#oc:1/closure"],
     resolverVersion: "resolver-1",
     receipts: [
       {
-        observationId: "oc:1",
-        observationRevision: e.observation_revision,
+        observationId: "oc:1#oc:1/closure",
+        observationRevision: String(e.record_revision),
         sourceId: "oc-child",
         graphGeneration: "host-graph",
         sourceGraphGeneration: e.graph_generation,
@@ -137,10 +98,15 @@ describe("engine application reconciliation", () => {
     ])
       expect(snapshotMatchesProof({ ...snapshot(), ...patch }, proof, NOW)).toBe(false);
   });
-  it("requires exact revision, source graph, policy, spans and current rights", () => {
-    expect(receiptCoversEvent(event(), snapshot(), proof, new Set(), NOW)).toBe(true);
+  it("requires exact revision, effect, source graph, policy, spans and current rights", () => {
+    const e = event();
+    const covers = (s: TrafficApplicationSnapshot, disallowed = new Set<string>()) =>
+      receiptCoversEffect(e, closureOf(e), s, proof, disallowed, NOW);
+    expect(covers(snapshot())).toBe(true);
     for (const patch of [
-      { observationRevision: "old" },
+      { observationRevision: "2" },
+      { observationId: "oc:1" },
+      { effect: "speed_cap" as const },
       { sourceGraphGeneration: "old" },
       { policyRevision: "old" },
       { intendedSpans: [] },
@@ -148,9 +114,41 @@ describe("engine application reconciliation", () => {
     ]) {
       const s = snapshot();
       Object.assign(s.receipts[0] as object, patch);
-      expect(receiptCoversEvent(event(), s, proof, new Set(), NOW)).toBe(false);
+      expect(covers(s), JSON.stringify(patch)).toBe(false);
     }
-    expect(receiptCoversEvent(event(), snapshot(), proof, new Set(["oc-parent"]), NOW)).toBe(false);
+    expect(covers(snapshot(), new Set(["oc-parent"]))).toBe(false);
+  });
+
+  it("covers a speed cap only with a speed-cap receipt", () => {
+    const cap = speedLimit("oc:1/speed_limit", 40);
+    const e = event({ effects: [cap] });
+    e.routingEvidence = {
+      [cap.id]: { ...snapshotEvidence(), effect_id: cap.id, effect_kind: "speed_limit" },
+    };
+    const s = snapshot();
+    Object.assign(s.receipts[0] as object, { observationId: "oc:1#oc:1/speed_limit" });
+    expect(receiptCoversEffect(e, cap, s, proof, new Set(), NOW)).toBe(false);
+    Object.assign(s.receipts[0] as object, { effect: "speed_cap" });
+    expect(receiptCoversEffect(e, cap, s, proof, new Set(), NOW)).toBe(true);
+  });
+
+  it("names what the writer does for each effect", () => {
+    expect(engineEffectOf(closureOf(event()))).toBe("closure");
+    expect(
+      engineEffectOf(effect("x", "lane_restriction", { vehicleImpact: "all_lanes_closed" })),
+    ).toBe("closure");
+    expect(engineEffectOf(speedLimit("x", 30))).toBe("speed_cap");
+    expect(
+      engineEffectOf(
+        effect("x", "speed_limit", { limit: { value: 30, unit: "km/h" }, advisory: true }),
+      ),
+    ).toBeNull();
+    expect(engineEffectOf(effect("x", "delay"))).toBeNull();
+    expect(
+      engineEffectOf(
+        effect("x", "closure", { applicability: { kind: "classes", include: [{ class: "hgv" }] } }),
+      ),
+    ).toBeNull();
   });
   it("uses fresh authenticated evidence and covers all events, including speed caps", async () => {
     vi.useFakeTimers();
@@ -201,14 +199,46 @@ describe("engine application reconciliation", () => {
       }),
     );
     expect(getRoutingEvents).toHaveBeenCalledWith(expect.any(Array));
+    const cap = speedLimit("unapplied-cap/speed_limit", 30);
     getEvents.mockResolvedValue([
       event(),
-      event({ id: "unapplied-cap", type: "roadworks", speedLimitKph: 30 }),
+      boundEvent({ id: "unapplied-cap", geometry: { type: "Point", coordinates: [7, 50] } }, cap),
     ]);
     expect(
       (await verifyRouteTraffic(ctx, routes, fallback, "routing-valhalla"))?.reasons,
     ).toContain("incomplete_engine_application");
-    getEvents.mockResolvedValue([event({ isStale: true })]);
+    // A second effect of the applied situation is its own obligation.
+    const twoEffects = event({ effects: [closureOf(event()), speedLimit("oc:1/speed_limit", 30)] });
+    twoEffects.routingEvidence = {
+      ...twoEffects.routingEvidence,
+      "oc:1/speed_limit": routingEvidence("oc:1", "oc:1/speed_limit", {
+        effect_kind: "speed_limit",
+      }),
+    };
+    getEvents.mockResolvedValue([twoEffects]);
+    expect(
+      (await verifyRouteTraffic(ctx, routes, fallback, "routing-valhalla"))?.reasons,
+    ).toContain("incomplete_engine_application");
+    // Unbound effects the writer never applies leave the proof current.
+    getEvents.mockResolvedValue([
+      event({ effects: [closureOf(event()), effect("oc:1/delay", "delay")] }),
+    ]);
+    expect(
+      (await verifyRouteTraffic(ctx, routes, fallback, "routing-valhalla"))?.availability,
+    ).toBe("current");
+    // An unbound closure is a gap in the proof.
+    getEvents.mockResolvedValue([
+      event({ effects: [closureOf(event()), effect("oc:1/ramp", "closure", { scope: "ramp" })] }),
+    ]);
+    expect(
+      (await verifyRouteTraffic(ctx, routes, fallback, "routing-valhalla"))?.reasons,
+    ).toContain("missing_routing_evidence");
+    getEvents.mockResolvedValue([
+      boundEvent({ geometry: { type: "Point", coordinates: [7, 50] } }, effect("oc:1/closure"), {
+        source_checked_at: "2026-09-12T11:40:00Z",
+        fresh_until: "2026-09-12T11:50:00Z",
+      }),
+    ]);
     expect(
       (await verifyRouteTraffic(ctx, routes, fallback, "routing-valhalla"))?.reasons,
     ).toContain("stale_source");

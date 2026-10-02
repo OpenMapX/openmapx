@@ -4,34 +4,25 @@ import { eventsToFeatureCollection } from "./eventsToGeojson.js";
 import { flowSpansForRoutes, parseRouteFlowBody } from "./flowAlongRoute.js";
 import { flowToFeatureCollection } from "./flowToGeojson.js";
 import { aggregateRoadConditions, aggregateRoadFlow } from "./orchestrator.js";
-import {
-  RESTRICTION_VIEW_MAX_AGE_MS,
-  restrictionRefreshDeadline,
-} from "./restriction-freshness.js";
-import type { RoadConditionSeverity, RoadConditionType } from "./types.js";
+import { isSeverityLabel } from "./severity.js";
 
 /**
- * Maximum lifetime of a road-event response. Bounded by the restriction
- * contract rather than by a UI-comfort interval: a longer cache would outlive
- * the source-freshness window a restriction view is evaluated against.
+ * Lifetime of a cached road-situation response. The client evaluates each
+ * effect's state and each situation's expiry at the instant it shows them,
+ * so the cache only bounds how late a changed situation can arrive.
  */
-const ROAD_EVENT_CACHE_MAX_AGE_MS = RESTRICTION_VIEW_MAX_AGE_MS;
+const ROAD_EVENT_CACHE_MAX_AGE_S = 60;
 
-/**
- * Seconds a cached FeatureCollection may still be served for, recomputed from
- * the restriction views it carries. Zero means the payload is already past its
- * producer deadline and must be rebuilt.
- */
-function cachedResponseMaxAge(
-  fc: { features?: Array<{ properties?: Record<string, unknown> }> },
-  atMs: number,
-): number {
-  const events = (fc.features ?? []).map((feature) => ({
-    restrictionDetails: feature.properties?.restrictionDetails,
-    restrictionDetailsUnsupported: feature.properties?.restrictionDetailsUnsupported,
-  })) as unknown as Parameters<typeof restrictionRefreshDeadline>[0];
-  const deadline = restrictionRefreshDeadline(events, atMs);
-  return Math.max(0, Math.floor((deadline - atMs) / 1000));
+/** A comma-separated query list, trimmed, empties dropped, sorted for a stable cache key. */
+function listParam(raw: string | undefined): string[] {
+  return [
+    ...new Set(
+      (raw ?? "")
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+    ),
+  ].sort();
 }
 
 /**
@@ -79,63 +70,41 @@ function parseHorizonDays(raw: string | undefined): number | undefined {
 }
 
 export function setup(ctx: IntegrationContext): void {
-  // GET /events?bbox=west,south,east,north[&types=&minSeverity=&horizonDays=]
+  // GET /events?bbox=west,south,east,north[&kinds=&types=&minSeverity=&horizonDays=]
   // Aggregates every enabled road-conditions provider into one GeoJSON
   // FeatureCollection — consumed by both the map overlay and navigation.
+  // `kinds` are registry kinds, `types` registry `kind.type` pairs, and
+  // `minSeverity` a severity label; an unknown label reads as no threshold.
   ctx.registerRoute("GET", "/events", async (req, reply) => {
-    const bbox = parseBbox(scalarQueries(req.query).bbox);
+    const query = scalarQueries(req.query);
+    const bbox = parseBbox(query.bbox);
     if (!bbox) {
       reply.status(400).send({ error: "bbox required: west,south,east,north" });
       return;
     }
 
-    const types = (scalarQueries(req.query).types ?? "")
-      .split(",")
-      .map((t) => t.trim())
-      .filter(Boolean) as RoadConditionType[];
-    const minSeverity = (scalarQueries(req.query).minSeverity || undefined) as
-      | RoadConditionSeverity
-      | undefined;
-    const horizonDays = parseHorizonDays(scalarQueries(req.query).horizonDays);
+    const kinds = listParam(query.kinds);
+    const types = listParam(query.types);
+    const minSeverity = isSeverityLabel(query.minSeverity) ? query.minSeverity : undefined;
+    const horizonDays = parseHorizonDays(query.horizonDays);
 
-    // Namespaced by the restriction contract version: a response now carries
-    // evaluated restriction views, so a cache entry written by an older shape
-    // must not be served against the new one.
-    const key = `conditions:query:roads:restriction-v1:${bboxKey(bbox)}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
+    // Namespaced by the contract version: a cache entry written in an older
+    // shape must not be served against the new one.
+    const key = `conditions:query:roads:situations-v2:${bboxKey(bbox)}:${kinds.join("+")}:${types.join("+")}:${minSeverity ?? ""}:${horizonDays ?? ""}`;
 
     try {
-      let deadlineMs = Date.now() + ROAD_EVENT_CACHE_MAX_AGE_MS;
-      let loaded = false;
-      const load = async () => {
-        loaded = true;
+      const fc = await ctx.cache.withCache(key, ROAD_EVENT_CACHE_MAX_AGE_S, async () => {
         const events = await aggregateRoadConditions(ctx, bbox, {
-          types: types.length > 0 ? types : undefined,
-          minSeverity,
-          horizonDays,
+          ...(kinds.length > 0 ? { kinds } : {}),
+          ...(types.length > 0 ? { types } : {}),
+          ...(minSeverity ? { minSeverity } : {}),
+          ...(horizonDays !== undefined ? { horizonDays } : {}),
         });
-        deadlineMs = restrictionRefreshDeadline(events, Date.now());
         return eventsToFeatureCollection(events);
-      };
-      let fc = await ctx.cache.withCache(
-        key,
-        ROAD_EVENT_CACHE_MAX_AGE_MS / 1000,
-        load,
-        undefined,
-        // A response whose restriction views expire sooner than the cache TTL
-        // is not stored at all: serving it later would keep an "active" label
-        // alive past the freshness window that justified it.
-        () => deadlineMs >= Date.now() + ROAD_EVENT_CACHE_MAX_AGE_MS,
-      );
-      // Recheck on retrieval too: a cached payload may have been written before
-      // this request and its own deadline may already have elapsed.
-      if (!loaded && cachedResponseMaxAge(fc, Date.now()) <= 0) {
-        await ctx.cache.del(key);
-        fc = await load();
-      }
-      const maxAge = cachedResponseMaxAge(fc, Date.now());
+      });
       reply.header(
         "Cache-Control",
-        maxAge <= 0 ? "no-store" : `public, max-age=${maxAge}, s-maxage=${maxAge}`,
+        `public, max-age=${ROAD_EVENT_CACHE_MAX_AGE_S}, s-maxage=${ROAD_EVENT_CACHE_MAX_AGE_S}`,
       );
       reply.send(fc);
     } catch (err) {

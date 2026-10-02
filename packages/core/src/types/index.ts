@@ -203,28 +203,23 @@ export type {
 } from "./ride";
 export { isQuoteExpired } from "./ride";
 export type {
-  PublishedRoadRestrictionDetailsV1,
+  LocalizedText,
   RoadConditionAttribution,
   RoadConditionBindingStatus,
+  RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,
   RoadConditionRoutingEvidence,
   RoadConditionSchedule,
-  RoadConditionSegmentSpan,
-  RoadConditionSeverity,
+  RoadConditionSeverityLabel,
   RoadConditionsQuery,
-  RoadConditionType,
+  RoadConditionValidity,
   RoadFlowQuery,
   RoadFlowSegment,
-  RoadRestrictionFact,
-  RoadRestrictionIssue,
-  RoadRestrictionIssueCode,
-  RoadRestrictionSource,
-  RoadRestrictionState,
-  RoadState,
   RouteFlowInput,
   RouteFlowResponse,
   RouteFlowSpan,
+  VehicleApplicability,
 } from "./roadConditions";
 export type {
   DirectionsResult,

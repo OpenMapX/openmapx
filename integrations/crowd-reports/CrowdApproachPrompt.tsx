@@ -8,9 +8,9 @@ import IconButton from "@mui/material/IconButton";
 import Paper from "@mui/material/Paper";
 import Stack from "@mui/material/Stack";
 import Typography from "@mui/material/Typography";
-import { useNavigationStore } from "@openmapx/core";
+import { localizedTextFor, useNavigationStore } from "@openmapx/core";
 import { useNavIncidentResource } from "@openmapx/integration-framework/react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useMemo, useState } from "react";
 import { selectCrowdApproach } from "./approach";
 import { useVote } from "./useCrowdReports";
@@ -30,6 +30,7 @@ import { useVote } from "./useCrowdReports";
  */
 export function CrowdApproachPrompt() {
   const t = useTranslations("crowdReports");
+  const locale = useLocale();
   const navigating = useNavigationStore((s) => s.status !== "idle");
   const alongMeters = useNavigationStore((s) => s.progress?.alongMeters ?? 0);
   const speedMps = useNavigationStore((s) => s.progress?.speedMps ?? 0);
@@ -71,7 +72,7 @@ export function CrowdApproachPrompt() {
       <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="body2" noWrap>
-            {nearest.headline || t("approachStillThere")}
+            {localizedTextFor(nearest.headline, locale) || t("approachStillThere")}
           </Typography>
           <Typography variant="caption" color="text.secondary">
             {t("approachPrompt")}

@@ -59,12 +59,6 @@ export {
   deliveryProviderIdForHost,
 } from "./deliveryProviderHosts";
 export {
-  type EdgeClosureInput,
-  isEdgeClosure,
-  isRoutingRelevantBinding,
-  PASSENGER_CAR_CLASSES,
-} from "./edgeClosure";
-export {
   buildElevationProfile,
   buildElevationProfileFromApi,
   computeElevationStats,
@@ -255,17 +249,32 @@ export {
 } from "./resultReference";
 export { buildRideOpenUrl, rideQuoteBody } from "./rideLink";
 export {
+  bindsEveryCar,
+  closesRoadForCars,
+  effectInForceAt,
+  effectValidity,
+  isRestrictionEvidence,
+  isVehicleSpecific,
+  localizedTextFor,
+  readRoadConditionEffects,
+  roadConditionEffectSchema,
+  roadConditionScheduleSchema,
+  roadConditionValiditySchema,
+  scheduleOccursAt,
+  speedCapKph,
+  VEHICLE_CLASSES,
+  validityHoldsAt,
+  vehicleApplicabilitySchema,
+} from "./roadConditionEffects";
+export {
   type RoadConditionRouteNotice,
   roadConditionRouteNotice,
 } from "./roadConditionRouteImpact";
 export {
   getRoadConditionRoutingDecision,
   isRoadConditionRoutingEvidence,
+  isRoutingRelevantBinding,
 } from "./roadConditionRouting";
-export {
-  hasRoadRestrictionEvidence,
-  readRoadRestrictionDetails,
-} from "./roadRestrictionDetails";
 export {
   compareSearchSuggestions,
   editDistance,

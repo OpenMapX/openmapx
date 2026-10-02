@@ -21,7 +21,7 @@ export interface PopupCardRow {
  */
 export interface PopupCardSpec {
   titleField: string;
-  /** Field whose value (low|medium|high|critical|unknown) → colored severity badge. */
+  /** Field whose value (minor|moderate|major|critical|unknown) → colored severity badge. */
   severityField?: string;
   /** Optional field containing the localized text for the severity badge. */
   severityLabelField?: string;
@@ -49,9 +49,9 @@ export interface PopupCardStackItem {
 /** Severity → badge colors, matching the marker severity ramp. */
 const SEVERITY_STYLE: Record<string, { bg: string; fg: string }> = {
   critical: { bg: "#7e0023", fg: "#ffffff" },
-  high: { bg: "#cc0033", fg: "#ffffff" },
-  medium: { bg: "#ff9933", fg: "#3a2a00" },
-  low: { bg: "#ffde33", fg: "#3a2a00" },
+  major: { bg: "#cc0033", fg: "#ffffff" },
+  moderate: { bg: "#ff9933", fg: "#3a2a00" },
+  minor: { bg: "#ffde33", fg: "#3a2a00" },
   unknown: { bg: "#8a8a8a", fg: "#ffffff" },
 };
 

@@ -1,8 +1,14 @@
 import { routeFingerprint } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { parseBbox, setup } from "../index.js";
-import type { RoadConditionEvent, RoadConditionsProvider, RoadFlowSegment } from "../types.js";
+import type {
+  RoadConditionEvent,
+  RoadConditionsProvider,
+  RoadConditionsQuery,
+  RoadFlowSegment,
+} from "../types.js";
+import { situation } from "./fixtures.js";
 
 type Handler = (
   req: { query: Record<string, string | undefined>; body: unknown },
@@ -85,19 +91,16 @@ function eventsProvider(
   return { id, getEvents };
 }
 
-/** A minimal event fixture, mirroring the orchestrator's own test fixtures. */
+/** A minimal situation fixture, mirroring the orchestrator's own test fixtures. */
 function event(
   over: Partial<RoadConditionEvent> & Pick<RoadConditionEvent, "id">,
 ): RoadConditionEvent {
-  return {
+  return situation({
     source: "s",
     provider: "",
-    type: "accident",
-    severity: "high",
     geometry: { type: "Point", coordinates: [13.4, 52.5] },
-    headline: "Accident on A1",
     ...over,
-  };
+  });
 }
 
 /** A minimal flow-capable provider, mirroring the orchestrator's own test fixtures. */
@@ -421,119 +424,65 @@ describe("POST /flow-along-route", () => {
   });
 });
 
-describe("GET /events restriction cache lifetime", () => {
+describe("GET /events filters", () => {
   const BBOX = "13.39,52.49,13.41,52.51";
 
-  function view(over: Record<string, unknown> = {}) {
-    return {
-      schemaVersion: 1,
-      vehicleScope: "specific",
-      completeness: "complete",
-      issues: [],
-      source: {
-        sourceId: "fi-digitraffic",
-        recordId: "GUID50465935",
-        recordVersion: "31",
-        sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
-        feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
-        publisher: "Fintraffic / Digitraffic",
-        license: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-        attribution: "Fintraffic / Digitraffic",
-        modificationNotice: "Normalized by OpenConditions",
-      },
-      facts: [],
-      evaluatedAt: new Date().toISOString(),
-      sourceCheckedAt: new Date().toISOString(),
-      freshUntil: new Date(Date.now() + 600_000).toISOString(),
-      nextTransitionAt: null,
-      isStale: false,
-      ...over,
-    };
-  }
-
-  function eventWith(restriction: Record<string, unknown>) {
-    return {
-      id: "fi-digitraffic:GUID50465935",
-      source: "fi-digitraffic",
-      provider: "road-conditions-openconditions",
-      type: "restriction",
-      severity: "high",
-      geometry: { type: "Point", coordinates: [10.5, 45.5] },
-      headline: "Tie 104",
-      ...restriction,
-    };
-  }
-
-  it("caps a restriction-bearing response at 60 seconds", async () => {
+  function capturing() {
+    const seen: Array<RoadConditionsQuery | undefined> = [];
     const h = eventsHarness({
       providers: [
-        { id: "p", getEvents: async () => [eventWith({ restrictionDetails: view() })] },
-      ] as unknown as RoadConditionsProvider[],
+        eventsProvider("p", async (_bbox, query) => {
+          seen.push(query);
+          return [];
+        }),
+      ],
     });
+    return { h, seen };
+  }
+
+  it("forwards kinds, kind.type pairs and a severity label to the providers", async () => {
+    const { h, seen } = capturing();
+    await h.get({
+      bbox: BBOX,
+      kinds: "roadworks, closure",
+      types: "incident.accident",
+      minSeverity: "major",
+      horizonDays: "7",
+    });
+    expect(seen[0]).toEqual({
+      kinds: ["closure", "roadworks"],
+      types: ["incident.accident"],
+      minSeverity: "major",
+      horizonDays: 7,
+    });
+  });
+
+  it("reads an unknown severity label and empty lists as no filter", async () => {
+    const { h, seen } = capturing();
+    await h.get({ bbox: BBOX, kinds: " , ", minSeverity: "high" });
+    expect(seen[0]).toEqual({});
+  });
+
+  it("keys the cache by the normalized filters", async () => {
+    const h = eventsHarness();
+    await h.get({ bbox: BBOX, kinds: "roadworks,closure" });
+    await h.get({ bbox: BBOX, kinds: "closure,roadworks,closure" });
+    await h.get({ bbox: BBOX, kinds: "closure" });
+    await h.get({ bbox: BBOX, minSeverity: "major" });
+    expect(h.cacheKeys[0]).toBe(h.cacheKeys[1]);
+    expect(new Set(h.cacheKeys).size).toBe(3);
+  });
+
+  it("serves each situation whole, effects included", async () => {
+    const served = event({ id: "oc:1", kind: "closure", type: "closure" });
+    const h = eventsHarness({ providers: [eventsProvider("p", async () => [served])] });
     const res = await h.get({ bbox: BBOX });
-    expect(res.status).toBe(200);
-    expect(res.headers["Cache-Control"]).toMatch(/^public, max-age=(59|60), s-maxage=(59|60)$/);
-  });
-
-  it("reloads an expired cached evaluation before returning it", async () => {
-    const getEvents = vi.fn(async () => []);
-    const h = eventsHarness({
-      providers: [{ id: "p", getEvents }] as unknown as RoadConditionsProvider[],
-      withCache: async <T>() =>
-        ({
-          type: "FeatureCollection",
-          features: [
-            {
-              properties: {
-                restrictionDetails: view({
-                  evaluatedAt: new Date(Date.now() - 61_000).toISOString(),
-                }),
-              },
-            },
-          ],
-        }) as T,
+    const { geometry, ...properties } = served;
+    expect(res.body).toEqual({
+      type: "FeatureCollection",
+      features: [
+        { type: "Feature", id: "oc:1", geometry, properties: { ...properties, provider: "p" } },
+      ],
     });
-    const response = await h.get({ bbox: BBOX });
-    expect(response.status).toBe(200);
-    expect(getEvents).toHaveBeenCalledTimes(1);
-    expect(response.body).toMatchObject({ features: [] });
-  });
-
-  it("shortens the response to an imminent phase transition", async () => {
-    const h = eventsHarness({
-      providers: [
-        {
-          id: "p",
-          getEvents: async () => [
-            eventWith({
-              restrictionDetails: view({
-                nextTransitionAt: new Date(Date.now() + 5_000).toISOString(),
-              }),
-            }),
-          ],
-        },
-      ] as unknown as RoadConditionsProvider[],
-    });
-    const res = await h.get({ bbox: BBOX });
-    const header = String(res.headers["Cache-Control"]);
-    expect(header).toMatch(/^public, max-age=[1-9], s-maxage=[1-9]$/);
-  });
-
-  it("never caches a stale or unsupported restriction response", async () => {
-    for (const restriction of [
-      { restrictionDetails: view({ isStale: true }) },
-      { restrictionDetails: view({ freshUntil: null }) },
-      { restrictionDetailsUnsupported: true },
-    ]) {
-      const h = eventsHarness({
-        providers: [
-          { id: "p", getEvents: async () => [eventWith(restriction)] },
-        ] as unknown as RoadConditionsProvider[],
-      });
-      const res = await h.get({ bbox: BBOX });
-      expect(res.status).toBe(200);
-      expect(res.headers["Cache-Control"], JSON.stringify(restriction)).toBe("no-store");
-    }
   });
 });

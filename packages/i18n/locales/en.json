@@ -163,14 +163,27 @@
     "incidentRoadClosed": "— road closed",
     "incidentType": {
       "accident": "Accident",
-      "roadworks": "Roadworks",
-      "road_closure": "Road closure",
-      "lane_closure": "Lane closure",
-      "hazard": "Hazard",
-      "congestion": "Congestion",
+      "breakdown": "Broken-down vehicle",
+      "vehicle_hazard": "Vehicle hazard",
+      "obstruction": "Obstruction",
+      "fire": "Fire",
+      "works": "Roadworks",
+      "closure": "Road closure",
+      "dimension": "Vehicle size limit",
+      "access": "Access restriction",
+      "speed": "Speed restriction",
+      "seasonal_load": "Seasonal load limit",
       "weather": "Weather",
+      "surface": "Road surface",
+      "driving_condition": "Driving conditions",
+      "hazard": "Hazard",
       "event": "Event",
-      "restriction": "Restriction",
+      "operation": "Police or authority activity",
+      "fault": "Equipment fault",
+      "incident": "Security incident",
+      "chain_control": "Chain control",
+      "pass": "Mountain pass",
+      "congestion": "Congestion",
       "other": "Incident"
     },
     "searchAlongRoute": "Search along route",
@@ -487,39 +500,61 @@
     "reset": "Reset",
     "all": "All",
     "sev": {
-      "low": "Low",
-      "medium": "Medium",
-      "high": "High",
+      "minor": "Minor",
+      "moderate": "Moderate",
+      "major": "Major",
       "critical": "Critical",
       "unknown": "Unknown"
     },
-    "type": {
+    "kind": {
+      "incident": "Incident",
       "roadworks": "Roadworks",
-      "road_closure": "Closure",
-      "lane_closure": "Lane closure",
-      "accident": "Accident",
-      "congestion": "Congestion",
-      "weather": "Weather",
-      "event": "Event",
+      "closure": "Closure",
       "restriction": "Restriction",
-      "detour": "Detour",
-      "hazard": "Hazard",
-      "obstruction": "Obstruction",
+      "weather_condition": "Weather",
+      "road_condition": "Road surface",
+      "road_hazard": "Hazard",
+      "public_event": "Event",
+      "authority": "Authority activity",
+      "equipment_fault": "Equipment fault",
+      "security": "Security",
+      "winter_operation": "Winter driving",
+      "pass_status": "Mountain pass",
+      "congestion": "Congestion",
       "other": "Other"
     },
-    "roadState": {
-      "open": "Open",
-      "closed": "Closed",
-      "some_lanes_closed": "Some lanes closed",
-      "single_lane_alternating": "Single-lane alternating traffic"
+    "type": {
+      "accident": "Accident",
+      "breakdown": "Broken-down vehicle",
+      "vehicle_hazard": "Vehicle hazard",
+      "obstruction": "Obstruction",
+      "fire": "Fire",
+      "works": "Roadworks",
+      "closure": "Closure",
+      "dimension": "Vehicle size limit",
+      "access": "Access restriction",
+      "speed": "Speed restriction",
+      "seasonal_load": "Seasonal load limit",
+      "weather": "Weather",
+      "surface": "Road surface",
+      "driving_condition": "Driving conditions",
+      "hazard": "Hazard",
+      "event": "Event",
+      "operation": "Police or authority activity",
+      "fault": "Equipment fault",
+      "incident": "Security incident",
+      "chain_control": "Chain control",
+      "pass": "Mountain pass",
+      "congestion": "Congestion",
+      "other": "Other"
     },
     "panel": {
       "type": "Type",
-      "roadState": "Status",
+      "effects": "Effects",
+      "direction": "Direction",
       "roads": "Roads affected",
       "validity": "Active",
       "startsAt": "Starts at",
-      "delay": "Delay",
       "description": "Details",
       "sourceRecord": "Source record",
       "sourceRecordCount": "{count, plural, one {# source record} other {# source records}}",
@@ -529,16 +564,14 @@
       "source": "Source",
       "license": "Licence",
       "updatedAt": "Source updated (UTC)",
-      "checkedAt": "Last validated (UTC)",
+      "checkedAt": "Last checked (UTC)",
+      "freshness": "Freshness",
+      "interpretation": "Interpretation",
+      "report": "Report",
       "binding": "Road binding",
-      "bindingConfidence": "Matching score (0–1)",
-      "vehicles": "Affected vehicles",
       "routing": "Route effect",
-      "allVehicles": "All vehicles",
       "routingCandidate": "Eligible; application depends on the route",
-      "routingDisplayOnly": "Shown on map; not applied to routing",
-      "restrictionText": "Vehicle restrictions",
-      "restrictionState": "Restriction status"
+      "routingDisplayOnly": "Shown on map; not applied to routing"
     },
     "binding": {
       "exact": "Exact",
@@ -551,74 +584,109 @@
       "obsolete": "Outdated",
       "invalid": "Invalid"
     },
-    "restriction": {
-      "heading": "Vehicle restrictions",
-      "unsupported": "Restriction details could not be interpreted",
-      "partial": "Partial source interpretation",
-      "stale": "Source data is stale",
-      "needsRefresh": "Needs refresh",
-      "liftable": "Restrictions may be lifted for abnormal transports; permission is not confirmed",
-      "extentNotVerified": "Restriction location has not been bound",
-      "workingHours": "Working hours (context only)",
-      "reportedContext": "Reported event context",
-      "maxHeight": "Maximum permitted height",
-      "maxWidth": "Maximum permitted width",
-      "maxLength": "Maximum permitted length",
-      "maxGrossWeight": "Maximum permitted gross weight",
-      "appliesHeight": "Event applies to vehicles with height",
-      "appliesWidth": "Event applies to vehicles with width",
-      "appliesLength": "Event applies to vehicles with length",
-      "appliesGrossWeight": "Event applies to vehicles with gross weight",
-      "appliesTo": "Event applies to",
-      "scopeLabel": "Applies to",
-      "validityLabel": "Restriction dates",
-      "directionLabel": "Source direction",
-      "complianceLabel": "Compliance",
-      "contextLabel": "Source context",
-      "sourceComment": "Source note",
-      "endedLabel": "Ended restriction",
-      "extentLabel": "Restriction extent",
-      "issuesLabel": "Interpretation",
-      "freshnessLabel": "Freshness",
-      "sourceLabel": "Restriction source",
-      "noticeLabel": "Source notice",
-      "restrictionText": "Vehicle restrictions",
-      "restrictionState": "Restriction status",
-      "operator": {
-        "gt": "greater than",
-        "gte": "at least",
-        "eq": "equal to",
-        "lte": "at most",
-        "lt": "less than"
-      },
-      "scope": {
-        "eventRoad": "Affected road",
-        "roadworkPhase": "Roadwork phase",
-        "detour": "Detour"
-      },
-      "state": {
-        "active": "Active",
-        "scheduled": "Scheduled",
-        "ended": "Ended",
-        "unknown": "Timing unknown"
-      },
-      "direction": {
-        "positive": "Increasing road reference",
-        "negative": "Decreasing road reference",
-        "both": "Both directions",
-        "unknown": "Direction unknown"
-      },
-      "compliance": {
-        "mandatory": "Mandatory",
-        "advisory": "Advisory",
-        "unknown": "Compliance unknown"
-      },
-      "vehicle": {
-        "truck": "Trucks"
-      },
-      "usage": {
-        "emergencyServices": "Emergency-service vehicles"
-      }
+    "direction": {
+      "positive": "Increasing road reference",
+      "negative": "Decreasing road reference",
+      "both": "Both directions",
+      "unknown": "Direction unknown"
+    },
+    "effect": {
+      "closure": "Closed",
+      "lane_restriction": "Lanes",
+      "speed_limit": "Speed limit",
+      "delay": "Delay",
+      "access": "Access",
+      "dimension_limit": "Vehicle limit",
+      "hazmat": "Dangerous goods",
+      "detour": "Detour",
+      "contraflow": "Contraflow",
+      "advisory": "Advice",
+      "unsupported": "Restriction",
+      "lanesClosedOf": "{closed} of {total} lanes closed",
+      "lanesClosed": "{closed} closed",
+      "advisorySpeed": "(advisory)",
+      "queue": "queue {length}",
+      "via": "via {roads}",
+      "signed": "signposted",
+      "notInterpreted": "details could not be interpreted",
+      "partial": "partly interpreted"
+    },
+    "scope": {
+      "road": "Road",
+      "carriageway": "Carriageway",
+      "ramp": "Ramp",
+      "junction": "Junction",
+      "bridge": "Bridge",
+      "tunnel": "Tunnel",
+      "sidewalk": "Footway",
+      "cycleway": "Cycle path",
+      "rest_area": "Rest area",
+      "facility": "Facility"
+    },
+    "dimension": {
+      "height": "Height",
+      "width": "Width",
+      "length": "Length",
+      "gross_weight": "Gross weight",
+      "laden_weight": "Laden weight",
+      "axle_load": "Axle load",
+      "axle_count": "Axle count",
+      "trailer_count": "Trailer count"
+    },
+    "operator": {
+      "lt": "less than",
+      "lte": "at most"
+    },
+    "physicalLimit": "physical limit",
+    "hazmat": {
+      "prohibited": "prohibited",
+      "restricted": "restricted",
+      "tunnelCategory": "ADR tunnel category {category}",
+      "unClasses": "UN classes {classes}"
+    },
+    "vehicle": {
+      "motor_vehicle": "Motor vehicles",
+      "car": "Cars",
+      "van": "Vans",
+      "truck": "Trucks",
+      "hgv": "Heavy goods vehicles",
+      "bus": "Buses",
+      "coach": "Coaches",
+      "motorcycle": "Motorcycles",
+      "moped": "Mopeds",
+      "bicycle": "Bicycles",
+      "pedestrian": "Pedestrians",
+      "trailer": "Trailers",
+      "caravan": "Caravans",
+      "agricultural": "Agricultural vehicles",
+      "emergency": "Emergency vehicles",
+      "taxi": "Taxis",
+      "oversize": "Oversize vehicles",
+      "abnormal_load": "Abnormal loads"
+    },
+    "vehicles": {
+      "except": "except {vehicles}",
+      "unspecified": "Vehicles not specified",
+      "conditional": "with conditions"
+    },
+    "state": {
+      "active": "in force",
+      "scheduled": "from {date}",
+      "inactive": "not in force now",
+      "ended": "ended"
+    },
+    "compliance": {
+      "advisory": "advisory"
+    },
+    "interpretation": {
+      "partial": "Some rules could not be fully interpreted; they are shown but not used for routing"
+    },
+    "freshness": {
+      "stale": "Source data may be outdated",
+      "needsRefresh": "Needs refresh"
+    },
+    "report": {
+      "unconfirmed": "Unconfirmed user report"
     }
   },
   "trafficFlow": {

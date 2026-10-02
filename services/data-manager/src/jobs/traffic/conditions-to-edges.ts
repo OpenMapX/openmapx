@@ -1,10 +1,14 @@
 import { createHash } from "node:crypto";
 import {
+  closesRoadForCars,
   getRoadConditionRoutingDecision,
-  isEdgeClosure,
   isRoadConditionRoutingEvidence,
   isRoutingRelevantBinding,
+  type RoadConditionEffect,
+  type RoadConditionEvent,
   type RoadConditionRoutingEvidence,
+  readRoadConditionEffects,
+  speedCapKph,
 } from "@openmapx/core";
 import type { WayEdge } from "./ways-to-edges.js";
 
@@ -17,16 +21,16 @@ export interface BoundSpan {
   geometry: [number, number][] | null;
 }
 
+/** One bound effect of one road situation, as `/segments/conditions.json` lists it. */
 export interface BoundCondition {
+  /** `<recordId>#<effectId>`: names the effect in overrides, receipts and span keys. */
   id: string;
-  source?: string;
+  recordId: string;
+  source: string;
   cacheGeneration?: string;
-  routingEvidence?: RoadConditionRoutingEvidence;
-  type: string;
-  roadState: string | null;
-  speedLimitKph: number | null;
-  vehiclesAffected: string[];
-  originKind: string;
+  effect: RoadConditionEffect;
+  routingEvidence: RoadConditionRoutingEvidence;
+  origin: RoadConditionEvent["origin"];
   routingEligible: boolean;
   bindingStatus: string;
   segments: BoundSpan[];
@@ -40,7 +44,7 @@ export type EdgeOverride = { contributorIds?: string[] } & (
 export interface ConditionsToEdgesResult {
   /** Keyed by `edgeKey` — `${level}:${tile}:${index}`. */
   overrides: Map<string, EdgeOverride & { edge: WayEdge }>;
-  /** Observation ids that produced at least one closed edge. */
+  /** Condition ids (`<recordId>#<effectId>`) that produced at least one closed edge. */
   appliedObservationIds: Set<string>;
   /** Routing-relevant ways that are absent from the way→edge map. */
   missingWayIds: Set<number>;
@@ -128,10 +132,15 @@ function parseSegments(raw: unknown): BoundSpan[] | null {
   return segments;
 }
 
+const ORIGINS: ReadonlySet<string> = new Set(["feed", "crowd", "federation", "derived"]);
+
 /**
- * Parses the `/segments/conditions.json` payload, which is snake_case on the
- * wire. Any malformed row rejects the snapshot; a partial publication must
- * never replace the last complete stock.
+ * Parses the `/segments/conditions.json` payload, schema version 2: one row
+ * per bound effect of a road situation, snake_case on the wire, the effect
+ * itself as the model publishes it. Any malformed row rejects the snapshot; a
+ * partial publication must never replace the last complete stock. An effect
+ * this host cannot read is kept as `unsupported` restriction evidence, which
+ * never routes, so a newer producer cannot fail every closure with it.
  */
 export function parseConditionsJson(body: string): {
   conditions: BoundCondition[];
@@ -143,60 +152,61 @@ export function parseConditionsJson(body: string): {
     resolver_version?: unknown;
     conditions?: unknown;
   };
-  if (
-    !parsed ||
-    !Array.isArray(parsed.conditions) ||
-    parsed.complete === false ||
-    (parsed.schema_version !== undefined &&
-      (parsed.schema_version !== 1 || parsed.complete !== true))
-  )
+  if (parsed?.schema_version !== 2 || parsed.complete !== true || !Array.isArray(parsed.conditions))
     throw new Error("Invalid or incomplete road conditions snapshot");
   const conditions: BoundCondition[] = [];
-  for (const raw of Array.isArray(parsed.conditions) ? (parsed.conditions as unknown[]) : []) {
+  for (const raw of parsed.conditions as unknown[]) {
     if (!raw || typeof raw !== "object") throw new Error("Invalid condition row");
     const row = raw as Record<string, unknown>;
     const id = str(row.id);
-    const type = str(row.type);
+    const recordId = str(row.record_id);
+    const effectId = str(row.effect_id);
+    const source = str(row.source);
     const binding = (row.binding ?? {}) as Record<string, unknown>;
     const bindingStatus = str(binding.status);
-    if (!id || !type || !bindingStatus) throw new Error("Invalid condition identity/binding");
+    if (
+      !id ||
+      !recordId ||
+      !effectId ||
+      !source ||
+      !bindingStatus ||
+      id !== `${recordId}#${effectId}`
+    )
+      throw new Error("Invalid condition identity/binding");
+    const effect = readRoadConditionEffects([row.effect])[0];
+    if (!effect || effect.id !== effectId) throw new Error("Invalid condition effect");
     const segments = parseSegments(row.segments);
     if (!segments) throw new Error("Invalid condition spans");
-    if (row.routing_evidence !== undefined && !isRoadConditionRoutingEvidence(row.routing_evidence))
+    if (!isRoadConditionRoutingEvidence(row.routing_evidence))
       throw new Error("Invalid routing evidence");
-    const evidence = row.routing_evidence as RoadConditionRoutingEvidence | undefined;
+    const evidence = row.routing_evidence;
+    if (evidence.record_id !== recordId || evidence.effect_id !== effectId)
+      throw new Error("Routing evidence names another effect");
     if (
-      evidence &&
-      (evidence.binding_status !== bindingStatus ||
-        evidence.segments.length !== segments.length ||
-        evidence.segments.some((span, i) => {
-          const projected = segments[i];
-          return (
-            !projected ||
-            span.segment_id !== `${projected.wayId}:${projected.dir}` ||
-            (span.direction === "forward" ? "f" : "b") !== projected.dir ||
-            span.from_fraction !== projected.startFraction ||
-            span.to_fraction !== projected.endFraction
-          );
-        }))
+      evidence.binding_status !== bindingStatus ||
+      evidence.segments.length !== segments.length ||
+      evidence.segments.some((span, i) => {
+        const projected = segments[i];
+        return (
+          !projected ||
+          span.segment_id !== `${projected.wayId}:${projected.dir}` ||
+          (span.direction === "forward" ? "f" : "b") !== projected.dir ||
+          span.from_fraction !== projected.startFraction ||
+          span.to_fraction !== projected.endFraction
+        );
+      })
     )
       throw new Error("Routing evidence disagrees with projected binding");
-    const speed = row.speed_limit_kph;
+    const origin = str(row.origin);
     conditions.push({
       id,
-      source: str(row.source) ?? str(row.source_id) ?? undefined,
-      routingEvidence: row.routing_evidence as RoadConditionRoutingEvidence | undefined,
-      type,
-      roadState: str(row.road_state),
-      speedLimitKph:
-        typeof speed === "number" && Number.isFinite(speed) && speed > 0 ? speed : null,
-      vehiclesAffected: Array.isArray(row.vehicles_affected)
-        ? (row.vehicles_affected as unknown[]).filter((v): v is string => typeof v === "string")
-        : [],
-      // Defaults to the strict side: a row without an origin must not slip past
-      // the routing-eligibility gate. Feed rows still apply because the emitter
-      // forces `routing_eligible: true` for every non-crowd origin.
-      originKind: str(row.origin_kind) ?? "crowd",
+      recordId,
+      source,
+      effect,
+      routingEvidence: evidence,
+      // Defaults to the strict side: a row without a known origin must not
+      // slip past the routing-eligibility gate as if it came from a feed.
+      origin: origin && ORIGINS.has(origin) ? (origin as BoundCondition["origin"]) : "crowd",
       routingEligible: row.routing_eligible === true,
       bindingStatus,
       segments,
@@ -205,10 +215,59 @@ export function parseConditionsJson(body: string): {
   return { conditions, resolverVersion: str(parsed.resolver_version) };
 }
 
+/** Whether a condition's origin may route: a feed outright, a crowd report once corroborated. */
+function originRoutes(condition: Pick<BoundCondition, "origin" | "routingEligible">): boolean {
+  return condition.origin === "feed" || condition.origin === "derived" || condition.routingEligible;
+}
+
+/**
+ * Whether a condition could reach the override map at all: an origin that may
+ * route and an effect a car's edge costing carries (a closure or a speed cap).
+ * Lets the span tracer skip work `conditionsToEdges` would discard anyway.
+ */
+export function conditionCanRoute(condition: BoundCondition): boolean {
+  return (
+    originRoutes(condition) &&
+    (closesRoadForCars(condition.effect) || speedCapKph(condition.effect) !== undefined)
+  );
+}
+
+/**
+ * Core's per-effect routing decision for one condition. The wire carries no
+ * situation validity beyond what the evidence states, so the situation is
+ * represented by the evidence's own window; an effect's own validity (and any
+ * recurring periods in it) still comes from the effect.
+ */
+export function conditionRoutingDecision(
+  condition: BoundCondition,
+  options: Parameters<typeof getRoadConditionRoutingDecision>[2] = {},
+): ReturnType<typeof getRoadConditionRoutingDecision> {
+  const e = condition.routingEvidence;
+  return getRoadConditionRoutingDecision(
+    {
+      id: condition.recordId,
+      source: condition.source,
+      validity: {
+        status: "active",
+        ...(e.valid_from ? { start: e.valid_from } : {}),
+        ...(e.valid_to ? { end: e.valid_to } : {}),
+      },
+      origin: condition.origin,
+      evidence: { state: "unknown", routingEligible: condition.routingEligible },
+      routingEvidence: { [condition.effect.id]: e },
+    },
+    condition.effect,
+    options,
+  );
+}
+
 /**
  * Turns bound conditions into per-directed-edge overrides. A span uses the
  * traced edge subset from `resolvedEdges` when present (edge-exact); otherwise
- * only a proven full-way span may use its complete directed-way mapping. Closure wins over cap; between caps the lower one wins.
+ * only a proven full-way span may use its complete directed-way mapping. An
+ * effect that closes the road for cars closes its edges; a mandatory speed
+ * limit for every car caps them. Closure wins over cap; between caps the lower
+ * one wins.
  */
 export function conditionsToEdges(
   conditions: BoundCondition[],
@@ -229,42 +288,21 @@ export function conditionsToEdges(
       skipped.notRelevant++;
       continue;
     }
-    if (condition.originKind !== "feed" && !condition.routingEligible) {
+    if (!originRoutes(condition)) {
       skipped.crowdNotEligible++;
       continue;
     }
-    const decision = getRoadConditionRoutingDecision(
-      {
-        source: condition.source ?? "",
-        routingEvidence: condition.routingEvidence,
-        originKind: condition.originKind === "feed" ? "feed" : "crowd",
-        routingEligible: condition.routingEligible,
-      },
-      options,
-    );
-    if (!decision.eligible) {
-      skipped.notRelevant++;
-      continue;
-    }
-    if (
-      condition.vehiclesAffected.length &&
-      !condition.vehiclesAffected.every((v) =>
-        ["all", "anyvehicle", "allvehicles", "vehicle", "vehicles"].includes(
-          v.toLowerCase().replace(/[_-]/g, ""),
-        ),
-      )
-    ) {
-      skipped.noEffect++;
-      continue;
-    }
-    const closes = isEdgeClosure({
-      type: condition.type,
-      roadState: condition.roadState,
-      vehiclesAffected: condition.vehiclesAffected,
-    });
-    const capKph = !closes && condition.speedLimitKph !== null ? condition.speedLimitKph : null;
+    // A lorry restriction, an advisory or a delay changes nothing a car's
+    // edge costing can carry.
+    const closes = closesRoadForCars(condition.effect);
+    const cap = closes ? undefined : speedCapKph(condition.effect);
+    const capKph = cap !== undefined && Number.isFinite(cap) && cap > 0 ? cap : null;
     if (!closes && capKph === null) {
       skipped.noEffect++;
+      continue;
+    }
+    if (!conditionRoutingDecision(condition, options).eligible) {
+      skipped.notRelevant++;
       continue;
     }
 

@@ -1,10 +1,15 @@
 import { describe, expect, it } from "vitest";
 import {
+  GLYPHS,
+  glyphFor,
+  markerGlyph,
   markerImageId,
+  markerImageIdFor,
   markerPoints,
   parseMarkerImageId,
   representativePoint,
 } from "../markers.js";
+import { effect, situation } from "./fixtures.js";
 
 describe("representativePoint", () => {
   it("returns the point itself for Point geometry", () => {
@@ -138,19 +143,86 @@ describe("markerPoints", () => {
 });
 
 describe("markerImageId", () => {
-  it("builds a stable rc:type:severity id", () => {
-    expect(markerImageId("road_closure", "high")).toBe("rc:road_closure:high");
+  it("builds a stable rc:glyph:severity id", () => {
+    expect(markerImageId("road_closure", "major")).toBe("rc:road_closure:major");
   });
 
   it("falls back to other/unknown for unrecognized values", () => {
-    expect(markerImageId("nope", "weird")).toBe("rc:other:unknown");
+    expect(markerImageId("nope", "high")).toBe("rc:other:unknown");
   });
 
   it("round-trips through parseMarkerImageId", () => {
-    expect(parseMarkerImageId("rc:road_closure:high")).toEqual({
-      type: "road_closure",
-      severity: "high",
+    expect(parseMarkerImageId("rc:road_closure:major")).toEqual({
+      glyph: "road_closure",
+      severity: "major",
     });
     expect(parseMarkerImageId("not-a-marker")).toBeNull();
+  });
+});
+
+describe("glyphFor", () => {
+  it("draws each registry classification with a glyph that exists", () => {
+    const cases: Array<[string, string, string]> = [
+      ["closure", "closure", "road_closure"],
+      ["roadworks", "works", "roadworks"],
+      ["incident", "accident", "accident"],
+      ["incident", "breakdown", "broken_down_vehicle"],
+      ["incident", "obstruction", "obstruction"],
+      ["incident", "fire", "hazard"],
+      ["congestion", "congestion", "congestion"],
+      ["weather_condition", "weather", "weather"],
+      ["road_condition", "surface", "road_condition"],
+      ["road_hazard", "hazard", "hazard"],
+      ["restriction", "dimension", "dimension_restriction"],
+      ["restriction", "speed", "speed_restriction"],
+      ["restriction", "access", "restriction"],
+      ["public_event", "event", "public_event"],
+      ["authority", "operation", "authority"],
+      ["equipment_fault", "fault", "equipment_fault"],
+      ["security", "incident", "security"],
+      ["winter_operation", "chain_control", "weather"],
+      ["other", "other", "other"],
+      ["teleport", "beam", "other"],
+    ];
+    for (const [kind, type, glyph] of cases) {
+      expect(glyphFor(kind, type), `${kind}.${type}`).toBe(glyph);
+      expect(GLYPHS[glyph], glyph).toBeDefined();
+    }
+  });
+});
+
+describe("markerGlyph", () => {
+  const closure = (applicability: Record<string, unknown>) =>
+    effect("c", "closure", { applicability });
+
+  it("draws a closure that binds only some vehicles as a restriction", () => {
+    const base = { kind: "closure", type: "closure" };
+    expect(markerGlyph(situation({ ...base, effects: [closure({ kind: "all" })] }))).toBe(
+      "road_closure",
+    );
+    expect(
+      markerGlyph(
+        situation({
+          ...base,
+          effects: [closure({ kind: "classes", include: [{ class: "hgv" }] })],
+        }),
+      ),
+    ).toBe("restriction");
+    expect(markerGlyph(situation({ ...base, effects: [] }))).toBe("road_closure");
+  });
+
+  it("draws a pass by whether it is closed", () => {
+    expect(markerGlyph(situation({ kind: "pass_status", type: "pass", subtype: "closed" }))).toBe(
+      "road_closure",
+    );
+    expect(markerGlyph(situation({ kind: "pass_status", type: "pass", subtype: "open" }))).toBe(
+      "other",
+    );
+  });
+
+  it("names the marker image by glyph and severity label", () => {
+    expect(markerImageIdFor(situation({ severity: { label: "critical" } }))).toBe(
+      "rc:accident:critical",
+    );
   });
 });

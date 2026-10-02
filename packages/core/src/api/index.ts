@@ -69,6 +69,7 @@ export {
   fetchRoadConditions,
   fetchRoadConditionsWithStatus,
   fetchRouteFlow,
+  roadConditionFeatureToEvent,
 } from "./roadConditions";
 export { fetchRouteMatchWindow, type RouteMatchWindow } from "./routeAttributes";
 export { fetchSpeedLimit } from "./speedLimit";

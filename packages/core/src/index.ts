@@ -94,6 +94,7 @@ export {
   groundRouteFingerprint,
   guidanceApproachMeters,
   type IncidentAlert,
+  incidentTypeLabelKey,
   isLiveNavigationStatus,
   isNavigationSessionExpired,
   isOverSpeed,

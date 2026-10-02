@@ -22,9 +22,11 @@ function crowdIncident(id: string, alongMeters: number): IncidentAlert {
     type: "traffic_incident",
     coord: [0, 0],
     alongMeters,
+    kind: "road_hazard",
     eventType: "hazard",
-    severity: "medium",
-    headline: `Report ${id}`,
+    severity: "moderate",
+    headline: [{ lang: "en", text: `Report ${id}` }],
+    closesRoad: false,
     geometry: { type: "Point", coordinates: [0, 0] },
     approach: { leadSec: 14, minM: 250, maxM: 1000 },
   };

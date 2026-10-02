@@ -84,10 +84,29 @@ function closureEvent(id: string): RoadConditionEvent {
     id,
     source: "s",
     provider: "p",
-    type: "road_closure",
-    severity: "critical",
+    kind: "closure",
+    type: "closure",
+    severity: { label: "critical" },
+    certainty: "observed",
+    temporality: "live",
+    planned: false,
     geometry: { type: "Point", coordinates: [13.00733, 52.00003] },
-    headline: `closure ${id}`,
+    headline: [{ lang: "en", text: `closure ${id}` }],
+    validity: { status: "active" },
+    effects: [
+      {
+        id: `${id}/closure`,
+        kind: "closure",
+        v: 1,
+        scope: "road",
+        applicability: { kind: "all" },
+        compliance: "mandatory",
+        normalization: "complete",
+      },
+    ],
+    origin: "feed",
+    attribution: { provider: "s" },
+    fetchedAt: "2026-09-11T12:00:00Z",
   };
 }
 

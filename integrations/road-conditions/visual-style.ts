@@ -1,14 +1,18 @@
 import type { RoadConditionEvent } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 
-/** Whether a condition has been announced but has not started yet. */
+/**
+ * Whether a situation has been announced but has not started yet: scheduled
+ * or forecast, or declared to start later than `atMs`.
+ */
 export function isFutureRoadCondition(
-  condition: Pick<RoadConditionEvent, "isForecast" | "validFrom">,
+  condition: Pick<RoadConditionEvent, "temporality" | "validity">,
+  atMs: number = Date.now(),
 ): boolean {
-  if (condition.isForecast === true) return true;
-  if (typeof condition.validFrom !== "string") return false;
-  const from = Date.parse(condition.validFrom);
-  return !Number.isNaN(from) && from > Date.now();
+  if (condition.temporality === "scheduled" || condition.temporality === "forecast") return true;
+  if (typeof condition.validity.start !== "string") return false;
+  const from = Date.parse(condition.validity.start);
+  return !Number.isNaN(from) && from > atMs;
 }
 
 /** Shared visual state: future markers are dimmed but remain fully discoverable. */

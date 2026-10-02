@@ -10,6 +10,7 @@ import {
   formatDuration,
   formatIncidentAnnouncement,
   formatMeasurementDistance,
+  incidentTypeLabelKey,
   useNavigationStore,
   useSettingsStore,
 } from "@openmapx/core";
@@ -54,7 +55,7 @@ export function AlertWidget({ alert }: { alert: ActiveAlert }) {
   const type = alert.alert.type;
   const Icon = ICON[type];
   const incident = type === "traffic_incident" ? (alert.alert as IncidentAlert) : null;
-  const baseLabel = incident ? t(`incidentType.${incident.eventType}`) : t(LABEL_KEY[type]);
+  const baseLabel = incident ? t(incidentTypeLabelKey(incident)) : t(LABEL_KEY[type]);
   const delayText =
     incident && typeof incident.delaySeconds === "number" && incident.delaySeconds >= 60
       ? `+${formatDuration(incident.delaySeconds)}`

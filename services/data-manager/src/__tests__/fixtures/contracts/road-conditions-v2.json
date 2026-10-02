@@ -1,33 +1,48 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "complete": true,
   "generated_at": "2026-09-11T12:00:00.000Z",
   "at": "2026-09-11T12:00:00.000Z",
-  "resolver_version": "1.0.0",
+  "resolver_version": "2.0.0",
   "conditions": [
     {
-      "id": "contract:speed-cap-1",
+      "id": "oc:situation:test-child:closure-1#closure-1/closure",
+      "record_id": "oc:situation:test-child:closure-1",
+      "effect_id": "closure-1/closure",
       "source": "test-child",
-      "type": "restriction",
-      "severity": "high",
-      "road_state": "open",
-      "speed_limit_kph": 40,
-      "vehicles_affected": [],
-      "origin_kind": "feed",
+      "kind": "closure",
+      "type": "closure",
+      "subtype": "full",
+      "severity": "major",
+      "effect": {
+        "id": "closure-1/closure",
+        "kind": "closure",
+        "v": 1,
+        "scope": "road",
+        "applicability": {
+          "kind": "all"
+        },
+        "compliance": "mandatory",
+        "normalization": "complete"
+      },
+      "origin": "feed",
+      "evidence_state": null,
       "routing_eligible": true,
-      "valid_from": "2026-09-11T11:59:00.000Z",
-      "valid_to": "2026-09-11T12:15:00.000Z",
       "binding": {
         "status": "exact",
         "confidence": 0.99,
         "direction_mode": "single"
       },
       "routing_evidence": {
-        "schema_version": 1,
-        "observation_revision": "revision-1",
-        "binding_revision": "revision-1",
+        "schema_version": 2,
+        "record_class": "situation",
+        "record_id": "oc:situation:test-child:closure-1",
+        "effect_id": "closure-1/closure",
+        "record_revision": 1,
+        "binding_revision": 1,
+        "effect_kind": "closure",
         "graph_generation": "graph-generation-1",
-        "resolver_version": "1.0.0",
+        "resolver_version": "2.0.0",
         "source_id": "test-parent",
         "child_source_id": "test-child",
         "source_license": "CC0-1.0",
@@ -39,7 +54,7 @@
         "expires_at": "2026-09-11T12:15:00.000Z",
         "valid_from": "2026-09-11T11:59:00.000Z",
         "valid_to": "2026-09-11T12:15:00.000Z",
-        "next_transition_at": null,
+        "next_transition_at": "2026-09-11T12:15:00.000Z",
         "direction_mode": "forward",
         "applicability": {
           "kind": "all"

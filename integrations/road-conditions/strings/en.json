@@ -8,9 +8,9 @@
     "validTo": "Until",
     "via": "Via",
     "severity": {
-      "low": "Low",
-      "medium": "Medium",
-      "high": "High",
+      "minor": "Minor",
+      "moderate": "Moderate",
+      "major": "Major",
       "critical": "Critical",
       "unknown": "Unknown"
     }

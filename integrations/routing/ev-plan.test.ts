@@ -1,5 +1,6 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
+import { roadConditionEvent } from "./__tests__/support/road-condition.js";
 import { type ResolvedRoutingProvider, runEvPlan } from "./ev-plan.js";
 
 function fakeCtx(overrides: Record<string, unknown> = {}) {
@@ -118,15 +119,11 @@ describe("runEvPlan", () => {
     // integrations/routing/__tests__/avoidClosures.test.ts's closureEvents.
     const closurePoint: [number, number] = [1.35, 50];
     const closureEvents = [
-      {
+      roadConditionEvent({
         id: "closure:0",
-        source: "test",
         provider: "road-conditions-stub",
-        type: "road_closure",
-        severity: "high",
         geometry: { type: "Point", coordinates: closurePoint },
-        headline: "Closure 0",
-      },
+      }),
     ];
 
     const ctx = fakeCtx({

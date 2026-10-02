@@ -1,5 +1,5 @@
-import { hasRoadRestrictionEvidence } from "@openmapx/core";
-import type { RoadConditionEvent } from "./types.js";
+import { hasRestrictionEvidence } from "./effects.js";
+import type { LocalizedText, RoadConditionEvent } from "./types.js";
 
 const CLUSTER_METERS = 60;
 /** Upper bound on vertices compared per geometry, so a long line/polygon can't
@@ -105,7 +105,7 @@ function words(s: string): Set<string> {
   );
 }
 
-function headlineSimilar(a: string, b: string): boolean {
+function textSimilar(a: string, b: string): boolean {
   const wa = words(a);
   const wb = words(b);
   if (wa.size === 0 || wb.size === 0) return false;
@@ -115,14 +115,53 @@ function headlineSimilar(a: string, b: string): boolean {
   return union > 0 && inter / union >= 0.5;
 }
 
-/** Normalised road-name keys for an event (lowercased, whitespace-stripped). */
+/**
+ * Whether two headlines say the same: the publishers' own texts, or any two
+ * texts in one language. Providers publish in different languages, and a
+ * translation never matches the original word for word.
+ */
+function headlineSimilar(a: LocalizedText | undefined, b: LocalizedText | undefined): boolean {
+  const [ownA, ownB] = [a?.[0], b?.[0]];
+  if (!a || !b || !ownA || !ownB) return false;
+  if (textSimilar(ownA.text, ownB.text)) return true;
+  return a.some((ta) =>
+    b.some(
+      (tb) => ta.lang.toLowerCase() === tb.lang.toLowerCase() && textSimilar(ta.text, tb.text),
+    ),
+  );
+}
+
+const roadKey = (s: string) => s.toLowerCase().replace(/\s+/g, "");
+
+/** Normalised road keys for an event: refs and names in every language. */
 function roadKeys(e: RoadConditionEvent): Set<string> {
   const keys = new Set<string>();
   for (const r of e.roads ?? []) {
-    const k = r.name?.toLowerCase().replace(/\s+/g, "");
-    if (k) keys.add(k);
+    if (r.ref) keys.add(roadKey(r.ref));
+    for (const name of r.name ?? []) {
+      const k = roadKey(name.text);
+      if (k) keys.add(k);
+    }
   }
   return keys;
+}
+
+/**
+ * What a situation does, independent of who reported it: its classification,
+ * when it holds, where it heads and each effect's rule. Ids, texts and
+ * provenance are left out, so two providers' copies of one situation agree.
+ */
+function semanticKey(e: RoadConditionEvent): string {
+  return JSON.stringify([
+    e.kind,
+    e.type,
+    e.subtype ?? null,
+    e.validity,
+    e.direction?.value ?? null,
+    e.effects.map(
+      ({ id: _id, sourceRecordRef: _ref, issues: _issues, location: _loc, ...rule }) => rule,
+    ),
+  ]);
 }
 
 /**
@@ -141,24 +180,26 @@ function roadsConflict(a: RoadConditionEvent, b: RoadConditionEvent): boolean {
 }
 
 function newer(a: RoadConditionEvent, b: RoadConditionEvent): RoadConditionEvent {
-  const ta = a.dataUpdatedAt ? Date.parse(a.dataUpdatedAt) : 0;
-  const tb = b.dataUpdatedAt ? Date.parse(b.dataUpdatedAt) : 0;
+  const ta = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+  const tb = b.updatedAt ? Date.parse(b.updatedAt) : 0;
   return tb > ta ? b : a;
 }
 
 /**
- * Merges duplicate road-condition events across providers. First collapses exact
- * `id` matches, then clusters same-`type` events whose geometries come within
+ * Merges duplicate road-condition situations across providers. First collapses
+ * exact `id` matches, then clusters situations with the same classification,
+ * validity, direction and effect rules whose geometries come within
  * {@link CLUSTER_METERS} (minimum vertex-to-segment distance, so a Point and a
  * LineString — or two overlapping lines — for the same incident match) and whose
  * headlines are similar (so NDW and TomTom reporting the same accident become
- * one). Events that name different roads never merge (see {@link roadsConflict}),
- * so two incidents passing within the radius at an interchange stay distinct. The
- * newest `dataUpdatedAt` survives, keeping its own provider/source.
+ * one). Situations that name different roads never merge (see
+ * {@link roadsConflict}), so two incidents passing within the radius at an
+ * interchange stay distinct. The newest `updatedAt` survives whole, keeping its
+ * own provider, source and attribution; the other copy is dropped.
  *
- * Greedy single-linkage: each event merges into the first matching survivor.
- * O(n²·k²) over a bbox query's events (k = {@link VERTEX_SAMPLE}); fine for the
- * few hundred a viewport yields, the vast majority of them points.
+ * Greedy single-linkage: each situation merges into the first matching
+ * survivor. O(n²·k²) over a bbox query's situations (k = {@link VERTEX_SAMPLE});
+ * fine for the few hundred a viewport yields, the vast majority of them points.
  */
 export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadConditionEvent[] {
   if (events.length === 0) return [];
@@ -172,30 +213,16 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
 
   const survivors: RoadConditionEvent[] = [];
   const survivorPos: [number, number][][] = [];
+  const survivorKeys: string[] = [];
   for (const e of unique) {
     const ep = positions(e.geometry);
+    const key = semanticKey(e);
     const dupIdx = survivors.findIndex((s, i) => {
-      if (s.type !== e.type) return false;
-      // A restriction-bearing record never merges into another record. Two
-      // distinct source ids carry two published sets of facts and two
-      // provenances; collapsing them would silently lose one, and the
-      // sourceRecords retention cap could then drop it entirely.
-      if (hasRoadRestrictionEvidence(s) || hasRoadRestrictionEvidence(e)) return false;
-      const semantics = (event: RoadConditionEvent) =>
-        JSON.stringify([
-          event.roadState ?? null,
-          event.validFrom ?? null,
-          event.validTo ?? null,
-          event.schedule ?? null,
-          event.vehiclesAffected ?? null,
-          event.routingEvidence?.applicability ?? null,
-          event.binding?.directionMode ?? null,
-          event.routingEvidence?.direction_mode ?? null,
-          event.segments ?? null,
-          event.speedLimitKph ?? null,
-        ]);
-      if (semantics(s) !== semantics(e)) return false;
-      if ((s.sourceRecords?.length ?? 1) + (e.sourceRecords?.length ?? 1) > 16) return false;
+      // A situation carrying restriction evidence never merges into another.
+      // Two sources' partly read rules are two claims and two provenances;
+      // dropping one would silently lose what the other did not say.
+      if (hasRestrictionEvidence(s) || hasRestrictionEvidence(e)) return false;
+      if (survivorKeys[i] !== key) return false;
       const sp = survivorPos[i];
       if (ep.length === 0 || sp.length === 0) return false;
       if (geometryDistanceMeters(ep, sp) > CLUSTER_METERS) return false;
@@ -205,15 +232,11 @@ export function dedupeRoadConditionEvents(events: RoadConditionEvent[]): RoadCon
     if (dupIdx === -1) {
       survivors.push(e);
       survivorPos.push(ep);
-    } else {
-      const survivor = newer(survivors[dupIdx], e);
-      // Keep the surviving event's own geometry as the cluster's representative.
-      if (survivor === e) survivorPos[dupIdx] = ep;
-      const originals = [
-        ...(survivors[dupIdx].sourceRecords ?? [survivors[dupIdx]]),
-        ...(e.sourceRecords ?? [e]),
-      ];
-      survivors[dupIdx] = { ...survivor, sourceRecords: originals };
+      survivorKeys.push(key);
+    } else if (newer(survivors[dupIdx], e) === e) {
+      // The newer copy survives whole, with its own geometry as the cluster's.
+      survivors[dupIdx] = e;
+      survivorPos[dupIdx] = ep;
     }
   }
   return survivors;

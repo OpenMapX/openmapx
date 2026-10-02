@@ -1,11 +1,12 @@
 import type { LngLat } from "../types/geometry";
 import type {
+  LocalizedText,
   RoadConditionEvent,
-  RoadConditionSeverity,
-  RoadConditionType,
+  RoadConditionSeverityLabel,
 } from "../types/roadConditions";
 import type { RouteStep } from "../types/routing";
 import { haversineDistance } from "../utils/coordinates";
+import { closesRoadForCars, effectInForceAt } from "../utils/roadConditionEffects";
 import type { RoadAlert } from "./alerts";
 import { angularDifference, bearingBetween, routeBearingAt } from "./bearing";
 import {
@@ -18,13 +19,17 @@ import {
 /** A road-condition event projected onto the active route as an approach alert. */
 export interface IncidentAlert extends RoadAlert {
   type: "traffic_incident";
-  eventType: RoadConditionType;
-  severity: RoadConditionSeverity;
-  headline: string;
+  /** Registry kind and type of the situation. */
+  kind: string;
+  eventType: string;
+  severity: RoadConditionSeverityLabel;
+  headline?: LocalizedText;
   /** Provider display relationship, retained for route-layer grouping only. */
   groupId?: string;
   /** Estimated delay in seconds this incident adds, where the source reports it. */
   delaySeconds?: number;
+  /** An effect in force at the evaluation instant closes the road to cars. */
+  closesRoad: boolean;
   /** Original affected-road geometry, retained for navigation-map rendering. */
   geometry: RoadConditionEvent["geometry"];
   approach: { leadSec: number; minM: number; maxM: number };
@@ -32,15 +37,31 @@ export interface IncidentAlert extends RoadAlert {
 
 /** Severity-scaled approach windows: critical incidents announce earlier/farther. */
 const SEVERITY_APPROACH: Record<
-  RoadConditionSeverity,
+  RoadConditionSeverityLabel,
   { leadSec: number; minM: number; maxM: number }
 > = {
   critical: { leadSec: 30, minM: 600, maxM: 2500 },
-  high: { leadSec: 20, minM: 400, maxM: 1500 },
-  medium: { leadSec: 14, minM: 250, maxM: 1000 },
-  low: { leadSec: 10, minM: 150, maxM: 600 },
+  major: { leadSec: 20, minM: 400, maxM: 1500 },
+  moderate: { leadSec: 14, minM: 250, maxM: 1000 },
+  minor: { leadSec: 10, minM: 150, maxM: 600 },
   unknown: { leadSec: 12, minM: 200, maxM: 800 },
 };
+
+/** The delay a situation's delay effect in force at `at` reports, in seconds. */
+function delaySecondsOf(event: RoadConditionEvent, at: Date): number | undefined {
+  for (const effect of event.effects) {
+    if (effect.kind !== "delay" || effect.delay?.unit !== "s") continue;
+    if (effectInForceAt(event, effect, at)) return effect.delay.value;
+  }
+  return undefined;
+}
+
+/** Whether an effect of the situation in force at `at` closes the road to cars. */
+function closesRoadAt(event: RoadConditionEvent, at: Date): boolean {
+  return event.effects.some(
+    (effect) => closesRoadForCars(effect) && effectInForceAt(event, effect, at),
+  );
+}
 
 export interface ProjectEventsOptions {
   /** Maximum distance between affected geometry and the routed carriageway. */
@@ -59,6 +80,8 @@ export interface ProjectEventsOptions {
    * one is prepared (and cached) here instead.
    */
   routeMatcher?: PreparedRouteMatcher;
+  /** The instant a situation's effects are evaluated at; default now. */
+  now?: Date;
 }
 
 const DEFAULT_CORRIDOR_M = 20;
@@ -118,8 +141,14 @@ function roadNameKeys(name: string): string[] {
     .filter((key, index, keys) => key.length > 0 && keys.indexOf(key) === index);
 }
 
+/** Every name and number a situation gives its roads, in every language. */
 function eventRoadNames(event: RoadConditionEvent): Set<string> {
-  return new Set((event.roads ?? []).flatMap((road) => roadNameKeys(road.name)));
+  return new Set(
+    (event.roads ?? []).flatMap((road) => [
+      ...(road.name ?? []).flatMap((name) => roadNameKeys(name.text)),
+      ...(road.ref ? roadNameKeys(road.ref) : []),
+    ]),
+  );
 }
 
 /**
@@ -193,21 +222,36 @@ function cardinalBearing(direction: string): number | null {
   return null;
 }
 
+const COMPASS_BEARING: Record<string, number> = {
+  N: 0,
+  NE: 45,
+  E: 90,
+  SE: 135,
+  S: 180,
+  SW: 225,
+  W: 270,
+  NW: 315,
+};
+
+/**
+ * The direction a situation affects: both ways, a compass bearing, or a
+ * direction the source named in words. A direction the source gave only
+ * relative to the road (positive/negative) has no bearing here; on a line
+ * situation, the line's own direction stands in for it.
+ */
 function eventDirection(event: RoadConditionEvent): EventDirection {
-  const raw = (event.roads ?? [])
-    .map((road) => road.direction?.trim())
-    .filter((direction): direction is string => Boolean(direction));
-  if (raw.length === 0) return { hasDirection: false, bidirectional: false, bearings: [] };
-  if (
-    raw.some((direction) => /^(both|all|both directions|beide|beide richtungen)$/i.test(direction))
-  ) {
-    return { hasDirection: true, bidirectional: true, bearings: [] };
+  const d = event.direction;
+  if (!d || (d.value === "unknown" && !d.compass && !d.text)) {
+    return { hasDirection: false, bidirectional: false, bearings: [] };
   }
-  const bearings = raw
-    .map(cardinalBearing)
-    .filter((bearing): bearing is number => bearing !== null);
-  const bidirectional = bearings.some((a) => bearings.some((b) => angularDifference(a, b) >= 120));
-  return { hasDirection: true, bidirectional, bearings };
+  if (d.value === "both") return { hasDirection: true, bidirectional: true, bearings: [] };
+  const bearing =
+    d.compass !== undefined
+      ? (COMPASS_BEARING[d.compass] ?? null)
+      : d.text !== undefined
+        ? cardinalBearing(d.text)
+        : null;
+  return { hasDirection: true, bidirectional: false, bearings: bearing === null ? [] : [bearing] };
 }
 
 function directionMatches(
@@ -348,6 +392,7 @@ export function projectEventsToRoute(
   // either.
   const matcher = routeMatcherFor(routeGeometry, opts.routeMatcher);
   const stepMatchers = prepareStepMatchers(opts.routeSteps);
+  const now = opts.now ?? new Date();
 
   const out: IncidentAlert[] = [];
   for (const event of events) {
@@ -377,18 +422,21 @@ export function projectEventsToRoute(
             tolerance,
           );
     if (!candidate) continue;
+    const delay = delaySecondsOf(event, now);
     out.push({
       id: event.id,
       type: "traffic_incident",
       coord: candidate.coord,
       alongMeters: candidate.alongMeters,
+      kind: event.kind,
       eventType: event.type,
-      severity: event.severity,
-      headline: event.headline,
+      severity: event.severity.label,
+      ...(event.headline ? { headline: event.headline } : {}),
       ...(event.groupId ? { groupId: event.groupId } : {}),
-      ...(typeof event.delaySeconds === "number" ? { delaySeconds: event.delaySeconds } : {}),
+      ...(delay !== undefined ? { delaySeconds: delay } : {}),
+      closesRoad: closesRoadAt(event, now),
       geometry: event.geometry,
-      approach: SEVERITY_APPROACH[event.severity] ?? SEVERITY_APPROACH.unknown,
+      approach: SEVERITY_APPROACH[event.severity.label],
     });
   }
   out.sort((a, b) => a.alongMeters - b.alongMeters);

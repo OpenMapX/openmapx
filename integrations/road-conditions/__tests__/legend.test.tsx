@@ -45,6 +45,16 @@ describe("RoadConditionsLegend time-horizon control", () => {
     expect(screen.getByText("roadConditions.reset")).toBeTruthy();
   });
 
+  it("filters by registry kind and severity label", async () => {
+    render(<RoadConditionsLegend />);
+
+    await userEvent.click(screen.getByRole("button", { name: "roadConditions.kind.closure" }));
+    expect(useRoadConditionsStore.getState().kinds).toEqual(["closure"]);
+
+    await userEvent.click(screen.getByRole("button", { name: /roadConditions\.sev\.major/ }));
+    expect(useRoadConditionsStore.getState().minSeverity).toBe("major");
+  });
+
   it("explains active and starts-later incident lines with the renderer styles", () => {
     render(<RoadConditionsLegend />);
 

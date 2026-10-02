@@ -44,7 +44,7 @@ export type {
   GroundPackageError,
 } from "./groundPackage";
 export { buildGroundNavigationPackage, groundRouteFingerprint } from "./groundPackage";
-export { formatIncidentAnnouncement } from "./incidentAnnounce";
+export { formatIncidentAnnouncement, incidentTypeLabelKey } from "./incidentAnnounce";
 export {
   type IncidentAlert,
   type ProjectEventsOptions,

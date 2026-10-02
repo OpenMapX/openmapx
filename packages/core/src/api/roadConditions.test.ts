@@ -4,24 +4,31 @@ import {
   fetchRoadConditions,
   fetchRoadConditionsWithStatus,
   fetchRouteFlow,
+  roadConditionFeatureToEvent,
 } from "./roadConditions";
+
+/** The least a transported situation needs to read back: id, classification, validity. */
+const minimal = (properties: Record<string, unknown> = {}) => ({
+  id: "status:1",
+  kind: "roadworks",
+  type: "works",
+  validity: { status: "active" },
+  ...properties,
+});
+
+const point = { type: "Point" as const, coordinates: [13.4, 52.5] };
 
 describe("fetchRoadConditions", () => {
   beforeEach(() => vi.restoreAllMocks());
 
   it("returns parsed events with an explicit success status", async () => {
     vi.spyOn(apiClient, "get").mockResolvedValue({
-      features: [
-        {
-          geometry: { type: "Point", coordinates: [13.4, 52.5] },
-          properties: { id: "status:1", type: "roadworks" },
-        },
-      ],
+      features: [{ geometry: point, properties: minimal() }],
     } as never);
 
     await expect(fetchRoadConditionsWithStatus([13, 52, 14, 53])).resolves.toMatchObject({
       ok: true,
-      events: [{ id: "status:1", type: "roadworks" }],
+      events: [{ id: "status:1", kind: "roadworks", type: "works" }],
     });
   });
 
@@ -95,64 +102,67 @@ describe("fetchRoadConditions", () => {
       features: [
         {
           type: "Feature",
-          geometry: { type: "Point", coordinates: [13.4, 52.5] },
+          geometry: point,
           properties: {
-            id: "ndw:1",
-            source: "ndw",
+            id: "oc:situation:nl-ndw:1",
+            source: "nl-ndw",
             provider: "road-conditions-openconditions",
+            kind: "incident",
             type: "accident",
-            severity: "high",
-            headline: "Accident on A1",
-            description: "Two cars",
+            severity: { label: "major", level: 4 },
+            certainty: "observed",
+            temporality: "live",
+            planned: false,
+            headline: [{ lang: "nl", text: "Ongeval op A1" }],
+            description: [{ lang: "nl", text: "Twee auto's" }],
             groupId: "SITUATION_1",
+            validity: { status: "active", start: "2026-09-11T08:00:00Z" },
+            effects: [],
+            origin: "feed",
+            attribution: { provider: "NDW", license: "CC0-1.0" },
+            fetchedAt: "2026-09-11T08:01:00Z",
           },
         },
       ],
     } as never);
 
     const out = await fetchRoadConditions([13.39, 52.49, 13.41, 52.51], {
-      types: ["accident", "roadworks"],
-      minSeverity: "medium",
+      kinds: ["incident", "roadworks"],
+      types: ["incident.accident"],
+      minSeverity: "moderate",
     });
 
     expect(spy).toHaveBeenCalledWith(
       "/api/integrations/road-conditions/events",
       expect.objectContaining({
         bbox: "13.39,52.49,13.41,52.51",
-        types: "accident,roadworks",
-        minSeverity: "medium",
+        kinds: "incident,roadworks",
+        types: "incident.accident",
+        minSeverity: "moderate",
       }),
     );
-    expect(out).toHaveLength(1);
-    expect(out[0]).toMatchObject({
-      id: "ndw:1",
-      source: "ndw",
-      provider: "road-conditions-openconditions",
-      type: "accident",
-      severity: "high",
-      headline: "Accident on A1",
-      groupId: "SITUATION_1",
-      geometry: { type: "Point", coordinates: [13.4, 52.5] },
-    });
-  });
-
-  it("reads a numeric delaySeconds off the feature into the event", async () => {
-    vi.spyOn(apiClient, "get").mockResolvedValue({
-      features: [
-        {
-          geometry: { type: "Point", coordinates: [5, 52] },
-          properties: { id: "d:1", delaySeconds: 1500 },
-        },
-        {
-          geometry: { type: "Point", coordinates: [5, 52] },
-          properties: { id: "d:2", delaySeconds: null },
-        },
-      ],
-    } as never);
-    const out = await fetchRoadConditions([0, 0, 1, 1]);
-    expect(out.find((e) => e.id === "d:1")?.delaySeconds).toBe(1500);
-    expect(out.find((e) => e.id === "d:2")?.delaySeconds).toBeUndefined();
-    expect(out.find((e) => e.id === "d:1")?.groupId).toBeUndefined();
+    expect(out).toEqual([
+      {
+        id: "oc:situation:nl-ndw:1",
+        source: "nl-ndw",
+        provider: "road-conditions-openconditions",
+        groupId: "SITUATION_1",
+        kind: "incident",
+        type: "accident",
+        severity: { label: "major", level: 4 },
+        certainty: "observed",
+        temporality: "live",
+        planned: false,
+        headline: [{ lang: "nl", text: "Ongeval op A1" }],
+        description: [{ lang: "nl", text: "Twee auto's" }],
+        geometry: point,
+        validity: { status: "active", start: "2026-09-11T08:00:00Z" },
+        effects: [],
+        origin: "feed",
+        attribution: { provider: "NDW", license: "CC0-1.0" },
+        fetchedAt: "2026-09-11T08:01:00Z",
+      },
+    ]);
   });
 
   it("sends horizonDays only when set", async () => {
@@ -178,40 +188,145 @@ describe("fetchRoadConditions", () => {
     );
   });
 
-  it("parses the planned/forecast flags off the feature", async () => {
+  it("drops features without an id, geometry, classification or readable validity", async () => {
     vi.spyOn(apiClient, "get").mockResolvedValue({
       features: [
-        {
-          geometry: { type: "Point", coordinates: [5, 52] },
-          properties: { id: "f:1", isForecast: true, isPlanned: true },
-        },
-        {
-          geometry: { type: "Point", coordinates: [5, 52] },
-          properties: { id: "f:2", isForecast: null, isPlanned: null },
-        },
+        { geometry: point, properties: minimal({ id: undefined }) },
+        { geometry: null, properties: minimal({ id: "x" }) },
+        { geometry: point, properties: minimal({ id: "no-kind", kind: undefined }) },
+        { geometry: point, properties: minimal({ id: "no-type", type: "" }) },
+        { geometry: point, properties: minimal({ id: "no-validity", validity: undefined }) },
+        { geometry: point, properties: minimal({ id: "bad-validity", validity: { status: "x" } }) },
+        { geometry: point, properties: minimal({ id: "kept" }) },
       ],
     } as never);
     const out = await fetchRoadConditions([0, 0, 1, 1]);
-    expect(out.find((e) => e.id === "f:1")).toMatchObject({ isForecast: true, isPlanned: true });
-    expect(out.find((e) => e.id === "f:2")?.isForecast).toBeUndefined();
-    expect(out.find((e) => e.id === "f:2")?.isPlanned).toBeUndefined();
-  });
-
-  it("drops features without an id or geometry", async () => {
-    vi.spyOn(apiClient, "get").mockResolvedValue({
-      features: [
-        { geometry: { type: "Point", coordinates: [0, 0] }, properties: { headline: "no id" } },
-        { geometry: null, properties: { id: "x" } },
-      ],
-    } as never);
-    const out = await fetchRoadConditions([0, 0, 1, 1]);
-    expect(out).toEqual([]);
+    expect(out.map((e) => e.id)).toEqual(["kept"]);
   });
 
   it("returns [] on transport error (never throws)", async () => {
     vi.spyOn(apiClient, "get").mockRejectedValue(new Error("network"));
     const out = await fetchRoadConditions([0, 0, 1, 1]);
     expect(out).toEqual([]);
+  });
+});
+
+describe("roadConditionFeatureToEvent", () => {
+  const read = (properties: Record<string, unknown>) =>
+    roadConditionFeatureToEvent({ geometry: point, properties: minimal(properties) });
+
+  it("reads unknown or missing enumerations conservatively", () => {
+    expect(
+      read({ severity: { label: "high" }, certainty: "sure", temporality: "soon", origin: "x" }),
+    ).toMatchObject({
+      severity: { label: "unknown" },
+      certainty: "unknown",
+      temporality: "live",
+      planned: false,
+      // An origin the host does not know never routes on its own.
+      origin: "crowd",
+      effects: [],
+      attribution: { provider: "" },
+      fetchedAt: "",
+    });
+  });
+
+  it("carries timing, freshness, evidence and the publisher's texts through", () => {
+    const event = read({
+      source: "de-autobahn",
+      temporality: "scheduled",
+      planned: true,
+      headline: [
+        { lang: "de", text: "Baustelle" },
+        { lang: "en", text: "Roadworks" },
+        { lang: 3, text: "dropped" },
+      ],
+      validity: {
+        status: "planned",
+        start: "2026-10-05T06:00:00Z",
+        end: "2026-10-09T18:00:00Z",
+        periods: [{ startTime: "06:00", duration: "PT12H", scheduleTimezone: "Europe/Berlin" }],
+      },
+      origin: "crowd",
+      evidence: { state: "corroborated", confidenceScore: 0.8, routingEligible: false },
+      updatedAt: "2026-10-01T10:00:00Z",
+      fetchedAt: "2026-10-01T10:01:00Z",
+      expiresAt: "2026-10-01T10:11:00Z",
+    });
+    expect(event).toMatchObject({
+      temporality: "scheduled",
+      planned: true,
+      headline: [
+        { lang: "de", text: "Baustelle" },
+        { lang: "en", text: "Roadworks" },
+      ],
+      validity: {
+        status: "planned",
+        start: "2026-10-05T06:00:00Z",
+        periods: [{ startTime: "06:00", duration: "PT12H", scheduleTimezone: "Europe/Berlin" }],
+      },
+      origin: "crowd",
+      evidence: { state: "corroborated", confidenceScore: 0.8, routingEligible: false },
+      updatedAt: "2026-10-01T10:00:00Z",
+      fetchedAt: "2026-10-01T10:01:00Z",
+      expiresAt: "2026-10-01T10:11:00Z",
+      // Attribution falls back to the source id when the provider gives no name.
+      attribution: { provider: "de-autobahn" },
+    });
+  });
+
+  it("validates effects one by one, keeping an unreadable one as unsupported evidence", () => {
+    const event = read({
+      effects: [
+        {
+          id: "r1/delay",
+          kind: "delay",
+          v: 1,
+          applicability: { kind: "all" },
+          compliance: "unknown",
+          normalization: "complete",
+          delay: { value: 900, unit: "s" },
+        },
+        { id: "r1/teleport", kind: "teleport", v: 1 },
+        "garbage",
+      ],
+    });
+    expect(event?.effects).toEqual([
+      expect.objectContaining({ id: "r1/delay", kind: "delay", delay: { value: 900, unit: "s" } }),
+      expect.objectContaining({
+        id: "r1/teleport",
+        kind: "unsupported",
+        applicability: { kind: "unknown" },
+        normalization: "unsupported",
+      }),
+      expect.objectContaining({ id: "effects[2]", kind: "unsupported" }),
+    ]);
+  });
+
+  it("keeps only well-typed road and direction fields", () => {
+    const event = read({
+      roads: [
+        { ref: "A1", name: [{ lang: "de", text: "Hansalinie" }], class: "motorway", from: 5 },
+        { name: "not localized" },
+        "A2",
+      ],
+      direction: { value: "positive", compass: "N", text: 7 },
+    });
+    expect(event?.roads).toEqual([
+      { ref: "A1", name: [{ lang: "de", text: "Hansalinie" }], class: "motorway" },
+    ]);
+    expect(event?.direction).toEqual({ value: "positive", compass: "N" });
+    expect(read({ roads: [{ name: "x" }], direction: { compass: "N" } })).not.toHaveProperty(
+      "roads",
+    );
+    expect(read({ direction: { compass: "N" } })).not.toHaveProperty("direction");
+  });
+
+  it("carries routing evidence keyed by effect id, and nothing for display reads", () => {
+    const evidence = { "r1/closure": { schema_version: 2, effect_id: "r1/closure" } };
+    expect(read({ routingEvidence: evidence })?.routingEvidence).toEqual(evidence);
+    expect(read({})).not.toHaveProperty("routingEvidence");
+    expect(read({ routingEvidence: [] })).not.toHaveProperty("routingEvidence");
   });
 });
 
@@ -259,125 +374,5 @@ describe("fetchRouteFlow", () => {
     expect(await fetchRouteFlow([])).toEqual({});
     expect(post).not.toHaveBeenCalled();
     post.mockRestore();
-  });
-});
-
-describe("road-condition restriction transport", () => {
-  beforeEach(() => vi.restoreAllMocks());
-
-  const mockGet = {
-    mockResolvedValueOnce(value: unknown) {
-      vi.spyOn(apiClient, "get").mockResolvedValue(value as never);
-    },
-  };
-
-  const details = {
-    schemaVersion: 1,
-    vehicleScope: "specific",
-    completeness: "complete",
-    issues: [],
-    source: {
-      sourceId: "fi-digitraffic",
-      recordId: "GUID50465935",
-      recordVersion: "31",
-      sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
-      feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
-      publisher: "Fintraffic / Digitraffic",
-      license: "CC-BY-4.0",
-      licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-      attribution: "Fintraffic / Digitraffic",
-      modificationNotice:
-        "Normalized by OpenConditions; source units and structure may be transformed.",
-    },
-    facts: [
-      {
-        id: "GUID50465935:GUID50469933:roadwork_phase:restrictions[2]",
-        kind: "dimension",
-        dimension: "gross_weight",
-        meaning: "maximum_permitted",
-        value: 26000,
-        unit: "kg",
-        operator: "lte",
-        state: "active",
-        scope: {
-          kind: "roadwork_phase",
-          phaseId: "GUID50469933",
-          locationDescription: "Tie 104, Raasepori",
-          sourceLocationRefs: { scheme: "digitraffic_road_address", road: 104 },
-          restrictionBinding: "not_established",
-        },
-        direction: { basis: "road_reference", value: "both", description: null },
-        validFrom: "2026-07-19T21:00:00.000Z",
-        validTo: "2026-12-14T21:59:59.999Z",
-        sourceTokens: { type: "vehicle gross weight limit", quantity: 26, unit: "t" },
-        context: {
-          restrictionsLiftable: false,
-          compliance: "unknown",
-          operatorActionStatus: null,
-          validityStatus: null,
-        },
-      },
-    ],
-    evaluatedAt: "2026-09-12T07:14:00.000Z",
-    sourceCheckedAt: "2026-09-12T07:13:00.000Z",
-    freshUntil: "2026-09-12T07:23:00.000Z",
-    nextTransitionAt: "2026-12-14T21:59:59.999Z",
-    isStale: false,
-  };
-
-  function feature(properties: Record<string, unknown>) {
-    return {
-      type: "Feature",
-      geometry: { type: "Point", coordinates: [23.5, 60.1] },
-      properties: {
-        id: "fi-digitraffic:GUID50465935",
-        source: "fi-digitraffic",
-        provider: "road-conditions-openconditions",
-        type: "restriction",
-        severity: "high",
-        headline: "Tie 104, Raasepori. Tietyö.",
-        ...properties,
-      },
-    };
-  }
-
-  it("carries a valid envelope through unchanged and deep-equal", async () => {
-    mockGet.mockResolvedValueOnce({
-      type: "FeatureCollection",
-      features: [feature({ restrictionDetails: details, subtype: "road construction" })],
-    });
-    const result = await fetchRoadConditionsWithStatus([19, 59, 32, 71]);
-    expect(result.ok).toBe(true);
-    expect(result.events[0]!.restrictionDetails).toEqual(details);
-    expect(result.events[0]!.subtype).toBe("road construction");
-    expect(result.events[0]!.restrictionDetailsUnsupported).toBeUndefined();
-  });
-
-  it("keeps a mixed response, marking only the malformed envelope unsupported", async () => {
-    mockGet.mockResolvedValueOnce({
-      type: "FeatureCollection",
-      features: [
-        feature({ id: "old:1" }),
-        feature({ id: "new:ok", restrictionDetails: details }),
-        feature({ id: "new:bad", restrictionDetails: { schemaVersion: 9 } }),
-      ],
-    });
-    const result = await fetchRoadConditionsWithStatus([19, 59, 32, 71]);
-    expect(result.ok).toBe(true);
-    expect(result.events).toHaveLength(3);
-    const byId = new Map(result.events.map((e) => [e.id, e]));
-    expect(byId.get("old:1")!.restrictionDetails).toBeUndefined();
-    expect(byId.get("old:1")!.restrictionDetailsUnsupported).toBeUndefined();
-    expect(byId.get("new:ok")!.restrictionDetails).toEqual(details);
-    expect(byId.get("new:bad")!.restrictionDetailsUnsupported).toBe(true);
-    expect(byId.get("new:bad")!.restrictionDetails).toBeUndefined();
-  });
-
-  it("reads an empty collection as a successful empty result", async () => {
-    mockGet.mockResolvedValueOnce({ type: "FeatureCollection", features: [] });
-    expect(await fetchRoadConditionsWithStatus([19, 59, 32, 71])).toEqual({
-      ok: true,
-      events: [],
-    });
   });
 });

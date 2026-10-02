@@ -1,16 +1,13 @@
-import type { BBox, LngLat, RoadConditionRouteImpact, TravelMode } from "@openmapx/core";
-import {
-  haversineDistance,
-  isEdgeClosure,
-  isRoutingRelevantBinding,
-  localDateInZone,
-  zonedWallClockToInstant,
-} from "@openmapx/core";
 import type {
-  IntegrationContext,
-  RoadConditionSchedule,
-  RoadConditionsProvider,
-} from "@openmapx/integration-framework";
+  BBox,
+  LngLat,
+  RoadConditionEffect,
+  RoadConditionEvent,
+  RoadConditionRouteImpact,
+  TravelMode,
+} from "@openmapx/core";
+import { closesRoadForCars, effectInForceAt, haversineDistance } from "@openmapx/core";
+import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 
 export interface ClosureExclusions {
@@ -18,9 +15,6 @@ export interface ClosureExclusions {
   polygons: LngLat[][];
   roadConditionImpact: RoadConditionRouteImpact;
 }
-
-/** Severity at which an event of any type is treated as route-blocking. */
-const CRITICAL_SEVERITY = "critical";
 
 /**
  * Maximum spacing (metres) between consecutive exclusion points on a densified
@@ -36,173 +30,43 @@ const MAX_EXCLUSION_SPACING_M = 45;
 const MAX_EXCLUSION_POINTS_PER_CLOSURE = 300;
 
 /**
- * Whether an event blocks the road for the trip we are routing. The type /
- * road-state / vehicle-class decision comes from core's `isEdgeClosure`, the
- * same rule the live-traffic writer uses to pick edge closures, so the two
- * vocabularies cannot drift apart.
- *
- * Two extensions live here and only here, because they matter for point
- * exclusions but never justify closing an edge: a `lane_closure` (the road
- * stays passable, but the feed says traffic cannot use it as mapped), and the
- * defensive critical-severity branch for providers that ignore the `types`
- * query and return critical events of any type (e.g. "accident"). Both are
- * asked the same road-state and vehicle-class question via `isEdgeClosure`, so
- * a lorry-only restriction never detours a car either way.
+ * Whether a crowd-sourced situation must be withheld from routing. A
+ * user-reported closure becomes a route exclusion ONLY once its evidence made
+ * it `routingEligible` (an external resolution corroborated it — peer votes
+ * never do), the same rule core's routing decision and the OpenConditions
+ * export apply. A `feed` or `derived` situation always keeps routing: dropping
+ * an official closure would route a car into a real closed road.
  */
-function isClosure(event: {
-  type: string;
-  severity: string;
-  roadState?: string | null;
-  vehiclesAffected?: readonly string[] | null;
-}): boolean {
-  if (isEdgeClosure(event)) return true;
-  if (event.type === "lane_closure" || event.severity === CRITICAL_SEVERITY) {
-    return isEdgeClosure({ ...event, type: "road_closure" });
-  }
-  return false;
-}
-
-/**
- * Whether a crowd-origin event must be withheld from routing. A user-reported
- * closure becomes a route exclusion ONLY once it is `routingEligible` (an
- * external resolution corroborated it — peer votes never do). This mirrors the
- * OpenConditions export gate (`eventsToExclusions`) exactly.
- *
- * The gate is DELIBERATELY asymmetric: the ONLY thing it can drop is an
- * explicit `originKind === "crowd"` event that is not routing-eligible. A `feed`
- * event, or one with NO `originKind` at all, always keeps routing — this path
- * aggregates many providers (TomTom/HERE/DATEX feeds) that never stamp
- * `originKind`, and silently dropping their closures would route a car into a
- * real closed road (a worse hazard than surfacing an over-eager crowd report).
- * The burden is on the crowd provider to stamp `originKind === "crowd"`, which
- * the OpenConditions provider does, so the crowd-drop fires correctly while
- * official events are never regressed.
- */
-function isCrowdNonRoutable(event: { originKind?: string; routingEligible?: boolean }): boolean {
-  return event.originKind === "crowd" && event.routingEligible !== true;
-}
-
-function parseHhMm(s: string | undefined): number | null {
-  if (!s) return null;
-  const m = s.match(/^(\d{1,2}):(\d{2})/);
-  return m ? Number(m[1]) * 60 + Number(m[2]) : null;
-}
-
-const ICAL_DAY = ["SU", "MO", "TU", "WE", "TH", "FR", "SA"];
-
-/** iCal weekday code for a local "YYYY-MM-DD" date (UTC-parsed → calendar day). */
-function iCalDayOf(localDate: string): string | undefined {
-  const d = new Date(`${localDate}T00:00:00Z`);
-  return Number.isNaN(d.getTime()) ? undefined : ICAL_DAY[d.getUTCDay()];
-}
-
-function addDaysLocal(localDate: string, delta: number): string {
-  const d = new Date(`${localDate}T00:00:00Z`);
-  d.setUTCDate(d.getUTCDate() + delta);
-  return d.toISOString().slice(0, 10);
-}
-
-/** ISO-8601 duration → milliseconds (PnDTnHnMnS subset). */
-function durationToMs(iso: string | undefined): number | null {
-  if (!iso) return null;
-  const m = iso.match(/^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?)?$/);
-  if (!m) return null;
-  const [, d, h, mi, s] = m;
+function isCrowdNonRoutable(event: Pick<RoadConditionEvent, "origin" | "evidence">): boolean {
   return (
-    (Number(d ?? 0) * 86_400 + Number(h ?? 0) * 3_600 + Number(mi ?? 0) * 60 + Number(s ?? 0)) *
-    1_000
+    (event.origin === "crowd" || event.origin === "federation") &&
+    event.evidence?.routingEligible !== true
   );
 }
 
-/** Length of each occurrence: explicit `duration`, else endTime−startTime
- * (overnight-aware), else the whole day. */
-function occurrenceDurationMs(schedule: RoadConditionSchedule): number {
-  const explicit = durationToMs(schedule.duration);
-  if (explicit != null) return explicit;
-  const s = parseHhMm(schedule.startTime);
-  const e = parseHhMm(schedule.endTime);
-  if (s != null && e != null) {
-    let mins = e - s;
-    if (mins <= 0) mins += 24 * 60;
-    return mins * 60_000;
-  }
-  return 24 * 3_600 * 1_000;
-}
-
-/** Whether the recurrence has an occurrence STARTING on local date `d`. */
-function occurrenceStartsOn(schedule: RoadConditionSchedule, d: string): boolean {
-  if (schedule.startDate && d < schedule.startDate.slice(0, 10)) return false;
-  if (schedule.endDate && d > schedule.endDate.slice(0, 10)) return false;
-  if (schedule.exceptDate?.some((x) => x.slice(0, 10) === d)) return false;
-  if (schedule.byDay && schedule.byDay.length > 0) {
-    const ical = iCalDayOf(d);
-    if (!ical || !schedule.byDay.includes(ical)) return false;
-  }
-  return true;
-}
-
 /**
- * Whether the instant `at` falls inside an occurrence of a schema.org-shaped
- * `Schedule`, evaluated in the schedule's OWN `scheduleTimezone` (DST-correct).
- * Each occurrence starts at `startTime` (local) on a qualifying date and lasts
- * `occurrenceDurationMs`. We test the occurrence that could contain `at` — one
- * starting on `at`'s local date, or the previous local date for a window that
- * runs past midnight.
- */
-function occursAt(schedule: RoadConditionSchedule, at: Date): boolean {
-  const tz = schedule.scheduleTimezone;
-  if (!tz) return true; // zone-less schedule can't be evaluated → don't suppress
-  const startTime = schedule.startTime ?? "00:00";
-  const durMs = occurrenceDurationMs(schedule);
-  const atLocalDate = localDateInZone(at, tz);
-  for (const startDate of [atLocalDate, addDaysLocal(atLocalDate, -1)]) {
-    if (!occurrenceStartsOn(schedule, startDate)) continue;
-    const start = zonedWallClockToInstant(tz, `${startDate}T${startTime}`);
-    if (!start) continue;
-    const startMs = start.getTime();
-    if (at.getTime() >= startMs && at.getTime() < startMs + durMs) return true;
-  }
-  return false;
-}
-
-/**
- * Whether a closure is in effect at the requested travel time `at`. Many feeds
+ * Whether an effect is in force at the requested travel time `at`. Many feeds
  * publish planned closures days ahead, and some (e.g. nightly roadworks) are
  * active only inside recurring windows; without this check the router would
  * detour around a closure that hasn't started, has ended, or is only active at
- * night. `at` is the chosen departure/arrival instant, or "now" for an immediate
- * trip. A closure with no temporal info is treated as ongoing (always in effect).
- *
- * The `validFrom`/`validTo` span and a `schedule` are INTERSECTED, mirroring the
- * producer's own in-effect rule: the span is the outer life of the closure and a
- * schedule only carves recurring windows out of it, so a nightly window can
- * never outlive an expired span or start before `validFrom`. A missing or
- * unparseable bound is unbounded on that side, and both ends are inclusive. The
- * schedule is evaluated in its own `scheduleTimezone`, so the result is
- * DST-correct and independent of the server's or the route origin's zone.
+ * night. `at` is the chosen departure/arrival instant, or "now" for an
+ * immediate trip. The effect's own validity wins over its situation's; an
+ * unparseable travel time never suppresses a closure.
  */
-function isActiveAt(
-  event: {
-    validFrom?: string | null;
-    validTo?: string | null;
-    schedule?: RoadConditionSchedule[];
-  },
-  at: Date,
-): boolean {
-  const t = at.getTime();
-  if (Number.isNaN(t)) return true; // unparseable travel time → don't suppress
-  if (event.validFrom) {
-    const from = Date.parse(event.validFrom);
-    if (!Number.isNaN(from) && t < from) return false; // not yet in effect at travel time
+function inForceAt(event: RoadConditionEvent, effect: RoadConditionEffect, at: Date): boolean {
+  return Number.isNaN(at.getTime()) || effectInForceAt(event, effect, at);
+}
+
+/** The place an effect closes: its own location when it has one, else its situation's. */
+function effectGeometry(
+  event: RoadConditionEvent,
+  effect: RoadConditionEffect,
+): { type: string; coordinates?: unknown } | undefined {
+  const own = effect.location?.geometry as { type?: unknown } | null | undefined;
+  if (own && typeof own === "object" && typeof own.type === "string") {
+    return own as { type: string; coordinates?: unknown };
   }
-  if (event.validTo) {
-    const to = Date.parse(event.validTo);
-    if (!Number.isNaN(to) && t > to) return false; // already ended by travel time
-  }
-  if (event.schedule && event.schedule.length > 0) {
-    return event.schedule.some((s) => occursAt(s, at));
-  }
-  return true;
+  return event.geometry ?? undefined;
 }
 
 function toLngLat(coord: number[]): LngLat | null {
@@ -336,13 +200,18 @@ function geometryToExclusions(
 }
 
 /**
- * Collect active road closures from all registered road-conditions providers
- * and convert them into generic route-exclusion geometry. Provider adapters
- * own any engine-specific conversion, validation, and request-size limits.
+ * Collect the effects that close a road to cars at the travel time from all
+ * registered road-conditions providers and convert them into generic
+ * route-exclusion geometry. Provider adapters own any engine-specific
+ * conversion, validation, and request-size limits.
+ *
+ * Each effect of a situation is judged on its own: a situation can close one
+ * carriageway, cap the speed on another and restrict lorries on a third. Only
+ * an effect with no routing evidence from a provider that publishes none falls
+ * back to geometry; graph evidence is never projected back onto raw geometry.
  *
  * The routing integration depends only on the `road-conditions` capability
- * contract — never on `@openconditions/*` packages or the conditions.observations
- * table directly.
+ * contract — never on `@openconditions/*` packages directly.
  */
 export async function activeClosuresForBbox(
   ctx: IntegrationContext,
@@ -370,7 +239,7 @@ export async function activeClosuresForBbox(
   );
   if (providers.length === 0) return unavailable("no_road_condition_provider");
 
-  // Load every event type: graph-bound speed caps also need application
+  // Load every kind: graph-bound speed caps also need application
   // assessment. Geometry exclusions below retain the closure-only gate.
   const settled = await Promise.allSettled(providers.map((p) => p.getEvents(bbox, {})));
 
@@ -396,37 +265,36 @@ export async function activeClosuresForBbox(
     }
     for (const event of result.value) {
       if (disallowed.has(event.source)) continue;
-      // A graph-bound event with an explicitly unusable binding must never
-      // fall back to its source geometry. Point/whole-geometry exclusions can
-      // broaden an ambiguous or unresolved match onto the wrong carriageway.
-      if (event.binding && !isRoutingRelevantBinding(event.binding.status)) continue;
-      const routeDecision = assessRoadConditionForRoute(event, {
-        evaluatedAt: evaluatedAt.getTime(),
-        travelAt: refTime.getTime(),
-        mode,
-        // This planning stage runs before any engine request. Request-bound
-        // application is assessed against the actual returned route later.
-        sharedTrafficApplied: false,
-        allowLegacyGeometry: true,
-        disallowedSources: disallowed,
-      });
       if (event.routingEvidence) sawRoutingEvidence = true;
-      for (const reason of routeDecision.reasons) assessmentReasons.add(reason);
-      if (routeDecision.validUntil) {
-        const deadline = Date.parse(routeDecision.validUntil);
-        if (Number.isFinite(deadline)) deadlines.push(deadline);
+      // Two closing effects of one situation without their own location
+      // share its geometry; exclude it once.
+      const excluded = new Set<object>();
+      for (const effect of event.effects ?? []) {
+        const routeDecision = assessRoadConditionForRoute(event, effect, {
+          evaluatedAt: evaluatedAt.getTime(),
+          travelAt: refTime.getTime(),
+          mode,
+          // This planning stage runs before any engine request. Request-bound
+          // application is assessed against the actual returned route later.
+          sharedTrafficApplied: false,
+          allowLegacyGeometry: true,
+          disallowedSources: disallowed,
+        });
+        for (const reason of routeDecision.reasons) assessmentReasons.add(reason);
+        if (routeDecision.validUntil) {
+          const deadline = Date.parse(routeDecision.validUntil);
+          if (Number.isFinite(deadline)) deadlines.push(deadline);
+        }
+        if (routeDecision.disposition !== "legacy-geometry") continue;
+        sawLegacyGeometry = true;
+        if (isCrowdNonRoutable(event)) continue;
+        if (!closesRoadForCars(effect)) continue;
+        if (!inForceAt(event, effect, refTime)) continue;
+        const geometry = effectGeometry(event, effect);
+        if (!geometry || excluded.has(geometry)) continue;
+        excluded.add(geometry);
+        geometryToExclusions(geometry, points, polygons, ctx);
       }
-      if (routeDecision.disposition !== "legacy-geometry") continue;
-      sawLegacyGeometry = true;
-      // Withhold an unconfirmed crowd report from routing (fail-open on unknown
-      // origin — feed/undefined always route). See isCrowdNonRoutable.
-      if (isCrowdNonRoutable(event)) continue;
-      // isClosure() also rejects `roadState === "open"` and lorry-only
-      // restrictions, via core's shared edge-closure rule.
-      if (!isClosure(event)) continue;
-      if (!isActiveAt(event, refTime)) continue;
-      if (!event.geometry) continue;
-      geometryToExclusions(event.geometry, points, polygons, ctx);
     }
   }
 

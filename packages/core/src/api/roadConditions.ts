@@ -1,19 +1,26 @@
 import type { BBox } from "../types/geometry";
 import type {
+  LocalizedText,
   RoadConditionEvent,
-  RoadConditionSeverity,
-  RoadConditionType,
+  RoadConditionRoadRef,
+  RoadConditionSeverityLabel,
   RouteFlowInput,
   RouteFlowResponse,
   RouteFlowSpan,
 } from "../types/roadConditions";
-import { readRoadRestrictionDetails } from "../utils/roadRestrictionDetails";
+import {
+  readRoadConditionEffects,
+  roadConditionValiditySchema,
+} from "../utils/roadConditionEffects";
 import { apiClient } from "./client";
 import { API_ENDPOINTS } from "./endpoints";
 
 export interface FetchRoadConditionsOptions {
-  types?: RoadConditionType[];
-  minSeverity?: RoadConditionSeverity;
+  /** Registry kind codes. */
+  kinds?: string[];
+  /** Registry type codes. */
+  types?: string[];
+  minSeverity?: RoadConditionSeverityLabel;
   /**
    * Keep only conditions in effect within the next `n` days (`0` = active now).
    * Omit for no temporal filter — navigation relies on that, since it evaluates
@@ -29,9 +36,9 @@ export interface FetchRoadConditionsResult {
   ok: boolean;
 }
 
-interface RoadConditionFeature {
-  geometry: RoadConditionEvent["geometry"];
-  properties: Record<string, unknown> | null;
+export interface RoadConditionFeature {
+  geometry?: RoadConditionEvent["geometry"] | null;
+  properties?: Record<string, unknown> | null;
 }
 
 interface RoadConditionFeatureCollection {
@@ -55,66 +62,120 @@ function isWellFormedFeatureCollection(v: unknown): v is RoadConditionFeatureCol
   return Array.isArray((v as { features: unknown }).features);
 }
 
-function featureToEvent(feature: RoadConditionFeature): RoadConditionEvent | null {
+const SEVERITY_LABELS = ["minor", "moderate", "major", "critical", "unknown"] as const;
+const CERTAINTIES = ["observed", "likely", "possible", "unlikely", "unknown"] as const;
+const TEMPORALITIES = ["live", "scheduled", "forecast"] as const;
+const ORIGINS = ["feed", "crowd", "federation", "derived"] as const;
+
+function oneOf<T extends string>(values: readonly T[], v: unknown, fallback: T): T {
+  return values.includes(v as T) ? (v as T) : fallback;
+}
+
+function object(v: unknown): Record<string, unknown> | undefined {
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : undefined;
+}
+
+function text(v: unknown): LocalizedText | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const entries = v.filter(
+    (t): t is { lang: string; text: string } =>
+      !!object(t) && typeof t.lang === "string" && typeof t.text === "string",
+  );
+  return entries.length > 0 ? entries.map(({ lang, text }) => ({ lang, text })) : undefined;
+}
+
+/** The roads a feature names, keeping only well-typed fields: consumers call string and array methods on them. */
+function roads(v: unknown): RoadConditionRoadRef[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out = v.flatMap((raw): RoadConditionRoadRef[] => {
+    const road = object(raw);
+    if (!road) return [];
+    const name = text(road.name);
+    const ref: RoadConditionRoadRef = {
+      ...(str(road.ref) ? { ref: str(road.ref) } : {}),
+      ...(name ? { name } : {}),
+      ...(str(road.class) ? { class: str(road.class) } : {}),
+      ...(str(road.from) ? { from: str(road.from) } : {}),
+      ...(str(road.to) ? { to: str(road.to) } : {}),
+    };
+    return Object.keys(ref).length > 0 ? [ref] : [];
+  });
+  return out.length > 0 ? out : undefined;
+}
+
+function direction(v: unknown): RoadConditionEvent["direction"] {
+  const d = object(v);
+  const value = str(d?.value);
+  if (!d || !value) return undefined;
+  return {
+    value,
+    ...(str(d.compass) ? { compass: str(d.compass) } : {}),
+    ...(str(d.text) ? { text: str(d.text) } : {}),
+  };
+}
+
+/**
+ * One transported situation, read back into the contract. A feature without
+ * an id, a classification or a readable validity is dropped: it cannot be
+ * shown truthfully. Effects are validated one by one; an unreadable effect
+ * stays as `unsupported` restriction evidence rather than vanishing. An
+ * unknown origin reads as `crowd`, which never routes on its own.
+ */
+export function roadConditionFeatureToEvent(
+  feature: RoadConditionFeature,
+): RoadConditionEvent | null {
   const p = feature.properties ?? {};
   const id = str(p.id);
-  if (!feature.geometry || !id) return null;
-  const groupId = str(p.groupId);
+  const kind = str(p.kind);
+  const type = str(p.type);
+  const validity = roadConditionValiditySchema.safeParse(p.validity);
+  if (!feature.geometry || !id || !kind || !type || !validity.success) return null;
+  const severity = object(p.severity);
+  const attribution = object(p.attribution);
+  const evidence = object(p.evidence);
+  const roadRefs = roads(p.roads);
+  const affectedDirection = direction(p.direction);
+  const headline = text(p.headline);
+  const description = text(p.description);
   return {
     id,
     source: str(p.source) ?? "",
     provider: str(p.provider) ?? "",
-    ...(groupId ? { groupId } : {}),
-    type: (str(p.type) ?? "other") as RoadConditionType,
-    severity: (str(p.severity) ?? "unknown") as RoadConditionSeverity,
-    geometry: feature.geometry,
-    headline: str(p.headline) ?? "",
-    description: str(p.description),
-    ...(typeof p.delaySeconds === "number" ? { delaySeconds: p.delaySeconds } : {}),
-    roadState: p.roadState as RoadConditionEvent["roadState"],
-    roads: (p.roads as RoadConditionEvent["roads"]) ?? undefined,
-    validFrom: (p.validFrom as string | null) ?? null,
-    validTo: (p.validTo as string | null) ?? null,
-    dataUpdatedAt: str(p.dataUpdatedAt),
-    attribution: (p.attribution as RoadConditionEvent["attribution"]) ?? undefined,
-    ...(typeof p.isForecast === "boolean" ? { isForecast: p.isForecast } : {}),
-    ...(typeof p.isPlanned === "boolean" ? { isPlanned: p.isPlanned } : {}),
+    ...(str(p.groupId) ? { groupId: str(p.groupId) } : {}),
+    kind,
+    type,
     ...(str(p.subtype) ? { subtype: str(p.subtype) } : {}),
-    // Normalized fields the host already understands must survive transport,
-    // or the popup and the routing gate would see a thinner event than the
-    // provider published.
-    ...(Array.isArray(p.schedule) && p.schedule.length > 0
-      ? { schedule: p.schedule as RoadConditionEvent["schedule"] }
+    severity: {
+      label: oneOf(SEVERITY_LABELS, severity?.label, "unknown"),
+      ...(typeof severity?.level === "number" ? { level: severity.level } : {}),
+    },
+    certainty: oneOf(CERTAINTIES, p.certainty, "unknown"),
+    temporality: oneOf(TEMPORALITIES, p.temporality, "live"),
+    planned: p.planned === true,
+    ...(headline ? { headline } : {}),
+    ...(description ? { description } : {}),
+    geometry: feature.geometry,
+    ...(roadRefs ? { roads: roadRefs } : {}),
+    ...(affectedDirection ? { direction: affectedDirection } : {}),
+    validity: validity.data,
+    effects: readRoadConditionEffects(p.effects),
+    origin: oneOf(ORIGINS, p.origin, "crowd"),
+    ...(evidence && typeof evidence.state === "string"
+      ? { evidence: evidence as RoadConditionEvent["evidence"] }
       : {}),
-    ...(Array.isArray(p.vehiclesAffected)
-      ? {
-          vehiclesAffected: p.vehiclesAffected.filter(
-            (value): value is string => typeof value === "string",
-          ),
-        }
-      : {}),
-    ...(p.binding && typeof p.binding === "object"
-      ? { binding: p.binding as RoadConditionEvent["binding"] }
-      : {}),
-    ...(Array.isArray(p.segments)
-      ? { segments: p.segments as RoadConditionEvent["segments"] }
-      : {}),
-    ...(p.routingEvidence && typeof p.routingEvidence === "object"
+    attribution: {
+      provider: str(attribution?.provider) ?? str(p.source) ?? "",
+      ...(str(attribution?.license) ? { license: str(attribution?.license) } : {}),
+      ...(str(attribution?.url) ? { url: str(attribution?.url) } : {}),
+    },
+    ...(str(p.updatedAt) ? { updatedAt: str(p.updatedAt) } : {}),
+    fetchedAt: str(p.fetchedAt) ?? "",
+    ...(str(p.expiresAt) ? { expiresAt: str(p.expiresAt) } : {}),
+    ...(object(p.routingEvidence)
       ? { routingEvidence: p.routingEvidence as RoadConditionEvent["routingEvidence"] }
       : {}),
-    ...(p.originKind === "feed" || p.originKind === "crowd" ? { originKind: p.originKind } : {}),
-    ...(typeof p.routingEligible === "boolean" ? { routingEligible: p.routingEligible } : {}),
-    ...(str(p.evidenceState) ? { evidenceState: str(p.evidenceState) } : {}),
-    ...(typeof p.confidenceScore === "number" ? { confidenceScore: p.confidenceScore } : {}),
-    ...(typeof p.isStale === "boolean" ? { isStale: p.isStale } : {}),
-    ...(typeof p.expiresAt === "string" ? { expiresAt: p.expiresAt } : {}),
-    ...(typeof p.speedLimitKph === "number" ? { speedLimitKph: p.speedLimitKph } : {}),
-    ...(Array.isArray(p.sourceRecords)
-      ? { sourceRecords: p.sourceRecords as RoadConditionEvent[] }
-      : {}),
-    // One malformed envelope must not discard the whole response: it becomes an
-    // explicit unsupported marker on its own event.
-    ...readRoadRestrictionDetails(p),
   };
 }
 
@@ -128,6 +189,7 @@ export async function fetchRoadConditionsWithStatus(
 ): Promise<FetchRoadConditionsResult> {
   try {
     const params: Record<string, string> = { bbox: bbox.join(",") };
+    if (opts?.kinds && opts.kinds.length > 0) params.kinds = opts.kinds.join(",");
     if (opts?.types && opts.types.length > 0) params.types = opts.types.join(",");
     if (opts?.minSeverity) params.minSeverity = opts.minSeverity;
     // `0` is a meaningful horizon ("active now"), so test for presence.
@@ -139,7 +201,7 @@ export async function fetchRoadConditionsWithStatus(
     return {
       ok: true,
       events: (raw.features ?? [])
-        .map(featureToEvent)
+        .map(roadConditionFeatureToEvent)
         .filter((e): e is RoadConditionEvent => e !== null),
     };
   } catch {

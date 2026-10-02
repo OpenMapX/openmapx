@@ -1,9 +1,13 @@
 import {
+  closesRoadForCars,
   getRoadConditionRoutingDecision,
+  type RoadConditionEffect,
   type RoadConditionEvent,
   type RoadConditionRouteImpact,
   type Route,
   type RoutingTrafficProof,
+  speedCapKph,
+  type TrafficApplicationReceipt,
   type TrafficApplicationSnapshot,
 } from "@openmapx/core";
 import { services as coreServices } from "@openmapx/core/server";
@@ -11,17 +15,39 @@ import { envString } from "@openmapx/core/server-env";
 import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 
-export function receiptCoversEvent(
+/**
+ * What the live-traffic writer does to an edge for an effect: close it, cap
+ * its speed, or nothing. A closure wins over a cap, as on the writer's side.
+ */
+export function engineEffectOf(
+  effect: RoadConditionEffect,
+): TrafficApplicationReceipt["effect"] | null {
+  if (closesRoadForCars(effect)) return "closure";
+  return speedCapKph(effect) !== undefined ? "speed_cap" : null;
+}
+
+/** A receipt names one effect of one situation: `<situationId>#<effectId>`, as the wire does. */
+export function receiptObservationId(
+  event: Pick<RoadConditionEvent, "id">,
+  effect: { id: string },
+) {
+  return `${event.id}#${effect.id}`;
+}
+
+export function receiptCoversEffect(
   event: RoadConditionEvent,
+  effect: RoadConditionEffect,
   snapshot: TrafficApplicationSnapshot,
   proof: RoutingTrafficProof,
   disallowed: ReadonlySet<string>,
   now: number,
 ): boolean {
-  const e = event.routingEvidence;
+  const e = event.routingEvidence?.[effect.id];
+  const applied = engineEffectOf(effect);
   if (
     !e ||
-    !getRoadConditionRoutingDecision(event, {
+    !applied ||
+    !getRoadConditionRoutingDecision(event, effect, {
       evaluatedAt: now,
       travelAt: now,
       disallowedSources: disallowed,
@@ -29,22 +55,18 @@ export function receiptCoversEvent(
     }).eligible
   )
     return false;
+  const observationId = receiptObservationId(event, effect);
   return snapshot.receipts.some(
     (r) =>
       r &&
-      r.observationId === event.id &&
-      r.observationRevision === e.observation_revision &&
+      r.observationId === observationId &&
+      r.observationRevision === String(e.record_revision) &&
       r.sourceId === event.source &&
       r.sourceGraphGeneration === e.graph_generation &&
       r.graphGeneration === proof.graphGeneration &&
       r.policyRevision === snapshot.policyRevision &&
       r.complete === true &&
-      r.effect ===
-        (event.speedLimitKph != null &&
-        event.roadState !== "closed" &&
-        event.type !== "road_closure"
-          ? "speed_cap"
-          : "closure") &&
+      r.effect === applied &&
       Date.parse(r.validUntil) > now &&
       Array.isArray(r.edgeKeys) &&
       r.edgeKeys.length > 0 &&
@@ -189,46 +211,52 @@ async function reconcileRouteTraffic(
       continue;
     }
     for (const event of result.value) {
-      const e = event.routingEvidence;
-      if (
-        disallowed.has(event.source) ||
-        (e &&
-          (disallowed.has(e.source_id) || (e.child_source_id && disallowed.has(e.child_source_id))))
-      )
-        continue;
-      if (!e) {
-        reasons.add("missing_routing_evidence");
-        continue;
-      }
-      const decision = getRoadConditionRoutingDecision(event, {
-        evaluatedAt: now,
-        travelAt: now,
-        disallowedSources: disallowed,
-        sharedTraffic: true,
-      });
-      if (!decision.eligible) {
-        for (const reason of decision.reasons) reasons.add(reason);
-        continue;
-      }
-      if (decision.validUntil) deadlines.push(Date.parse(decision.validUntil));
-      const eventReceipts = receiptsById.get(event.id) ?? [];
-      const eventSnapshot = { ...snapshot, receipts: eventReceipts };
-      const covered = proofs.every((p) =>
-        receiptCoversEvent(event, eventSnapshot, p, disallowed, now),
-      );
-      if (!covered) reasons.add("incomplete_engine_application");
-      for (const route of routes) {
-        const assessment = assessRoadConditionForRoute(event, {
+      if (disallowed.has(event.source)) continue;
+      for (const effect of event.effects ?? []) {
+        const e = event.routingEvidence?.[effect.id];
+        if (
+          e &&
+          (disallowed.has(e.source_id) || (e.child_source_id && disallowed.has(e.child_source_id)))
+        )
+          continue;
+        const applied = engineEffectOf(effect);
+        // Effects the provider did not bind and the writer could never apply
+        // (advisories, delays, a detour) leave the route's proof untouched.
+        if (!e) {
+          if (applied) reasons.add("missing_routing_evidence");
+          continue;
+        }
+        const decision = getRoadConditionRoutingDecision(event, effect, {
           evaluatedAt: now,
           travelAt: now,
-          mode: route.mode,
-          sharedTrafficApplied: covered,
           disallowedSources: disallowed,
+          sharedTraffic: true,
         });
-        for (const reason of assessment.reasons) reasons.add(reason);
-      }
-      if (covered) {
-        for (const r of eventReceipts) deadlines.push(Date.parse(r.validUntil));
+        if (!decision.eligible) {
+          for (const reason of decision.reasons) reasons.add(reason);
+          continue;
+        }
+        if (!applied) continue;
+        if (decision.validUntil) deadlines.push(Date.parse(decision.validUntil));
+        const effectReceipts = receiptsById.get(receiptObservationId(event, effect)) ?? [];
+        const effectSnapshot = { ...snapshot, receipts: effectReceipts };
+        const covered = proofs.every((p) =>
+          receiptCoversEffect(event, effect, effectSnapshot, p, disallowed, now),
+        );
+        if (!covered) reasons.add("incomplete_engine_application");
+        for (const route of routes) {
+          const assessment = assessRoadConditionForRoute(event, effect, {
+            evaluatedAt: now,
+            travelAt: now,
+            mode: route.mode,
+            sharedTrafficApplied: covered,
+            disallowedSources: disallowed,
+          });
+          for (const reason of assessment.reasons) reasons.add(reason);
+        }
+        if (covered) {
+          for (const r of effectReceipts) deadlines.push(Date.parse(r.validUntil));
+        }
       }
     }
   }

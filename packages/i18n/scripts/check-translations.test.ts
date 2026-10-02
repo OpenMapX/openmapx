@@ -123,25 +123,57 @@ describe("cross-locale key consistency diff (composed)", () => {
   });
 });
 
-describe("road-condition type catalog", () => {
-  const roadConditionTypes = [
-    "accident",
+describe("road-condition classification catalog", () => {
+  const kinds = [
+    "incident",
     "roadworks",
-    "road_closure",
-    "lane_closure",
-    "hazard",
-    "congestion",
-    "weather",
-    "event",
+    "closure",
     "restriction",
+    "weather_condition",
+    "road_condition",
+    "road_hazard",
+    "public_event",
+    "authority",
+    "equipment_fault",
+    "security",
+    "winter_operation",
+    "pass_status",
+    "congestion",
+    "other",
+  ];
+  const types = [
+    "accident",
+    "breakdown",
+    "vehicle_hazard",
+    "obstruction",
+    "fire",
+    "works",
+    "closure",
+    "dimension",
+    "access",
+    "speed",
+    "seasonal_load",
+    "weather",
+    "surface",
+    "driving_condition",
+    "hazard",
+    "event",
+    "operation",
+    "fault",
+    "incident",
+    "chain_control",
+    "pass",
+    "congestion",
     "other",
   ];
 
   it.each([
-    ["en", en.roadConditions.type],
-    ["de", de.roadConditions.type],
-  ])("defines every supported road-condition type in %s", (_, typeMessages) => {
-    expect(Object.keys(typeMessages)).toEqual(expect.arrayContaining(roadConditionTypes));
+    ["en", en],
+    ["de", de],
+  ])("defines every registry kind and type in %s", (_, messages) => {
+    expect(Object.keys(messages.roadConditions.kind)).toEqual(expect.arrayContaining(kinds));
+    expect(Object.keys(messages.roadConditions.type)).toEqual(expect.arrayContaining(types));
+    expect(Object.keys(messages.navigation.incidentType)).toEqual(expect.arrayContaining(types));
   });
 });
 

@@ -2,6 +2,7 @@ import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../../index.js";
 import type { DirectionsResult, RoutingProvider, TravelMode } from "../../types.js";
+import { roadConditionEvent } from "./road-condition.js";
 
 export interface RoutingProviderFixture {
   integrationId: string;
@@ -64,15 +65,13 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
   getHandler(path: string): RoutingTestHandler;
 } {
   const handlers = new Map<string, RoutingTestHandler>();
-  const closureEvents = (options.closurePoints ?? []).map((coordinates, index) => ({
-    id: `closure:${index}`,
-    source: "test",
-    provider: "road-conditions-stub",
-    type: "road_closure",
-    severity: "high",
-    geometry: { type: "Point", coordinates },
-    headline: `Closure ${index}`,
-  }));
+  const closureEvents = (options.closurePoints ?? []).map((coordinates, index) =>
+    roadConditionEvent({
+      id: `closure:${index}`,
+      provider: "road-conditions-stub",
+      geometry: { type: "Point", coordinates },
+    }),
+  );
 
   const context = {
     getIntegrationsByDomain(domain: string) {

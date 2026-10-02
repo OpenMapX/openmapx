@@ -1,5 +1,6 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
+import { roadConditionEvent } from "./__tests__/support/road-condition.js";
 import { applyClosureExclusions } from "./closure-exclusions.js";
 
 describe("applyClosureExclusions", () => {
@@ -45,17 +46,13 @@ describe("applyClosureExclusions", () => {
                       {
                         id: "road-conditions-test",
                         getEvents: vi.fn().mockResolvedValue([
-                          {
+                          roadConditionEvent({
                             id: "polygon-overflow",
-                            source: "test",
-                            provider: "test",
-                            type: "road_closure",
-                            severity: "critical",
                             geometry: {
                               type: "MultiPolygon",
                               coordinates: polygons.map((ring) => [ring]),
                             },
-                          },
+                          }),
                         ]),
                       },
                     ],

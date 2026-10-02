@@ -3,7 +3,12 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { RoadConditionEvent } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import { buildRoadConditionDisplayGroups, buildRoadConditionDisplayLines } from "../display";
+import {
+  buildRoadConditionDisplayGroups,
+  buildRoadConditionDisplayLines,
+  buildRoadConditionFeatures,
+} from "../display";
+import { situation, text } from "./fixtures";
 
 const DISPLAY_SOURCE_DIR = dirname(fileURLToPath(import.meta.url)).replace(/\/__tests__$/, "");
 
@@ -12,16 +17,17 @@ function event(
   geometry: RoadConditionEvent["geometry"],
   extra: Partial<RoadConditionEvent> = {},
 ): RoadConditionEvent {
-  return {
+  return situation({
     id,
     source: "source-a",
     provider: "road-conditions-openconditions",
-    type: "roadworks",
-    severity: "medium",
-    headline: "Roadworks",
+    kind: "roadworks",
+    type: "works",
+    severity: { label: "moderate" },
+    headline: text("Roadworks"),
     geometry,
     ...extra,
-  };
+  });
 }
 
 describe("buildRoadConditionDisplayGroups", () => {
@@ -120,13 +126,13 @@ describe("buildRoadConditionDisplayGroups", () => {
     const events = [
       event("oc:roadworks", geometry, {
         groupId: "works-duplicate",
-        type: "roadworks",
-        severity: "low",
+        severity: { label: "minor" },
       }),
       event("oc:other", geometry, {
         groupId: "works-duplicate",
+        kind: "other",
         type: "other",
-        severity: "unknown",
+        severity: { label: "unknown" },
       }),
     ];
 
@@ -172,8 +178,8 @@ describe("buildRoadConditionDisplayGroups", () => {
       ],
     };
     const groups = buildRoadConditionDisplayGroups([
-      event("oc:a", geometry, { headline: "Same date" }),
-      event("oc:b", geometry, { headline: "Same date" }),
+      event("oc:a", geometry, { headline: text("Same date") }),
+      event("oc:b", geometry, { headline: text("Same date") }),
     ]);
 
     expect(groups).toHaveLength(2);
@@ -260,13 +266,13 @@ describe("buildRoadConditionDisplayGroups", () => {
     const groups = buildRoadConditionDisplayGroups([
       event("oc:congestion", geometry, {
         groupId: "congestion-group",
+        kind: "congestion",
         type: "congestion",
-        severity: "medium",
+        severity: { label: "moderate" },
       }),
       event("oc:roadworks", geometry, {
         groupId: "roadworks-group",
-        type: "roadworks",
-        severity: "low",
+        severity: { label: "minor" },
       }),
     ]);
 
@@ -299,5 +305,62 @@ describe("buildRoadConditionDisplayGroups", () => {
     ]);
 
     expect(buildRoadConditionDisplayLines(groups)).toHaveLength(2);
+  });
+});
+
+describe("buildRoadConditionFeatures", () => {
+  const AT = Date.parse("2026-09-11T12:00:00Z");
+  const line = {
+    type: "LineString" as const,
+    coordinates: [
+      [6.77, 51.2],
+      [6.78, 51.2],
+    ],
+  };
+
+  it("draws a group with its most severe situation's look and the group's identity", () => {
+    const groups = buildRoadConditionDisplayGroups([
+      event("oc:minor", line, { groupId: "g", severity: { label: "minor" } }),
+      event("oc:closure", line, {
+        groupId: "g",
+        kind: "closure",
+        type: "closure",
+        severity: { label: "critical" },
+        headline: [
+          { lang: "nl", text: "Afgesloten" },
+          { lang: "de", text: "Gesperrt" },
+        ],
+        origin: "crowd",
+      }),
+    ]);
+    const features = buildRoadConditionFeatures(groups, "de", AT);
+    const marker = features.find((f) => f.geometry.type === "Point");
+    expect(marker?.properties).toEqual({
+      headline: "Gesperrt",
+      classification: "closure.closure",
+      severity: "critical",
+      _icon: "rc:road_closure:critical",
+      _id: groups[0]?.displayId,
+      _displayId: groups[0]?.displayId,
+      _sev: 4,
+      _unconfirmed: true,
+      future: false,
+    });
+    const drawnLine = features.find((f) => f.geometry.type === "LineString");
+    expect(drawnLine?.properties).toMatchObject({ severity: "critical", future: false });
+  });
+
+  it("dims a group only when every situation in it is still to come", () => {
+    const later = { status: "planned" as const, start: "2026-09-20T00:00:00Z" };
+    const future = (extra: Parameters<typeof event>[2][]) =>
+      buildRoadConditionFeatures(
+        buildRoadConditionDisplayGroups(
+          extra.map((e, i) => event(`oc:${i}`, line, { groupId: "g", ...e })),
+        ),
+        "en",
+        AT,
+      ).map((f) => f.properties?.future);
+    expect(future([{ validity: later }, { temporality: "forecast" }])).toEqual([true, true]);
+    expect(future([{ validity: later }, {}])).toEqual([false, false]);
   });
 });

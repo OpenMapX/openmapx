@@ -1,63 +1,75 @@
 import { describe, expect, it } from "vitest";
 import { dedupeRoadConditionEvents } from "../dedupe.js";
 import type { RoadConditionEvent } from "../types.js";
+import { effect, situation, text } from "./fixtures.js";
 
 function ev(
   over: Partial<RoadConditionEvent> & Pick<RoadConditionEvent, "id">,
 ): RoadConditionEvent {
-  return {
+  return situation({
     source: "s",
     provider: "p",
-    type: "accident",
-    severity: "high",
     geometry: { type: "Point", coordinates: [13.4, 52.5] },
-    headline: "Accident on A1",
     ...over,
-  };
+  });
 }
 
+const works = { kind: "roadworks", type: "works" } as const;
+
 describe("dedupeRoadConditionEvents", () => {
-  it("collapses exact-id duplicates, keeping the newest dataUpdatedAt", () => {
+  it("collapses exact-id duplicates, keeping the newest updatedAt", () => {
     const out = dedupeRoadConditionEvents([
-      ev({ id: "x", dataUpdatedAt: "2026-01-01T00:00:00Z", headline: "old" }),
-      ev({ id: "x", dataUpdatedAt: "2026-06-01T00:00:00Z", headline: "new" }),
+      ev({ id: "x", updatedAt: "2026-01-01T00:00:00Z", headline: text("old") }),
+      ev({ id: "x", updatedAt: "2026-06-01T00:00:00Z", headline: text("new") }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0].headline).toBe("new");
+    expect(out[0]?.headline).toEqual(text("new"));
   });
 
-  it("collapses near-identical events from different providers (newest wins, keeps its provider)", () => {
+  it("collapses near-identical situations from different providers (newest wins whole)", () => {
+    const older = ev({
+      id: "oc:1",
+      provider: "road-conditions-openconditions",
+      source: "nl-ndw",
+      attribution: { provider: "NDW", license: "CC0-1.0" },
+      updatedAt: "2026-06-01T00:00:00Z",
+      headline: text("Accident on the A1 northbound"),
+    });
+    const newer = ev({
+      id: "tt:9",
+      provider: "road-conditions-tomtom",
+      source: "tomtom",
+      attribution: { provider: "TomTom" },
+      geometry: { type: "Point", coordinates: [13.4004, 52.5001] }, // ~35 m away
+      updatedAt: "2026-06-02T00:00:00Z",
+      headline: text("Accident A1 northbound"),
+    });
+    expect(dedupeRoadConditionEvents([older, newer])).toEqual([newer]);
+    expect(dedupeRoadConditionEvents([newer, older])).toEqual([newer]);
+  });
+
+  it("matches headlines in a shared language when the publishers' own differ", () => {
     const out = dedupeRoadConditionEvents([
       ev({
-        id: "oc:1",
-        provider: "road-conditions-openconditions",
-        geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        dataUpdatedAt: "2026-06-01T00:00:00Z",
-        headline: "Accident on the A1 northbound",
+        id: "a",
+        headline: [
+          { lang: "nl", text: "Ongeval op de A1" },
+          { lang: "en", text: "Accident on the A1" },
+        ],
       }),
-      ev({
-        id: "tt:9",
-        provider: "road-conditions-tomtom",
-        geometry: { type: "Point", coordinates: [13.4004, 52.5001] }, // ~35 m away
-        dataUpdatedAt: "2026-06-02T00:00:00Z",
-        headline: "Accident A1 northbound",
-      }),
+      ev({ id: "b", headline: text("Accident A1") }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0].provider).toBe("road-conditions-tomtom");
   });
 
-  it("keeps events that differ in type even when co-located", () => {
-    const out = dedupeRoadConditionEvents([
-      ev({ id: "a", type: "accident", geometry: { type: "Point", coordinates: [13.4, 52.5] } }),
-      ev({ id: "b", type: "roadworks", geometry: { type: "Point", coordinates: [13.4, 52.5] } }),
-    ]);
+  it("keeps situations that differ in classification even when co-located", () => {
+    const out = dedupeRoadConditionEvents([ev({ id: "a" }), ev({ id: "b", ...works })]);
     expect(out).toHaveLength(2);
   });
 
-  it("keeps same-type events that are far apart", () => {
+  it("keeps same-type situations that are far apart", () => {
     const out = dedupeRoadConditionEvents([
-      ev({ id: "a", geometry: { type: "Point", coordinates: [13.4, 52.5] } }),
+      ev({ id: "a" }),
       ev({ id: "b", geometry: { type: "Point", coordinates: [9.99, 53.55] } }), // Hamburg, far
     ]);
     expect(out).toHaveLength(2);
@@ -77,19 +89,19 @@ describe("dedupeRoadConditionEvents", () => {
             [13.41, 52.5],
           ],
         },
-        dataUpdatedAt: "2026-06-01T00:00:00Z",
-        headline: "Accident on the A1",
+        updatedAt: "2026-06-01T00:00:00Z",
+        headline: text("Accident on the A1"),
       }),
       ev({
         id: "tt:9",
         provider: "road-conditions-tomtom",
         geometry: { type: "Point", coordinates: [13.405, 52.5003] },
-        dataUpdatedAt: "2026-06-02T00:00:00Z",
-        headline: "Accident A1",
+        updatedAt: "2026-06-02T00:00:00Z",
+        headline: text("Accident A1"),
       }),
     ]);
     expect(out).toHaveLength(1);
-    expect(out[0].provider).toBe("road-conditions-tomtom");
+    expect(out[0]?.provider).toBe("road-conditions-tomtom");
   });
 
   it("merges two sparsely-digitised overlapping lines (no shared/near vertices)", () => {
@@ -98,8 +110,8 @@ describe("dedupeRoadConditionEvents", () => {
     const out = dedupeRoadConditionEvents([
       ev({
         id: "a",
-        type: "roadworks",
-        headline: "Roadworks on the A2",
+        ...works,
+        headline: text("Roadworks on the A2"),
         geometry: {
           type: "LineString",
           coordinates: [
@@ -110,8 +122,8 @@ describe("dedupeRoadConditionEvents", () => {
       }),
       ev({
         id: "b",
-        type: "roadworks",
-        headline: "Roadworks A2",
+        ...works,
+        headline: text("Roadworks A2"),
         geometry: {
           type: "LineString",
           coordinates: [
@@ -128,7 +140,7 @@ describe("dedupeRoadConditionEvents", () => {
     const out = dedupeRoadConditionEvents([
       ev({
         id: "a",
-        type: "roadworks",
+        ...works,
         geometry: {
           type: "LineString",
           coordinates: [
@@ -139,7 +151,7 @@ describe("dedupeRoadConditionEvents", () => {
       }),
       ev({
         id: "b",
-        type: "roadworks",
+        ...works,
         geometry: {
           type: "LineString",
           coordinates: [
@@ -156,99 +168,107 @@ describe("dedupeRoadConditionEvents", () => {
     expect(dedupeRoadConditionEvents([])).toEqual([]);
   });
 
-  describe("road-name guard", () => {
-    it("does NOT merge co-located same-type events on different named roads", () => {
+  describe("road guard", () => {
+    it("does NOT merge co-located same-type situations on different named roads", () => {
       // ~7 m apart, identical generic headline (jaccard 1.0) — would merge on
       // geometry alone — but they name different roads (an interchange).
       const out = dedupeRoadConditionEvents([
-        ev({
-          id: "a",
-          type: "roadworks",
-          headline: "Roadworks",
-          roads: [{ name: "A3" }],
-          geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        }),
+        ev({ id: "a", ...works, headline: text("Roadworks"), roads: [{ ref: "A3" }] }),
         ev({
           id: "b",
-          type: "roadworks",
-          headline: "Roadworks",
-          roads: [{ name: "A44" }],
+          ...works,
+          headline: text("Roadworks"),
+          roads: [{ name: text("A44") }],
           geometry: { type: "Point", coordinates: [13.4001, 52.5] },
         }),
       ]);
       expect(out).toHaveLength(2);
     });
 
-    it("still merges co-located same-type events that share a road name", () => {
+    it("still merges co-located same-type situations that share a road ref or name", () => {
       const out = dedupeRoadConditionEvents([
-        ev({
-          id: "a",
-          type: "roadworks",
-          headline: "Roadworks",
-          roads: [{ name: "A3" }],
-          dataUpdatedAt: "2026-06-01T00:00:00Z",
-          geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        }),
+        ev({ id: "a", ...works, headline: text("Roadworks"), roads: [{ ref: "A 3" }] }),
         ev({
           id: "b",
-          type: "roadworks",
-          headline: "Roadworks",
-          roads: [{ name: "A3", direction: "north" }],
-          dataUpdatedAt: "2026-06-02T00:00:00Z",
+          ...works,
+          headline: text("Roadworks"),
+          roads: [{ name: [{ lang: "de", text: "A3" }] }],
           geometry: { type: "Point", coordinates: [13.4001, 52.5] },
         }),
       ]);
       expect(out).toHaveLength(1);
     });
 
-    it("still merges when one or both events carry no road ref (NDW fallback)", () => {
+    it("still merges when one situation carries no road (NDW fallback)", () => {
       const out = dedupeRoadConditionEvents([
-        ev({
-          id: "a",
-          type: "lane_closure",
-          headline: "Lane closure",
-          geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        }),
+        ev({ id: "a", ...works, headline: text("Roadworks") }),
         ev({
           id: "b",
-          type: "lane_closure",
-          headline: "Lane closure",
-          roads: [{ name: "A3" }],
+          ...works,
+          headline: text("Roadworks"),
+          roads: [{ ref: "A3" }],
           geometry: { type: "Point", coordinates: [13.4001, 52.5] },
         }),
       ]);
       expect(out).toHaveLength(1);
     });
   });
-});
 
-it("retains each original licence when compatible cross-source reports merge", () => {
-  const base = {
-    type: "road_closure" as const,
-    severity: "high" as const,
-    geometry: { type: "Point" as const, coordinates: [13, 52] },
-    headline: "Closed road A1",
-    provider: "oc",
-  };
-  const out = dedupeRoadConditionEvents([
-    { ...base, id: "a", source: "a", attribution: { provider: "A", license: "CC0" } },
-    { ...base, id: "b", source: "b", attribution: { provider: "B", license: "CC-BY-4.0" } },
-  ]);
-  expect(out).toHaveLength(1);
-  expect(out[0]!.sourceRecords?.map((e) => e.attribution?.license)).toEqual(["CC0", "CC-BY-4.0"]);
-});
+  describe("semantic guard", () => {
+    const closure = { kind: "closure", type: "closure", headline: text("Closed road A1") };
 
-it("never merges opposite directions or different vehicle/validity restrictions", () => {
-  const base = {
-    type: "road_closure" as const,
-    severity: "high" as const,
-    geometry: { type: "Point" as const, coordinates: [13, 52] },
-    headline: "Closed road A1",
-    provider: "oc",
-  };
-  const out = dedupeRoadConditionEvents([
-    { ...base, id: "a", source: "a", vehiclesAffected: ["truck"] },
-    { ...base, id: "b", source: "b", vehiclesAffected: ["car"] },
-  ]);
-  expect(out).toHaveLength(2);
+    it("merges copies whose effects differ only in ids and source references", () => {
+      const out = dedupeRoadConditionEvents([
+        ev({ id: "a", ...closure, effects: [effect("a/1", "closure", { sourceRecordRef: "x" })] }),
+        ev({ id: "b", ...closure, effects: [effect("b/7", "closure")] }),
+      ]);
+      expect(out).toHaveLength(1);
+    });
+
+    it("never merges different directions, validity or effect rules", () => {
+      const pairs: Array<[Partial<RoadConditionEvent>, Partial<RoadConditionEvent>]> = [
+        [{ direction: { value: "positive" } }, { direction: { value: "negative" } }],
+        [
+          { validity: { status: "active", end: "2026-10-01T00:00:00Z" } },
+          { validity: { status: "active", end: "2026-10-02T00:00:00Z" } },
+        ],
+        [
+          { effects: [effect("1", "closure", { scope: "road" })] },
+          { effects: [effect("1", "closure", { scope: "ramp" })] },
+        ],
+        [
+          {
+            effects: [
+              effect("1", "closure", {
+                applicability: { kind: "classes", include: [{ class: "truck" }] },
+              }),
+            ],
+          },
+          {
+            effects: [
+              effect("1", "closure", {
+                applicability: { kind: "classes", include: [{ class: "car" }] },
+              }),
+            ],
+          },
+        ],
+      ];
+      for (const [a, b] of pairs) {
+        const out = dedupeRoadConditionEvents([
+          ev({ id: "a", source: "a", ...closure, ...a }),
+          ev({ id: "b", source: "b", ...closure, ...b }),
+        ]);
+        expect(out).toHaveLength(2);
+      }
+    });
+
+    it("never merges a situation carrying restriction evidence", () => {
+      const partial = [effect("1", "closure", { normalization: "partial" })];
+      const out = dedupeRoadConditionEvents([
+        ev({ id: "a", source: "a", ...closure, effects: partial }),
+        ev({ id: "b", source: "b", ...closure, effects: partial }),
+      ]);
+      expect(out).toHaveLength(2);
+    });
+  });
 });

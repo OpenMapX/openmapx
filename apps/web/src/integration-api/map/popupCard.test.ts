@@ -14,7 +14,7 @@ describe("buildPopupCard", () => {
     const html = buildPopupCard(spec, {
       headline: "Lane closure on A2",
       type: "accident",
-      severity: "high",
+      severity: "major",
     });
     expect(html).toContain("Lane closure on A2");
     expect(html).toContain("accident");
@@ -58,22 +58,22 @@ describe("buildPopupCard", () => {
   it("renders a colored, humanized severity badge from severityField", () => {
     const html = buildPopupCard(
       { titleField: "h", severityField: "severity", rows: [] },
-      { h: "T", severity: "high" },
+      { h: "T", severity: "major" },
     );
     expect(html).toContain("omx-overlay-popup__badge");
-    expect(html).toContain("High");
-    expect(html).toContain("#cc0033"); // high severity color, inlined
+    expect(html).toContain("Major");
+    expect(html).toContain("#cc0033"); // major severity color, inlined
   });
 
   it("uses a configured localized label for the severity badge", () => {
     const html = buildPopupCard(
       { titleField: "h", severityField: "severity", severityLabelField: "severityText", rows: [] },
-      { h: "T", severity: "medium", severityText: "Mittel" },
+      { h: "T", severity: "moderate", severityText: "Mittel" },
     );
 
     expect(html).toContain("Mittel");
-    expect(html).not.toContain(">Medium<");
-    expect(html).toContain("#ff9933"); // medium severity color still uses the raw value
+    expect(html).not.toContain(">Moderate<");
+    expect(html).toContain("#ff9933"); // moderate severity color still uses the raw value
   });
 
   it("omits the severity badge when severity is unknown or empty", () => {

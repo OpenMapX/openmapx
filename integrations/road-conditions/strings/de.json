@@ -8,9 +8,9 @@
     "validTo": "Bis",
     "via": "Quelle",
     "severity": {
-      "low": "Niedrig",
-      "medium": "Mittel",
-      "high": "Hoch",
+      "minor": "Gering",
+      "moderate": "Mittel",
+      "major": "Hoch",
       "critical": "Kritisch",
       "unknown": "Unbekannt"
     }

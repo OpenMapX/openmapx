@@ -2,12 +2,12 @@
 
 import {
   type RoadConditionEvent,
-  readRoadRestrictionDetails,
+  roadConditionFeatureToEvent,
   useOverlayExclusion,
 } from "@openmapx/core";
 import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -22,20 +22,11 @@ import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIn
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
-import {
-  buildRoadConditionDisplayGroups,
-  buildRoadConditionDisplayLines,
-  type RoadConditionDisplayGroup,
-} from "./display";
-import { isUnconfirmedCrowd } from "./evidence";
-import { markerImageData, markerImageId, parseMarkerImageId } from "./markers";
-import {
-  buildRoadConditionPopupHtml,
-  ROAD_CONDITION_SEVERITY_RANK as SEVERITY_RANK,
-} from "./popup";
-import { hasRestrictionView, restrictionRefreshDeadline } from "./restriction-freshness";
-import { isConditionalRoadState } from "./restrictions";
+import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
+import { markerImageData, parseMarkerImageId } from "./markers";
+import { buildRoadConditionPopupHtml } from "./popup";
 import { RouteConditionsLayer } from "./route-layer";
+import { SEVERITY_LINE_COLOR } from "./severity";
 // The named import also runs the module side-effect that registers the
 // "road-conditions" overlay store (shared by the layer selector + legend).
 import { horizonDaysParam, useRoadConditionsStore } from "./store";
@@ -45,7 +36,6 @@ import {
   type ViewportFetchScheduler,
 } from "./viewport-scheduler";
 import {
-  isFutureRoadCondition,
   ROAD_CONDITION_LINE_DASHARRAY,
   ROAD_CONDITION_LINE_OPACITY,
   ROAD_CONDITION_MARKER_OPACITY,
@@ -68,11 +58,11 @@ const MARKER_LAYER = "omx-road-conditions-markers";
 
 /**
  * The server's own `/events` cache TTL (`index.ts` caches the aggregation for
- * 90s and sends `Cache-Control: max-age=90`) — refetching sooner than this
- * with no viewport change would only replay the same cached response, so 90s
+ * 60s and sends `Cache-Control: max-age=60`) — refetching sooner than this
+ * with no viewport change would only replay the same cached response, so 60s
  * is the shortest interval that can actually return newer data while parked.
  */
-const VIEWPORT_FRESHNESS_DEADLINE_MS = 90_000;
+const VIEWPORT_FRESHNESS_DEADLINE_MS = 60_000;
 
 /**
  * Slack added on every side of the last-fetched viewport, as a fraction of
@@ -95,35 +85,8 @@ function boundsToViewportBox(map: maplibregl.Map | null): ViewportBox {
   };
 }
 
-/** Affected-segment line color by severity (matches the marker disc ramp). */
-const SEVERITY_LINE_COLOR: maplibregl.ExpressionSpecification = [
-  "match",
-  ["get", "severity"],
-  "critical",
-  "#7e0023",
-  "high",
-  "#cc0033",
-  "medium",
-  "#ff9933",
-  "low",
-  "#ffde33",
-  "#8a8a8a",
-];
-
-/** Collapse the attribution object into a single credit string for the popup. */
-function attributionString(raw: unknown): string {
-  if (typeof raw === "string") return raw;
-  if (raw && typeof raw === "object") {
-    const o = raw as Record<string, unknown>;
-    const provider = typeof o.provider === "string" ? o.provider : "";
-    const license = typeof o.license === "string" ? o.license : "";
-    return provider && license ? `${provider} · ${license}` : provider || license;
-  }
-  return "";
-}
-
 export interface RawFeature {
-  geometry?: { type: string; coordinates: unknown } | null;
+  geometry?: RoadConditionEvent["geometry"] | null;
   properties?: Record<string, unknown> | null;
 }
 
@@ -133,205 +96,32 @@ export interface RoadConditionDisplaySources {
   eventsByDisplayId: Map<string, RoadConditionEvent[]>;
 }
 
-function rawFeatureToEvent(feature: RawFeature): RoadConditionEvent | null {
-  const properties = feature.properties ?? {};
-  if (!feature.geometry) return null;
-
-  const headline = String(properties.headline ?? "");
-  const id = String(properties.id ?? headline);
-  if (!id) return null;
-
-  const event: RoadConditionEvent = {
-    id,
-    source: String(properties.source ?? "unknown"),
-    provider: String(properties.provider ?? "unknown"),
-    type: String(properties.type ?? "other") as RoadConditionEvent["type"],
-    severity: String(properties.severity ?? "unknown") as RoadConditionEvent["severity"],
-    geometry: feature.geometry as RoadConditionEvent["geometry"],
-    headline,
-  };
-
-  if (typeof properties.groupId === "string" && properties.groupId.length > 0) {
-    event.groupId = properties.groupId;
-  }
-  if (typeof properties.description === "string") event.description = properties.description;
-  if (typeof properties.delaySeconds === "number") event.delaySeconds = properties.delaySeconds;
-  if (typeof properties.roadState === "string") {
-    event.roadState = properties.roadState as RoadConditionEvent["roadState"];
-  }
-  if (Array.isArray(properties.roads)) {
-    event.roads = properties.roads as RoadConditionEvent["roads"];
-  }
-  if (typeof properties.validFrom === "string") event.validFrom = properties.validFrom;
-  if (typeof properties.validTo === "string") event.validTo = properties.validTo;
-  if (Array.isArray(properties.schedule)) {
-    event.schedule = properties.schedule as RoadConditionEvent["schedule"];
-  }
-  if (properties.attribution && typeof properties.attribution === "object") {
-    event.attribution = properties.attribution as RoadConditionEvent["attribution"];
-  }
-  if (properties.originKind === "feed" || properties.originKind === "crowd") {
-    event.originKind = properties.originKind;
-  }
-  if (typeof properties.evidenceState === "string") {
-    event.evidenceState = properties.evidenceState;
-  }
-  if (typeof properties.routingEligible === "boolean") {
-    event.routingEligible = properties.routingEligible;
-  }
-  if (typeof properties.confidenceScore === "number") {
-    event.confidenceScore = properties.confidenceScore;
-  }
-  if (Array.isArray(properties.sourceRecords))
-    event.sourceRecords = properties.sourceRecords as RoadConditionEvent[];
-  if (typeof properties.dataUpdatedAt === "string") event.dataUpdatedAt = properties.dataUpdatedAt;
-  if (typeof properties.expiresAt === "string") event.expiresAt = properties.expiresAt;
-  if (typeof properties.isStale === "boolean") event.isStale = properties.isStale;
-  if (Array.isArray(properties.vehiclesAffected))
-    event.vehiclesAffected = properties.vehiclesAffected.filter(
-      (value): value is string => typeof value === "string",
-    );
-  if (properties.binding && typeof properties.binding === "object")
-    event.binding = properties.binding as RoadConditionEvent["binding"];
-  if (properties.routingEvidence && typeof properties.routingEvidence === "object")
-    event.routingEvidence = properties.routingEvidence as RoadConditionEvent["routingEvidence"];
-  if (typeof properties.isForecast === "boolean") event.isForecast = properties.isForecast;
-  if (typeof properties.isPlanned === "boolean") event.isPlanned = properties.isPlanned;
-  if (typeof properties.subtype === "string" && properties.subtype.length > 0)
-    event.subtype = properties.subtype;
-  // This layer fetches GeoJSON directly and bypasses the core client, so it
-  // needs the same validation rather than a looser cast.
-  Object.assign(event, readRoadRestrictionDetails(properties));
-
-  return event;
-}
-
-function mostSevereEvent(events: RoadConditionEvent[]): RoadConditionEvent {
-  const [first, ...rest] = events;
-  if (!first) throw new Error("Cannot select severity from an empty road-condition group");
-  return rest.reduce((best, event) => {
-    const bestRank = SEVERITY_RANK[best.severity] ?? 0;
-    const eventRank = SEVERITY_RANK[event.severity] ?? 0;
-    return eventRank > bestRank ? event : best;
-  }, first);
-}
-
-function roadNames(event: RoadConditionEvent): string | undefined {
-  const names = (event.roads ?? [])
-    .map((road) => {
-      const raw = road as unknown as { name?: unknown; ref?: unknown };
-      return String(raw.ref ?? raw.name ?? "").trim();
-    })
-    .filter(Boolean);
-  return names.length > 0 ? [...new Set(names)].join(", ") : undefined;
-}
-
-function markerProperties(
-  group: RoadConditionDisplayGroup,
-  event: RoadConditionEvent,
-): Record<string, unknown> {
-  const future = group.events.every(isFutureRoadCondition);
-  const properties: Record<string, unknown> = {
-    headline: event.headline,
-    type: event.type,
-    severity: event.severity,
-    attribution: attributionString(event.attribution),
-    _icon: markerImageId(
-      isConditionalRoadState(event) ? "restriction" : event.type,
-      event.severity,
-    ),
-    // Keep the canonical id for compatibility with existing ungrouped marker
-    // consumers; `_displayId` is the presentation identity used for grouping.
-    _id: group.events.length === 1 ? event.id : group.displayId,
-    _displayId: group.displayId,
-    _sev: SEVERITY_RANK[event.severity] ?? 0,
-    _unconfirmed: group.events.some((item) =>
-      isUnconfirmedCrowd({
-        originKind: item.originKind ?? null,
-        evidenceState: item.evidenceState ?? null,
-      }),
-    ),
-    future,
-  };
-  if (event.roadState) properties.roadState = event.roadState;
-  // A vehicle-conditioned closure must not render as an unconditional one. The
-  // marker carries the restriction flag; the source's own headline is kept and
-  // the qualification is added in the popup.
-  if (group.events.some(isConditionalRoadState)) properties._restricted = true;
-  if (event.restrictionDetails !== undefined || event.restrictionDetailsUnsupported === true) {
-    properties.restrictionDetails = event.restrictionDetails ?? null;
-    if (event.restrictionDetailsUnsupported === true) {
-      properties.restrictionDetailsUnsupported = true;
-    }
-  }
-  if (event.validFrom) properties.validFrom = event.validFrom;
-  if (event.validTo) properties.validTo = event.validTo;
-  if (event.schedule && event.schedule.length > 0) {
-    properties.schedule = JSON.stringify(event.schedule);
-  }
-  if (event.description) properties.description = event.description;
-  if (typeof event.delaySeconds === "number") properties.delaySeconds = event.delaySeconds;
-  const roads = roadNames(event);
-  if (roads) properties.roads = roads;
-  return properties;
-}
-
 /**
  * Build the marker + line source data from the raw /events FeatureCollection:
  * one marker per display group (or every real endpoint where a group has no
  * line), and one visual line feature per unique rendered component set. Exact
  * overlaps can represent multiple display groups; child event records stay in
  * an in-memory lookup for popup resolution, and full child payloads are never
- * placed in MapLibre feature properties.
+ * placed in MapLibre feature properties. This layer fetches GeoJSON directly,
+ * so it reads each feature through the same validating reader the core
+ * client uses.
  */
-export function buildSources(features: RawFeature[]): RoadConditionDisplaySources {
-  const markerFeatures: unknown[] = [];
+export function buildSources(
+  features: RawFeature[],
+  locale = "en",
+  atMs: number = Date.now(),
+): RoadConditionDisplaySources {
   const events = features
-    .map(rawFeatureToEvent)
+    .map(roadConditionFeatureToEvent)
     .filter((event): event is RoadConditionEvent => event !== null);
   const groups = buildRoadConditionDisplayGroups(events);
   const eventsByDisplayId = new Map(
     groups.map((group) => [group.displayId, group.events] as const),
   );
-
-  for (const group of groups) {
-    const event = mostSevereEvent(group.events);
-    const properties = markerProperties(group, event);
-    for (const point of group.markerCoordinates) {
-      markerFeatures.push({
-        type: "Feature",
-        geometry: { type: "Point", coordinates: point },
-        properties,
-      });
-    }
-  }
-
-  const lineFeatures = buildRoadConditionDisplayLines(groups).flatMap((line) => {
-    const lineEvents = line.displayIds.flatMap(
-      (displayId) => eventsByDisplayId.get(displayId) ?? [],
-    );
-    if (lineEvents.length === 0) return [];
-    const event = mostSevereEvent(lineEvents);
-    return [
-      {
-        type: "Feature",
-        geometry: line.geometry,
-        properties: {
-          severity: event.severity,
-          future: lineEvents.every(isFutureRoadCondition),
-          // Keep `_displayId` for single-group consumers; `_displayIds` carries
-          // every group represented by an exact-overlap visual line.
-          _displayId: line.displayIds[0],
-          _displayIds: line.displayIds,
-        },
-      },
-    ];
-  });
-
   return {
     data: {
       type: "FeatureCollection",
-      features: [...markerFeatures, ...lineFeatures],
+      features: buildRoadConditionFeatures(groups, locale, atMs),
     } as GeoJsonData,
     eventsByDisplayId,
   };
@@ -383,9 +173,14 @@ export function RoadConditionsLayer() {
   useEffect(() => {
     tRef.current = t;
   }, [t]);
+  const locale = useLocale();
+  const localeRef = useRef(locale);
+  useEffect(() => {
+    localeRef.current = locale;
+  }, [locale]);
   // Legend filter state — threaded into the events query so filtering runs
   // server-side across every provider, not as client-side hiding.
-  const filterTypes = useRoadConditionsStore((s) => s.types);
+  const filterKinds = useRoadConditionsStore((s) => s.kinds);
   const minSeverity = useRoadConditionsStore((s) => s.minSeverity);
   const horizon = useRoadConditionsStore((s) => s.horizon);
   const setViewportFetchStatus = useRoadConditionsStore((s) => s.setViewportFetchStatus);
@@ -401,6 +196,7 @@ export function RoadConditionsLayer() {
         formatDateTime: dtfRef.current.dateTime,
         formatDate: dtfRef.current.date,
         translate: (key, values) => tRef.current(key, values),
+        locale: localeRef.current,
         atMs: Date.now(),
         needsRefresh,
         requireCurrentEvents: true,
@@ -439,7 +235,7 @@ export function RoadConditionsLayer() {
     const params = new URLSearchParams({
       bbox: `${b.getWest()},${b.getSouth()},${b.getEast()},${b.getNorth()}`,
     });
-    if (filterTypes.length > 0) params.set("types", filterTypes.join(","));
+    if (filterKinds.length > 0) params.set("kinds", filterKinds.join(","));
     if (minSeverity !== "all") params.set("minSeverity", minSeverity);
     const horizonDays = horizonDaysParam(horizon);
     if (horizonDays !== undefined) params.set("horizonDays", horizonDays);
@@ -451,30 +247,14 @@ export function RoadConditionsLayer() {
       if (!request.isCurrent()) return;
       const { data, eventsByDisplayId } = buildSources(
         Array.isArray(fc.features) ? fc.features : [],
+        localeRef.current,
       );
       eventsByDisplayIdRef.current = eventsByDisplayId;
       viewNeedsRefreshRef.current = false;
       refreshPopup(false);
       publishGeoJson([{ sourceId: SOURCE, data }]);
       hasViewportDataRef.current = true;
-      // Expire the displayed evaluation at the producer's own deadline, but
-      // only when something visible actually carries one — a response with no
-      // restriction view keeps the layer's normal refresh interval. A deadline
-      // that has already passed means the response arrived unusable, so the
-      // view is labelled stale rather than claiming to be current, and no
-      // immediate-refresh loop is started.
-      const events = [...eventsByDisplayId.values()].flat();
-      if (hasRestrictionView(events)) {
-        const due = restrictionRefreshDeadline(events, Date.now());
-        if (due > Date.now()) {
-          schedulerRef.current?.setFreshnessDeadline(due);
-          setViewportFetchStatus("ready");
-        } else {
-          setViewportFetchStatus("stale");
-        }
-      } else {
-        setViewportFetchStatus("ready");
-      }
+      setViewportFetchStatus("ready");
     } catch {
       if (!request.isCurrent()) return;
       // Keep the last good source data visible while making the degraded state
@@ -487,7 +267,7 @@ export function RoadConditionsLayer() {
     apiUrl,
     beginRequest,
     mapRef,
-    filterTypes,
+    filterKinds,
     minSeverity,
     horizon,
     minZoom,
@@ -496,7 +276,7 @@ export function RoadConditionsLayer() {
     setViewportFetchStatus,
   ]);
 
-  // Bake a disc+glyph marker image on demand for each (type, severity) the
+  // Bake a disc+glyph marker image on demand for each (glyph, severity) the
   // symbol layer requests. MapLibre v6 awaits this resolver before declaring
   // an image missing; the later `styleimagemissing` event can no longer supply
   // the requested image. The map carries the resolver across style rebuilds.
@@ -507,7 +287,7 @@ export function RoadConditionsLayer() {
       if (map.hasImage(id)) return;
       const parsed = parseMarkerImageId(id);
       if (!parsed) return;
-      const data = markerImageData(parsed.type, parsed.severity);
+      const data = markerImageData(parsed.glyph, parsed.severity);
       if (data && !map.hasImage(id)) map.addImage(id, data, { pixelRatio: 2 });
     };
     map.setMissingStyleImageResolver(resolveMissingImage);
@@ -720,6 +500,7 @@ export function RoadConditionsLayer() {
           formatDateTime: dtfRef.current.dateTime,
           formatDate: dtfRef.current.date,
           translate: (key, values) => tRef.current(key, values),
+          locale: localeRef.current,
         });
         if (content.groupCount === 0) return;
         const popup = new maplibregl.Popup({

@@ -1,6 +1,9 @@
 import {
+  closesRoadForCars,
   getRoadConditionRoutingDecision,
-  hasRoadRestrictionEvidence,
+  isRestrictionEvidence,
+  isVehicleSpecific,
+  type RoadConditionEffect,
   type RoadConditionEvent,
   type RoadConditionRouteImpact,
   type TravelMode,
@@ -60,19 +63,26 @@ export interface RoadConditionRouteDecision {
   validUntil: string | null;
 }
 
-/** Pure route-side interpretation of one event; implemented through its contract tests. */
+/**
+ * Pure route-side interpretation of one effect of a situation; implemented
+ * through its contract tests.
+ */
 export function assessRoadConditionForRoute(
   event: RoadConditionEvent,
+  effect: RoadConditionEffect,
   context: RoadConditionRouteContext,
 ): RoadConditionRouteDecision {
   // Restriction evidence outranks every other disposition, including the
   // legacy-geometry path, which would otherwise let a vehicle-conditioned
-  // record steer a route without any routing evidence at all.
-  if (hasRoadRestrictionEvidence(event)) {
+  // rule steer a route without any routing evidence at all. A rule naming
+  // cars outright still closes the road for them, so it keeps its geometry.
+  if (isRestrictionEvidence(effect) || (isVehicleSpecific(effect) && !closesRoadForCars(effect))) {
     return { disposition: "ignore", reasons: ["vehicle_specific_restriction"], validUntil: null };
   }
-  if (!event.routingEvidence) {
-    if (event.binding || !context.allowLegacyGeometry) {
+  if (!event.routingEvidence?.[effect.id]) {
+    // A provider that publishes evidence for some effects declares the others
+    // unbound: their raw geometry must not stand in for a graph binding.
+    if (event.routingEvidence || !context.allowLegacyGeometry) {
       return { disposition: "ignore", reasons: ["missing_routing_evidence"], validUntil: null };
     }
     return {
@@ -82,7 +92,7 @@ export function assessRoadConditionForRoute(
     };
   }
 
-  const eligibility = getRoadConditionRoutingDecision(event, {
+  const eligibility = getRoadConditionRoutingDecision(event, effect, {
     evaluatedAt: context.evaluatedAt,
     travelAt: context.travelAt,
     disallowedSources: context.disallowedSources,

@@ -1,9 +1,19 @@
-import { getRoadConditionRoutingDecision, type TrafficApplicationReceipt } from "@openmapx/core";
-import type { BoundCondition, EdgeOverride } from "./conditions-to-edges.js";
+import { closesRoadForCars, type TrafficApplicationReceipt } from "@openmapx/core";
+import {
+  type BoundCondition,
+  conditionRoutingDecision,
+  type EdgeOverride,
+} from "./conditions-to-edges.js";
 import type { WayEdge } from "./ways-to-edges.js";
 
 export type { TrafficApplicationReceipt, TrafficApplicationSnapshot } from "@openmapx/core";
 
+/**
+ * One receipt per applied effect: `observationId` is the condition id
+ * (`<recordId>#<effectId>`) and `observationRevision` the record revision the
+ * binding resolved, so a router can match it to exactly one effect of exactly
+ * one situation revision.
+ */
 export function buildTrafficReceipts(options: {
   conditions: BoundCondition[];
   overrides: Map<string, EdgeOverride & { edge: WayEdge }>;
@@ -23,16 +33,8 @@ export function buildTrafficReceipts(options: {
   const applied = new Set(options.appliedObservationIds);
   return options.conditions.flatMap((c) => {
     const e = c.routingEvidence;
-    const decision = getRoadConditionRoutingDecision(
-      {
-        source: c.source ?? "",
-        routingEvidence: e,
-        originKind: c.originKind === "feed" ? "feed" : "crowd",
-        routingEligible: c.routingEligible,
-      },
-      { evaluatedAt: now },
-    );
-    if (!e || !applied.has(c.id) || !decision.eligible || !decision.validUntil) return [];
+    const decision = conditionRoutingDecision(c, { evaluatedAt: now });
+    if (!applied.has(c.id) || !decision.eligible || !decision.validUntil) return [];
     const edges = [...options.overrides.entries()].filter(([, o]) =>
       (o.contributorIds ?? [o.observationId]).includes(c.id),
     );
@@ -40,8 +42,8 @@ export function buildTrafficReceipts(options: {
     return [
       {
         observationId: c.id,
-        observationRevision: e.observation_revision,
-        sourceId: c.source ?? e.source_id,
+        observationRevision: String(e.record_revision),
+        sourceId: c.source,
         graphGeneration: options.graphGeneration,
         sourceGraphGeneration: e.graph_generation,
         policyRevision: options.policyRevision,
@@ -49,10 +51,7 @@ export function buildTrafficReceipts(options: {
           Math.min(Date.parse(options.validUntil), Date.parse(decision.validUntil)),
         ).toISOString(),
         complete: true as const,
-        effect:
-          c.speedLimitKph != null && c.roadState !== "closed" && c.type !== "road_closure"
-            ? ("speed_cap" as const)
-            : ("closure" as const),
+        effect: closesRoadForCars(c.effect) ? ("closure" as const) : ("speed_cap" as const),
         intendedSpans: e.segments,
         edgeKeys: edges.map(([key]) => key).sort(),
         sourceLicense: e.source_license,

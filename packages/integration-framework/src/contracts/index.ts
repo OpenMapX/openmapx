@@ -96,18 +96,19 @@ export type {
   RideUnavailableReason,
 } from "./ride-provider.js";
 export type {
+  LocalizedText,
   RoadConditionAttribution,
+  RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,
   RoadConditionSchedule,
-  RoadConditionSeverity,
+  RoadConditionSeverityLabel,
   RoadConditionsOperationalEvidence,
   RoadConditionsProvider,
   RoadConditionsQuery,
-  RoadConditionType,
+  RoadConditionValidity,
   RoadFlowQuery,
   RoadFlowSegment,
-  RoadState,
 } from "./road-conditions-provider.js";
 export { RoutingProviderError } from "./routing-provider";
 export type {

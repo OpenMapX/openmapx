@@ -1,6 +1,18 @@
 import type { RoadConditionEvent, RoadConditionRoutingEvidence } from "../types/roadConditions";
-import { isRoutingRelevantBinding } from "./edgeClosure";
-import { hasRoadRestrictionEvidence } from "./roadRestrictionDetails";
+import {
+  effectValidity,
+  isRestrictionEvidence,
+  isVehicleSpecific,
+  type RoadConditionEffect,
+} from "./roadConditionEffects";
+
+/**
+ * Only these binding statuses may influence routing. The emitter also publishes
+ * `ambiguous`, which is fine for display but must never move an edge.
+ */
+export function isRoutingRelevantBinding(status: string | undefined): boolean {
+  return status === "exact" || status === "likely";
+}
 
 /** Validate untrusted JSON before it can replace an accepted snapshot. */
 export function isRoadConditionRoutingEvidence(
@@ -11,11 +23,15 @@ export function isRoadConditionRoutingEvidence(
   const string = (v: unknown) => typeof v === "string" && v.length <= 8192;
   const nullable = (v: unknown) => v === null || string(v);
   const strings = (v: unknown) => Array.isArray(v) && v.length <= 10000 && v.every(string);
-  if (!object(value) || value.schema_version !== 1) return false;
+  const revision = (v: unknown) => typeof v === "number" && Number.isInteger(v) && v > 0;
+  if (!object(value) || value.schema_version !== 2 || value.record_class !== "situation") {
+    return false;
+  }
   if (
     ![
-      "observation_revision",
-      "binding_revision",
+      "record_id",
+      "effect_id",
+      "effect_kind",
       "graph_generation",
       "resolver_version",
       "source_id",
@@ -26,6 +42,7 @@ export function isRoadConditionRoutingEvidence(
     ].every((k) => string(value[k]))
   )
     return false;
+  if (!revision(value.record_revision) || !revision(value.binding_revision)) return false;
   if (
     ![
       "child_source_id",
@@ -67,7 +84,6 @@ export function isRoadConditionRoutingEvidence(
   if (
     !object(a) ||
     !["all", "classes", "unknown"].includes(a.kind as string) ||
-    (a.classes !== undefined && !strings(a.classes)) ||
     (a.raw !== undefined && !strings(a.raw))
   )
     return false;
@@ -105,19 +121,23 @@ export function isRoadConditionRoutingEvidence(
   );
 }
 
-/** Eligibility is evidence, not proof that a particular engine applied the effect. */
+/** Whether a situation's origin may route: a feed outright, a crowd report once corroborated. */
+function originRoutes(event: Pick<RoadConditionEvent, "origin" | "evidence">): boolean {
+  if (event.origin === "feed" || event.origin === "derived") return true;
+  return event.evidence?.routingEligible === true;
+}
+
+/**
+ * Whether one effect of a situation may shape shared routing at `travelAt`,
+ * and until when that answer holds. Eligibility is evidence, not proof that a
+ * particular engine applied the effect.
+ */
 export function getRoadConditionRoutingDecision(
   event: Pick<
     RoadConditionEvent,
-    | "source"
-    | "routingEvidence"
-    | "originKind"
-    | "routingEligible"
-    | "isStale"
-    | "schedule"
-    | "restrictionDetails"
-    | "restrictionDetailsUnsupported"
+    "id" | "source" | "validity" | "origin" | "evidence" | "routingEvidence"
   >,
+  effect: RoadConditionEffect,
   options: {
     evaluatedAt?: number;
     travelAt?: number;
@@ -128,14 +148,18 @@ export function getRoadConditionRoutingDecision(
   const now = options.evaluatedAt ?? Date.now();
   const travel = options.travelAt ?? now;
   // Checked before any evidence branch: a vehicle-specific or uninterpretable
-  // restriction must never reach shared routing, whatever the rest of the
-  // record claims. A legacy applicability of "all traffic" cannot override it.
-  if (hasRoadRestrictionEvidence(event))
+  // rule must never reach shared routing, whatever the evidence claims.
+  if (isRestrictionEvidence(effect) || isVehicleSpecific(effect))
     return { eligible: false, reasons: ["vehicle_specific_restriction"], validUntil: null };
-  const e = event.routingEvidence;
-  if (!e || e.schema_version !== 1)
+  const e = event.routingEvidence?.[effect.id];
+  if (!e || e.schema_version !== 2)
     return { eligible: false, reasons: ["missing_routing_evidence"], validUntil: null };
-  if (!isRoadConditionRoutingEvidence(e))
+  if (
+    !isRoadConditionRoutingEvidence(e) ||
+    e.record_id !== event.id ||
+    e.effect_id !== effect.id ||
+    e.effect_kind !== effect.kind
+  )
     return { eligible: false, reasons: ["invalid_routing_evidence"], validUntil: null };
   const reasons: string[] = [];
   const deadlines: number[] = [];
@@ -158,18 +182,9 @@ export function getRoadConditionRoutingDecision(
     reasons.push("source_excluded");
   if (!e.source_id || !e.source_license || event.source !== (e.child_source_id ?? e.source_id))
     reasons.push("invalid_source_identity");
-  if (
-    event.originKind !== "feed" &&
-    !(event.originKind === "crowd" && event.routingEligible === true)
-  )
-    reasons.push("unconfirmed_origin");
+  if (!originRoutes(event)) reasons.push("unconfirmed_origin");
   if (!isRoutingRelevantBinding(e.binding_status)) reasons.push("binding_not_routable");
-  if (
-    !e.observation_revision ||
-    e.observation_revision !== e.binding_revision ||
-    !e.graph_generation ||
-    !e.resolver_version
-  )
+  if (e.record_revision !== e.binding_revision || !e.graph_generation || !e.resolver_version)
     reasons.push("obsolete_binding");
   if (!["forward", "reverse", "both"].includes(e.direction_mode)) reasons.push("unknown_direction");
   if (e.applicability?.kind !== "all") reasons.push("unsupported_vehicle_scope");
@@ -193,13 +208,15 @@ export function getRoadConditionRoutingDecision(
   const end = parseTime(e.valid_to);
   const transition = parseTime(e.next_transition_at);
   if (checked !== null && checked > now) reasons.push("invalid_time");
-  if (event.isStale || (fresh !== null && (fresh <= now || (checked !== null && fresh <= checked))))
+  if (fresh !== null && (fresh <= now || (checked !== null && fresh <= checked)))
     reasons.push("stale_source");
   if (expiry !== null && expiry <= now) reasons.push("expired_observation");
   if ((start !== null && travel < start) || (end !== null && travel >= end))
     reasons.push("outside_validity");
   if (start !== null && end !== null && start >= end) reasons.push("invalid_time");
-  if (event.schedule?.length && transition === null) reasons.push("unsupported_schedule");
+  const validity = effectValidity(event, effect);
+  if ((validity.periods?.length || validity.exceptions?.length) && transition === null)
+    reasons.push("unsupported_schedule");
   if (travel === now && transition !== null && transition <= now) reasons.push("expired_window");
   for (const d of [fresh, expiry, travel === now ? end : null, travel === now ? transition : null])
     if (d !== null) deadlines.push(d);

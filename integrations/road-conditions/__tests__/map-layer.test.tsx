@@ -1,5 +1,3 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
@@ -56,7 +54,9 @@ vi.mock("maplibre-gl", () => ({
 }));
 
 import type { RoadConditionEvent } from "@openmapx/core";
+import { eventsToFeatureCollection } from "../eventsToGeojson";
 import { buildRoadConditionPopupGroups, buildSources, RoadConditionsLayer } from "../map-layer";
+import { effect, situation, text } from "./fixtures";
 
 const SOURCE = "omx-road-conditions";
 const MARKER_LAYER = "omx-road-conditions-markers";
@@ -66,6 +66,18 @@ const fetchMock = vi.fn();
 
 function inDays(d: number): string {
   return new Date(Date.now() + d * 86_400_000).toISOString();
+}
+
+/** Serialized properties of a minor live roadworks situation; `over` replaces any field. */
+function props(over: Partial<RoadConditionEvent> = {}): Record<string, unknown> {
+  const { geometry: _geometry, ...properties } = situation({
+    kind: "roadworks",
+    type: "works",
+    severity: { label: "minor" },
+    headline: text("Road works"),
+    ...over,
+  });
+  return properties;
 }
 
 function respondWith(features: unknown[]) {
@@ -133,7 +145,7 @@ describe("RoadConditionsLayer horizon query", () => {
             [13.41, 52.51],
           ],
         },
-        properties: { id: "early", type: "roadworks", severity: "low" },
+        properties: props({ id: "early" }),
       },
     ]);
 
@@ -192,7 +204,7 @@ describe("RoadConditionsLayer horizon query", () => {
         features: [
           {
             geometry: { type: "Point", coordinates: [13.42, 52.52] },
-            properties: { id: "new", type: "roadworks", severity: "low" },
+            properties: props({ id: "new" }),
           },
         ],
       }),
@@ -207,7 +219,7 @@ describe("RoadConditionsLayer horizon query", () => {
         features: [
           {
             geometry: { type: "Point", coordinates: [13.4, 52.5] },
-            properties: { id: "old", type: "roadworks", severity: "low" },
+            properties: props({ id: "old" }),
           },
         ],
       }),
@@ -220,7 +232,7 @@ describe("RoadConditionsLayer horizon query", () => {
     respondWith([
       {
         geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        properties: { id: "last-good", type: "roadworks", severity: "low" },
+        properties: props({ id: "last-good" }),
       },
     ]);
     render(<RoadConditionsLayer />);
@@ -239,29 +251,23 @@ describe("RoadConditionsLayer horizon query", () => {
 });
 
 describe("RoadConditionsLayer future styling", () => {
-  it("stamps a `future` flag from either isForecast or a future validFrom", async () => {
+  it("stamps a `future` flag from a scheduled or forecast situation or a future start", async () => {
     respondWith([
       {
         geometry: { type: "Point", coordinates: [13.4, 52.5] },
-        properties: { id: "flagged", type: "roadworks", severity: "low", isForecast: true },
+        properties: props({ id: "flagged", temporality: "forecast" }),
+      },
+      {
+        geometry: { type: "Point", coordinates: [13.405, 52.505] },
+        properties: props({ id: "scheduled", temporality: "scheduled" }),
       },
       {
         geometry: { type: "Point", coordinates: [13.41, 52.51] },
-        properties: {
-          id: "dated",
-          type: "roadworks",
-          severity: "low",
-          validFrom: inDays(3),
-        },
+        properties: props({ id: "dated", validity: { status: "planned", start: inDays(3) } }),
       },
       {
         geometry: { type: "Point", coordinates: [13.42, 52.52] },
-        properties: {
-          id: "current",
-          type: "roadworks",
-          severity: "low",
-          validFrom: inDays(-3),
-        },
+        properties: props({ id: "current", validity: { status: "active", start: inDays(-3) } }),
       },
     ]);
 
@@ -275,6 +281,7 @@ describe("RoadConditionsLayer future styling", () => {
       ]),
     );
     expect(byId.get("flagged")).toBe(true);
+    expect(byId.get("scheduled")).toBe(true);
     expect(byId.get("dated")).toBe(true);
     expect(byId.get("current")).toBe(false);
   });
@@ -289,7 +296,7 @@ describe("RoadConditionsLayer future styling", () => {
             [13.41, 52.51],
           ],
         },
-        properties: { id: "line", type: "roadworks", severity: "low", validFrom: inDays(3) },
+        properties: props({ id: "line", validity: { status: "planned", start: inDays(3) } }),
       },
     ]);
 
@@ -339,42 +346,36 @@ describe("road-condition display grouping", () => {
           type: "LineString",
           coordinates: itinerary.slice(0, 6),
         },
-        properties: {
+        properties: props({
           id: "oc:1",
           source: "duesseldorf",
-          provider: "road-conditions-openconditions",
           groupId: "works-42",
-          type: "roadworks",
-          severity: "medium",
-          headline: "Roadworks",
-        },
+          severity: { label: "moderate" },
+          headline: text("Roadworks"),
+        }),
       },
       {
         geometry: {
           type: "LineString",
           coordinates: itinerary.slice(5, 12),
         },
-        properties: {
+        properties: props({
           id: "oc:2",
           source: "duesseldorf",
-          provider: "road-conditions-openconditions",
           groupId: "works-42",
-          type: "roadworks",
-          severity: "high",
-          headline: "Lane closure",
-        },
+          severity: { label: "major" },
+          headline: text("Lane closure"),
+        }),
       },
       {
         geometry: { type: "LineString", coordinates: itinerary.slice(11) },
-        properties: {
+        properties: props({
           id: "oc:3",
           source: "duesseldorf",
-          provider: "road-conditions-openconditions",
           groupId: "works-42",
-          type: "roadworks",
-          severity: "medium",
-          headline: "Roadworks",
-        },
+          severity: { label: "moderate" },
+          headline: text("Roadworks"),
+        }),
       },
     ]);
 
@@ -402,7 +403,7 @@ describe("road-condition display grouping", () => {
     ]);
     expect(popupGroup?.summary).toMatchObject({
       headline: "Lane closure (3 related records)",
-      type: "roadworks",
+      classification: "roadworks.works",
       sourceRecordCount: 3,
     });
   });
@@ -418,27 +419,19 @@ describe("road-condition display grouping", () => {
     const { data, eventsByDisplayId } = buildSources([
       {
         geometry,
-        properties: {
+        properties: props({
           id: "congestion",
           source: "duesseldorf",
-          provider: "road-conditions-openconditions",
           groupId: "congestion-group",
+          kind: "congestion",
           type: "congestion",
-          severity: "medium",
-          headline: "Traffic congestion",
-        },
+          severity: { label: "moderate" },
+          headline: text("Traffic congestion"),
+        }),
       },
       {
         geometry,
-        properties: {
-          id: "roadworks",
-          source: "duesseldorf",
-          provider: "road-conditions-openconditions",
-          groupId: "roadworks-group",
-          type: "roadworks",
-          severity: "low",
-          headline: "Road works",
-        },
+        properties: props({ id: "roadworks", source: "duesseldorf", groupId: "roadworks-group" }),
       },
     ]);
 
@@ -448,7 +441,7 @@ describe("road-condition display grouping", () => {
     );
     expect(lines).toHaveLength(1);
     expect(lines[0]?.properties).toMatchObject({
-      severity: "medium",
+      severity: "moderate",
       _displayIds: [
         "group:road-conditions-openconditions:duesseldorf:congestion-group",
         "group:road-conditions-openconditions:duesseldorf:roadworks-group",
@@ -464,45 +457,50 @@ describe("road-condition display grouping", () => {
   });
 
   it("aggregates mixed grouped source records into one summary and keeps every record in details", () => {
-    const dateFrom = "2026-06-22T05:00:00.000Z";
-    const dateTo = "2026-09-01T15:00:00.000Z";
+    const validity = {
+      status: "active" as const,
+      start: "2026-06-22T05:00:00.000Z",
+      end: "2026-09-01T15:00:00.000Z",
+    };
     const events = [
-      ["road-1", "roadworks", "Road works", "2922"],
-      ["road-2", "roadworks", "Road works", "1002"],
-      ["road-3", "roadworks", "Road works", "2119"],
-      ["info-1", "other", "Traffic information", "2922"],
-      ["info-2", "other", "Traffic information", "1002"],
-      ["info-3", "other", "Traffic information", "2119"],
-    ].map(([id, type, headline, road]) => ({
-      id,
-      source: "duesseldorf",
-      provider: "road-conditions-openconditions",
-      groupId: "situation-42",
-      type,
-      severity: "low",
-      headline,
-      geometry: {
-        type: "LineString" as const,
-        coordinates: [
-          [6.77, 51.2],
-          [6.771, 51.2],
-        ],
-      },
-      roads: [{ ref: road, name: road }],
-      validFrom: dateFrom,
-      validTo: dateTo,
-    }));
+      ["road-1", "roadworks.works", "Road works", "2922"],
+      ["road-2", "roadworks.works", "Road works", "1002"],
+      ["road-3", "roadworks.works", "Road works", "2119"],
+      ["info-1", "other.other", "Traffic information", "2922"],
+      ["info-2", "other.other", "Traffic information", "1002"],
+      ["info-3", "other.other", "Traffic information", "2119"],
+    ].map(([id, classification, headline, road]) => {
+      const [kind = "", type = ""] = (classification ?? "").split(".");
+      return situation({
+        id,
+        source: "duesseldorf",
+        groupId: "situation-42",
+        kind,
+        type,
+        severity: { label: "minor" },
+        headline: text(headline ?? ""),
+        geometry: {
+          type: "LineString" as const,
+          coordinates: [
+            [6.77, 51.2],
+            [6.771, 51.2],
+          ],
+        },
+        roads: [{ ref: road, name: text(road ?? "") }],
+        validity,
+      });
+    });
 
     const [group] = buildRoadConditionPopupGroups("group:situation-42", events);
 
     expect(group?.summary).toMatchObject({
       headline: "Road works (6 related records)",
-      type: "roadworks, other",
+      classification: "roadworks.works,other.other",
       roads: "2922, 1002, 2119",
-      validFrom: dateFrom,
-      validTo: dateTo,
       sourceRecordCount: 6,
     });
+    // Every record agrees on what it does and when, so the summary may say it.
+    expect(group?.summary).not.toHaveProperty("_summaryOnly");
     expect(group?.sourceRecords).toHaveLength(6);
     expect(group?.sourceRecords.map((entry) => entry.recordId)).toEqual([
       "road-1",
@@ -524,14 +522,7 @@ describe("road-condition display grouping", () => {
             [6.78, 51.2],
           ],
         },
-        properties: {
-          id: "oc:endpoints",
-          source: "duesseldorf",
-          provider: "road-conditions-openconditions",
-          type: "roadworks",
-          severity: "low",
-          headline: "Road works",
-        },
+        properties: props({ id: "oc:endpoints", source: "duesseldorf" }),
       },
     ]);
 
@@ -551,7 +542,7 @@ describe("RoadConditionsLayer viewport scheduler", () => {
   // ../map-layer.tsx (the server's `/events` cache TTL, and the padding
   // factor documented there). Not imported — those constants are
   // intentionally private to the module under test.
-  const FRESHNESS_DEADLINE_MS = 90_000;
+  const FRESHNESS_DEADLINE_MS = 60_000;
   const BASE_BOX = { west: 10, south: 45, east: 11, north: 46 };
 
   function setBounds(box: { west: number; south: number; east: number; north: number }) {
@@ -583,29 +574,23 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     vi.useRealTimers();
   });
 
-  it("refreshes an open restriction popup through deadline, failure, recovery and withdrawal", async () => {
-    const fixture = JSON.parse(
-      readFileSync(
-        join(
-          process.cwd(),
-          "services/data-manager/src/__tests__/fixtures/contracts/road-restrictions-v1.json",
-        ),
-        "utf8",
-      ),
-    ) as { displayEvents: RoadConditionEvent[] };
-    const current = structuredClone(
-      fixture.displayEvents.find((event) => event.restrictionDetails?.facts.length)!,
-    );
-    const details = current.restrictionDetails!;
-    const at = Date.now();
-    details.evaluatedAt = new Date(at).toISOString();
-    details.freshUntil = new Date(at + 600_000).toISOString();
-    details.nextTransitionAt = new Date(at + 1_000).toISOString();
-    details.isStale = false;
-    details.facts.forEach((fact) => {
-      fact.state = "active";
+  it("refreshes an open restriction popup through failure, recovery and withdrawal", async () => {
+    const current = situation({
+      id: "oc:situation:fi-digitraffic:GUID50465935",
+      kind: "restriction",
+      type: "dimension",
+      geometry: { type: "Point", coordinates: [10.5, 45.5] },
+      validity: { status: "active", start: new Date(Date.now() - 3_600_000).toISOString() },
+      effects: [
+        effect("GUID50465935/weight", "dimension_limit", {
+          applicability: { kind: "classes", include: [{ class: "truck" }] },
+          dimension: "gross_weight",
+          value: { value: 26000, unit: "kg" },
+          operator: "lte",
+          meaning: "maximum_permitted",
+        }),
+      ],
     });
-    const { eventsToFeatureCollection } = await import("../eventsToGeojson");
     respondWith(eventsToFeatureCollection([current]).features);
     render(<RoadConditionsLayer />);
     await flush();
@@ -622,25 +607,21 @@ describe("RoadConditionsLayer viewport scheduler", () => {
       fake.emit("click", { point: { x: 10, y: 20 }, lngLat: { lng: 10.5, lat: 45.5 } });
     });
     expect(popupHtml).toHaveBeenCalledTimes(1);
-    expect(popupHtml.mock.lastCall![0]).toContain("restriction.state.active");
+    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.effect.dimension_limit");
+    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.state.active");
 
     fetchMock.mockRejectedValueOnce(new Error("temporary outage"));
-    await flush(1_000);
-    expect(popupHtml.mock.lastCall![0]).toContain("restriction.needsRefresh");
-    expect(popupHtml.mock.lastCall![0]).not.toContain("restriction.state.active");
-
-    details.evaluatedAt = new Date(at + 91_000).toISOString();
-    details.nextTransitionAt = null;
-    details.facts.forEach((fact) => {
-      fact.state = "ended";
-    });
-    respondWith(eventsToFeatureCollection([current]).features);
     await flush(FRESHNESS_DEADLINE_MS);
-    expect(popupHtml.mock.lastCall![0]).toContain("restriction.state.ended");
-    expect(popupHtml.mock.lastCall![0]).not.toContain("restriction.needsRefresh");
+    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.freshness.needsRefresh");
+
+    const ended = { ...current, validity: { ...current.validity, status: "ended" as const } };
+    respondWith(eventsToFeatureCollection([ended]).features);
+    await flush(FRESHNESS_DEADLINE_MS);
+    expect(popupHtml.mock.lastCall![0]).toContain("roadConditions.state.ended");
+    expect(popupHtml.mock.lastCall![0]).not.toContain("roadConditions.freshness.needsRefresh");
 
     respondWith([]);
-    await flush(60_000);
+    await flush(FRESHNESS_DEADLINE_MS);
     expect(popupRemove).toHaveBeenCalledTimes(1);
   });
 
@@ -760,7 +741,7 @@ describe("RoadConditionsLayer viewport scheduler", () => {
     respondWith([
       {
         geometry: { type: "Point", coordinates: [10.5, 45.5] },
-        properties: { id: "last-good", type: "roadworks", severity: "low" },
+        properties: props({ id: "last-good" }),
       },
     ]);
     render(<RoadConditionsLayer />);
@@ -775,166 +756,65 @@ describe("RoadConditionsLayer viewport scheduler", () => {
   });
 });
 
-it("preserves source binding and vehicle evidence through the GeoJSON display boundary", async () => {
-  const { buildSources } = await import("../map-layer");
+it("reads each feature through the client's validating reader", () => {
+  const served = situation({
+    id: "source:record",
+    kind: "closure",
+    type: "closure",
+    effects: [effect("c", "closure")],
+    origin: "crowd",
+    evidence: { state: "corroborated", confidenceScore: 0.4 },
+    updatedAt: "2026-09-11T12:00:00Z",
+    expiresAt: "2026-09-11T12:10:00Z",
+  });
+  const [feature] = eventsToFeatureCollection([served]).features;
   const result = buildSources([
+    feature!,
     {
       geometry: { type: "Point", coordinates: [13, 52] },
-      properties: {
-        id: "source:record",
-        source: "source",
-        provider: "oc",
-        headline: "Truck closure",
-        type: "road_closure",
-        binding: { status: "ambiguous", confidence: 0.4 },
-        vehiclesAffected: ["truck"],
-        dataUpdatedAt: "2026-09-11T12:00:00Z",
-        isStale: true,
-      },
+      properties: props({ id: "x", validity: undefined }),
+    },
+    {
+      geometry: { type: "Point", coordinates: [13, 52] },
+      properties: { ...props({ id: "odd" }), effects: [{ id: "odd/1", kind: "teleport" }] },
     },
   ]);
   const events = [...result.eventsByDisplayId.values()].flat();
-  expect(events[0]).toMatchObject({
-    binding: { status: "ambiguous", confidence: 0.4 },
-    vehiclesAffected: ["truck"],
-    dataUpdatedAt: "2026-09-11T12:00:00Z",
-    isStale: true,
-  });
+  // A situation without a readable validity cannot be shown truthfully.
+  expect(events.map((event) => event.id)).toEqual(["source:record", "odd"]);
+  expect(events[0]).toEqual(served);
+  expect(events[1]?.effects).toEqual([
+    expect.objectContaining({ id: "odd/1", kind: "unsupported" }),
+  ]);
 });
 
 describe("road-condition restriction display boundary", () => {
-  it("flags a conditional marker and carries the envelope through the display boundary", () => {
-    const details = {
-      schemaVersion: 1,
-      vehicleScope: "specific",
-      completeness: "complete",
-      issues: [],
-      source: {
-        sourceId: "fi-digitraffic",
-        recordId: "GUID50465935",
-        recordVersion: "31",
-        sourceUpdatedAt: "2026-08-28T04:18:02.629Z",
-        feedUrls: ["https://tie.digitraffic.fi/api/traffic-message/v2/roadworks"],
-        publisher: "Fintraffic / Digitraffic",
-        license: "CC-BY-4.0",
-        licenseUrl: "https://creativecommons.org/licenses/by/4.0/",
-        attribution: "Fintraffic / Digitraffic",
-        modificationNotice: "Normalized by OpenConditions",
-      },
-      facts: [
-        {
-          id: "GUID50465935:GUID50469933:roadwork_phase:restrictions[2]",
-          kind: "dimension",
-          dimension: "gross_weight",
-          meaning: "maximum_permitted",
-          value: 26000,
-          unit: "kg",
-          operator: "lte",
-          state: "active",
-          scope: {
-            kind: "roadwork_phase",
-            phaseId: "GUID50469933",
-            locationDescription: null,
-            sourceLocationRefs: { scheme: "digitraffic_road_address" },
-            restrictionBinding: "not_established",
-          },
-          direction: { basis: "road_reference", value: "both", description: null },
-          validFrom: "2026-07-19T21:00:00.000Z",
-          validTo: "2026-12-14T21:59:59.999Z",
-          sourceTokens: { type: "vehicle gross weight limit" },
-          context: {
-            restrictionsLiftable: false,
-            compliance: "unknown",
-            operatorActionStatus: null,
-            validityStatus: null,
-          },
-        },
-      ],
-      evaluatedAt: "2026-09-12T07:14:00.000Z",
-      sourceCheckedAt: "2026-09-12T07:13:00.000Z",
-      freshUntil: "2026-09-12T07:23:00.000Z",
-      nextTransitionAt: null,
-      isStale: false,
-    };
+  it("draws a closure that binds only some vehicles as a restriction marker", () => {
     const sources = buildSources([
       {
         geometry: { type: "Point", coordinates: [23.5, 60.1] },
-        properties: {
-          id: "fi-digitraffic:GUID50465935",
-          source: "fi-digitraffic",
-          provider: "road-conditions-openconditions",
-          type: "road_closure",
-          severity: "high",
-          headline: "Tie 104, Raasepori",
-          roadState: "closed",
-          restrictionDetails: details,
-        },
+        properties: props({
+          id: "oc:situation:fi-digitraffic:GUID50465935",
+          kind: "closure",
+          type: "closure",
+          severity: { label: "major" },
+          effects: [
+            effect("GUID50465935/closure", "closure", {
+              applicability: { kind: "classes", include: [{ class: "hgv" }] },
+            }),
+          ],
+        }),
       },
-    ] as never);
+    ]);
     const collection = sources.data as { features: Array<{ properties: unknown }> };
     const marker = collection.features[0]!.properties as Record<string, unknown>;
-    expect(marker._restricted).toBe(true);
-    expect(marker._icon).toBe("rc:restriction:high");
-    expect(marker.restrictionDetails).toEqual(details);
+    expect(marker._icon).toBe("rc:restriction:major");
+    // Situations stay out of the marker; the popup reads them from the lookup.
+    expect(marker).not.toHaveProperty("effects");
     const events = [...sources.eventsByDisplayId.values()].flat();
-    expect(events[0]!.restrictionDetails).toEqual(details);
-  });
-
-  it("marks an unreadable envelope unsupported instead of trusting it", () => {
-    const sources = buildSources([
-      {
-        geometry: { type: "Point", coordinates: [23.5, 60.1] },
-        properties: {
-          id: "fi:bad",
-          source: "fi-digitraffic",
-          type: "restriction",
-          severity: "high",
-          headline: "Bad",
-          restrictionDetails: { schemaVersion: 9 },
-        },
-      },
-    ] as never);
-    const events = [...sources.eventsByDisplayId.values()].flat();
-    expect(events[0]!.restrictionDetails).toBeUndefined();
-    expect(events[0]!.restrictionDetailsUnsupported).toBe(true);
-  });
-});
-
-/**
- * The Dutch contract records through the real map source builder: the producer
- * fixture's display events, published as GeoJSON and rebuilt into display
- * groups. This proves the conditional records reach the map without the layer
- * having to know anything about DATEX.
- */
-describe("road-condition display grouping — NDW contract records", () => {
-  // This project runs under jsdom, where `import.meta.url` is an http URL, so
-  // the shared fixture is read from the repository root instead.
-  const fixture = JSON.parse(
-    readFileSync(
-      join(
-        process.cwd(),
-        "services/data-manager/src/__tests__/fixtures/contracts/road-restrictions-v1.json",
-      ),
-      "utf8",
-    ),
-  ) as { displayEvents: RoadConditionEvent[]; expectedConditionalIds: string[] };
-
-  const ndwIds = fixture.expectedConditionalIds.filter((id) => id.startsWith("nl-ndw:"));
-
-  it("keeps every Dutch conditional record available for popup lookup", async () => {
-    const { eventsToFeatureCollection } = await import("../eventsToGeojson");
-    const events = fixture.displayEvents.filter((event) => ndwIds.includes(event.id));
-    expect(events).toHaveLength(4);
-    const fc = eventsToFeatureCollection(events);
-    const { eventsByDisplayId } = buildSources(
-      fc.features as unknown as Parameters<typeof buildSources>[0],
-    );
-    const reached = [...eventsByDisplayId.values()].flat().map((event) => event.id);
-    for (const id of ndwIds) expect(reached, id).toContain(id);
-    for (const event of [...eventsByDisplayId.values()].flat()) {
-      if (!ndwIds.includes(event.id)) continue;
-      expect(event.restrictionDetails, event.id).toBeDefined();
-      expect(event.restrictionDetailsUnsupported, event.id).toBeUndefined();
-    }
+    expect(events[0]!.effects[0]?.applicability).toEqual({
+      kind: "classes",
+      include: [{ class: "hgv" }],
+    });
   });
 });

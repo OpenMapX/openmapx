@@ -8,22 +8,23 @@ import type {
 } from "@openmapx/core";
 
 export type {
+  LocalizedText,
   RoadConditionAttribution,
+  RoadConditionEffect,
   RoadConditionEvent,
   RoadConditionRoadRef,
   RoadConditionSchedule,
-  RoadConditionSeverity,
+  RoadConditionSeverityLabel,
   RoadConditionsQuery,
-  RoadConditionType,
+  RoadConditionValidity,
   RoadFlowQuery,
   RoadFlowSegment,
-  RoadState,
 } from "@openmapx/core";
 
 /**
  * Pluggable "road conditions" capability. Multiple integrations implement this
- * — OpenConditions (reading the shared PostGIS `conditions.observations` table),
- * or live third-party APIs (TomTom/HERE/Waze) — and the first-party
+ * — OpenConditions (reading its record API), or live third-party APIs
+ * (TomTom/HERE/Waze) — and the first-party
  * `road-conditions` orchestrator merges them behind one `/events` route consumed
  * by both the map overlay and turn-by-turn navigation.
  *
@@ -39,8 +40,8 @@ export interface RoadConditionsProvider {
   readonly coverage?: { bbox: BBox } | { all: true };
   getOperationalEvidence?(): Promise<RoadConditionsOperationalEvidence>;
   getEvents(bbox: BBox, opts?: RoadConditionsQuery): Promise<RoadConditionEvent[]>;
-  /** Complete, uncollapsed observations for routing; reject overflow or unavailable data.
-   * Display-only lists cannot establish routing coverage. */
+  /** Every situation in the box with each effect's routing evidence; reject anything
+   * incomplete. Display-only lists cannot establish routing coverage. */
   getRoutingEvents?(bbox: BBox): Promise<{ complete: true; events: RoadConditionEvent[] }>;
 
   /** Optional live speed/congestion segments for the traffic-flow overlay. */

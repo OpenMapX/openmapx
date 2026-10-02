@@ -163,14 +163,27 @@
     "incidentRoadClosed": "— gesperrt",
     "incidentType": {
       "accident": "Unfall",
-      "roadworks": "Baustelle",
-      "road_closure": "Sperrung",
-      "lane_closure": "Fahrspursperrung",
-      "hazard": "Gefahr",
-      "congestion": "Stau",
+      "breakdown": "Liegengebliebenes Fahrzeug",
+      "vehicle_hazard": "Gefahr durch Fahrzeug",
+      "obstruction": "Hindernis",
+      "fire": "Brand",
+      "works": "Baustelle",
+      "closure": "Sperrung",
+      "dimension": "Fahrzeugmaßbeschränkung",
+      "access": "Zufahrtsbeschränkung",
+      "speed": "Geschwindigkeitsbeschränkung",
+      "seasonal_load": "Saisonale Lastbeschränkung",
       "weather": "Wetter",
-      "event": "Ereignis",
-      "restriction": "Einschränkung",
+      "surface": "Fahrbahnzustand",
+      "driving_condition": "Straßenverhältnisse",
+      "hazard": "Gefahr",
+      "event": "Veranstaltung",
+      "operation": "Polizei- oder Behördeneinsatz",
+      "fault": "Anlagenstörung",
+      "incident": "Sicherheitsvorfall",
+      "chain_control": "Schneekettenpflicht",
+      "pass": "Passstraße",
+      "congestion": "Stau",
       "other": "Störung"
     },
     "searchAlongRoute": "Entlang der Route suchen",
@@ -487,39 +500,61 @@
     "reset": "Zurücksetzen",
     "all": "Alle",
     "sev": {
-      "low": "Niedrig",
-      "medium": "Mittel",
-      "high": "Hoch",
+      "minor": "Gering",
+      "moderate": "Mittel",
+      "major": "Hoch",
       "critical": "Kritisch",
       "unknown": "Unbekannt"
     },
-    "type": {
+    "kind": {
+      "incident": "Vorfall",
       "roadworks": "Baustelle",
-      "road_closure": "Sperrung",
-      "lane_closure": "Spursperrung",
-      "accident": "Unfall",
+      "closure": "Sperrung",
+      "restriction": "Beschränkung",
+      "weather_condition": "Wetter",
+      "road_condition": "Fahrbahnzustand",
+      "road_hazard": "Gefahr",
+      "public_event": "Veranstaltung",
+      "authority": "Behördeneinsatz",
+      "equipment_fault": "Anlagenstörung",
+      "security": "Sicherheit",
+      "winter_operation": "Winterdienst",
+      "pass_status": "Passstraße",
       "congestion": "Stau",
-      "weather": "Wetter",
-      "event": "Ereignis",
-      "restriction": "Einschränkung",
-      "detour": "Umleitung",
-      "hazard": "Gefahr",
-      "obstruction": "Hindernis",
       "other": "Sonstiges"
     },
-    "roadState": {
-      "open": "Offen",
-      "closed": "Geschlossen",
-      "some_lanes_closed": "Einige Fahrspuren gesperrt",
-      "single_lane_alternating": "Einspuriger Wechselverkehr"
+    "type": {
+      "accident": "Unfall",
+      "breakdown": "Liegengebliebenes Fahrzeug",
+      "vehicle_hazard": "Gefahr durch Fahrzeug",
+      "obstruction": "Hindernis",
+      "fire": "Brand",
+      "works": "Baustelle",
+      "closure": "Sperrung",
+      "dimension": "Fahrzeugmaßbeschränkung",
+      "access": "Zufahrtsbeschränkung",
+      "speed": "Geschwindigkeitsbeschränkung",
+      "seasonal_load": "Saisonale Lastbeschränkung",
+      "weather": "Wetter",
+      "surface": "Fahrbahnzustand",
+      "driving_condition": "Straßenverhältnisse",
+      "hazard": "Gefahr",
+      "event": "Veranstaltung",
+      "operation": "Polizei- oder Behördeneinsatz",
+      "fault": "Anlagenstörung",
+      "incident": "Sicherheitsvorfall",
+      "chain_control": "Schneekettenpflicht",
+      "pass": "Passstraße",
+      "congestion": "Stau",
+      "other": "Sonstiges"
     },
     "panel": {
       "type": "Typ",
-      "roadState": "Status",
+      "effects": "Auswirkungen",
+      "direction": "Richtung",
       "roads": "Betroffene Straßen",
       "validity": "Aktiv",
       "startsAt": "Beginnt am",
-      "delay": "Verzögerung",
       "description": "Details",
       "sourceRecord": "Quelleneintrag",
       "sourceRecordCount": "{count, plural, one {# Quelleneintrag} other {# Quelleneinträge}}",
@@ -530,15 +565,13 @@
       "license": "Lizenz",
       "updatedAt": "Quelle aktualisiert (UTC)",
       "checkedAt": "Zuletzt geprüft (UTC)",
+      "freshness": "Aktualität",
+      "interpretation": "Auswertung",
+      "report": "Meldung",
       "binding": "Straßenzuordnung",
-      "bindingConfidence": "Zuordnungswert (0–1)",
-      "vehicles": "Betroffene Fahrzeuge",
       "routing": "Routenwirkung",
-      "allVehicles": "Alle Fahrzeuge",
       "routingCandidate": "Geeignet; Anwendung hängt von der Route ab",
-      "routingDisplayOnly": "Auf der Karte sichtbar; nicht für Routing angewendet",
-      "restrictionText": "Fahrzeugbeschränkungen",
-      "restrictionState": "Status der Beschränkung"
+      "routingDisplayOnly": "Auf der Karte sichtbar; nicht für Routing angewendet"
     },
     "binding": {
       "exact": "Exakt",
@@ -551,74 +584,109 @@
       "obsolete": "Veraltet",
       "invalid": "Ungültig"
     },
-    "restriction": {
-      "heading": "Fahrzeugbeschränkungen",
-      "unsupported": "Beschränkungsdetails konnten nicht ausgewertet werden",
-      "partial": "Teilweise Auswertung der Quelle",
-      "stale": "Quelldaten sind veraltet",
-      "needsRefresh": "Aktualisierung erforderlich",
-      "liftable": "Beschränkungen können für Großraum- und Schwertransporte aufgehoben werden; eine Genehmigung ist nicht bestätigt",
-      "extentNotVerified": "Genauer Geltungsbereich der Beschränkung ist nicht zugeordnet",
-      "workingHours": "Arbeitszeiten (nur Kontext)",
-      "reportedContext": "Gemeldeter Ereigniskontext",
-      "maxHeight": "Zulässige Höchsthöhe",
-      "maxWidth": "Zulässige Höchstbreite",
-      "maxLength": "Zulässige Höchstlänge",
-      "maxGrossWeight": "Zulässiges Gesamtgewicht",
-      "appliesHeight": "Ereignis gilt für Fahrzeuge mit einer Höhe",
-      "appliesWidth": "Ereignis gilt für Fahrzeuge mit einer Breite",
-      "appliesLength": "Ereignis gilt für Fahrzeuge mit einer Länge",
-      "appliesGrossWeight": "Ereignis gilt für Fahrzeuge mit einem Gesamtgewicht",
-      "appliesTo": "Ereignis gilt für",
-      "scopeLabel": "Gilt für",
-      "validityLabel": "Zeitraum der Beschränkung",
-      "directionLabel": "Richtung laut Quelle",
-      "complianceLabel": "Verbindlichkeit",
-      "contextLabel": "Kontext der Quelle",
-      "sourceComment": "Hinweis der Quelle",
-      "endedLabel": "Beendete Beschränkung",
-      "extentLabel": "Geltungsbereich",
-      "issuesLabel": "Auswertung",
-      "freshnessLabel": "Aktualität",
-      "sourceLabel": "Quelle der Beschränkung",
-      "noticeLabel": "Hinweis der Quelle",
-      "restrictionText": "Fahrzeugbeschränkungen",
-      "restrictionState": "Status der Beschränkung",
-      "operator": {
-        "gt": "größer als",
-        "gte": "mindestens",
-        "eq": "gleich",
-        "lte": "höchstens",
-        "lt": "kleiner als"
-      },
-      "scope": {
-        "eventRoad": "Betroffene Straße",
-        "roadworkPhase": "Bauphase",
-        "detour": "Umleitung"
-      },
-      "state": {
-        "active": "Aktiv",
-        "scheduled": "Geplant",
-        "ended": "Beendet",
-        "unknown": "Zeitraum unbekannt"
-      },
-      "direction": {
-        "positive": "Aufsteigende Straßenreferenz",
-        "negative": "Absteigende Straßenreferenz",
-        "both": "Beide Richtungen",
-        "unknown": "Richtung unbekannt"
-      },
-      "compliance": {
-        "mandatory": "Verbindlich",
-        "advisory": "Empfehlung",
-        "unknown": "Verbindlichkeit unbekannt"
-      },
-      "vehicle": {
-        "truck": "Lastkraftwagen"
-      },
-      "usage": {
-        "emergencyServices": "Einsatzfahrzeuge"
-      }
+    "direction": {
+      "positive": "Aufsteigende Straßenreferenz",
+      "negative": "Absteigende Straßenreferenz",
+      "both": "Beide Richtungen",
+      "unknown": "Richtung unbekannt"
+    },
+    "effect": {
+      "closure": "Gesperrt",
+      "lane_restriction": "Fahrstreifen",
+      "speed_limit": "Tempolimit",
+      "delay": "Verzögerung",
+      "access": "Zufahrt",
+      "dimension_limit": "Fahrzeugbeschränkung",
+      "hazmat": "Gefahrgut",
+      "detour": "Umleitung",
+      "contraflow": "Verkehrsführung auf der Gegenfahrbahn",
+      "advisory": "Hinweis",
+      "unsupported": "Beschränkung",
+      "lanesClosedOf": "{closed} von {total} Fahrstreifen gesperrt",
+      "lanesClosed": "{closed} gesperrt",
+      "advisorySpeed": "(Empfehlung)",
+      "queue": "Stau {length}",
+      "via": "über {roads}",
+      "signed": "ausgeschildert",
+      "notInterpreted": "Details konnten nicht ausgewertet werden",
+      "partial": "teilweise ausgewertet"
+    },
+    "scope": {
+      "road": "Straße",
+      "carriageway": "Fahrbahn",
+      "ramp": "Anschlussstelle",
+      "junction": "Kreuzung",
+      "bridge": "Brücke",
+      "tunnel": "Tunnel",
+      "sidewalk": "Gehweg",
+      "cycleway": "Radweg",
+      "rest_area": "Rastanlage",
+      "facility": "Einrichtung"
+    },
+    "dimension": {
+      "height": "Höhe",
+      "width": "Breite",
+      "length": "Länge",
+      "gross_weight": "Gesamtgewicht",
+      "laden_weight": "Tatsächliches Gewicht",
+      "axle_load": "Achslast",
+      "axle_count": "Achsanzahl",
+      "trailer_count": "Anhängeranzahl"
+    },
+    "operator": {
+      "lt": "kleiner als",
+      "lte": "höchstens"
+    },
+    "physicalLimit": "bauliche Grenze",
+    "hazmat": {
+      "prohibited": "verboten",
+      "restricted": "eingeschränkt",
+      "tunnelCategory": "ADR-Tunnelkategorie {category}",
+      "unClasses": "UN-Klassen {classes}"
+    },
+    "vehicle": {
+      "motor_vehicle": "Kraftfahrzeuge",
+      "car": "Pkw",
+      "van": "Transporter",
+      "truck": "Lkw",
+      "hgv": "Schwere Lkw",
+      "bus": "Busse",
+      "coach": "Reisebusse",
+      "motorcycle": "Motorräder",
+      "moped": "Mopeds",
+      "bicycle": "Fahrräder",
+      "pedestrian": "Fußgänger",
+      "trailer": "Anhänger",
+      "caravan": "Wohnwagen",
+      "agricultural": "Landwirtschaftliche Fahrzeuge",
+      "emergency": "Einsatzfahrzeuge",
+      "taxi": "Taxis",
+      "oversize": "Übergroße Fahrzeuge",
+      "abnormal_load": "Schwertransporte"
+    },
+    "vehicles": {
+      "except": "außer {vehicles}",
+      "unspecified": "Fahrzeuge nicht angegeben",
+      "conditional": "mit Bedingungen"
+    },
+    "state": {
+      "active": "gilt",
+      "scheduled": "ab {date}",
+      "inactive": "gilt derzeit nicht",
+      "ended": "beendet"
+    },
+    "compliance": {
+      "advisory": "Empfehlung"
+    },
+    "interpretation": {
+      "partial": "Einige Regeln konnten nicht vollständig ausgewertet werden; sie werden angezeigt, aber nicht für das Routing verwendet"
+    },
+    "freshness": {
+      "stale": "Quelldaten sind möglicherweise veraltet",
+      "needsRefresh": "Aktualisierung erforderlich"
+    },
+    "report": {
+      "unconfirmed": "Unbestätigte Nutzermeldung"
     }
   },
   "trafficFlow": {

@@ -8,7 +8,7 @@ import {
 } from "@openmapx/core";
 import type { MapGeoJSONFeature } from "maplibre-gl";
 import * as maplibregl from "maplibre-gl";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import type { GeoJsonSourceData } from "@/integration-api/map/layerStyleUtils";
@@ -23,18 +23,11 @@ import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSour
 import { useOverlayMinZoom } from "@/integration-api/overlay/overlayZoomGate";
 import { useOverlayLayerVisible } from "@/integration-api/overlay/useOverlayStoreState";
 import { useDateTimeFormat } from "@/integration-api/runtime/useDateTimeFormat";
-import {
-  buildRoadConditionDisplayGroups,
-  buildRoadConditionDisplayLines,
-  type RoadConditionDisplayGroup,
-} from "./display";
-import { markerImageId } from "./markers";
+import { buildRoadConditionDisplayGroups, buildRoadConditionFeatures } from "./display";
 import { buildRoadConditionPopupHtml, type RoadConditionPopupInput } from "./popup";
-import { hasRestrictionView, restrictionRefreshDeadline } from "./restriction-freshness";
-import { isConditionalRoadState } from "./restrictions";
+import { SEVERITY_LINE_COLOR } from "./severity";
 import { useRoadConditionsStore } from "./store";
 import {
-  isFutureRoadCondition,
   ROAD_CONDITION_LINE_DASHARRAY,
   ROAD_CONDITION_LINE_OPACITY,
   ROAD_CONDITION_MARKER_OPACITY,
@@ -47,13 +40,6 @@ const LINE_LAYER = "omx-road-conditions-route-line";
 
 // Same coarse cadence the nav incident fetch uses (useNavIncidents.ts).
 const REFRESH_MS = 120_000;
-const SEVERITY_RANK: Record<string, number> = {
-  critical: 4,
-  high: 3,
-  medium: 2,
-  low: 1,
-  unknown: 0,
-};
 
 const EMPTY = { type: "FeatureCollection" as const, features: [] };
 // Stable reference (not a fresh `[]` literal) so a repeat "nothing to show"
@@ -63,66 +49,6 @@ const EMPTY = { type: "FeatureCollection" as const, features: [] };
 // perfectly memoized re-triggers this effect every render, and each run would
 // otherwise hand React a brand-new empty array, forcing another render forever.
 const EMPTY_EVENTS: RoadConditionEvent[] = [];
-
-interface RouteSourceData {
-  data: GeoJsonSourceData;
-}
-
-function buildRouteSourceData(displayGroups: RoadConditionDisplayGroup[]): RouteSourceData {
-  const eventsByDisplayId = new Map(
-    displayGroups.map((group) => [group.displayId, group.events] as const),
-  );
-  const markers = displayGroups.flatMap((group) => {
-    const event = group.events.reduce((best, candidate) => {
-      const bestRank = SEVERITY_RANK[best.severity] ?? 0;
-      const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
-      return candidateRank > bestRank ? candidate : best;
-    });
-    const future = group.events.every(isFutureRoadCondition);
-    return group.markerCoordinates.map((point) => ({
-      type: "Feature" as const,
-      geometry: { type: "Point" as const, coordinates: point },
-      properties: {
-        headline: event.headline,
-        severity: event.severity,
-        _icon: markerImageId(
-          isConditionalRoadState(event) ? "restriction" : event.type,
-          event.severity,
-        ),
-        _id: group.events.length === 1 ? event.id : group.displayId,
-        _displayId: group.displayId,
-        _sev: SEVERITY_RANK[event.severity] ?? 0,
-        future,
-      },
-    }));
-  });
-  const lines = buildRoadConditionDisplayLines(displayGroups).flatMap((line) => {
-    const lineEvents = line.displayIds.flatMap(
-      (displayId) => eventsByDisplayId.get(displayId) ?? [],
-    );
-    if (lineEvents.length === 0) return [];
-    const event = lineEvents.reduce((best, candidate) => {
-      const bestRank = SEVERITY_RANK[best.severity] ?? 0;
-      const candidateRank = SEVERITY_RANK[candidate.severity] ?? 0;
-      return candidateRank > bestRank ? candidate : best;
-    });
-    return [
-      {
-        type: "Feature" as const,
-        geometry: line.geometry as GeoJSON.Geometry,
-        properties: {
-          severity: event.severity,
-          future: lineEvents.every(isFutureRoadCondition),
-          _displayId: line.displayIds[0],
-          _displayIds: line.displayIds,
-        },
-      },
-    ];
-  });
-  return {
-    data: { type: "FeatureCollection", features: [...markers, ...lines] },
-  };
-}
 
 /** Bounding box around a whole route, padded enough to catch its shoulder. */
 function routeBounds(geometry: [number, number][]): [number, number, number, number] | null {
@@ -184,6 +110,7 @@ export function RouteConditionsLayer() {
   useEffect(() => {
     tRef.current = t;
   }, [t]);
+  const locale = useLocale();
 
   useEffect(() => {
     if (!layerVisible || geometry.length < 2) {
@@ -200,7 +127,6 @@ export function RouteConditionsLayer() {
     let inFlight = false;
     let activeRequest: ReturnType<typeof beginRequest> | null = null;
     let timer: ReturnType<typeof setInterval> | undefined;
-    let restrictionTimer: ReturnType<typeof setTimeout> | undefined;
     const refreshOpenPopup = (needsRefresh: boolean) => {
       if (popupRef.current && popupInputRef.current) {
         popupRef.current.setHTML(
@@ -232,19 +158,7 @@ export function RouteConditionsLayer() {
           setEvents(result.events);
           hasRouteDataRef.current = true;
           viewNeedsRefreshRef.current = false;
-          clearTimeout(restrictionTimer);
-          restrictionTimer = undefined;
-          const at = Date.now();
-          const deadline = restrictionRefreshDeadline(result.events, at);
-          setRouteFetchStatus(
-            hasRestrictionView(result.events) && deadline <= at ? "stale" : "ready",
-          );
-          if (hasRestrictionView(result.events) && deadline > at && map.getZoom() < minZoom) {
-            restrictionTimer = setTimeout(() => {
-              restrictionTimer = undefined;
-              void load();
-            }, deadline - at);
-          }
+          setRouteFetchStatus("ready");
         } else {
           viewNeedsRefreshRef.current = true;
           refreshOpenPopup(true);
@@ -261,8 +175,6 @@ export function RouteConditionsLayer() {
       }
     };
     const stopPolling = () => {
-      clearTimeout(restrictionTimer);
-      restrictionTimer = undefined;
       if (timer !== undefined) {
         clearInterval(timer);
         timer = undefined;
@@ -377,19 +289,7 @@ export function RouteConditionsLayer() {
             maxzoom: minZoom,
             layout: { "line-cap": "round", "line-join": "round" },
             paint: {
-              "line-color": [
-                "match",
-                ["get", "severity"],
-                "critical",
-                "#7e0023",
-                "high",
-                "#cc0033",
-                "medium",
-                "#ff9933",
-                "low",
-                "#ffde33",
-                "#8a8a8a",
-              ],
+              "line-color": SEVERITY_LINE_COLOR,
               "line-width": ["interpolate", ["linear"], ["zoom"], 5, 3, 10, 6],
               "line-opacity": ROAD_CONDITION_LINE_OPACITY,
               "line-dasharray": ROAD_CONDITION_LINE_DASHARRAY,
@@ -436,9 +336,12 @@ export function RouteConditionsLayer() {
   useEffect(() => {
     void styleVersion;
     if (!layerVisible) return;
-    const sourceData = buildRouteSourceData(displayGroups);
-    publishGeoJson([{ sourceId: SOURCE, data: sourceData.data }]);
-  }, [displayGroups, layerVisible, publishGeoJson, styleVersion]);
+    const data: GeoJsonSourceData = {
+      type: "FeatureCollection",
+      features: buildRoadConditionFeatures(displayGroups, locale),
+    };
+    publishGeoJson([{ sourceId: SOURCE, data }]);
+  }, [displayGroups, layerVisible, locale, publishGeoJson, styleVersion]);
 
   // Route markers and route lines resolve through the same grouped popup as
   // the area overlay. This keeps a line click and a marker click equivalent,
@@ -479,6 +382,7 @@ export function RouteConditionsLayer() {
           formatDateTime: dtfRef.current.dateTime,
           formatDate: dtfRef.current.date,
           translate: (key, values) => tRef.current(key, values),
+          locale,
         };
         popupInputRef.current = input;
         const content = buildRoadConditionPopupHtml(input);
@@ -501,7 +405,7 @@ export function RouteConditionsLayer() {
         popupRef.current = null;
       }
     };
-  }, [mapRef, mapReady, styleVersion, layerVisible, eventsByDisplayId]);
+  }, [mapRef, mapReady, styleVersion, layerVisible, eventsByDisplayId, locale]);
 
   return null;
 }

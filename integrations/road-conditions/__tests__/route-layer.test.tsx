@@ -1,21 +1,21 @@
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
-import { fetchRoadConditions, type RoadConditionEvent } from "@openmapx/core";
+import { fetchRoadConditions } from "@openmapx/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { act, createFakeMap, type FakeMap, render, waitFor } from "@/test";
 import { useRoadConditionsStore } from "../store";
+import { effect, situation, text } from "./fixtures";
 
 let fake: FakeMap;
 
+const closure = { kind: "closure", type: "closure", severity: { label: "critical" as const } };
+const works = { kind: "roadworks", type: "works", severity: { label: "moderate" as const } };
+
 const events = [
-  {
+  situation({
     id: "oc:1",
     source: "autobahn",
-    provider: "road-conditions-openconditions",
-    type: "road_closure",
-    severity: "critical",
-    headline: "Vollsperrung",
+    ...closure,
+    headline: text("Vollsperrung", "de"),
     geometry: {
       type: "LineString",
       coordinates: [
@@ -23,7 +23,7 @@ const events = [
         [8, 50.006],
       ],
     },
-  },
+  }),
 ];
 
 // A stable ref object (not a fresh `{ current: ... }` literal per call),
@@ -179,15 +179,13 @@ describe("RouteConditionsLayer", () => {
 
   it("uses the shared upcoming style for route markers and lines", async () => {
     fetchMock.mockResolvedValueOnce([
-      {
+      situation({
         id: "oc:future-route",
         source: "autobahn",
-        provider: "road-conditions-openconditions",
-        type: "roadworks",
-        severity: "medium",
-        headline: "Roadworks",
-        isForecast: true,
-        validFrom: "2099-08-03T00:00:00Z",
+        ...works,
+        headline: text("Roadworks"),
+        temporality: "scheduled",
+        validity: { status: "planned", start: "2099-08-03T00:00:00Z" },
         geometry: {
           type: "LineString",
           coordinates: [
@@ -195,7 +193,7 @@ describe("RouteConditionsLayer", () => {
             [8, 50.004],
           ],
         },
-      },
+      }),
     ]);
 
     render(<RouteConditionsLayer />);
@@ -237,14 +235,12 @@ describe("RouteConditionsLayer", () => {
 
   it("collapses explicitly grouped route line records into one marker and one line", async () => {
     fetchMock.mockResolvedValueOnce([
-      {
+      situation({
         id: "oc:route-1",
         source: "autobahn",
-        provider: "road-conditions-openconditions",
         groupId: "works-42",
-        type: "roadworks",
-        severity: "medium",
-        headline: "Roadworks",
+        ...works,
+        headline: text("Roadworks"),
         geometry: {
           type: "LineString",
           coordinates: [
@@ -252,15 +248,15 @@ describe("RouteConditionsLayer", () => {
             [8, 50.004],
           ],
         },
-      },
-      {
+      }),
+      situation({
         id: "oc:route-2",
         source: "autobahn",
-        provider: "road-conditions-openconditions",
         groupId: "works-42",
-        type: "lane_closure",
-        severity: "high",
-        headline: "Lane closure",
+        ...works,
+        severity: { label: "major" },
+        headline: text("Lane closure"),
+        effects: [effect("w/lanes", "lane_restriction", { vehicleImpact: "lane_closed" })],
         geometry: {
           type: "LineString",
           coordinates: [
@@ -268,7 +264,7 @@ describe("RouteConditionsLayer", () => {
             [8, 50.007],
           ],
         },
-      },
+      }),
     ]);
 
     render(<RouteConditionsLayer />);
@@ -291,26 +287,25 @@ describe("RouteConditionsLayer", () => {
       ],
     };
     fetchMock.mockResolvedValueOnce([
-      {
+      situation({
         id: "oc:route-congestion",
         source: "autobahn",
-        provider: "road-conditions-openconditions",
         groupId: "congestion-group",
+        kind: "congestion",
         type: "congestion",
-        severity: "medium",
-        headline: "Traffic congestion",
+        severity: { label: "moderate" },
+        headline: text("Traffic congestion"),
         geometry,
-      },
-      {
+      }),
+      situation({
         id: "oc:route-roadworks",
         source: "autobahn",
-        provider: "road-conditions-openconditions",
         groupId: "roadworks-group",
-        type: "roadworks",
-        severity: "low",
-        headline: "Road works",
+        ...works,
+        severity: { label: "minor" },
+        headline: text("Road works"),
         geometry,
-      },
+      }),
     ]);
 
     render(<RouteConditionsLayer />);
@@ -324,28 +319,24 @@ describe("RouteConditionsLayer", () => {
 
   it("keeps unrelated route alerts distinct even when their geometry and date match", async () => {
     fetchMock.mockResolvedValueOnce([
-      {
+      situation({
         id: "oc:point-1",
         source: "autobahn",
-        provider: "road-conditions-openconditions",
         groupId: "works-a",
-        type: "roadworks",
-        severity: "medium",
-        headline: "Roadworks",
+        ...works,
+        headline: text("Roadworks"),
         geometry: { type: "Point", coordinates: [8, 50.004] },
-        validFrom: "2026-08-03T00:00:00Z",
-      },
-      {
+        validity: { status: "active", start: "2026-08-03T00:00:00Z" },
+      }),
+      situation({
         id: "oc:point-2",
         source: "autobahn",
-        provider: "road-conditions-openconditions",
         groupId: "works-b",
-        type: "roadworks",
-        severity: "medium",
-        headline: "Roadworks",
+        ...works,
+        headline: text("Roadworks"),
         geometry: { type: "Point", coordinates: [8, 50.004] },
-        validFrom: "2026-08-03T00:00:00Z",
-      },
+        validity: { status: "active", start: "2026-08-03T00:00:00Z" },
+      }),
     ]);
 
     render(<RouteConditionsLayer />);
@@ -408,32 +399,26 @@ describe("RouteConditionsLayer", () => {
     expect(sourceFeatures("Point")).toHaveLength(1);
   });
 
-  it("expires a route restriction popup at the producer deadline even if the refresh hangs", async () => {
+  it("labels an open popup as needing refresh while a route refresh hangs", async () => {
     vi.useFakeTimers();
     let unmount: (() => void) | undefined;
     try {
-      const fixture = JSON.parse(
-        readFileSync(
-          join(
-            process.cwd(),
-            "services/data-manager/src/__tests__/fixtures/contracts/road-restrictions-v1.json",
-          ),
-          "utf8",
-        ),
-      ) as { displayEvents: RoadConditionEvent[] };
-      const event = structuredClone(
-        fixture.displayEvents.find((entry) => entry.restrictionDetails?.facts.length)!,
-      );
-      event.geometry = events[0]!.geometry as RoadConditionEvent["geometry"];
-      const details = event.restrictionDetails!;
-      details.evaluatedAt = new Date().toISOString();
-      details.freshUntil = new Date(Date.now() + 600_000).toISOString();
-      details.nextTransitionAt = new Date(Date.now() + 1_000).toISOString();
-      details.isStale = false;
-      details.facts.forEach((fact) => {
-        fact.state = "active";
-      });
-      fetchMock.mockResolvedValueOnce([event]);
+      fetchMock.mockResolvedValueOnce([
+        situation({
+          ...events[0]!,
+          kind: "restriction",
+          type: "dimension",
+          effects: [
+            effect("w/height", "dimension_limit", {
+              applicability: { kind: "classes", include: [{ class: "truck" }] },
+              dimension: "height",
+              value: { value: 4, unit: "m" },
+              operator: "lte",
+              meaning: "maximum_permitted",
+            }),
+          ],
+        }),
+      ]);
       ({ unmount } = render(<RouteConditionsLayer />));
       await act(async () => {
         await vi.advanceTimersByTimeAsync(0);
@@ -450,14 +435,15 @@ describe("RouteConditionsLayer", () => {
       await act(async () => {
         fake.emit("click", { point: { x: 10, y: 10 }, lngLat: { lng: 8, lat: 50.005 } });
       });
-      expect(popupState.html).toContain("restriction.state.active");
+      expect(popupState.html).toContain("roadConditions.effect.dimension_limit");
+      expect(popupState.html).not.toContain("roadConditions.freshness.needsRefresh");
+
       fetchMock.mockImplementationOnce(() => new Promise(() => {}));
       await act(async () => {
-        await vi.advanceTimersByTimeAsync(1_000);
+        await vi.advanceTimersByTimeAsync(120_000);
       });
       expect(fetchMock).toHaveBeenCalledTimes(2);
-      expect(popupState.html).toContain("restriction.needsRefresh");
-      expect(popupState.html).not.toContain("restriction.state.active");
+      expect(popupState.html).toContain("roadConditions.freshness.needsRefresh");
     } finally {
       unmount?.();
       vi.useRealTimers();
@@ -490,13 +476,11 @@ describe("RouteConditionsLayer", () => {
     // place a marker at each real endpoint instead (matching the area
     // overlay's own placement in map-layer.tsx).
     fetchMock.mockResolvedValueOnce([
-      {
+      situation({
         id: "oc:2",
         source: "autobahn",
-        provider: "road-conditions-openconditions",
-        type: "road_closure",
-        severity: "critical",
-        headline: "Vollsperrung",
+        ...closure,
+        headline: text("Vollsperrung", "de"),
         geometry: {
           type: "MultiPoint",
           coordinates: [
@@ -504,7 +488,7 @@ describe("RouteConditionsLayer", () => {
             [8, 50.008],
           ],
         },
-      },
+      }),
     ]);
     render(<RouteConditionsLayer />);
     await waitFor(() => {

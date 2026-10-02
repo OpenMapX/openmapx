@@ -3,7 +3,11 @@ import assert from "node:assert/strict";
 import { createHash, randomUUID } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { RoadConditionEvent, TrafficApplicationSnapshot } from "@openmapx/core";
+import type {
+  RoadConditionEffect,
+  RoadConditionEvent,
+  TrafficApplicationSnapshot,
+} from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import Fastify from "fastify";
 import { verifyRouteTraffic } from "../../../integrations/routing/traffic-application.js";
@@ -11,10 +15,14 @@ import {
   setValhallaUrl,
   valhallaService,
 } from "../../../integrations/routing-valhalla/provider.js";
-import { event as fixtureEvent } from "../src/__tests__/fixtures/road-condition.js";
+import {
+  boundCondition,
+  effect,
+  event as fixtureEvent,
+  speedLimit,
+} from "../src/__tests__/fixtures/road-condition.js";
 import { registerApi } from "../src/api.js";
 import { registerAuth } from "../src/auth.js";
-import type { BoundCondition } from "../src/jobs/traffic/conditions-to-edges.js";
 import { readTrafficGraphState } from "../src/jobs/traffic/graph-generation.js";
 import { buildTrafficReceipts } from "../src/jobs/traffic/receipts.js";
 import { decodeGraphId, type WayEdge } from "../src/jobs/traffic/ways-to-edges.js";
@@ -50,38 +58,41 @@ const graphGeneration = createHash("sha256")
   .update(JSON.stringify([state.generation, [...ways]]))
   .digest("hex");
 const validUntil = new Date(Date.now() + 90_000).toISOString();
-const event = fixtureEvent();
-event.id = "synthetic-closure";
-event.geometry = {
-  type: "LineString",
-  coordinates: [
-    [13, 52],
-    [13.02, 52],
-  ],
-};
-assert.ok(event.routingEvidence);
-Object.assign(event.routingEvidence, {
+const currentEvidence = {
   source_checked_at: new Date().toISOString(),
   fresh_until: validUntil,
   evaluated_at: new Date().toISOString(),
-  direction_mode: "forward",
-});
-const condition: BoundCondition = {
-  id: event.id,
-  source: event.source,
-  routingEvidence: event.routingEvidence,
-  type: event.type,
-  roadState: "closed",
-  speedLimitKph: null,
-  vehiclesAffected: [],
-  originKind: "feed",
-  routingEligible: true,
-  bindingStatus: "exact",
-  segments: [{ wayId: 10, dir: "f", startFraction: 0, endFraction: 1, geometry: null }],
+  direction_mode: "forward" as const,
 };
-const overrides = new Map(
-  JSON.parse(await readFile(join(directory, "probe-overrides.json"), "utf8")),
-) as NonNullable<Parameters<typeof writeLiveTraffic>[0]["overrides"]>;
+/** The synthetic situation `recordId` with the one effect `fx`, bound to way 10 forward. */
+function synthetic(recordId: string, fx: RoadConditionEffect) {
+  const condition = boundCondition({}, fx, recordId);
+  condition.routingEvidence = { ...condition.routingEvidence, ...currentEvidence };
+  const event: RoadConditionEvent = {
+    ...fixtureEvent(),
+    id: recordId,
+    geometry: {
+      type: "LineString",
+      coordinates: [
+        [13, 52],
+        [13.02, 52],
+      ],
+    },
+    effects: [fx],
+    routingEvidence: { [fx.id]: condition.routingEvidence },
+  };
+  return { event, condition };
+}
+const { event, condition } = synthetic("synthetic-closure", effect());
+type Overrides = NonNullable<Parameters<typeof writeLiveTraffic>[0]["overrides"]>;
+// The engine probe names its closure by situation; a receipt names the effect.
+const overrides: Overrides = new Map(
+  [
+    ...(new Map(
+      JSON.parse(await readFile(join(directory, "probe-overrides.json"), "utf8")),
+    ) as Overrides),
+  ].map(([key, value]) => [key, { ...value, observationId: condition.id }]),
+);
 const deps = {
   tarPath: join(directory, "traffic.tar"),
   statePath: join(directory, "watchdog-state/live-state.json"),
@@ -208,7 +219,7 @@ try {
     "current",
   );
   policyRevision = "synthetic-policy";
-  events = [{ ...event, id: "unapplied", type: "roadworks", speedLimitKph: 30 }];
+  events = [synthetic("unapplied", speedLimit(30)).event];
   assert.equal(
     (await verifyRouteTraffic(ctx, routed.routes, fallback, "routing-valhalla"))?.availability,
     "limited",
@@ -234,20 +245,17 @@ try {
     assert.equal(first.trafficProof, undefined);
     assert.ok(first.distance < 2000);
   }
-  const capEvent: RoadConditionEvent = { ...event, type: "roadworks", speedLimitKph: 10 };
-  const capCondition: BoundCondition = {
-    ...condition,
-    type: "roadworks",
-    roadState: null,
-    speedLimitKph: 10,
-  };
+  const { event: capEvent, condition: capCondition } = synthetic(
+    "synthetic-closure",
+    speedLimit(10),
+  );
   const capOverrides = new Map(
     [...overrides].map(([key, value]) => [
       key,
       {
         closed: false as const,
         capKph: 10,
-        observationId: event.id,
+        observationId: capCondition.id,
         edge: value.edge,
       },
     ]),
