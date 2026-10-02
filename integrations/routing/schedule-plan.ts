@@ -9,6 +9,7 @@ import {
   resolveTemporalCapabilities,
   type ScheduledDirectionsResult,
   type SchedulePlanWarning,
+  type TemporalCapabilities,
   type TemporalSemantic,
   type TemporalSupport,
   type TripSchedule,
@@ -35,6 +36,12 @@ export class NoScheduleProviderError extends Error {
 interface EligibleProvider {
   resolved: ResolvedProvider;
   level: TemporalSupport;
+  temporal: TemporalCapabilities;
+}
+
+interface ServedRoute {
+  route: Route;
+  servedBy: EligibleProvider;
 }
 
 /**
@@ -48,7 +55,11 @@ function eligibleProviders(
   return chain
     .map((resolved) => {
       const capabilities = resolveTemporalCapabilities(resolved.provider);
-      return { resolved, level: worstSupport(semantics.map((s) => capabilities[s])) };
+      return {
+        resolved,
+        temporal: capabilities,
+        level: worstSupport(semantics.map((s) => capabilities[s])),
+      };
     })
     .filter((entry) => entry.level !== "unsupported");
 }
@@ -62,10 +73,7 @@ export interface SchedulePlanHooks {
   onProviderCall?: (providerId: string, outcome: "ok" | "error", durationMs: number) => void;
 }
 
-type ChainCall = (
-  waypoints: [number, number][],
-  options: RoutingOptions,
-) => Promise<{ route: Route; providerId: string }>;
+type ChainCall = (waypoints: [number, number][], options: RoutingOptions) => Promise<ServedRoute>;
 
 export async function runSchedulePlan(
   request: ParsedScheduleRequest,
@@ -88,15 +96,6 @@ export async function runSchedulePlan(
     .filter((stop) => stop.dwellIgnored)
     .map((stop) => ({ kind: "dwell-ignored-at-endpoint", waypointIndex: stop.index }));
 
-  const level = worstSupport(eligible.map((entry) => entry.level));
-  const fidelity = fidelityFor(level);
-  if (fidelity === "approximate") {
-    warnings.push({
-      kind: "approximate-travel-times",
-      providerId: eligible[0].resolved.integrationId,
-    });
-  }
-
   const seenFallbacks = new Set<string>();
   const noteFallback = (from: string, to: string) => {
     const key = `${from}->${to}`;
@@ -108,7 +107,8 @@ export async function runSchedulePlan(
   const callChain: ChainCall = async (waypoints, options) => {
     let lastError: unknown;
     let previousId: string | undefined;
-    for (const { resolved: candidate } of eligible) {
+    for (const entry of eligible) {
+      const candidate = entry.resolved;
       const startedAt = performance.now();
       try {
         const result = await candidate.provider.getRoute(waypoints, request.travelMode, options);
@@ -116,7 +116,7 @@ export async function runSchedulePlan(
         if (!route) throw new Error("provider returned no route");
         hooks.onProviderCall?.(candidate.integrationId, "ok", performance.now() - startedAt);
         if (previousId) noteFallback(previousId, candidate.integrationId);
-        return { route, providerId: candidate.integrationId };
+        return { route, servedBy: entry };
       } catch (error) {
         hooks.onProviderCall?.(candidate.integrationId, "error", performance.now() - startedAt);
         previousId = candidate.integrationId;
@@ -128,18 +128,45 @@ export async function runSchedulePlan(
 
   const finish = (
     routes: Route[],
-    providerId: string,
+    retained: ServedRoute[],
     schedule: TripSchedule,
-  ): ScheduledDirectionsResult => ({
-    waypoints: request.waypoints,
-    routes,
-    activeRouteIndex: 0,
-    provider: providerId,
-    schedule,
-    fidelity,
-    temporal: resolveTemporalCapabilities(eligible[0].resolved.provider),
-    warnings,
-  });
+  ): ScheduledDirectionsResult => {
+    const contributors = [...new Set(retained.map((call) => call.servedBy))];
+    // Empty output must not advertise a provider's unserved capabilities.
+    const temporal: TemporalCapabilities = {
+      tripDepartAt: "unsupported",
+      tripArriveBy: "unsupported",
+      dwell: "unsupported",
+      waypointDepartAfter: "unsupported",
+      waypointArriveBy: "unsupported",
+      timeDependentTravel: "unsupported",
+    };
+    if (contributors.length > 0) {
+      for (const semantic of Object.keys(temporal) as TemporalSemantic[]) {
+        temporal[semantic] = worstSupport(contributors.map((entry) => entry.temporal[semantic]));
+      }
+    }
+    const approximateIds = new Set(
+      contributors
+        .filter((entry) => fidelityFor(entry.level) === "approximate")
+        .map((entry) => entry.resolved.integrationId),
+    );
+    for (const providerId of approximateIds)
+      warnings.push({ kind: "approximate-travel-times", providerId });
+    // Preserve the singular label's last-successful-call convention in either
+    // solve direction. Payloads themselves are retained in geometric leg order.
+    const lastCall = resolved.direction === "backward" ? retained[0] : retained.at(-1);
+    return {
+      waypoints: request.waypoints,
+      routes,
+      activeRouteIndex: 0,
+      provider: lastCall?.servedBy.resolved.integrationId,
+      schedule,
+      fidelity: fidelityFor(worstSupport(contributors.map((entry) => entry.level))),
+      temporal,
+      warnings,
+    };
+  };
 
   const single = await trySingleCall(request, resolved, eligible, callChain);
   if (single) {
@@ -150,10 +177,9 @@ export async function runSchedulePlan(
       direction: resolved.direction,
     });
     schedule.violations = [...resolved.violations, ...schedule.violations];
-    return finish([single.route], single.providerId, schedule);
+    return finish([single.route], [single], schedule);
   }
 
-  let servedBy = eligible[0].resolved.integrationId;
   const oracle = async (legIndex: number, instantMs: number, pinArrival: boolean) => {
     const pair: [number, number][] = [request.waypoints[legIndex], request.waypoints[legIndex + 1]];
     const zone = resolved.stops[pinArrival ? legIndex + 1 : legIndex].timeZone;
@@ -163,8 +189,7 @@ export async function runSchedulePlan(
         ? { arriveBy: wallClockIn(instantMs, zone) }
         : { departAt: wallClockIn(instantMs, zone) }),
     });
-    servedBy = call.providerId;
-    return { seconds: call.route.duration, payload: call.route };
+    return { seconds: call.route.duration, payload: call };
   };
 
   const planned = await planScheduledTrip({
@@ -174,14 +199,15 @@ export async function runSchedulePlan(
     providerId: eligible[0].resolved.integrationId,
   });
 
-  const legRoutes = planned.legPayloads.filter(
-    (payload): payload is Route => payload !== undefined,
+  const retained = planned.legPayloads.filter(
+    (payload): payload is ServedRoute => payload !== undefined,
   );
+  const legRoutes = retained.map((call) => call.route);
   // Every leg failed. There is no geometry to draw, but the schedule still
   // carries the `unreachable` violation that explains why, and the caller needs
   // that far more than it needs an exception.
   const routes = legRoutes.length > 0 ? [concatenateRoutes(legRoutes)] : [];
-  return finish(routes, servedBy, planned.schedule);
+  return finish(routes, retained, planned.schedule);
 }
 
 /**
@@ -196,11 +222,9 @@ async function trySingleCall(
   resolved: ResolvedSchedule,
   eligible: EligibleProvider[],
   callChain: ChainCall,
-): Promise<{ route: Route; providerId: string; legSeconds: number[] } | null> {
+): Promise<(ServedRoute & { legSeconds: number[] }) | null> {
   if (request.hasWindows) return null;
-  const nativeDwell = eligible.some(
-    (entry) => resolveTemporalCapabilities(entry.resolved.provider).dwell === "native",
-  );
+  const nativeDwell = eligible.some((entry) => entry.temporal.dwell === "native");
   if (!nativeDwell) return null;
 
   const anchor = request.anchor;
@@ -220,5 +244,5 @@ async function trySingleCall(
   const travelSeconds = legSeconds.reduce((sum, seconds) => sum + seconds, 0);
   const route: Route = { ...call.route, duration: travelSeconds };
 
-  return { route, providerId: call.providerId, legSeconds };
+  return { route, servedBy: call.servedBy, legSeconds };
 }

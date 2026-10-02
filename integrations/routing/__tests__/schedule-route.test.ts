@@ -43,6 +43,77 @@ async function post(ctx: MockContext, body: unknown) {
 }
 
 describe("POST /directions/schedule", () => {
+  it.each([false, true])(
+    "serializes accuracy for the actual serving provider (fallback: %s)",
+    async (fallback) => {
+      const native = {
+        tripDepartAt: "native",
+        tripArriveBy: "native",
+        dwell: "native",
+        waypointDepartAfter: "emulated",
+        waypointArriveBy: "emulated",
+        timeDependentTravel: "native",
+      } as const;
+      const approximate = {
+        tripDepartAt: "approximate",
+        tripArriveBy: "approximate",
+        dwell: "approximate",
+        waypointDepartAfter: "approximate",
+        waypointArriveBy: "approximate",
+        timeDependentTravel: "unsupported",
+      } as const;
+      const route = {
+        distance: 1000,
+        duration: 60,
+        geometry: [COLOGNE, BONN],
+        legs: [{ distance: 1000, duration: 60, geometry: [COLOGNE, BONN], steps: [] }],
+        steps: [],
+        mode: "driving" as const,
+      };
+      const primary: RoutingProvider = {
+        id: "valhalla",
+        supportedModes: ["driving"],
+        temporal: native,
+        getRoute: vi.fn(async (waypoints): Promise<DirectionsResult> => {
+          if (fallback) throw new Error("primary unavailable");
+          return { waypoints, routes: [route], activeRouteIndex: 0 };
+        }),
+      };
+      const backup: RoutingProvider = {
+        id: "osrm",
+        supportedModes: ["driving"],
+        temporal: approximate,
+        getRoute: vi.fn(
+          async (waypoints): Promise<DirectionsResult> => ({
+            waypoints,
+            routes: [route],
+            activeRouteIndex: 0,
+          }),
+        ),
+      };
+      const ctx = createMockIntegrationContext();
+      ctx.getIntegrationsByDomain = (domain) =>
+        domain === "routing"
+          ? [primary, backup].map((provider) => ({
+              id: `routing-${provider.id}`,
+              providers: new Map([["routing", [provider]]]),
+              manifest: {} as never,
+            }))
+          : [];
+      setup(ctx);
+      const sent = await post(ctx, { waypoints: [COLOGNE, BONN], departAt: "2026-09-01T09:00" });
+      expect(sent.status).toBe(200);
+      const body = JSON.parse(JSON.stringify(sent.payload));
+      expect(body.provider).toBe(fallback ? "routing-osrm" : "routing-valhalla");
+      expect(body.fidelity).toBe(fallback ? "approximate" : "exact");
+      expect(body.temporal).toEqual(fallback ? approximate : native);
+      expect(
+        body.warnings.filter(
+          (warning: { kind: string }) => warning.kind === "approximate-travel-times",
+        ),
+      ).toEqual(fallback ? [{ kind: "approximate-travel-times", providerId: "routing-osrm" }] : []);
+    },
+  );
   it("is registered", () => {
     const ctx = newContext();
     expect(

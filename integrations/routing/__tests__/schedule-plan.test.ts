@@ -58,6 +58,271 @@ const APPROXIMATE = {
   timeDependentTravel: "unsupported",
 } as const;
 
+function resultOf(waypoints: [number, number][]): DirectionsResult {
+  const legs = waypoints
+    .slice(1)
+    .map((point, index) => routeOf(3600, waypoints[index], point).legs[0]);
+  return {
+    waypoints,
+    activeRouteIndex: 0,
+    routes: [
+      {
+        ...routeOf(3600 * legs.length, waypoints[0], waypoints[waypoints.length - 1]),
+        geometry: waypoints,
+        legs,
+      },
+    ],
+  };
+}
+
+const windowedRequest = () =>
+  parseScheduleRequest({
+    waypoints: [COLOGNE, BONN, AACHEN],
+    schedules: [null, { departAfter: "2026-09-01T12:00" }, null],
+    departAt: "2026-09-01T09:00",
+  });
+
+describe("retained schedule provider metadata", () => {
+  it("aggregates each retained semantic independently without downgrading exact emulation", async () => {
+    const secondaryTemporal = {
+      ...NATIVE_DWELL,
+      tripArriveBy: "unsupported",
+      dwell: "emulated",
+      timeDependentTravel: "emulated",
+    } as const;
+    const primary = vi.fn<GetRoute>(async (waypoints) => {
+      if (waypoints[0][0] === BONN[0]) throw new Error("leg unavailable");
+      return resultOf(waypoints);
+    });
+    const backup = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
+    const result = await runSchedulePlan(windowedRequest(), [
+      provider({ id: "native", temporal: NATIVE_DWELL }, primary),
+      provider({ id: "emulated", temporal: secondaryTemporal }, backup),
+    ]);
+    expect(result.temporal).toEqual(secondaryTemporal);
+    expect(result.fidelity).toBe("exact");
+    expect(
+      result.warnings.filter((warning) => warning.kind === "approximate-travel-times"),
+    ).toEqual([]);
+  });
+
+  it("warns once for each actual approximate contributor across repeated legs", async () => {
+    const first = vi.fn<GetRoute>(async (waypoints) => {
+      if (waypoints[0][0] !== COLOGNE[0]) throw new Error("leg unavailable");
+      return resultOf(waypoints);
+    });
+    const second = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
+    const result = await runSchedulePlan(
+      parseScheduleRequest({
+        waypoints: [COLOGNE, BONN, AACHEN, COLOGNE],
+        schedules: [null, { departAfter: "2026-09-01T12:00" }, null, null],
+        departAt: "2026-09-01T09:00",
+      }),
+      [
+        provider({ id: "osrm-a", temporal: APPROXIMATE }, first),
+        provider({ id: "osrm-b", temporal: APPROXIMATE }, second),
+      ],
+    );
+    expect(result.routes[0].legs).toHaveLength(3);
+    expect(
+      result.warnings.filter((warning) => warning.kind === "approximate-travel-times"),
+    ).toEqual([
+      { kind: "approximate-travel-times", providerId: "osrm-a" },
+      { kind: "approximate-travel-times", providerId: "osrm-b" },
+    ]);
+    expect(result.warnings.filter((warning) => warning.kind === "provider-fallback")).toEqual([
+      { kind: "provider-fallback", from: "osrm-a", to: "osrm-b" },
+    ]);
+  });
+
+  it("preserves the last-served provider label for a backward mixed chain", async () => {
+    const primary = vi.fn<GetRoute>(async (waypoints) => {
+      if (waypoints[0][0] === COLOGNE[0]) throw new Error("leg unavailable");
+      return resultOf(waypoints);
+    });
+    const backup = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
+    const result = await runSchedulePlan(
+      parseScheduleRequest({
+        waypoints: [COLOGNE, BONN, AACHEN],
+        schedules: [null, { arriveBy: "2026-09-01T16:00" }, null],
+        arriveBy: "2026-09-01T18:00",
+      }),
+      [
+        provider({ id: "valhalla", temporal: NATIVE_DWELL }, primary),
+        provider({ id: "osrm", temporal: APPROXIMATE }, backup),
+      ],
+    );
+    expect(result.provider).toBe("osrm");
+    expect(result.temporal).toEqual(APPROXIMATE);
+    expect(result.fidelity).toBe("approximate");
+    expect(result.routes[0].legs).toHaveLength(2);
+  });
+  it.each([false, true])(
+    "does not downgrade a native result for an unused approximate backup (windows: %s)",
+    async (windows) => {
+      const primary = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
+      const backup = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
+      const request = windows
+        ? windowedRequest()
+        : parseScheduleRequest({
+            waypoints: [COLOGNE, BONN, AACHEN],
+            schedules: [null, { dwellSeconds: 600 }, null],
+            departAt: "2026-09-01T09:00",
+          });
+      const result = await runSchedulePlan(request, [
+        provider({ id: "valhalla", temporal: NATIVE_DWELL }, primary),
+        provider({ id: "osrm", temporal: APPROXIMATE }, backup),
+      ]);
+      expect(backup).not.toHaveBeenCalled();
+      expect(result.fidelity).toBe("exact");
+      expect(result.temporal).toEqual(NATIVE_DWELL);
+      expect(
+        result.warnings.filter((warning) => warning.kind === "approximate-travel-times"),
+      ).toEqual([]);
+    },
+  );
+
+  it("attributes a retained approximate single-call fallback to its actual provider", async () => {
+    const primary = vi.fn<GetRoute>(async () => {
+      throw new Error("native unavailable");
+    });
+    const backup = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
+    const result = await runSchedulePlan(
+      parseScheduleRequest({
+        waypoints: [COLOGNE, BONN, AACHEN],
+        schedules: [null, { dwellSeconds: 600 }, null],
+        departAt: "2026-09-01T09:00",
+      }),
+      [
+        provider({ id: "valhalla", temporal: NATIVE_DWELL }, primary),
+        provider({ id: "osrm", temporal: APPROXIMATE }, backup),
+      ],
+    );
+    expect(backup).toHaveBeenCalledTimes(1);
+    expect(result.provider).toBe("osrm");
+    expect(result.fidelity).toBe("approximate");
+    expect(result.temporal).toEqual(APPROXIMATE);
+    expect(result.warnings).toContainEqual({
+      kind: "approximate-travel-times",
+      providerId: "osrm",
+    });
+    expect(result.warnings).toContainEqual({
+      kind: "provider-fallback",
+      from: "valhalla",
+      to: "osrm",
+    });
+  });
+
+  it("aggregates mixed retained legs and warns only for the approximate contributor", async () => {
+    const primary = vi.fn<GetRoute>(async (waypoints) => {
+      if (waypoints[0][0] === BONN[0]) throw new Error("leg unavailable");
+      return resultOf(waypoints);
+    });
+    const backup = vi.fn<GetRoute>(async (waypoints) => resultOf(waypoints));
+    const result = await runSchedulePlan(windowedRequest(), [
+      provider({ id: "valhalla", temporal: NATIVE_DWELL }, primary),
+      provider({ id: "osrm", temporal: APPROXIMATE }, backup),
+    ]);
+    expect(result.routes[0].legs).toHaveLength(2);
+    expect(result.fidelity).toBe("approximate");
+    expect(result.temporal).toEqual(APPROXIMATE);
+    expect(
+      result.warnings.filter((warning) => warning.kind === "approximate-travel-times"),
+    ).toEqual([{ kind: "approximate-travel-times", providerId: "osrm" }]);
+  });
+
+  it("excludes rejected approximate single-call output from exact retained leg metadata", async () => {
+    const primary = vi.fn<GetRoute>(async (waypoints) => {
+      if (waypoints.length > 2) throw new Error("single call unavailable");
+      return resultOf(waypoints);
+    });
+    const backup = vi.fn<GetRoute>(async (waypoints) => ({
+      waypoints,
+      activeRouteIndex: 0,
+      routes: [routeOf(3600, waypoints[0], waypoints[waypoints.length - 1])],
+    }));
+    const result = await runSchedulePlan(
+      parseScheduleRequest({
+        waypoints: [COLOGNE, BONN, AACHEN],
+        schedules: [null, { dwellSeconds: 600 }, null],
+        departAt: "2026-09-01T09:00",
+      }),
+      [
+        provider({ id: "valhalla", temporal: NATIVE_DWELL }, primary),
+        provider({ id: "osrm", temporal: APPROXIMATE }, backup),
+      ],
+    );
+    expect(primary).toHaveBeenCalledTimes(3);
+    expect(backup).toHaveBeenCalledTimes(1);
+    expect(result.routes[0].legs).toHaveLength(2);
+    expect(result.provider).toBe("valhalla");
+    expect(result.fidelity).toBe("exact");
+    expect(result.temporal).toEqual(NATIVE_DWELL);
+    expect(
+      result.warnings.filter((warning) => warning.kind === "approximate-travel-times"),
+    ).toEqual([]);
+    expect(result.warnings).toContainEqual({
+      kind: "provider-fallback",
+      from: "valhalla",
+      to: "osrm",
+    });
+  });
+
+  it.each(["forward", "backward"])(
+    "keeps metadata from the retained exact %s partial route",
+    async (direction) => {
+      const request =
+        direction === "forward"
+          ? windowedRequest()
+          : parseScheduleRequest({
+              waypoints: [COLOGNE, BONN, AACHEN],
+              schedules: [null, { arriveBy: "2026-09-01T16:00" }, null],
+              arriveBy: "2026-09-01T18:00",
+            });
+      const primary = vi.fn<GetRoute>(async (waypoints) => {
+        if (waypoints[0][0] === (direction === "forward" ? BONN[0] : COLOGNE[0]))
+          throw new Error("unreachable");
+        return resultOf(waypoints);
+      });
+      const backup = vi.fn<GetRoute>(async () => {
+        throw new Error("unreachable");
+      });
+      const result = await runSchedulePlan(request, [
+        provider({ id: "valhalla", temporal: NATIVE_DWELL }, primary),
+        provider({ id: "osrm", temporal: APPROXIMATE }, backup),
+      ]);
+      expect(result.routes[0].legs).toHaveLength(1);
+      expect(result.schedule.violations).toContainEqual({
+        kind: "unreachable",
+        fromIndex: direction === "forward" ? 1 : 0,
+        toIndex: direction === "forward" ? 2 : 1,
+      });
+      expect(result.provider).toBe("valhalla");
+      expect(result.fidelity).toBe("exact");
+      expect(result.temporal).toEqual(NATIVE_DWELL);
+      expect(
+        result.warnings.filter((warning) => warning.kind === "approximate-travel-times"),
+      ).toEqual([]);
+    },
+  );
+
+  it("does not advertise any serving provider or support when every leg is unreachable", async () => {
+    const dead = vi.fn<GetRoute>(async () => {
+      throw new Error("unreachable");
+    });
+    const result = await runSchedulePlan(windowedRequest(), [
+      provider({ id: "valhalla", temporal: NATIVE_DWELL }, dead),
+      provider({ id: "osrm", temporal: APPROXIMATE }, dead),
+    ]);
+    expect(result.routes).toEqual([]);
+    expect(result.provider).toBeUndefined();
+    expect(Object.values(result.temporal)).toEqual(Array(6).fill("unsupported"));
+    expect(
+      result.warnings.filter((warning) => warning.kind === "approximate-travel-times"),
+    ).toEqual([]);
+  });
+});
+
 describe("runSchedulePlan", () => {
   it("takes the single-call path for a dwell-only trip on a native-dwell provider", async () => {
     const getRoute = vi.fn<GetRoute>(async (waypoints) => ({
