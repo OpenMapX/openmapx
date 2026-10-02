@@ -10,6 +10,19 @@ vi.mock("next-intl", () => ({
   useLocale: () => "en",
 }));
 
+// Keep signed-out place rendering independent of Better Auth's session fetch
+// and delayed listener cleanup, which can outlive this file's jsdom environment.
+// Mock at the shared hook so the real saved-place hooks use the same session.
+vi.mock("../../../../../../packages/core/src/auth/useSession", () => ({
+  useSession: () => ({
+    data: null,
+    error: null,
+    isPending: false,
+    isRefetching: false,
+    refetch: vi.fn(),
+  }),
+}));
+
 vi.mock("@openmapx/mangrove-react", () => ({
   useReviewAggregate: () => ({ data: undefined, isLoading: false }),
 }));
