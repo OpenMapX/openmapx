@@ -26,29 +26,49 @@ interface ScoredHit {
   entry: PresetIndexEntry;
   score: number;
   matchedOn: PresetMatch["matchedOn"];
+  matchedValue: string;
 }
 
 function scoreEntry(entry: PresetIndexEntry, qn: string): ScoredHit | undefined {
   if (entry.normalizedName === qn) {
-    return { entry, score: 1000 * entry.matchScore, matchedOn: "name" };
+    return {
+      entry,
+      score: 1000 * entry.matchScore,
+      matchedOn: "name",
+      matchedValue: entry.displayName,
+    };
   }
   if (entry.normalizedName.startsWith(qn)) {
-    return { entry, score: 500 * entry.matchScore, matchedOn: "name" };
+    return {
+      entry,
+      score: 500 * entry.matchScore,
+      matchedOn: "name",
+      matchedValue: entry.displayName,
+    };
   }
   if (entry.normalizedName.includes(qn)) {
-    return { entry, score: 250 * entry.matchScore, matchedOn: "name" };
+    return {
+      entry,
+      score: 250 * entry.matchScore,
+      matchedOn: "name",
+      matchedValue: entry.displayName,
+    };
   }
-  if (entry.normalizedAliases.includes(qn)) {
-    return { entry, score: 200 * entry.matchScore, matchedOn: "alias" };
+  const exactAlias = entry.normalizedAliases.find((alias) => alias === qn);
+  if (exactAlias) {
+    return { entry, score: 200 * entry.matchScore, matchedOn: "alias", matchedValue: exactAlias };
   }
-  if (entry.normalizedAliases.some((a) => a.startsWith(qn))) {
-    return { entry, score: 150 * entry.matchScore, matchedOn: "alias" };
+  const prefixAlias = entry.normalizedAliases.find((alias) => alias.startsWith(qn));
+  if (prefixAlias) {
+    return { entry, score: 150 * entry.matchScore, matchedOn: "alias", matchedValue: prefixAlias };
   }
-  if (entry.normalizedTerms.includes(qn)) {
-    return { entry, score: 100 * entry.matchScore, matchedOn: "term" };
+  const exactTerm = entry.normalizedTerms.find((term) => term === qn);
+  if (exactTerm) {
+    return { entry, score: 100 * entry.matchScore, matchedOn: "term", matchedValue: exactTerm };
   }
-  if (entry.normalizedTerms.some((t) => t.includes(qn))) {
-    return { entry, score: 50 * entry.matchScore, matchedOn: "term" };
+  const partialTerm = entry.normalizedTerms.find((term) => term.includes(qn));
+  if (partialTerm) {
+    return { entry, score: 50 * entry.matchScore, matchedOn: "term", matchedValue: partialTerm };
   }
   return undefined;
 }
@@ -80,6 +100,7 @@ export function searchPresets(
       iconKey: hit.entry.icon,
       tags: hit.entry.tags,
       matchedOn: hit.matchedOn,
+      matchedValue: hit.matchedValue,
     });
   }
   return out;

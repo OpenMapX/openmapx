@@ -53,4 +53,6 @@ export interface PresetMatch {
   tags: Record<string, string>;
   /** Which field produced the highest score. Useful for UI hints / debugging. */
   matchedOn: "name" | "alias" | "term";
+  /** Full winning name/alias/term, never just the query fragment. */
+  matchedValue: string;
 }

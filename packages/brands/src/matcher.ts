@@ -46,6 +46,7 @@ interface ScoredHit {
   entry: BrandEntry;
   score: number;
   matchedOn: BrandMatch["matchedOn"];
+  matchedValue: string;
 }
 
 /** True when `qn` starts one of the words of `name` after the first. */
@@ -88,7 +89,8 @@ function scoreEntry(entry: BrandEntry, qn: string): ScoredHit | undefined {
     const matchedOn: BrandMatch["matchedOn"] = name === canonical ? "name" : "alias";
     // An alias hit is worth slightly less than the same hit on the display name.
     const score = matchedOn === "name" ? base : base * 0.9;
-    if (!best || score > best.score) best = { entry, score, matchedOn };
+    if (!best || score > best.score)
+      best = { entry, score, matchedOn, matchedValue: matchedOn === "name" ? entry.name : name };
   }
   return best;
 }
@@ -123,6 +125,7 @@ export function searchBrands(index: BrandIndex, opts: BrandSearchOptions): Brand
       name: hit.entry.name,
       kind: hit.entry.kind,
       matchedOn: hit.matchedOn,
+      matchedValue: hit.matchedValue,
       presence: hit.presence,
     };
     if (hit.entry.description) match.description = hit.entry.description;

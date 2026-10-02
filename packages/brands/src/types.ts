@@ -20,6 +20,8 @@ export interface BrandArtifact {
 export type BrandMatch = BrandSummary & {
   /** Which field produced the highest score. Useful for UI hints / debugging. */
   matchedOn: "name" | "alias";
+  /** Full winning name/alias, never just the query fragment. */
+  matchedValue: string;
   /** Where the chain operates relative to the country searched from. */
   presence: BrandPresence;
 };

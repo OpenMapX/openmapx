@@ -2,6 +2,7 @@ import type { BrandSuggestResponse } from "../types/brand";
 import type { CategoryDefinition } from "../types/category";
 import type { AutocompleteResult } from "../types/geocoding";
 import type { ChipTranslation, PresetMatch } from "../types/presetMatch";
+import type { SearchSuggestionMatch } from "../types/searchSuggestion";
 import {
   CONFIDENT_TEXT_SCORE,
   compareSearchSuggestions,
@@ -343,6 +344,19 @@ export function matchCategorySuggestions({
   return rows;
 }
 
+/** Relevance travels with the winning candidate while the row keeps its canonical label. */
+function shortcutMatch(
+  matchedOn: "name" | "alias" | "term",
+  value: string | undefined,
+): SearchSuggestionMatch | undefined {
+  if (!value) return undefined;
+  return {
+    kind: matchedOn === "alias" ? "explicit_alias" : matchedOn === "term" ? "keyword" : "name",
+    value,
+    normalized: normalizeSearchTerm(value),
+  };
+}
+
 /** Chain rows from a brand-suggest response; `fallbackSublabel` stands in for a missing description. */
 export function brandSuggestionRows(
   matches: BrandSuggestResponse["matches"],
@@ -355,6 +369,7 @@ export function brandSuggestionRows(
     type: "brand",
     brand,
     brandPresence: brand.presence,
+    searchMatch: shortcutMatch(brand.matchedOn, brand.matchedValue),
   }));
 }
 
@@ -369,6 +384,7 @@ export function presetSuggestionRows(
     sublabel,
     type: "category",
     presetIconKey: preset.iconKey,
+    searchMatch: shortcutMatch(preset.matchedOn, preset.matchedValue),
   }));
 }
 

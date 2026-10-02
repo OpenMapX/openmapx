@@ -23,6 +23,23 @@ function index(entries: BrandEntry[]): BrandIndex {
 }
 
 describe("searchBrands", () => {
+  it.each(["kentucky fried chicken", "kentucky", "fried"])(
+    "returns the winning full alias for %s",
+    (q) => {
+      const result = searchBrands(
+        index([
+          entry({ qid: "Q524757", name: "KFC", matchNames: ["kentucky fried chicken", "kfc"] }),
+        ]),
+        { q, limit: 10 },
+      );
+      expect(result[0]).toMatchObject({
+        qid: "Q524757",
+        name: "KFC",
+        matchedOn: "alias",
+        matchedValue: "kentucky fried chicken",
+      });
+    },
+  );
   it("ranks an exact name match above a prefix match", () => {
     const result = searchBrands(
       index([entry({ qid: "Q1", name: "Star" }), entry({ qid: "Q2", name: "Starbucks" })]),

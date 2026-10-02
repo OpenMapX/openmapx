@@ -348,7 +348,9 @@ export function textMatchScore(item: AutocompleteResult, query: string): number 
         ? TEXT_SCORE.wordPrefix
         : match.normalized.startsWith(normalizedQuery)
           ? TEXT_SCORE.contextWordPrefix
-          : 0;
+          : item.type === "category" && match.normalized.includes(normalizedQuery)
+            ? TEXT_SCORE.contains
+            : 0;
     return Math.max(tagged, textMatchScore({ ...item, searchMatch: undefined }, query));
   }
   if (match?.kind === "near_name") {
@@ -375,6 +377,19 @@ export function textMatchScore(item: AutocompleteResult, query: string): number 
   }
   if (match?.normalized.startsWith(normalizedQuery) && match.kind !== "generated_acronym") {
     return TEXT_SCORE.prefix;
+  }
+
+  if (
+    (item.type === "brand" || item.type === "category") &&
+    (match?.kind === "name" || match?.kind === "explicit_alias")
+  ) {
+    return Math.max(
+      textMatchScore(
+        { ...item, label: match.value, sublabel: undefined, searchMatch: undefined },
+        query,
+      ),
+      textMatchScore({ ...item, searchMatch: undefined }, query),
+    );
   }
 
   const key = matchKey(query);

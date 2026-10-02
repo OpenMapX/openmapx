@@ -931,6 +931,54 @@ describe("SearchBar", () => {
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
   });
 
+  it("shows a brand's canonical label for a recognized alias and selects that brand", async () => {
+    useBrandSuggestMock.mockReturnValue({
+      data: {
+        matches: [
+          {
+            qid: "Q524757",
+            name: "KFC",
+            kind: ["brand"],
+            matchedOn: "alias",
+            matchedValue: "kentucky fried chicken",
+            presence: "here",
+          },
+        ],
+      },
+    });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "Kentucky Fried Chicken" } });
+    fireEvent.click(await screen.findByRole("option", { name: /KFC/ }));
+    expect(useCategorySearchStore.getState().activeBrand?.qid).toBe("Q524757");
+    expect(useCategorySearchStore.getState().adHocFilter).toMatchObject({
+      selectors: [{ tags: [{ key: "brand:wikidata", value: "Q524757" }] }],
+    });
+  });
+
+  it("shows and selects the canonical preset for a recognized search term", async () => {
+    usePresetSuggestMock.mockReturnValue({
+      data: {
+        matches: [
+          {
+            id: "amenity/ice_cream",
+            name: "Ice Cream Shop",
+            tags: { amenity: "ice_cream" },
+            matchedOn: "term",
+            matchedValue: "gelato",
+          },
+        ],
+      },
+    });
+    renderBar();
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "gelato" } });
+    fireEvent.click(await screen.findByRole("option", { name: /Ice Cream Shop/ }));
+    expect(useCategorySearchStore.getState().activeCategory).toBe("preset:amenity/ice_cream");
+  });
+
   it("plain Enter selects an exact preset name", async () => {
     usePresetSuggestMock.mockReturnValue({
       data: {

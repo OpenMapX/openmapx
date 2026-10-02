@@ -6,6 +6,34 @@ const index = loadPresetIndex(["en", "de"]);
 const noSuppression = new Set<string>();
 
 describe("searchPresets", () => {
+  it.each([
+    ["sweet", "name", "Sweet Store"],
+    ["dessert kiosk", "alias", "dessert kiosk"],
+    ["dessert", "alias", "dessert kiosk"],
+    ["frozen dessert", "term", "frozen dessert"],
+    ["frozen", "term", "frozen dessert"],
+    ["rozen", "term", "frozen dessert"],
+  ])("preserves the full winning candidate for %s", (q, matchedOn, matchedValue) => {
+    const controlled = new Map([
+      [
+        "en",
+        [
+          {
+            presetId: "shop/sweets",
+            displayName: "Sweet Store",
+            normalizedName: "sweet store",
+            normalizedAliases: ["dessert kiosk"],
+            normalizedTerms: ["frozen dessert"],
+            tags: { shop: "confectionery" },
+            matchScore: 1,
+          },
+        ],
+      ],
+    ]);
+    expect(
+      searchPresets(controlled, { q, lang: "en", limit: 8, suppressTagSets: noSuppression })[0],
+    ).toMatchObject({ matchedOn, matchedValue });
+  });
   it("finds an OSM ice-cream shop by German term 'Eisdiele'", () => {
     const results = searchPresets(index, {
       q: "eisdiele",

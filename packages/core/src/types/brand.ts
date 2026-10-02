@@ -40,5 +40,10 @@ export interface BrandDetail extends BrandSummary {
 export type BrandPresence = "here" | "global" | "unknown" | "elsewhere";
 
 export interface BrandSuggestResponse {
-  matches: (BrandSummary & { matchedOn: "name" | "alias"; presence: BrandPresence })[];
+  matches: (BrandSummary & {
+    matchedOn: "name" | "alias";
+    presence: BrandPresence;
+    /** Actual winning name/alias. Optional for older servers and cached responses. */
+    matchedValue?: string;
+  })[];
 }
