@@ -204,6 +204,49 @@ describe("leg advancement", () => {
     expect(events.some((e) => e.type === "alight")).toBe(true);
   });
 
+  it("keeps the final walk active after alighting", () => {
+    const result = tick({
+      state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
+      fix: fix(at(RIDE, 1), NOW + 20 * 60_000),
+      nowMs: NOW + 20 * 60_000,
+    });
+
+    expect(result.state.currentLegIndex).toBe(2);
+    expect(result.state.phase).toBe("walking");
+    expect(result.events).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "alight", legIndex: 1 }),
+        expect.objectContaining({ type: "transfer", fromLegIndex: 1, toLegIndex: 2 }),
+      ]),
+    );
+    expect(result.events.some((event) => event.type === "arrival")).toBe(false);
+
+    const halfway = tick({
+      state: result.state,
+      fix: fix(at(WALK_B, 0.5), NOW + 22 * 60_000),
+      nowMs: NOW + 22 * 60_000,
+    });
+    expect(halfway.state.phase).toBe("walking");
+    expect(halfway.events.some((event) => event.type === "arrival")).toBe(false);
+
+    const arrived = tick({
+      state: halfway.state,
+      fix: fix(at(WALK_B, 1), NOW + 25 * 60_000),
+      nowMs: NOW + 25 * 60_000,
+    });
+    expect(arrived.state.phase).toBe("arrived");
+    expect(arrived.events.filter((event) => event.type === "arrival")).toEqual([
+      expect.objectContaining({ legIndex: 2 }),
+    ]);
+    expect(
+      tick({
+        state: arrived.state,
+        fix: fix(at(WALK_B, 1), NOW + 26 * 60_000),
+        nowMs: NOW + 26 * 60_000,
+      }).events,
+    ).toEqual([]);
+  });
+
   it("never regresses once riding progress is established", () => {
     const { state } = run(
       [

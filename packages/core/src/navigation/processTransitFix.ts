@@ -405,8 +405,14 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
         });
       }
 
-      // Arrival is only ever asserted from a real fix on the final leg.
-      if (state.currentLegIndex === legs.length - 1 && match.fraction >= 0.98 && legs.length > 0) {
+      // A transition still carries the previous leg's match. Evaluate arrival
+      // only when this fix was matched to the final leg itself.
+      if (
+        !shouldAdvance &&
+        state.currentLegIndex === legs.length - 1 &&
+        match.fraction >= 0.98 &&
+        legs.length > 0
+      ) {
         state.phase = "arrived";
         emit({
           id: eventId(options.itineraryFingerprint, "arrival", state.currentLegIndex),

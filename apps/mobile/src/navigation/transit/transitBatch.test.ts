@@ -221,6 +221,45 @@ describe("processTransitBatch events", () => {
       expect(outcome.session.status).toBe("active");
     }
   });
+
+  it("preserves an active session from alighting through the final walk", () => {
+    const current = riding();
+    const itinerary = current.payload.startPackage.itinerary as {
+      legs: Array<{ geometry?: { coordinates: [number, number][] } }>;
+    };
+    itinerary.legs[1].geometry = {
+      coordinates: [
+        [8.68, 50.11],
+        [8.64, 50.11],
+      ],
+    };
+    itinerary.legs[2].geometry = {
+      coordinates: [
+        [8.64, 50.11],
+        [8.63, 50.11],
+      ],
+    };
+    const alightAt = new Date("2026-08-09T08:40:00Z").getTime();
+    const alight = run({
+      session: current,
+      fixes: [fixAt(alightAt, { coords: [8.64, 50.11] })],
+      nowMs: alightAt,
+    });
+
+    expect(alight.arrived).toBe(false);
+    expect(alight.session.status).toBe("active");
+    expect((alight.session as TransitMobileSession).payload.tickState.phase).toBe("walking");
+    expect(alight.events.some((event) => event.type === "alight")).toBe(true);
+
+    const destinationAt = alightAt + 5 * 60_000;
+    const destination = run({
+      session: alight.session as TransitMobileSession,
+      fixes: [fixAt(destinationAt, { coords: [8.63, 50.11] })],
+      nowMs: destinationAt,
+    });
+    expect(destination.arrived).toBe(true);
+    expect(destination.session.status).toBe("arrived");
+  });
 });
 
 describe("processTransitBatch location profile", () => {
