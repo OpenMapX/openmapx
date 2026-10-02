@@ -662,7 +662,7 @@ function deferredVoid() {
 }
 
 /** Real storage/accounting; only extraction's external tool is replaced. */
-function artifactFixture(maxQueuedJobs = 64) {
+function artifactFixture(maxQueuedJobs = 64, maxTrackedJobs = 1_024) {
   const dataDir = createDataDir();
   const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
   let now = Date.parse("2026-09-01T10:00:00Z");
@@ -684,7 +684,7 @@ function artifactFixture(maxQueuedJobs = 64) {
       temporaryBytesPeak: 7,
     };
   });
-  const generator = new OfflinePackageGenerator({
+  const generatorOptions = {
     source: () => ({
       descriptor: sourceDescriptor,
       mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
@@ -696,8 +696,10 @@ function artifactFixture(maxQueuedJobs = 64) {
     extractor: extract,
     maxConcurrent: 1,
     maxQueuedJobs,
+    maxTrackedJobs,
     clock: () => new Date(now++),
-  });
+  };
+  const generator = new OfflinePackageGenerator(generatorOptions);
   const area = (index: number): OfflinePackageRequest => ({
     ...request,
     bbox: { west: index + 1, south: 1, east: index + 2, north: 2 },
@@ -712,8 +714,245 @@ function artifactFixture(maxQueuedJobs = 64) {
     if (!completed?.packageId) throw new Error("Ready fixture has no package ID");
     return { ...completed, packageId: completed.packageId };
   };
-  return { generator, storage, accounting, extract, area, ready };
+  return { generator, generatorOptions, storage, accounting, extract, area, ready };
 }
+
+describe("offline worker tracking", () => {
+  it.each(["reload", "capacity"])(
+    "keeps work admitted during a pending durable snapshot for %s",
+    async (operation) => {
+      const { generator, accounting, extract, area } = artifactFixture(64, 2);
+      const extractionGate = deferredVoid();
+      const readStarted = deferredVoid();
+      const readGate = deferredVoid();
+      const originalExtraction = extract.getMockImplementation();
+      if (!originalExtraction) throw new Error("Missing fixture extractor");
+      extract.mockImplementationOnce(async (options) => {
+        await extractionGate.promise;
+        return await originalExtraction(options);
+      });
+      const first = await generator.prepare(principal, area(0));
+      await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(1));
+      if (operation === "capacity") {
+        await generator.prepare(principal, {
+          ...request,
+          bbox: { west: -1, south: 1, east: 2, north: 2 },
+        });
+      }
+      const loadRunnable = accounting.loadRunnable.bind(accounting);
+      const read = vi.spyOn(accounting, "loadRunnable").mockImplementationOnce(async () => {
+        const snapshot = await loadRunnable();
+        readStarted.resolve();
+        await readGate.promise;
+        return snapshot;
+      });
+      const worker = generator as unknown as { reloadRunnableJobs(): Promise<void> };
+      const pendingOperation = Promise.allSettled([
+        operation === "reload"
+          ? worker.reloadRunnableJobs()
+          : generator.prepare(principal, area(2)),
+      ]);
+      let queuedId: string | undefined;
+      try {
+        await readStarted.promise;
+        const queued = await generator.prepare(principal, area(1));
+        queuedId = queued.jobId;
+        readGate.resolve();
+        const [result] = await pendingOperation;
+        expect(result.status).toBe(operation === "reload" ? "fulfilled" : "rejected");
+        expect(generator.pendingCount()).toBe(2);
+        extractionGate.resolve();
+        await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+        expect((await generator.getJob(principal, first.jobId))?.status).toBe("ready-to-download");
+        expect((await generator.getJob(principal, queued.jobId))?.status).toBe("ready-to-download");
+        expect(extract).toHaveBeenCalledTimes(2);
+      } finally {
+        read.mockRestore();
+        readGate.resolve();
+        await pendingOperation;
+        extractionGate.resolve();
+        await worker.reloadRunnableJobs();
+        await vi.waitFor(
+          async () => {
+            if (queuedId)
+              expect((await generator.getJob(principal, queuedId))?.status).toBe(
+                "ready-to-download",
+              );
+            expect(generator.pendingCount()).toBe(0);
+          },
+          { timeout: 4_000 },
+        );
+      }
+    },
+  );
+
+  it("does not schedule the same durable job in overlapping reloads", async () => {
+    const { generatorOptions, accounting, storage, extract, area } = artifactFixture(64, 2);
+    const generator = new OfflinePackageGenerator({ ...generatorOptions, maxConcurrent: 2 });
+    await generator.initialize();
+    const canonical = canonicalizeOfflinePackageRequest(area(0), sourceDescriptor);
+    await accounting.admit(
+      principal,
+      {
+        jobId: "overlapping-reload-job",
+        request: canonical,
+        packageId: offlinePackageIdForRequest(canonical),
+        status: "preparing",
+        createdAtMs: 0,
+        updatedAtMs: 0,
+      },
+      { readManifest: (id) => storage.readPublishedManifest(id) },
+    );
+    const gate = deferredVoid();
+    const originalExtraction = extract.getMockImplementation();
+    if (!originalExtraction) throw new Error("Missing fixture extractor");
+    extract.mockImplementation(async (options) => {
+      await gate.promise;
+      return await originalExtraction(options);
+    });
+    const worker = generator as unknown as { reloadRunnableJobs(): Promise<void> };
+    try {
+      await Promise.all([worker.reloadRunnableJobs(), worker.reloadRunnableJobs()]);
+      expect(generator.pendingCount()).toBe(1);
+      await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(1));
+    } finally {
+      gate.resolve();
+      await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+    }
+    expect((await generator.getJob(principal, "overlapping-reload-job"))?.status).toBe(
+      "ready-to-download",
+    );
+    expect(extract).toHaveBeenCalledTimes(1);
+  });
+
+  it("drains a partial durable reload when further records exceed tracking capacity", async () => {
+    const { generator, accounting, storage, extract, area } = artifactFixture(64, 1);
+    await generator.initialize();
+    const jobs = [0, 1].map((index) => {
+      const canonical = canonicalizeOfflinePackageRequest(area(index), sourceDescriptor);
+      return {
+        jobId: `reload-job-${index}`,
+        request: canonical,
+        packageId: offlinePackageIdForRequest(canonical),
+        status: "preparing" as const,
+        createdAtMs: index,
+        updatedAtMs: index,
+      };
+    });
+    for (const job of jobs) {
+      await accounting.admit(principal, job, {
+        readManifest: (id) => storage.readPublishedManifest(id),
+      });
+    }
+    const gate = deferredVoid();
+    const originalExtraction = extract.getMockImplementation();
+    if (!originalExtraction) throw new Error("Missing fixture extractor");
+    extract.mockImplementationOnce(async (options) => {
+      await gate.promise;
+      return await originalExtraction(options);
+    });
+    const worker = generator as unknown as { reloadRunnableJobs(): Promise<void>; drain(): void };
+    try {
+      await worker.reloadRunnableJobs();
+      await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(1));
+      expect((await generator.getJob(principal, jobs[1].jobId))?.status).toBe("preparing");
+    } finally {
+      gate.resolve();
+      // Also releases the queued first job when the regression is still red.
+      worker.drain();
+      await vi.waitFor(
+        async () => {
+          expect((await generator.getJob(principal, jobs[1].jobId))?.status).toBe(
+            "ready-to-download",
+          );
+          expect(generator.pendingCount()).toBe(0);
+        },
+        { timeout: 4_000 },
+      );
+    }
+    expect(extract).toHaveBeenCalledTimes(2);
+  });
+
+  it.each([
+    { owner: principal, outcome: "ready-to-download" },
+    { owner: "b".repeat(64), outcome: "ready-to-download" },
+    { owner: principal, outcome: "failed" },
+    { owner: "b".repeat(64), outcome: "failed" },
+  ])(
+    "admits new work after duplicated jobs become $outcome for $owner",
+    async ({ owner, outcome }) => {
+      const { generator, extract, area } = artifactFixture(64, 2);
+      const originalExtraction = extract.getMockImplementation();
+      if (!originalExtraction) throw new Error("Missing fixture extractor");
+      const gates = [deferredVoid(), deferredVoid()];
+      try {
+        for (const [index, gate] of gates.entries()) {
+          extract.mockImplementationOnce(async (options) => {
+            await gate.promise;
+            if (outcome === "failed") throw new Error("test extraction failure");
+            return await originalExtraction(options);
+          });
+          const first = await generator.prepare(principal, area(index));
+          await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(index + 1));
+          const duplicate = await generator.prepare(owner, area(index));
+          expect(duplicate).toMatchObject({ jobId: first.jobId, status: "preparing" });
+          gate.resolve();
+          await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+          expect((await generator.getJob(owner, first.jobId))?.status).toBe(outcome);
+        }
+
+        const next = await generator.prepare(principal, area(2));
+        await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+        expect((await generator.getJob(principal, next.jobId))?.status).toBe("ready-to-download");
+        expect(extract).toHaveBeenCalledTimes(3);
+      } finally {
+        for (const gate of gates) gate.resolve();
+        await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+      }
+    },
+  );
+
+  it("reclaims tracking for remotely completed jobs without deleting durable access", async () => {
+    const { generator: worker, generatorOptions, storage, extract, area } = artifactFixture();
+    const observer = new OfflinePackageGenerator({ ...generatorOptions, maxTrackedJobs: 2 });
+    const owner = "b".repeat(64);
+    const originalExtraction = extract.getMockImplementation();
+    if (!originalExtraction) throw new Error("Missing fixture extractor");
+    const gates = [deferredVoid(), deferredVoid()];
+    const completedIds: string[] = [];
+    try {
+      for (const [index, gate] of gates.entries()) {
+        extract.mockImplementationOnce(async (options) => {
+          await gate.promise;
+          return await originalExtraction(options);
+        });
+        const running = await worker.prepare(principal, area(index));
+        await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(index + 1));
+        const shared = await observer.prepare(owner, area(index));
+        expect(shared.jobId).toBe(running.jobId);
+        await vi.waitFor(() => expect(observer.pendingCount()).toBe(0));
+        gate.resolve();
+        await vi.waitFor(() => expect(worker.pendingCount()).toBe(0));
+        expect((await observer.getJob(owner, shared.jobId))?.status).toBe("ready-to-download");
+        completedIds.push(shared.jobId);
+      }
+
+      const next = await observer.prepare(owner, area(2));
+      await vi.waitFor(() => expect(observer.pendingCount()).toBe(0));
+      expect((await observer.getJob(owner, next.jobId))?.status).toBe("ready-to-download");
+      expect(extract).toHaveBeenCalledTimes(3);
+      for (const jobId of completedIds) {
+        const completed = await observer.getJob(owner, jobId);
+        expect(completed?.status).toBe("ready-to-download");
+        expect((await worker.getJob(principal, jobId))?.status).toBe("ready-to-download");
+        expect(await storage.readPublishedManifest(completed?.packageId ?? "")).toBeDefined();
+      }
+    } finally {
+      for (const gate of gates) gate.resolve();
+      await vi.waitFor(() => expect(worker.pendingCount() + observer.pendingCount()).toBe(0));
+    }
+  });
+});
 
 describe("offline artifact eviction and recovery", () => {
   it.each([principal, "b".repeat(64)])(

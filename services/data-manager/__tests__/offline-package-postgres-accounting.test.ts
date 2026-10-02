@@ -1,10 +1,14 @@
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { CanonicalOfflinePackageRequest, OfflineMapPackageManifest } from "@openmapx/core";
 import { PostgreSqlContainer, type StartedPostgreSqlContainer } from "@testcontainers/postgresql";
 import postgres, { type Sql } from "postgres";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { OfflinePackageGenerator } from "../src/offline-packages/generator.js";
 import { PostgresOfflinePackageAccountingStore } from "../src/offline-packages/postgres-accounting.js";
+import { OfflinePackageStorage } from "../src/offline-packages/storage.js";
 import type { OfflinePackageJobRecord } from "../src/offline-packages/types.js";
 
 const principal = "a".repeat(64);
@@ -139,6 +143,77 @@ integration("PostgreSQL offline-package accounting", () => {
   afterAll(async () => {
     await sql?.end();
     await container?.stop();
+  });
+
+  it("admits a third area after two duplicated generator jobs complete", async () => {
+    const root = mkdtempSync(join(tmpdir(), "openmapx-offline-postgres-tracking-"));
+    const store = new PostgresOfflinePackageAccountingStore(sql);
+    const storage = new OfflinePackageStorage(join(root, "packages"));
+    const source = {
+      ...record(1).request.source,
+      sourceBounds: { west: 0, south: 0, east: 10, north: 10 },
+    };
+    let release = () => {};
+    let extractionGate = Promise.resolve();
+    const bytes = Buffer.from("12345678");
+    const sha256 = createHash("sha256").update(bytes).digest("hex");
+    const extract = vi.fn(
+      async (options: { destinationPath: string; request: CanonicalOfflinePackageRequest }) => {
+        await extractionGate;
+        writeFileSync(options.destinationPath, bytes);
+        return {
+          byteLength: bytes.length,
+          sha256,
+          etag: `sha256-${sha256}`,
+          bounds: options.request.effective.bbox,
+          minZoom: options.request.effective.minZoom,
+          maxZoom: options.request.effective.maxZoom,
+          tileCount: 1,
+          tileCompression: "none" as const,
+          attribution: source.attribution,
+          sourceBytesRead: bytes.length,
+          destinationBytesWritten: bytes.length,
+          temporaryBytesPeak: bytes.length,
+        };
+      },
+    );
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: source,
+        mbtilesPath: join(root, "unused.mbtiles"),
+        fontsDirectory: join(root, "fonts"),
+        packageRoot: storage.packageRoot,
+      }),
+      storage,
+      accounting: store,
+      extractor: extract,
+      maxTrackedJobs: 2,
+      maxConcurrent: 1,
+      maxPackageBytes: 1_024,
+      minFreeBytes: 0,
+    });
+    try {
+      for (let index = 1; index <= 3; index++) {
+        extractionGate = new Promise<void>((resolve) => {
+          release = resolve;
+        });
+        const area = record(index).request.request;
+        const first = await generator.prepare(principal, area);
+        await vi.waitFor(() => expect(extract).toHaveBeenCalledTimes(index));
+        if (index < 3) {
+          const duplicate = await generator.prepare("b".repeat(64), area);
+          expect(duplicate).toMatchObject({ jobId: first.jobId, status: "preparing" });
+        }
+        release();
+        await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+        expect((await generator.getJob(principal, first.jobId))?.status).toBe("ready-to-download");
+      }
+      expect(extract).toHaveBeenCalledTimes(3);
+    } finally {
+      release();
+      await vi.waitFor(() => expect(generator.pendingCount()).toBe(0));
+      rmSync(root, { recursive: true, force: true });
+    }
   });
 
   it("serializes 50 process-level contenders and restores ownership/runnable state", async () => {

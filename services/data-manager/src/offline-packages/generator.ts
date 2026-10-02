@@ -182,8 +182,7 @@ export class OfflinePackageGenerator {
       await this.storage.reconcileOfflinePackageStorage();
       for (const job of await this.accounting.loadRunnable()) {
         await this.ensureTrackingCapacity(job.createdAtMs);
-        this.jobs.set(job.jobId, job);
-        this.pending.push(job);
+        this.pending.push(this.trackJob(job));
       }
       this.initialized = true;
       this.drain();
@@ -251,9 +250,8 @@ export class OfflinePackageGenerator {
     for (const evictedPackageId of admission.unreferencedPackageIds) {
       await this.removeUnreferencedPackage(evictedPackageId);
     }
-    this.jobs.set(admission.record.jobId, admission.record);
-    if (admission.createdJob && admission.record.status === "preparing")
-      this.pending.push(admission.record);
+    const tracked = this.trackJob(admission.record);
+    if (admission.createdJob && admission.record.status === "preparing") this.pending.push(tracked);
     this.logger?.info("offline-package.prepare", {
       jobId: admission.record.jobId,
       packageId: admission.record.packageId,
@@ -428,8 +426,49 @@ export class OfflinePackageGenerator {
     }
   }
 
+  private trackJob(record: OfflinePackageJobRecord): OfflinePackageJobRecord {
+    const current = this.jobs.get(record.jobId);
+    // Admission and durable reloads return fresh objects. A queued/running
+    // worker must keep the same record that it will eventually terminalise.
+    if (
+      current &&
+      (this.inFlightJobIds.has(record.jobId) ||
+        this.pending.some((job) => job.jobId === record.jobId))
+    ) {
+      return current;
+    }
+    this.jobs.set(record.jobId, record);
+    return record;
+  }
+
+  private reconcileInactiveTracking(
+    runnable: readonly OfflinePackageJobRecord[],
+    trackedBeforeRead: readonly OfflinePackageJobRecord[],
+  ): void {
+    const runnableIds = new Set(runnable.map((job) => job.jobId));
+    for (const job of trackedBeforeRead) {
+      if (
+        this.jobs.get(job.jobId) !== job ||
+        job.status !== "preparing" ||
+        this.inFlightJobIds.has(job.jobId) ||
+        runnableIds.has(job.jobId)
+      ) {
+        continue;
+      }
+      // Another worker completed this job. Release only local bookkeeping:
+      // durable diagnostics, owners and artifact references remain available.
+      this.jobs.delete(job.jobId);
+      for (let index = this.pending.length - 1; index >= 0; index--) {
+        if (this.pending[index]?.jobId === job.jobId) this.pending.splice(index, 1);
+      }
+    }
+  }
+
   private async ensureTrackingCapacity(nowMs: number): Promise<void> {
     await this.pruneTerminalJobs(nowMs);
+    if (this.jobs.size < this.maxTrackedJobs) return;
+    const trackedBeforeRead = [...this.jobs.values()];
+    this.reconcileInactiveTracking(await this.accounting.loadRunnable(), trackedBeforeRead);
     if (this.jobs.size < this.maxTrackedJobs) return;
 
     // Under sustained invalid input, retain as much of the diagnostic window
@@ -484,20 +523,35 @@ export class OfflinePackageGenerator {
 
   private async reloadRunnableJobs(): Promise<void> {
     try {
+      const trackedBeforeRead = [...this.jobs.values()];
       const records = await this.accounting.loadRunnable();
+      this.reconcileInactiveTracking(records, trackedBeforeRead);
       const scheduled = new Set([
         ...this.pending.map((item) => item.jobId),
         ...this.inFlightJobIds,
       ]);
       for (const record of records) {
-        if (!scheduled.has(record.jobId)) this.pending.push(record);
+        if (scheduled.has(record.jobId)) continue;
+        if (!this.jobs.has(record.jobId)) await this.ensureTrackingCapacity(this.clock().getTime());
+        // Capacity checks yield. Another reload may have scheduled this ID.
+        if (
+          this.inFlightJobIds.has(record.jobId) ||
+          this.pending.some((job) => job.jobId === record.jobId)
+        ) {
+          continue;
+        }
+        this.pending.push(this.trackJob(record));
+        scheduled.add(record.jobId);
       }
-      this.drain();
     } catch (error) {
       this.logger?.warn("offline-package.queue-reload.failed", {
         error: packageErrorMessage(error),
       });
       this.scheduleDrainRetry();
+    } finally {
+      // Capacity can stop a reload after some records were queued. Those
+      // records must still run so a subsequent retry can reclaim their slots.
+      this.drain();
     }
   }
 
