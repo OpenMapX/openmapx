@@ -178,10 +178,12 @@ export function processFix(
   // - 1` reaches true on the last travel step, so a multi-step route can't
   // false-arrive near the start. Also require actual destination proximity:
   // a distant off-route fix can project onto the endpoint with zero remaining
-  // distance. A step-less route has no gate to reach.
+  // distance. A step-less route has no gate to reach. Coasting can estimate
+  // progress into this range, but only a real fix can confirm arrival.
   const lastIndex = route.steps.length - 1;
   const destination = route.geometry.at(-1);
   const arrived =
+    !fix.coasted &&
     destination !== undefined &&
     haversineDistance(fix.coords, destination) <= opts.arrivalThresholdMeters &&
     prog.distanceRemaining <= opts.arrivalThresholdMeters &&

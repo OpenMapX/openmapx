@@ -117,8 +117,9 @@ export interface FixInput {
   timestampMs: number;
   /**
    * True for a synthetic fix produced by the coasting driver during a GPS
-   * outage. Runs the normal pipeline (progress, voice, arrival) but must not be
-   * recorded, and must not reset the last-real-fix clock that decides coasting.
+   * outage. Advances estimated progress and voice cues, but cannot confirm
+   * arrival, must not be recorded, and must not reset the last-real-fix clock
+   * that decides coasting.
    */
   coasted?: boolean;
 }

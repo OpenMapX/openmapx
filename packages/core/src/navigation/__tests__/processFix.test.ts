@@ -196,6 +196,25 @@ describe("processFix", () => {
   describe.each([true, false])("destination proximity with steps=%s", (withSteps) => {
     const arrivalRoute = { ...route, steps: withSteps ? route.steps : [] };
 
+    it("waits for a real fix after coasting reaches the destination", () => {
+      const coasted = processFix(
+        arrivalRoute,
+        { coords: [0.004, 0], accuracy: 1, timestampMs: 30_000, coasted: true },
+        emptyState,
+        opts,
+      );
+      expect(coasted.progress?.distanceRemaining).toBe(0);
+      expect(coasted.arrived).toBe(false);
+
+      const real = processFix(
+        arrivalRoute,
+        { coords: [0.004, 0], accuracy: 5, timestampMs: 31_000 },
+        coasted.nextState,
+        opts,
+      );
+      expect(real.arrived).toBe(true);
+    });
+
     it.each([
       { name: "on a parallel road", coords: [0.004, 0.01] as [number, number] },
       { name: "beyond the destination", coords: [0.014, 0] as [number, number] },

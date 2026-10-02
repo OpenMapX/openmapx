@@ -289,6 +289,36 @@ describe("processGroundBatch rejected and stale fixes", () => {
 
     expect(outcome.lastAcceptedFix?.coasted).toBe(true);
   });
+
+  it("waits for a real destination fix before completing a coasted session", () => {
+    const cache = new GroundRouteCache();
+    const current = session();
+    current.payload.coasting = true;
+    const coasted = processGroundBatch({
+      session: current,
+      fixes: [fixAt(59, NOW, { coasted: true })],
+      nowMs: NOW,
+      cache,
+    });
+    const estimated = coasted.session as GroundMobileSession;
+    expect(estimated.payload.progress?.distanceRemaining).toBe(0);
+    expect(estimated.payload.coasting).toBe(true);
+    expect(coasted.arrived).toBe(false);
+    expect(estimated.status).toBe("active");
+    expect(coasted.enqueue ?? []).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ payload: { type: "arrived" } })]),
+    );
+
+    const real = processGroundBatch({
+      session: estimated,
+      fixes: [fixAt(59, NOW + 1_000)],
+      nowMs: NOW + 1_000,
+      cache,
+    });
+    expect(real.arrived).toBe(true);
+    expect(real.session.status).toBe("arrived");
+    expect((real.session as GroundMobileSession).payload.coasting).toBe(false);
+  });
 });
 
 describe("processGroundBatch cue selection", () => {

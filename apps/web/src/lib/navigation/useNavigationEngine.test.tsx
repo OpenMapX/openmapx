@@ -464,6 +464,31 @@ describe("useNavigationEngine route index ownership", () => {
     }
   });
 
+  it("keeps navigation active when coasting enters the arrival range", () => {
+    vi.useFakeTimers();
+    try {
+      useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
+      renderHook(() => useNavigationEngine(disabledResource));
+      act(() => {
+        fixHandler?.({ coords: [0.001, 0], accuracy: 5, speed: 15, timestampMs: Date.now() });
+      });
+
+      act(() => vi.advanceTimersByTime(30_000));
+      const estimated = useNavigationStore.getState();
+      expect(estimated.progress?.distanceRemaining).toBeLessThan(35);
+      expect(estimated.coasting).toBe(true);
+      expect(estimated.status).toBe("navigating");
+
+      act(() => {
+        fixHandler?.({ coords: [0.004, 0], accuracy: 5, timestampMs: Date.now() });
+      });
+      expect(useNavigationStore.getState().status).toBe("arrived");
+      expect(useNavigationStore.getState().coasting).toBe(false);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("indexes the replacement route exactly once after a reroute", () => {
     useNavigationStore.getState().startGroundNavigation(freshRoute(), "driving", waypoints);
     renderHook(() => useNavigationEngine(disabledResource));
