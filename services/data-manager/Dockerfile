@@ -114,13 +114,14 @@ WORKDIR /app
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 
 # Explicitly upgrade libraries already satisfied by the pinned base image:
-# libexpat1 fixes CVE-2026-56408; libpcre2-8-0 fixes CVE-2026-86145,
+# Require Expat's 2.5.0-1+deb12u4 security update rather than reusing an older
+# cached package-install layer. libpcre2-8-0 fixes CVE-2026-86145,
 # CVE-2026-89157 and CVE-2026-89161.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
       osmium-tool curl unzip bzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
-      libexpat1 libpcre2-8-0 \
+      libexpat1=2.5.0-1+deb12u4 libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Static Docker CLI so the data-manager can invoke `docker exec` (feed-proxy
