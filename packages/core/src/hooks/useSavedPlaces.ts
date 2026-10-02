@@ -95,8 +95,13 @@ export function useDeleteList() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => apiClient.delete(`${API_ENDPOINTS.savedLists}/${id}`),
-    onSuccess: () => {
+    onSuccess: async (_data, id) => {
       void queryClient.invalidateQueries({ queryKey: ["savedLists"] });
+      queryClient.removeQueries({ queryKey: ["savedListPlaces", id], exact: true });
+      // Invalidation can reuse an initial fetch with no cached data. Discard
+      // that pre-deletion response before starting the membership refresh.
+      await queryClient.cancelQueries({ queryKey: ["savedCheck"] });
+      void queryClient.invalidateQueries({ queryKey: ["savedCheck"] });
     },
   });
 }
