@@ -439,6 +439,100 @@ describe("SearchBar", () => {
     );
   });
 
+  it.each(["settlement", "timeout"])(
+    "preserves an explicit same-label choice after deferred Enter %s",
+    async (completion) => {
+      vi.useFakeTimers();
+      try {
+        fakeMap.state.center = { lng: 13.405, lat: 52.52 };
+        const suggestions: AutocompleteResult[] = [
+          {
+            id: "osm:city",
+            label: "Berlin",
+            type: "region",
+            coordinates: [13.405, 52.52],
+          },
+          {
+            id: "osm:street",
+            label: "Berlin",
+            sublabel: "Chosen address",
+            type: "address",
+            coordinates: [13.45, 52.53],
+          },
+        ];
+        useSearchStore.setState({ query: "Berlin", isFocused: true });
+        useAutocompleteMock.mockReturnValue({ data: suggestions, isFetching: true });
+        renderBar();
+        const input = screen.getByLabelText("search.ariaLabel");
+        fireEvent.submit(input.closest("form") as HTMLFormElement);
+        fireEvent.click(screen.getByRole("option", { name: /Chosen address/ }));
+        expect(usePlaceStore.getState().selectedPlace?.id).toBe("osm:street");
+
+        if (completion === "settlement") {
+          useAutocompleteMock.mockReturnValue({ data: suggestions, isFetching: false });
+          await act(async () => useSearchStore.getState().setResults([]));
+        }
+        await act(async () => vi.advanceTimersByTime(3_000));
+
+        expect(usePlaceStore.getState().selectedPlace?.id).toBe("osm:street");
+        expect(launchTextSearch).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it.each(["Escape", "blur", "mobile back", "directions"])(
+    "cancels deferred Enter when search is dismissed via %s",
+    async (dismissal) => {
+      vi.useFakeTimers();
+      try {
+        useSettingsStore.setState({ aiSearchEnabled: false });
+        useSearchStore.setState({ query: "Unknown place", isFocused: true });
+        useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+        useMediaQueryMock.mockReturnValue(dismissal === "mobile back");
+        renderBar();
+        const input = screen.getByLabelText("search.ariaLabel");
+        fireEvent.submit(input.closest("form") as HTMLFormElement);
+        if (dismissal === "Escape") fireEvent.keyDown(input, { key: "Escape" });
+        else if (dismissal === "blur") fireEvent.blur(input);
+        else if (dismissal === "mobile back") {
+          fireEvent.click(screen.getByRole("button", { name: "common.back" }));
+        } else {
+          fireEvent.click(screen.getByRole("button", { name: "search.getDirectionsAriaLabel" }));
+        }
+        useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: false });
+        await act(async () => useSearchStore.getState().setResults([]));
+        expect(launchTextSearch).not.toHaveBeenCalled();
+        await act(async () => vi.advanceTimersByTime(3_000));
+        expect(launchTextSearch).not.toHaveBeenCalled();
+        expect(usePlaceStore.getState().selectedPlace).toBeNull();
+      } finally {
+        vi.useRealTimers();
+      }
+    },
+  );
+
+  it("still executes deferred Enter after its settle timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      useSettingsStore.setState({ aiSearchEnabled: false });
+      useSearchStore.setState({ query: "Unknown place", isFocused: true });
+      useAutocompleteMock.mockReturnValue({ data: undefined, isFetching: true });
+      renderBar();
+      fireEvent.submit(
+        screen.getByLabelText("search.ariaLabel").closest("form") as HTMLFormElement,
+      );
+      await act(async () => vi.advanceTimersByTime(2_499));
+      expect(launchTextSearch).not.toHaveBeenCalled();
+      await act(async () => vi.advanceTimersByTime(1));
+      expect(launchTextSearch).toHaveBeenCalledTimes(1);
+      expect(launchTextSearch).toHaveBeenCalledWith(fakeMap.map, "Unknown place");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("plain Enter opens the top-ranked city rather than a foreign chain of the same name", async () => {
     fakeMap.state.center = { lng: 13.405, lat: 52.52 };
     useBrandSuggestMock.mockReturnValue({

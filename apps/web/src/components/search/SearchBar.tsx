@@ -185,7 +185,15 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const debouncedGeoQuery = useDebounce(query, 400);
   // Plain Enter pressed before the suggestions for the typed text arrived:
   // the text it was pressed for, acted on once they settle (see handleSubmit).
-  const [pendingSubmit, setPendingSubmit] = useState<string | null>(null);
+  const [pendingSubmit, setPendingSubmit] = useState<{ query: string } | null>(null);
+  const pendingSubmitRef = useRef<typeof pendingSubmit>(null);
+  const submitTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const cancelPendingSubmit = useCallback(() => {
+    pendingSubmitRef.current = null;
+    if (submitTimeoutRef.current !== null) clearTimeout(submitTimeoutRef.current);
+    submitTimeoutRef.current = null;
+    setPendingSubmit(null);
+  }, []);
   // Suggestions are only fetched while someone can see them or an Enter waits
   // on them. The text stays in the box after a place opens, and the map then
   // flies there; following the moving centre would request a fresh batch for
@@ -371,6 +379,8 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   useEffect(() => {
     return () => {
       if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+      pendingSubmitRef.current = null;
+      if (submitTimeoutRef.current !== null) clearTimeout(submitTimeoutRef.current);
     };
   }, []);
 
@@ -385,8 +395,9 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   }, [exploreBoxOpen, setQuery, setIsFocused]);
 
   const handleBlur = useCallback(() => {
+    cancelPendingSubmit();
     blurTimeoutRef.current = setTimeout(() => setIsFocused(false), 150);
-  }, [setIsFocused]);
+  }, [cancelPendingSubmit, setIsFocused]);
 
   // When user types a short plus code with city, geocode the city name to get
   // the reference coordinates for decoding.
@@ -586,21 +597,27 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const runSubmitRef = useRef<() => void>(() => {});
   useEffect(() => {
     if (pendingSubmit === null) return;
-    if (pendingSubmit !== query) {
-      setPendingSubmit(null);
+    if (directionsOpen || pendingSubmit.query !== query) {
+      cancelPendingSubmit();
       return;
     }
+    const complete = () => {
+      // A later choice can keep the same label. Only this submission may run.
+      if (pendingSubmitRef.current !== pendingSubmit) return;
+      cancelPendingSubmit();
+      runSubmitRef.current();
+    };
     if (suggestionsSettled) {
-      setPendingSubmit(null);
-      runSubmitRef.current();
+      complete();
       return;
     }
-    const timer = setTimeout(() => {
-      setPendingSubmit(null);
-      runSubmitRef.current();
-    }, SUBMIT_SETTLE_TIMEOUT_MS);
-    return () => clearTimeout(timer);
-  }, [pendingSubmit, query, suggestionsSettled]);
+    const timer = setTimeout(complete, SUBMIT_SETTLE_TIMEOUT_MS);
+    submitTimeoutRef.current = timer;
+    return () => {
+      clearTimeout(timer);
+      if (submitTimeoutRef.current === timer) submitTimeoutRef.current = null;
+    };
+  }, [pendingSubmit, query, suggestionsSettled, directionsOpen, cancelPendingSubmit]);
 
   // Once a natural-language parse finishes without anything to offer, fall
   // back to the plain search of the visible area rather than doing nothing.
@@ -760,6 +777,12 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.nativeEvent.isComposing || e.keyCode === 229 || isComposingRef.current) return;
+    if (e.key === "Escape") {
+      cancelPendingSubmit();
+      setIsFocused(false);
+      setHighlightedKey(null);
+      return;
+    }
     if (!showDropdown) {
       // Escape closed the list without leaving the input; the arrow keys bring it back.
       if ((e.key === "ArrowDown" || e.key === "ArrowUp") && q.length > 0) {
@@ -778,13 +801,11 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     } else if (e.key === "Enter" && highlightedIndex >= 0) {
       e.preventDefault();
       handleSelectAny(effectiveSuggestions[highlightedIndex]);
-    } else if (e.key === "Escape") {
-      setIsFocused(false);
-      setHighlightedKey(null);
     }
   };
 
   const updateQuery = (newValue: string) => {
+    cancelPendingSubmit();
     // In nearby mode keep the anchor (don't clearCategory — that would drop it);
     // the nearby dropdown re-filters and a selection relaunches the search.
     if (!nearbyMode) {
@@ -832,6 +853,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     if (e.target !== e.currentTarget) return;
     e.preventDefault();
     if (isComposingRef.current || !q) return;
+    cancelPendingSubmit();
     if (nearbyMode) {
       inputRef.current?.blur();
       if (anchor && q.length > 0) launchExploreTextSearch(mapRef.current, anchor, q);
@@ -846,7 +868,9 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     // Act on the suggestions for exactly this text: wait for them to arrive
     // rather than choosing from rows that belong to an earlier keystroke.
     if (!suggestionsSettled) {
-      setPendingSubmit(query);
+      const submission = { query };
+      pendingSubmitRef.current = submission;
+      setPendingSubmit(submission);
       return;
     }
     runSubmit();
@@ -942,6 +966,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   runSubmitRef.current = runSubmit;
 
   const handleSelect = (result: AutocompleteResult, recordHistory = true) => {
+    cancelPendingSubmit();
     if (result.type === "recent_search") {
       handleSelectRecent(result.label);
       return;
@@ -1040,6 +1065,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   // Nearby mode: route a category pick / free-text to the place-anchored search.
   const handleNearbySelect = (result: AutocompleteResult) => {
+    cancelPendingSubmit();
     if (!anchor) return;
     setIsFocused(false);
     inputRef.current?.blur();
@@ -1059,6 +1085,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // Cancel nearby search (the brand pill's ✕): exit nearby mode and reopen the
   // place the search was started from.
   const handleCancelNearby = () => {
+    cancelPendingSubmit();
     const place = anchor;
     clearCategory();
     setQuery("");
@@ -1078,11 +1105,13 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
     !syntheticResult;
 
   const handleBack = () => {
+    cancelPendingSubmit();
     setIsFocused(false);
     inputRef.current?.blur();
   };
 
   const handleSelectLabeledPlace = (place: LabeledPlace) => {
+    cancelPendingSubmit();
     setQuery(place.label);
     setIsFocused(false);
     flyTo([place.lng, place.lat], 15);
@@ -1248,6 +1277,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
               <IconButton
                 size="small"
                 onClick={() => {
+                  cancelPendingSubmit();
                   setQuery("");
                   inputRef.current?.focus();
                 }}
@@ -1319,6 +1349,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                   aria-label={t("closePanelAriaLabel")}
                   sx={{ ml: 1, mr: 0.5 }}
                   onClick={() => {
+                    cancelPendingSubmit();
                     closeSidePanel();
                     setQuery("");
                   }}
@@ -1332,6 +1363,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
                     aria-label={t("getDirectionsAriaLabel")}
                     sx={{ ml: 1, mr: 0.5 }}
                     onClick={() => {
+                      cancelPendingSubmit();
                       openDirections();
                       useSidebarStore.getState().openSidebar(PANEL.DIRECTIONS);
                     }}
