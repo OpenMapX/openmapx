@@ -1,4 +1,8 @@
 import {
+  createGeocoderSuggestionProvider,
+  runWithProviderDeadline,
+} from "@openmapx/integration-framework";
+import {
   type FakeMobilityHttpTransport,
   fakeMobilityHttpTransport,
 } from "@openmapx/integration-framework/testing";
@@ -163,4 +167,93 @@ describe("lookupDbStation", () => {
     const detail = result.dataSourceDetail as { sections: unknown[] };
     expect(detail.sections).toEqual([]);
   });
+});
+
+// These use the real suggestion adapter and provider, replacing only upstream I/O.
+describe("autocomplete cancellation through the suggestion adapter", () => {
+  it.each(["deadline", "caller"] as const)(
+    "aborts downstream I/O on %s and permits retry",
+    async (mode) => {
+      let downstreamSignal: AbortSignal | undefined;
+      let release!: () => void;
+      mockFetch.mockImplementationOnce(
+        (request: { options?: { signal?: AbortSignal } }) =>
+          new Promise((resolve) => {
+            downstreamSignal = request.options?.signal;
+            release = () => resolve(mockOk({ stopPlaces: [] }));
+          }),
+      );
+      const provider = createGeocoderSuggestionProvider({
+        id: "geocoding-db-ris",
+        geocoder: dbRisGeocodingService,
+        attributions: () => [],
+      });
+      const controller = new AbortController();
+      const pending = runWithProviderDeadline(
+        (context) =>
+          provider.searchSuggestions({ query: "station", lang: "en", limit: 8 }, context),
+        { signal: controller.signal, timeoutMs: mode === "deadline" ? 30 : 1_000 },
+      );
+      const outcome = pending.catch((error: Error) => error);
+      try {
+        // I/O starts synchronously once the provider's microtask is dispatched.
+        await Promise.resolve();
+        await Promise.resolve();
+        if (mode === "caller") controller.abort(new Error("caller left"));
+        expect((await outcome).name).toBe(
+          mode === "deadline" ? "ProviderTimeoutError" : "ProviderCancelledError",
+        );
+        expect(downstreamSignal?.aborted).toBe(true);
+      } finally {
+        release();
+        await outcome;
+      }
+      mockFetch.mockResolvedValueOnce(mockOk({ stopPlaces: [] }));
+      await expect(
+        provider.searchSuggestions(
+          { query: "station", lang: "en", limit: 8 },
+          { signal: new AbortController().signal, deadlineAt: Date.now() + 1_000 },
+        ),
+      ).resolves.toMatchObject({ suggestions: [] });
+    },
+  );
+
+  it("rejects an already-cancelled direct autocomplete without upstream I/O", async () => {
+    const controller = new AbortController();
+    const reason = new Error("caller left before autocomplete");
+    controller.abort(reason);
+    mockFetch.mockResolvedValue(mockOk({ stopPlaces: [] }));
+    await expect(
+      dbRisGeocodingService.autocomplete("station", "en", undefined, { signal: controller.signal }),
+    ).rejects.toBe(reason);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+it("does not convert an aborted autocomplete into an empty success when transport rejects late", async () => {
+  let rejectFetch!: (error: Error) => void;
+  mockFetch.mockImplementationOnce(
+    () =>
+      new Promise((_resolve, reject) => {
+        rejectFetch = reject;
+      }),
+  );
+  const controller = new AbortController();
+  const reason = new Error("provider cancelled");
+  const pending = dbRisGeocodingService.autocomplete("Köln", "en", undefined, {
+    signal: controller.signal,
+  });
+  const assertion = expect(pending).rejects.toBe(reason);
+  controller.abort(reason);
+  rejectFetch(new Error("late connection error"));
+  await assertion;
+});
+
+it("preserves empty fallback for ordinary autocomplete upstream errors", async () => {
+  mockFetch.mockRejectedValueOnce(new Error("HTTP 503"));
+  await expect(
+    dbRisGeocodingService.autocomplete("Köln", "en", undefined, {
+      signal: new AbortController().signal,
+    }),
+  ).resolves.toEqual([]);
 });

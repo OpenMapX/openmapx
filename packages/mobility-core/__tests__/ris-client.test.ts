@@ -133,3 +133,32 @@ describe("RIS client", () => {
     expect(fetchJson).not.toHaveBeenCalled();
   });
 });
+
+describe("RIS client cancellation", () => {
+  it.each(["get", "post"] as const)(
+    "preserves caller cancellation for %s with positional timeout",
+    async (method) => {
+      const { fetchJson, transport } = createTransport();
+      const controller = new AbortController();
+      const reason = new Error("provider cancelled");
+      fetchJson.mockImplementation(
+        (_url, options) =>
+          new Promise((_resolve, reject) => {
+            options?.signal?.addEventListener("abort", () => reject(options.signal.reason), {
+              once: true,
+            });
+          }),
+      );
+      const client = createRisClient({ clientId: "client", apiKey: "key" }, transport);
+      const pending =
+        method === "get"
+          ? client.get("stations", "/stop-places/1", 125, controller.signal)
+          : client.post("routing", "/multimodal", {}, 250, controller.signal);
+      const assertion = expect(pending).rejects.toBe(reason);
+      controller.abort(reason);
+      // Deadline remains alongside cancellation; existing timeout calls still work.
+      expect(fetchJson.mock.calls[0]?.[1]?.timeoutMs).toBe(method === "get" ? 125 : 250);
+      await assertion;
+    },
+  );
+});

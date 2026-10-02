@@ -1,7 +1,7 @@
 "use client";
 
 import { useColorScheme } from "@mui/material/styles";
-import type { MapGeoJSONFeature, MapSourceDataEvent } from "maplibre-gl";
+import type { MapGeoJSONFeature, MapMovementEvent, MapSourceDataEvent } from "maplibre-gl";
 import { useLocale } from "next-intl";
 import { useEffect, useMemo, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
@@ -18,6 +18,8 @@ import {
 } from "./stopLabelPoints";
 
 const BASEMAP_SOURCE_ID = "openmaptiles";
+const LABEL_MIN_ZOOM = 16;
+const REFRESH_INTERVAL_MS = 250;
 const STATION_SUBCLASSES = new Set(["station", "halt", "subway"]);
 
 function displayedName(properties: MapGeoJSONFeature["properties"], locale: string) {
@@ -53,10 +55,24 @@ export function TransitStopLabels() {
     if (!map || !mapReady) return;
     let frame = 0;
     let published = "";
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let lastUpdate = -Infinity;
+    let visible = map.getZoom() >= LABEL_MIN_ZOOM;
+
+    const clear = () => {
+      if (published !== "[]") {
+        published = "[]";
+        setFeatures([]);
+      }
+    };
 
     const update = () => {
       frame = 0;
-      if (!map.getSource(BASEMAP_SOURCE_ID)) return;
+      lastUpdate = Date.now();
+      if (map.getZoom() < LABEL_MIN_ZOOM || !map.getSource(BASEMAP_SOURCE_ID)) {
+        clear();
+        return;
+      }
       const stops: StopPoint[] = [];
       const stations: StationPoint[] = [];
       for (const feature of map.querySourceFeatures(BASEMAP_SOURCE_ID, { sourceLayer: "poi" })) {
@@ -88,18 +104,59 @@ export function TransitStopLabels() {
       setFeatures(next);
     };
     const schedule = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
       if (!frame) frame = requestAnimationFrame(update);
     };
+    const scheduleBounded = () => {
+      if (frame || timer !== undefined || map.getZoom() < LABEL_MIN_ZOOM) return;
+      const delay = Math.max(0, REFRESH_INTERVAL_MS - (Date.now() - lastUpdate));
+      if (delay === 0) schedule();
+      else {
+        timer = setTimeout(() => {
+          timer = undefined;
+          schedule();
+        }, delay);
+      }
+    };
+    const onZoom = () => {
+      const nextVisible = map.getZoom() >= LABEL_MIN_ZOOM;
+      if (nextVisible === visible) return false;
+      visible = nextVisible;
+      schedule();
+      return true;
+    };
+    const onMoveEnd = (event: MapMovementEvent & { programmatic?: boolean }) => {
+      if (onZoom() || !visible) return;
+      // Navigation jumpTo runs every frame, including when it reveals cached
+      // tiles without a source event. Keep a bounded trailing refresh for it.
+      if (event?.programmatic) scheduleBounded();
+      else schedule();
+    };
     const onSourceData = (event: MapSourceDataEvent) => {
-      if (event.sourceId === BASEMAP_SOURCE_ID && event.isSourceLoaded) schedule();
+      if (event.sourceId !== BASEMAP_SOURCE_ID) return;
+      // idle/visibility are source lifecycle notifications, not tile arrivals.
+      // Tile data can omit sourceDataType and arrive before isSourceLoaded.
+      if (
+        event.sourceDataType === "content" ||
+        event.sourceDataType === "metadata" ||
+        event.coord
+      ) {
+        scheduleBounded();
+      }
     };
 
     schedule();
-    map.on("moveend", schedule);
+    map.on("moveend", onMoveEnd);
+    map.on("zoom", onZoom);
     map.on("sourcedata", onSourceData);
     return () => {
       if (frame) cancelAnimationFrame(frame);
-      map.off("moveend", schedule);
+      if (timer !== undefined) clearTimeout(timer);
+      map.off("moveend", onMoveEnd);
+      map.off("zoom", onZoom);
       map.off("sourcedata", onSourceData);
     };
   }, [mapRef, mapReady, styleVersion, locale]);

@@ -7,7 +7,11 @@
 
 import type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 import { mobilityHttpTransport } from "@openmapx/core/mobility-http-transport";
-import type { GeocodingProvider as GeocodingProviderImpl } from "@openmapx/integration-geocoding/types";
+import type { ProviderCallContext } from "@openmapx/integration-framework";
+import type {
+  GeocodingBias,
+  GeocodingProvider as GeocodingProviderImpl,
+} from "@openmapx/integration-geocoding/types";
 import type { MobilityHttpTransport } from "@openmapx/mobility-core/json-transport";
 import { createRisClient, type RisCredentials } from "@openmapx/mobility-core/ris-client";
 import {
@@ -33,11 +37,17 @@ export function setRisCredentials(
   risClient = createRisClient(credentials, transport);
 }
 
-async function searchStopPlaces(query: string, limit = 6): Promise<RisStopPlace[]> {
+async function searchStopPlaces(
+  query: string,
+  limit = 6,
+  signal?: AbortSignal,
+): Promise<RisStopPlace[]> {
   const encoded = encodeURIComponent(query);
   const data = await risClient.get<RisStopPlacesResponse>(
     "stations",
     `/stop-places/by-name/${encoded}?limit=${limit}`,
+    undefined,
+    signal,
   );
   return data.stopPlaces ?? [];
 }
@@ -85,12 +95,19 @@ export const dbRisGeocodingService: GeocodingProviderImpl = {
     }
   },
 
-  async autocomplete(query: string, lang?: string): Promise<AutocompleteResult[]> {
+  async autocomplete(
+    query: string,
+    lang?: string,
+    _bias?: GeocodingBias,
+    context?: Pick<ProviderCallContext, "signal">,
+  ): Promise<AutocompleteResult[]> {
+    context?.signal.throwIfAborted();
     if (!risClient.isConfigured()) return [];
     try {
-      const stops = await searchStopPlaces(query, 6);
+      const stops = await searchStopPlaces(query, 6, context?.signal);
       return stops.map((s) => stopPlaceToAutocompleteResult(s, lang));
     } catch {
+      context?.signal.throwIfAborted();
       return [];
     }
   },

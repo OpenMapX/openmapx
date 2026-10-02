@@ -268,14 +268,12 @@ function buildTransitGeoJson(stops: TransitStop[]) {
 export function CategoryResultMarkers() {
   const publish = useRef(createGeoJsonSourcePublisher()).current;
   const { mapRef, mapReady, styleVersion, flyTo } = useMap();
-  const {
-    activeCategory,
-    mode,
-    textQuery,
-    searchBbox,
-    hoveredCategoryPlaceId,
-    setHoveredCategoryPlaceId,
-  } = useCategorySearchStore();
+  const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+  const mode = useCategorySearchStore((s) => s.mode);
+  const textQuery = useCategorySearchStore((s) => s.textQuery);
+  const searchBbox = useCategorySearchStore((s) => s.searchBbox);
+  const hoveredCategoryPlaceId = useCategorySearchStore((s) => s.hoveredCategoryPlaceId);
+  const setHoveredCategoryPlaceId = useCategorySearchStore((s) => s.setHoveredCategoryPlaceId);
   const { setSelectedPlace } = usePlaceStore();
   const selectedPlace = usePlaceStore((state) => state.selectedPlace);
 

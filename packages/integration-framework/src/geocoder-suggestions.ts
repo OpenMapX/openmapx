@@ -91,8 +91,9 @@ export function createGeocoderSuggestionProvider(
     id: options.id,
     async searchSuggestions(
       query: SearchSuggestionQuery,
-      { signal }: ProviderCallContext,
+      context: ProviderCallContext,
     ): Promise<SearchSuggestionProviderResult> {
+      const { signal } = context;
       signal.throwIfAborted();
       const box = options.coverage?.();
       if (box && query.proximity && !withinBox(query.proximity, box)) return empty();
@@ -101,6 +102,7 @@ export function createGeocoderSuggestionProvider(
         query.query,
         query.lang,
         query.proximity ? { proximity: query.proximity } : undefined,
+        context,
       );
       signal.throwIfAborted();
 

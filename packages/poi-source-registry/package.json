@@ -11,6 +11,10 @@
     ".": {
       "types": "./src/index.ts",
       "default": "./src/index.ts"
+    },
+    "./static-change-key": {
+      "types": "./src/static-change-key.ts",
+      "default": "./src/static-change-key.ts"
     }
   },
   "scripts": {

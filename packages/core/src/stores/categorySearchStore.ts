@@ -107,7 +107,10 @@ export const useCategorySearchStore = create<CategorySearchState>((set) => ({
       };
     }),
   setMapMoved: (mapMoved) => set({ mapMoved }),
-  setHoveredCategoryPlaceId: (hoveredCategoryPlaceId) => set({ hoveredCategoryPlaceId }),
+  setHoveredCategoryPlaceId: (hoveredCategoryPlaceId) =>
+    set((state) =>
+      state.hoveredCategoryPlaceId === hoveredCategoryPlaceId ? state : { hoveredCategoryPlaceId },
+    ),
   setAnchor: (anchor) => set((state) => ({ anchor, searchRevision: state.searchRevision + 1 })),
   openExploreBox: (anchor) => set({ anchor, exploreBoxOpen: true }),
   closeExploreBox: () => set({ exploreBoxOpen: false }),

@@ -28,6 +28,7 @@ interface SelectCall {
 const insertCalls: InsertCall[] = [];
 const updateCalls: UpdateCall[] = [];
 const selectCalls: SelectCall[] = [];
+const evidenceWrites: unknown[][] = [];
 let returningResult: unknown[] = [];
 let insertShouldThrow: Error | null = null;
 let selectResult: unknown[] = [];
@@ -110,7 +111,12 @@ vi.mock("../../src/db/index.js", () => {
         };
       },
     },
-    sql: { unsafe: async () => [] },
+    sql: {
+      unsafe: async (_query: string, params: unknown[]) => {
+        evidenceWrites.push(params);
+        return [];
+      },
+    },
   };
 });
 
@@ -175,6 +181,7 @@ beforeEach(() => {
   insertCalls.length = 0;
   updateCalls.length = 0;
   selectCalls.length = 0;
+  evidenceWrites.length = 0;
   returningResult = [];
   selectResult = [];
   insertShouldThrow = null;
@@ -490,5 +497,49 @@ describe("getLastPoiFeedState", () => {
     selectResult = [];
     const result = await getLastPoiFeedState("unknown");
     expect(result).toBeUndefined();
+  });
+});
+
+describe("verified unchanged static evidence", () => {
+  it("preserves publication columns while recording a check tied to the retained version without caller metadata", async () => {
+    const { upsertPoiFeedState } = await import("../../src/jobs/poi-ingest/persistence.js");
+    await upsertPoiFeedState({
+      sourceId: "de-test",
+      domain: "ev-charging",
+      jobId: "checked-job",
+      result: baseResult({
+        kind: "static",
+        skippedStaticSwap: true,
+        staticHash: "verified-hash",
+        staticPublicationVersion: "verified-hash",
+        staticPublishedAt: "2026-05-01T00:00:00.000Z",
+        stages: [
+          {
+            stage: "swap",
+            status: "skipped",
+            startedAt: "2026-05-24T00:00:01.000Z",
+            finishedAt: "2026-05-24T00:00:01.000Z",
+            durationMs: 0,
+          },
+        ],
+      }),
+    });
+    const set = insertCalls[0]?.onConflict?.set as Record<string, unknown>;
+    for (const column of [
+      "lastStaticHash",
+      "lastStaticRowCount",
+      "lastStaticIngestAt",
+      "lastLiveIngestAt",
+      "lastLiveRowCount",
+    ])
+      expect(set).not.toHaveProperty(column);
+    const patch = JSON.parse(evidenceWrites[0][3] as string);
+    expect(patch).toMatchObject({
+      lastSuccessfullyCheckedVersion: "verified-hash",
+      lastSuccessfulCheckAt: "2026-05-24T00:00:01.000Z",
+      lastAttempt: { outcome: "unchanged" },
+    });
+    for (const column of ["activeVersion", "lastPublishedVersion", "lastPublishedAt", "rowCount"])
+      expect(patch).not.toHaveProperty(column);
   });
 });

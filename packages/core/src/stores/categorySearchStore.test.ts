@@ -1,8 +1,46 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Place } from "../types/place";
 import { useCategorySearchStore } from "./categorySearchStore";
 
 const place = { id: "p1", name: "Hbf", coordinates: [13.4, 52.5] } as unknown as Place;
+
+describe("category hover publications", () => {
+  beforeEach(() => useCategorySearchStore.setState({ hoveredCategoryPlaceId: null }));
+
+  it.each([null, "osm:node/1"])("does not publish repeated hover value %s", (hoveredId) => {
+    useCategorySearchStore.getState().setHoveredCategoryPlaceId(hoveredId);
+    const original = useCategorySearchStore.getState();
+    const listener = vi.fn();
+    const unsubscribe = useCategorySearchStore.subscribe(listener);
+    try {
+      for (let index = 0; index < 100; index++) {
+        useCategorySearchStore.getState().setHoveredCategoryPlaceId(hoveredId);
+      }
+      expect(listener).not.toHaveBeenCalled();
+      expect(useCategorySearchStore.getState()).toBe(original);
+    } finally {
+      unsubscribe();
+    }
+  });
+
+  it("publishes every real hover transition without changing search identity", () => {
+    const revision = useCategorySearchStore.getState().searchRevision;
+    const transitions: (string | null)[] = [];
+    const unsubscribe = useCategorySearchStore.subscribe((state) => {
+      transitions.push(state.hoveredCategoryPlaceId);
+    });
+    try {
+      const store = useCategorySearchStore.getState();
+      store.setHoveredCategoryPlaceId("osm:node/1");
+      store.setHoveredCategoryPlaceId("osm:node/2");
+      store.setHoveredCategoryPlaceId(null);
+      expect(transitions).toEqual(["osm:node/1", "osm:node/2", null]);
+      expect(useCategorySearchStore.getState().searchRevision).toBe(revision);
+    } finally {
+      unsubscribe();
+    }
+  });
+});
 
 describe("categorySearchStore explore state", () => {
   beforeEach(() => {

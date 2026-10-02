@@ -44,6 +44,8 @@ export interface PoiRefreshStreamEvidence {
   lastPublishedVersion: string | null;
   lastPublishedAt: string | null;
   rowCount: number | null;
+  /** Physical static-table identity, recorded atomically with opted-in publication. */
+  tableOid?: string;
   /** Upstream content timestamp when the source supplies one. */
   upstreamAsOf: string | null;
   /** Earliest/latest upstream timestamp when a snapshot spans a range. */

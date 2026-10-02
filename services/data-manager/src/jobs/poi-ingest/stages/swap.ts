@@ -55,6 +55,16 @@ export async function runSwap(ctx: PoiJobContext): Promise<PoiIngestStageResult>
       await tx.unsafe(`DROP TABLE IF EXISTS poi_ingest."${live}" CASCADE`);
       await tx.unsafe(`ALTER TABLE poi_ingest."${staging}" RENAME TO "${live}"`);
       await tx.unsafe(`ALTER INDEX poi_ingest."${stagingIdx}" RENAME TO "${liveIdx}"`);
+      // Bind opt-in reuse to the actual table produced by this transaction.
+      // A restored/recreated same-name table must not inherit stale evidence.
+      let tableOid: string | undefined;
+      if (ctx.kind === "static" && ctx.source.static?.staticChangeKey) {
+        const [table] = await tx.unsafe<{ table_oid: string }[]>(
+          `SELECT to_regclass($1::text)::oid::text AS table_oid`,
+          [`poi_ingest."${live}"`],
+        );
+        tableOid = table?.table_oid;
+      }
       await mergePoiRefreshEvidence(tx, {
         sourceId: id,
         domain: ctx.source.domain,
@@ -67,6 +77,7 @@ export async function runSwap(ctx: PoiJobContext): Promise<PoiIngestStageResult>
           lastPublishedVersion: publicationVersion,
           lastPublishedAt: publishedAt,
           rowCount: ctx.state.staticRows?.length ?? null,
+          ...(tableOid ? { tableOid } : {}),
           activeAssociation: "known",
           pendingWriteIntentId: null,
           lastAttempt: {

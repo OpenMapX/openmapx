@@ -119,8 +119,8 @@ export async function upsertPoiFeedState(opts: UpsertPoiFeedStateOptions): Promi
       insertValues.lastStaticHash = result.staticHash;
       updatePatch.lastStaticHash = result.staticHash;
     }
-  } else if (result.kind === "bundled" && result.skippedStaticSwap === true) {
-    // Bundled-skip: do NOT bump last_static_ingest_at — the table on disk was
+  } else if (staticRequested && result.skippedStaticSwap === true) {
+    // Unchanged publication: do NOT bump last_static_ingest_at — the table on disk was
     // not rewritten. The previous hash + row count remain authoritative; we
     // preserve them on the first-INSERT path so the row is internally
     // consistent.
@@ -212,7 +212,9 @@ function buildAttemptPatch(
     stream === "static" &&
     stage?.status === "skipped" &&
     result.staticHash &&
-    opts.previousStaticHash === result.staticHash
+    (result.kind === "static"
+      ? result.skippedStaticSwap === true && result.staticPublicationVersion === result.staticHash
+      : opts.previousStaticHash === result.staticHash)
   ) {
     patch.lastSuccessfullyCheckedVersion = result.staticHash;
     patch.lastSuccessfulCheckAt = at;

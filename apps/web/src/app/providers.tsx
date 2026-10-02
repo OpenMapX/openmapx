@@ -11,7 +11,6 @@ import {
 } from "@openmapx/core";
 import { registerBuiltinIdSchemeViews } from "@openmapx/place-ids";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { PersistQueryClientProvider } from "@tanstack/react-query-persist-client";
 import { useEffect, useState } from "react";
 import { ImpersonationBanner } from "../components/admin/ImpersonationBanner";
 import { SavedPlacesMirror } from "../components/pwa/SavedPlacesMirror";
@@ -23,6 +22,7 @@ import {
 } from "../lib/personalTimelineCachePolicy";
 import { installHighCardinalityQueryCacheBudget } from "../lib/queryCacheBudget";
 import { createIdbPersister } from "../lib/queryPersister";
+import { RecentMapDataQueryProvider } from "../lib/RecentMapDataQueryProvider";
 import {
   enforceRecentMapDataCachePreference,
   isRecentMapDataQueryKey,
@@ -175,7 +175,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
   if (persister) {
     return (
-      <PersistQueryClientProvider
+      <RecentMapDataQueryProvider
         client={queryClient}
         onSuccess={() => removePersonalTimelineMutations(queryClient)}
         persistOptions={{
@@ -190,7 +190,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         }}
       >
         {inner}
-      </PersistQueryClientProvider>
+      </RecentMapDataQueryProvider>
     );
   }
 

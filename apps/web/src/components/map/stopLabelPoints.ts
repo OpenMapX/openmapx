@@ -115,13 +115,13 @@ export function stopPlaceName(name: string): string {
   );
 }
 
-function namedAfter(stopPlace: string, stationName: string): boolean {
-  const station = stopPlaceName(stationName);
-  if (!stopPlace || !station) return false;
-  // "Berlin Alexanderplatz" is the same station as "Alexanderplatz".
-  return (
-    station === stopPlace || station.endsWith(` ${stopPlace}`) || stopPlace.endsWith(` ${station}`)
-  );
+/** Full name and suffixes separated by spaces; never match part of a word. */
+function nameSuffixes(name: string): string[] {
+  const suffixes = [name];
+  for (let i = name.indexOf(" "); i !== -1; i = name.indexOf(" ", i + 1)) {
+    suffixes.push(name.slice(i + 1));
+  }
+  return suffixes;
 }
 
 /**
@@ -134,24 +134,51 @@ export function stopLabelFeatures(
   stations: readonly StationPoint[],
 ): StopLabelFeature[] {
   const ordered = [...stops].sort((a, b) => a.rank - b.rank || (a.id ?? 0) - (b.id ?? 0));
-  const groups: { key: string; anchor: StopPoint; rank: number }[] = [];
+  type Group = { anchor: StopPoint; rank: number };
+  const groups: Group[] = [];
+  const groupsByName = new Map<string, Group[]>();
+  const stationsByName = new Map<string, StationPoint[]>();
+  const stationsBySuffix = new Map<string, StationPoint[]>();
+  const indexStation = (index: Map<string, StationPoint[]>, key: string, station: StationPoint) => {
+    const bucket = index.get(key);
+    if (bucket) bucket.push(station);
+    else index.set(key, [station]);
+  };
+  for (const station of stations) {
+    const name = stopPlaceName(station.name);
+    if (!name) continue;
+    indexStation(stationsByName, name, station);
+    for (const suffix of nameSuffixes(name)) indexStation(stationsBySuffix, suffix, station);
+  }
   for (const stop of ordered) {
     const key = nameKey(stop.name);
-    const group = groups.find(
+    const bucket = groupsByName.get(key);
+    const group = bucket?.find(
       (candidate) =>
-        candidate.key === key &&
         haversineDistance(candidate.anchor.coordinates, stop.coordinates) <= SAME_STOP_METRES,
     );
     if (group) group.rank = Math.min(group.rank, stop.rank);
-    else groups.push({ key, anchor: stop, rank: stop.rank });
+    else {
+      const next = { anchor: stop, rank: stop.rank };
+      groups.push(next);
+      if (bucket) bucket.push(next);
+      else groupsByName.set(key, [next]);
+    }
   }
 
   return groups.map(({ anchor, rank }) => {
     const place = stopPlaceName(anchor.name);
-    const nearStation = stations.some(
-      (station) =>
-        namedAfter(place, station.name) &&
-        haversineDistance(station.coordinates, anchor.coordinates) <= STATION_METRES,
+    const candidates = new Set<StationPoint>();
+    if (place) {
+      // Station longer than stop (or equal), e.g. Berlin Alexanderplatz.
+      for (const station of stationsBySuffix.get(place) ?? []) candidates.add(station);
+      // Stop longer than station, e.g. Berlin Alexanderplatz / Alexanderplatz.
+      for (const suffix of nameSuffixes(place).slice(1)) {
+        for (const station of stationsByName.get(suffix) ?? []) candidates.add(station);
+      }
+    }
+    const nearStation = [...candidates].some(
+      (station) => haversineDistance(station.coordinates, anchor.coordinates) <= STATION_METRES,
     );
     return {
       type: "Feature",

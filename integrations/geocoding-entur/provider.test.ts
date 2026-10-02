@@ -1,4 +1,11 @@
+import { getEventListeners } from "node:events";
+import {
+  createGeocoderSuggestionProvider,
+  runWithProviderDeadline,
+} from "@openmapx/integration-framework";
+import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { createSearchSuggestionsOrchestrator } from "../search-suggestions/orchestrator.js";
 import {
   enturFeatureToPlace,
   enturGeocodingService,
@@ -223,3 +230,191 @@ describe("lookupEnturPlaceById", () => {
     expect(await lookupEnturPlaceById("NSR:StopPlace:000")).toBeNull();
   });
 });
+
+// These use the real suggestion adapter and provider, replacing only upstream I/O.
+describe("autocomplete cancellation through the suggestion adapter", () => {
+  it.each(["deadline", "caller"] as const)(
+    "aborts downstream I/O on %s and permits retry",
+    async (mode) => {
+      let downstreamSignal: AbortSignal | undefined;
+      let release!: () => void;
+      mockFetch.mockImplementationOnce(
+        (_url: string, init?: RequestInit) =>
+          new Promise((resolve) => {
+            downstreamSignal = init?.signal ?? undefined;
+            release = () => resolve(mockOk({ features: [] }));
+          }),
+      );
+      const provider = createGeocoderSuggestionProvider({
+        id: "geocoding-entur",
+        geocoder: enturGeocodingService,
+        attributions: () => [],
+      });
+      const controller = new AbortController();
+      const pending = runWithProviderDeadline(
+        (context) =>
+          provider.searchSuggestions({ query: "station", lang: "en", limit: 8 }, context),
+        { signal: controller.signal, timeoutMs: mode === "deadline" ? 30 : 1_000 },
+      );
+      const outcome = pending.catch((error: Error) => error);
+      try {
+        // I/O starts synchronously once the provider's microtask is dispatched.
+        await Promise.resolve();
+        await Promise.resolve();
+        if (mode === "caller") controller.abort(new Error("caller left"));
+        expect((await outcome).name).toBe(
+          mode === "deadline" ? "ProviderTimeoutError" : "ProviderCancelledError",
+        );
+        expect(downstreamSignal?.aborted).toBe(true);
+      } finally {
+        release();
+        await outcome;
+      }
+      mockFetch.mockResolvedValueOnce(mockOk({ features: [] }));
+      await expect(
+        provider.searchSuggestions(
+          { query: "station", lang: "en", limit: 8 },
+          { signal: new AbortController().signal, deadlineAt: Date.now() + 1_000 },
+        ),
+      ).resolves.toMatchObject({ suggestions: [] });
+    },
+  );
+
+  it("rejects an already-cancelled direct autocomplete without upstream I/O", async () => {
+    const controller = new AbortController();
+    const reason = new Error("caller left before autocomplete");
+    controller.abort(reason);
+    mockFetch.mockResolvedValue(mockOk({ features: [] }));
+    await expect(
+      enturGeocodingService.autocomplete("station", "en", undefined, { signal: controller.signal }),
+    ).rejects.toBe(reason);
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("autocomplete HTTP lifetime", () => {
+  it("keeps the native HTTP timeout when a caller signal is supplied and cleans listeners", async () => {
+    vi.useFakeTimers();
+    let downstreamSignal: AbortSignal | undefined;
+    mockFetch.mockImplementationOnce((_url: string, init?: RequestInit) => {
+      downstreamSignal = init?.signal ?? undefined;
+      return new Promise(() => {});
+    });
+    const controller = new AbortController();
+    try {
+      const pending = enturGeocodingService.autocomplete("Oslo", "en", undefined, {
+        signal: controller.signal,
+      });
+      const assertion = expect(pending).rejects.toThrow();
+      await vi.advanceTimersByTimeAsync(4_000);
+      await assertion;
+      expect(downstreamSignal?.aborted).toBe(true);
+      expect(controller.signal.aborted).toBe(false);
+      if (!downstreamSignal) throw new Error("HTTP request never started");
+      expect(getEventListeners(downstreamSignal, "abort")).toHaveLength(0);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("handles a late upstream rejection after cancellation without an unhandled rejection", async () => {
+    let rejectFetch!: (error: Error) => void;
+    mockFetch.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, reject) => {
+          rejectFetch = reject;
+        }),
+    );
+    const controller = new AbortController();
+    const reason = new Error("caller left");
+    const pending = enturGeocodingService.autocomplete("Oslo", "en", undefined, {
+      signal: controller.signal,
+    });
+    const assertion = expect(pending).rejects.toBe(reason);
+    controller.abort(reason);
+    await assertion;
+    rejectFetch(new Error("late network failure"));
+    await new Promise((resolve) => setImmediate(resolve));
+  });
+});
+
+it.each(["deadline", "caller"] as const)(
+  "preserves aggregate health and partial-result policy for actual Entur %s cancellation",
+  async (mode) => {
+    vi.useFakeTimers();
+    let downstreamSignal: AbortSignal | undefined;
+    let release!: () => void;
+    const started = Promise.withResolvers<void>();
+    mockFetch.mockImplementationOnce(
+      (_url: string, init?: RequestInit) =>
+        new Promise((resolve) => {
+          downstreamSignal = init?.signal ?? undefined;
+          release = () => resolve(mockOk({ features: [] }));
+          started.resolve();
+        }),
+    );
+    const provider = createGeocoderSuggestionProvider({
+      id: "entur",
+      geocoder: enturGeocodingService,
+      attributions: () => [],
+    });
+    const ctx = createMockIntegrationContext();
+    ctx.getIntegrationsByDomain = () => [
+      {
+        id: "entur",
+        manifest: {} as never,
+        config: {},
+        directory: "",
+        isBuiltIn: true,
+        enabled: true,
+        providers: new Map([["search-suggestions", [provider]]]),
+        strings: {},
+        shutdownHandlers: [],
+      },
+    ];
+    const recordFailure = vi.fn(async () => {});
+    const recordSuccess = vi.fn(async () => {});
+    ctx.providerHealth = {
+      isHealthy: async () => true,
+      recordFailure,
+      recordSuccess,
+      getSnapshot: vi.fn(),
+    };
+    const recordProviderCall = vi.fn();
+    ctx.metricsRecorder = { recordProviderCall };
+    const controller = new AbortController();
+    const work = createSearchSuggestionsOrchestrator(ctx).search(
+      { query: "Oslo", lang: "en", limit: 8 },
+      controller.signal,
+    );
+    const outcome = work.catch((error: Error) => error);
+    try {
+      await started.promise;
+      if (mode === "deadline") {
+        await vi.advanceTimersByTimeAsync(1_200);
+        expect(await outcome).toMatchObject({ partial: true, suggestions: [] });
+        expect(recordFailure).toHaveBeenCalledWith(
+          "entur",
+          expect.any(Number),
+          "timeout",
+          expect.any(String),
+        );
+      } else {
+        controller.abort(new Error("caller left"));
+        expect(await outcome).toMatchObject({ name: "ProviderCancelledError" });
+        expect(recordFailure).not.toHaveBeenCalled();
+      }
+      expect(downstreamSignal?.aborted).toBe(true);
+      expect(recordSuccess).not.toHaveBeenCalled();
+      expect(recordProviderCall).toHaveBeenCalledWith(
+        expect.objectContaining({ outcome: mode === "deadline" ? "timeout" : "cancelled" }),
+        expect.any(Number),
+      );
+    } finally {
+      release();
+      await outcome;
+      vi.useRealTimers();
+    }
+  },
+);

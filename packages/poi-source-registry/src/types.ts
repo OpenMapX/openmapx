@@ -93,6 +93,12 @@ export type PoiValidateFn = (
 
 export interface StaticPoiSpec {
   cron: string;
+  /**
+   * Opt in to validated publication reuse. Must cover IDs, coordinates and the
+   * complete normalized payload, with deterministic ordering and a version.
+   * A match is reused only when durable active-publication evidence agrees.
+   */
+  staticChangeKey?: (rows: readonly PoiRow[]) => string;
   /** Dynamic URLs (e.g. BNetzA CSV path changes). Optional — falls back to fetch.url. */
   resolveUrl?: (log: PoiSourceLogger) => Promise<string>;
   fetch: PoiFetchSpec;

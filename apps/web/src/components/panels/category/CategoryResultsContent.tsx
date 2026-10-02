@@ -413,14 +413,12 @@ export function CategoryResultsContent() {
   const ts = useTranslations("search");
   const tc = useTranslations("common");
   const tm = useTranslations("map");
-  const {
-    activeCategory,
-    searchBbox,
-    setSearchBbox,
-    setMapMoved,
-    hoveredCategoryPlaceId,
-    setHoveredCategoryPlaceId,
-  } = useCategorySearchStore();
+  const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+  const searchBbox = useCategorySearchStore((s) => s.searchBbox);
+  const setSearchBbox = useCategorySearchStore((s) => s.setSearchBbox);
+  const setMapMoved = useCategorySearchStore((s) => s.setMapMoved);
+  const hoveredCategoryPlaceId = useCategorySearchStore((s) => s.hoveredCategoryPlaceId);
+  const setHoveredCategoryPlaceId = useCategorySearchStore((s) => s.setHoveredCategoryPlaceId);
   const anchor = useCategorySearchStore((s) => s.anchor);
   const adHocLabel = useCategorySearchStore((s) => s.adHocLabel);
   const activeBrand = useCategorySearchStore((s) => s.activeBrand);

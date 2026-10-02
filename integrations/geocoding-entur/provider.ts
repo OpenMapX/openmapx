@@ -7,7 +7,7 @@ import {
   resolvePoiIconPath,
   type SearchResult,
 } from "@openmapx/core";
-import type { Wgs84BoundingBox } from "@openmapx/integration-framework";
+import type { ProviderCallContext, Wgs84BoundingBox } from "@openmapx/integration-framework";
 import type {
   GeocodingBias,
   GeocodingProvider as GeocodingProviderImpl,
@@ -424,6 +424,7 @@ export function enturFeatureToPlace(feature: EnturFeature, lang?: string): Place
 async function fetchEntur(
   path: "/autocomplete" | "/reverse",
   params: Record<string, string | undefined>,
+  signal?: AbortSignal,
 ): Promise<EnturFeatureCollection> {
   const url = new URL(`${baseUrl}${path}`);
   for (const [key, value] of Object.entries(params)) {
@@ -434,6 +435,7 @@ async function fetchEntur(
 
   return fetchJson<EnturFeatureCollection>(url.toString(), {
     timeoutMs: REQUEST_TIMEOUT_MS,
+    signal,
     userAgent: null,
     headers: { "ET-Client-Name": clientName },
     errorMessage: ({ status }) => `Entur geocoding error ${status}`,
@@ -448,17 +450,22 @@ async function fetchEnturAutocomplete(
     boundaryCountry?: string;
     multiModal?: EnturMultiModal;
     focus?: GeocodingBias["proximity"];
+    signal?: AbortSignal;
   },
 ): Promise<EnturFeature[]> {
-  const data = await fetchEntur("/autocomplete", {
-    text,
-    lang,
-    size: String(size),
-    "boundary.country": options?.boundaryCountry,
-    multiModal: options?.multiModal,
-    "focus.point.lat": options?.focus ? String(options.focus[1]) : undefined,
-    "focus.point.lon": options?.focus ? String(options.focus[0]) : undefined,
-  });
+  const data = await fetchEntur(
+    "/autocomplete",
+    {
+      text,
+      lang,
+      size: String(size),
+      "boundary.country": options?.boundaryCountry,
+      multiModal: options?.multiModal,
+      "focus.point.lat": options?.focus ? String(options.focus[1]) : undefined,
+      "focus.point.lon": options?.focus ? String(options.focus[0]) : undefined,
+    },
+    options?.signal,
+  );
   return data.features ?? [];
 }
 
@@ -483,11 +490,13 @@ export const enturGeocodingService: GeocodingProviderImpl = {
     query: string,
     lang?: string,
     bias?: GeocodingBias,
+    context?: Pick<ProviderCallContext, "signal">,
   ): Promise<AutocompleteResult[]> {
     const features = await fetchEnturAutocomplete(query, 6, lang, {
       boundaryCountry: boundaryCountry || undefined,
       multiModal,
       focus: bias?.proximity,
+      signal: context?.signal,
     });
     return features
       .map((feature) => featureToAutocompleteResult(feature, lang))

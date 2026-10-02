@@ -1297,6 +1297,56 @@ describe("GET /places/:id", () => {
     expect(body.error).toBe("Internal server error");
   });
 
+  it("starts boundary, photos, and reviews while place knowledge is still pending", async () => {
+    const adminPlace = {
+      ...MOCK_PLACE,
+      ids: { osm: "relation/62422" },
+      osmTags: { boundary: "administrative", name: "Berlin" },
+    };
+    const heroPhoto = { url: "https://example.org/hero.jpg", source: "osm" };
+    const knowledgePhoto = { url: "https://example.org/knowledge.jpg", source: "wikidata" };
+    mockLookupByOsmRef.mockResolvedValue(adminPlace);
+    let releaseKnowledge!: (value: unknown) => void;
+    mockGetPlaceKnowledge.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          releaseKnowledge = resolve;
+        }),
+    );
+    mockFetchOsmBoundary.mockResolvedValue({ boundary: null, boundingBox: null });
+    mockSearchHeroPhotos.mockResolvedValue([heroPhoto]);
+    mockFetchAggregate.mockResolvedValue({ stars: 4.5, count: 10, ratingCount: 10 });
+    mockBuildReviewLinks.mockReturnValue([]);
+    const request = app
+      .inject({
+        method: "GET",
+        url: `/places/${encodeURIComponent("osm:node/12345")}`,
+      })
+      .then((response) => response);
+
+    try {
+      await vi.waitFor(() => expect(mockGetPlaceKnowledge).toHaveBeenCalledTimes(1));
+      expect(mockFetchOsmBoundary).toHaveBeenCalledWith("relation/62422", undefined);
+      expect(mockSearchHeroPhotos).toHaveBeenCalledWith(adminPlace.osmTags, []);
+      expect(mockFetchAggregate).toHaveBeenCalled();
+    } finally {
+      releaseKnowledge({
+        externalIds: { gers: "test-gers" },
+        description: "Knowledge description",
+        photos: [knowledgePhoto],
+      });
+      await request;
+    }
+    const response = await request;
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      name: adminPlace.name,
+      ids: { osm: "relation/62422", gers: "test-gers" },
+      description: "Knowledge description",
+      photos: [heroPhoto, knowledgePhoto],
+    });
+  });
+
   it("runs boundary, photo, and review calls in parallel within enrichPlace", async () => {
     // Place with boundary=administrative so all three downstream paths are active.
     const adminPlace = {

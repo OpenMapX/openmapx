@@ -1,5 +1,6 @@
 import { IntegrationRegistry } from "@openmapx/integration-framework";
 import { IntegrationRegistryContext } from "@openmapx/integration-framework/react";
+import { Profiler } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getMapObstructionInsets, publishMapObstruction } from "@/lib/mapObstructions";
 import { act, createFakeMap, createQueryWrapper, fireEvent, render, screen, waitFor } from "@/test";
@@ -165,6 +166,25 @@ const renderBar = (disclosures: Disclosure[] = []) =>
   );
 
 describe("SearchBar", () => {
+  it("does not render again when a category result is hovered", async () => {
+    useCategorySearchStore.setState({ hoveredCategoryPlaceId: null });
+    const onRender = vi.fn();
+    render(
+      <IntegrationDisclosuresProvider value={[]}>
+        <Profiler id="search" onRender={onRender}>
+          <SearchBar />
+        </Profiler>
+      </IntegrationDisclosuresProvider>,
+      { wrapper: createQueryWrapper() },
+    );
+    await act(async () => {});
+    onRender.mockClear();
+
+    act(() => useCategorySearchStore.getState().setHoveredCategoryPlaceId("osm:node/1"));
+
+    expect(onRender).not.toHaveBeenCalled();
+  });
+
   it("mounts and renders the search input", () => {
     renderBar();
     screen.getByLabelText("search.ariaLabel");

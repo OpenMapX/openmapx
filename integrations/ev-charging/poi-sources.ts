@@ -1,5 +1,6 @@
 import { gunzipSync } from "node:zlib";
 import type { PoiSource, PoiStaticParseFn } from "@openmapx/poi-source-registry";
+import { createStaticPoiChangeKey } from "@openmapx/poi-source-registry/static-change-key";
 import { parseAuNsw, resolveNswUrl } from "./providers/au-nsw-parser.js";
 import { AU_QLD_CSV_URL, parseAuQld } from "./providers/au-qld-parser.js";
 import { parseAuVic } from "./providers/au-vic-parser.js";
@@ -79,6 +80,7 @@ export function declarePoiSources(): PoiSource[] {
         resolveUrl: resolveDeBnetzaCsvUrl,
         fetch: { type: "http", timeoutMs: 30_000, encoding: "windows-1252" },
         parse: parseDeBnetzaCsv,
+        staticChangeKey: createStaticPoiChangeKey("de-bnetza-v1"),
         // Sanity floor — registry today is ~65k; anything below this is a feed regression.
         minRowCount: 1000,
       },
@@ -93,6 +95,8 @@ export function declarePoiSources(): PoiSource[] {
         cron: "0 4 * * *",
         fetch: { type: "http", url: DE_OCPDB_LOCATIONS_URL, timeoutMs: 30_000 },
         parse: parseDeOcpdb,
+        // Includes resolved tariffs/associations after all parser fetches.
+        staticChangeKey: createStaticPoiChangeKey("de-ocpdb-v1"),
         // Feed today is ~91k locations nationwide.
         minRowCount: 10_000,
       },

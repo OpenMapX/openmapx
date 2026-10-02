@@ -1,5 +1,10 @@
+import {
+  createGeocoderSuggestionProvider,
+  runWithProviderDeadline,
+} from "@openmapx/integration-framework";
 import { createNoopLogger } from "@openmapx/integration-framework/testing";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { enturGeocodingService } from "../../../../integrations/geocoding-entur/provider.js";
 
 const { redisMock } = vi.hoisted(() => ({
   redisMock: {
@@ -282,4 +287,69 @@ describe("integration cache single-flight", () => {
       "second",
     ]);
   });
+});
+
+describe("geocoder suggestion shared cache ownership", () => {
+  it.each(["survivor", "all-cancelled"] as const)(
+    "preserves owner cancellation semantics with a real Entur adapter: %s",
+    async (mode) => {
+      let downstreamSignal: AbortSignal | undefined;
+      let release!: () => void;
+      const started = deferred();
+      const fetch = vi.fn(
+        (_url: string, init?: RequestInit) =>
+          new Promise<Response>((resolve) => {
+            downstreamSignal = init?.signal ?? undefined;
+            release = () => resolve(Response.json({ features: [] }));
+            started.resolve();
+          }),
+      );
+      vi.stubGlobal("fetch", fetch);
+      const provider = createGeocoderSuggestionProvider({
+        id: "geocoding-entur",
+        geocoder: enturGeocodingService,
+        attributions: () => [],
+      });
+      const cache = createCacheClient("search-suggestions");
+      const load = (signal: AbortSignal) =>
+        runWithProviderDeadline(
+          (context) => provider.searchSuggestions({ query: "Oslo", lang: "en", limit: 8 }, context),
+          { signal, timeoutMs: 1_000 },
+        );
+      const firstController = new AbortController();
+      const secondController = new AbortController();
+      const first = cache.withCache("oslo", 300, load, firstController.signal);
+      const second = cache.withCache("oslo", 300, load, secondController.signal);
+      const firstOutcome = first.catch((error: Error) => error);
+      const secondOutcome = second.catch((error: Error) => error);
+      await started.promise;
+      try {
+        firstController.abort(new Error("first caller left"));
+        expect(await firstOutcome).toMatchObject({ message: "first caller left" });
+        expect(downstreamSignal?.aborted).toBe(false);
+        if (mode === "all-cancelled") {
+          secondController.abort(new Error("second caller left"));
+          expect(await secondOutcome).toMatchObject({ message: "second caller left" });
+          expect(downstreamSignal?.aborted).toBe(true);
+          expect(redisMock.setex).not.toHaveBeenCalled();
+        } else {
+          release();
+          await expect(second).resolves.toMatchObject({ suggestions: [] });
+          expect(redisMock.setex).toHaveBeenCalledTimes(1);
+        }
+        expect(fetch).toHaveBeenCalledTimes(1);
+      } finally {
+        release();
+        await Promise.all([firstOutcome, secondOutcome]);
+      }
+      if (mode === "all-cancelled") {
+        fetch.mockImplementationOnce(async () => Response.json({ features: [] }));
+        await expect(cache.withCache("oslo", 300, load)).resolves.toMatchObject({
+          suggestions: [],
+        });
+        expect(fetch).toHaveBeenCalledTimes(2);
+        expect(redisMock.setex).toHaveBeenCalledTimes(1);
+      }
+    },
+  );
 });

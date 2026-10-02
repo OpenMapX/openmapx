@@ -19,8 +19,14 @@ export interface RisCredentials {
 
 export interface RisClient {
   isConfigured(): boolean;
-  get<T>(api: RisApi, path: string, timeoutMs?: number): Promise<T>;
-  post<T>(api: RisApi, path: string, body: unknown, timeoutMs?: number): Promise<T>;
+  get<T>(api: RisApi, path: string, timeoutMs?: number, signal?: AbortSignal): Promise<T>;
+  post<T>(
+    api: RisApi,
+    path: string,
+    body: unknown,
+    timeoutMs?: number,
+    signal?: AbortSignal,
+  ): Promise<T>;
 }
 
 export function createRisClient(
@@ -45,12 +51,14 @@ export function createRisClient(
     method: "GET" | "POST",
     options: Omit<MobilityHttpRequestOptions, "method">,
   ): Promise<T> {
+    options.signal?.throwIfAborted();
     try {
       return await transport.fetchJson<T>(`${RIS_BASE_URLS[api]}${path}`, {
         ...options,
         method,
       });
     } catch (error) {
+      options.signal?.throwIfAborted();
       const detail = error instanceof Error ? error.message : "request failed";
       throw new Error(`RIS ${api} ${method} ${path} failed: ${detail}`, { cause: error });
     }
@@ -59,18 +67,26 @@ export function createRisClient(
   return {
     isConfigured: () => clientId !== undefined && apiKey !== undefined,
 
-    async get<T>(api: RisApi, path: string, timeoutMs = 6_000): Promise<T> {
+    async get<T>(api: RisApi, path: string, timeoutMs = 6_000, signal?: AbortSignal): Promise<T> {
       return request<T>(api, path, "GET", {
         timeoutMs,
+        ...(signal ? { signal } : {}),
         allowedRedirectOrigin: RIS_ORIGIN,
         headers: headers(),
       });
     },
 
-    async post<T>(api: RisApi, path: string, body: unknown, timeoutMs = 8_000): Promise<T> {
+    async post<T>(
+      api: RisApi,
+      path: string,
+      body: unknown,
+      timeoutMs = 8_000,
+      signal?: AbortSignal,
+    ): Promise<T> {
       return request<T>(api, path, "POST", {
         body: JSON.stringify(body),
         timeoutMs,
+        ...(signal ? { signal } : {}),
         allowedRedirectOrigin: RIS_ORIGIN,
         headers: { ...headers(), "Content-Type": "application/json" },
       });

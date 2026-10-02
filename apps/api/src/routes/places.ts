@@ -611,6 +611,22 @@ async function safeAggregate(
  * share identical enrichment.
  */
 async function enrichPlace(place: Place, lang: string | undefined): Promise<Place> {
+  const allIntegrations = getAllIntegrations();
+  const photoProviders = getPhotoProviders(allIntegrations);
+  const reviewProviders = getReviewProviders(allIntegrations);
+  const [plng, plat] = place.coordinates;
+
+  // These inputs do not depend on knowledge's auxiliary IDs. Start all four
+  // branches together, then fold those IDs into the final response.
+  const [knowledgeResult, adminBoundary, heroPhotos, reviewStats] = await Promise.all([
+    getPlaceKnowledge(place, lang),
+    // Only administrative areas get a boundary highlight.
+    place.osmTags?.boundary === "administrative" && place.ids?.osm
+      ? fetchOsmBoundary(place.ids.osm, lang)
+      : Promise.resolve(null),
+    place.osmTags ? searchHeroPhotos(place.osmTags, photoProviders) : Promise.resolve([]),
+    safeAggregate(plat, plng, place.name, place.ids?.osm, reviewProviders),
+  ]);
   const {
     externalIds,
     photos: knowledgePhotos,
@@ -623,25 +639,8 @@ async function enrichPlace(place: Place, lang: string | undefined): Promise<Plac
     countryCode: knowledgeCountryCode,
     provenance: knowledgeProvenance,
     ...knowledge
-  } = await getPlaceKnowledge(place, lang);
+  } = knowledgeResult;
   const enriched = foldExternalIdsIntoPlace(place, externalIds);
-
-  const allIntegrations = getAllIntegrations();
-  const photoProviders = getPhotoProviders(allIntegrations);
-  const reviewProviders = getReviewProviders(allIntegrations);
-  const [plng, plat] = enriched.coordinates;
-
-  // The three downstream calls are mutually independent: run them in parallel.
-  // fetchOsmBoundary is gated on boundary=administrative so we never pull
-  // polygons for POIs — only admin areas get a boundary highlight.
-  // If a future step consumes another step's output, move it outside this call.
-  const [adminBoundary, heroPhotos, reviewStats] = await Promise.all([
-    enriched.osmTags?.boundary === "administrative" && enriched.ids?.osm
-      ? fetchOsmBoundary(enriched.ids.osm, lang)
-      : Promise.resolve(null),
-    enriched.osmTags ? searchHeroPhotos(enriched.osmTags, photoProviders) : Promise.resolve([]),
-    safeAggregate(plat, plng, enriched.name, enriched.ids?.osm, reviewProviders),
-  ]);
   const photos = deduplicatePhotos([...heroPhotos, ...(knowledgePhotos ?? [])]);
   return {
     ...enriched,

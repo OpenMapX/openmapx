@@ -4,6 +4,7 @@ import type {
   ReverseGeocodingResult,
   SearchResult,
 } from "@openmapx/core";
+import type { ProviderCallContext } from "../provider-execution.js";
 
 export type { AutocompleteResult, ReverseGeocodingResult, SearchResult } from "@openmapx/core";
 
@@ -19,6 +20,12 @@ export interface GeocodingBias {
 
 export interface GeocodingProvider {
   geocode(query: string, lang?: string, proximity?: LngLat): Promise<SearchResult[]>;
-  autocomplete(query: string, lang?: string, bias?: GeocodingBias): Promise<AutocompleteResult[]>;
+  /** Optional caller context is forwarded to cancellable I/O when supported. */
+  autocomplete(
+    query: string,
+    lang?: string,
+    bias?: GeocodingBias,
+    context?: Pick<ProviderCallContext, "signal">,
+  ): Promise<AutocompleteResult[]>;
   reverseGeocode(lat: number, lng: number, lang?: string): Promise<ReverseGeocodingResult | null>;
 }

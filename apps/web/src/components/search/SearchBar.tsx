@@ -158,8 +158,10 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const { setSelectedPlace } = usePlaceStore();
   const { isOpen: hasSidePanel, close: closeSidePanel } = useActiveSidePanel();
   const { isOpen: directionsOpen, open: openDirections } = useDirectionsStore();
-  const { activeCategory, setActiveCategory, clearCategory, setBrandFilter } =
-    useCategorySearchStore();
+  const activeCategory = useCategorySearchStore((s) => s.activeCategory);
+  const setActiveCategory = useCategorySearchStore((s) => s.setActiveCategory);
+  const clearCategory = useCategorySearchStore((s) => s.clearCategory);
+  const setBrandFilter = useCategorySearchStore((s) => s.setBrandFilter);
   const anchor = useCategorySearchStore((s) => s.anchor);
   const exploreBoxOpen = useCategorySearchStore((s) => s.exploreBoxOpen);
   // Nearby/Explore mode: a place is the anchor. Reuses this search bar, adding a

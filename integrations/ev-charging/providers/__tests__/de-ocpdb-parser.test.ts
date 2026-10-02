@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { createStaticPoiChangeKey } from "@openmapx/poi-source-registry/static-change-key";
 import { describe, expect, it, vi } from "vitest";
 import { parseDeOcpdb } from "../de-ocpdb-parser.js";
 
@@ -152,5 +153,41 @@ describe("parseDeOcpdb", () => {
     );
     expect(types).toContain("Schuko");
     expect(types).not.toContain("DOMESTIC_F");
+  });
+});
+
+describe("OCPDB full static comparison", () => {
+  it("detects tariff and association changes even when the locations seed is identical", async () => {
+    const key = createStaticPoiChangeKey("ocpdb-test-v1");
+    const original = await collect();
+    async function enriched(tariffs: unknown, associations: unknown) {
+      vi.stubGlobal(
+        "fetch",
+        async (url: string) =>
+          new Response(
+            JSON.stringify(url.includes("/tariff-associations") ? associations : tariffs),
+          ),
+      );
+      try {
+        const rows = [];
+        for await (const row of parseDeOcpdb(locationsPage, { log })) rows.push(row);
+        return rows;
+      } finally {
+        vi.unstubAllGlobals();
+      }
+    }
+    const changedTariffs = JSON.parse(JSON.stringify(tariffsPage));
+    // Fixture tariff dimensions are actual OCPI price components.
+    for (const tariff of changedTariffs.items) {
+      for (const element of tariff.elements ?? []) {
+        for (const component of element.price_components ?? []) component.price += 1;
+      }
+    }
+    const tariffRows = await enriched(changedTariffs, associationsPage);
+    const associationRows = await enriched(tariffsPage, { ...associationsPage, items: [] });
+    expect(tariffRows.map((row) => row.poiId)).toEqual(original.map((row) => row.poiId));
+    expect(associationRows.map((row) => row.poiId)).toEqual(original.map((row) => row.poiId));
+    expect(key(tariffRows)).not.toBe(key(original));
+    expect(key(associationRows)).not.toBe(key(original));
   });
 });

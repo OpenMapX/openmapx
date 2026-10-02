@@ -25,6 +25,42 @@ const RECENT_MAP_DATA_QUERY_KEY_ROOTS = new Set([
 ]);
 
 const SERVICE_WORKER_MESSAGE_TYPE = "SET_RECENT_MAP_DATA_CACHE_ENABLED";
+const CACHE_CHANGE_EVENT = "openmapx:recent-map-data-cache-change";
+type CacheChangeReason = "preference" | "clear";
+let cacheGeneration = 0;
+
+export function getRecentMapDataCacheGeneration(): number {
+  return cacheGeneration;
+}
+
+function notifyCacheChange(reason: CacheChangeReason): void {
+  cacheGeneration += 1;
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent<CacheChangeReason>(CACHE_CHANGE_EVENT, { detail: reason }),
+    );
+  }
+}
+
+export function subscribeRecentMapDataCacheChanges(
+  listener: (reason: CacheChangeReason) => void,
+): () => void {
+  if (typeof window === "undefined") return () => {};
+  const onChange = (event: Event) => listener((event as CustomEvent<CacheChangeReason>).detail);
+  const onStorage = (event: StorageEvent) => {
+    if (event.storageArea && event.storageArea !== window.localStorage) return;
+    if (event.key !== null && event.key !== RECENT_MAP_DATA_CACHE_ENABLED_KEY) return;
+    cacheGeneration += 1;
+    configureOfflineQueryRetention(isRecentMapDataCacheEnabled());
+    listener("preference");
+  };
+  window.addEventListener(CACHE_CHANGE_EVENT, onChange);
+  window.addEventListener("storage", onStorage);
+  return () => {
+    window.removeEventListener(CACHE_CHANGE_EVENT, onChange);
+    window.removeEventListener("storage", onStorage);
+  };
+}
 
 function postRecentMapDataCachePreference(enabled: boolean): void {
   if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
@@ -58,6 +94,8 @@ export function isRecentMapDataQueryKey(queryKey: readonly unknown[]): boolean {
 }
 
 export async function clearRecentMapDataCache(): Promise<void> {
+  // Invalidate pending snapshots and reads before asynchronous storage deletion.
+  notifyCacheChange("clear");
   await idbDelete(QUERY_CACHE_KEY);
 
   if (typeof caches !== "undefined") {
@@ -79,6 +117,7 @@ export async function setRecentMapDataCacheEnabled(enabled: boolean): Promise<vo
   // Keep in-memory retention in step with persistence: queries GC'd by the
   // short default policies can neither be persisted nor survive a restore.
   configureOfflineQueryRetention(enabled);
+  notifyCacheChange("preference");
   postRecentMapDataCachePreference(enabled);
 
   if (!enabled) {

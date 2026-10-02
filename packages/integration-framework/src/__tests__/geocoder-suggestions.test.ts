@@ -76,7 +76,7 @@ describe("createGeocoderSuggestionProvider", () => {
 
     const result = await provider.searchSuggestions({ query: "Oslo", lang: "nb", limit: 2 }, CALL);
 
-    expect(upstream.autocomplete).toHaveBeenCalledWith("Oslo", "nb", undefined);
+    expect(upstream.autocomplete).toHaveBeenCalledWith("Oslo", "nb", undefined, CALL);
     expect(result.suggestions.map((s) => s.id)).toEqual(["row-0", "row-1"]);
   });
 
@@ -93,7 +93,12 @@ describe("createGeocoderSuggestionProvider", () => {
       CALL,
     );
 
-    expect(upstream.autocomplete).toHaveBeenCalledWith("Oslo", "en", { proximity: [10.7, 59.9] });
+    expect(upstream.autocomplete).toHaveBeenCalledWith(
+      "Oslo",
+      "en",
+      { proximity: [10.7, 59.9] },
+      CALL,
+    );
   });
 
   it("returns nothing, without calling upstream, when the proximity lies outside coverage", async () => {
