@@ -14,6 +14,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { claimMapClick } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { resolveTravelTimeBackend, type TravelTimeMode, useTravelTimeStore } from "./store";
@@ -462,6 +463,7 @@ export function TravelTimeLayer() {
     if (!map || !mapReady || !isActive || anchored) return;
 
     const onClick = (e: MapMouseEvent) => {
+      if (!claimMapClick(e, "travel-time")) return;
       const lngLat: LngLat = [e.lngLat.lng, e.lngLat.lat];
       useTravelTimeStore.getState().setOrigin(lngLat);
     };

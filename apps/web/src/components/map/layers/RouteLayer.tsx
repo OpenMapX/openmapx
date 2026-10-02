@@ -9,6 +9,7 @@ import type { MapMouseEvent } from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
@@ -248,6 +249,13 @@ export function RouteLayer() {
         if (element instanceof HTMLButtonElement) {
           element.type = "button";
           element.addEventListener("click", (event) => {
+            if (getMapClickOwner(event)) return;
+            event.stopPropagation();
+            setActiveRouteIndex(routeIndex);
+          });
+          element.addEventListener("keydown", (event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
             event.stopPropagation();
             setActiveRouteIndex(routeIndex);
           });
@@ -315,6 +323,7 @@ export function RouteLayer() {
     const map = mapRef.current;
     if (!map) return;
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const idx = e.features?.[0]?.properties?.routeIndex as number | undefined;
       if (idx !== undefined) setActiveRouteIndex(idx);
     };
@@ -429,6 +438,7 @@ export function RouteLayer() {
     const map = mapRef.current;
     if (!map) return;
     const onStopClick = (e: MapMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       if (!map.getLayer(EV_STOPS_LAYER_ID)) return;
       const features = map.queryRenderedFeatures(e.point, { layers: [EV_STOPS_LAYER_ID] });
       if (!features.length) return;

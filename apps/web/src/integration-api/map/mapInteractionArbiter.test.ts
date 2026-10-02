@@ -1,3 +1,4 @@
+import { useParkingStore } from "@openmapx/core";
 import type { MapGeoJSONFeature, Map as MaplibreMap, MapMouseEvent } from "maplibre-gl";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
@@ -72,7 +73,27 @@ function event(): MapMouseEvent {
 }
 
 describe("map interaction arbiter", () => {
+  it("suppresses an overlay popup for a picker-owned click", () => {
+    const { map, state } = createMap();
+    state.addLayer("test-incident");
+    state.setHits("test-incident", [feature("incident")]);
+    const open = vi.fn();
+    const unregister = registerMapOverlayInteraction(map, {
+      id: "owned",
+      layerIds: ["test-incident"],
+      priority: 10,
+      onClick: open,
+    });
+    useParkingStore.getState().setPicking(true);
+    state.emit("click", event());
+    expect(open).not.toHaveBeenCalled();
+    useParkingStore.getState().reset();
+    state.emit("click", event());
+    expect(open).toHaveBeenCalledTimes(1);
+    unregister();
+  });
   beforeEach(() => {
+    useParkingStore.getState().reset();
     INTERACTIVE_LAYER_IDS.delete("test-incident");
     INTERACTIVE_LAYER_IDS.delete("test-flow");
   });

@@ -1,5 +1,6 @@
 import type { MapGeoJSONFeature, Map as MaplibreMap, MapMouseEvent, Popup } from "maplibre-gl";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 
 export interface MapOverlayInteractionEvent {
   event: MapMouseEvent;
@@ -110,6 +111,7 @@ function createMapState(map: MaplibreMap): MapInteractionState {
   state.arbiterOwnedLayerIds = new Set();
   state.nextOrder = 0;
   state.onClick = (event) => {
+    if (getMapClickOwner(event)) return;
     const hit = winningHit(map, state, event);
     if (!hit) return;
     hit.registration.onClick({ event, features: hit.features });

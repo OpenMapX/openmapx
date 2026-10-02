@@ -18,6 +18,7 @@ import { useEffect, useRef, useState } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { loadMaptilerStyle, loadOpenMapXStyle, type MapStyleVariant } from "@/lib/map";
+import { initializeMapClickModes } from "@/lib/mapClickModes";
 import { loadMapLibreRuntime, type MapLibreRuntime } from "@/lib/maplibreRuntime";
 import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
@@ -107,6 +108,7 @@ export function MapCanvas() {
 
   useEffect(() => {
     if (!containerRef.current) return;
+    initializeMapClickModes();
 
     // Read initial viewport values once at mount — not reactive dependencies.
     // Adding center/zoom/bearing/pitch to the dep array would cause the map to

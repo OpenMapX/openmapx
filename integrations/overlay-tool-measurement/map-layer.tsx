@@ -10,6 +10,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { claimMapClick } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useMeasurementStore } from "./store";
 
@@ -455,6 +456,7 @@ export function MeasurementLayer() {
     if (!map || !mapReady || !isActive) return;
 
     const onClick = (e: MapMouseEvent) => {
+      if (!claimMapClick(e, "measurement")) return;
       const state = useMeasurementStore.getState();
       if (state.isFinalized) return;
 

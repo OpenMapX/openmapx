@@ -26,6 +26,7 @@ import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { createBrandMarkerSvg, createMarkerSvg } from "@/lib/markerSvg";
 import { useExploreReachResults } from "@/lib/useExploreReachResults";
@@ -664,6 +665,7 @@ export function CategoryResultMarkers() {
     if (clickHandlerRef.current) map.off("click", clickHandlerRef.current);
 
     const onClick = (e: MapMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const layers = [LAYER_ID, LABEL_LAYER_ID].filter((id) => !!map.getLayer(id));
       if (layers.length === 0) return;
       const features = map.queryRenderedFeatures(e.point, { layers });
@@ -709,6 +711,7 @@ export function CategoryResultMarkers() {
 
     // Transit layer click handler
     const onTransitClick = (e: MapMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const features = map.queryRenderedFeatures(e.point, { layers: [TRANSIT_LAYER_ID] });
       if (!features.length) return;
       const props = features[0].properties as {

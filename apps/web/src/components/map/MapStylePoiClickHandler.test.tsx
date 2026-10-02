@@ -28,10 +28,22 @@ vi.mock("@openmapx/core", async (importOriginal) => ({
 vi.mock("@/components/auth/AuthDialog", () => ({ AuthDialog: () => null }));
 vi.mock("@/components/panels/saved/SavePlaceDialog", () => ({ SavePlaceDialog: () => null }));
 
-import { PANEL, useDirectionsStore, usePlaceStore, useSidebarStore } from "@openmapx/core";
+import { useCrowdReportStore } from "@integrations/crowd-reports/store";
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
+import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
+import {
+  createPlace,
+  PANEL,
+  useDirectionsStore,
+  useMapClickStore,
+  useParkingStore,
+  usePlaceStore,
+  useSidebarStore,
+} from "@openmapx/core";
 import { fireEvent, screen } from "@testing-library/react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import * as mapContext from "@/integration-api/map/MapContext";
+import { MapClickHandler } from "./MapClickHandler";
 import { MapStylePoiClickHandler } from "./MapStylePoiClickHandler";
 
 const mapContextTest = (mapContext as unknown as { __test: { mapRef: { current: unknown } } })
@@ -98,6 +110,10 @@ function renderHandler(map: FakeMap) {
 }
 
 beforeEach(() => {
+  useParkingStore.getState().reset();
+  useCrowdReportStore.getState().stopPicking();
+  useMeasurementStore.getState().deactivate();
+  useTravelTimeStore.getState().deactivate();
   finePointer.current = true;
   usePlaceDetailsMock.mockReset().mockReturnValue({ data: undefined, isFetching: false });
   usePlaceStore.setState({ selectedPlace: null });
@@ -106,6 +122,10 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  useParkingStore.getState().reset();
+  useCrowdReportStore.getState().stopPicking();
+  useMeasurementStore.getState().deactivate();
+  useTravelTimeStore.getState().deactivate();
   mapContextTest.mapRef.current = null;
   usePlaceStore.setState({ selectedPlace: null });
   useSidebarStore.setState({ activeSidebarId: null, activeDetailId: null, collapsed: false });
@@ -114,6 +134,75 @@ afterEach(() => {
 });
 
 describe("MapStylePoiClickHandler", () => {
+  it("allows ordinary POI selection while travel time is anchored", () => {
+    const fake = new FakeMap({ "poi-label": [pointFeature({ name: "Museum" }, { id: 42 })] });
+    useTravelTimeStore.getState().activateAnchored([8, 50]);
+    renderHandler(fake);
+    act(() =>
+      fake.emit("click", {
+        originalEvent: new MouseEvent("click"),
+        point: { x: 12, y: 24 },
+        lngLat: { lng: 8, lat: 50 },
+      }),
+    );
+    expect(usePlaceStore.getState().selectedPlace?.name).toBe("Museum");
+    expect(useTravelTimeStore.getState().origin).toEqual([8, 50]);
+  });
+  it.each(["parking", "crowd", "measurement", "travel"])(
+    "gives %s exclusive ownership regardless of listener order",
+    (mode) => {
+      for (const pickerFirst of [true, false]) {
+        const fake = new FakeMap({ "poi-label": [pointFeature({ name: "Museum" }, { id: 42 })] });
+        mapContextTest.mapRef.current = fake;
+        const selected = createPlace({
+          primaryScheme: "osm",
+          ids: { osm: "node/1" },
+          name: "Current place",
+          address: "",
+          coordinates: [8, 50],
+        });
+        usePlaceStore.getState().setSelectedPlace(selected);
+        useSidebarStore.setState({
+          activeSidebarId: PANEL.CATEGORY,
+          activeDetailId: null,
+          collapsed: false,
+        });
+        const view = render(
+          pickerFirst ? (
+            <>
+              <MapClickHandler />
+              <MapStylePoiClickHandler />
+            </>
+          ) : (
+            <>
+              <MapStylePoiClickHandler />
+              <MapClickHandler />
+            </>
+          ),
+        );
+        act(() => {
+          if (mode === "parking") useParkingStore.getState().setPicking(true);
+          if (mode === "crowd") useCrowdReportStore.getState().startPicking();
+          if (mode === "measurement") useMeasurementStore.getState().activate();
+          if (mode === "travel") useTravelTimeStore.getState().activate();
+          fake.emit("click", {
+            point: { x: 12, y: 24 },
+            lngLat: { lng: 8, lat: 50 },
+            originalEvent: new MouseEvent("click"),
+          });
+        });
+        expect(usePlaceStore.getState().selectedPlace).toBe(selected);
+        expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.CATEGORY);
+        expect(useSidebarStore.getState().activeDetailId).toBeNull();
+        expect(useMapClickStore.getState().clickedLngLat).toBeNull();
+        if (mode === "parking") expect(useParkingStore.getState().pickedCoords).toEqual([8, 50]);
+        if (mode === "crowd") expect(useCrowdReportStore.getState().location).toEqual([8, 50]);
+        view.unmount();
+        useMeasurementStore.getState().deactivate();
+        useTravelTimeStore.getState().deactivate();
+      }
+    },
+  );
   it("selects a named style POI and opens the place sidebar", () => {
     const fake = new FakeMap({
       "poi-label": [

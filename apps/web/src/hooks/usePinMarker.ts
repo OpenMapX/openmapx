@@ -4,6 +4,7 @@ import type { LngLat } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 
 interface PinColor {
@@ -188,6 +189,7 @@ export function usePinMarker(
           el.setAttribute("aria-label", label);
         }
         el.addEventListener("click", (event) => {
+          if (getMapClickOwner(event)) return;
           if (!onActivateRef.current) return;
           event.stopPropagation();
           onActivateRef.current();

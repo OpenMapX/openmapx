@@ -1,7 +1,12 @@
 // @vitest-environment jsdom
 
+import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  configureMapClickOwnership,
+  getMapClickOwner,
+} from "@/integration-api/map/mapClickOwnership";
 
 const originalConsoleError = console.error;
 
@@ -279,6 +284,7 @@ const mapContextTest = (
 ).__test;
 
 afterEach(() => {
+  useMeasurementStore.getState().deactivate();
   console.error = originalConsoleError;
   vi.unstubAllGlobals();
   vi.clearAllMocks();
@@ -303,6 +309,15 @@ async function renderWithMoveEnd() {
 }
 
 describe("MapCanvas", () => {
+  it("initializes tool ownership without waiting for the sibling click-handler chunk", async () => {
+    configureMapClickOwnership(() => null);
+    useMeasurementStore.getState().activate();
+    const view = render(<MapCanvas />);
+    await waitFor(() => expect(mapContextTest.mapRef.current).not.toBeNull());
+    expect(getMapClickOwner(new MouseEvent("click"))).toBe("measurement");
+    view.unmount();
+    useMeasurementStore.getState().deactivate();
+  });
   it("removes native building extrusions while preserving flat buildings and other 3D layers", async () => {
     maplibreTest.reset();
     mapStyleTest.reset();

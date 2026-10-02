@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import { MyLocationCard } from "@/components/panels/MyLocationCard";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 
 export function UserLocationMarker() {
   const t = useTranslations("parking");
@@ -42,7 +43,16 @@ export function UserLocationMarker() {
         wrapper.setAttribute("aria-label", locationLabel);
         wrapper.style.cssText =
           "position:relative;width:16px;height:16px;padding:0;border:0;background:none;cursor:pointer;";
-        wrapper.addEventListener("click", () => setCardOpen(true));
+        wrapper.addEventListener("click", (event) => {
+          if (getMapClickOwner(event)) return;
+          setCardOpen(true);
+        });
+        wrapper.addEventListener("keydown", (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.stopPropagation();
+          setCardOpen(true);
+        });
 
         // Outer pulsing ring
         const pulse = document.createElement("div");

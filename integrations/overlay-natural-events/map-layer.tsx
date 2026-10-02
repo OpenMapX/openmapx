@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useIntegrationAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -260,6 +261,7 @@ export function NaturalEventLayer() {
     if (!map || !mapReady || !layerVisible) return;
 
     const onClick = (e: MapLayerMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const f = e.features?.[0];
       if (!f) return;
       const p = f.properties as Record<string, string | number | null>;

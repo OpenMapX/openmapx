@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import type { CategoryPlace } from "@openmapx/core";
+import { useParkingStore } from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, render } from "@/test";
 
@@ -85,13 +86,33 @@ describe("ArrivalParkingMarkers", () => {
   let mapContainer: HTMLElement;
 
   beforeEach(() => {
+    useParkingStore.getState().reset();
     createdMarkers.length = 0;
     mapContainer = document.createElement("div");
     mockMapContext.current = null;
   });
 
   afterEach(() => {
+    useParkingStore.getState().reset();
     vi.clearAllMocks();
+  });
+
+  it("suppresses an arrival marker pointer while picking and keeps keyboard activation", () => {
+    mockMapContext.current = { mapRef: { current: { container: mapContainer } } };
+    const onSelectPlace = vi.fn();
+    render(
+      <ArrivalParkingMarkers
+        places={samplePlaces}
+        selectedPlace={null}
+        onSelectPlace={onSelectPlace}
+      />,
+    );
+    const marker = mapContainer.querySelector<HTMLElement>(".omx-arrival-parking-marker");
+    useParkingStore.getState().setPicking(true);
+    fireEvent.click(marker as HTMLElement);
+    expect(onSelectPlace).not.toHaveBeenCalled();
+    fireEvent.keyDown(marker as HTMLElement, { key: "Enter" });
+    expect(onSelectPlace).toHaveBeenCalledWith(samplePlaces[0]);
   });
 
   it("renders without crashing when map context is null", () => {

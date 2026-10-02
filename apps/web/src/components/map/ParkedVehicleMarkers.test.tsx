@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/integration-api/map/MapContext", () => {
@@ -79,6 +79,16 @@ async function settle() {
 }
 
 describe("ParkedVehicleMarkers", () => {
+  it("does not open a parked record while picking a replacement point", async () => {
+    render(<ParkedVehicleMarkers />);
+    await waitFor(() => expect(container.children).toHaveLength(1));
+    useParkingStore.getState().setPicking(true);
+    (container.firstElementChild as HTMLElement).click();
+    expect(useParkingStore.getState().selectedParkedId).toBeNull();
+    expect(useSidebarStore.getState().activeSidebarId).toBeNull();
+    fireEvent.keyDown(container.firstElementChild as HTMLElement, { key: "Enter" });
+    expect(useParkingStore.getState().selectedParkedId).toBe("p1");
+  });
   it("renders one marker per parked record", async () => {
     render(<ParkedVehicleMarkers />);
     await waitFor(() => expect(container.children).toHaveLength(1));

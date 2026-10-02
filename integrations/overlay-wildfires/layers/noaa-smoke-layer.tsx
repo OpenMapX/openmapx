@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
@@ -295,6 +296,7 @@ export function NoaaSmokeLayer({ active, popupController }: NoaaSmokeLayerProps)
     if (!map || !mapContext.mapReady || !active) return;
 
     const onClick = (event: MapLayerMouseEvent) => {
+      if (getMapClickOwner(event)) return;
       const properties = event.features?.[0]?.properties;
       if (!isNoaaSmokeProperties(properties)) return;
       const html = buildPopupCard(buildNoaaSmokePopupModel(properties, locale), translate);

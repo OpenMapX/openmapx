@@ -35,6 +35,7 @@ import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { createGeoJsonSourcePublisher } from "@/integration-api/map/layerStyleUtils";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
@@ -705,6 +706,7 @@ export function DataSourceLayer() {
     const currentSource = activeSource;
 
     const onClick = (e: MapMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       // Query both markers and labels layers
       const layers = [markersLid, labelsLid].filter((l) => map.getLayer(l));
       const features = map.queryRenderedFeatures(e.point, { layers });
@@ -752,6 +754,7 @@ export function DataSourceLayer() {
     };
 
     const onContextClick = (e: MapMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const markerLayers = [markersLid, labelsLid].filter((id) => !!map.getLayer(id));
       const markerHitCount = map.queryRenderedFeatures(e.point, { layers: markerLayers }).length;
       if (!map.getLayer(contextFillLid)) return;

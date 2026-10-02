@@ -7,6 +7,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import { useHikingStore } from "./store";
@@ -209,6 +210,7 @@ export function MountainShelterLayer() {
     if (!map || !mapReady || !layerVisible) return;
 
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const f = e.features?.[0];
       if (!f) return;
       const props = f.properties as Record<string, string | number>;

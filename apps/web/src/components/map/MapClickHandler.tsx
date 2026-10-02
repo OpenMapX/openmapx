@@ -1,7 +1,6 @@
 "use client";
 
 import { useCrowdReportStore } from "@integrations/crowd-reports/store";
-import { useMeasurementStore } from "@integrations/overlay-tool-measurement/store";
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import {
   PANEL,
@@ -16,6 +15,12 @@ import type { MapMouseEvent } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
+import { claimMapClick, getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
+import { initializeMapClickModes } from "@/lib/mapClickModes";
+
+// Configure before any map listener mounts. Read live mode state at the first
+// callback for each click; capture may clear that state before later callbacks.
+initializeMapClickModes();
 
 export function MapClickHandler() {
   const { mapRef, mapReady, styleVersion } = useMap();
@@ -30,19 +35,22 @@ export function MapClickHandler() {
     if (!map || !mapReady) return;
 
     const onClick = (e: MapMouseEvent) => {
+      const owner = getMapClickOwner(e);
       // Repositioning a parked pin consumes the tap: falling through would also
       // deselect the place and drop a grey pin under the one being moved.
-      if (useParkingStore.getState().picking) {
-        useParkingStore.getState().setPickedCoords([e.lngLat.lng, e.lngLat.lat]);
+      if (owner === "parking") {
+        if (claimMapClick(e, owner))
+          useParkingStore.getState().setPickedCoords([e.lngLat.lng, e.lngLat.lat]);
         return;
       }
       // Crowd-report location picking: consume the tap to place the report point
       // and re-open the dialog, instead of the normal place/waypoint behavior.
-      if (useCrowdReportStore.getState().picking) {
-        useCrowdReportStore.getState().setLocation([e.lngLat.lng, e.lngLat.lat]);
+      if (owner === "crowd") {
+        if (claimMapClick(e, owner))
+          useCrowdReportStore.getState().setLocation([e.lngLat.lng, e.lngLat.lat]);
         return;
       }
-      if (useMeasurementStore.getState().isActive) return;
+      if (owner) return;
       if (useTravelTimeStore.getState().isActive) return;
 
       const activeLayers = [...INTERACTIVE_LAYER_IDS].filter((id) => !!map.getLayer(id));

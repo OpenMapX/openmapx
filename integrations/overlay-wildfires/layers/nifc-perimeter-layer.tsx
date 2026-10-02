@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
 import type { WildfirePopupController, WildfirePopupLease } from "../popup-controller";
@@ -150,6 +151,7 @@ export function usePolygonLayerLifecycle({
     if (!map || !mapReady || !active) return;
 
     const onClick = (event: MapLayerMouseEvent) => {
+      if (getMapClickOwner(event)) return;
       const feature = event.features?.[0];
       if (!feature) return;
       const html = popupHtml(feature.properties as Record<string, unknown>);

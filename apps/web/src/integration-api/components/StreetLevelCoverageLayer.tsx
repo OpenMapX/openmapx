@@ -6,6 +6,7 @@ import type { FilterSpecification, MapLayerMouseEvent, MapMouseEvent } from "map
 import { useEffect } from "react";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useIntegrationDomainAttribution } from "@/integration-api/overlay/useIntegrationAttribution";
 import { useEnv } from "@/integration-api/runtime/EnvProvider";
@@ -225,6 +226,7 @@ export function StreetLevelCoverageLayer() {
     // providers' dots overlap resolves to the topmost feature instead of
     // firing once per layer and letting the last one win.
     const handleClick = (e: MapLayerMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const feature = e.features?.[0];
       const imageId = feature?.properties?.id;
       const providerId = byLayer.get(feature?.layer?.id ?? "");

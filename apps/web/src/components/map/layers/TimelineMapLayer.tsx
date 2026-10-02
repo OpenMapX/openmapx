@@ -13,6 +13,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo, useRef } from "react";
 import { calendarDateInTimeZone } from "@/components/panels/timeline/TimelineDayHeader";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
@@ -116,6 +117,7 @@ function ActiveTimelineGeometry({ ownerId, date }: { ownerId: string; date: stri
     if (!map || !day) return;
 
     const onClick = (event: maplibregl.MapLayerMouseEvent) => {
+      if (getMapClickOwner(event)) return;
       const id = event.features?.[0]?.properties?.id;
       if (typeof id === "string" && id.length > 0) selectEntry(id);
     };

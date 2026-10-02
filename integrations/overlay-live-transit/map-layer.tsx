@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { addLayerInSlot, unregisterLayerSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import {
   loadTransitVehicleMarkers,
   modeColor,
@@ -455,6 +456,7 @@ export function LiveTransitLayer() {
 
   const handleClick = useCallback(
     (e: MapLayerMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const feature = e.features?.[0];
       if (!feature) return;
       const map = mapRef.current;

@@ -5,6 +5,7 @@ import type * as maplibregl from "maplibre-gl";
 import { useEffect } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useGeoJsonSourceDataBridge } from "@/integration-api/map/useGeoJsonSourceDataBridge";
 import { BRAND_HEX } from "@/integration-api/runtime/theme";
 import { createMarkerSvg } from "@/lib/markerSvg";
@@ -113,6 +114,7 @@ export function RouteSearchResultsLayer({
     const map = mapRef.current;
     if (!map) return;
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const id = e.features?.[0]?.properties?.id;
       const hit = results.find((r) => r.place.id === id);
       if (hit) onSelect(hit);

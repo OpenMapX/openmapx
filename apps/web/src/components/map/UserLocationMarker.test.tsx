@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", async () => (await import("@/test/intl")).mockNextIntl());
@@ -40,7 +40,7 @@ vi.mock("maplibre-gl", () => {
   return { Marker: FakeMarker };
 });
 
-import { useMapStore } from "@openmapx/core";
+import { useMapStore, useParkingStore } from "@openmapx/core";
 import * as mapContext from "@/integration-api/map/MapContext";
 import { UserLocationMarker } from "./UserLocationMarker";
 
@@ -54,6 +54,7 @@ const mapContextTest = (
 ).__test;
 
 afterEach(() => {
+  useParkingStore.getState().reset();
   cleanup();
   vi.clearAllMocks();
   useMapStore.setState({ userLocation: null });
@@ -62,6 +63,19 @@ afterEach(() => {
 });
 
 describe("UserLocationMarker", () => {
+  it("suppresses a pointer during picking but preserves keyboard activation", async () => {
+    const mapContainer = document.createElement("div");
+    mapContextTest.mapRef.current = { container: mapContainer };
+    mapContextTest.mapReady = true;
+    useMapStore.setState({ userLocation: [13.4, 52.5] });
+    render(<UserLocationMarker />);
+    await waitFor(() => expect(mapContainer.children).toHaveLength(1));
+    useParkingStore.getState().setPicking(true);
+    fireEvent.click(mapContainer.firstElementChild as HTMLElement);
+    expect(screen.queryByText("my-location-card")).toBeNull();
+    fireEvent.keyDown(mapContainer.firstElementChild as HTMLElement, { key: " " });
+    expect(screen.getByText("my-location-card")).toBeInTheDocument();
+  });
   it("adds a location published before map readiness when the map becomes ready", async () => {
     const mapContainer = document.createElement("div");
     useMapStore.setState({ userLocation: [13.4, 52.5] });

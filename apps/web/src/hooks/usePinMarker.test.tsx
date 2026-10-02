@@ -1,3 +1,4 @@
+import { useParkingStore } from "@openmapx/core";
 import { act, fireEvent, render } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { publishMapObstruction } from "@/lib/mapObstructions";
@@ -5,6 +6,9 @@ import { createFakeMap } from "@/test";
 import { usePinMarker } from "./usePinMarker";
 
 const fake = createFakeMap({ styleLoaded: true });
+Object.assign(fake.map.getContainer(), {
+  getBoundingClientRect: () => new DOMRect(0, 0, 1200, 800),
+});
 const mapRef = { current: fake.map };
 let styleVersion = 0;
 vi.mock("@/integration-api/map/MapContext", () => ({
@@ -33,6 +37,31 @@ function Pin({ onClick, label = "Cafe" }: { onClick?: () => void; label?: string
   usePinMarker([8, 50], label, true, undefined, onClick);
   return null;
 }
+
+it("lets an owned pointer click bubble without activating the pin", async () => {
+  const onClick = vi.fn();
+  const capture = vi.fn((...args: unknown[]) => {
+    const event = args[0] as MouseEvent;
+    useParkingStore.getState().setPickedCoords([8, 50]);
+    // The same DOM event may also reach a delegated MapLibre wrapper afterward.
+    fake.emit("click", { originalEvent: event });
+  });
+  const container = fake.map.getCanvasContainer();
+  container.addEventListener("click", capture);
+  const view = render(<Pin onClick={onClick} />);
+  await act(async () => {});
+  const pin = container.querySelector<HTMLElement>("[role='button']");
+  useParkingStore.getState().setPicking(true);
+  fireEvent.click(pin as HTMLElement);
+  expect(onClick).not.toHaveBeenCalled();
+  expect(capture).toHaveBeenCalledTimes(1);
+  expect(useParkingStore.getState().pickedCoords).toEqual([8, 50]);
+  container.removeEventListener("click", capture);
+  fireEvent.click(pin as HTMLElement);
+  expect(onClick).toHaveBeenCalledTimes(1);
+  view.unmount();
+  useParkingStore.getState().reset();
+});
 
 it("activates a focused pin by pointer and keyboard", async () => {
   const onClick = vi.fn();

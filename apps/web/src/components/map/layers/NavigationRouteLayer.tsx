@@ -5,6 +5,7 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useMemo } from "react";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
@@ -233,6 +234,7 @@ export function NavigationRouteLayer() {
     const map = mapRef.current;
     if (!map) return;
     const onClick = (e: maplibregl.MapLayerMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const idx = e.features?.[0]?.properties?.routeIndex;
       if (typeof idx === "number") useNavigationStore.getState().selectRoute(idx);
     };

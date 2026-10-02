@@ -20,6 +20,7 @@ import { AuthDialog } from "@/components/auth/AuthDialog";
 import { SavePlaceDialog } from "@/components/panels/saved/SavePlaceDialog";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { useMapObstructionInsets } from "@/lib/mapObstructions";
 import { findStylePoiAtPoint, getStylePoiLayerIds, type StylePoiTarget } from "./mapStylePoiTarget";
 import { StylePoiHoverCard } from "./StylePoiHoverCard";
@@ -166,6 +167,7 @@ export function MapStylePoiClickHandler() {
     if (!map || !mapReady) return;
 
     const onClick = (e: MapMouseEvent) => {
+      if (getMapClickOwner(e)) return;
       const target = findStylePoiAtPoint(
         map,
         e.point,

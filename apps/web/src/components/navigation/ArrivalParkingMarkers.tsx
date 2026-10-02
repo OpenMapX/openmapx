@@ -6,6 +6,7 @@ import { Marker } from "maplibre-gl";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { PRIMARY_BLUE_HEX } from "@/integration-api/runtime/theme";
 import { getParkingCoords } from "./parkingCoords";
 
@@ -69,7 +70,8 @@ export function ArrivalParkingMarkers({
       el.style.boxShadow = "0 2px 4px rgba(0,0,0,0.2)";
       el.textContent = "P";
 
-      el.addEventListener("click", () => {
+      el.addEventListener("click", (event) => {
+        if (getMapClickOwner(event)) return;
         if (!disabled) onSelectPlace(isSelected ? null : place);
       });
 

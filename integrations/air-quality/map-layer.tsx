@@ -7,6 +7,7 @@ import { useLocale, useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef } from "react";
 import { INTERACTIVE_LAYER_IDS } from "@/integration-api/map/interactiveLayers";
 import { useMap } from "@/integration-api/map/MapContext";
+import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useSourceAttributions } from "@/integration-api/overlay/useIntegrationAttribution";
@@ -321,6 +322,7 @@ export function AirQualityLayer() {
         .addTo(map);
     };
     const onClick = (event: MapLayerMouseEvent) => {
+      if (getMapClickOwner(event)) return;
       const feature = event.features?.[0];
       if (feature) openFeature(feature);
     };
