@@ -15,7 +15,7 @@ const REPORTS_URL = "https://api.test/api/integrations/crowd-reports/reports";
 const fetchMock = vi.fn();
 vi.stubGlobal("fetch", fetchMock);
 
-/** Route the mock by URL: enroll → entitlement, vote → ok, submit → id. */
+/** Route the mock by URL: enroll → entitlement, vote → ok, submit → the landed record. */
 function routeFetch(grant: unknown = "GRANT-FROM-ENROLL") {
   fetchMock.mockImplementation((url: string) => {
     if (url.endsWith("/enroll")) {
@@ -24,7 +24,14 @@ function routeFetch(grant: unknown = "GRANT-FROM-ENROLL") {
     if (url.includes("/reports/")) {
       return Promise.resolve({ ok: true, json: async () => ({ ok: true }) });
     }
-    return Promise.resolve({ ok: true, json: async () => ({ id: "r1" }) });
+    return Promise.resolve({
+      ok: true,
+      json: async () => ({
+        record: { class: "situation", id: "r1" },
+        evidenceState: "self_reported",
+        routingEligible: false,
+      }),
+    });
   });
 }
 
@@ -69,6 +76,7 @@ describe("useSubmitReport", () => {
     expect(typeof sent.report.keyId).toBe("string");
     expect(typeof sent.report.signature).toBe("string");
     expect(sent.report.claim).toEqual(CLAIM);
+    expect(result.current.data?.record).toEqual({ class: "situation", id: "r1" });
   });
 
   it("uses a fresh cached grant without re-enrolling", async () => {
@@ -102,21 +110,45 @@ describe("useSubmitReport", () => {
 });
 
 describe("useVote", () => {
-  it("signs a sub-claim and POSTs { subClaim, reportingGrant } to /reports/:id/:action", async () => {
+  it("signs a sub-claim naming the record and POSTs it to /reports/:class/:id/:action", async () => {
     seedGrant("CACHED-GRANT", Date.now());
     routeFetch();
     const { result } = renderHookWithQuery(() => useVote());
 
-    result.current.mutate({ reportId: "crowd:42", subject: "crowd:42", action: "confirm" });
+    result.current.mutate({ subject: { class: "situation", id: "sit:42" }, action: "confirm" });
     await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe("https://api.test/api/integrations/crowd-reports/reports/crowd%3A42/confirm");
+    expect(url).toBe(
+      "https://api.test/api/integrations/crowd-reports/reports/situation/sit%3A42/confirm",
+    );
     const sent = JSON.parse(init.body as string);
     expect(sent.reportingGrant).toBe("CACHED-GRANT");
     expect(sent.subClaim.claimType).toBe("confirm");
-    expect(sent.subClaim.subject).toBe("crowd:42");
+    expect(sent.subClaim.subject).toEqual({ class: "situation", id: "sit:42" });
     expect(typeof sent.subClaim.signature).toBe("string");
+  });
+
+  it("passes a feature component through as a query", async () => {
+    seedGrant("CACHED-GRANT", Date.now());
+    routeFetch();
+    const { result } = renderHookWithQuery(() => useVote());
+
+    result.current.mutate({
+      subject: { class: "feature", id: "feature:1", componentKey: "lane 1" },
+      action: "negate",
+    });
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe(
+      "https://api.test/api/integrations/crowd-reports/reports/feature/feature%3A1/negate?component=lane%201",
+    );
+    expect(JSON.parse(init.body as string).subClaim.subject).toEqual({
+      class: "feature",
+      id: "feature:1",
+      componentKey: "lane 1",
+    });
   });
 });

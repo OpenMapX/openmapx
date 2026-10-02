@@ -1,5 +1,11 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { isSafeReportId, isSubClaimAction, type RelayResult, relayContribution } from "./relay.js";
+import {
+  isRecordClass,
+  isSafeReportId,
+  isSubClaimAction,
+  type RelayResult,
+  relayContribution,
+} from "./relay.js";
 
 const ISSUER_KEYS_CACHE_KEY = "crowd-reports:issuer-keys";
 const ISSUER_KEYS_TTL_SECONDS = 300;
@@ -14,7 +20,7 @@ const ISSUER_KEYS_TTL_SECONDS = 300;
  * signed payload.
  *
  * Egress target: `OPENCONDITIONS_CONTRIBUTIONS_URL` (operator-configured,
- * default `http://localhost:3002`) — see `relay.ts` for the trust model.
+ * default `http://localhost:4200`) — see `relay.ts` for the trust model.
  */
 export function setup(ctx: IntegrationContext): void {
   // POST /reports → /contrib/reports (signed SignedReport envelope in the body).
@@ -28,23 +34,31 @@ export function setup(ctx: IntegrationContext): void {
     }
   });
 
-  // POST /reports/:id/:action → /contrib/reports/:id/:action (confirm/negate/flag).
-  ctx.registerRoute("POST", "/reports/:id/:action", async (req, reply) => {
+  // POST /reports/:class/:id/:action[?component=] → /contrib/reports/:class/:id/:action
+  // (confirm/negate/flag on a record; a component names part of a feature).
+  ctx.registerRoute("POST", "/reports/:class/:id/:action", async (req, reply) => {
+    const recordClass = req.params.class ?? "";
     const id = req.params.id ?? "";
     const action = req.params.action ?? "";
-    if (!isSafeReportId(id) || !isSubClaimAction(action)) {
-      reply.status(400).send({ error: "invalid report id or action" });
+    const component = req.query.component;
+    if (!isRecordClass(recordClass) || !isSafeReportId(id) || !isSubClaimAction(action)) {
+      reply.status(400).send({ error: "invalid record class, id or action" });
       return;
     }
+    if (component !== undefined && (typeof component !== "string" || component.length === 0)) {
+      reply.status(400).send({ error: "component must appear once and be non-empty" });
+      return;
+    }
+    const query = component === undefined ? "" : `?component=${encodeURIComponent(component)}`;
     try {
       const result = await relayContribution(
         "POST",
-        `/contrib/reports/${encodeURIComponent(id)}/${action}`,
+        `/contrib/reports/${recordClass}/${encodeURIComponent(id)}/${action}${query}`,
         { body: req.body },
       );
       reply.status(result.status).send(result.body);
     } catch (err) {
-      ctx.log.error("crowd-reports relay POST /reports/:id/:action failed", err);
+      ctx.log.error("crowd-reports relay POST /reports/:class/:id/:action failed", err);
       reply.status(502).send({ error: "contributions service unavailable" });
     }
   });

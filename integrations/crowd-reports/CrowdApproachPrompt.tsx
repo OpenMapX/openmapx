@@ -19,14 +19,14 @@ import { useVote } from "./useCrowdReports";
  * One-tap confirm/negate prompt shown while navigating when the driver nears an
  * active crowd-sourced report ahead on the route. Reuses the host's shared nav
  * incident resource (`useNavIncidentResource`, from `@openmapx/integration-framework/react`)
- * — a crowd report is just an Observation flowing through the same
- * road-conditions pipeline — rather than a parallel proximity detector. Reading
+ * — a crowd report is just a situation of `crowd` origin flowing through the
+ * same road-conditions pipeline — rather than a parallel proximity detector. Reading
  * the resource through the framework context (instead of importing the app's
  * `useNavIncidents` hook directly) keeps this integration on the framework
  * boundary, not apps/web internals.
  *
- * Browser-verify: rendering/interaction and the exact crowd-origin id marker
- * depend on the live contributions → road-conditions pipeline.
+ * Browser-verify: rendering/interaction depend on the live contributions →
+ * road-conditions pipeline.
  */
 export function CrowdApproachPrompt() {
   const t = useTranslations("crowdReports");
@@ -50,7 +50,7 @@ export function CrowdApproachPrompt() {
   const dismiss = (id: string) => setDismissed((prev) => new Set(prev).add(id));
 
   const castVote = (action: "confirm" | "negate") => {
-    vote.mutate({ reportId: nearest.id, subject: nearest.id, action });
+    vote.mutate({ subject: { class: "situation", id: nearest.id }, action });
     dismiss(nearest.id);
   };
 

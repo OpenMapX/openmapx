@@ -28,9 +28,6 @@
       "hazard_animal": "Tier auf der Fahrbahn",
       "jam": "Stau",
       "roadworks": "Baustelle",
-      "transit_disruption": "Störung im ÖPNV",
-      "micromobility": "Problem mit Rad/Roller",
-      "accessibility": "Barrierefreiheitsproblem",
       "other": "Sonstiges"
     },
     "fuzzinessLabel": "Wo ist es?",

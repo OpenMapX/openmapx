@@ -1,6 +1,6 @@
 ---
 title: Crowd reports
-description: Submit and verify pseudonymous live road, transit, micromobility, and accessibility conditions through OpenConditions.
+description: Submit and verify pseudonymous live road conditions through OpenConditions.
 sidebar_position: 12
 ---
 
@@ -9,8 +9,10 @@ sidebar_position: 12
 OpenMapX can collect fresh, on-the-ground conditions without tying them to an
 account. From the map or during navigation, a person can report a road or lane
 closure, crash, stopped vehicle, object/weather/animal hazard, congestion,
-roadworks, transit disruption, micromobility issue, accessibility issue, or an
-uncategorized condition.
+roadworks, or an uncategorized condition. Each category is sent as an
+OpenConditions situation (for example a lane closure is a closure that restricts
+some lanes, a jam is a queue), so crowd reports and official feeds describe the
+same situation the same way.
 
 The report flow captures three useful signals:
 
@@ -44,10 +46,11 @@ OpenConditions contributions service. Install the OpenConditions extension (or
 another compatible service) and set its endpoint for `app-api`:
 
 ```bash
-OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions:3002
+OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions:4200
 ```
 
-The development fallback is `http://localhost:3002`; without a reachable
+The development fallback is `http://localhost:4200`, the contributions
+service's default port; without a reachable
 service, report enrollment and submission return an unavailable error. The API
 also briefly caches the service's public issuer keys. See [Community
 extensions](../administration/community-extensions.md) for installing a bundled
@@ -59,4 +62,3 @@ model.
 
 - [Directions & navigation](./directions.md) — approach prompts and live routing.
 - [Map layers](./map-layers.md) — display trusted crowd and official conditions.
-- [Public transit](./public-transit.md) — report transit disruptions.

@@ -65,7 +65,7 @@ describe("crowd-reports setup", () => {
         "GET /issuer-keys",
         "POST /enroll",
         "POST /reports",
-        "POST /reports/:id/:action",
+        "POST /reports/:class/:id/:action",
         "POST /tokens",
       ].sort(),
     );
@@ -90,45 +90,68 @@ describe("crowd-reports setup", () => {
     expect(captured.body).toEqual({ id: "r1" });
   });
 
-  it("POST /reports/:id/:action rejects an unknown action before relaying", async () => {
+  it.each([
+    ["an unknown action", { class: "situation", id: "r1", action: "delete" }, {}],
+    ["an unknown record class", { class: "report", id: "r1", action: "confirm" }, {}],
+    ["a path-traversal class", { class: "..", id: "r1", action: "confirm" }, {}],
+    ["a path-traversal id", { class: "situation", id: "..", action: "confirm" }, {}],
+    [
+      "a repeated component",
+      { class: "feature", id: "f1", action: "confirm" },
+      { component: ["a", "b"] },
+    ],
+    ["an empty component", { class: "feature", id: "f1", action: "confirm" }, { component: "" }],
+  ])("POST /reports/:class/:id/:action rejects %s before relaying", async (_, params, query) => {
     const fetchMock = fakeFetch(200, {});
     vi.stubGlobal("fetch", fetchMock);
-    const handler = handlerFor("POST /reports/:id/:action");
+    const handler = handlerFor("POST /reports/:class/:id/:action");
     const { reply, captured } = fakeReply();
 
-    await handler({ query: {}, params: { id: "r1", action: "delete" }, body: {} }, reply as never);
+    await handler({ query, params, body: {} }, reply as never);
 
     expect(fetchMock).not.toHaveBeenCalled();
     expect(captured.status).toBe(400);
   });
 
-  it("POST /reports/:id/:action rejects a path-traversal id before relaying", async () => {
-    const fetchMock = fakeFetch(200, {});
+  it("POST /reports/:class/:id/:action relays a valid confirm to the encoded path", async () => {
+    const fetchMock = fakeFetch(200, { record: { class: "situation", id: "s 1" } });
     vi.stubGlobal("fetch", fetchMock);
-    const handler = handlerFor("POST /reports/:id/:action");
-    const { reply, captured } = fakeReply();
-
-    await handler({ query: {}, params: { id: "..", action: "confirm" }, body: {} }, reply as never);
-
-    expect(fetchMock).not.toHaveBeenCalled();
-    expect(captured.status).toBe(400);
-  });
-
-  it("POST /reports/:id/:action relays a valid confirm to the encoded path", async () => {
-    const fetchMock = fakeFetch(200, { ok: true });
-    vi.stubGlobal("fetch", fetchMock);
-    const handler = handlerFor("POST /reports/:id/:action");
+    const handler = handlerFor("POST /reports/:class/:id/:action");
     const { reply, captured } = fakeReply();
 
     await handler(
-      { query: {}, params: { id: "crowd:a b", action: "confirm" }, body: { subClaim: {} } },
+      {
+        query: {},
+        params: { class: "situation", id: "crowd:a b", action: "confirm" },
+        body: { subClaim: {} },
+      },
       reply as never,
     );
 
     const [url] = fetchMock.mock.calls[0] as [string];
-    expect(url).toContain("/contrib/reports/crowd%3Aa%20b/confirm");
+    expect(url).toMatch(/\/contrib\/reports\/situation\/crowd%3Aa%20b\/confirm$/);
     expect(captured.status).toBe(200);
-    expect(captured.body).toEqual({ ok: true });
+    expect(captured.body).toEqual({ record: { class: "situation", id: "s 1" } });
+  });
+
+  it("POST /reports/:class/:id/:action passes a feature component through", async () => {
+    const fetchMock = fakeFetch(422, { reason: "unsupported_record_class" });
+    vi.stubGlobal("fetch", fetchMock);
+    const handler = handlerFor("POST /reports/:class/:id/:action");
+    const { reply, captured } = fakeReply();
+
+    await handler(
+      {
+        query: { component: "lane 1&x=y" },
+        params: { class: "feature", id: "f1", action: "negate" },
+        body: { subClaim: {} },
+      },
+      reply as never,
+    );
+
+    const [url] = fetchMock.mock.calls[0] as [string];
+    expect(url).toMatch(/\/contrib\/reports\/feature\/f1\/negate\?component=lane%201%26x%3Dy$/);
+    expect(captured.status).toBe(422);
   });
 
   it("GET /issuer-keys does not cache a non-2xx upstream response", async () => {

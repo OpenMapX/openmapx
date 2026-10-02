@@ -2647,10 +2647,18 @@
         "x-openmapx-source": "integrations/crowd-reports/index.ts"
       }
     },
-    "/api/integrations/crowd-reports/reports/{id}/{action}": {
+    "/api/integrations/crowd-reports/reports/{class}/{id}/{action}": {
       "post": {
-        "operationId": "postApiIntegrationsCrowdReportsReportsIdAction",
+        "operationId": "postApiIntegrationsCrowdReportsReportsClassIdAction",
         "parameters": [
+          {
+            "name": "class",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
           {
             "name": "id",
             "in": "path",
@@ -2673,7 +2681,7 @@
             "description": "Integration response"
           }
         },
-        "summary": "POST /reports/:id/:action (crowd-reports)",
+        "summary": "POST /reports/:class/:id/:action (crowd-reports)",
         "tags": [
           "integrations"
         ],

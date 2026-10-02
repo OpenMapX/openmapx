@@ -28,9 +28,6 @@
       "hazard_animal": "Animal on road",
       "jam": "Traffic jam",
       "roadworks": "Roadworks",
-      "transit_disruption": "Transit disruption",
-      "micromobility": "Bike/scooter issue",
-      "accessibility": "Accessibility issue",
       "other": "Other"
     },
     "fuzzinessLabel": "Where is it?",

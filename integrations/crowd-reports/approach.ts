@@ -1,16 +1,13 @@
 import { type IncidentAlert, selectActiveAlert } from "@openmapx/core";
 
 /**
- * Id prefix that marks a projected incident as crowd-sourced (as opposed to an
- * authoritative DATEX/agency feed). A crowd report published through the
- * contributions-api → road-conditions pipeline carries this on its observation
- * id, so confirm-on-approach can single out the reports a driver can vote on.
+ * Whether a projected incident is a crowd-sourced situation (as opposed to an
+ * authoritative DATEX/agency feed) — the reports a driver can vote on. The
+ * road-conditions pipeline carries each situation's origin through to the
+ * projected alert.
  */
-export const CROWD_ORIGIN_PREFIXES = ["crowd:"] as const;
-
-/** Whether a road-condition/observation id denotes a crowd-sourced report. */
-export function isCrowdOriginId(id: string): boolean {
-  return CROWD_ORIGIN_PREFIXES.some((p) => id.startsWith(p));
+export function isCrowdIncident(incident: Pick<IncidentAlert, "origin">): boolean {
+  return incident.origin === "crowd";
 }
 
 /**
@@ -30,7 +27,7 @@ export function selectCrowdApproach(
   speedMps: number,
   dismissed: readonly string[] = [],
 ): IncidentAlert | null {
-  const crowd = incidents.filter((i) => isCrowdOriginId(i.id));
+  const crowd = incidents.filter(isCrowdIncident);
   const active = selectActiveAlert(crowd, alongMeters, speedMps, [...dismissed]);
   return (active?.alert as IncidentAlert | undefined) ?? null;
 }

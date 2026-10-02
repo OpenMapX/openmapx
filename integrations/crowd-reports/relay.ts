@@ -11,10 +11,12 @@
  * is the same trust model as the `apps/api/src/routes/data-manager.ts` relay to
  * the internal data-manager service: a self-hosted service on the internal
  * network. The SSRF-relevant surface here is the caller-supplied path segments
- * (`:id`, `:action`), which are sanitized before interpolation (see `index.ts`).
+ * (`:class`, `:id`, `:action`) and the `component` query, which are sanitized
+ * before interpolation (see `index.ts`).
  */
 
-const DEFAULT_CONTRIBUTIONS_URL = "http://localhost:3002";
+/** OpenConditions' contributions-api listens on 4200 by default. */
+const DEFAULT_CONTRIBUTIONS_URL = "http://localhost:4200";
 
 /** Upstream response, passed through verbatim (status + parsed JSON body). */
 export interface RelayResult {
@@ -88,8 +90,17 @@ export function isSubClaimAction(value: string): value is SubClaimAction {
   return (SUBCLAIM_ACTIONS as readonly string[]).includes(value);
 }
 
+/** Record classes a vote can name; anything else is rejected. */
+export const RECORD_CLASSES = ["feature", "situation", "observation", "offer"] as const;
+export type RecordClass = (typeof RECORD_CLASSES)[number];
+
+/** Narrow a caller-supplied `:class` param to the allowed set (SSRF guard). */
+export function isRecordClass(value: string): value is RecordClass {
+  return (RECORD_CLASSES as readonly string[]).includes(value);
+}
+
 /**
- * Reject a caller-supplied report id that could traverse the upstream path.
+ * Reject a caller-supplied record id that could traverse the upstream path.
  * `encodeURIComponent` already neutralizes slashes, but `.`/`..` are left
  * verbatim and could still be interpreted as path segments upstream, so refuse
  * them (and any empty/whitespace or slash-bearing id) before building the URL.

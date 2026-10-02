@@ -23,6 +23,8 @@ export interface IncidentAlert extends RoadAlert {
   kind: string;
   eventType: string;
   severity: RoadConditionSeverityLabel;
+  /** Where the situation came from; `crowd` marks a report a driver can vote on. */
+  origin: RoadConditionEvent["origin"];
   headline?: LocalizedText;
   /** Provider display relationship, retained for route-layer grouping only. */
   groupId?: string;
@@ -431,6 +433,7 @@ export function projectEventsToRoute(
       kind: event.kind,
       eventType: event.type,
       severity: event.severity.label,
+      origin: event.origin,
       ...(event.headline ? { headline: event.headline } : {}),
       ...(event.groupId ? { groupId: event.groupId } : {}),
       ...(delay !== undefined ? { delaySeconds: delay } : {}),

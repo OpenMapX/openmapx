@@ -1,10 +1,20 @@
-import type { GeoJsonGeometry, ReportClaim, SubClaimBody } from "./types";
+import type {
+  Effect,
+  GeoJsonGeometry,
+  ObservationClaim,
+  ReportClaim,
+  SituationClaim,
+  SubClaimBody,
+} from "./types";
 
 /**
  * Structural and I-JSON validation for report claims and sub-claim bodies.
- * Every rule here is a signing-time hard rule (a TypeError) and mirrors
- * @openconditions/contrib-core's verification-time rules, so a claim this
- * client will sign is a claim the OpenConditions verifier will accept.
+ * Every rule here is a signing-time hard rule (a TypeError) and mirrors the
+ * structure of the OpenConditions model claims, so a claim this client will
+ * sign has the shape the OpenConditions verifier expects. Whether a kind,
+ * type, subtype, effect kind or details shape is registered is decided by the
+ * receiving instance's registry, so those values are only checked as
+ * well-formed here.
  */
 
 const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
@@ -15,7 +25,7 @@ const NONCE_PATTERN = /^[A-Za-z0-9_-]{16,64}$/;
 const ISO_ZONED_INSTANT =
   /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,9})?)?(?:Z|[+-]\d{2}:?\d{2})$/;
 
-const DOMAINS = new Set(["roads", "transit", "places"]);
+const BCP47 = /^[A-Za-z]{2,3}(?:-[A-Za-z0-9]{1,8})*$/;
 
 const FUZZINESS_VALUES = new Set([
   "exact",
@@ -35,6 +45,51 @@ const GEOMETRY_TYPES = new Set([
   "MultiPolygon",
   "GeometryCollection",
 ]);
+
+const SITUATION_KEYS = new Set([
+  "claimClass",
+  "kind",
+  "type",
+  "subtype",
+  "geometry",
+  "fuzziness",
+  "severityLevel",
+  "effects",
+  "details",
+  "text",
+  "reportedAt",
+  "nonce",
+]);
+
+const OBSERVATION_KEYS = new Set([
+  "claimClass",
+  "subject",
+  "property",
+  "qualifiers",
+  "result",
+  "geometry",
+  "reportedAt",
+  "nonce",
+]);
+
+const SUB_CLAIM_KEYS = new Set([
+  "subject",
+  "claimType",
+  "reason",
+  "geometry",
+  "reportedAt",
+  "nonce",
+]);
+
+const RECORD_REF_KEYS = new Set(["class", "id", "componentKey"]);
+
+const RECORD_CLASSES = new Set(["feature", "situation", "observation", "offer"]);
+
+const APPLICABILITY_KINDS = new Set(["all", "classes", "unknown"]);
+
+const COMPLIANCE_VALUES = new Set(["mandatory", "advisory", "unknown"]);
+
+const NORMALIZATION_VALUES = new Set(["complete", "partial", "unsupported"]);
 
 const SUB_CLAIM_TYPES = new Set(["confirm", "negate", "flag"]);
 
@@ -150,10 +205,145 @@ function assertGeometry(geometry: unknown, path: string): void {
   }
 }
 
+function assertPoint(geometry: unknown, path: string): void {
+  assertPlainObject(geometry, `${path}.geometry`);
+  const { type, coordinates } = geometry as { type?: unknown; coordinates?: unknown };
+  if (
+    type !== "Point" ||
+    !Array.isArray(coordinates) ||
+    (coordinates.length !== 2 && coordinates.length !== 3) ||
+    !coordinates.every((value) => typeof value === "number")
+  ) {
+    throw new TypeError(`${path}: geometry must be a GeoJSON Point`);
+  }
+  assertOnlyKeys(geometry as object, new Set(["type", "coordinates"]), `${path}.geometry`);
+}
+
 function assertPlainObject(value: unknown, path: string): void {
   if (value === null || typeof value !== "object" || Array.isArray(value)) {
     throw new TypeError(`${path} must be an object`);
   }
+}
+
+function assertOnlyKeys(value: object, allowed: ReadonlySet<string>, path: string): void {
+  for (const key of Object.keys(value)) {
+    if (!allowed.has(key)) {
+      throw new TypeError(`${path} must not carry the field "${key}"`);
+    }
+  }
+}
+
+function assertNonEmptyString(value: unknown, path: string): void {
+  if (typeof value !== "string" || value.length === 0) {
+    throw new TypeError(`${path} must be a non-empty string`);
+  }
+}
+
+function assertEffects(effects: unknown): void {
+  if (!Array.isArray(effects) || effects.length === 0) {
+    throw new TypeError("claim.effects must be a non-empty array of effects");
+  }
+  const ids = new Set<string>();
+  for (const [index, effect] of (effects as unknown[]).entries()) {
+    const path = `claim.effects[${index}]`;
+    assertPlainObject(effect, path);
+    const { id, kind, v, applicability, compliance, normalization } = effect as Effect;
+    assertNonEmptyString(id, `${path}.id`);
+    if (ids.has(id)) {
+      throw new TypeError(`claim.effects: effect id "${id}" repeats`);
+    }
+    ids.add(id);
+    assertNonEmptyString(kind, `${path}.kind`);
+    if (!Number.isInteger(v) || v < 1) {
+      throw new TypeError(`${path}.v must be a positive integer major version`);
+    }
+    assertPlainObject(applicability, `${path}.applicability`);
+    if (!APPLICABILITY_KINDS.has(applicability.kind)) {
+      throw new TypeError(
+        `${path}.applicability.kind must be one of "all" | "classes" | "unknown"`,
+      );
+    }
+    if (typeof compliance !== "string" || !COMPLIANCE_VALUES.has(compliance)) {
+      throw new TypeError(`${path}.compliance must be one of "mandatory" | "advisory" | "unknown"`);
+    }
+    if (typeof normalization !== "string" || !NORMALIZATION_VALUES.has(normalization)) {
+      throw new TypeError(
+        `${path}.normalization must be one of "complete" | "partial" | "unsupported"`,
+      );
+    }
+  }
+}
+
+function assertText(text: unknown): void {
+  if (!Array.isArray(text) || text.length === 0) {
+    throw new TypeError("claim.text must be a non-empty array of localized texts");
+  }
+  for (const [index, entry] of (text as unknown[]).entries()) {
+    const path = `claim.text[${index}]`;
+    assertPlainObject(entry, path);
+    assertOnlyKeys(entry as object, new Set(["lang", "text", "machine"]), path);
+    const {
+      lang,
+      text: value,
+      machine,
+    } = entry as { lang?: unknown; text?: unknown; machine?: unknown };
+    if (typeof lang !== "string" || !BCP47.test(lang)) {
+      throw new TypeError(`${path}.lang must be a BCP 47 language tag`);
+    }
+    assertNonEmptyString(value, `${path}.text`);
+    if (machine !== undefined && machine !== true) {
+      throw new TypeError(`${path}.machine must be true when present`);
+    }
+  }
+}
+
+function validateSituationClaim(claim: SituationClaim): void {
+  assertOnlyKeys(claim, SITUATION_KEYS, "claim");
+  assertNonEmptyString(claim.kind, "claim.kind");
+  assertNonEmptyString(claim.type, "claim.type");
+  if (claim.subtype !== undefined) {
+    assertNonEmptyString(claim.subtype, "claim.subtype");
+  }
+  assertGeometry(claim.geometry, "claim");
+  if (typeof claim.fuzziness !== "string" || !FUZZINESS_VALUES.has(claim.fuzziness)) {
+    throw new TypeError("claim.fuzziness must be a canonical Fuzziness value");
+  }
+  if (
+    claim.severityLevel !== undefined &&
+    (!Number.isInteger(claim.severityLevel) || claim.severityLevel < 1 || claim.severityLevel > 5)
+  ) {
+    throw new TypeError("claim.severityLevel must be an integer 1..5");
+  }
+  if (claim.effects !== undefined) {
+    assertEffects(claim.effects);
+  }
+  if (claim.details !== undefined) {
+    assertPlainObject(claim.details, "claim.details");
+  }
+  if (claim.text !== undefined) {
+    assertText(claim.text);
+  }
+}
+
+function validateObservationClaim(claim: ObservationClaim): void {
+  assertOnlyKeys(claim, OBSERVATION_KEYS, "claim");
+  assertPlainObject(claim.subject, "claim.subject");
+  if ("featureId" in claim.subject) {
+    assertOnlyKeys(claim.subject, new Set(["featureId", "componentKey"]), "claim.subject");
+    assertNonEmptyString(claim.subject.featureId, "claim.subject.featureId");
+    if (claim.subject.componentKey !== undefined) {
+      assertNonEmptyString(claim.subject.componentKey, "claim.subject.componentKey");
+    }
+  } else {
+    assertOnlyKeys(claim.subject, new Set(["location"]), "claim.subject");
+    assertPlainObject((claim.subject as { location?: unknown }).location, "claim.subject.location");
+  }
+  assertNonEmptyString(claim.property, "claim.property");
+  if (claim.qualifiers !== undefined) {
+    assertPlainObject(claim.qualifiers, "claim.qualifiers");
+  }
+  assertPlainObject(claim.result, "claim.result");
+  assertPoint(claim.geometry, "claim");
 }
 
 /**
@@ -163,35 +353,15 @@ function assertPlainObject(value: unknown, path: string): void {
  */
 export function validateReportClaim(claim: ReportClaim): void {
   assertPlainObject(claim, "claim");
-  if (!DOMAINS.has(claim.domain)) {
-    throw new TypeError(`claim.domain must be one of "roads" | "transit" | "places"`);
-  }
-  if (typeof claim.type !== "string" || claim.type.length === 0) {
-    throw new TypeError("claim.type must be a non-empty canonical taxonomy value");
-  }
-  assertGeometry(claim.geometry, "claim");
-  if (typeof claim.fuzziness !== "string" || !FUZZINESS_VALUES.has(claim.fuzziness)) {
-    throw new TypeError("claim.fuzziness must be a canonical Fuzziness value");
-  }
-  if (claim.subject !== undefined) {
-    if (!Array.isArray(claim.subject)) {
-      throw new TypeError("claim.subject must be an array of subject refs");
-    }
-    for (const [index, ref] of claim.subject.entries()) {
-      assertPlainObject(ref, `claim.subject[${index}]`);
-      if (typeof ref.type !== "string" || !ref.type || typeof ref.id !== "string" || !ref.id) {
-        throw new TypeError(`claim.subject[${index}] must carry non-empty string type and id`);
-      }
-    }
-  }
-  if (
-    claim.severityLevel !== undefined &&
-    (!Number.isInteger(claim.severityLevel) || claim.severityLevel < 1 || claim.severityLevel > 5)
-  ) {
-    throw new TypeError("claim.severityLevel must be an integer 1..5");
-  }
-  if (claim.attributes !== undefined) {
-    assertPlainObject(claim.attributes, "claim.attributes");
+  switch (claim.claimClass) {
+    case "situation":
+      validateSituationClaim(claim);
+      break;
+    case "observation":
+      validateObservationClaim(claim);
+      break;
+    default:
+      throw new TypeError(`claim.claimClass must be one of "situation" | "observation"`);
   }
   assertReportedAt(claim.reportedAt, "claim");
   assertNonce(claim.nonce, "claim");
@@ -213,21 +383,37 @@ export function validateSubClaimBody(body: SubClaimBody): void {
       throw new TypeError(`subClaim body must not carry the envelope field "${field}"`);
     }
   }
-  if (typeof body.subject !== "string" || body.subject.length === 0) {
-    throw new TypeError("subClaim.subject must be a non-empty string");
+  assertOnlyKeys(body, SUB_CLAIM_KEYS, "subClaim");
+  assertPlainObject(body.subject, "subClaim.subject");
+  assertOnlyKeys(body.subject, RECORD_REF_KEYS, "subClaim.subject");
+  if (!RECORD_CLASSES.has(body.subject.class)) {
+    throw new TypeError(
+      `subClaim.subject.class must be one of "feature" | "situation" | "observation" | "offer"`,
+    );
+  }
+  assertNonEmptyString(body.subject.id, "subClaim.subject.id");
+  if (body.subject.componentKey !== undefined) {
+    assertNonEmptyString(body.subject.componentKey, "subClaim.subject.componentKey");
+    if (body.subject.class !== "feature") {
+      throw new TypeError("subClaim.subject.componentKey is only allowed on a feature");
+    }
   }
   if (typeof body.claimType !== "string" || !SUB_CLAIM_TYPES.has(body.claimType)) {
     throw new TypeError(`subClaim.claimType must be one of "confirm" | "negate" | "flag"`);
   }
   if (body.reason !== undefined) {
-    if (typeof body.reason !== "string" || body.reason.length > MAX_REASON_CHARS) {
+    if (
+      typeof body.reason !== "string" ||
+      body.reason.length === 0 ||
+      body.reason.length > MAX_REASON_CHARS
+    ) {
       throw new TypeError(
-        `subClaim.reason must be a string of at most ${MAX_REASON_CHARS} characters`,
+        `subClaim.reason must be a non-empty string of at most ${MAX_REASON_CHARS} characters`,
       );
     }
   }
   if (body.geometry !== undefined) {
-    assertGeometry(body.geometry, "subClaim");
+    assertPoint(body.geometry, "subClaim");
   }
   assertReportedAt(body.reportedAt, "subClaim");
   assertNonce(body.nonce, "subClaim");

@@ -5,6 +5,7 @@ import {
   type DeviceKey,
   loadOrCreateDeviceKey,
   localStorageDeviceKeyStore,
+  type RecordRef,
   type ReportClaim,
   type SubClaimBody,
   signReport,
@@ -125,6 +126,18 @@ export function useContributorSession() {
   return { ensureKey, ensureGrant, keyId };
 }
 
+/** The contributions-api's answer to a landed report: the record it became and its evidence. */
+export interface SubmitReportResult {
+  record: { class: "situation"; id: string };
+  evidenceState: string;
+  routingEligible: boolean;
+}
+
+/** The answer to a vote: a confirm/negate re-evaluates the record's evidence, a flag only marks it. */
+export type VoteResult =
+  | (Omit<SubmitReportResult, "record"> & { record: RecordRef; action: "confirm" | "negate" })
+  | { flagged: true };
+
 /**
  * Submit a signed crowd report: enroll if needed for a fresh reporting grant,
  * sign the claim with the device key, then POST `{ report, reportingGrant }` to
@@ -136,7 +149,7 @@ export function useSubmitReport() {
   const { ensureKey, ensureGrant } = useContributorSession();
 
   return useMutation({
-    mutationFn: async (claim: ReportClaim): Promise<unknown> => {
+    mutationFn: async (claim: ReportClaim): Promise<SubmitReportResult> => {
       const key = await ensureKey();
       const reportingGrant = await ensureGrant();
       const report = await signReport(claim, key);
@@ -147,32 +160,38 @@ export function useSubmitReport() {
         body: JSON.stringify({ report, reportingGrant }),
       });
       if (!res.ok) throw new Error(`Report submit failed: ${res.status}`);
-      return res.json();
+      return (await res.json()) as SubmitReportResult;
     },
   });
 }
 
 export interface VoteInput {
-  /** The report/observation id used in the relay path (`/reports/:id/:action`). */
-  reportId: string;
-  /** The subject URI the sub-claim is about (report urn or observation id). */
-  subject: string;
+  /** The record the vote is about; it also names the relay path (`/reports/:class/:id/:action`). */
+  subject: RecordRef;
   action: SubClaimAction;
   /** Free text; only meaningful for `flag`. */
   reason?: string;
 }
 
+/** The relay path of a vote on a record, with its component (a feature's) as a query. */
+function votePath(subject: RecordRef, action: SubClaimAction): string {
+  const path = `${API_ENDPOINTS.crowdReportsVote}/${subject.class}/${encodeURIComponent(subject.id)}/${action}`;
+  return subject.componentKey === undefined
+    ? path
+    : `${path}?component=${encodeURIComponent(subject.componentKey)}`;
+}
+
 /**
- * Confirm / negate / flag an existing report or observation. Enrolls for a grant
- * if needed, signs a sub-claim (body WITHOUT the envelope fields) and POSTs
- * `{ subClaim, reportingGrant }` to `/reports/:id/:action`.
+ * Confirm / negate / flag an existing record. Enrolls for a grant if needed,
+ * signs a sub-claim (body WITHOUT the envelope fields) naming the record and
+ * POSTs `{ subClaim, reportingGrant }` to `/reports/:class/:id/:action`.
  */
 export function useVote() {
   const { apiUrl } = useEnv();
   const { ensureKey, ensureGrant } = useContributorSession();
 
   return useMutation({
-    mutationFn: async ({ reportId, subject, action, reason }: VoteInput): Promise<unknown> => {
+    mutationFn: async ({ subject, action, reason }: VoteInput): Promise<VoteResult> => {
       const key = await ensureKey();
       const reportingGrant = await ensureGrant();
       const body: SubClaimBody = {
@@ -183,15 +202,14 @@ export function useVote() {
         ...(reason ? { reason } : {}),
       };
       const subClaim = await signSubClaim(body, key);
-      const url = `${apiUrl}${API_ENDPOINTS.crowdReportsVote}/${encodeURIComponent(reportId)}/${action}`;
-      const res = await fetch(url, {
+      const res = await fetch(`${apiUrl}${votePath(subject, action)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json", Accept: "application/json" },
         credentials: "include",
         body: JSON.stringify({ subClaim, reportingGrant }),
       });
       if (!res.ok) throw new Error(`Vote failed: ${res.status}`);
-      return res.json();
+      return (await res.json()) as VoteResult;
     },
   });
 }

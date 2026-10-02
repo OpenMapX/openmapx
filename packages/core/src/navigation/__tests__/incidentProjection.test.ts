@@ -101,10 +101,24 @@ describe("projectEventsToRoute", () => {
     expect(out[0]?.kind).toBe("incident");
     expect(out[0]?.eventType).toBe("accident");
     expect(out[0]?.severity).toBe("major");
+    expect(out[0]?.origin).toBe("feed");
     expect(out[0]?.headline).toEqual(en("accident a"));
     expect(out[0]?.approach).toEqual({ leadSec: 20, minM: 400, maxM: 1500 });
     expect(out[0]?.alongMeters).toBeGreaterThan(3000);
     expect(out[0]?.alongMeters).toBeLessThan(3900);
+  });
+
+  it("carries the situation's origin so crowd reports stay recognisable", () => {
+    const out = projectEventsToRoute(
+      [
+        ev("c", "major", { type: "Point", coordinates: [13.05, 52.00008] }, "accident", {
+          origin: "crowd",
+        }),
+      ],
+      route,
+      0,
+    );
+    expect(out[0]?.origin).toBe("crowd");
   });
 
   it("leaves the headline off an alert whose situation has none", () => {
@@ -660,6 +674,7 @@ function legacyProjectEventsToRoute(
       kind: event.kind,
       eventType: event.type,
       severity: event.severity.label,
+      origin: event.origin,
       ...(event.headline ? { headline: event.headline } : {}),
       ...(event.groupId ? { groupId: event.groupId } : {}),
       ...(delay?.kind === "delay" && delay.delay ? { delaySeconds: delay.delay.value } : {}),

@@ -36,6 +36,7 @@ function closureIncident(id: string): IncidentAlert {
     kind: "closure",
     eventType: "closure",
     severity: "major",
+    origin: "feed",
     headline: [{ lang: "en", text: `closure ${id}` }],
     closesRoad: true,
     geometry: { type: "Point", coordinates: [0.002, 0] },

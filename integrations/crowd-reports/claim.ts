@@ -1,4 +1,4 @@
-import type { Fuzziness, ReportClaim } from "@openmapx/openconditions-contrib-client";
+import type { Effect, Fuzziness, SituationClaim } from "@openmapx/openconditions-contrib-client";
 
 /**
  * The crowd-report categories offered in the report dialog. `police` is
@@ -16,9 +16,6 @@ export const REPORT_CATEGORIES = [
   "hazard_animal",
   "jam",
   "roadworks",
-  "transit_disruption",
-  "micromobility",
-  "accessibility",
   "other",
 ] as const;
 
@@ -41,71 +38,82 @@ const FUZZINESS_BY_CHOICE: Record<FuzzinessChoice, Fuzziness> = {
   all_along: "extent_unknown",
 };
 
-/**
- * The report domain a category belongs to. Transit disruptions ride the transit
- * graph, accessibility reports describe a place, everything else is a road
- * condition. Keeps the wire `domain` correct without the UI having to know it.
- */
-const DOMAIN_BY_CATEGORY: Record<ReportCategory, ReportClaim["domain"]> = {
-  road_closure: "roads",
-  lane_closure: "roads",
-  accident: "roads",
-  stopped_vehicle: "roads",
-  hazard_object: "roads",
-  hazard_weather: "roads",
-  hazard_animal: "roads",
-  jam: "roads",
-  roadworks: "roads",
-  transit_disruption: "transit",
-  micromobility: "roads",
-  accessibility: "places",
-  other: "roads",
-};
+/** What a category reports as: the registered situation kind, type and subtype, plus its effects and details. */
+export type CategorySituation = Pick<
+  SituationClaim,
+  "kind" | "type" | "subtype" | "effects" | "details"
+>;
 
 /**
- * The CANONICAL taxonomy value each category reports as — `ReportClaim.type` is
- * a canonical value, not our dialog's vocabulary.
- *
- * This is what lets a crowd report be cross-validated: the evidence matcher
- * pairs a report with an official feed observation only when their `type` is
- * identical, and the feeds speak OpenConditions' road-event taxonomy
- * (`congestion`, `obstruction`, `hazard`, `weather`, …). Sending the raw UI
- * category meant "jam" could never meet the feeds' "congestion", so those
- * reports could never be confirmed by a feed and never became routing-eligible.
- *
- * Mappings follow what the feed normalizers actually emit, so a report lands on
- * the same value an official row would: an object on the road is DATEX
- * `generalobstruction` → `obstruction`, while animals are mapped to `hazard`
- * ("Animals on the road", "plant/animal hazards"), NOT `obstruction`. A stopped
- * vehicle is DATEX `vehicleObstruction` → `broken_down_vehicle` (distinct from a
- * generic object), and a partial closure is `lane_closure` (distinct from a full
- * `road_closure`) — both first-class canonical types the map already renders.
- *
- * `micromobility` and `accessibility` have no canonical road equivalent and
- * collapse to `other`; the dialog's own choice is preserved verbatim in
- * `attributes.reportCategory`, so nothing the user picked is lost.
+ * The members every crowd effect shares: a reporter sees the situation apply to
+ * everyone, as a fact on the road, fully expressed by the effect.
  */
-const TYPE_BY_CATEGORY: Record<ReportCategory, ReportClaim["type"]> = {
-  road_closure: "road_closure",
-  lane_closure: "lane_closure",
-  accident: "accident",
-  stopped_vehicle: "broken_down_vehicle",
-  hazard_object: "obstruction",
-  hazard_weather: "weather",
-  hazard_animal: "hazard",
-  jam: "congestion",
-  roadworks: "roadworks",
-  transit_disruption: "transit_disruption",
-  micromobility: "other",
-  accessibility: "other",
-  other: "other",
-};
+function crowdEffect(id: string, kind: string, fields: Record<string, unknown>): Effect {
+  return {
+    id,
+    kind,
+    v: 1,
+    applicability: { kind: "all" },
+    compliance: "mandatory",
+    normalization: "complete",
+    ...fields,
+  };
+}
+
+/**
+ * The situation each category reports as, in the OpenConditions registry's
+ * vocabulary — not our dialog's. A report is cross-validated against official
+ * feeds by its kind and type, so a category lands on the same kind an official
+ * record of the same thing would: an object on the road is an obstruction, a
+ * stopped vehicle a breakdown, a queue a congestion with its level of service.
+ * A full closure closes the road; a partial closure restricts some lanes and is
+ * never a closure effect. Returns a fresh object per call.
+ */
+export function situationForCategory(category: ReportCategory): CategorySituation {
+  switch (category) {
+    case "road_closure":
+      return {
+        kind: "closure",
+        type: "closure",
+        subtype: "full",
+        effects: [crowdEffect("closure", "closure", { scope: "road" })],
+      };
+    case "lane_closure":
+      return {
+        kind: "closure",
+        type: "closure",
+        subtype: "lane",
+        effects: [crowdEffect("lanes", "lane_restriction", { vehicleImpact: "some_lanes_closed" })],
+      };
+    case "accident":
+      return { kind: "incident", type: "accident" };
+    case "stopped_vehicle":
+      return { kind: "incident", type: "breakdown", subtype: "disabled_vehicle" };
+    case "hazard_object":
+      return { kind: "incident", type: "obstruction", subtype: "object" };
+    case "hazard_weather":
+      return { kind: "weather_condition", type: "weather" };
+    case "hazard_animal":
+      return { kind: "incident", type: "obstruction", subtype: "animal" };
+    case "jam":
+      return {
+        kind: "congestion",
+        type: "congestion",
+        subtype: "queuing",
+        details: { kind: "congestion", v: 1, los: "queuing" },
+      };
+    case "roadworks":
+      return { kind: "roadworks", type: "works" };
+    case "other":
+      return { kind: "other", type: "other" };
+  }
+}
 
 /**
  * The severity (1–5) each category preselects when picked, so the common case is
  * one tap fewer — the reporter can still override it. Rough danger ordering:
  * a full closure or crash is high; a partial closure, stopped vehicle or hazard
- * is medium; congestion, roadworks and soft categories are low.
+ * is medium; congestion and roadworks are low.
  */
 const DEFAULT_SEVERITY_BY_CATEGORY: Record<ReportCategory, 1 | 2 | 3 | 4 | 5> = {
   road_closure: 5,
@@ -117,9 +125,6 @@ const DEFAULT_SEVERITY_BY_CATEGORY: Record<ReportCategory, 1 | 2 | 3 | 4 | 5> = 
   hazard_animal: 3,
   jam: 2,
   roadworks: 2,
-  transit_disruption: 2,
-  micromobility: 2,
-  accessibility: 2,
   other: 1,
 };
 
@@ -129,14 +134,6 @@ export function fuzzinessForChoice(choice: FuzzinessChoice): Fuzziness {
 
 export function defaultSeverityForCategory(category: ReportCategory): 1 | 2 | 3 | 4 | 5 {
   return DEFAULT_SEVERITY_BY_CATEGORY[category];
-}
-
-export function domainForCategory(category: ReportCategory): ReportClaim["domain"] {
-  return DOMAIN_BY_CATEGORY[category];
-}
-
-export function typeForCategory(category: ReportCategory): ReportClaim["type"] {
-  return TYPE_BY_CATEGORY[category];
 }
 
 const NONCE_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
@@ -171,25 +168,26 @@ export interface BuildReportClaimInput {
 }
 
 /**
- * Build a signable {@link ReportClaim} from a dialog selection. Pure: the same
- * input (with an explicit `reportedAt`/`nonce`) always yields the same claim, so
- * it is unit-testable without mocking time or crypto. The geometry is always a
- * Point at the chosen location; the `fuzziness` communicates how far the
- * condition actually extends.
+ * Build a signable {@link SituationClaim} from a dialog selection. Pure: the
+ * same input (with an explicit `reportedAt`/`nonce`) always yields the same
+ * claim, so it is unit-testable without mocking time or crypto. The geometry is
+ * always a Point at the chosen location; the `fuzziness` communicates how far
+ * the situation actually extends.
  */
-export function buildReportClaim(input: BuildReportClaimInput): ReportClaim {
-  const claim: ReportClaim = {
-    domain: domainForCategory(input.category),
-    type: typeForCategory(input.category),
+export function buildReportClaim(input: BuildReportClaimInput): SituationClaim {
+  const { kind, type, subtype, effects, details } = situationForCategory(input.category);
+  const claim: SituationClaim = {
+    claimClass: "situation",
+    kind,
+    type,
     geometry: { type: "Point", coordinates: [input.lon, input.lat] },
     fuzziness: fuzzinessForChoice(input.fuzziness),
-    // The canonical `type` is what the matcher pairs on, so several categories
-    // share one value. Keep the exact choice the reporter made — it is the only
-    // record of it once the type is canonicalized.
-    attributes: { reportCategory: input.category },
     reportedAt: input.reportedAt ?? new Date().toISOString(),
     nonce: input.nonce ?? generateNonce(),
   };
+  if (subtype !== undefined) claim.subtype = subtype;
   if (input.severityLevel !== undefined) claim.severityLevel = input.severityLevel;
+  if (effects !== undefined) claim.effects = effects;
+  if (details !== undefined) claim.details = details;
   return claim;
 }

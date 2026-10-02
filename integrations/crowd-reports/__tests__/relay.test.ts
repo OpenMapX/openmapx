@@ -1,8 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   contributionsBaseUrl,
+  isRecordClass,
   isSafeReportId,
   isSubClaimAction,
+  RECORD_CLASSES,
   relayContribution,
   SUBCLAIM_ACTIONS,
 } from "../relay.js";
@@ -15,8 +17,8 @@ function fakeResponse(status: number, body: unknown) {
 }
 
 describe("contributionsBaseUrl", () => {
-  it("defaults to localhost:3002 when the env var is unset", () => {
-    expect(contributionsBaseUrl({})).toBe("http://localhost:3002");
+  it("defaults to the contributions-api's own port 4200 when the env var is unset", () => {
+    expect(contributionsBaseUrl({})).toBe("http://localhost:4200");
   });
 
   it("uses the configured URL and strips a trailing slash", () => {
@@ -27,7 +29,7 @@ describe("contributionsBaseUrl", () => {
 
   it("falls back to the default for a Compose-injected empty string", () => {
     expect(contributionsBaseUrl({ OPENCONDITIONS_CONTRIBUTIONS_URL: "  " })).toBe(
-      "http://localhost:3002",
+      "http://localhost:4200",
     );
   });
 });
@@ -83,6 +85,15 @@ describe("isSubClaimAction", () => {
     expect(isSubClaimAction("delete")).toBe(false);
     expect(isSubClaimAction("../admin")).toBe(false);
     expect(isSubClaimAction("")).toBe(false);
+  });
+});
+
+describe("isRecordClass", () => {
+  it("accepts the record classes and rejects anything else", () => {
+    for (const c of RECORD_CLASSES) expect(isRecordClass(c)).toBe(true);
+    expect(isRecordClass("report")).toBe(false);
+    expect(isRecordClass("..")).toBe(false);
+    expect(isRecordClass("")).toBe(false);
   });
 });
 

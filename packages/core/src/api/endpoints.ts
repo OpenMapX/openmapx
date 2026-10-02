@@ -15,7 +15,7 @@ export const API_ENDPOINTS = {
   roadConditions: "/api/integrations/road-conditions/events",
   roadConditionsFlowRoute: "/api/integrations/road-conditions/flow-along-route",
   crowdReportsSubmit: "/api/integrations/crowd-reports/reports",
-  crowdReportsVote: "/api/integrations/crowd-reports/reports", // used as `${base}/${id}/${action}`
+  crowdReportsVote: "/api/integrations/crowd-reports/reports", // used as `${base}/${class}/${id}/${action}`
   crowdReportsEnroll: "/api/integrations/crowd-reports/enroll",
   crowdReportsTokens: "/api/integrations/crowd-reports/tokens",
   crowdReportsIssuerKeys: "/api/integrations/crowd-reports/issuer-keys",

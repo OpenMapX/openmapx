@@ -1,14 +1,11 @@
 "use client";
 
 import type { SvgIconComponent } from "@mui/icons-material";
-import AccessibleIcon from "@mui/icons-material/Accessible";
 import ArrowUpwardIcon from "@mui/icons-material/ArrowUpward";
 import CarCrashIcon from "@mui/icons-material/CarCrash";
 import CarRepairIcon from "@mui/icons-material/CarRepair";
-import DirectionsTransitIcon from "@mui/icons-material/DirectionsTransit";
 import DoNotDisturbOnIcon from "@mui/icons-material/DoNotDisturbOn";
 import EditLocationAltIcon from "@mui/icons-material/EditLocationAlt";
-import ElectricScooterIcon from "@mui/icons-material/ElectricScooter";
 import EngineeringIcon from "@mui/icons-material/Engineering";
 import LinearScaleIcon from "@mui/icons-material/LinearScale";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
@@ -83,9 +80,6 @@ const CATEGORY_ICONS: Record<ReportCategory, SvgIconComponent> = {
   hazard_animal: PetsIcon,
   jam: CongestionIcon,
   roadworks: EngineeringIcon,
-  transit_disruption: DirectionsTransitIcon,
-  micromobility: ElectricScooterIcon,
-  accessibility: AccessibleIcon,
   other: MoreHorizIcon,
 };
 

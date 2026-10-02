@@ -1,13 +1,20 @@
+import { validateReportClaim } from "@openmapx/openconditions-contrib-client";
 import { describe, expect, it } from "vitest";
 import {
   buildReportClaim,
   defaultSeverityForCategory,
-  domainForCategory,
   fuzzinessForChoice,
   generateNonce,
   REPORT_CATEGORIES,
-  typeForCategory,
+  situationForCategory,
 } from "../claim.js";
+
+const CROWD_EFFECT_BASE = {
+  v: 1,
+  applicability: { kind: "all" },
+  compliance: "mandatory",
+  normalization: "complete",
+};
 
 describe("fuzzinessForChoice", () => {
   it("maps the four picker choices to the wire fuzziness values", () => {
@@ -18,17 +25,16 @@ describe("fuzzinessForChoice", () => {
   });
 });
 
-describe("domainForCategory", () => {
-  it("routes transit, place and road categories to the right domain", () => {
-    expect(domainForCategory("transit_disruption")).toBe("transit");
-    expect(domainForCategory("accessibility")).toBe("places");
-    expect(domainForCategory("road_closure")).toBe("roads");
-    expect(domainForCategory("jam")).toBe("roads");
-  });
-
+describe("REPORT_CATEGORIES", () => {
   it("does not include police in the taxonomy", () => {
     expect(REPORT_CATEGORIES).not.toContain("police");
-    expect(REPORT_CATEGORIES.length).toBeLessThanOrEqual(13);
+  });
+
+  it("offers only categories that report as road situations", () => {
+    expect(REPORT_CATEGORIES).not.toContain("transit_disruption");
+    expect(REPORT_CATEGORIES).not.toContain("micromobility");
+    expect(REPORT_CATEGORIES).not.toContain("accessibility");
+    expect(REPORT_CATEGORIES).toHaveLength(10);
   });
 });
 
@@ -51,6 +57,69 @@ describe("defaultSeverityForCategory", () => {
   });
 });
 
+describe("situationForCategory", () => {
+  // A report is cross-validated against official feeds by its kind and type,
+  // so each category must land on the registry's vocabulary, not the dialog's.
+  it.each([
+    ["road_closure", { kind: "closure", type: "closure", subtype: "full" }],
+    ["lane_closure", { kind: "closure", type: "closure", subtype: "lane" }],
+    ["accident", { kind: "incident", type: "accident" }],
+    ["stopped_vehicle", { kind: "incident", type: "breakdown", subtype: "disabled_vehicle" }],
+    ["hazard_object", { kind: "incident", type: "obstruction", subtype: "object" }],
+    ["hazard_weather", { kind: "weather_condition", type: "weather" }],
+    ["hazard_animal", { kind: "incident", type: "obstruction", subtype: "animal" }],
+    ["jam", { kind: "congestion", type: "congestion", subtype: "queuing" }],
+    ["roadworks", { kind: "roadworks", type: "works" }],
+    ["other", { kind: "other", type: "other" }],
+  ] as const)("maps %s onto %o", (category, expected) => {
+    const { kind, type, subtype } = situationForCategory(category);
+    expect({ kind, type, ...(subtype === undefined ? {} : { subtype }) }).toEqual(expected);
+  });
+
+  it("closes the road for a full closure", () => {
+    expect(situationForCategory("road_closure").effects).toEqual([
+      { id: "closure", kind: "closure", scope: "road", ...CROWD_EFFECT_BASE },
+    ]);
+  });
+
+  it("restricts some lanes for a partial closure, never a closure effect", () => {
+    expect(situationForCategory("lane_closure").effects).toEqual([
+      {
+        id: "lanes",
+        kind: "lane_restriction",
+        vehicleImpact: "some_lanes_closed",
+        ...CROWD_EFFECT_BASE,
+      },
+    ]);
+  });
+
+  it("gives a queue its level of service", () => {
+    expect(situationForCategory("jam").details).toEqual({
+      kind: "congestion",
+      v: 1,
+      los: "queuing",
+    });
+  });
+
+  it("carries no effects or details for the other categories", () => {
+    for (const category of REPORT_CATEGORIES) {
+      if (category === "road_closure" || category === "lane_closure" || category === "jam")
+        continue;
+      const situation = situationForCategory(category);
+      expect(situation.effects).toBeUndefined();
+      expect(situation.details).toBeUndefined();
+    }
+  });
+
+  it("returns fresh effect objects per call", () => {
+    const first = situationForCategory("road_closure").effects;
+    const second = situationForCategory("road_closure").effects;
+    expect(first).toEqual(second);
+    expect(first).not.toBe(second);
+    expect(first?.[0]).not.toBe(second?.[0]);
+  });
+});
+
 describe("generateNonce", () => {
   it("produces a 16..64 char [A-Za-z0-9_-] token", () => {
     const nonce = generateNonce();
@@ -64,7 +133,7 @@ describe("generateNonce", () => {
 });
 
 describe("buildReportClaim", () => {
-  it("builds a Point claim with the mapped domain/type/fuzziness", () => {
+  it("builds a Point situation claim with the mapped kind/type/fuzziness", () => {
     const claim = buildReportClaim({
       category: "accident",
       fuzziness: "ahead",
@@ -74,62 +143,54 @@ describe("buildReportClaim", () => {
       nonce: "fixednonce_1234567890",
     });
     expect(claim).toEqual({
-      domain: "roads",
+      claimClass: "situation",
+      kind: "incident",
       type: "accident",
       geometry: { type: "Point", coordinates: [6.1, 51.2] },
       fuzziness: "end_unknown",
-      attributes: { reportCategory: "accident" },
       reportedAt: "2026-07-11T10:00:00.000Z",
       nonce: "fixednonce_1234567890",
     });
   });
 
-  // `ReportClaim.type` is a CANONICAL taxonomy value. The evidence matcher only
-  // pairs a report with an official feed observation when their `type` matches
-  // exactly, so a dialog-vocabulary type can never be confirmed by a feed and
-  // can never become routing-eligible.
-  it.each([
-    ["jam", "congestion"],
-    ["hazard_object", "obstruction"],
-    ["hazard_animal", "hazard"],
-    ["hazard_weather", "weather"],
-    ["road_closure", "road_closure"],
-    ["lane_closure", "lane_closure"],
-    ["stopped_vehicle", "broken_down_vehicle"],
-    ["accident", "accident"],
-    ["roadworks", "roadworks"],
-    ["transit_disruption", "transit_disruption"],
-    ["micromobility", "other"],
-    ["accessibility", "other"],
-    ["other", "other"],
-  ] as const)("maps the %s category onto the canonical type %s", (category, expected) => {
-    expect(typeForCategory(category)).toBe(expected);
-    expect(
-      buildReportClaim({
-        category,
-        fuzziness: "here",
-        lon: 0,
-        lat: 0,
-        reportedAt: "2026-07-11T10:00:00.000Z",
-        nonce: "fixednonce_1234567890",
-      }).type,
-    ).toBe(expected);
+  it("carries the subtype, severity, effects and details of the category", () => {
+    const claim = buildReportClaim({
+      category: "jam",
+      fuzziness: "back_of_queue",
+      lon: 7,
+      lat: 50,
+      severityLevel: 2,
+      reportedAt: "2026-07-11T10:00:00.000Z",
+      nonce: "fixednonce_1234567890",
+    });
+    expect(claim).toEqual({
+      claimClass: "situation",
+      kind: "congestion",
+      type: "congestion",
+      subtype: "queuing",
+      geometry: { type: "Point", coordinates: [7, 50] },
+      fuzziness: "start_unknown",
+      severityLevel: 2,
+      details: { kind: "congestion", v: 1, los: "queuing" },
+      reportedAt: "2026-07-11T10:00:00.000Z",
+      nonce: "fixednonce_1234567890",
+    });
   });
 
-  it("keeps the reporter's exact category when several collapse onto one canonical type", () => {
-    // micromobility/accessibility/other all report as `other`; the choice the
-    // reporter actually made must survive that collapse.
-    for (const category of ["micromobility", "accessibility", "other"] as const) {
+  it("builds a claim the signing client accepts for every category", () => {
+    for (const category of REPORT_CATEGORIES) {
       const claim = buildReportClaim({
         category,
         fuzziness: "here",
-        lon: 0,
-        lat: 0,
+        lon: 7,
+        lat: 50,
+        severityLevel: defaultSeverityForCategory(category),
         reportedAt: "2026-07-11T10:00:00.000Z",
         nonce: "fixednonce_1234567890",
       });
-      expect(claim.type).toBe("other");
-      expect(claim.attributes).toEqual({ reportCategory: category });
+      expect(() => validateReportClaim(claim)).not.toThrow();
+      expect(claim).not.toHaveProperty("domain");
+      expect(claim).not.toHaveProperty("attributes");
     }
   });
 

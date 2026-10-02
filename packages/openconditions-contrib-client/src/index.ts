@@ -12,13 +12,20 @@ export { normalizeLowS, P256_HALF_ORDER, P256_ORDER, signatureS } from "./lowS";
 export { signReport, signSubClaim } from "./sign";
 export { keyIdFromJwk } from "./thumbprint";
 export type {
+  Effect,
+  EffectApplicability,
   Fuzziness,
   GeoJsonGeometry,
+  GeoJsonPoint,
+  LocalizedText,
+  ObservationClaim,
+  RecordClass,
+  RecordRef,
   ReportClaim,
   SignedReport,
   SignedSubClaim,
+  SituationClaim,
   SubClaimBody,
   SubClaimType,
-  SubjectRef,
 } from "./types";
 export { validateReportClaim, validateSubClaimBody } from "./validate";
