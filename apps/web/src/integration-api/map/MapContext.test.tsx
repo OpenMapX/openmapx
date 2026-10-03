@@ -162,13 +162,27 @@ describe("MapContext camera wrappers", () => {
     reduced.current = true;
     const { fake, ctx } = setup();
     const zoom = vi.fn();
-    fake.map[method] = (options) => {
-      zoom(options);
+    fake.map[method] = (options, eventData) => {
+      zoom(options, eventData);
       return fake.map;
     };
     act(() => ctx()[method]());
-    expect(zoom).toHaveBeenCalledWith({ duration: 0 });
+    expect(zoom).toHaveBeenCalledWith({ duration: 0 }, { programmatic: true });
   });
+
+  it.each(["zoomIn", "zoomOut"] as const)(
+    "%s marks its camera events as programmatic",
+    (method) => {
+      const { fake, ctx } = setup();
+      const zoom = vi.fn();
+      fake.map[method] = (options, eventData) => {
+        zoom(options, eventData);
+        return fake.map;
+      };
+      act(() => ctx()[method]());
+      expect(zoom).toHaveBeenCalledWith({ duration: 200 }, { programmatic: true });
+    },
+  );
 
   it("resetBearing is programmatic", () => {
     const { fake, ctx } = setup();
