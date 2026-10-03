@@ -255,10 +255,12 @@ export const overtureKnowledgeSource: KnowledgeProvider = {
     const database = db;
     if (!database) return null;
 
-    const gers = await withDeadline(1500, () => resolveGers(database, osmTags, context));
-    if (!gers) return null;
+    return withDeadline(1500, async () => {
+      const gers = await resolveGers(database, osmTags, context);
+      if (!gers) return null;
 
-    const row = await fetchOverturePlaceByGers(database, gers);
-    return row ? overtureRowToKnowledgeResult(row) : null;
+      const row = await fetchOverturePlaceByGers(database, gers);
+      return row ? overtureRowToKnowledgeResult(row) : null;
+    });
   },
 };

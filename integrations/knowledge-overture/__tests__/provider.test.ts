@@ -314,6 +314,36 @@ describe("knowledge-overture provider lookup", () => {
     ).resolves.not.toThrow();
   });
 
+  it("bounds a stalled detail lookup after resolving the identity", async () => {
+    vi.useFakeTimers();
+    try {
+      const db = makeDb(
+        vi.fn().mockImplementation((sql: string) => {
+          if (sql.includes("poi_conflation_link")) {
+            return Promise.resolve([{ gers_id: "overture-abc-123" }]);
+          }
+          return new Promise(() => {});
+        }),
+      );
+      const { setup, overtureKnowledgeSource } = await import("../index.js");
+      setup(makeCtx(db));
+      const result = overtureKnowledgeSource.lookup({ osm_type: "node", osm_id: "123" }, "en", {
+        coordinates: [13.4, 52.5],
+        name: "Starbucks",
+        ids: { overture: "overture-abc-123" },
+      });
+      let settled = false;
+      void result.then(() => {
+        settled = true;
+      });
+      await vi.advanceTimersByTimeAsync(1500);
+      expect(settled).toBe(true);
+      await expect(result).resolves.toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("returns null when entire resolveGers exceeds 1500 ms deadline", async () => {
     const db = makeDb(
       vi.fn().mockImplementation((sql: string) => {
