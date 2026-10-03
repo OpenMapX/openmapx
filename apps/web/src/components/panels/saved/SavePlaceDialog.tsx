@@ -163,6 +163,9 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
               else next.delete(listId);
               return [...next];
             });
+            // Retire intent explicitly: structural sharing can suppress the
+            // membership effect when the final server result is unchanged.
+            operations.current.delete(key);
             break;
           }
         } catch {

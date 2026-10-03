@@ -314,11 +314,16 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
         match.snapped,
         prepared,
       );
+      const alightStop = captureFor(captures, state.currentLegIndex)?.stops.at(-1);
+      const atAlightStop =
+        alightStop !== undefined &&
+        metresBetween(coords, [alightStop.lng, alightStop.lat]) <= ENDPOINT_PROXIMITY_METERS;
 
       const shouldAdvance =
         state.currentLegIndex < legs.length - 1 &&
         ((match.fraction >= ADVANCE_FRACTION && nextIsCloser) ||
-          (endpointDistance <= ENDPOINT_PROXIMITY_METERS && plausibleByTime));
+          (endpointDistance <= ENDPOINT_PROXIMITY_METERS && plausibleByTime) ||
+          (state.phase === "riding" && alightProximity === 0 && atAlightStop));
 
       // Phase within the leg, before any advance.
       if (isTransitLeg(leg)) {

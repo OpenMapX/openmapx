@@ -45,7 +45,7 @@ function setup(initial = false) {
     () =>
       new Promise((resolve) => {
         finishPost = () => {
-          rows.push(row);
+          if (!rows.some((existing) => existing.id === row.id)) rows.push(row);
           resolve(row);
         };
       }),
@@ -98,6 +98,25 @@ function setup(initial = false) {
   };
 }
 describe("saved-place membership intent", () => {
+  it("accepts later server membership changes after a save finishes", async () => {
+    const fixture = setup();
+    await waitFor(() => expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([]));
+    await userEvent.click(screen.getByText("Trip"));
+    // The server commits before the POST acknowledgement arrives. A refetch
+    // sees that membership while the local reconciliation is still running.
+    fixture.rows.push(row);
+    await act(async () => fixture.client.invalidateQueries({ queryKey: ["savedCheck", place.id] }));
+    await waitFor(() =>
+      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(["l1"]),
+    );
+    await act(async () => fixture.finishPost());
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
+    await act(async () => fixture.client.invalidateQueries({ queryKey: ["savedCheck", place.id] }));
+    fixture.rows.splice(0);
+    await act(async () => fixture.client.invalidateQueries({ queryKey: ["savedCheck", place.id] }));
+    await waitFor(() => expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([]));
+    await waitFor(() => expect(screen.getByRole("checkbox")).not.toBeChecked());
+  });
   it.each([2, 3])(
     "honours the final intent after %i clicks during a pending save",
     async (clicks) => {

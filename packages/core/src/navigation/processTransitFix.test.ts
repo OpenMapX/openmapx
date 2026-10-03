@@ -177,6 +177,29 @@ describe("boarding and riding", () => {
 });
 
 describe("leg advancement", () => {
+  it("alights at the actual stop ahead of schedule when the following walk has no usable geometry", () => {
+    const trip = itinerary();
+    trip.legs[2].geometry = { type: "LineString", coordinates: [] };
+    const early = NOW + 10 * 60_000;
+    const result = tick({
+      itinerary: trip,
+      state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
+      fix: fix([8.7, 50.1], early),
+      nowMs: early,
+    });
+    expect(result.state.currentLegIndex).toBe(2);
+    expect(result.state.phase).toBe("walking");
+    expect(result.events.filter((e) => e.type === "alight")).toHaveLength(1);
+    expect(result.events.filter((e) => e.type === "transfer")).toHaveLength(1);
+    const repeated = tick({
+      itinerary: trip,
+      state: result.state,
+      fix: fix([8.7, 50.1], early + 1_000),
+      nowMs: early + 1_000,
+    });
+    expect(repeated.events.filter((e) => e.type === "alight" || e.type === "transfer")).toEqual([]);
+  });
+
   it("keeps riding when the alight stop is nearest but still over a kilometre away", () => {
     const result = tick({
       state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
@@ -189,6 +212,33 @@ describe("leg advancement", () => {
     expect(result.events).toContainEqual(
       expect.objectContaining({ type: "approaching-alight", stopsRemaining: 1 }),
     );
+  });
+
+  it("keeps riding when a looping leg passes close to its later alight stop", () => {
+    const trip = itinerary();
+    trip.legs[1].geometry = {
+      type: "LineString",
+      coordinates: [
+        [8.61, 50.1],
+        [8.7, 50.1],
+        [8.75, 50.11],
+        [8.7, 50.1003],
+      ],
+    };
+    const result = tick({
+      itinerary: trip,
+      captures: captures({
+        stops: [
+          { stopId: "board", name: "Board", lat: 50.1, lng: 8.61 },
+          { stopId: "alight", name: "Alight", lat: 50.1003, lng: 8.7 },
+        ],
+      }),
+      state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
+      fix: fix([8.7, 50.1], NOW + 10 * 60_000),
+      nowMs: NOW + 10 * 60_000,
+    });
+    expect(result.state.currentLegIndex).toBe(1);
+    expect(result.events.filter((e) => e.type === "alight" || e.type === "transfer")).toEqual([]);
   });
   it("advances at most one leg per tick", () => {
     const { state } = run([{ fix: fix(at(WALK_B, 0.5), NOW + 1_000), nowMs: NOW + 1_000 }]);
