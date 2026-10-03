@@ -56,6 +56,16 @@ describe("production supply-chain policy", () => {
       },
     );
     expect(managedServices).toHaveLength(24);
+
+    const globalMatcher = new RegExp(manager?.matchStrings?.[0] ?? "(?!x)x", "g");
+    for (const slug of ["tileserver", "pelias"]) {
+      const text = read(`services/${slug}/service.json`);
+      const manifest = JSON.parse(text) as { buildImages?: Record<string, { image: string }> };
+      const matched = new Set([...text.matchAll(globalMatcher)].map((m) => m.groups?.depName));
+      for (const buildImage of Object.values(manifest.buildImages ?? {})) {
+        expect(matched).toContain(buildImage.image);
+      }
+    }
   });
 
   it("pins every third-party service image to an immutable manifest digest", () => {
@@ -65,11 +75,19 @@ describe("production supply-chain policy", () => {
     for (const entry of readdirSync(serviceRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const path = join(serviceRoot, entry.name, "service.json");
-      let manifest: { container?: { image?: string; digest?: string } };
+      let manifest: {
+        container?: { image?: string; digest?: string };
+        buildImages?: Record<string, { image?: string; digest?: string }>;
+      };
       try {
         manifest = JSON.parse(readFileSync(path, "utf8")) as typeof manifest;
       } catch {
         continue;
+      }
+      for (const [role, buildImage] of Object.entries(manifest.buildImages ?? {})) {
+        if (!/^sha256:[a-f0-9]{64}$/.test(buildImage.digest ?? "")) {
+          violations.push(`${entry.name}#buildImages.${role}`);
+        }
       }
       const container = manifest.container;
       if (!container?.image || container.image.startsWith("ghcr.io/openmapx/")) continue;

@@ -110,6 +110,11 @@ pnpm openmapx data build motis europe/germany
 manual stop/build/start sequence for feed changes on an operating deployment;
 the transactional sync is what preserves the prior live dataset on failure.
 
+Add `--import` to also run `motis import` right away, with the runtime image and
+paths. That's how you seed a serving host from a bigger build machine: import
+there, then move the result with `data export motis` and `data import` (see
+[Building on another host](../install/preparing-data.md#building-on-another-host)).
+
 ### 4. Render, link, and start
 
 After a build, wire the prepared data into the stack and bring the engine up:
@@ -321,7 +326,8 @@ This runs OTP's `--build --save` over your OSM extract and GTFS feeds and writes
 `graph.obj` into **`data/otp-graph/`**. The build refuses planet-scale input —
 point it at `planet.osm.pbf` (or anything over ~50 GB) and it errors out before
 starting. The build defaults to a generous `-Xmx24g` JVM heap; bump it for large
-regions or trim it for a single city.
+regions or trim it for a single city with `OTP_BUILD_JAVA_TOOL_OPTIONS` in
+`.env` (for example `-Xmx8g`).
 
 ### 3. Link and serve
 

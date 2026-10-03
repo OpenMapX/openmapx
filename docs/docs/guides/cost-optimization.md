@@ -171,10 +171,14 @@ You can exploit this in two ways:
   build helper skips work entirely when the input data is unchanged, so
   re-running the sequence is cheap.
 - **Build elsewhere, then run smaller.** Because the build peak is transient,
-  some operators do the expensive import on a large short-lived machine (a cloud
-  spot instance, or a workstation with lots of RAM), then move the prepared data
-  to a smaller, cheaper host for steady-state serving. The data tree under
-  `infra/docker/data/` is self-contained and portable.
+  you can run the expensive build on a large short-lived machine (a server rented
+  by the hour, or a workstation with lots of RAM), then move the result to a
+  smaller, cheaper host for steady-state serving. `data export` and
+  `data import` carry OSRM, OTP, Pelias, MOTIS, and TileServer builds across with
+  checksums and an image-version check; see
+  [Building on another host](../install/preparing-data.md#building-on-another-host).
+  Valhalla, Nominatim, and Overpass build inside their own containers on first
+  start, so they build where they serve.
 
 A swap file can carry an import over a brief RAM shortfall too, at the cost of a
 much slower build — useful for a one-time Nominatim import on an otherwise

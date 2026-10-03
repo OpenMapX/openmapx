@@ -59,8 +59,16 @@ The equivalent data alias is:
 pnpm openmapx data build tiles europe/germany
 ```
 
-Planetiler writes `data/tile-mbtiles/tiles.mbtiles`. Stop TileServer GL before
-replacing a running archive:
+Planetiler writes `data/tile-mbtiles/tiles.mbtiles`. It builds into
+`data/tile-mbtiles.next/` and only replaces the archive once the build succeeds,
+so a failed build keeps the old tiles. Its JVM heap defaults to half the PBF
+size (at least 2 GB; `-Xmx30g` for the planet), and its downloaded sources and
+temp files live in `data/planetiler/`, where later builds reuse the sources.
+Set `PLANETILER_JAVA_TOOL_OPTIONS` or `PLANETILER_WORK_DIR` in `.env` to change
+either. To build on a bigger machine and serve from this one, see
+[Building on another host](../install/preparing-data.md#building-on-another-host).
+
+Stop TileServer GL before replacing a running archive:
 
 ```bash
 pnpm openmapx services stop tileserver

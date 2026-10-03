@@ -428,6 +428,43 @@ function copyGeneratedMotisArtifacts(
   return { configPath, licensePath };
 }
 
+export interface ImportMotisDataOptions {
+  motisDir: string;
+  /** The runtime `motis` image: its import output is bound to that version. */
+  image: string;
+  runner?: CommandRunner;
+}
+
+/**
+ * Run `motis import` against a prepared data dir with the same image, mount
+ * path and working dir as the runtime container. The container's own
+ * `/motis import` on start then only re-verifies the inputs, so the heavy
+ * import can happen on a different host than the one serving it.
+ */
+export async function importMotisData(opts: ImportMotisDataOptions): Promise<void> {
+  if (!existsSync(join(opts.motisDir, MOTIS_CONFIG_FILENAME))) {
+    throw new Error(
+      `No ${MOTIS_CONFIG_FILENAME} in ${opts.motisDir}; MOTIS import needs at least one GTFS feed`,
+    );
+  }
+  const runner = opts.runner ?? defaultRunner;
+  const args = ["run", "--rm", "--name", "openmapx-build-motis-import"];
+  if (typeof process.getuid === "function" && typeof process.getgid === "function") {
+    args.push("--user", `${process.getuid()}:${process.getgid()}`);
+  }
+  args.push(
+    "-v",
+    `${opts.motisDir}:/motis-data`,
+    "-w",
+    "/motis-data",
+    "--entrypoint",
+    "/motis",
+    opts.image,
+    "import",
+  );
+  await runner("docker", args, { stdio: "inherit" });
+}
+
 export async function buildMotisData(
   opts: BuildMotisDataOptions = {},
 ): Promise<BuildMotisDataResult> {

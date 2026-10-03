@@ -21,6 +21,7 @@
       "ES_JAVA_OPTS": "-Xms2g -Xmx2g",
       "xpack.security.enabled": "false"
     },
+    "user": "${UID:-1000}:0",
     "memory": "4g",
     "restart": "unless-stopped",
     "healthcheck": {
@@ -32,8 +33,12 @@
       "retries": 10
     }
   },
-  "volumes": [
-    { "name": "openmapx-esdata", "mountAt": "/usr/share/elasticsearch/data", "backup": false }
+  "bindMounts": [
+    {
+      "source": "@infra:data/pelias/elasticsearch",
+      "target": "/usr/share/elasticsearch/data",
+      "readOnly": false
+    }
   ],
   "exposure": {
     "hostPorts": [{ "container": 9200, "host": 9200, "bindAddress": "127.0.0.1" }]

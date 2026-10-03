@@ -3,11 +3,18 @@ import { services } from "@openmapx/core/server";
 import type { Command } from "commander";
 import kleur from "kleur";
 import {
+  BUILD_ARTIFACTS,
+  buildArtifactSpec,
+  exportBuildBundle,
+  importBuildBundle,
+} from "../lib/build-artifacts";
+import {
   applyDataCleanup,
   collectOfflineDataStatus,
   planDataCleanup,
   pruneDataManagerStateForCleanup,
 } from "../lib/data-local";
+import { runningComposeServices } from "../lib/docker";
 import {
   OPENMAPX_REGION_ENV,
   resolveOsmRegion,
@@ -16,7 +23,7 @@ import {
   TRANSITOUS_COUNTRIES_ENV,
 } from "../lib/env-defaults";
 import { applyGeneratedHardlinks } from "../lib/hardlinks";
-import { log, table } from "../lib/output";
+import { log, routeLogsToStderr, table } from "../lib/output";
 import { buildServices, resolveDataBuildServiceId } from "../lib/service-builds";
 import { generateTransitousApiKeys } from "../lib/transitous-api-keys";
 import { renderComposeForRepo } from "./compose";
@@ -290,6 +297,61 @@ export function registerDataCommands(program: Command): void {
         log.err(`build failed: ${(err as Error).message}`);
         process.exit(1);
       }
+    });
+
+  data
+    .command("export <service> <bundle>")
+    .description(
+      `Write a service's built artifact and a checksummed manifest as a tar bundle for another host (\`-\` streams to stdout; service: ${Object.keys(BUILD_ARTIFACTS).join(" | ")})`,
+    )
+    .action(async (serviceId: string, bundle: string) => {
+      if (bundle === "-") routeLogsToStderr();
+      try {
+        const running = await runningComposeServices(buildArtifactSpec(serviceId).consumers);
+        if (running.length > 0) {
+          throw new Error(
+            `${running.join(", ")} ${running.length === 1 ? "is" : "are"} running and may be writing the artifact; stop first with \`openmapx services stop ${running.join(" ")}\``,
+          );
+        }
+        log.dim(`Hashing ${serviceId} artifact…`);
+        const manifest = await exportBuildBundle({ serviceId, bundle });
+        const bytes = manifest.files.reduce((sum, file) => sum + file.sizeBytes, 0);
+        log.ok(
+          `Exported ${serviceId} (${manifest.files.length} files, ${formatBytes(bytes)}, region ${manifest.region ?? "unknown"}) → ${bundle === "-" ? "stdout" : bundle}`,
+        );
+      } catch (err) {
+        log.err(`export failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
+    });
+
+  data
+    .command("import <bundle>")
+    .description(
+      "Verify a bundle written by `data export` (`-` reads stdin), check it matches this host's runtime images, swap it in, then render and link",
+    )
+    .action(async (bundle: string) => {
+      let manifest: Awaited<ReturnType<typeof importBuildBundle>>;
+      try {
+        manifest = await importBuildBundle({ bundle, runningServices: runningComposeServices });
+      } catch (err) {
+        log.err(`import failed: ${(err as Error).message}`);
+        process.exit(1);
+      }
+      log.ok(
+        `Imported ${manifest.service} (${manifest.files.length} files, built ${manifest.builtAt}${manifest.revision ? ` at ${manifest.revision.slice(0, 12)}` : ""})`,
+      );
+      try {
+        await renderAndApplyHardlinks();
+      } catch (err) {
+        log.err(
+          `The artifact is in place, but rendering and linking failed: ${(err as Error).message}. Fix that, then run \`openmapx data link\`.`,
+        );
+        process.exit(1);
+      }
+      log.info(
+        `Start the consumers with \`openmapx services start ${buildArtifactSpec(manifest.service).consumers.join(" ")}\``,
+      );
     });
 
   data

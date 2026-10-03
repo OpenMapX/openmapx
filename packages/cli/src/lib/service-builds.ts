@@ -1,40 +1,38 @@
+import { statSync } from "node:fs";
+import { basename } from "node:path";
 import { services as coreServices } from "@openmapx/core/server";
+import {
+  BUILD_ARTIFACTS,
+  type BuildRecord,
+  currentRevision,
+  writeBuildRecord,
+} from "./build-artifacts";
 import { runningComposeServices } from "./docker";
 import { resolveBuildRegion } from "./env-defaults";
-import { buildMotisData } from "./motis-data";
+import { buildMotisData, importMotisData } from "./motis-data";
 import { buildOsrmGraph } from "./osrm-graph";
 import { buildOtpGraph } from "./otp-graph";
 import { log } from "./output";
 import { repoPaths } from "./paths";
-import {
-  buildPeliasData,
-  DEFAULT_PELIAS_OPENSTREETMAP_IMAGE,
-  DEFAULT_PELIAS_SCHEMA_IMAGE,
-  DEFAULT_PELIAS_WHOSONFIRST_IMAGE,
-} from "./pelias-data";
-import { buildTileMbtiles, DEFAULT_PLANETILER_IMAGE } from "./tile-mbtiles";
+import { buildPeliasData } from "./pelias-data";
+import { buildTileMbtiles } from "./tile-mbtiles";
 
 /**
- * Services whose build step mutates the on-disk producer directory that the
- * running container consumes via hardlink. Building with the container live
- * yields a half-swapped state (the container keeps its open file handles on
- * the *old* inodes while we stage new ones, so it reads stale data until it
- * is restarted). Refusing to run while the consumer is up is simpler than a
- * multi-phase atomic swap and matches operator expectations — nothing in
+ * Builds stage into `<dir>.next` and swap at the end, but the consumers still
+ * hold the old inodes through their hardlinked mounts until they restart and
+ * the post-build link pass runs. Refusing while a consumer (listed per service
+ * in {@link BUILD_ARTIFACTS}) is up keeps that window explicit — nothing in
  * this project supports live rebuilds.
- *
- * The check is keyed by service id; extend this set when adding a new
- * `services build <id>` handler that stages into a shared producer dir.
  */
-const BUILD_REFUSES_WHEN_CONSUMER_RUNNING: ReadonlySet<string> = new Set([
-  "motis",
-  "otp",
-  "osrm",
-  "pelias",
-  "pelias-pip",
-  "pelias-placeholder",
-  "tileserver",
-]);
+function consumersBlockingBuild(ids: readonly string[]): string[] {
+  return [
+    ...new Set(
+      ids.flatMap(
+        (id) => (Object.hasOwn(BUILD_ARTIFACTS, id) ? BUILD_ARTIFACTS[id]?.consumers : []) ?? [],
+      ),
+    ),
+  ];
+}
 
 const { ServiceRegistry } = coreServices;
 type LoadedService = coreServices.LoadedService;
@@ -48,11 +46,21 @@ export interface ServiceBuildContext {
   region?: string;
   registry: coreServices.ServiceRegistry;
   service: LoadedService;
+  /** MOTIS only: also run `motis import` so the output is ready to serve. */
+  motisImport?: boolean;
+}
+
+export interface ServiceBuildArtifact {
+  sourcePbf: string;
+  runtimeImages: BuildRecord["runtimeImages"];
+  toolImages: BuildRecord["toolImages"];
 }
 
 export interface ServiceBuildHandlerResult {
   summary: string;
   warnings?: string[];
+  /** Provenance recorded for `data export`; omitted by test/custom handlers. */
+  artifact?: ServiceBuildArtifact;
 }
 
 export type ServiceBuildHandler = (
@@ -87,6 +95,7 @@ export interface PlanServiceBuildsOptions {
 export interface BuildServicesOptions extends PlanServiceBuildsOptions {
   region?: string;
   continueOnError?: boolean;
+  motisImport?: boolean;
 }
 
 function serviceImage(service: LoadedService): string {
@@ -100,22 +109,40 @@ function requireService(registry: coreServices.ServiceRegistry, id: string): Loa
 }
 
 const BUILT_IN_SERVICE_BUILD_HANDLERS: Record<string, ServiceBuildHandler> = {
-  async motis({ rootDir, region }) {
+  async motis({ rootDir, region, service, motisImport }): Promise<ServiceBuildHandlerResult> {
     log.info("Building MOTIS prepared data with Transitous tools");
     const result = await buildMotisData({ rootDir, region });
+    const toolImages = { "transitous-tools": result.image };
+    if (!motisImport) {
+      return {
+        summary: `Built MOTIS prepared data → ${result.motisDir}`,
+        warnings:
+          result.gtfsFeeds.length === 0
+            ? ["No GTFS feeds found; staged MOTIS data with OSM only"]
+            : [],
+        artifact: { sourcePbf: result.sourcePbf, runtimeImages: {}, toolImages },
+      };
+    }
+    const image = serviceImage(service);
+    log.info(`Importing MOTIS data with ${image}`);
+    await importMotisData({ motisDir: result.motisDir, image });
     return {
-      summary: `Built MOTIS prepared data → ${result.motisDir}`,
-      warnings:
-        result.gtfsFeeds.length === 0
-          ? ["No GTFS feeds found; staged MOTIS data with OSM only"]
-          : [],
+      summary: `Built and imported MOTIS data → ${result.motisDir}`,
+      artifact: { sourcePbf: result.sourcePbf, runtimeImages: { motis: image }, toolImages },
     };
   },
   async osrm({ rootDir, region, service }) {
     const image = serviceImage(service);
     log.info(`Building OSRM graph with ${image}`);
     const result = await buildOsrmGraph({ rootDir, region, image });
-    return { summary: `Built OSRM graph → ${result.graphPath}` };
+    // A skipped build keeps the record of the build that actually wrote it.
+    if (result.skipped) {
+      return { summary: `OSRM graph unchanged → ${result.graphPath}` };
+    }
+    return {
+      summary: `Built OSRM graph → ${result.graphPath}`,
+      artifact: { sourcePbf: result.sourcePbf, runtimeImages: { osrm: image }, toolImages: {} },
+    };
   },
   async otp({ rootDir, region, service }) {
     const image = serviceImage(service);
@@ -125,30 +152,82 @@ const BUILT_IN_SERVICE_BUILD_HANDLERS: Record<string, ServiceBuildHandler> = {
       summary: `Built OTP graph → ${result.graphPath}`,
       warnings:
         result.gtfsFeeds.length === 0 ? ["No GTFS feeds found; built OTP graph with OSM only"] : [],
+      artifact: { sourcePbf: result.sourcePbf, runtimeImages: { otp: image }, toolImages: {} },
     };
   },
-  async pelias({ rootDir, region, registry }) {
-    const elasticsearch = requireService(registry, "elasticsearch");
-    const placeholder = requireService(registry, "pelias-placeholder");
-    const elasticsearchImage = serviceImage(elasticsearch);
-    const placeholderImage = serviceImage(placeholder);
+  async pelias({ rootDir, region, registry, service }) {
+    const elasticsearchImage = serviceImage(requireService(registry, "elasticsearch"));
+    const placeholderImage = serviceImage(requireService(registry, "pelias-placeholder"));
+    const toolImages = {
+      schema: coreServices.serviceBuildImageReference(service.manifest, "schema"),
+      whosonfirst: coreServices.serviceBuildImageReference(service.manifest, "whosonfirst"),
+      openstreetmap: coreServices.serviceBuildImageReference(service.manifest, "openstreetmap"),
+    };
     log.info(
-      `Building Pelias data/index with ${elasticsearchImage}, ${DEFAULT_PELIAS_SCHEMA_IMAGE}, ${DEFAULT_PELIAS_WHOSONFIRST_IMAGE}, ${DEFAULT_PELIAS_OPENSTREETMAP_IMAGE}, and ${placeholderImage}`,
+      `Building Pelias data/index with ${elasticsearchImage}, ${Object.values(toolImages).join(", ")}, and ${placeholderImage}`,
     );
     const result = await buildPeliasData({
       rootDir,
       region,
       elasticsearchImage,
       placeholderImage,
+      schemaImage: toolImages.schema,
+      whosonfirstImage: toolImages.whosonfirst,
+      openstreetmapImage: toolImages.openstreetmap,
     });
-    return { summary: `Built Pelias data/index → ${result.peliasDir}` };
+    return {
+      summary: `Built Pelias data/index → ${result.peliasDir}`,
+      artifact: {
+        sourcePbf: result.sourcePbf,
+        // The index is read by this Elasticsearch, the store by this placeholder.
+        runtimeImages: {
+          elasticsearch: elasticsearchImage,
+          "pelias-placeholder": placeholderImage,
+        },
+        toolImages,
+      },
+    };
   },
-  async tileserver({ rootDir, region }) {
-    log.info(`Building TileServer MBTiles with ${DEFAULT_PLANETILER_IMAGE}`);
-    const result = await buildTileMbtiles({ rootDir, region });
-    return { summary: `Built TileServer MBTiles → ${result.mbtilesPath}` };
+  async tileserver({ rootDir, region, service }) {
+    const image = coreServices.serviceBuildImageReference(service.manifest, "planetiler");
+    log.info(`Building TileServer MBTiles with ${image}`);
+    const result = await buildTileMbtiles({ rootDir, region, image });
+    log.dim(`Planetiler heap ${result.javaToolOptions}, work dir ${result.workDir}`);
+    return {
+      summary: `Built TileServer MBTiles → ${result.mbtilesPath}`,
+      artifact: {
+        sourcePbf: result.sourcePbf,
+        runtimeImages: {},
+        toolImages: { planetiler: image },
+      },
+    };
   },
 };
+
+async function recordBuild(
+  rootDir: string,
+  serviceId: string,
+  region: string | undefined,
+  artifact: ServiceBuildArtifact,
+): Promise<void> {
+  const revision = await currentRevision(rootDir);
+  writeBuildRecord(
+    {
+      schemaVersion: 1,
+      service: serviceId,
+      ...(region ? { region } : {}),
+      sourcePbf: {
+        name: basename(artifact.sourcePbf),
+        sizeBytes: statSync(artifact.sourcePbf).size,
+      },
+      builtAt: new Date().toISOString(),
+      ...(revision ? { revision } : {}),
+      runtimeImages: artifact.runtimeImages,
+      toolImages: artifact.toolImages,
+    },
+    rootDir,
+  );
+}
 
 function getServiceBuildHandlers(
   overrides?: Record<string, ServiceBuildHandler>,
@@ -274,15 +353,7 @@ export async function buildServices(
 
   log.info(`Build plan: ${plannedIds.join(", ")}`);
 
-  const idsToCheck = plannedIds.filter((id) => BUILD_REFUSES_WHEN_CONSUMER_RUNNING.has(id));
-  // For pelias specifically, ALL three consumer containers (api + pip +
-  // placeholder) read from the pelias build output. Even when we're building
-  // just "pelias" as a synonym for "the pelias data set", refuse if any of
-  // the three are running.
-  if (idsToCheck.includes("pelias")) {
-    idsToCheck.push("pelias-pip", "pelias-placeholder");
-  }
-  const running = await runningComposeServices(Array.from(new Set(idsToCheck)));
+  const running = await runningComposeServices(consumersBlockingBuild(plannedIds));
   if (running.length > 0) {
     throw new Error(
       `Refusing to build: ${running.join(", ")} ${running.length === 1 ? "is" : "are"} running. ` +
@@ -305,9 +376,13 @@ export async function buildServices(
         region: resolvedRegion.value,
         registry,
         service: item.service,
+        motisImport: opts.motisImport,
       });
       for (const warning of result.warnings ?? []) {
         log.warn(`${item.id}: ${warning}`);
+      }
+      if (result.artifact) {
+        await recordBuild(rootDir, item.id, resolvedRegion.value, result.artifact);
       }
       log.ok(result.summary);
       completedIds.push(item.id);

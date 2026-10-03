@@ -26,6 +26,23 @@
     ]
   },
   "buildCommand": "openmapx services build pelias",
+  "buildImages": {
+    "schema": {
+      "image": "pelias/schema",
+      "tag": "latest",
+      "digest": "sha256:5093e52a91b051013786d5d51367ea8eb471eac87edc626737b61ae67f89198a"
+    },
+    "whosonfirst": {
+      "image": "pelias/whosonfirst",
+      "tag": "latest",
+      "digest": "sha256:81c842a3f87edc2857f24337b9dfdd6edd3cdd958e178306afbe314d67a96c9b"
+    },
+    "openstreetmap": {
+      "image": "pelias/openstreetmap",
+      "tag": "latest",
+      "digest": "sha256:fe640a1ec2ea5bf3a13b89566419b1194c67c4f70a6821d11b6711ad661ebcba"
+    }
+  },
   "provides": ["geocoder"],
   "produces": [
     { "type": "pelias-placeholder-data", "sourceDir": "data/pelias/placeholder" },

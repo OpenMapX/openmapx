@@ -5,14 +5,13 @@ import {
   existsSync,
   linkSync,
   mkdirSync,
-  readdirSync,
   readFileSync,
-  rmSync,
   statSync,
   writeFileSync,
 } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { execa } from "execa";
+import { withStagedBuildDir } from "./build-staging";
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
 
@@ -49,23 +48,12 @@ export interface BuildOsrmGraphResult {
   graphPath: string;
   image: string;
   profile: string;
+  /** True when the inputs matched the previous build and nothing ran. */
+  skipped: boolean;
 }
 
 export function resolveOsmPbfForOsrm(dataDir: string, region?: string): string {
   return resolveOsmPbf(dataDir, region, "OSRM");
-}
-
-function clearPreviousOsrmGraph(graphDir: string): void {
-  mkdirSync(graphDir, { recursive: true });
-  for (const name of readdirSync(graphDir)) {
-    // Intentionally narrow: OSRM_TRAFFIC_FILENAME (segment-speeds.csv) and the
-    // .osrm-pbf-hash marker must survive a rebuild — the CSV is the
-    // traffic-refresh handoff and is hashed into the build cache key, so
-    // adding it to the cleanup pattern would break edge-weight updates.
-    if (name === OSRM_INPUT_FILENAME || name.startsWith(`${OSRM_GRAPH_BASENAME}`)) {
-      rmSync(join(graphDir, name), { recursive: true, force: true });
-    }
-  }
 }
 
 function linkOrCopy(source: string, target: string): void {
@@ -144,12 +132,13 @@ export async function buildOsrmGraph(opts: BuildOsrmGraphOptions): Promise<Build
 
   // Skip the build entirely if the input PBF hash matches the one captured
   // by the previous build AND the graph artefact still exists. The hash file
-  // also encodes the OSRM profile and the traffic CSV's content hash, so
-  // changing either forces a rebuild even on an identical PBF.
+  // also encodes the OSRM image, the profile and the traffic CSV's content
+  // hash, so changing any of them forces a rebuild even on an identical PBF —
+  // the graph format is bound to the image that wrote it.
   const trafficCsvPath = join(graphDir, OSRM_TRAFFIC_FILENAME);
   ensureTrafficCsv(trafficCsvPath);
   const trafficHash = createHash("sha256").update(readFileSync(trafficCsvPath)).digest("hex");
-  const newHash = `${profile}|${await hashPbf(sourcePbf)}|traffic:${trafficHash}`;
+  const newHash = `${opts.image}|${profile}|${await hashPbf(sourcePbf)}|traffic:${trafficHash}`;
   const hashPath = join(graphDir, PBF_HASH_FILE);
   const graphPath = join(graphDir, OSRM_GRAPH_BASENAME);
   if (existsSync(hashPath) && existsSync(graphPath)) {
@@ -162,6 +151,7 @@ export async function buildOsrmGraph(opts: BuildOsrmGraphOptions): Promise<Build
           graphPath,
           image: opts.image,
           profile,
+          skipped: true,
         };
       }
     } catch {
@@ -169,40 +159,42 @@ export async function buildOsrmGraph(opts: BuildOsrmGraphOptions): Promise<Build
     }
   }
 
-  clearPreviousOsrmGraph(graphDir);
-  linkOrCopy(sourcePbf, join(graphDir, OSRM_INPUT_FILENAME));
-
   const cwd = paths.infraDir;
-  await runner(
-    "docker",
-    dockerOsrmArgs(graphDir, opts.image, [
-      "osrm-extract",
-      "-p",
-      profile,
-      `/data/${OSRM_INPUT_FILENAME}`,
-    ]),
-    { cwd, stdio: "inherit" },
-  );
-  await runner(
-    "docker",
-    dockerOsrmArgs(graphDir, opts.image, ["osrm-partition", `/data/${OSRM_GRAPH_BASENAME}`]),
-    { cwd, stdio: "inherit" },
-  );
-  await runner(
-    "docker",
-    dockerOsrmArgs(graphDir, opts.image, [
-      "osrm-customize",
-      `/data/${OSRM_GRAPH_BASENAME}`,
-      "--segment-speed-file",
-      `/data/${OSRM_TRAFFIC_FILENAME}`,
-    ]),
-    { cwd, stdio: "inherit" },
-  );
-
-  if (!existsSync(graphPath)) {
-    throw new Error(`OSRM build finished but did not create ${graphPath}`);
-  }
-  writeFileSync(hashPath, `${newHash}\n`, "utf-8");
+  await withStagedBuildDir(graphDir, async (nextDir) => {
+    // The traffic CSV is the edge-weight handoff and part of the cache key, so
+    // it carries over into every rebuild.
+    copyFileSync(trafficCsvPath, join(nextDir, OSRM_TRAFFIC_FILENAME));
+    linkOrCopy(sourcePbf, join(nextDir, OSRM_INPUT_FILENAME));
+    await runner(
+      "docker",
+      dockerOsrmArgs(nextDir, opts.image, [
+        "osrm-extract",
+        "-p",
+        profile,
+        `/data/${OSRM_INPUT_FILENAME}`,
+      ]),
+      { cwd, stdio: "inherit" },
+    );
+    await runner(
+      "docker",
+      dockerOsrmArgs(nextDir, opts.image, ["osrm-partition", `/data/${OSRM_GRAPH_BASENAME}`]),
+      { cwd, stdio: "inherit" },
+    );
+    await runner(
+      "docker",
+      dockerOsrmArgs(nextDir, opts.image, [
+        "osrm-customize",
+        `/data/${OSRM_GRAPH_BASENAME}`,
+        "--segment-speed-file",
+        `/data/${OSRM_TRAFFIC_FILENAME}`,
+      ]),
+      { cwd, stdio: "inherit" },
+    );
+    if (!existsSync(join(nextDir, OSRM_GRAPH_BASENAME))) {
+      throw new Error(`OSRM build finished but did not create ${OSRM_GRAPH_BASENAME}`);
+    }
+    writeFileSync(join(nextDir, PBF_HASH_FILE), `${newHash}\n`, "utf-8");
+  });
 
   return {
     sourcePbf,
@@ -210,5 +202,6 @@ export async function buildOsrmGraph(opts: BuildOsrmGraphOptions): Promise<Build
     graphPath,
     image: opts.image,
     profile,
+    skipped: false,
   };
 }

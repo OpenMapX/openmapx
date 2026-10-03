@@ -185,6 +185,7 @@ describe.skipIf(!manifestsPresent)(
       const result = renderCompose(services, {
         domain: "example.com",
         allServices: registry.list(),
+        composeOutDir: "/repo/infra/docker",
       });
 
       expect(result.hardlinkPlan).toEqual(
@@ -209,6 +210,15 @@ describe.skipIf(!manifestsPresent)(
       expect(result.composeYaml).toContain(
         "./data/pelias-pip/pelias-whosonfirst-data:/data/whosonfirst:ro",
       );
+      // The index lives in the data tree (not a named volume) so a Pelias
+      // build can be exported and served elsewhere.
+      expect(result.composeYaml).toContain(
+        "./data/pelias/elasticsearch:/usr/share/elasticsearch/data",
+      );
+      expect(result.composeYaml).not.toContain("openmapx-esdata");
+      expect(
+        result.writableBindDirs?.some((dir) => dir.endsWith("/data/pelias/elasticsearch")),
+      ).toBe(true);
       expect(result.composeYaml).toContain("pelias-placeholder:");
       expect(result.composeYaml).toContain("pelias-pip:");
       expect(result.composeYaml).toContain(

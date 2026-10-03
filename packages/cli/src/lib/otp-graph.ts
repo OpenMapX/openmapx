@@ -1,20 +1,14 @@
-import {
-  copyFileSync,
-  existsSync,
-  linkSync,
-  mkdirSync,
-  readdirSync,
-  rmSync,
-  statSync,
-} from "node:fs";
+import { copyFileSync, existsSync, linkSync, readdirSync, statSync } from "node:fs";
 import { basename, extname, join, resolve } from "node:path";
 import { execa } from "execa";
+import { withStagedBuildDir } from "./build-staging";
 import { resolveOsmPbf } from "./osm-pbf";
 import { repoPaths } from "./paths";
 
 export const OTP_GRAPH_DIR = "otp-graph";
 export const OTP_GRAPH_FILENAME = "graph.obj";
 export const DEFAULT_OTP_BUILD_JAVA_TOOL_OPTIONS = "-Xmx24g";
+export const OTP_BUILD_JAVA_TOOL_OPTIONS_ENV = "OTP_BUILD_JAVA_TOOL_OPTIONS";
 
 export type CommandRunner = (
   command: string,
@@ -53,11 +47,6 @@ function linkOrCopy(source: string, target: string): void {
   } catch {
     copyFileSync(source, target);
   }
-}
-
-function clearGraphDir(graphDir: string): void {
-  rmSync(graphDir, { recursive: true, force: true });
-  mkdirSync(graphDir, { recursive: true });
 }
 
 function gtfsTargetName(sourceName: string): string {
@@ -118,23 +107,27 @@ export async function buildOtpGraph(opts: BuildOtpGraphOptions): Promise<BuildOt
 
   const graphDir = resolve(dataDir, OTP_GRAPH_DIR);
   const image = opts.image;
-  const javaToolOptions = opts.javaToolOptions ?? DEFAULT_OTP_BUILD_JAVA_TOOL_OPTIONS;
+  const javaToolOptions =
+    opts.javaToolOptions ||
+    process.env[OTP_BUILD_JAVA_TOOL_OPTIONS_ENV]?.trim() ||
+    DEFAULT_OTP_BUILD_JAVA_TOOL_OPTIONS;
   const runner = opts.runner ?? defaultRunner;
-
-  clearGraphDir(graphDir);
-  linkOrCopy(sourcePbf, join(graphDir, basename(sourcePbf)));
-  const gtfsFeeds = stageGtfsFeeds(join(dataDir, "gtfs"), graphDir);
-
   const buildConfigPath = join(paths.root, "services", "otp", "config", "build-config.json");
-  await runner("docker", dockerOtpArgs(graphDir, buildConfigPath, image, javaToolOptions), {
-    cwd: paths.infraDir,
-    stdio: "inherit",
+
+  const gtfsFeeds = await withStagedBuildDir(graphDir, async (nextDir) => {
+    linkOrCopy(sourcePbf, join(nextDir, basename(sourcePbf)));
+    const staged = stageGtfsFeeds(join(dataDir, "gtfs"), nextDir);
+    await runner("docker", dockerOtpArgs(nextDir, buildConfigPath, image, javaToolOptions), {
+      cwd: paths.infraDir,
+      stdio: "inherit",
+    });
+    if (!existsSync(join(nextDir, OTP_GRAPH_FILENAME))) {
+      throw new Error(`OTP build finished but did not create ${OTP_GRAPH_FILENAME}`);
+    }
+    return staged.map((path) => join(graphDir, basename(path)));
   });
 
   const graphPath = join(graphDir, OTP_GRAPH_FILENAME);
-  if (!existsSync(graphPath)) {
-    throw new Error(`OTP build finished but did not create ${graphPath}`);
-  }
 
   return {
     sourcePbf,

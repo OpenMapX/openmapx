@@ -268,6 +268,15 @@ const dependsOnSchema = z.object({
   condition: z.enum(["service_started", "service_healthy"]).optional(),
 });
 
+// Helper images the `services build` handler runs (never deployed). Digest is
+// mandatory so a build host and a serving host on the same revision run the
+// exact same tooling.
+const buildImageSchema = z.object({
+  image: z.string().regex(IMAGE_REGEX, "must be lowercase, no tag suffix (use 'tag' field)"),
+  tag: z.string().regex(TAG_REGEX),
+  digest: z.string().regex(IMAGE_DIGEST_REGEX, "must be a sha256 OCI manifest digest"),
+});
+
 const containerSchema = z.object({
   image: z.string().regex(IMAGE_REGEX, "must be lowercase, no tag suffix (use 'tag' field)"),
   tag: z.string().regex(TAG_REGEX),
@@ -458,6 +467,7 @@ export const serviceManifestSchema = z.object({
   exposure: exposureSchema.optional(),
 
   buildCommand: z.string().optional(),
+  buildImages: z.record(z.string().regex(SERVICE_ID_REGEX), buildImageSchema).optional(),
 
   ui: uiSchema.optional(),
   subjectData: serviceSubjectDataSchema.optional(),

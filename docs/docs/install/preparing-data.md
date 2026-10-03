@@ -214,24 +214,31 @@ pnpm openmapx data build motis europe/germany
 
 The build kinds that prepare artifacts are:
 
-| Kind     | Engine        | Output                                                      |
-| -------- | ------------- | ----------------------------------------------------------- |
-| `osrm`   | OSRM          | Routing graph (`data/osrm-graph/`) — region scale only      |
-| `otp`    | OTP           | Transit graph (`data/otp-graph/`) — region scale only       |
-| `motis`  | MOTIS         | Prepared inputs for the MOTIS slot lifecycle                |
-| `pelias` | Pelias        | Geocoding index (Elasticsearch + supporting data)           |
-| `tiles`  | TileServer GL | MBTiles archive (`data/tile-mbtiles/`) from the OSM extract |
+| Kind     | Engine        | Output                                                                      |
+| -------- | ------------- | --------------------------------------------------------------------------- |
+| `osrm`   | OSRM          | Routing graph (`data/osrm-graph/`) — region scale only                      |
+| `otp`    | OTP           | Transit graph (`data/otp-graph/`) — region scale only                       |
+| `motis`  | MOTIS         | Prepared inputs for the MOTIS slot lifecycle (`--import` also imports them) |
+| `pelias` | Pelias        | Geocoding data and Elasticsearch index (`data/pelias/`)                     |
+| `tiles`  | TileServer GL | MBTiles archive (`data/tile-mbtiles/`) from the OSM extract                 |
 
 Engines that read raw source data directly — Valhalla, Nominatim, Overpass — have
 no build step here; they consume the downloaded extract as-is (Overpass needs a
 one-time format conversion, covered [below](#deriving-secondary-formats)).
 
+OSRM, OTP, Pelias, and TileServer builds write into a sibling `<dir>.next` and
+only replace the live directory once the build has succeeded, so a failed or
+interrupted build leaves the previous artifact in place. The old and the new
+copy coexist for the whole build, so budget disk for both: for Pelias that is
+two Elasticsearch indexes. MOTIS keeps building in place; its data-manager
+pipeline owns the staged swap for that engine.
+
 :::caution[Stop the consumer before rebuilding]
-A build stages new files into the directory the running engine reads from. To
-avoid leaving a live container reading a half-swapped state, the build refuses to
-run while the consuming service is up — stop it first
-(`pnpm openmapx services stop <id>`), build, then start it again. Builds skip
-their work entirely when the input data is unchanged, so re-running is cheap.
+A running engine keeps reading the old files through its hardlinked mount until
+it restarts, so the build refuses to run while the consuming service is up — stop
+it first (`pnpm openmapx services stop <id>`), build, then start it again. The
+OSRM build skips its work entirely when the input data is unchanged, so
+re-running it is cheap.
 :::
 
 ### Deriving secondary formats
@@ -294,6 +301,69 @@ how many services read it.
 You run `data link` after any change that affects what consumes what: after a fresh
 download or build, or after changing your enabled services. The all-in-one
 [update](#a-full-refresh-in-one-command) command does it for you at the end.
+
+## Building on another host
+
+The build peak is much larger than what an engine needs to serve, so you can run
+`services build` on a big machine (a workstation, or a server rented by the hour)
+and serve from a smaller one. Every build records what it produced in
+`data/.openmapx-builds/<service>.json`: the region, the source PBF, the OpenMapX
+commit, and the runtime images the output is bound to. `data export` packs the
+built directories together with that record and a SHA-256 for every file.
+`data import` on the other host verifies all of it before swapping anything in.
+
+Both hosts need a checkout of the same OpenMapX revision. OSRM graphs, OTP
+graphs, the Pelias index, and imported MOTIS data only load in the exact image
+version that built them, and the import refuses a bundle whose runtime images
+don't match the serving host's manifests.
+
+```bash
+# On the build host
+pnpm openmapx data download osm europe/germany
+pnpm openmapx services build tileserver --region europe/germany
+
+# Stream straight to the serving host (stop the consumer there first)
+pnpm --silent openmapx data export tileserver - \
+  | ssh serve-host 'cd openmapx && pnpm --silent openmapx data import -'
+
+# Or go through a file
+pnpm openmapx data export tileserver tiles-germany.tar
+pnpm openmapx data import tiles-germany.tar
+```
+
+The import extracts into `data/.openmapx-import/` on the same filesystem, so the
+serving host briefly needs room for both the old and the new artifact. Files are
+owned by whoever runs the import, so a different UID on the two hosts needs no
+`chown`, as long as you run the import as the user whose id is `UID` in
+`infra/docker/.env` (Elasticsearch and MOTIS run as that user and write to their
+data). Relative bundle paths are taken from the directory you run the command
+in. After the swap the import re-renders and re-links; start the consumers it
+names when it finishes.
+
+What travels for each service:
+
+| Service      | Bundled directories                | Left out                                  |
+| ------------ | ---------------------------------- | ----------------------------------------- |
+| `tileserver` | `tile-mbtiles/`                    | nothing                                   |
+| `osrm`       | `osrm-graph/`                      | the staged `region.osm.pbf`               |
+| `otp`        | `otp-graph/`                       | the staged PBF and GTFS archives          |
+| `pelias`     | `pelias/` (Elasticsearch included) | the staged `openstreetmap/` extract       |
+| `motis`      | `motis/live/`, `motis-feed-proxy/` | nothing (the import re-checks its inputs) |
+
+For MOTIS, build with `--import` so the heavy `motis import` runs on the build
+host, using the same image and paths as the runtime container. On the serving
+host, the container's own `motis import` at start-up then only re-verifies the
+inputs before serving. Export refuses MOTIS import output from a build that ran
+without `--import`, since nothing ties it to an image. Stop both `motis` and
+`motis-staging` before exporting or importing:
+
+```bash
+pnpm openmapx services build motis --region europe/germany --import
+pnpm openmapx data export motis motis-germany.tar
+```
+
+Valhalla, Nominatim, and Overpass build inside their own containers on first
+start, so they have no bundle. Run them where they serve.
 
 ## Checking what you have
 

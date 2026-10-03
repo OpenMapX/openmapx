@@ -26,6 +26,13 @@ afterEach(() => {
   rmSync(tmp, { recursive: true, force: true });
 });
 
+/** The host dir the fake OSRM container sees as `/data`. */
+function mountedDataDir(args: string[]): string {
+  const mount = args.find((arg) => arg.endsWith(":/data"));
+  if (!mount) throw new Error("no /data mount");
+  return mount.slice(0, -":/data".length);
+}
+
 describe("resolveOsmPbfForOsrm", () => {
   it("resolves the expected region file", () => {
     const dataDir = join(tmp, "infra", "docker", "data");
@@ -67,7 +74,7 @@ describe("buildOsrmGraph", () => {
     const runner: CommandRunner = async (command, args, opts) => {
       calls.push({ command, args, cwd: opts.cwd });
       if (args.includes("osrm-customize")) {
-        writeFileSync(join(graphDir, OSRM_GRAPH_BASENAME), "GRAPH");
+        writeFileSync(join(mountedDataDir(args), OSRM_GRAPH_BASENAME), "GRAPH");
       }
     };
 
@@ -90,7 +97,7 @@ describe("buildOsrmGraph", () => {
         "run",
         "--rm",
         "-v",
-        `${graphDir}:/data`,
+        `${graphDir}.next:/data`,
         "ghcr.io/project-osrm/osrm-backend:latest",
         "osrm-extract",
         "-p",
@@ -110,7 +117,7 @@ describe("buildOsrmGraph", () => {
     const runner: CommandRunner = async (command, args) => {
       calls.push({ command, args });
       if (args.includes("osrm-customize")) {
-        writeFileSync(join(graphDir, OSRM_GRAPH_BASENAME), "GRAPH");
+        writeFileSync(join(mountedDataDir(args), OSRM_GRAPH_BASENAME), "GRAPH");
       }
     };
 
@@ -145,7 +152,7 @@ describe("buildOsrmGraph", () => {
     const runner: CommandRunner = async (_command, args) => {
       if (args.includes("osrm-customize")) {
         buildCount += 1;
-        writeFileSync(join(graphDir, OSRM_GRAPH_BASENAME), "GRAPH");
+        writeFileSync(join(mountedDataDir(args), OSRM_GRAPH_BASENAME), "GRAPH");
       }
     };
 
@@ -175,5 +182,44 @@ describe("buildOsrmGraph", () => {
       runner,
     });
     expect(buildCount).toBe(2);
+    expect(readFileSync(join(graphDir, OSRM_TRAFFIC_FILENAME), "utf-8")).toBe("1,2,30\n");
+  });
+
+  it("rebuilds when the OSRM image changes and reports skipped builds", async () => {
+    writeFileSync(join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf"), "PBF");
+    let buildCount = 0;
+    const runner: CommandRunner = async (_command, args) => {
+      if (args.includes("osrm-customize")) {
+        buildCount += 1;
+        writeFileSync(join(mountedDataDir(args), OSRM_GRAPH_BASENAME), "GRAPH");
+      }
+    };
+    const build = (image: string) =>
+      buildOsrmGraph({ rootDir: tmp, region: "europe/germany", image, runner });
+
+    expect((await build("osrm:1")).skipped).toBe(false);
+    expect((await build("osrm:1")).skipped).toBe(true);
+    expect((await build("osrm:2")).skipped).toBe(false);
+    expect(buildCount).toBe(2);
+  });
+
+  it("keeps the previous graph when a stage fails", async () => {
+    writeFileSync(join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf"), "PBF");
+    const graphDir = join(tmp, "infra", "docker", "data", OSRM_GRAPH_DIR);
+    mkdirSync(graphDir, { recursive: true });
+    writeFileSync(join(graphDir, OSRM_GRAPH_BASENAME), "OLD");
+
+    await expect(
+      buildOsrmGraph({
+        rootDir: tmp,
+        region: "europe/germany",
+        image: "ghcr.io/project-osrm/osrm-backend:latest",
+        runner: async (_command, args) => {
+          if (args.includes("osrm-partition")) throw new Error("partition OOM");
+        },
+      }),
+    ).rejects.toThrow(/partition OOM/);
+    expect(readFileSync(join(graphDir, OSRM_GRAPH_BASENAME), "utf-8")).toBe("OLD");
+    expect(existsSync(`${graphDir}.next`)).toBe(false);
   });
 });

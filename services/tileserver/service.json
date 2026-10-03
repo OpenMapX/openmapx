@@ -22,6 +22,13 @@
     "restart": "unless-stopped"
   },
   "buildCommand": "openmapx services build tileserver",
+  "buildImages": {
+    "planetiler": {
+      "image": "ghcr.io/onthegomap/planetiler",
+      "tag": "0.10.2",
+      "digest": "sha256:cf32202dbc001a9ab4bc11534b642b13de3798179817da8558e567a3d13dd403"
+    }
+  },
   "provides": ["tile-server"],
   "produces": [{ "type": "tile-mbtiles", "sourceDir": "data/tile-mbtiles" }],
   "consumes": [

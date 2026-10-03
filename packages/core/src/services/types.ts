@@ -217,6 +217,20 @@ export function serviceContainerImageReference(container: ServiceContainer): str
   return container.digest ? `${tagged}@${container.digest}` : tagged;
 }
 
+export interface ServiceBuildImage {
+  image: string;
+  tag: string;
+  digest: string;
+}
+
+export function serviceBuildImageReference(manifest: ServiceManifest, role: string): string {
+  const pinned = manifest.buildImages?.[role];
+  if (!pinned) {
+    throw new Error(`Service "${manifest.id}" does not declare buildImages.${role}`);
+  }
+  return `${pinned.image}:${pinned.tag}@${pinned.digest}`;
+}
+
 export interface ServiceUI {
   icon?: string;
   category?: string;
@@ -312,6 +326,8 @@ export interface ServiceManifest {
   exposure?: ServiceExposure;
 
   buildCommand?: string;
+  /** Digest-pinned helper images the build handler runs, keyed by role. */
+  buildImages?: Record<string, ServiceBuildImage>;
 
   ui?: ServiceUI;
 

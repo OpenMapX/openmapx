@@ -2,6 +2,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { readBuildRecord } from "../src/lib/build-artifacts";
 import {
   buildServices,
   planServiceBuilds,
@@ -214,5 +215,64 @@ describe("resolveDataBuildServiceId", () => {
     expect(resolveDataBuildServiceId("tileserver")).toBe("tileserver");
     expect(resolveDataBuildServiceId("osrm")).toBe("osrm");
     expect(resolveDataBuildServiceId("unknown")).toBeUndefined();
+  });
+});
+
+describe("build records", () => {
+  it("records provenance for handlers that report an artifact and passes motisImport through", async () => {
+    const pbf = join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf");
+    mkdirSync(join(tmp, "infra", "docker", "data", "osm"), { recursive: true });
+    writeFileSync(pbf, "PBF");
+    writeManifest("osrm", {
+      ...baseManifest,
+      id: "osrm",
+      buildCommand: "openmapx services build osrm",
+    });
+
+    let sawImport: boolean | undefined;
+    await buildServices({
+      rootDir: tmp,
+      mode: "explicit",
+      serviceIds: ["osrm"],
+      region: "europe/germany",
+      motisImport: true,
+      handlers: {
+        async osrm({ motisImport }) {
+          sawImport = motisImport;
+          return {
+            summary: "Built osrm",
+            artifact: {
+              sourcePbf: pbf,
+              runtimeImages: { osrm: "t/x:latest@sha256:1" },
+              toolImages: {},
+            },
+          };
+        },
+      },
+    });
+
+    expect(sawImport).toBe(true);
+    expect(readBuildRecord("osrm", tmp)).toMatchObject({
+      schemaVersion: 1,
+      service: "osrm",
+      region: "europe/germany",
+      sourcePbf: { name: "europe-germany.osm.pbf", sizeBytes: 3 },
+      runtimeImages: { osrm: "t/x:latest@sha256:1" },
+    });
+  });
+
+  it("writes no record for handlers without an artifact", async () => {
+    writeManifest("alpha", {
+      ...baseManifest,
+      id: "alpha",
+      buildCommand: "openmapx services build alpha",
+    });
+    await buildServices({
+      rootDir: tmp,
+      mode: "explicit",
+      serviceIds: ["alpha"],
+      handlers: { alpha: async () => ({ summary: "Built alpha" }) },
+    });
+    expect(readBuildRecord("alpha", tmp)).toBeUndefined();
   });
 });

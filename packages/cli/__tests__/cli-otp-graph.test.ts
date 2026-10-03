@@ -6,6 +6,7 @@ import {
   buildOtpGraph,
   type CommandRunner,
   DEFAULT_OTP_BUILD_JAVA_TOOL_OPTIONS,
+  OTP_BUILD_JAVA_TOOL_OPTIONS_ENV,
   OTP_GRAPH_DIR,
   OTP_GRAPH_FILENAME,
 } from "../src/lib/otp-graph";
@@ -36,7 +37,7 @@ describe("buildOtpGraph", () => {
     const graphDir = join(tmp, "infra", "docker", "data", OTP_GRAPH_DIR);
     const runner: CommandRunner = async (command, args, opts) => {
       calls.push({ command, args, cwd: opts.cwd });
-      writeFileSync(join(graphDir, OTP_GRAPH_FILENAME), "GRAPH");
+      writeFileSync(join(`${graphDir}.next`, OTP_GRAPH_FILENAME), "GRAPH");
     };
 
     const result = await buildOtpGraph({
@@ -61,13 +62,51 @@ describe("buildOtpGraph", () => {
       "-e",
       `JAVA_TOOL_OPTIONS=${DEFAULT_OTP_BUILD_JAVA_TOOL_OPTIONS}`,
       "-v",
-      `${graphDir}:/var/opentripplanner`,
+      `${graphDir}.next:/var/opentripplanner`,
       "-v",
       `${join(tmp, "services", "otp", "config", "build-config.json")}:/var/opentripplanner/build-config.json:ro`,
       "opentripplanner/opentripplanner:latest",
       "--build",
       "--save",
     ]);
+  });
+
+  it("takes the build heap from OTP_BUILD_JAVA_TOOL_OPTIONS", async () => {
+    writeFileSync(join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf"), "PBF");
+    const graphDir = join(tmp, "infra", "docker", "data", OTP_GRAPH_DIR);
+    process.env[OTP_BUILD_JAVA_TOOL_OPTIONS_ENV] = "-Xmx10g";
+    try {
+      const calls: string[][] = [];
+      const result = await buildOtpGraph({
+        rootDir: tmp,
+        image: "opentripplanner/opentripplanner:latest",
+        runner: async (_command, args) => {
+          calls.push(args);
+          writeFileSync(join(`${graphDir}.next`, OTP_GRAPH_FILENAME), "GRAPH");
+        },
+      });
+      expect(result.javaToolOptions).toBe("-Xmx10g");
+      expect(calls[0]).toContain("JAVA_TOOL_OPTIONS=-Xmx10g");
+    } finally {
+      delete process.env[OTP_BUILD_JAVA_TOOL_OPTIONS_ENV];
+    }
+  });
+
+  it("keeps the previous graph when the build fails", async () => {
+    writeFileSync(join(tmp, "infra", "docker", "data", "osm", "europe-germany.osm.pbf"), "PBF");
+    const graphDir = join(tmp, "infra", "docker", "data", OTP_GRAPH_DIR);
+    mkdirSync(graphDir, { recursive: true });
+    writeFileSync(join(graphDir, OTP_GRAPH_FILENAME), "OLD");
+
+    await expect(
+      buildOtpGraph({
+        rootDir: tmp,
+        image: "opentripplanner/opentripplanner:latest",
+        runner: async () => {},
+      }),
+    ).rejects.toThrow(/did not create graph.obj/);
+    expect(readFileSync(join(graphDir, OTP_GRAPH_FILENAME), "utf-8")).toBe("OLD");
+    expect(existsSync(`${graphDir}.next`)).toBe(false);
   });
 
   it("rejects planet-scale PBFs", async () => {

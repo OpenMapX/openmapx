@@ -502,6 +502,23 @@ Dockerized build handler. Today this is used by `osrm`, `otp`, `motis`,
 "buildCommand": "openmapx services build tileserver"
 ```
 
+## `buildImages`
+
+Helper images the build handler runs, keyed by role. Each entry needs an
+`image`, a `tag`, and a mandatory `digest`, so a build host and a serving host
+on the same revision run identical tooling. Renovate refreshes the digests the
+same way it refreshes `container`.
+
+```json
+"buildImages": {
+  "planetiler": {
+    "image": "ghcr.io/onthegomap/planetiler",
+    "tag": "0.10.2",
+    "digest": "sha256:cf32202dbc001a9ab4bc11534b642b13de3798179817da8558e567a3d13dd403"
+  }
+}
+```
+
 ## `ui`
 
 Hints for the admin catalog.

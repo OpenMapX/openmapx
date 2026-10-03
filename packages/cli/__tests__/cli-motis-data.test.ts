@@ -8,6 +8,7 @@ import {
   type CommandRunner,
   DEFAULT_TRANSITOUS_REPO_URL,
   DEFAULT_TRANSITOUS_TOOLS_IMAGE,
+  importMotisData,
   MOTIS_CONFIG_FILENAME,
   MOTIS_DATA_DIR,
   MOTIS_FEED_PROXY_DIR,
@@ -410,5 +411,55 @@ describe("buildMotisData", () => {
     expect(dockerActions).toContain("generate-config");
     expect(dockerActions).toContain("generate-feed-proxy-vars");
     expect(result.configPath).toBe(join(dataDir, MOTIS_DATA_DIR, "config.yml"));
+  });
+});
+
+describe("importMotisData", () => {
+  it("runs `motis import` with the runtime image, mount path, and working dir", async () => {
+    const motisDir = join(tmp, "infra", "docker", "data", MOTIS_DATA_DIR);
+    mkdirSync(motisDir, { recursive: true });
+    writeFileSync(join(motisDir, MOTIS_CONFIG_FILENAME), "osm: x.osm.pbf\n");
+    const calls: Array<{ command: string; args: string[] }> = [];
+
+    await importMotisData({
+      motisDir,
+      image: "ghcr.io/motis-project/motis:2.11.3@sha256:abc",
+      runner: async (command, args) => {
+        calls.push({ command, args });
+      },
+    });
+
+    const user =
+      typeof process.getuid === "function" && typeof process.getgid === "function"
+        ? ["--user", `${process.getuid()}:${process.getgid()}`]
+        : [];
+    expect(calls).toEqual([
+      {
+        command: "docker",
+        args: [
+          "run",
+          "--rm",
+          "--name",
+          "openmapx-build-motis-import",
+          ...user,
+          "-v",
+          `${motisDir}:/motis-data`,
+          "-w",
+          "/motis-data",
+          "--entrypoint",
+          "/motis",
+          "ghcr.io/motis-project/motis:2.11.3@sha256:abc",
+          "import",
+        ],
+      },
+    ]);
+  });
+
+  it("refuses when the build staged no config", async () => {
+    const motisDir = join(tmp, "infra", "docker", "data", MOTIS_DATA_DIR);
+    mkdirSync(motisDir, { recursive: true });
+    await expect(importMotisData({ motisDir, image: "m", runner: async () => {} })).rejects.toThrow(
+      /needs at least one GTFS feed/,
+    );
   });
 });

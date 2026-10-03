@@ -323,35 +323,48 @@ export function registerServicesCommands(program: Command): void {
       "Region selector passed through to build handlers (overrides service-specific env defaults)",
     )
     .option("--continue-on-error", "Keep building later services after a failure")
-    .action(async (ids: string[], options: { region?: string; continueOnError?: boolean }) => {
-      try {
-        const result = await buildServices({
-          mode: "explicit",
-          serviceIds: ids,
-          region: options.region,
-          continueOnError: options.continueOnError,
-        });
-        if (result.completedIds.length > 0) {
-          const rendered = await renderComposeForRepo({
-            domain: process.env.DOMAIN ?? "localhost",
+    .option(
+      "--import",
+      "MOTIS only: also run `motis import` with the runtime image so the data is ready to export and serve",
+    )
+    .action(
+      async (
+        ids: string[],
+        options: { region?: string; continueOnError?: boolean; import?: boolean },
+      ) => {
+        try {
+          if (options.import && !ids.includes("motis")) {
+            log.warn("--import only applies to motis; ignoring it");
+          }
+          const result = await buildServices({
+            mode: "explicit",
+            serviceIds: ids,
+            region: options.region,
+            continueOnError: options.continueOnError,
+            motisImport: options.import === true,
           });
-          for (const warning of rendered.selectionWarnings) log.warn(warning);
-          const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
-          log.ok(
-            `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
-          );
-        }
-        if (result.failures.length > 0) {
-          log.err(
-            `build completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
-          );
+          if (result.completedIds.length > 0) {
+            const rendered = await renderComposeForRepo({
+              domain: process.env.DOMAIN ?? "localhost",
+            });
+            for (const warning of rendered.selectionWarnings) log.warn(warning);
+            const linked = await applyGeneratedHardlinks({ prune: true, requirePlan: true });
+            log.ok(
+              `Applied hardlinks: ${linked.linked} linked, ${linked.skipped} already linked, ${linked.pruned} stale file${linked.pruned === 1 ? "" : "s"} pruned`,
+            );
+          }
+          if (result.failures.length > 0) {
+            log.err(
+              `build completed with ${result.failures.length} failure${result.failures.length === 1 ? "" : "s"}`,
+            );
+            process.exit(1);
+          }
+        } catch (err) {
+          log.err(`build failed: ${(err as Error).message}`);
           process.exit(1);
         }
-      } catch (err) {
-        log.err(`build failed: ${(err as Error).message}`);
-        process.exit(1);
-      }
-    });
+      },
+    );
 
   services
     .command("start [ids...]")

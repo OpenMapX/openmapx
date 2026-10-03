@@ -8,6 +8,13 @@ export const log = {
   dim: (msg: string) => console.log(kleur.dim(msg)),
 };
 
+/** Keep stdout clean for a command that streams binary data there. */
+export function routeLogsToStderr(): void {
+  log.info = (msg) => console.error(msg);
+  log.ok = (msg) => console.error(kleur.green(`✓ ${msg}`));
+  log.dim = (msg) => console.error(kleur.dim(msg));
+}
+
 export interface TableColumn {
   key: string;
   header: string;
