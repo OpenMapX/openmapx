@@ -69,6 +69,7 @@ function insertedRow(): Record<string, unknown> {
 
 describe("POST /api/shares", () => {
   it("mints a live list share and returns the token exactly once", async () => {
+    dbMock.queueSelect([{ id: USER_ID }]); // account lock
     dbMock.queueSelect([{ count: 0 }]); // per-user cap
     dbMock.queueSelect([LIST_ROW]); // ownership check
     const res = await app.inject({
@@ -94,6 +95,7 @@ describe("POST /api/shares", () => {
   });
 
   it("mints a snapshot list share with the frozen public projection", async () => {
+    dbMock.queueSelect([{ id: USER_ID }]); // account lock
     dbMock.queueSelect([{ count: 0 }]);
     dbMock.queueSelect([LIST_ROW]);
     dbMock.queueSelect([PLACE_ROW]); // snapshot source places
@@ -123,6 +125,7 @@ describe("POST /api/shares", () => {
   });
 
   it("mints a route share with a derived label", async () => {
+    dbMock.queueSelect([{ id: USER_ID }]); // account lock
     dbMock.queueSelect([{ count: 0 }]);
     const res = await app.inject({
       method: "POST",
@@ -135,6 +138,7 @@ describe("POST /api/shares", () => {
   });
 
   it("404s for a list the caller does not own", async () => {
+    dbMock.queueSelect([{ id: USER_ID }]); // account lock
     dbMock.queueSelect([{ count: 0 }]);
     dbMock.queueSelect([]); // ownership check finds nothing
     const res = await app.inject({
@@ -156,13 +160,17 @@ describe("POST /api/shares", () => {
       [{ targetType: "route", route: { ...ROUTE_PAYLOAD, mode: "transit" } }, false],
     ];
     for (const [payload, reachesHandler] of cases) {
-      if (reachesHandler) dbMock.queueSelect([{ count: 0 }]);
+      if (reachesHandler) {
+        dbMock.queueSelect([{ id: USER_ID }]);
+        dbMock.queueSelect([{ count: 0 }]);
+      }
       const res = await app.inject({ method: "POST", url: "/api/shares", payload });
       expect(res.statusCode).toBe(400);
     }
   });
 
   it("409s over the per-user cap", async () => {
+    dbMock.queueSelect([{ id: USER_ID }]); // account lock
     dbMock.queueSelect([{ count: 100 }]);
     const res = await app.inject({
       method: "POST",

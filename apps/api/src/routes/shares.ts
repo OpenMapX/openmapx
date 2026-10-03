@@ -2,7 +2,7 @@ import { httpError } from "@openmapx/integration-framework";
 import { and, desc, eq, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
-import { savedList, savedPlace, shareLink } from "../db/schema";
+import { savedList, savedPlace, shareLink, user } from "../db/schema";
 import {
   generateShareToken,
   hashShareToken,
@@ -146,95 +146,101 @@ export const sharesRoute: FastifyPluginAsync = async (fastify) => {
           route?: unknown;
         };
 
-        const [{ count }] = await db
-          .select({ count: sql<number>`count(*)::int` })
-          .from(shareLink)
-          .where(eq(shareLink.userId, userId));
-        if (count >= MAX_SHARES_PER_USER) {
-          throw httpError(409, "Share link limit reached — delete an existing link first");
-        }
-
-        const now = new Date();
-        const expiresAt = body.expiresInDays
-          ? new Date(now.getTime() + body.expiresInDays * DAY_MS)
-          : null;
-        const id = crypto.randomUUID();
-        const token = generateShareToken();
-
-        let row: typeof shareLink.$inferInsert;
-        if (body.targetType === "list") {
-          if (!body.targetId || !body.mode) {
-            throw httpError(400, "List shares require targetId and mode");
+        const result = await db.transaction(async (tx) => {
+          // Lock the owner even when no shares exist; serialize count and insert
+          // across all API processes competing for the same user's quota.
+          await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+          const [{ count }] = await tx
+            .select({ count: sql<number>`count(*)::int` })
+            .from(shareLink)
+            .where(eq(shareLink.userId, userId));
+          if (count >= MAX_SHARES_PER_USER) {
+            throw httpError(409, "Share link limit reached — delete an existing link first");
           }
-          const lists = await db
-            .select()
-            .from(savedList)
-            .where(and(eq(savedList.id, body.targetId), eq(savedList.userId, userId)))
-            .limit(1);
-          const list = lists[0];
-          if (!list) throw httpError(404, "List not found");
-          let snapshot: ReturnType<typeof listSnapshotFrom> | null = null;
-          if (body.mode === "snapshot") {
-            const places = await db
-              .select()
-              .from(savedPlace)
-              .where(eq(savedPlace.listId, list.id))
-              .orderBy(savedPlace.sortOrder)
-              .limit(MAX_SNAPSHOT_PLACES + 1);
-            if (places.length > MAX_SNAPSHOT_PLACES) {
-              throw httpError(
-                400,
-                `Lists over ${MAX_SNAPSHOT_PLACES} places cannot be shared as a snapshot`,
-              );
+
+          const now = new Date();
+          const expiresAt = body.expiresInDays
+            ? new Date(now.getTime() + body.expiresInDays * DAY_MS)
+            : null;
+          const id = crypto.randomUUID();
+          const token = generateShareToken();
+
+          let row: typeof shareLink.$inferInsert;
+          if (body.targetType === "list") {
+            if (!body.targetId || !body.mode) {
+              throw httpError(400, "List shares require targetId and mode");
             }
-            snapshot = listSnapshotFrom(list, places);
+            const lists = await tx
+              .select()
+              .from(savedList)
+              .where(and(eq(savedList.id, body.targetId), eq(savedList.userId, userId)))
+              .limit(1);
+            const list = lists[0];
+            if (!list) throw httpError(404, "List not found");
+            let snapshot: ReturnType<typeof listSnapshotFrom> | null = null;
+            if (body.mode === "snapshot") {
+              const places = await tx
+                .select()
+                .from(savedPlace)
+                .where(eq(savedPlace.listId, list.id))
+                .orderBy(savedPlace.sortOrder)
+                .limit(MAX_SNAPSHOT_PLACES + 1);
+              if (places.length > MAX_SNAPSHOT_PLACES) {
+                throw httpError(
+                  400,
+                  `Lists over ${MAX_SNAPSHOT_PLACES} places cannot be shared as a snapshot`,
+                );
+              }
+              snapshot = listSnapshotFrom(list, places);
+            }
+            row = {
+              id,
+              userId,
+              tokenHash: hashShareToken(token),
+              targetType: "list",
+              targetId: list.id,
+              mode: body.mode,
+              label: list.name,
+              snapshot,
+              createdAt: now,
+              updatedAt: now,
+              expiresAt,
+            };
+          } else {
+            const route = validateRouteShare(body.route);
+            if (!route) throw httpError(400, "Invalid route payload");
+            row = {
+              id,
+              userId,
+              tokenHash: hashShareToken(token),
+              targetType: "route",
+              targetId: null,
+              mode: "snapshot",
+              label: routeShareLabel(route),
+              snapshot: route,
+              createdAt: now,
+              updatedAt: now,
+              expiresAt,
+            };
           }
-          row = {
-            id,
-            userId,
-            tokenHash: hashShareToken(token),
-            targetType: "list",
-            targetId: list.id,
-            mode: body.mode,
-            label: list.name,
-            snapshot,
-            createdAt: now,
-            updatedAt: now,
-            expiresAt,
-          };
-        } else {
-          const route = validateRouteShare(body.route);
-          if (!route) throw httpError(400, "Invalid route payload");
-          row = {
-            id,
-            userId,
-            tokenHash: hashShareToken(token),
-            targetType: "route",
-            targetId: null,
-            mode: "snapshot",
-            label: routeShareLabel(route),
-            snapshot: route,
-            createdAt: now,
-            updatedAt: now,
-            expiresAt,
-          };
-        }
 
-        await db.insert(shareLink).values(row);
-        return reply.status(201).send({
-          id,
-          token,
-          share: toOwnerShare({
+          await tx.insert(shareLink).values(row);
+          return {
             id,
-            targetType: row.targetType,
-            targetId: row.targetId ?? null,
-            mode: row.mode,
-            label: row.label,
-            createdAt: now,
-            updatedAt: now,
-            expiresAt,
-          }),
+            token,
+            share: toOwnerShare({
+              id,
+              targetType: row.targetType,
+              targetId: row.targetId ?? null,
+              mode: row.mode,
+              label: row.label,
+              createdAt: now,
+              updatedAt: now,
+              expiresAt,
+            }),
+          };
         });
+        return reply.status(201).send(result);
       },
     });
 
