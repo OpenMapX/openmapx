@@ -41,6 +41,51 @@ beforeEach(() => {
 });
 
 describe("VehiclesDialog", () => {
+  it("preserves mass and charge taper when renaming an EV", async () => {
+    state.vehicles = [
+      {
+        ...CAR,
+        powertrain: "electric",
+        ev: {
+          batteryKwh: 60,
+          baseWhPerKm: 180,
+          massTonnes: 1.3,
+          maxDcKw: 150,
+          maxAcKw: 11,
+          vehicleTaperSocPct: 65,
+          connectors: ["ccs2"],
+        },
+      },
+    ];
+    render(<VehiclesDialog open onClose={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "vehicles.edit" }));
+    await userEvent.clear(screen.getByLabelText("vehicles.name"));
+    await userEvent.type(screen.getByLabelText("vehicles.name"), "Renamed EV");
+    await userEvent.click(screen.getByRole("button", { name: "vehicles.save" }));
+    expect(state.update.mock.calls[0][0]).toMatchObject({
+      ev: { massTonnes: 1.3, vehicleTaperSocPct: 65 },
+    });
+  });
+
+  it("uses the selected preset mass instead of a generic car mass", async () => {
+    state.vehicles = [];
+    render(<VehiclesDialog open onClose={() => {}} />);
+    await userEvent.click(screen.getByRole("button", { name: "vehicles.add" }));
+    await userEvent.type(screen.getByLabelText("vehicles.name"), "Audi");
+    await userEvent.click(screen.getByLabelText("vehicles.powertrain"));
+    await userEvent.click(screen.getByRole("option", { name: "vehicles.powertrainElectric" }));
+    await userEvent.type(
+      screen.getByRole("combobox", { name: "vehicles.preset" }),
+      "Audi A6 e-tron Avant (2024)",
+    );
+    await userEvent.click(
+      await screen.findByRole("option", { name: "Audi A6 e-tron Avant (2024)" }),
+    );
+    await userEvent.click(screen.getByRole("button", { name: "vehicles.save" }));
+    expect(state.create.mock.calls[0][0]).toMatchObject({
+      ev: { massTonnes: 2.22, vehicleTaperSocPct: 80 },
+    });
+  });
   it("lists the garage", () => {
     render(<VehiclesDialog open onClose={() => {}} />);
     expect(screen.getByText("Blue Golf")).toBeInTheDocument();

@@ -76,6 +76,8 @@ interface Draft {
   consumption: string;
   maxDc: string;
   maxAc: string;
+  massTonnes: number;
+  vehicleTaperSocPct: number;
   connectors: ConnectorStandard[];
   fuel: string;
 }
@@ -91,6 +93,8 @@ function emptyDraft(): Draft {
     consumption: "",
     maxDc: "",
     maxAc: "",
+    massTonnes: 2,
+    vehicleTaperSocPct: 80,
     connectors: DEFAULT_CONNECTORS,
     fuel: "",
   };
@@ -107,10 +111,10 @@ function draftToVehicle(draft: Draft): VehicleDraft | null {
     const ev = normalizeEvSpec({
       batteryKwh: Number(draft.battery),
       baseWhPerKm: Number(draft.consumption),
-      massTonnes: 2,
+      massTonnes: draft.massTonnes,
       maxDcKw: Number(draft.maxDc),
       maxAcKw: Number(draft.maxAc),
-      vehicleTaperSocPct: 80,
+      vehicleTaperSocPct: draft.vehicleTaperSocPct,
       connectors: draft.connectors,
     });
     if (!ev) return null;
@@ -171,6 +175,8 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
             consumption: String(spec.baseWhPerKm),
             maxDc: String(spec.maxDcKw),
             maxAc: String(spec.maxAcKw),
+            massTonnes: spec.massTonnes,
+            vehicleTaperSocPct: spec.vehicleTaperSocPct,
             connectors: spec.connectors,
           }
         : {}),
@@ -231,6 +237,8 @@ export function VehiclesDialog({ open, onClose }: { open: boolean; onClose: () =
                   consumption: vehicle.ev ? String(vehicle.ev.baseWhPerKm) : "",
                   maxDc: vehicle.ev ? String(vehicle.ev.maxDcKw) : "",
                   maxAc: vehicle.ev ? String(vehicle.ev.maxAcKw) : "",
+                  massTonnes: vehicle.ev?.massTonnes ?? 2,
+                  vehicleTaperSocPct: vehicle.ev?.vehicleTaperSocPct ?? 80,
                   connectors: vehicle.ev?.connectors ?? DEFAULT_CONNECTORS,
                   fuel:
                     vehicle.fuelConsumptionLPer100Km === null
