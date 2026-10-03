@@ -65,7 +65,7 @@ export interface FakeMapState {
   handlers: Map<string, Set<(...args: unknown[]) => void>>;
   /** Every registered or removed map listener, preserving overload arguments and handler identity. */
   listenerCalls: Array<{
-    method: "on" | "off";
+    method: "on" | "off" | "once";
     event: string;
     layerId?: string;
     handler: (...args: unknown[]) => void;
@@ -134,6 +134,17 @@ export interface CreateFakeMapOptions {
 }
 
 export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
+  type Handler = (...args: unknown[]) => void;
+  const regularHandlers = new Map<string, Set<Handler>>();
+  const oneTimeHandlers = new Map<string, Set<Handler>>();
+  class HandlerInstrumentation extends Map<string, Set<Handler>> {
+    override clear() {
+      // Existing consumers reuse a fake across cases and reset this map.
+      super.clear();
+      regularHandlers.clear();
+      oneTimeHandlers.clear();
+    }
+  }
   const canvas = document.createElement("canvas");
   canvas.tabIndex = 0;
   const state: FakeMapState = {
@@ -159,7 +170,7 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     movedLayers: [],
     light: null,
     missingStyleImageResolver: null,
-    handlers: new Map(),
+    handlers: new HandlerInstrumentation(),
     listenerCalls: [],
     counts: {
       setData: new Map(),
@@ -235,22 +246,45 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     }
   };
 
-  const on = (event: string, ...rest: unknown[]) => {
-    // MapLibre overloads: on(type, handler) and on(type, layerId, handler).
-    const handler = rest[rest.length - 1] as (...a: unknown[]) => void;
-    if (typeof handler !== "function") return api.map;
+  // Keep the public instrumentation as the union of both registration kinds.
+  const syncHandlers = (event: string) => {
+    const handlers = state.handlers.get(event) ?? new Set<Handler>();
+    handlers.clear();
+    for (const handler of regularHandlers.get(event) ?? []) handlers.add(handler);
+    for (const handler of oneTimeHandlers.get(event) ?? []) handlers.add(handler);
+    state.handlers.set(event, handlers);
+  };
+  const register = (method: "on" | "once", event: string, rest: unknown[]) => {
+    // Preserve the fake's generic and delegated listener instrumentation.
+    const handler = rest[rest.length - 1] as Handler;
+    if (typeof handler !== "function") return;
     const layerId = typeof rest[0] === "string" ? rest[0] : undefined;
-    state.listenerCalls.push({ method: "on", event, layerId, handler });
-    if (!state.handlers.has(event)) state.handlers.set(event, new Set());
-    state.handlers.get(event)?.add(handler);
-    return api.map;
+    state.listenerCalls.push({ method, event, layerId, handler });
+    const registrations = method === "on" ? regularHandlers : oneTimeHandlers;
+    if (!registrations.has(event)) registrations.set(event, new Set());
+    registrations.get(event)?.add(handler);
+    syncHandlers(event);
   };
   const off = (event: string, ...rest: unknown[]) => {
-    const handler = rest[rest.length - 1] as (...a: unknown[]) => void;
+    const handler = rest[rest.length - 1] as Handler;
     if (typeof handler !== "function") return api.map;
     const layerId = typeof rest[0] === "string" ? rest[0] : undefined;
     state.listenerCalls.push({ method: "off", event, layerId, handler });
-    state.handlers.get(event)?.delete(handler);
+    regularHandlers.get(event)?.delete(handler);
+    oneTimeHandlers.get(event)?.delete(handler);
+    syncHandlers(event);
+    return api.map;
+  };
+  const on = (event: string, ...rest: unknown[]) => {
+    register("on", event, rest);
+    return {
+      unsubscribe: () => {
+        off(event, ...rest);
+      },
+    };
+  };
+  const once = (event: string, ...rest: unknown[]) => {
+    register("once", event, rest);
     return api.map;
   };
 
@@ -469,14 +503,23 @@ export function createFakeMap(options: CreateFakeMapOptions = {}): FakeMap {
     },
     on,
     off,
-    once: on,
+    once,
   };
 
   const api: FakeMap = {
     map: fake as unknown as MaplibreMap,
     state,
     emit(event, ...args) {
-      for (const handler of state.handlers.get(event) ?? []) handler(...args);
+      // Evented snapshots each phase separately: an on callback may add a
+      // once callback for this event, but additions during that once phase wait.
+      for (const handler of [...(regularHandlers.get(event) ?? [])]) {
+        handler.call(api.map, ...args);
+      }
+      for (const handler of [...(oneTimeHandlers.get(event) ?? [])]) {
+        oneTimeHandlers.get(event)?.delete(handler);
+        syncHandlers(event);
+        handler.call(api.map, ...args);
+      }
     },
     setRenderedFeatures(layerId, features) {
       state.renderedFeatures.set(layerId, features);

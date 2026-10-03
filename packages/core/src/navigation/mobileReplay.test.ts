@@ -34,7 +34,9 @@ interface TransitFixture {
   itineraryFingerprint: string;
   itinerary: TripItinerary;
   captures: TransitLegCapture[];
-  fixes: Array<{ coords: [number, number]; accuracy: number; offsetMs: number }>;
+  fixes: Array<
+    { coords: [number, number]; accuracy: number; offsetMs: number } | { offsetMs: number }
+  >;
 }
 
 const FIXTURE_DIR = join(import.meta.dirname, "__fixtures__/mobile");
@@ -46,7 +48,9 @@ function loadTransitFixture(name: string): TransitFixture {
 
 const TRANSIT_FIXTURES = ["transit-basic", "transit-tunnel", "transit-transfer"] as const;
 
-function toFix(entry: TransitFixture["fixes"][number]): FixInput {
+function toFix(entry: TransitFixture["fixes"][number]): FixInput | undefined {
+  // Entries without coordinates are timer wake-ups during a GPS gap.
+  if (!("coords" in entry)) return undefined;
   return { coords: entry.coords, accuracy: entry.accuracy, timestampMs: NOW + entry.offsetMs };
 }
 
@@ -59,6 +63,13 @@ function replayTransit(
   const events: string[] = [];
   let last: TransitTickResult | undefined;
   const confidences: string[] = [];
+  const milestones: Array<{
+    offsetMs: number;
+    leg: number;
+    phase: string;
+    confidence: string;
+    fallback: string;
+  }> = [];
 
   for (const entry of fixture.fixes) {
     const fix = toFix(entry);
@@ -67,7 +78,7 @@ function replayTransit(
       captures: fixture.captures,
       state,
       fix,
-      nowMs: fix.timestampMs,
+      nowMs: NOW + entry.offsetMs,
       options: {
         ...DEFAULT_TRANSIT_TICK_OPTIONS,
         itineraryFingerprint: fixture.itineraryFingerprint,
@@ -75,6 +86,13 @@ function replayTransit(
     });
     events.push(...last.events.map((event) => event.id));
     confidences.push(last.confidence);
+    milestones.push({
+      offsetMs: entry.offsetMs,
+      leg: last.state.currentLegIndex,
+      phase: last.state.phase,
+      confidence: last.confidence,
+      fallback: last.state.scheduleFallback,
+    });
     // Modelling process death: the only thing that survives is serialized state.
     state = options.serializeBetween
       ? (JSON.parse(JSON.stringify(last.state)) as TransitTickState)
@@ -85,6 +103,7 @@ function replayTransit(
     finalPhase: state.phase,
     events,
     confidences,
+    milestones,
     needsReplan: last?.needsReplan ?? false,
   };
 }
@@ -100,6 +119,42 @@ describe.each(TRANSIT_FIXTURES)("%s", (name) => {
     const first = replayTransit(fixture);
     const second = replayTransit(fixture);
     expect(second).toEqual(first);
+    const expectedEvents =
+      name === "transit-transfer"
+        ? [
+            "transfer:0:1",
+            "board:1",
+            "approaching-alight:1",
+            "alight:1",
+            "transfer:1:2",
+            "transfer:2:3",
+            "board:3",
+            "approaching-alight:3",
+            "arrival:3",
+          ]
+        : [
+            "transfer:0:1",
+            "board:1",
+            "approaching-alight:1",
+            "alight:1",
+            "transfer:1:2",
+            "arrival:2",
+          ];
+    expect(first.events).toEqual(
+      expectedEvents.map((id) => `${fixture.itineraryFingerprint}:${id}`),
+    );
+    expect(first.finalLeg).toBe(name === "transit-transfer" ? 3 : 2);
+    expect(first.finalPhase).toBe("arrived");
+    expect(first.milestones).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ leg: 0, phase: "walking" }),
+        expect.objectContaining({ leg: 1, phase: "waiting-to-board" }),
+        expect.objectContaining({ leg: 1, phase: "riding" }),
+        ...(name === "transit-transfer"
+          ? [expect.objectContaining({ leg: 3, phase: "riding" })]
+          : []),
+      ]),
+    );
     expect(first.events).toEqual([...new Set(first.events)]);
   });
 
@@ -126,7 +181,7 @@ describe.each(TRANSIT_FIXTURES)("%s", (name) => {
     expect(replayTransit({ ...fixture, fixes: deduplicated })).toEqual(replayTransit(fixture));
   });
 
-  it("never advances more than one leg per fix", () => {
+  it("never advances more than one leg per tick", () => {
     let state = freshTransitTickState(NOW);
     let previous = 0;
     for (const entry of fixture.fixes) {
@@ -136,7 +191,7 @@ describe.each(TRANSIT_FIXTURES)("%s", (name) => {
         captures: fixture.captures,
         state,
         fix,
-        nowMs: fix.timestampMs,
+        nowMs: NOW + entry.offsetMs,
         options: {
           ...DEFAULT_TRANSIT_TICK_OPTIONS,
           itineraryFingerprint: fixture.itineraryFingerprint,
@@ -180,7 +235,7 @@ function replayTransitPartial(fixture: TransitFixture, from: number, to: number)
       captures: fixture.captures,
       state,
       fix,
-      nowMs: fix.timestampMs,
+      nowMs: NOW + entry.offsetMs,
       options: {
         ...DEFAULT_TRANSIT_TICK_OPTIONS,
         itineraryFingerprint: fixture.itineraryFingerprint,
@@ -196,9 +251,21 @@ describe("tunnel behaviour", () => {
   it("keeps guiding through a gap and labels the confidence honestly", () => {
     const fixture = loadTransitFixture("transit-tunnel");
     const result = replayTransit(fixture);
-    // The fixture's gap is long enough that at least one tick is not GPS-backed.
-    expect(result.confidences).toContain("gps");
-    expect(result.finalLeg).toBeGreaterThanOrEqual(0);
+    // No-fix wake-ups first become stale, then use the timetable; the first
+    // accepted fix after the tunnel reanchors the same riding leg to GPS.
+    expect(
+      result.milestones.filter((tick) => tick.offsetMs >= 541_000 && tick.offsetMs <= 841_000),
+    ).toEqual([
+      { offsetMs: 541_000, leg: 1, phase: "riding", confidence: "stale", fallback: "inactive" },
+      ...[601_000, 661_000, 721_000, 781_000].map((offsetMs) => ({
+        offsetMs,
+        leg: 1,
+        phase: "riding",
+        confidence: "schedule",
+        fallback: "eligible",
+      })),
+      { offsetMs: 841_000, leg: 1, phase: "riding", confidence: "gps", fallback: "inactive" },
+    ]);
   });
 });
 

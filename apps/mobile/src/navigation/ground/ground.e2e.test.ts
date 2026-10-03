@@ -27,6 +27,10 @@ import { GroundRerouteService } from "./GroundRerouteService";
  */
 
 const START = 1_700_000_100_000;
+// The trace crosses the first turn at 10 km, exercising all three voice stages.
+const EXPECTED_TURN_CUES = ["far", "near", "now"].map(
+  (stage) => `journey-1:ground:300:12fed9p:1:${stage}`,
+);
 
 /** A straight route long enough to drive along for several minutes. */
 const GEOMETRY: Array<[number, number]> = Array.from({ length: 300 }, (_, index) => [
@@ -289,9 +293,14 @@ describe("ground navigation end to end", () => {
       });
       const session = await context.repository.loadActive(context.now());
       const progress = session?.kind === "ground" ? session.payload.progress : null;
+      expect(progress).toEqual(expect.objectContaining({ alongMeters: expect.any(Number) }));
       if (progress) along.push((progress as { alongMeters: number }).alongMeters);
     }
 
+    expect(along).toHaveLength(30);
+    expect(along[0]).toBeCloseTo(0);
+    expect(along.at(-1)).toBeGreaterThan(2_000);
+    expect(along.at(-1)).toBeLessThan(2_100);
     for (let index = 1; index < along.length; index += 1) {
       expect(along[index]).toBeGreaterThanOrEqual(along[index - 1]);
     }
@@ -301,6 +310,8 @@ describe("ground navigation end to end", () => {
   it("keeps revisions strictly increasing across the whole journey", async () => {
     const context = await harness();
     await begin(context);
+    const initialRevision = (await context.repository.loadActive(context.now()))?.revision;
+    expect(initialRevision).toEqual(expect.any(Number));
     const revisions: number[] = [];
 
     for (let index = 0; index < 20; index += 1) {
@@ -312,6 +323,9 @@ describe("ground navigation end to end", () => {
       if (session) revisions.push(session.revision);
     }
 
+    expect(revisions).toHaveLength(20);
+    expect(revisions[0]).toBe((initialRevision ?? 0) + 1);
+    expect(revisions.at(-1)).toBe((initialRevision ?? 0) + 20);
     for (let index = 1; index < revisions.length; index += 1) {
       expect(revisions[index]).toBeGreaterThan(revisions[index - 1]);
     }
@@ -322,7 +336,7 @@ describe("ground navigation end to end", () => {
     let context = await harness();
     await begin(context);
 
-    for (let index = 0; index < 40; index += 1) {
+    for (let index = 0; index < 150; index += 1) {
       context.advance(1_000);
       await context.coordinator.handleLocationBatch({
         locations: [locationAt(index, context.now())],
@@ -332,6 +346,7 @@ describe("ground navigation end to end", () => {
       context = context.restart();
     }
 
+    expect(context.spoken).toEqual(EXPECTED_TURN_CUES);
     expect(new Set(context.spoken).size).toBe(context.spoken.length);
     await context.database.closeAsync();
   });
@@ -339,11 +354,12 @@ describe("ground navigation end to end", () => {
   it("does not replay a cue when the same batch is delivered twice", async () => {
     const context = await harness();
     await begin(context);
-    await drive(context, 0, 20);
+    await drive(context, 0, 150);
     const before = [...context.spoken];
+    expect(before).toEqual(EXPECTED_TURN_CUES);
 
     // The same fixes again: every one is at or behind the watermark.
-    for (let index = 0; index < 20; index += 1) {
+    for (let index = 0; index < 150; index += 1) {
       await context.coordinator.handleLocationBatch({
         locations: [locationAt(index, START + (index + 1) * 1_000)],
       });
@@ -357,12 +373,12 @@ describe("ground navigation end to end", () => {
     const context = await harness();
     await begin(context);
 
-    await drive(context, 0, 30);
+    await drive(context, 0, 150);
 
     const session = await context.repository.loadActive(context.now());
     expect(session?.kind === "ground" && session.payload.progress).toBeTruthy();
     // The captured route is the whole point: no request was needed to follow it.
-    expect(context.spoken.length).toBeGreaterThanOrEqual(0);
+    expect(context.spoken).toEqual(EXPECTED_TURN_CUES);
     await context.database.closeAsync();
   });
 

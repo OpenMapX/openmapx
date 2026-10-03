@@ -1,5 +1,6 @@
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
+import { readdirSync, readFileSync } from "node:fs";
+import { matchesGlob, resolve } from "node:path";
+import ts from "typescript";
 import { describe, expect, it } from "vitest";
 
 const root = resolve(import.meta.dirname, "..");
@@ -43,24 +44,68 @@ describe("required database test gate", () => {
     expect(packageJson.scripts["test:database"]).toContain("--maxWorkers=1");
   });
 
-  it("keeps every PostGIS suite behind the same explicit opt-in without CI-only skips", () => {
-    const databaseSuites = [
-      "apps/api/src/services/mobileAuthHandoff.test.ts",
-      "apps/api/src/services/capability-bindings.test.ts",
-      "services/data-manager/__tests__/poi-ingest/e2e-bnetza.test.ts",
-      "services/data-manager/__tests__/search-index/schema-postgres.test.ts",
-      "services/data-manager/__tests__/search-index/build-postgres.test.ts",
-      "services/data-manager/__tests__/notable-places/build-postgres.test.ts",
-      "services/data-manager/__tests__/overture/schema-postgres.test.ts",
-      "services/data-manager/__tests__/overture/runtime-postgres.test.ts",
-    ];
-
-    for (const suite of databaseSuites) {
+  it("discovers gated database suites and requires a registered, enabled CI command for each", () => {
+    const packageJson = JSON.parse(read("package.json")) as {
+      scripts: Record<string, string>;
+    };
+    const workflow = read(".github/workflows/ci.yml");
+    const databaseJob =
+      workflow.match(/^ {2}database:\n[\s\S]*?(?=^ {2}\w[\w-]*:|$(?![\s\S]))/m)?.[0] ?? "";
+    const selectors = packageJson.scripts["test:database"]
+      .split(/\s+/)
+      .filter((token) => token.endsWith(".test.ts"));
+    function discover(directory: string): string[] {
+      return readdirSync(resolve(root, directory), { withFileTypes: true }).flatMap((entry) => {
+        if (["node_modules", "dist", ".next", ".turbo"].includes(entry.name)) return [];
+        const path = `${directory}/${entry.name}`;
+        if (entry.isDirectory()) return discover(path);
+        return entry.isFile() && /\.(test|spec)\.tsx?$/.test(entry.name) ? [path] : [];
+      });
+    }
+    const suites = ["apps", "packages", "services", "integrations", "scripts"].flatMap(discover);
+    const inventory: { suite: string; flag: string }[] = [];
+    for (const suite of suites) {
+      const file = ts.createSourceFile(suite, read(suite), ts.ScriptTarget.Latest, true);
+      const flags = new Set<string>();
+      function visit(node: ts.Node): void {
+        if (
+          ts.isPropertyAccessExpression(node) &&
+          ts.isPropertyAccessExpression(node.expression) &&
+          ts.isIdentifier(node.expression.expression) &&
+          node.expression.expression.text === "process" &&
+          node.expression.name.text === "env" &&
+          /OPENMAPX_(?:RUN_.*(?:DATABASE|DAWARICH).*TESTS|POSTGRES_TESTS)/.test(node.name.text)
+        ) {
+          flags.add(node.name.text);
+        }
+        ts.forEachChild(node, visit);
+      }
+      visit(file);
+      for (const flag of flags) inventory.push({ suite, flag });
+    }
+    expect(inventory.length).toBeGreaterThan(0);
+    for (const { suite, flag } of inventory) {
+      expect(flag, `${suite}: obsolete or unknown database opt-in`).toMatch(
+        /^OPENMAPX_RUN_(DATABASE|RESTORE_DATABASE|DAWARICH_EXPORT)_TESTS$/,
+      );
+      if (flag === "OPENMAPX_RUN_DAWARICH_EXPORT_TESTS") {
+        // This suite uses the exact deployment image and has its own command.
+        expect(databaseJob, suite).toContain(
+          `${flag}=1 pnpm exec vitest run --project node ${suite}`,
+        );
+      } else {
+        expect(
+          selectors.some((selector) => matchesGlob(suite, selector)),
+          `${suite}: missing from test:database`,
+        ).toBe(true);
+        expect(databaseJob, suite).toContain(`${flag}: "1"`);
+        expect(databaseJob, suite).toContain("run: pnpm test:database");
+      }
       const source = read(suite);
-      expect(source, suite).toContain('process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1"');
       expect(source, suite).not.toContain("process.env.CI");
       expect(source, suite).not.toContain("context.skip");
       expect(source, suite).not.toContain("SKIP_TESTCONTAINERS");
     }
+    expect(workflow).toContain("needs.database.result != 'success'");
   });
 });

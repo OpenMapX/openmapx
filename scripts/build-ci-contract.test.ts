@@ -24,6 +24,22 @@ describe("required production build gate", () => {
     );
   });
 
+  it("executes the emitted traffic worker after the production build in the required build job", () => {
+    const workflow = read(".github/workflows/ci.yml");
+    const buildJob =
+      workflow.match(/^ {2}build:\n[\s\S]*?(?=^ {2}\w[\w-]*:|$(?![\s\S]))/m)?.[0] ?? "";
+    const smoke =
+      "OPENMAPX_RUN_BUILT_WORKER_TESTS=1 pnpm exec vitest run --project node services/data-manager/src/__tests__/live-writer-worker.test.ts";
+    const buildPosition = buildJob.indexOf("run: pnpm build");
+    const smokePosition = buildJob.indexOf(`run: ${smoke}`);
+    expect(buildPosition).toBeGreaterThan(-1);
+    expect(smokePosition).toBeGreaterThan(buildPosition);
+    // Neither step can be conditional or allowed to fail while the aggregate succeeds.
+    expect(buildJob).not.toMatch(/continue-on-error:|^\s+if:/m);
+    expect(workflow).toMatch(/needs: \[[^\]]*build[^\]]*\]/);
+    expect(workflow).toContain("needs.build.result != 'success'");
+  });
+
   it("does not make a production build depend on downloading a Google font", () => {
     const layout = read("apps/web/src/app/layout.tsx");
     const webPackage = JSON.parse(read("apps/web/package.json")) as {

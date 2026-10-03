@@ -1,3 +1,4 @@
+import { Evented } from "maplibre-gl";
 import { describe, expect, it } from "vitest";
 import { createFakeMap } from "./fakeMap";
 
@@ -193,6 +194,26 @@ describe("fake map operation counters", () => {
 });
 
 describe("fake map interaction controls", () => {
+  it("clears both listener kinds when existing consumers reset handler instrumentation", () => {
+    const fake = createFakeMap();
+    let calls = 0;
+    fake.map.on("idle", () => {
+      calls++;
+    });
+    void fake.map.once("idle", () => {
+      calls++;
+    });
+    fake.state.handlers.clear();
+    fake.emit("idle");
+    expect(calls).toBe(0);
+    void fake.map.once("idle", () => {
+      calls++;
+    });
+    fake.emit("idle");
+    fake.emit("idle");
+    expect(calls).toBe(1);
+  });
+
   it("records generic and delegated listener lifecycle calls with their exact handler identity", () => {
     const fake = createFakeMap();
     const generic = () => {};
@@ -291,5 +312,161 @@ describe("camera recording", () => {
     expect(fake.map.isMoving()).toBe(false);
     fake.state.moving = true;
     expect(fake.map.isMoving()).toBe(true);
+  });
+});
+
+// Run the same observable contract against the installed implementation and our
+// shared fake. Literal expectations keep upstream drift visible.
+class RealEvented extends Evented {}
+
+interface EventHarness {
+  map: {
+    on(event: "idle", listener: () => void): { unsubscribe(): void };
+    once(event: "idle", listener: () => void): unknown;
+    off(event: "idle", listener: () => void): unknown;
+  };
+  emit(): void;
+}
+
+const eventHarnesses: Array<{ name: string; create(): EventHarness }> = [
+  {
+    name: "installed MapLibre Evented",
+    create: () => {
+      const map = new RealEvented();
+      return { map, emit: () => map.fire("idle") };
+    },
+  },
+  {
+    name: "fake map Evented",
+    create: () => {
+      const fake = createFakeMap();
+      return { map: fake.map, emit: () => fake.emit("idle") };
+    },
+  },
+];
+
+describe.each(eventHarnesses)("$name", ({ create }) => {
+  it("calls a one-time listener only once across repeated emissions", () => {
+    const { map, emit } = create();
+    let calls = 0;
+    map.once("idle", () => {
+      calls++;
+    });
+    emit();
+    emit();
+    expect(calls).toBe(1);
+  });
+
+  it("removes a one-time listener before a recursive emission", () => {
+    const { map, emit } = create();
+    let calls = 0;
+    map.once("idle", () => {
+      calls++;
+      if (calls === 1) emit();
+    });
+    emit();
+    expect(calls).toBe(1);
+  });
+
+  it("allows off to remove a one-time listener by its original identity", () => {
+    const { map, emit } = create();
+    let calls = 0;
+    const listener = () => {
+      calls++;
+    };
+    map.once("idle", listener);
+    map.off("idle", listener);
+    emit();
+    expect(calls).toBe(0);
+  });
+
+  it("keeps a one-time re-registration for the next emission", () => {
+    const { map, emit } = create();
+    let calls = 0;
+    const listener = () => {
+      calls++;
+      if (calls === 1) map.once("idle", listener);
+    };
+    map.once("idle", listener);
+    emit();
+    expect(calls).toBe(1);
+    emit();
+    emit();
+    expect(calls).toBe(2);
+  });
+
+  it("defers regular listeners added during dispatch until the next emission", () => {
+    const { map, emit } = create();
+    const seen: string[] = [];
+    const added = () => {
+      seen.push("added");
+    };
+    map.on("idle", () => {
+      seen.push("first");
+      map.on("idle", added);
+    });
+    emit();
+    expect(seen).toEqual(["first"]);
+    emit();
+    expect(seen).toEqual(["first", "first", "added"]);
+  });
+
+  it("still calls a listener removed from the current dispatch snapshot", () => {
+    const { map, emit } = create();
+    const seen: string[] = [];
+    const removed = () => {
+      seen.push("removed");
+    };
+    map.on("idle", () => {
+      seen.push("first");
+      map.off("idle", removed);
+    });
+    map.on("idle", removed);
+    emit();
+    emit();
+    expect(seen).toEqual(["first", "removed", "first"]);
+  });
+
+  it("dispatches regular listeners before a separate one-time snapshot", () => {
+    const { map, emit } = create();
+    const seen: string[] = [];
+    map.once("idle", () => {
+      seen.push("once");
+    });
+    map.on("idle", () => {
+      seen.push("on");
+      map.once("idle", () => {
+        seen.push("added-once");
+      });
+    });
+    emit();
+    expect(seen).toEqual(["on", "once", "added-once"]);
+  });
+
+  it("keeps regular and one-time registrations of the same callback distinct", () => {
+    const { map, emit } = create();
+    let calls = 0;
+    const listener = () => {
+      calls++;
+    };
+    map.on("idle", listener);
+    map.once("idle", listener);
+    map.once("idle", listener);
+    emit();
+    expect(calls).toBe(2);
+    emit();
+    expect(calls).toBe(3);
+  });
+
+  it("returns an on subscription that disposes the original listener", () => {
+    const { map, emit } = create();
+    let calls = 0;
+    const subscription = map.on("idle", () => {
+      calls++;
+    });
+    emit();
+    subscription.unsubscribe();
+    emit();
+    expect(calls).toBe(1);
   });
 });

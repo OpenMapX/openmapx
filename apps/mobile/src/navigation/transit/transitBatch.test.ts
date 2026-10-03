@@ -160,8 +160,23 @@ describe("processTransitBatch events", () => {
   }
 
   it("enqueues each new event durably", () => {
-    const outcome = run({ session: riding(), nowMs: new Date("2026-08-09T08:41:00Z").getTime() });
+    const outcome = run({ session: riding(), nowMs: new Date("2026-08-09T08:42:00Z").getTime() });
 
+    expect(outcome.enqueue).toEqual([
+      {
+        eventId: `${FIXTURE_FINGERPRINT}:transfer:1:2`,
+        critical: true,
+        payload: { type: "transfer" },
+      },
+    ]);
+    expect(outcome.events).toEqual([
+      {
+        id: `${FIXTURE_FINGERPRINT}:transfer:1:2`,
+        type: "transfer",
+        fromLegIndex: 1,
+        toLegIndex: 2,
+      },
+    ]);
     for (const entry of outcome.enqueue ?? []) {
       expect(entry.eventId).toEqual(expect.any(String));
       expect(typeof entry.critical).toBe("boolean");
@@ -170,17 +185,21 @@ describe("processTransitBatch events", () => {
 
   it("puts no stop name or coordinate into an enqueued event", () => {
     // The outbox outlives the leg; a stop name in it would outlive the trip.
-    const outcome = run({ session: riding(), nowMs: new Date("2026-08-09T08:41:00Z").getTime() });
+    const outcome = run({ session: riding(), nowMs: new Date("2026-08-09T08:42:00Z").getTime() });
 
+    expect((outcome.enqueue ?? []).map((entry) => entry.eventId)).toEqual([
+      `${FIXTURE_FINGERPRINT}:transfer:1:2`,
+    ]);
     const serialised = JSON.stringify(outcome.enqueue ?? []);
     expect(serialised).not.toContain("Messe");
     expect(serialised).not.toContain("50.11");
   });
 
   it("does not re-emit an event already in the ledger", () => {
-    const first = run({ session: riding(), nowMs: new Date("2026-08-09T08:41:00Z").getTime() });
+    const first = run({ session: riding(), nowMs: new Date("2026-08-09T08:42:00Z").getTime() });
     const ids = (first.enqueue ?? []).map((entry) => entry.eventId);
-    if (ids.length === 0) return;
+    expect(ids).toEqual([`${FIXTURE_FINGERPRINT}:transfer:1:2`]);
+    expect(first.session.cueLedger.events).toEqual(ids);
 
     const afterRestart = {
       ...riding(),
@@ -188,21 +207,24 @@ describe("processTransitBatch events", () => {
     } as TransitMobileSession;
     const second = run({
       session: afterRestart,
-      nowMs: new Date("2026-08-09T08:41:00Z").getTime(),
+      nowMs: new Date("2026-08-09T08:42:00Z").getTime(),
     });
 
-    expect((second.enqueue ?? []).map((entry) => entry.eventId)).not.toEqual(
-      expect.arrayContaining(ids),
-    );
+    expect(second.enqueue ?? []).toEqual([]);
+    expect(second.session.cueLedger.events).toEqual(ids);
   });
 
   it("emits no speech when voice is disabled, while still recording the event", () => {
     const muted = riding();
     muted.payload.startPackage.settings.voiceEnabled = false;
 
-    const outcome = run({ session: muted, nowMs: new Date("2026-08-09T08:41:00Z").getTime() });
+    const outcome = run({ session: muted, nowMs: new Date("2026-08-09T08:42:00Z").getTime() });
 
     expect((outcome.effects ?? []).filter((e) => e.kind === "speak")).toEqual([]);
+    expect((outcome.enqueue ?? []).map((entry) => entry.eventId)).toEqual([
+      `${FIXTURE_FINGERPRINT}:transfer:1:2`,
+    ]);
+    expect(outcome.session.cueLedger.events).toEqual([`${FIXTURE_FINGERPRINT}:transfer:1:2`]);
   });
 
   it("marks the session arrived when the engine says so", () => {

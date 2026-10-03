@@ -310,6 +310,9 @@ jobs:
       - name: Build production applications, services, and packages
         run: pnpm build
 
+      - name: Exercise the emitted traffic writer client and worker
+        run: OPENMAPX_RUN_BUILT_WORKER_TESTS=1 pnpm exec vitest run --project node services/data-manager/src/__tests__/live-writer-worker.test.ts
+
       - name: Install and exercise the packed public extension packages
         run: pnpm check-packed-packages
 

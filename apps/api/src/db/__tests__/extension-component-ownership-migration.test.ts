@@ -13,7 +13,7 @@ const DOWN_MIGRATION = join(
   "0015_fair_emma_frost.down.sql",
 );
 
-const integration = describe.runIf(process.env.OPENMAPX_POSTGRES_TESTS === "1");
+const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 
 let container: StartedPostgreSqlContainer;
 let sql: Sql;

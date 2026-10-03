@@ -12,7 +12,7 @@ import { OfflinePackageStorage } from "../src/offline-packages/storage.js";
 import type { OfflinePackageJobRecord } from "../src/offline-packages/types.js";
 
 const principal = "a".repeat(64);
-const integration = describe.runIf(process.env.OPENMAPX_POSTGRES_TESTS === "1");
+const integration = describe.runIf(process.env.OPENMAPX_RUN_DATABASE_TESTS === "1");
 let container: StartedPostgreSqlContainer;
 let sql: Sql;
 
