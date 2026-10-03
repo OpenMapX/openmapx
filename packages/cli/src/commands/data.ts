@@ -277,13 +277,13 @@ export function registerDataCommands(program: Command): void {
   data
     .command("build <kind> [region]")
     .description(
-      "Build prepared artifacts from downloaded data (compatibility alias for `services build`; kind: motis | osrm | otp | pelias | tiles)",
+      "Build prepared artifacts from downloaded data (compatibility alias for `services build`; kind: motis | osrm | otp | pelias | tileserver)",
     )
     .action(async (kind: string, region: string | undefined) => {
       try {
         const serviceId = resolveDataBuildServiceId(kind);
         if (!serviceId) {
-          log.err(`Unknown kind: ${kind} (use: motis | osrm | otp | pelias | tiles)`);
+          log.err(`Unknown kind: ${kind} (use: motis | osrm | otp | pelias | tileserver)`);
           process.exit(1);
         }
         const result = await buildServices({

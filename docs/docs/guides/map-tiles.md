@@ -56,7 +56,7 @@ pnpm openmapx services build tileserver --region europe/germany
 The equivalent data alias is:
 
 ```bash
-pnpm openmapx data build tiles europe/germany
+pnpm openmapx data build tileserver europe/germany
 ```
 
 Planetiler writes `data/tile-mbtiles/tiles.mbtiles`. It builds into

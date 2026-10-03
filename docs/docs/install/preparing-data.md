@@ -214,13 +214,13 @@ pnpm openmapx data build motis europe/germany
 
 The build kinds that prepare artifacts are:
 
-| Kind     | Engine        | Output                                                                      |
-| -------- | ------------- | --------------------------------------------------------------------------- |
-| `osrm`   | OSRM          | Routing graph (`data/osrm-graph/`) — region scale only                      |
-| `otp`    | OTP           | Transit graph (`data/otp-graph/`) — region scale only                       |
-| `motis`  | MOTIS         | Prepared inputs for the MOTIS slot lifecycle (`--import` also imports them) |
-| `pelias` | Pelias        | Geocoding data and Elasticsearch index (`data/pelias/`)                     |
-| `tiles`  | TileServer GL | MBTiles archive (`data/tile-mbtiles/`) from the OSM extract                 |
+| Kind         | Engine        | Output                                                                      |
+| ------------ | ------------- | --------------------------------------------------------------------------- |
+| `osrm`       | OSRM          | Routing graph (`data/osrm-graph/`) — region scale only                      |
+| `otp`        | OTP           | Transit graph (`data/otp-graph/`) — region scale only                       |
+| `motis`      | MOTIS         | Prepared inputs for the MOTIS slot lifecycle (`--import` also imports them) |
+| `pelias`     | Pelias        | Geocoding data and Elasticsearch index (`data/pelias/`)                     |
+| `tileserver` | TileServer GL | MBTiles archive (`data/tile-mbtiles/`) from the OSM extract                 |
 
 Engines that read raw source data directly — Valhalla, Nominatim, Overpass — have
 no build step here; they consume the downloaded extract as-is (Overpass needs a
