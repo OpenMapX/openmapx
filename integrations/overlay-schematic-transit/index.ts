@@ -1,3 +1,4 @@
+import { USER_AGENT } from "@openmapx/core";
 import {
   createBoundedBinaryProxyStream,
   MAX_VECTOR_TILE_BYTES,
@@ -38,7 +39,7 @@ export function setup(ctx: IntegrationContext): void {
         // production-tuned budget for vector-tile fan-out (see the Panoramax proxy).
         const timeoutSignal = AbortSignal.timeout(25_000);
         const signal = req.signal ? AbortSignal.any([req.signal, timeoutSignal]) : timeoutSignal;
-        const upstream = await fetch(url, { signal });
+        const upstream = await fetch(url, { signal, headers: { "User-Agent": USER_AGENT } });
 
         if (upstream.status === 404) {
           // LOOM answers 404 for every empty or unavailable tile (oceans, sparse

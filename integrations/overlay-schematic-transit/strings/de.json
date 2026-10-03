@@ -1,6 +1,6 @@
 {
   "name": "Schematischer Liniennetzplan",
-  "description": "Schematische Liniennetzpläne als Kartenebene — Straßenbahn, U-Bahn und Stadtbahn, S-Bahn/Regionalverkehr und Fernverkehr — als Metroplan (oktilinear), geografisch oder radial. Wöchentlich von LOOM (Universität Freiburg) aus OpenStreetMap gerendert und über diesen Server geleitet.",
+  "description": "Schematische Liniennetzpläne als Kartenebene — Straßenbahn, U-Bahn und Stadtbahn, S-Bahn/Regionalverkehr und Fernverkehr — als Metroplan (oktilinear), geografisch oder radial. Von LOOM (Universität Freiburg) aus OpenStreetMap gerendert und über diesen Server geleitet. Abdeckung und Aktualität variieren je nach Region.",
   "dataSources": {
     "loom-tiles": {
       "purpose": "Schematische Liniennetz-Kacheln für die Kartenebene.",

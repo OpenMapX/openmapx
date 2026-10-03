@@ -1,3 +1,4 @@
+import { USER_AGENT } from "@openmapx/core";
 import { createMockIntegrationContext } from "@openmapx/integration-framework/testing";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { setup } from "./index.js";
@@ -87,6 +88,17 @@ describe("overlay-schematic-transit tile proxy", () => {
     expect(reply.headers["cross-origin-resource-policy"]).toBe("cross-origin");
     expect(reply.contentType).toBe("application/octet-stream");
     expect(reply.sent).toBe(true);
+  });
+
+  it("identifies tile requests with the shared application user agent", async () => {
+    mockFetch.mockResolvedValue(mvtResponse());
+    const { handler } = tileRoute(ctx);
+    await handler(
+      { params: { network: "tram", layout: "geo", z: "3", x: "1", y: "1" }, query: {} },
+      new Reply(),
+    );
+    const options = mockFetch.mock.calls[0][1] as RequestInit;
+    expect(new Headers(options.headers).get("user-agent")).toBe(USER_AGENT);
   });
 
   it.each([
