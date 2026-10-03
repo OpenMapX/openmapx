@@ -1,4 +1,5 @@
 import type { LngLat } from "@openmapx/core";
+import along from "@turf/along";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
 import { describe, expect, it } from "vitest";
@@ -36,6 +37,37 @@ function projectY(lat: number): number {
   const sin = Math.sin((lat * Math.PI) / 180);
   const y = 0.5 - (0.25 * Math.log((1 + sin) / (1 - sin))) / Math.PI;
   return y < 0 ? 0 : y > 1 ? 1 : y;
+}
+
+/**
+ * Pre-optimization reference: walk the full route and let Turf find the cut
+ * point. Independent of the binary lookup and segment-only interpolation.
+ */
+function fullRouteProgressFraction(prepared: NavRouteLine, alongMeters: number): number {
+  const { line, lengthKm, cumulativeKm, mercatorCumulative, mercatorTotal } = prepared;
+  if (
+    !Number.isFinite(lengthKm) ||
+    lengthKm <= 0 ||
+    !Number.isFinite(mercatorTotal) ||
+    mercatorTotal <= 0
+  )
+    return 0;
+  const alongKm = Math.min(
+    Math.max((Number.isNaN(alongMeters) ? 0 : alongMeters) / 1000, 0),
+    lengthKm,
+  );
+  if (alongKm <= 0) return 0;
+  if (alongKm >= lengthKm) return 1;
+
+  let segment = 0;
+  while (cumulativeKm[segment + 1] < alongKm) segment++;
+  const [lng, lat] = along(line, alongKm, { units: "kilometers" }).geometry.coordinates;
+  const start = line.geometry.coordinates[segment];
+  const fraction =
+    (mercatorCumulative[segment] +
+      Math.hypot(projectX(lng) - projectX(start[0]), projectY(lat) - projectY(start[1]))) /
+    mercatorTotal;
+  return Number.isFinite(fraction) ? Math.min(Math.max(fraction, 0), 1) : 0;
 }
 
 /**
@@ -256,6 +288,89 @@ describe("navRouteProgressFraction", () => {
 
     expect(() => navRouteProgressFraction(prepared, 500)).not.toThrow();
     expect(navRouteProgressFraction(prepared, 500)).toBe(0);
+  });
+});
+
+describe("navigation progress full-route parity", () => {
+  const fixtures: { name: string; geometry: LngLat[] }[] = [
+    { name: "exact segment boundaries", geometry: DENSE_ROUTE },
+    {
+      name: "duplicate start, middle and end vertices",
+      geometry: [
+        [6.9, 50.9],
+        [6.9, 50.9],
+        [6.92, 50.91],
+        [6.92, 50.91],
+        [6.95, 50.94],
+        [6.95, 50.94],
+      ],
+    },
+    {
+      name: "tiny segments next to ordinary segments",
+      geometry: [
+        [0, 0],
+        [1e-15, 0],
+        [1e-11, 0],
+        [0.01, 0],
+        [0.01 + 1e-11, 0],
+        [0.02, 0.01],
+      ],
+    },
+    {
+      name: "long diagonal segments",
+      geometry: [
+        [-70, 35],
+        [10, 62],
+        [60, 78],
+      ],
+    },
+    {
+      name: "high-latitude segments",
+      geometry: [
+        [10, 77],
+        [10.5, 78],
+        [11, 78.5],
+      ],
+    },
+    {
+      name: "near-polar segments",
+      geometry: [
+        [0, 89.999],
+        [180, 89.999],
+        [179.99, 89.998],
+      ],
+    },
+    {
+      name: "a nonfinite decoded coordinate",
+      geometry: [
+        [6.9, 50.9],
+        [Number.NaN, 50.95],
+        [6.97, 50.95],
+      ],
+    },
+  ];
+
+  it.each(fixtures)("matches Turf's full-route walk for $name", ({ geometry }) => {
+    const prepared = buildNavRouteLine(geometry);
+    if (!prepared) throw new Error("expected prepared line");
+    const distances = new Set([
+      ...prepared.cumulativeKm
+        .filter(Number.isFinite)
+        .flatMap((km) => [km * 1000 - 1e-6, km * 1000, km * 1000 + 1e-6]),
+      ...[0.05, 0.25, 0.5, 0.75, 0.95].map((ratio) => prepared.lengthKm * 1000 * ratio),
+      -1,
+      0,
+      prepared.lengthKm * 1000 + 1,
+      Number.NEGATIVE_INFINITY,
+      Number.POSITIVE_INFINITY,
+      Number.NaN,
+    ]);
+    for (const distance of distances) {
+      expect({ distance, fraction: navRouteProgressFraction(prepared, distance) }).toEqual({
+        distance,
+        fraction: fullRouteProgressFraction(prepared, distance),
+      });
+    }
   });
 });
 
