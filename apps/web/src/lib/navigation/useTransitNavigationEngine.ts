@@ -10,7 +10,7 @@ import {
 } from "@openmapx/core";
 import type { MobilityEnvelope } from "@openmapx/mobility-core/result";
 import type { TripPlan } from "@openmapx/mobility-core/transit";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useMapOptional } from "@/integration-api/map/MapContext";
 import { haptics } from "../haptics";
 import { useWatchPosition } from "../useWatchPosition";
@@ -27,20 +27,44 @@ const REPLAN_RETRY_COOLDOWN_MS = 30_000;
 export function useTransitNavigationEngine(): void {
   const map = useMapOptional()?.mapRef.current ?? null;
   // Guards against firing overlapping replans while one is in flight.
-  const replanningRef = useRef(false);
+  const replanningRef = useRef<{ requestId: string; lifecycle: object } | null>(null);
+  const lifecycleRef = useRef<object | null>({});
+  useEffect(() => {
+    lifecycleRef.current = {};
+    return () => {
+      lifecycleRef.current = null;
+      const store = useNavigationStore.getState();
+      if (replanningRef.current?.requestId === store.transitRequestId) {
+        store.setTransitRerouteNeeded(false);
+      }
+    };
+  }, []);
   // Earliest time a replan may retry after a failure, so a persistently failing
   // replan (destination temporarily unreachable, offline) doesn't fire on every
   // ~1Hz fix and storm the BFF.
-  const nextReplanAllowedAtRef = useRef(0);
+  const nextReplanAllowedAtRef = useRef({ requestId: null as string | null, until: 0 });
   // The planned trip's per-leg snap indexes. They describe the itinerary, so
   // they outlive every fix and are rebuilt only when a replan swaps the
   // itinerary in. A ref, because the fix handler reads it from the store.
   const preparedRef = useRef<PreparedTransitProgress | null>(null);
 
   const replan = useCallback(async (from: [number, number], to: [number, number]) => {
-    if (replanningRef.current) return;
-    replanningRef.current = true;
-    useNavigationStore.getState().setTransitRerouteNeeded(true);
+    const initial = useNavigationStore.getState();
+    const requestId = initial.transitRequestId;
+    const lifecycle = lifecycleRef.current;
+    if (!requestId || !lifecycle || replanningRef.current?.requestId === requestId) return;
+    const flight = { requestId, lifecycle };
+    replanningRef.current = flight;
+    const ownsRequest = () => {
+      const current = useNavigationStore.getState();
+      return (
+        lifecycleRef.current === lifecycle &&
+        current.transitRequestId === requestId &&
+        current.status === "navigating" &&
+        current.kind === "transit"
+      );
+    };
+    initial.setTransitRerouteNeeded(true);
     try {
       // Reuse the user's original transit options, snapshotted into the
       // navigation store when the trip started (preferred modes, the
@@ -49,7 +73,7 @@ export function useTransitNavigationEngine(): void {
       // resets to defaults — keeps the replan from silently routing onto
       // excluded/inaccessible legs, and respects the Germany-only D-Ticket gate
       // exactly as it was applied at planning time.
-      const opts = useNavigationStore.getState().transitReplanOptions;
+      const opts = initial.transitReplanOptions;
       const params: Record<string, string> = {
         from_lat: String(from[1]),
         from_lng: String(from[0]),
@@ -70,25 +94,33 @@ export function useTransitNavigationEngine(): void {
       );
       const next = env.data?.itineraries?.[0];
       const latest = useNavigationStore.getState();
-      // Only apply if we're still in transit navigation (the user may have stopped).
-      if (next && latest.status === "navigating" && latest.kind === "transit") {
+      if (!ownsRequest()) return;
+      if (next) {
         haptics.warn();
         // Back off after a successful replan too: the fresh itinerary's first
         // transit leg may still read as "missed" when no better option exists,
         // and replaceItinerary clears transitRerouteNeeded — without a cooldown
         // the next fix would re-fire the replan every ~1Hz and storm the BFF.
-        nextReplanAllowedAtRef.current = Date.now() + REPLAN_RETRY_COOLDOWN_MS;
+        nextReplanAllowedAtRef.current = {
+          requestId,
+          until: Date.now() + REPLAN_RETRY_COOLDOWN_MS,
+        };
         latest.replaceItinerary(next);
+        nextReplanAllowedAtRef.current.requestId = useNavigationStore.getState().transitRequestId;
       } else {
         // No alternative: back off before the next missed-connection retry.
-        nextReplanAllowedAtRef.current = Date.now() + REPLAN_RETRY_COOLDOWN_MS;
+        nextReplanAllowedAtRef.current = {
+          requestId,
+          until: Date.now() + REPLAN_RETRY_COOLDOWN_MS,
+        };
         latest.setTransitRerouteNeeded(false);
       }
     } catch {
-      nextReplanAllowedAtRef.current = Date.now() + REPLAN_RETRY_COOLDOWN_MS;
+      if (!ownsRequest()) return;
+      nextReplanAllowedAtRef.current = { requestId, until: Date.now() + REPLAN_RETRY_COOLDOWN_MS };
       useNavigationStore.getState().setTransitRerouteNeeded(false);
     } finally {
-      replanningRef.current = false;
+      if (replanningRef.current === flight) replanningRef.current = null;
     }
   }, []);
 
@@ -125,7 +157,8 @@ export function useTransitNavigationEngine(): void {
       // here to the original destination (the last leg's drop-off point).
       if (
         !store.transitRerouteNeeded &&
-        Date.now() >= nextReplanAllowedAtRef.current &&
+        (nextReplanAllowedAtRef.current.requestId !== store.transitRequestId ||
+          Date.now() >= nextReplanAllowedAtRef.current.until) &&
         detectMissedConnection(itinerary, tp, Date.now())
       ) {
         const legs = itinerary.legs ?? [];

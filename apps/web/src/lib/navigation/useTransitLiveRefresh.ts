@@ -22,19 +22,23 @@ export function useTransitLiveRefresh(active: boolean): void {
   // (unstable) mutation object, which would otherwise reset the timer.
   const mutateRef = useRef(refresh.mutateAsync);
   mutateRef.current = refresh.mutateAsync;
-  const inFlightRef = useRef(false);
+  const inFlightRef = useRef<{ requestId: string | null } | null>(null);
 
   useEffect(() => {
     if (!active) return;
 
+    let cancelled = false;
     const tick = async () => {
-      if (inFlightRef.current) return;
       const store = useNavigationStore.getState();
       if (store.status !== "navigating" || store.kind !== "transit") return;
+      const requestId = store.transitRequestId;
+      if (inFlightRef.current?.requestId === requestId) return;
+      if (store.transitRerouteNeeded) return;
       const token = store.itinerary?.refreshToken;
       if (!token) return;
 
-      inFlightRef.current = true;
+      const flight = { requestId };
+      inFlightRef.current = flight;
       try {
         const response = await mutateRef.current(token);
         const next = response.data?.itinerary;
@@ -43,6 +47,9 @@ export function useTransitLiveRefresh(active: boolean): void {
         // pending (a replan will swap the itinerary itself).
         if (
           next &&
+          !cancelled &&
+          cur.transitRequestId === requestId &&
+          cur.itinerary?.refreshToken === token &&
           cur.status === "navigating" &&
           cur.kind === "transit" &&
           !cur.transitRerouteNeeded
@@ -53,11 +60,15 @@ export function useTransitLiveRefresh(active: boolean): void {
         // Keep the last itinerary; the vehicle-journey poll still updates the
         // current leg. A broken token chain simply means no more live refreshes.
       } finally {
-        inFlightRef.current = false;
+        if (inFlightRef.current === flight) inFlightRef.current = null;
       }
     };
 
     const id = setInterval(tick, REFRESH_INTERVAL_MS);
-    return () => clearInterval(id);
+    return () => {
+      cancelled = true;
+      inFlightRef.current = null;
+      clearInterval(id);
+    };
   }, [active]);
 }

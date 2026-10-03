@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
 import {
+  apiClient,
   type FixInput,
   readRouteMatcherCounters,
   resetRouteMatcherCounters,
@@ -8,7 +9,7 @@ import {
   useNavigationStore,
 } from "@openmapx/core";
 import type { TripItinerary, TripLeg } from "@openmapx/mobility-core/transit";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 let fixHandler: ((fix: FixInput) => void) | null = null;
@@ -97,5 +98,69 @@ describe("useTransitNavigationEngine itinerary index ownership", () => {
     });
 
     expect(readRouteMatcherCounters().preparations).toBe(4);
+  });
+});
+
+function missedTrip(): TripItinerary {
+  const trip = freshItinerary();
+  trip.legs[0].tripId = "missed";
+  trip.legs[0].startTime = "2020-01-01T00:00:00Z";
+  trip.legs[0].endTime = "2020-01-01T00:10:00Z";
+  return trip;
+}
+
+describe("transit replan request ownership", () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+    useNavigationStore.getState().stopNavigation();
+  });
+
+  it.each(["new trip", "replacement", "unmount"])(
+    "ignores an old success after %s",
+    async (change) => {
+      let resolve: (value: unknown) => void = () => {};
+      const get = vi.spyOn(apiClient, "get").mockImplementation(
+        () =>
+          new Promise((r) => {
+            resolve = r;
+          }),
+      );
+      useNavigationStore.getState().startTransitNavigation(missedTrip());
+      const view = renderHook(() => useTransitNavigationEngine());
+      act(() => fixHandler?.({ coords: [0, 0], accuracy: 5, timestampMs: Date.now() }));
+      await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+      const expected = freshItinerary();
+      act(() => {
+        if (change === "unmount") view.unmount();
+        else if (change === "replacement") useNavigationStore.getState().replaceItinerary(expected);
+        else {
+          useNavigationStore.getState().stopNavigation();
+          useNavigationStore.getState().startTransitNavigation(expected);
+        }
+      });
+      const before = useNavigationStore.getState().itinerary;
+      await act(async () => resolve({ data: { itineraries: [freshItinerary()] } }));
+      expect(useNavigationStore.getState().itinerary).toBe(before);
+    },
+  );
+
+  it("does not clear a new trip's reroute flag when an old request fails", async () => {
+    let reject: (reason: Error) => void = () => {};
+    const get = vi.spyOn(apiClient, "get").mockImplementation(
+      () =>
+        new Promise((_r, j) => {
+          reject = j;
+        }),
+    );
+    useNavigationStore.getState().startTransitNavigation(missedTrip());
+    renderHook(() => useTransitNavigationEngine());
+    act(() => fixHandler?.({ coords: [0, 0], accuracy: 5, timestampMs: Date.now() }));
+    await waitFor(() => expect(get).toHaveBeenCalledTimes(1));
+    act(() => {
+      useNavigationStore.getState().startTransitNavigation(freshItinerary());
+      useNavigationStore.getState().setTransitRerouteNeeded(true);
+    });
+    await act(async () => reject(new Error("old request")));
+    expect(useNavigationStore.getState().transitRerouteNeeded).toBe(true);
   });
 });

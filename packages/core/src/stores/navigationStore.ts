@@ -240,6 +240,8 @@ interface NavigationState {
   keepScreenOn: boolean;
   // Transit follow-along state (only populated when kind === "transit").
   itinerary: TripItinerary | null;
+  /** Identity of the current browser transit trip/replan; live refresh preserves it. */
+  transitRequestId: string | null;
   transitProgress: TransitProgress | null;
   /** Set when a missed connection is detected and an on-trip replan is wanted. */
   transitRerouteNeeded: boolean;
@@ -432,6 +434,8 @@ const ROUTE_IDENTITY_RESET = {
   currentSpeedLimit: null as number | null,
 };
 
+let nextTransitRequestId = 0;
+
 const INITIAL = {
   status: "idle" as NavStatus,
   kind: "ground" as NavKind,
@@ -456,6 +460,7 @@ const INITIAL = {
   liveSpeedLimits: null as (number | null)[] | null,
   routeCountries: null as RouteCountrySpan[] | null,
   itinerary: null as TripItinerary | null,
+  transitRequestId: null as string | null,
   transitProgress: null as TransitProgress | null,
   transitRerouteNeeded: false,
   transitReplanOptions: null as TransitReplanOptions | null,
@@ -569,6 +574,7 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
       ...INITIAL,
       status: "navigating",
       kind: "transit",
+      transitRequestId: String(++nextTransitRequestId),
       itinerary,
       route: null,
       progress: null,
@@ -579,7 +585,12 @@ export const useNavigationStore = create<NavigationState>((set, get) => ({
   applyTransitProgress: (transitProgress) => set({ transitProgress }),
   setTransitRerouteNeeded: (transitRerouteNeeded) => set({ transitRerouteNeeded }),
   replaceItinerary: (itinerary) =>
-    set({ itinerary, transitProgress: null, transitRerouteNeeded: false }),
+    set({
+      itinerary,
+      transitRequestId: String(++nextTransitRequestId),
+      transitProgress: null,
+      transitRerouteNeeded: false,
+    }),
   updateItinerary: (itinerary) => set({ itinerary }),
   applyProgress: (progress) => set({ progress }),
   // One publication per accepted fix. A coasted fix omits `coasting` so the
