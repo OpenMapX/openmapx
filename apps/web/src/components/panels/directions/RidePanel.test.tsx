@@ -29,7 +29,7 @@ let providers = {
     },
   ],
   defaultProvider: "uber",
-  comparison: { allowed: false, comparableProviderIds: [] },
+  comparison: { allowed: false, comparableProviderIds: [] as string[] },
 };
 
 let quoteResults: unknown[] = [];
@@ -79,6 +79,125 @@ describe("RidePanel", () => {
   beforeEach(() => {
     quoteResults = [];
     providers = baseProviders;
+  });
+
+  function quote(name: string, amount?: number, eta = 300, currency = "EUR", min?: number) {
+    return {
+      productId: name,
+      product: { id: name, name },
+      pickupEtaSeconds: eta,
+      expiresAt: "2099-01-01T00:00:00Z",
+      fare:
+        amount === undefined && min === undefined
+          ? undefined
+          : { amount, min, currency, basis: "quoted" },
+    };
+  }
+
+  function comparison() {
+    providers = {
+      ...baseProviders,
+      providers: baseProviders.providers.map((p) => ({
+        ...p,
+        capabilities: { ...p.capabilities, quote: true },
+        permitsComparison: true,
+      })),
+      comparison: { allowed: true, comparableProviderIds: ["uber", "bolt"] },
+    };
+  }
+
+  it("orders comparison providers and products by cheapest fare then pickup ETA", () => {
+    comparison();
+    quoteResults = [
+      {
+        providerId: "uber",
+        attributions: [],
+        quotes: [quote("Ride expensive", 30), quote("Ride slow", 10, 600)],
+      },
+      {
+        providerId: "bolt",
+        attributions: [],
+        quotes: [
+          quote("Ride missing"),
+          quote("Ride range", undefined, 200, "EUR", 12),
+          quote("Ride fast", 10, 60),
+        ],
+      },
+    ];
+    renderPanel();
+    expect(screen.getAllByText(/^Ride (?!provider$)/).map((node) => node.textContent)).toEqual([
+      "Ride fast",
+      "Ride range",
+      "Ride missing",
+      "Ride slow",
+      "Ride expensive",
+    ]);
+  });
+
+  it("groups currencies without converting them and keeps equal quotes stable", () => {
+    comparison();
+    quoteResults = [
+      { providerId: "uber", attributions: [], quotes: [quote("Ride dollars", 1, 1, "USD")] },
+      {
+        providerId: "bolt",
+        attributions: [],
+        quotes: [quote("Ride first", 20, 100), quote("Ride second", 20, 100)],
+      },
+    ];
+    renderPanel();
+    expect(screen.getAllByText(/^Ride (?!provider$)/).map((node) => node.textContent)).toEqual([
+      "Ride first",
+      "Ride second",
+      "Ride dollars",
+    ]);
+  });
+
+  it("uses ETA for unpriced or mixed-currency providers without inventing a cheapest fare", () => {
+    comparison();
+    quoteResults = [
+      {
+        providerId: "uber",
+        attributions: [],
+        quotes: [
+          quote("Ride unknown ETA", undefined, Infinity),
+          quote("Ride quick", undefined, 60),
+        ],
+      },
+      {
+        providerId: "bolt",
+        attributions: [],
+        quotes: [quote("Ride USD", 1, 200, "USD"), quote("Ride EUR", 100, 100)],
+      },
+    ];
+    renderPanel();
+    expect(screen.getAllByText(/^Ride (?!provider$)/).map((node) => node.textContent)).toEqual([
+      "Ride quick",
+      "Ride unknown ETA",
+      "Ride EUR",
+      "Ride USD",
+    ]);
+  });
+
+  it("preserves provider product order when comparison is not permitted", () => {
+    providers = {
+      ...baseProviders,
+      providers: baseProviders.providers.map((p) => ({
+        ...p,
+        capabilities: { ...p.capabilities, quote: true },
+      })),
+    };
+    quoteResults = [
+      {
+        providerId: "uber",
+        attributions: [],
+        quotes: [quote("Ride original", 30), quote("Ride cheaper", 10)],
+      },
+    ];
+    renderPanel();
+    expect(screen.getAllByText(/^Ride (?!provider$)/).map((node) => node.textContent)).toEqual([
+      "Ride original",
+      "Ride cheaper",
+    ]);
   });
 
   it("renders one chip per available provider", async () => {

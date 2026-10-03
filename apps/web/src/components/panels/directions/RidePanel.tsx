@@ -6,7 +6,7 @@ import RemoveIcon from "@mui/icons-material/Remove";
 import Box from "@mui/material/Box";
 import CircularProgress from "@mui/material/CircularProgress";
 import Typography from "@mui/material/Typography";
-import type { RideProviderInfo, RideQuoteRequest } from "@openmapx/core";
+import type { RideProviderInfo, RideQuote, RideQuoteRequest } from "@openmapx/core";
 import {
   buildRideOpenUrl,
   formatDistance,
@@ -25,6 +25,35 @@ import { BRAND } from "@/integration-api/runtime/theme";
 
 /** Stop refreshing quotes once the user has stopped interacting with the panel. */
 const IDLE_MS = 5 * 60 * 1000;
+
+function quoteRank(quote: RideQuote) {
+  const fare = quote.fare;
+  // Rank ranges by their published lower bound, falling back to an upper-only
+  // bound. Display-only/invalid fares stay unpriced; never infer an exchange rate.
+  const amount = [fare?.amount, fare?.min, fare?.max].find(
+    (value): value is number => value !== undefined && Number.isFinite(value) && value >= 0,
+  );
+  const currency = amount !== undefined && fare?.currency ? fare.currency.toUpperCase() : "";
+  const eta = quote.pickupEtaSeconds;
+  return {
+    currency,
+    amount: currency ? amount : undefined,
+    eta: eta !== undefined && Number.isFinite(eta) && eta >= 0 ? eta : Infinity,
+  };
+}
+
+function compareRanks(a: ReturnType<typeof quoteRank>, b: ReturnType<typeof quoteRank>) {
+  // Currency groups are alphabetical, not a statement that one is cheaper.
+  // Unpriced offers follow priced groups; ETA breaks fare ties and ranks unpriced offers.
+  if (a.currency !== b.currency) {
+    if (!a.currency) return 1;
+    if (!b.currency) return -1;
+    return a.currency < b.currency ? -1 : 1;
+  }
+  const fareDifference = (a.amount ?? Infinity) - (b.amount ?? Infinity);
+  if (fareDifference && !Number.isNaN(fareDifference)) return fareDifference;
+  return a.eta === b.eta ? 0 : a.eta - b.eta;
+}
 
 const inputSx = {
   border: "1px solid",
@@ -232,6 +261,24 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
     enabled: quotesEnabled,
   });
 
+  const comparisonResults = useMemo(() => {
+    const sorted = results.map((result) => ({
+      ...result,
+      quotes: [...result.quotes].sort((a, b) => compareRanks(quoteRank(a), quoteRank(b))),
+    }));
+    const rank = (result: (typeof sorted)[number]) => {
+      const ranks = result.quotes.map(quoteRank);
+      const currencies = new Set(ranks.map((r) => r.currency).filter(Boolean));
+      // A provider offering multiple currencies cannot have a single cheapest
+      // monetary rank. Keep it with unpriced providers, ordered by earliest ETA.
+      if (currencies.size > 1 || ranks.length === 0) {
+        return { currency: "", amount: undefined, eta: Math.min(...ranks.map((r) => r.eta)) };
+      }
+      return ranks[0];
+    };
+    return sorted.sort((a, b) => compareRanks(rank(a), rank(b)));
+  }, [results]);
+
   // Uses the canonical rule rather than comparing the timestamp inline: an
   // unparseable expiry counts as already expired, where `now >= Date.parse(...)`
   // would be false for NaN and leave a stale price on screen indefinitely.
@@ -324,7 +371,7 @@ export function RidePanel({ route }: { route?: RideQuoteRequest["route"] }) {
 
       {comparing && (
         <Box sx={{ display: "flex", flexDirection: "column", gap: 1.25 }}>
-          {results.map((result) => {
+          {comparisonResults.map((result) => {
             const provider = providers.find((p) => p.id === result.providerId);
             if (!provider) return null;
             return (
