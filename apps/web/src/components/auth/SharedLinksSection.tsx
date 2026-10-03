@@ -7,13 +7,14 @@ import Chip from "@mui/material/Chip";
 import IconButton from "@mui/material/IconButton";
 import Typography from "@mui/material/Typography";
 import { useRevokeShare, useRotateShare, useShares } from "@openmapx/core";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { forwardRef, useState } from "react";
 import { ShareLinkCreated } from "@/components/share/ShareLinkCreated";
 
 export const SharedLinksSection = forwardRef<HTMLHeadingElement>(
   function SharedLinksSection(_props, headingRef) {
     const t = useTranslations("share");
+    const locale = useLocale();
     const { data: shares } = useShares();
     const rotateShare = useRotateShare();
     const revokeShare = useRevokeShare();
@@ -69,8 +70,11 @@ export const SharedLinksSection = forwardRef<HTMLHeadingElement>(
                 <Typography variant="caption" sx={{ color: "text.secondary" }}>
                   {share.mode === "live" ? t("modeLive") : t("modeSnapshot")}
                   {" · "}
-                  {new Date(share.createdAt).toLocaleDateString()}
-                  {expired && ` · ${t("expiredBadge")}`}
+                  {new Date(share.createdAt).toLocaleDateString(locale)}
+                  {" · "}
+                  {expired
+                    ? t("expiredBadge")
+                    : `${t("expiry")}: ${share.expiresAt ? new Date(share.expiresAt).toLocaleDateString(locale) : t("expiryNever")}`}
                 </Typography>
                 {rotated?.id === share.id && <ShareLinkCreated token={rotated.token} />}
               </Box>
