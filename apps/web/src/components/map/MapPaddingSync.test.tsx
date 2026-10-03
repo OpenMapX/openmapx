@@ -103,6 +103,44 @@ describe("MapPaddingSync", () => {
     });
   });
 
+  it.each(["outside mouse release", "window blur"])(
+    "applies deferred padding after %s",
+    (release) => {
+      const flush = manualFrames();
+      const fake = mount({ emitCameraEvents: true, deferAnimatedCamera: true });
+      flush();
+      act(() => {
+        fake.emit("mousedown");
+        fake.emit("movestart", {});
+        publishMapObstruction("rail", "left", 400);
+        flush();
+        fake.emit("moveend", {});
+        flush();
+      });
+      expect(paddingOnlyEases(fake)).toHaveLength(0);
+      act(() => {
+        if (release === "outside mouse release") document.dispatchEvent(new MouseEvent("mouseup"));
+        else window.dispatchEvent(new Event("blur"));
+        flush();
+      });
+      expect(paddingOnlyEases(fake)).toHaveLength(1);
+      act(() => {
+        fake.settleCameraAnimation();
+        flush();
+      });
+      expect(fake.state.padding).toMatchObject({ left: 400 });
+    },
+  );
+
+  it("removes outside release listeners on unmount", () => {
+    const documentRemove = vi.spyOn(document, "removeEventListener");
+    const windowRemove = vi.spyOn(window, "removeEventListener");
+    mount();
+    cleanup();
+    expect(documentRemove).toHaveBeenCalledWith("mouseup", expect.any(Function));
+    expect(windowRemove).toHaveBeenCalledWith("blur", expect.any(Function));
+  });
+
   it("defers while a foreign programmatic animation is in flight", () => {
     const fake = mount();
     act(() => fake.emit("movestart", { programmatic: true }));

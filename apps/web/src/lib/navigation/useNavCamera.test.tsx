@@ -749,6 +749,55 @@ describe("useNavCamera camera ownership", () => {
     expect(fake.state.cameraTransitions.length).toBeGreaterThan(transitions);
   });
 
+  it.each(["outside mouse release", "window blur"])(
+    "resumes camera publication after recenter following %s",
+    async (release) => {
+      const { fake, frames } = await mountNavCamera();
+      applyFix(START_ALONG);
+      frames.flush(60, FRAME_MS);
+      act(() => {
+        fake.emit("mousedown");
+        fake.emit("dragstart", {});
+      });
+      frames.flush(60, FRAME_MS);
+      act(() => {
+        if (release === "outside mouse release") document.dispatchEvent(new MouseEvent("mouseup"));
+        else window.dispatchEvent(new Event("blur"));
+        useNavigationStore.getState().setCameraMode("follow");
+      });
+      const jumps = fake.state.cameraTransitions.filter((t) => t.method === "jumpTo").length;
+      applyFix(START_ALONG + FIX_STEP_METERS);
+      frames.flush(120, FRAME_MS);
+      expect(
+        fake.state.cameraTransitions.filter((t) => t.method === "jumpTo").length,
+      ).toBeGreaterThan(jumps);
+    },
+  );
+
+  it("keeps the follow camera suspended until the final touch lifts", async () => {
+    const { fake, frames } = await mountNavCamera();
+    applyFix(START_ALONG);
+    frames.flush(60, FRAME_MS);
+    const transitions = fake.state.cameraTransitions.length;
+    act(() => fake.emit("touchstart"));
+    act(() => fake.emit("touchend", { originalEvent: { touches: [{}] } }));
+    applyFix(START_ALONG + FIX_STEP_METERS);
+    frames.flush(60, FRAME_MS);
+    expect(fake.state.cameraTransitions).toHaveLength(transitions);
+    act(() => fake.emit("touchend", { originalEvent: { touches: [] } }));
+    frames.flush(60, FRAME_MS);
+    expect(fake.state.cameraTransitions.length).toBeGreaterThan(transitions);
+  });
+
+  it("removes outside release listeners when navigation stops", async () => {
+    const documentRemove = vi.spyOn(document, "removeEventListener");
+    const windowRemove = vi.spyOn(window, "removeEventListener");
+    await mountNavCamera();
+    act(() => useNavigationStore.getState().stopNavigation());
+    expect(documentRemove).toHaveBeenCalledWith("mouseup", expect.any(Function));
+    expect(windowRemove).toHaveBeenCalledWith("blur", expect.any(Function));
+  });
+
   it("hands zoom to the user after a zoom gesture and stops commanding it", async () => {
     const { fake, frames } = await mountNavCamera();
     applyFix(START_ALONG);

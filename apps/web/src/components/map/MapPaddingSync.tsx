@@ -178,6 +178,11 @@ export function MapPaddingSync() {
     const onPointerDown = () => {
       pointerDown = true;
     };
+    const releasePointer = () => {
+      if (!pointerDown) return;
+      pointerDown = false;
+      schedule();
+    };
     const onPointerUp = (event: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
       if ("touches" in event.originalEvent && event.originalEvent.touches.length > 0) return;
       pointerDown = false;
@@ -188,6 +193,9 @@ export function MapPaddingSync() {
       schedule();
     };
 
+    // Releases outside the canvas do not produce a MapLibre map mouseup.
+    document.addEventListener("mouseup", releasePointer);
+    window.addEventListener("blur", releasePointer);
     map.on("movestart", onMoveStart);
     map.on("moveend", onMoveEnd);
     map.on("mousedown", onPointerDown);
@@ -201,6 +209,8 @@ export function MapPaddingSync() {
 
     return () => {
       unsubscribe();
+      document.removeEventListener("mouseup", releasePointer);
+      window.removeEventListener("blur", releasePointer);
       map.off("movestart", onMoveStart);
       map.off("moveend", onMoveEnd);
       map.off("mousedown", onPointerDown);

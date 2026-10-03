@@ -647,13 +647,21 @@ export function useNavCamera(): void {
       userInteractingRef.current = true;
       suspend();
     };
+    const releasePointer = () => {
+      if (!userInteractingRef.current) return;
+      userInteractingRef.current = false;
+      requestFrame();
+    };
     const onPointerUp = (event: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
       // A multi-touch gesture fires touchend as each finger lifts; only release
       // once none remain.
       if ("touches" in event.originalEvent && event.originalEvent.touches.length > 0) return;
-      userInteractingRef.current = false;
-      requestFrame();
+      releasePointer();
     };
+    // MapLibre only emits map mouseup for releases on its canvas. A drag may
+    // finish elsewhere, or lose focus before any release event arrives.
+    document.addEventListener("mouseup", releasePointer);
+    window.addEventListener("blur", releasePointer);
     map.on("dragstart", onPanRotatePitch);
     map.on("rotatestart", onPanRotatePitch);
     map.on("pitchstart", onPanRotatePitch);
@@ -667,6 +675,8 @@ export function useNavCamera(): void {
     map.on("mouseup", onPointerUp);
     map.on("wheel", onUserMove);
     return () => {
+      document.removeEventListener("mouseup", releasePointer);
+      window.removeEventListener("blur", releasePointer);
       map.off("dragstart", onPanRotatePitch);
       map.off("rotatestart", onPanRotatePitch);
       map.off("pitchstart", onPanRotatePitch);
