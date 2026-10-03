@@ -86,7 +86,8 @@ at any time — revocation is immediate and responses are strictly non-cacheable
 
 A few quotas and security properties apply:
 
-- **Quotas**: Each account may hold up to 100 active share links (`MAX_SHARES_PER_USER = 100`).
+- **Quotas**: Each account may hold up to 100 stored share links (`MAX_SHARES_PER_USER = 100`),
+  including expired links until they are deleted.
   Snapshot links support lists up to 1,000 places (`MAX_SNAPSHOT_PLACES = 1000`).
 - **Cryptographic tokens**: Share URLs use 32 random bytes (43 base64url characters).
   Tokens are stored in the database exclusively as SHA-256 hashes; the database never
