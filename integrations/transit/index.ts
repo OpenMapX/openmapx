@@ -1233,9 +1233,10 @@ export function setup(ctx: IntegrationContext): void {
       reply.status(400).send({ error: "Invalid or missing bbox params" });
       return;
     }
-    reply.header("Cache-Control", "public, max-age=60, s-maxage=60");
+    reply.header("Cache-Control", "public, max-age=15, s-maxage=15");
     const cacheKey = `transit:alerts:${bbox.join(",")}`;
-    const alerts = await ctx.cache.withCache(cacheKey, 60, async () => {
+    // Leave room for the 15 s national feed cache and 15 s HTTP cache.
+    const alerts = await ctx.cache.withCache(cacheKey, 30, async () => {
       const res = await orchestrator.getAlerts(bbox);
       return toEnvelope(res);
     });

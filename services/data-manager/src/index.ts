@@ -320,6 +320,7 @@ async function shutdown(signal: NodeJS.Signals): Promise<void> {
   } catch {
     // Closing an already-closed socket throws; ignore.
   }
+  await offlinePackages.close();
   await cronHandles?.closeTrafficWriter();
   const result = await awaitInflightSync(singleFlight, 30_000);
   if (result === "timeout") {

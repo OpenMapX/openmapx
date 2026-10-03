@@ -2,10 +2,7 @@ import { createHash, randomUUID } from "node:crypto";
 import { lstatSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import { createRequire } from "node:module";
 import { join, resolve } from "node:path";
-import {
-  extractPmtilesPackage as extractPmtilesPackageServer,
-  type PmtilesPackageMetadata,
-} from "@openmapx/cli/tile-pmtiles";
+import type { PmtilesPackageMetadata } from "@openmapx/cli/tile-pmtiles";
 import {
   type CanonicalOfflinePackageRequest,
   canonicalizeOfflinePackageRequest,
@@ -23,6 +20,7 @@ import {
   OfflinePackagePrincipalQuotaError,
   type OfflinePackageRemoval,
 } from "./accounting.js";
+import { createOfflinePackageExtractor } from "./extractor-client.js";
 import { OfflinePackageSourceError } from "./source-catalog.js";
 import type {
   OfflinePackageExtractor,
@@ -110,6 +108,10 @@ export class OfflinePackageGenerator {
   private readonly sourceFactory: OfflinePackageGeneratorOptions["source"];
   private readonly storage: OfflinePackageStorageLike;
   private readonly extractor: OfflinePackageExtractor;
+  private readonly workerExtractor: ReturnType<typeof createOfflinePackageExtractor> | undefined;
+  private readonly running = new Set<Promise<void>>();
+  private closed = false;
+  private closing: Promise<void> | undefined;
   private readonly clock: () => Date;
   private readonly maxConcurrent: number;
   private readonly maxQueuedJobs: number;
@@ -134,7 +136,11 @@ export class OfflinePackageGenerator {
   constructor(options: OfflinePackageGeneratorOptions) {
     this.sourceFactory = options.source;
     this.storage = options.storage;
-    this.extractor = options.extractor ?? (extractPmtilesPackageServer as OfflinePackageExtractor);
+    if (options.extractor) this.extractor = options.extractor;
+    else {
+      this.workerExtractor = createOfflinePackageExtractor();
+      this.extractor = this.workerExtractor.extract;
+    }
     this.clock = options.clock ?? (() => new Date());
     this.maxConcurrent = Math.max(
       1,
@@ -175,6 +181,19 @@ export class OfflinePackageGenerator {
     this.leaseMs = Math.max(10_000, options.leaseMs ?? 60_000);
   }
 
+  /** Stop admission and threads before temporary-file cleanup and process exit. */
+  close(): Promise<void> {
+    if (this.closing) return this.closing;
+    this.closed = true;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.pending.length = 0; // Durable queued jobs remain available after restart.
+    this.closing = (async () => {
+      await this.workerExtractor?.close();
+      await Promise.allSettled([...this.running]);
+    })();
+    return this.closing;
+  }
+
   async initialize(): Promise<void> {
     if (this.initialized) return;
     if (this.initializing) return await this.initializing;
@@ -197,6 +216,7 @@ export class OfflinePackageGenerator {
     request: OfflinePackageRequest,
   ): Promise<OfflinePackagePreparation> {
     assertOfflinePackagePrincipal(principal);
+    if (this.closed) throw new Error("Offline package generator closed");
     await this.initialize();
     await this.pruneTerminalJobs(this.clock().getTime());
     const source = await this.sourceFactory();
@@ -483,12 +503,13 @@ export class OfflinePackageGenerator {
   }
 
   private drain(): void {
+    if (this.closed) return;
     while (this.active < this.maxConcurrent && this.pending.length > 0) {
       const job = this.pending.shift();
       if (job?.status !== "preparing") continue;
       this.active++;
       this.inFlightJobIds.add(job.jobId);
-      void this.accounting
+      const running = this.accounting
         .claim(job.jobId, this.workerId, this.maxConcurrent, this.leaseMs)
         .then(async (claimed) => {
           if (claimed) await this.run(job);
@@ -504,13 +525,15 @@ export class OfflinePackageGenerator {
         .finally(() => {
           this.inFlightJobIds.delete(job.jobId);
           this.active--;
+          this.running.delete(running);
           this.drain();
         });
+      this.running.add(running);
     }
   }
 
   private scheduleDrainRetry(): void {
-    if (this.retryTimer) return;
+    if (this.closed || this.retryTimer) return;
     this.retryTimer = setTimeout(
       () => {
         this.retryTimer = undefined;
@@ -652,11 +675,13 @@ export class OfflinePackageGenerator {
       }
       await this.ensureCapacity(source.descriptor.datasetVersion);
       temporaryPath = this.storage.temporaryArchivePath(job.jobId);
+      if (this.closed) throw new Error("Offline package generator closed");
       const result = await this.extractor({
         sourceMbtilesPath: source.mbtilesPath,
         destinationPath: temporaryPath,
         request: job.request,
       });
+      if (this.closed) throw new Error("Offline package generator closed");
       if (result.byteLength > this.maxPackageBytes) {
         throw new Error("offline package capacity: generated archive exceeds the package limit");
       }

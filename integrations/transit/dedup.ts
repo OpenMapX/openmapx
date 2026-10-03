@@ -227,17 +227,50 @@ export function deduplicateStops(
     }
   }
 
-  // Pairwise comparison — O(n^2) but n is small (nearby stops query)
+  // On the unit sphere, any pair within 300 m differs by at most the
+  // corresponding chord in each axis. A slightly wider arc-length cell
+  // therefore covers every candidate in the 27 neighboring cells, including
+  // across the antimeridian and at the poles. Radius matches haversineMeters.
+  const cellWidth = MAX_DISTANCE_M / 6_371_000 + 1e-12;
+  const cells = new Map<string, number[]>();
+  const unindexed: number[] = [];
+  const compare = (i: number, j: number) => {
+    const dist = haversineMeters(sorted[i].lat, sorted[i].lng, sorted[j].lat, sorted[j].lng);
+    if (dist > MAX_DISTANCE_M) return;
+    if (diceSimilarity(normNames[i], normNames[j]) >= MIN_DICE) unite(i, j);
+  };
   for (let i = 0; i < sorted.length; i++) {
-    for (let j = i + 1; j < sorted.length; j++) {
-      const dist = haversineMeters(sorted[i].lat, sorted[i].lng, sorted[j].lat, sorted[j].lng);
-      if (dist > MAX_DISTANCE_M) continue;
-
-      const sim = diceSimilarity(normNames[i], normNames[j]);
-      if (sim >= MIN_DICE) {
-        unite(i, j);
+    const { lat, lng } = sorted[i];
+    if (
+      !Number.isFinite(lat) ||
+      !Number.isFinite(lng) ||
+      Math.abs(lat) > 90 ||
+      Math.abs(lng) > 180
+    ) {
+      // Preserve legacy behavior for malformed provider coordinates, whose
+      // distance may be NaN. They cannot safely be excluded by the index.
+      for (let j = 0; j < i; j++) compare(i, j);
+      unindexed.push(i);
+      continue;
+    }
+    const latitude = (lat * Math.PI) / 180;
+    const longitude = (lng * Math.PI) / 180;
+    const cosLat = Math.cos(latitude);
+    const x = Math.floor((cosLat * Math.cos(longitude)) / cellWidth);
+    const y = Math.floor((cosLat * Math.sin(longitude)) / cellWidth);
+    const z = Math.floor(Math.sin(latitude) / cellWidth);
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dz = -1; dz <= 1; dz++) {
+          for (const j of cells.get(`${x + dx},${y + dy},${z + dz}`) ?? []) compare(i, j);
+        }
       }
     }
+    for (const j of unindexed) compare(i, j);
+    const key = `${x},${y},${z}`;
+    const bucket = cells.get(key);
+    if (bucket) bucket.push(i);
+    else cells.set(key, [i]);
   }
 
   // Pick the best representative per cluster (lowest index = best priority

@@ -195,11 +195,14 @@ export {
   type AlongRouteOptions,
   type AlongRoutePoi,
   DEFAULT_CORRIDOR_PAD_METERS,
+  filterRoutePois,
   PROGRESS_BUCKET_METERS,
+  type ProjectedRoutePoi,
   paddedRouteAheadBounds,
   poiAlongRoute,
   progressBucket,
   progressBucketStartMeters,
+  projectRoutePois,
   routeAheadBounds,
 } from "./searchAlongRoute";
 export { refKind, signHeadline, visibleToward } from "./signFormat";

@@ -12,6 +12,7 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
+import { setTimeout as delay } from "node:timers/promises";
 import {
   canonicalizeOfflinePackageRequest,
   type OfflineMapPackageManifest,
@@ -254,6 +255,95 @@ describe("offline package storage", () => {
 });
 
 describe("offline package generation", () => {
+  it("removes all worker spool files after cancelling real extraction", async () => {
+    const dataDir = createDataDir();
+    const mbtilesPath = join(dataDir, "tile-mbtiles", "tiles.mbtiles");
+    const db = new DatabaseSync(mbtilesPath);
+    const tile = db.prepare("INSERT INTO tiles VALUES (12, ?, ?, ?)");
+    db.exec("BEGIN");
+    for (let x = 2048; x < 2162; x++) {
+      for (let y = 2047; y < 2163; y++) tile.run(x, y, Buffer.alloc(2048, 1));
+    }
+    db.exec("COMMIT");
+    db.close();
+    const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: sourceDescriptor,
+        mbtilesPath,
+        fontsDirectory: join(dataDir, "tile-fonts"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage,
+      maxPackageBytes: 100_000_000,
+      minFreeBytes: 0,
+    });
+    const temporaryRoot = join(dataDir, "offline-packages", ".tmp");
+    const containsSpool = (dir: string): boolean =>
+      existsSync(dir) &&
+      readdirSync(dir, { withFileTypes: true }).some((entry) => {
+        const path = join(dir, entry.name);
+        if (entry.isDirectory()) return containsSpool(path);
+        return entry.name.endsWith(".tiles") && statSync(path).size > 1_000_000;
+      });
+    try {
+      const job = await generator.prepare(principal, {
+        ...request,
+        bbox: sourceDescriptor.sourceBounds,
+        minZoom: 12,
+        maxZoom: 12,
+      });
+      const deadline = Date.now() + 15_000;
+      while (!containsSpool(temporaryRoot) && Date.now() < deadline) await delay(1);
+      expect(containsSpool(temporaryRoot)).toBe(true);
+      await generator.close();
+      expect((await generator.getJob(principal, job.jobId))?.status).toBe("failed");
+      expect(readdirSync(temporaryRoot)).toEqual([]);
+      expect(await storage.listPublishedPackages()).toEqual([]);
+    } finally {
+      await generator.close();
+    }
+  }, 20_000);
+
+  it("stops admission and awaits active extraction cleanup on shutdown", async () => {
+    const dataDir = createDataDir();
+    const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const extractor = vi.fn(async (options: OfflinePackageExtractorOptions) => {
+      await gate;
+      writeFileSync(options.destinationPath, "partial");
+      throw new Error("interrupted extraction");
+    });
+    const generator = new OfflinePackageGenerator({
+      source: () => ({
+        descriptor: sourceDescriptor,
+        mbtilesPath: join(dataDir, "tile-mbtiles", "tiles.mbtiles"),
+        fontsDirectory: join(dataDir, "tile-fonts"),
+        packageRoot: join(dataDir, "offline-packages"),
+      }),
+      storage,
+      extractor,
+    });
+    const job = await generator.prepare(principal, request);
+    await vi.waitFor(() => expect(extractor).toHaveBeenCalledOnce());
+    let closed = false;
+    const closing = generator.close().then(() => {
+      closed = true;
+    });
+    await Promise.resolve();
+    expect(closed).toBe(false);
+    await expect(generator.prepare(principal, request)).rejects.toThrow("closed");
+    release();
+    await closing;
+    expect((await generator.getJob(principal, job.jobId))?.status).toBe("failed");
+    expect(existsSync(storage.temporaryArchivePath(job.jobId))).toBe(false);
+    expect(await storage.listPublishedPackages()).toEqual([]);
+    await generator.close();
+  });
+
   it("fails safely if the source changes between preparation and extraction", async () => {
     const dataDir = createDataDir();
     const storage = new OfflinePackageStorage(join(dataDir, "offline-packages"));

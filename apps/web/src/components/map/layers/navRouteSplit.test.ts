@@ -258,3 +258,32 @@ describe("navRouteProgressFraction", () => {
     expect(navRouteProgressFraction(prepared, 500)).toBe(0);
   });
 });
+
+describe("navigation progress lookup work", () => {
+  it("reads logarithmic prefixes and only the located segment on a long route", () => {
+    const geometry: LngLat[] = Array.from({ length: 20_001 }, (_, i) => [i / 100_000, 50]);
+    const prepared = buildNavRouteLine(geometry);
+    if (!prepared) throw new Error("expected prepared line");
+    let prefixReads = 0;
+    let coordinateReads = 0;
+    const countReads = <T>(values: T[], read: () => void): T[] =>
+      new Proxy(values, {
+        get(target, key, receiver) {
+          if (typeof key === "string" && /^\d+$/.test(key)) read();
+          return Reflect.get(target, key, receiver);
+        },
+      });
+    prepared.cumulativeKm = countReads(prepared.cumulativeKm, () => prefixReads++);
+    prepared.line.geometry.coordinates = countReads(
+      prepared.line.geometry.coordinates,
+      () => coordinateReads++,
+    );
+    for (let i = 0; i < 20; i++) {
+      const fraction = navRouteProgressFraction(prepared, prepared.lengthKm * (900 + i));
+      expect(fraction).toBeGreaterThan(0);
+      expect(fraction).toBeLessThan(1);
+    }
+    expect(prefixReads).toBeLessThan(400);
+    expect(coordinateReads).toBeLessThanOrEqual(60);
+  });
+});

@@ -7,10 +7,11 @@ import {
   type CategoryId,
   type CategoryPlace,
   fetchDirections,
+  filterRoutePois,
   type LngLat,
   type OverpassFilter,
-  poiAlongRoute,
   prepareRouteMatcher,
+  projectRoutePois,
   remainingWaypoints,
   routeAheadBounds,
   useCategorySearch,
@@ -113,13 +114,19 @@ export function useRouteSearch(query: RouteSearchQuery | null): UseRouteSearch {
   const filterSearch = useFilterSearch(filter, filter ? bbox : null, locale);
   const active = filter ? filterSearch : categorySearch;
 
-  const results = useMemo(() => {
-    if (!matcher || !active.data?.results) return [];
-    return poiAlongRoute(active.data.results, matcher, alongMeters, {
-      lookaheadMeters: LOOKAHEAD_M,
-      speedMps: speedMps > 0 ? speedMps : undefined,
-    });
-  }, [matcher, active.data, alongMeters, speedMps]);
+  const places = active.data?.results;
+  const projections = useMemo(
+    () => (matcher && places ? projectRoutePois(places, matcher) : []),
+    [matcher, places],
+  );
+  const results = useMemo(
+    () =>
+      filterRoutePois(projections, alongMeters, {
+        lookaheadMeters: LOOKAHEAD_M,
+        speedMps: speedMps > 0 ? speedMps : undefined,
+      }),
+    [projections, alongMeters, speedMps],
+  );
 
   const addStop = async (coord: LngLat): Promise<boolean> => {
     const store = useNavigationStore.getState();

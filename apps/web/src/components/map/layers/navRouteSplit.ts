@@ -1,5 +1,6 @@
 import type { LngLat } from "@openmapx/core";
-import along from "@turf/along";
+import bearing from "@turf/bearing";
+import destination from "@turf/destination";
 import { lineString } from "@turf/helpers";
 import length from "@turf/length";
 import lineSliceAlong from "@turf/line-slice-along";
@@ -124,22 +125,29 @@ export function navRouteProgressFraction(prepared: NavRouteLine, alongMeters: nu
   if (alongKm <= 0) return 0;
   if (alongKm >= lengthKm) return 1;
 
-  // Locate the segment `alongKm` falls in, using the same cumulative
-  // geodesic walk `along`/`lineSliceAlong` use internally.
-  let segIdx = cumulativeKm.length - 2;
-  for (let i = 0; i < cumulativeKm.length - 1; i++) {
-    if (alongKm <= cumulativeKm[i + 1]) {
-      segIdx = i;
-      break;
-    }
+  // Lower bound: the first vertex at or beyond the cut. Equal prefixes
+  // (duplicate vertices) retain the same boundary as Turf's forward walk.
+  let low = 1;
+  let high = cumulativeKm.length - 1;
+  while (low < high) {
+    const mid = Math.floor((low + high) / 2);
+    if (cumulativeKm[mid] < alongKm) low = mid + 1;
+    else high = mid;
   }
-
-  // The exact point splitNavRoute's traveled/remaining boundary cuts at.
-  const point = along(line, alongKm, { units: "kilometers" });
-  const [lng, lat] = point.geometry.coordinates;
+  const segIdx = low - 1;
+  const segStart = line.geometry.coordinates[segIdx];
+  const segEnd = line.geometry.coordinates[low];
+  // Turf interpolates backwards from the segment end. Use the full-route
+  // prefix for its overshoot so rounding at long-route boundaries also agrees.
+  const overshot = alongKm - cumulativeKm[low];
+  const [lng, lat] =
+    overshot === 0
+      ? segEnd
+      : destination(segEnd, overshot, bearing(segEnd, segStart) - 180, {
+          units: "kilometers",
+        }).geometry.coordinates;
   if (!Number.isFinite(lng) || !Number.isFinite(lat)) return 0;
 
-  const segStart = line.geometry.coordinates[segIdx];
   const mercatorIntoSegment = Math.hypot(
     projectX(lng) - projectX(segStart[0]),
     projectY(lat) - projectY(segStart[1]),

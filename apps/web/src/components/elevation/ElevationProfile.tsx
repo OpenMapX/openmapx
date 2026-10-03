@@ -9,12 +9,17 @@ import Divider from "@mui/material/Divider";
 import Typography from "@mui/material/Typography";
 import type { Route } from "@openmapx/core";
 import { useElevation } from "@openmapx/core";
+import dynamic from "next/dynamic";
 import { useTranslations } from "next-intl";
 import { useEffect, useState } from "react";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { ElevationChart } from "./ElevationChart";
 import { useElevationHover } from "./ElevationHoverContext";
 import { ElevationStats } from "./ElevationStats";
+
+const ElevationChart = dynamic(() => import("./ElevationChart").then((m) => m.ElevationChart), {
+  ssr: false,
+  loading: () => <Box sx={{ width: "100%", height: 160 }} />,
+});
 
 interface ElevationProfileProps {
   route: Route;

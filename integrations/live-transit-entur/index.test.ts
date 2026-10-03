@@ -12,15 +12,16 @@ function mockOk(data: unknown) {
 }
 
 /** Run setup() with a capturing context and return the registered realtime provider. */
-function registerProvider() {
+function registerProvider(config: Record<string, unknown> = {}) {
   const ctx = createMockIntegrationContext({
     id: "live-transit-entur",
+    config,
     manifest: { dataSources: DATA_SOURCES } as never,
   });
   setup(ctx);
   const provider = ctx.registered.realtime[0];
-  if (!provider) throw new Error("no realtime provider registered");
-  return provider;
+  if (!provider?.getAlertsForBbox) throw new Error("no bbox alert provider registered");
+  return { ...provider, getAlertsForBbox: provider.getAlertsForBbox.bind(provider) };
 }
 
 let mockFetch: ReturnType<typeof vi.fn>;
@@ -31,6 +32,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
+  vi.useRealTimers();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
 });
@@ -174,5 +176,87 @@ describe("getAlertsForBbox", () => {
 
     const result = await registerProvider().getAlertsForBbox?.([4, 57, 32, 71.5]);
     expect(result?.data).toEqual([]);
+  });
+});
+
+describe("national situation snapshot cache", () => {
+  const situation = (id: string, longitude: number) => ({
+    id,
+    summary: [{ value: id, language: "en" }],
+    stopPlaces: [{ id: `stop:${id}`, latitude: 60, longitude }],
+  });
+
+  it("coalesces distinct concurrent areas while independently filtering each area", async () => {
+    const provider = registerProvider();
+    let resolve!: (response: Response) => void;
+    mockFetch.mockImplementation(
+      () =>
+        new Promise<Response>((yes) => {
+          resolve = yes;
+        }),
+    );
+    const requests = Array.from({ length: 10 }, (_, i) =>
+      provider.getAlertsForBbox([10 + i, 59, 10.5 + i, 61]),
+    );
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    resolve(
+      mockOk({ situations: Array.from({ length: 10 }, (_, i) => situation(String(i), 10.25 + i)) }),
+    );
+    const results = await Promise.all(requests);
+    expect(results.map((r) => r.data.map((a) => a.id))).toEqual(
+      Array.from({ length: 10 }, (_, i) => [`entur:${i}`]),
+    );
+  });
+
+  it("preserves snapshot fetchedAt on hits and refreshes at 15 seconds", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-10-03T10:00:00Z"));
+    const provider = registerProvider();
+    mockFetch.mockImplementation(async () => mockOk({ situations: [] }));
+    const first = await provider.getAlertsForBbox([4, 57, 32, 71.5]);
+    vi.advanceTimersByTime(14_999);
+    const cached = await provider.getAlertsForBbox([10, 59, 11, 60]);
+    expect(mockFetch).toHaveBeenCalledTimes(1);
+    expect(cached.freshness.fetchedAt).toBe(first.freshness.fetchedAt);
+    vi.advanceTimersByTime(1);
+    const refreshed = await provider.getAlertsForBbox([10, 59, 11, 60]);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(refreshed.freshness.fetchedAt).not.toBe(first.freshness.fetchedAt);
+  });
+
+  it("retries after a failed fetch rather than caching the failure", async () => {
+    const provider = registerProvider();
+    mockFetch.mockResolvedValueOnce(Response.json({ errors: [{ message: "unavailable" }] }));
+    await expect(provider.getAlertsForBbox([4, 57, 32, 71.5])).rejects.toThrow("unavailable");
+    mockFetch.mockResolvedValueOnce(mockOk({ situations: [] }));
+    expect((await provider.getAlertsForBbox([4, 57, 32, 71.5])).data).toEqual([]);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not repopulate the current cache from an older activation", async () => {
+    const old = registerProvider();
+    let resolveOld!: (response: Response) => void;
+    mockFetch.mockImplementationOnce(
+      () =>
+        new Promise<Response>((yes) => {
+          resolveOld = yes;
+        }),
+    );
+    const oldRequest = old.getAlertsForBbox([4, 57, 32, 71.5]);
+    const current = registerProvider({
+      journeyPlannerEndpoint: "https://example.test/graphql",
+      clientName: "new-client",
+    });
+    mockFetch.mockResolvedValueOnce(mockOk({ situations: [situation("current", 10)] }));
+    await current.getAlertsForBbox([4, 57, 32, 71.5]);
+    resolveOld(mockOk({ situations: [situation("old", 10)] }));
+    await oldRequest;
+    const hit = await current.getAlertsForBbox([4, 57, 32, 71.5]);
+    expect(hit.data.map((a) => a.id)).toEqual(["entur:current"]);
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(String(mockFetch.mock.calls[1]?.[0])).toBe("https://example.test/graphql");
+    expect((mockFetch.mock.calls[1]?.[1] as RequestInit).headers).toMatchObject({
+      "ET-Client-Name": "new-client",
+    });
   });
 });

@@ -43,7 +43,8 @@ export function setup(ctx: IntegrationContext): void {
     const baseKey = `live-transit:${bboxKey(bbox)}`;
     const [vehicles, alerts] = await Promise.all([
       ctx.cache.withCache(`${baseKey}:vehicles`, 15, () => orchestrator.getVehicles(bbox)),
-      ctx.cache.withCache(`${baseKey}:alerts`, 60, () => orchestrator.getAlerts(bbox)),
+      // 15 s national snapshot + 30 s bbox + 15 s HTTP stays within 60 s.
+      ctx.cache.withCache(`${baseKey}:alerts`, 30, () => orchestrator.getAlerts(bbox)),
     ]);
 
     reply.header("Cache-Control", "public, max-age=15, s-maxage=15");

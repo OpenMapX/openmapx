@@ -28,45 +28,56 @@ const DEFAULT_CORRIDOR_M = 1200;
 const DEFAULT_LOOKAHEAD_M = 25_000;
 const DEFAULT_SPEED_MPS = 14;
 
-/**
- * Project POIs onto the active route and keep those that are ahead of the
- * current position, within the corridor, and within the look-ahead window;
- * each is returned with an estimated detour (leave the route + rejoin ≈ twice
- * the perpendicular deviation). Sorted by distance along the route. Pure.
- *
- * `route` is the active route's prepared matcher, so a results refresh projects
- * the whole POI set against one index. Passing the bare geometry prepares it
- * once here, never once per POI.
- */
+/** Geometry-dependent projection retained across progress and speed updates. */
+export type ProjectedRoutePoi<T> = Omit<AlongRoutePoi<T>, "detourSeconds">;
+
+/** Snap once per result-array / route identity, in stable along-route order. */
+export function projectRoutePois<T extends { coordinates: LngLat }>(
+  places: T[],
+  route: RouteMatcherInput,
+): ProjectedRoutePoi<T>[] {
+  const matcher = asRouteMatcher(route);
+  if (matcher.geometry.length < 2) return [];
+  return places
+    .map((place) => {
+      const snap = snapPreparedRoute(matcher, place.coordinates);
+      return {
+        place,
+        alongMeters: snap.alongMeters,
+        deviationMeters: snap.deviationMeters,
+        detourMeters: 2 * snap.deviationMeters,
+      };
+    })
+    .sort((a, b) => a.alongMeters - b.alongMeters);
+}
+
+/** Refilter retained projections against live progress and recompute detour time. */
+export function filterRoutePois<T>(
+  projections: readonly ProjectedRoutePoi<T>[],
+  currentAlongMeters: number,
+  opts: AlongRouteOptions = {},
+): AlongRoutePoi<T>[] {
+  const corridor = opts.corridorMeters ?? DEFAULT_CORRIDOR_M;
+  const lookahead = opts.lookaheadMeters ?? DEFAULT_LOOKAHEAD_M;
+  const speed = opts.speedMps && opts.speedMps > 0 ? opts.speedMps : DEFAULT_SPEED_MPS;
+  const out: AlongRoutePoi<T>[] = [];
+  for (const projection of projections) {
+    if (projection.deviationMeters > corridor) continue;
+    const ahead = projection.alongMeters - currentAlongMeters;
+    if (ahead <= 0 || ahead > lookahead) continue;
+    out.push({ ...projection, detourSeconds: projection.detourMeters / speed });
+  }
+  return out;
+}
+
+/** Project and filter in one call for callers without retained result ownership. */
 export function poiAlongRoute<T extends { coordinates: LngLat }>(
   places: T[],
   route: RouteMatcherInput,
   currentAlongMeters: number,
   opts: AlongRouteOptions = {},
 ): AlongRoutePoi<T>[] {
-  const matcher = asRouteMatcher(route);
-  if (matcher.geometry.length < 2) return [];
-  const corridor = opts.corridorMeters ?? DEFAULT_CORRIDOR_M;
-  const lookahead = opts.lookaheadMeters ?? DEFAULT_LOOKAHEAD_M;
-  const speed = opts.speedMps && opts.speedMps > 0 ? opts.speedMps : DEFAULT_SPEED_MPS;
-
-  const out: AlongRoutePoi<T>[] = [];
-  for (const place of places) {
-    const snap = snapPreparedRoute(matcher, place.coordinates);
-    if (snap.deviationMeters > corridor) continue;
-    const ahead = snap.alongMeters - currentAlongMeters;
-    if (ahead <= 0 || ahead > lookahead) continue;
-    const detourMeters = 2 * snap.deviationMeters;
-    out.push({
-      place,
-      alongMeters: snap.alongMeters,
-      deviationMeters: snap.deviationMeters,
-      detourMeters,
-      detourSeconds: detourMeters / speed,
-    });
-  }
-  out.sort((a, b) => a.alongMeters - b.alongMeters);
-  return out;
+  return filterRoutePois(projectRoutePois(places, route), currentAlongMeters, opts);
 }
 
 /**

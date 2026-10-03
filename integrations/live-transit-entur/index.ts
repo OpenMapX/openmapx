@@ -146,6 +146,43 @@ let clientName = DEFAULT_CLIENT_NAME;
 let journeyPlannerEndpoint = DEFAULT_JOURNEY_PLANNER_ENDPOINT;
 let vehiclesEndpoint = DEFAULT_VEHICLES_ENDPOINT;
 
+// Combined cache budget: national snapshot 15 s + bbox 30 s + HTTP 15 s.
+const SITUATIONS_CACHE_MS = 15_000;
+interface SituationSnapshot {
+  situations: EnturSituation[];
+  fetchedAt: string;
+  expiresAt: number;
+}
+let situationCache: { snapshot?: SituationSnapshot; pending?: Promise<SituationSnapshot> } = {};
+
+function getSituationSnapshot(): Promise<SituationSnapshot> {
+  const cache = situationCache;
+  if (cache.snapshot && Date.now() < cache.snapshot.expiresAt)
+    return Promise.resolve(cache.snapshot);
+  if (cache.pending) return cache.pending;
+  cache.pending = (async () => {
+    try {
+      const data = await fetchGraphQl<{ situations?: EnturSituation[] | null }>(
+        journeyPlannerEndpoint,
+        NATIONAL_SITUATIONS_QUERY,
+      );
+      const now = Date.now();
+      const snapshot = {
+        situations: data.situations ?? [],
+        fetchedAt: new Date(now).toISOString(),
+        expiresAt: now + SITUATIONS_CACHE_MS,
+      };
+      // An old activation owns a different cache object and cannot refill
+      // the current activation's snapshot after its request finishes.
+      cache.snapshot = snapshot;
+      return snapshot;
+    } finally {
+      cache.pending = undefined;
+    }
+  })();
+  return cache.pending;
+}
+
 function withEnturPrefix(id: string): string {
   return `${ENTUR_PREFIX}${id}`;
 }
@@ -376,20 +413,16 @@ async function getEnturVehicles(bbox: BBox): Promise<LiveTransitVehicle[]> {
     .filter((vehicle): vehicle is LiveTransitVehicle => vehicle !== null);
 }
 
-async function getEnturAlerts(bbox: BBox): Promise<ServiceAlert[]> {
-  const data = await fetchGraphQl<{ situations?: EnturSituation[] | null }>(
-    journeyPlannerEndpoint,
-    NATIONAL_SITUATIONS_QUERY,
-  );
-
+async function getEnturAlerts(bbox: BBox): Promise<{ data: ServiceAlert[]; fetchedAt: string }> {
+  const snapshot = await getSituationSnapshot();
   const byId = new Map<string, ServiceAlert>();
-  for (const situation of data.situations ?? []) {
+  for (const situation of snapshot.situations) {
     if (!situationTouchesBbox(situation, bbox)) continue;
     const alert = toAlert(situation);
     if (!alert) continue;
     byId.set(alert.id, alert);
   }
-  return [...byId.values()];
+  return { data: [...byId.values()], fetchedAt: snapshot.fetchedAt };
 }
 
 async function isEnturLiveTransitAvailable(): Promise<boolean> {
@@ -415,6 +448,7 @@ function attributionFor(sourceId: string): Attribution[] {
 
 export function setup(ctx: IntegrationContext): void {
   ctx.onActivate(() => {
+    situationCache = {};
     attribution.set(ctx.manifest.dataSources ?? []);
     clientName =
       ctx.config.clientName && String(ctx.config.clientName).trim().length > 0
@@ -457,12 +491,11 @@ export function setup(ctx: IntegrationContext): void {
       );
     },
     async getAlertsForBbox(bbox: BBox) {
-      const data = await getEnturAlerts(bbox);
-      return withAttribution(
-        data,
-        attributionFor("entur-live-situations"),
-        freshnessNow({ hasRealtimeData: true }),
-      );
+      const snapshot = await getEnturAlerts(bbox);
+      return withAttribution(snapshot.data, attributionFor("entur-live-situations"), {
+        ...freshnessNow({ hasRealtimeData: true }),
+        fetchedAt: snapshot.fetchedAt,
+      });
     },
   };
 

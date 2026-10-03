@@ -154,8 +154,43 @@ describe("useRouteSearch route index ownership", () => {
 
     const counters = readRouteMatcherCounters();
     expect(counters.preparations).toBe(1);
-    // Every POI is projected on the first pass and on each of the five updates.
-    expect(counters.snaps).toBe(places.length * 6);
+    // Unchanged places are projected only once; each fix just refilters them.
+    expect(counters.snaps).toBe(places.length);
+  });
+
+  it("updates ahead filtering and detour time without resnapping on speed changes", () => {
+    const { result } = renderHook(() => useRouteSearch({ category: "fuel" }));
+    const initial = result.current.results.find((r) => r.place.id === "b");
+    if (!initial) throw new Error("missing initial POI");
+    act(() => publishProgress(150));
+    expect(result.current.results.map((r) => r.place.id)).toEqual(["b", "c"]);
+    const slower = result.current.results.find((r) => r.place.id === "b");
+    if (!slower) throw new Error("missing updated POI");
+    expect(slower.detourSeconds).toBeCloseTo(initial.detourMeters / 12);
+    act(() =>
+      useNavigationStore.setState((state) => ({
+        progress: state.progress ? { ...state.progress, speedMps: 24 } : null,
+      })),
+    );
+    expect(result.current.results[0].detourSeconds).toBeCloseTo(slower.detourSeconds / 2);
+    expect(readRouteMatcherCounters().snaps).toBe(places.length);
+  });
+
+  it("reprojects a new filter result array including changed coordinates", () => {
+    const filter: OverpassFilter = {
+      selectors: [{ tags: [{ key: "brand", op: "=", value: "x" }] }],
+    };
+    filterSearchResult = { data: { results: places }, isLoading: false, isError: false };
+    const { result, rerender } = renderHook(() => useRouteSearch({ filter }));
+    const initial = result.current.results[0].alongMeters;
+    const refreshed = places.map((p) => ({
+      ...p,
+      coordinates: [p.coordinates[0] + 0.0005, p.coordinates[1]],
+    }));
+    filterSearchResult = { ...filterSearchResult, data: { results: refreshed } };
+    rerender();
+    expect(result.current.results[0].alongMeters).toBeGreaterThan(initial);
+    expect(readRouteMatcherCounters().snaps).toBe(places.length * 2);
   });
 
   it("indexes the replacement route once when the route is swapped", () => {
