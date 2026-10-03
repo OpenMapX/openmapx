@@ -131,6 +131,14 @@ describe("GlobeProjection sky lifecycle", () => {
     expect(container.style.backgroundColor).toBe("red");
   });
 
+  it("marks an animated globe reveal as an app camera movement", () => {
+    fake.state.zoom = 14;
+    render(<GlobeProjection />);
+    expect(fake.state.cameraTransitions).toEqual([
+      { method: "easeTo", options: { zoom: 3, duration: 1500 }, eventData: { programmatic: true } },
+    ]);
+  });
+
   it("keeps the reduced-motion globe reveal immediate and does not repeat it on style reload", () => {
     vi.stubGlobal(
       "matchMedia",
@@ -139,7 +147,7 @@ describe("GlobeProjection sky lifecycle", () => {
     fake.state.zoom = 14;
     const { rerender } = render(<GlobeProjection />);
     expect(fake.state.cameraTransitions).toEqual([
-      { method: "jumpTo", options: { zoom: 3 }, eventData: undefined },
+      { method: "jumpTo", options: { zoom: 3 }, eventData: { programmatic: true } },
     ]);
     context.styleVersion++;
     rerender(<GlobeProjection />);

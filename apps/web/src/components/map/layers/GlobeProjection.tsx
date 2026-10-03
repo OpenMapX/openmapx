@@ -140,9 +140,9 @@ export function GlobeProjection() {
 
     const prefersReducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     if (prefersReducedMotion) {
-      map.jumpTo({ zoom: ZOOM_OUT_TARGET });
+      map.jumpTo({ zoom: ZOOM_OUT_TARGET }, { programmatic: true });
     } else {
-      map.easeTo({ zoom: ZOOM_OUT_TARGET, duration: ZOOM_OUT_DURATION });
+      map.easeTo({ zoom: ZOOM_OUT_TARGET, duration: ZOOM_OUT_DURATION }, { programmatic: true });
     }
   }, [globeView, globeCameraBehavior, mapReady, styleVersion, mapRef]);
 

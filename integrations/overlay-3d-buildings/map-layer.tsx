@@ -27,10 +27,10 @@ function prefersReducedMotion(): boolean {
 
 function moveToPitch(map: maplibregl.Map, pitch: number, duration: number): void {
   if (prefersReducedMotion()) {
-    map.jumpTo({ pitch });
+    map.jumpTo({ pitch }, { programmatic: true });
     return;
   }
-  map.easeTo({ pitch, duration });
+  map.easeTo({ pitch, duration }, { programmatic: true });
 }
 
 export function BuildingExtrusionLayer() {

@@ -188,6 +188,7 @@ describe("BuildingExtrusionLayer", () => {
     expect(fake.state.cameraTransitions.at(-1)).toEqual({
       method: "easeTo",
       options: { pitch: 45, duration: 800 },
+      eventData: { programmatic: true },
     });
 
     act(() => {
@@ -243,6 +244,7 @@ describe("BuildingExtrusionLayer", () => {
     expect(fake.state.cameraTransitions).toContainEqual({
       method: "jumpTo",
       options: { pitch: 45 },
+      eventData: { programmatic: true },
     });
     expect(fake.state.cameraTransitions.some((transition) => transition.method === "easeTo")).toBe(
       false,
