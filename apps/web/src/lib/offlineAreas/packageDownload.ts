@@ -350,6 +350,13 @@ async function downloadOfflinePackageImpl(
       throw new Error("offline package archive length mismatch");
     }
     if (hash.digestHex() !== manifest.archive.sha256) {
+      // None of this prefix is trustworthy after the whole-archive check fails.
+      // Reset the durable counters even if truncating/flushing itself fails;
+      // the next attempt will truncate the file to that zero-byte prefix.
+      record.bytesReceived = 0;
+      record.verifiedPrefixBytes = 0;
+      await file.truncate(0);
+      await file.flush();
       throw new Error("offline package archive checksum mismatch");
     }
 

@@ -189,6 +189,54 @@ describe("downloadOfflinePackage", () => {
     expect(readyError.message).toContain("not ready");
   });
 
+  it.each([0, 3])("redownloads after a checksum failure with %i resumed bytes", async (prefix) => {
+    const bytes = new TextEncoder().encode("abcdef");
+    const bad = new TextEncoder().encode("abcdeg");
+    const current = manifest(bytes);
+    const storage = new MemoryOfflinePackageStorage();
+    if (prefix) {
+      await storage.put({
+        id: packageId,
+        name: "Fixture",
+        manifest: current,
+        status: "paused",
+        bytesReceived: prefix,
+        bytesTotal: 6,
+        verifiedPrefixBytes: prefix,
+        createdAt: 1,
+        updatedAt: 1,
+      });
+      const file = await storage.openPartial(packageId);
+      await file.append(bad.subarray(0, prefix));
+      await file.close();
+    }
+    let attempts = 0;
+    const openArchive = vi.fn(async () => {
+      attempts += 1;
+      return attempts === 1
+        ? response(bad.subarray(prefix), prefix ? 206 : 200, {
+            etag: current.archive.etag,
+            ...(prefix ? { "content-range": "bytes 3-5/6" } : {}),
+          })
+        : response(bytes, 200, { etag: current.archive.etag });
+    });
+    const api = { openArchive } as unknown as OfflinePackageApi;
+
+    expect((await failure(() => downloadOfflinePackage(api, storage, current))).message).toContain(
+      "checksum",
+    );
+    expect(await storage.get(packageId)).toMatchObject({
+      status: "error",
+      bytesReceived: 0,
+      verifiedPrefixBytes: 0,
+    });
+    const result = await downloadOfflinePackage(api, storage, current);
+    expect(result.status).toBe("ready");
+    expect(openArchive.mock.calls[1]).toEqual([packageId, undefined, undefined]);
+    const file = await storage.openReady(packageId);
+    expect(Array.from(await file.read(0, 6))).toEqual([97, 98, 99, 100, 101, 102]);
+  });
+
   it("reports an HTTP error without confusing it with a successful package", async () => {
     const bytes = new TextEncoder().encode("abcdef");
     const current = manifest(bytes);
