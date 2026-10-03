@@ -36,6 +36,7 @@ export type JobEvent = JobStatusEvent | JobProgressEvent | JobLogEvent;
 
 export interface StoredJobEvent {
   cursor: number;
+  publishedAtMs: number;
   event: JobEvent;
 }
 
@@ -46,6 +47,8 @@ export interface JobStreamMetrics {
   snapshotFallbacks: number;
   droppedEvents: number;
   publishedEvents: number;
+  maxPublishLagMs: number;
+  handlerDurationMs: { upperBoundMs: number | null; count: number }[];
   handlerDurations: { count: number; totalMs: number; maxMs: number };
 }
 
@@ -69,6 +72,8 @@ export interface JobEventBusOptions {
   ringSize?: number;
   /** How long a finished job stays replayable. */
   terminalRetentionMs?: number;
+  /** Monotonic publication and delivery clock. */
+  nowMs?: () => number;
 }
 
 const DEFAULT_RING_SIZE = 1_000;
@@ -78,6 +83,7 @@ export class JobEventBus {
   private readonly jobs = new Map<string, JobState>();
   private readonly ringSize: number;
   private readonly terminalRetentionMs: number;
+  private readonly nowMs: () => number;
   readonly metrics: JobStreamMetrics = {
     activeStreams: 0,
     reconnects: 0,
@@ -85,10 +91,16 @@ export class JobEventBus {
     snapshotFallbacks: 0,
     droppedEvents: 0,
     publishedEvents: 0,
+    maxPublishLagMs: 0,
+    handlerDurationMs: [100, 1000, 10000, 60000, null].map((upperBoundMs) => ({
+      upperBoundMs,
+      count: 0,
+    })),
     handlerDurations: { count: 0, totalMs: 0, maxMs: 0 },
   };
 
   constructor(options: JobEventBusOptions = {}) {
+    this.nowMs = options.nowMs ?? (() => performance.now());
     this.ringSize = options.ringSize ?? DEFAULT_RING_SIZE;
     this.terminalRetentionMs = options.terminalRetentionMs ?? DEFAULT_TERMINAL_RETENTION_MS;
   }
@@ -104,7 +116,7 @@ export class JobEventBus {
 
   publish(jobId: string, event: JobEvent): StoredJobEvent {
     const state = this.state(jobId);
-    const stored: StoredJobEvent = { cursor: state.nextCursor, event };
+    const stored: StoredJobEvent = { cursor: state.nextCursor, publishedAtMs: this.nowMs(), event };
     state.nextCursor += 1;
     state.ring.push(stored);
     if (state.ring.length > this.ringSize) state.ring.shift();
@@ -157,7 +169,17 @@ export class JobEventBus {
     state.dropTimer.unref?.();
   }
 
+  recordDelivery(stored: StoredJobEvent): void {
+    this.metrics.maxPublishLagMs = Math.max(
+      this.metrics.maxPublishLagMs,
+      this.nowMs() - stored.publishedAtMs,
+    );
+  }
+
   recordHandlerDuration(durationMs: number): void {
+    for (const bucket of this.metrics.handlerDurationMs) {
+      if (bucket.upperBoundMs === null || durationMs <= bucket.upperBoundMs) bucket.count += 1;
+    }
     const stats = this.metrics.handlerDurations;
     stats.count += 1;
     stats.totalMs += durationMs;

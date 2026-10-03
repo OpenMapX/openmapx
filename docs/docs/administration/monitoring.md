@@ -490,8 +490,15 @@ what it missed from a bounded in-memory window, or sends a fresh snapshot when
 that window has expired (for example after an API restart). If the stream keeps
 failing the view falls back to polling. `GET /api/admin/jobs/stream-metrics`
 reports active streams, reconnects, backfilled events, snapshot fallbacks,
-slow-consumer disconnects, and job handler durations. Data-manager jobs are
-written by a separate process and keep polling.
+slow-consumer disconnects, and job handler durations. `maxPublishLagMs` is the
+largest elapsed time from an event's publication to its server-side stream write,
+including reconnect backfill; it does not measure network or browser delivery.
+`handlerDurations` provides count, total milliseconds and maximum duration.
+`handlerDurationMs` provides cumulative histogram counts with inclusive upper
+bounds of 100, 1,000, 10,000 and 60,000 milliseconds; the final `null` bound includes
+all durations, including overflow. Metrics describe the current API process and
+reset on restart. Data-manager jobs are written by a separate process and keep
+polling.
 
 ## Where to go next
 

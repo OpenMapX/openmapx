@@ -107,6 +107,8 @@ export async function adminJobEventsRoute(app: FastifyInstance): Promise<void> {
           backlog.push(stored);
           return;
         }
+        if (closed) return;
+        jobEventBus.recordDelivery(stored);
         if (!write(frame(stored.cursor, stored.event.type, stored.event))) return;
         if (stored.event.type === "status" && TERMINAL_JOB_STATUSES.has(stored.event.status)) {
           write(frame(null, "end", { status: stored.event.status }));

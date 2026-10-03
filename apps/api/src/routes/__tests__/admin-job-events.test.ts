@@ -161,6 +161,42 @@ describe("GET /admin/jobs/:id/events", () => {
     expect(jobEventBus.metrics.backfilledEvents).toBe(before.backfilledEvents + 1);
   });
 
+  it.each(["live", "replay"])("records publication-to-write lag for %s delivery", async (mode) => {
+    const id = nextJobId();
+    let now = 10;
+    const clock = vi.spyOn(performance, "now").mockImplementation(() => now);
+    const previous = jobEventBus.metrics.maxPublishLagMs;
+    jobEventBus.metrics.maxPublishLagMs = 0;
+    try {
+      if (mode === "replay") {
+        jobEventBus.publish(id, logEvent(0));
+        jobEventBus.publish(id, logEvent(1));
+        now = 90;
+        mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "success" }));
+      } else {
+        mockGetActivityJob.mockResolvedValueOnce(jobRow({ id }));
+        mockGetActivityJob.mockImplementationOnce(async () => {
+          jobEventBus.publish(id, logEvent(0));
+          jobEventBus.publish(id, { type: "status", status: "success" });
+          now = 90;
+          return jobRow({ id });
+        });
+      }
+      const res = await app.inject({
+        method: "GET",
+        url: `/admin/jobs/${id}/events`,
+        ...(mode === "replay" ? { headers: { "last-event-id": "1" } } : {}),
+      });
+      expect(parseSse(res.body).map((frame) => frame.event)).toEqual(
+        mode === "replay" ? ["log", "end"] : ["snapshot", "log", "status", "end"],
+      );
+      expect(jobEventBus.metrics.maxPublishLagMs).toBe(80);
+    } finally {
+      clock.mockRestore();
+      jobEventBus.metrics.maxPublishLagMs = previous;
+    }
+  });
+
   it("falls back to a snapshot when the cursor is unknown to the bus", async () => {
     const id = nextJobId();
     mockGetActivityJob.mockResolvedValue(jobRow({ id, status: "canceled" }));
