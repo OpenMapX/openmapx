@@ -1,4 +1,10 @@
-import { API_ENDPOINTS, apiClient, createPlace, type SavedPlace } from "@openmapx/core";
+import {
+  API_ENDPOINTS,
+  apiClient,
+  createPlace,
+  type SavedList,
+  type SavedPlace,
+} from "@openmapx/core";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { act } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -39,34 +45,62 @@ afterEach(() => {
 });
 function setup(initial = false) {
   const rows: SavedPlace[] = initial ? [row] : [];
+  const lists = [{ id: "l1", name: "Trip", icon: null, isPrivate: true }] as SavedList[];
+  let finishCreate: () => void = () => {};
+  let rejectCreate: (error: Error) => void = () => {};
+  let rejectPost: (error: Error) => void = () => {};
   let finishPost: () => void = () => {};
   let finishDelete: () => void = () => {};
-  const post = vi.spyOn(apiClient, "post").mockImplementation(
-    () =>
-      new Promise((resolve) => {
-        finishPost = () => {
-          if (!rows.some((existing) => existing.id === row.id)) rows.push(row);
-          resolve(row);
+  const post = vi.spyOn(apiClient, "post").mockImplementation((url, data) => {
+    if (url === API_ENDPOINTS.savedLists)
+      return new Promise((resolve, reject) => {
+        rejectCreate = reject;
+        finishCreate = () => {
+          const list = {
+            id: "l2",
+            name: (data as { name: string }).name,
+            icon: null,
+            isPrivate: true,
+          } as SavedList;
+          lists.push(list);
+          resolve(list);
         };
-      }),
-  );
+      });
+    return new Promise((resolve, reject) => {
+      rejectPost = reject;
+      finishPost = () => {
+        const saved = {
+          ...row,
+          ...(data as object),
+          listId: String(url).split("/").at(-2),
+          id: "sp1",
+        } as SavedPlace;
+        if (!rows.some((existing) => existing.id === saved.id)) rows.push(saved);
+        resolve(saved);
+      };
+    });
+  });
   const remove = vi.spyOn(apiClient, "delete").mockImplementation(async () => {
     rows.splice(0);
     return {};
   });
-  vi.spyOn(apiClient, "get").mockImplementation(async (url, params) => {
+  const read = async (url: unknown, params?: unknown) => {
     if (url === API_ENDPOINTS.savedLists)
       return {
-        lists: [{ id: "l1", name: "Trip", icon: null, isPrivate: true, placeCount: rows.length }],
+        lists: lists.map((list) => ({
+          ...list,
+          placeCount: rows.filter((row) => row.listId === list.id).length,
+        })),
       };
     if (url === API_ENDPOINTS.savedCheck)
       return {
-        listIds: rows.some((row) => row.placeId === (params as { placeId: string }).placeId)
-          ? ["l1"]
-          : [],
+        listIds: rows
+          .filter((row) => row.placeId === (params as { placeId: string }).placeId)
+          .map((row) => row.listId),
       };
     return { places: [...rows] };
-  });
+  };
+  const get = vi.spyOn(apiClient, "get").mockImplementation(read);
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -78,6 +112,12 @@ function setup(initial = false) {
   );
   return {
     rows,
+    lists,
+    get,
+    read,
+    finishCreate: () => finishCreate(),
+    rejectCreate: () => rejectCreate(new Error("creation failed")),
+    rejectPost: () => rejectPost(new Error("save failed")),
     post,
     remove,
     client,
@@ -188,5 +228,153 @@ describe("saved-place membership intent", () => {
     await act(async () => fixture.finishPost());
     await waitFor(() => expect(fixture.rows).toHaveLength(0));
     expect(fixture.remove).toHaveBeenCalledTimes(1);
+  });
+});
+
+const other = createPlace({
+  primaryScheme: "osm",
+  ids: { osm: "p2" },
+  name: "Other",
+  address: "",
+  coordinates: [9, 51],
+});
+async function startCreation() {
+  await userEvent.click(screen.getByRole("button", { name: "saved.createNewList" }));
+  await userEvent.type(screen.getByRole("textbox"), "New list{Enter}");
+}
+function show(fixture: ReturnType<typeof setup>, open = true, displayed = place) {
+  fixture.view.rerender(
+    <QueryClientProvider client={fixture.client}>
+      <SavePlaceDialog open={open} onClose={() => {}} place={displayed} />
+    </QueryClientProvider>,
+  );
+}
+async function reopen(fixture: ReturnType<typeof setup>) {
+  show(fixture, false);
+  await waitFor(() => expect(screen.queryByRole("checkbox")).toBeNull());
+  show(fixture);
+}
+describe("saved-place failure and creation reconciliation", () => {
+  it.each(["remove", "lookup"])(
+    "restores membership after failed %s and reopening",
+    async (failure) => {
+      const fixture = setup(true);
+      await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
+      let rejectRemoval: (error: Error) => void = () => {};
+      if (failure === "remove")
+        fixture.remove.mockImplementation(
+          () =>
+            new Promise((_resolve, reject) => {
+              rejectRemoval = reject;
+            }),
+        );
+      else {
+        const original = fixture.read;
+        fixture.get.mockImplementation((url, params) =>
+          String(url).endsWith("/places")
+            ? Promise.reject(new Error("lookup failed"))
+            : original(url, params),
+        );
+      }
+      await userEvent.click(screen.getByText("Trip"));
+      if (failure === "remove") {
+        await waitFor(() => expect(fixture.remove).toHaveBeenCalledTimes(1));
+        expect(screen.getByRole("checkbox")).not.toBeChecked();
+        await act(async () => rejectRemoval(new Error("offline")));
+      }
+      await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
+      expect(fixture.rows).toEqual([row]);
+      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(["l1"]);
+      if (failure === "lookup") expect(fixture.remove).not.toHaveBeenCalled();
+      await reopen(fixture);
+      await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
+    },
+  );
+  it.each(["success", "creation failure", "save failure", "switch place"])(
+    "binds creation to its requested place: %s",
+    async (outcome) => {
+      const fixture = setup();
+      await waitFor(() =>
+        expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([]),
+      );
+      await startCreation();
+      await waitFor(() =>
+        expect(fixture.post).toHaveBeenCalledWith(API_ENDPOINTS.savedLists, { name: "New list" }),
+      );
+      if (outcome === "creation failure") {
+        await act(async () => fixture.rejectCreate());
+        expect(fixture.lists).toHaveLength(1);
+        expect(fixture.rows).toHaveLength(0);
+        expect(fixture.post).toHaveBeenCalledTimes(1);
+        await reopen(fixture);
+        expect(screen.getByRole("checkbox")).not.toBeChecked();
+        return;
+      }
+      if (outcome === "switch place") {
+        show(fixture, true, other);
+        await waitFor(() =>
+          expect(fixture.client.getQueryData(["savedCheck", other.id])).toEqual([]),
+        );
+      }
+      await act(async () => fixture.finishCreate());
+      await waitFor(() => expect(fixture.post).toHaveBeenCalledTimes(2));
+      expect(fixture.post).toHaveBeenLastCalledWith(
+        `${API_ENDPOINTS.savedLists}/l2/places`,
+        expect.objectContaining({ placeId: place.id, name: place.name, lat: 50, lng: 8 }),
+      );
+      await act(async () => {
+        if (outcome === "save failure") fixture.rejectPost();
+        else fixture.finishPost();
+      });
+      await screen.findByText("New list");
+      await waitFor(() =>
+        expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(
+          outcome === "save failure" ? [] : ["l2"],
+        ),
+      );
+      expect(fixture.rows).toHaveLength(outcome === "save failure" ? 0 : 1);
+      if (outcome === "switch place") {
+        expect(fixture.rows[0].placeId).toBe(place.id);
+        expect(fixture.client.getQueryData(["savedCheck", other.id])).toEqual([]);
+        expect(
+          screen
+            .getAllByRole("checkbox")
+            .every((checkbox) => !(checkbox as HTMLInputElement).checked),
+        ).toBe(true);
+      }
+      await reopen(fixture);
+      await waitFor(() => {
+        if (outcome === "save failure")
+          expect(screen.getAllByRole("checkbox")[1]).not.toBeChecked();
+        else expect(screen.getAllByRole("checkbox")[1]).toBeChecked();
+      });
+    },
+  );
+  it("discards a stale membership read captured before the final save", async () => {
+    const fixture = setup();
+    await waitFor(() => expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual([]));
+    let finishRead!: () => void;
+    const original = fixture.read;
+    fixture.get.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          finishRead = () => resolve({ listIds: [] });
+        }),
+    );
+    act(() => {
+      void fixture.client.invalidateQueries({ queryKey: ["savedCheck", place.id] });
+    });
+    await userEvent.click(screen.getByText("Trip"));
+    fixture.get.mockImplementation(original);
+    await act(async () => fixture.finishPost());
+    await waitFor(() =>
+      expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(["l1"]),
+    );
+    await act(async () => finishRead());
+    expect(fixture.client.getQueryData(["savedCheck", place.id])).toEqual(["l1"]);
+    expect(screen.getByRole("checkbox")).toBeChecked();
+    expect(fixture.rows).toEqual([row]);
+    await reopen(fixture);
+    await waitFor(() => expect(screen.getByRole("checkbox")).toBeChecked());
   });
 });

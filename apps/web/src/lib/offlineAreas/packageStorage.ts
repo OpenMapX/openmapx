@@ -536,10 +536,28 @@ export class IndexedDbOfflinePackageStorage implements OfflinePackageStorage {
         return;
       }
       const source = await partial.getFile();
-      const target = await directory.getFileHandle(`${packageId}.pmtiles`, { create: true });
-      const writable = await target.createWritable();
-      await writable.write(source);
-      await writable.close();
+      const targetName = `${packageId}.pmtiles`;
+      let target: FileSystemFileHandle;
+      let targetCreated = false;
+      try {
+        target = await directory.getFileHandle(targetName);
+      } catch (error) {
+        if (!(error instanceof DOMException) || error.name !== "NotFoundError") throw error;
+        target = await directory.getFileHandle(targetName, { create: true });
+        targetCreated = true;
+      }
+      let writable: FileSystemWritableFileStream | undefined;
+      try {
+        writable = await target.createWritable();
+        await writable.write(source);
+        await writable.close();
+      } catch (error) {
+        // Creating the target exposes an empty file before the copy commits.
+        // Keep the partial resumable and remove the failed ready target.
+        await writable?.abort().catch(() => {});
+        if (targetCreated) await directory.removeEntry(targetName).catch(() => {});
+        throw error;
+      }
       await directory.removeEntry(`${packageId}.pmtiles.part`);
       return;
     }
