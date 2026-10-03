@@ -158,6 +158,18 @@ describe("MapContext camera wrappers", () => {
     });
   });
 
+  it.each(["zoomIn", "zoomOut"] as const)("%s respects reduced motion", (method) => {
+    reduced.current = true;
+    const { fake, ctx } = setup();
+    const zoom = vi.fn();
+    fake.map[method] = (options) => {
+      zoom(options);
+      return fake.map;
+    };
+    act(() => ctx()[method]());
+    expect(zoom).toHaveBeenCalledWith({ duration: 0 });
+  });
+
   it("resetBearing is programmatic", () => {
     const { fake, ctx } = setup();
     act(() => ctx().resetBearing());

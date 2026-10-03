@@ -110,11 +110,11 @@ export function MapProvider({ children }: { children: React.ReactNode }) {
   );
 
   const zoomIn = useCallback(() => {
-    mapRef.current?.zoomIn({ duration: 200 });
+    mapRef.current?.zoomIn({ duration: prefersReducedMotion() ? 0 : 200 });
   }, []);
 
   const zoomOut = useCallback(() => {
-    mapRef.current?.zoomOut({ duration: 200 });
+    mapRef.current?.zoomOut({ duration: prefersReducedMotion() ? 0 : 200 });
   }, []);
 
   const resetBearing = useCallback(() => {
