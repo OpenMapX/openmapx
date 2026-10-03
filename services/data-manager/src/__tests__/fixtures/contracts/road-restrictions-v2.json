@@ -95,8 +95,8 @@
       ]
     },
     {
-      "id": "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA#RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
-      "record_id": "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA",
+      "id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA#RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
+      "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
       "effect_id": "RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
       "source": "test-child",
       "kind": "roadworks",
@@ -167,7 +167,7 @@
       "routing_evidence": {
         "schema_version": 2,
         "record_class": "situation",
-        "record_id": "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA",
+        "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
         "effect_id": "RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
         "record_revision": 1,
         "binding_revision": 1,
@@ -240,8 +240,8 @@
       ]
     },
     {
-      "id": "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA#RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
-      "record_id": "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA",
+      "id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA#RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
+      "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
       "effect_id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
       "source": "test-child",
       "kind": "roadworks",
@@ -300,7 +300,7 @@
       "routing_evidence": {
         "schema_version": 2,
         "record_class": "situation",
-        "record_id": "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA",
+        "record_id": "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA",
         "effect_id": "RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
         "record_revision": 1,
         "binding_revision": 1,
@@ -364,8 +364,8 @@
       ]
     },
     {
-      "id": "oc:situation:nl-ndw:NLRWS_0005382945#NLRWS_0005382945_1/closure",
-      "record_id": "oc:situation:nl-ndw:NLRWS_0005382945",
+      "id": "oc:situation:nl-ndw-events:NLRWS_0005382945#NLRWS_0005382945_1/closure",
+      "record_id": "oc:situation:nl-ndw-events:NLRWS_0005382945",
       "effect_id": "NLRWS_0005382945_1/closure",
       "source": "test-child",
       "kind": "closure",
@@ -424,7 +424,7 @@
       "routing_evidence": {
         "schema_version": 2,
         "record_class": "situation",
-        "record_id": "oc:situation:nl-ndw:NLRWS_0005382945",
+        "record_id": "oc:situation:nl-ndw-events:NLRWS_0005382945",
         "effect_id": "NLRWS_0005382945_1/closure",
         "record_revision": 1,
         "binding_revision": 1,
@@ -488,8 +488,8 @@
       ]
     },
     {
-      "id": "oc:situation:nl-ndw:NLRWS_0005406494#NLRWS_0005406494_1/closure",
-      "record_id": "oc:situation:nl-ndw:NLRWS_0005406494",
+      "id": "oc:situation:nl-ndw-events:NLRWS_0005406494#NLRWS_0005406494_1/closure",
+      "record_id": "oc:situation:nl-ndw-events:NLRWS_0005406494",
       "effect_id": "NLRWS_0005406494_1/closure",
       "source": "test-child",
       "kind": "closure",
@@ -548,7 +548,7 @@
       "routing_evidence": {
         "schema_version": 2,
         "record_class": "situation",
-        "record_id": "oc:situation:nl-ndw:NLRWS_0005406494",
+        "record_id": "oc:situation:nl-ndw-events:NLRWS_0005406494",
         "effect_id": "NLRWS_0005406494_1/closure",
         "record_revision": 1,
         "binding_revision": 1,
@@ -612,8 +612,8 @@
       ]
     },
     {
-      "id": "oc:situation:fi-digitraffic:GUID50451433#GUID50451433/dimension_limit",
-      "record_id": "oc:situation:fi-digitraffic:GUID50451433",
+      "id": "oc:situation:fi-digitraffic-events:GUID50451433#GUID50451433/dimension_limit",
+      "record_id": "oc:situation:fi-digitraffic-events:GUID50451433",
       "effect_id": "GUID50451433/dimension_limit",
       "source": "test-child",
       "kind": "restriction",
@@ -662,7 +662,7 @@
       "routing_evidence": {
         "schema_version": 2,
         "record_class": "situation",
-        "record_id": "oc:situation:fi-digitraffic:GUID50451433",
+        "record_id": "oc:situation:fi-digitraffic-events:GUID50451433",
         "effect_id": "GUID50451433/dimension_limit",
         "record_revision": 1,
         "binding_revision": 1,

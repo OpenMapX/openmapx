@@ -178,11 +178,11 @@ describe("restriction contract v2: no vehicle-specific effect reaches the edge g
     // generic loops above by having nothing left to exclude.
     expect(restrictionIds()).toEqual(
       expect.arrayContaining([
-        "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA#RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
-        "oc:situation:nl-ndw:RWS01_SM1080891_D2_WWA#RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
-        "oc:situation:nl-ndw:NLRWS_0005382945#NLRWS_0005382945_1/closure",
-        "oc:situation:nl-ndw:NLRWS_0005406494#NLRWS_0005406494_1/closure",
-        "oc:situation:fi-digitraffic:GUID50451433#GUID50451433/dimension_limit",
+        "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA#RWS01_M1080891_NARROW_LANES_D2_WWA/closure",
+        "oc:situation:nl-ndw-events:RWS01_SM1080891_D2_WWA#RWS01_M1080891_EMERGENCY_SERVICES_D2_WWA/access",
+        "oc:situation:nl-ndw-events:NLRWS_0005382945#NLRWS_0005382945_1/closure",
+        "oc:situation:nl-ndw-events:NLRWS_0005406494#NLRWS_0005406494_1/closure",
+        "oc:situation:fi-digitraffic-events:GUID50451433#GUID50451433/dimension_limit",
       ]),
     );
   });
