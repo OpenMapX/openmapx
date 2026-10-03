@@ -1,6 +1,8 @@
+import type { RoutingOptions } from "@openmapx/core";
 import { RoutingProviderError } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import type { DirectionsResult } from "../types.js";
+import { effect, roadConditionEvent } from "./support/road-condition.js";
 import {
   closureRoutingContract,
   createDirectionsResult,
@@ -159,6 +161,57 @@ describe("/directions handler — avoidClosures=true with active closures", () =
         reasons: ["unsupported_future_shared_traffic"],
       },
     });
+  });
+});
+
+describe("/directions handler — a road closed to all but local access", () => {
+  const street: [number, number][] = [
+    [13.485, 52.437],
+    [13.487, 52.437],
+  ];
+  const localAccessClosure = roadConditionEvent({
+    id: "local:1",
+    geometry: { type: "LineString", coordinates: street },
+    effects: [
+      effect("local:1/closure", "closure", {
+        applicability: { kind: "all", except: [{ usage: "local_access" }] },
+      }),
+    ],
+  });
+  const route = (geometry: [number, number][]) =>
+    ({ distance: 1, duration: 1, geometry, legs: [], steps: [] }) as DirectionsResult["routes"][0];
+
+  it("plans the destination onto it and marks only the route that drives it", async () => {
+    const getRoute = vi.fn(async () =>
+      createDirectionsResult([
+        route([
+          [13.3, 52.5],
+          [13.4855, 52.437],
+          [13.4862, 52.437],
+        ]),
+        route([
+          [13.3, 52.5],
+          [13.4861, 52.4372],
+        ]),
+      ]),
+    );
+    const environment = createRoutingHandlerEnvironment({
+      routingProviders: [
+        { integrationId: "routing-a", providerId: "a", supportsExclusions: true, getRoute },
+      ],
+      closureEvents: [localAccessClosure],
+    });
+    const reply = createRoutingTestReply();
+    await environment.getHandler("/directions")(
+      { query: { waypoints: "13.3,52.5;13.486,52.43705", avoidClosures: "true" } },
+      reply,
+    );
+
+    const options = getRoute.mock.calls[0]?.[2] as RoutingOptions | undefined;
+    expect(options?.localAccess?.destination).toMatchObject({ snapOntoClosure: true });
+    expect(options?.excludeLocations ?? []).toEqual([]);
+    const routes = (reply.body as DirectionsResult).routes;
+    expect(routes.map((r) => r.usesLocalAccessRoad)).toEqual([true, undefined]);
   });
 });
 

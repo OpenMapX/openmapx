@@ -157,7 +157,7 @@ describe("aggregateRoadConditions", () => {
     expect(out.map((e) => e.id)).toEqual(["1"]);
   });
 
-  it("post-filters kinds, kind.type pairs and the severity threshold", async () => {
+  it("post-filters kinds, types and the severity threshold", async () => {
     const ctx = ctxWith([
       provider("ignores-opts", async () => [
         ev({ id: "accident", severity: { label: "critical" }, geometry: pt(13.4) }),
@@ -180,8 +180,12 @@ describe("aggregateRoadConditions", () => {
     const ids = async (query: Parameters<typeof aggregateRoadConditions>[2]) =>
       (await aggregateRoadConditions(ctx, BBOX, query)).map((e) => e.id).sort();
     expect(await ids({ kinds: ["roadworks"] })).toEqual(["works"]);
-    expect(await ids({ types: ["incident.accident"] })).toEqual(["accident"]);
-    expect(await ids({ kinds: ["closure"], types: ["incident.accident"] })).toEqual([
+    // Bare type codes, AND-ed with kinds, as OpenConditions filters them.
+    expect(await ids({ types: ["accident"] })).toEqual(["accident"]);
+    expect(await ids({ types: ["incident.accident"] })).toEqual([]);
+    expect(await ids({ kinds: ["incident"], types: ["accident"] })).toEqual(["accident"]);
+    expect(await ids({ kinds: ["closure"], types: ["accident"] })).toEqual([]);
+    expect(await ids({ kinds: ["closure", "incident"], types: ["accident", "closure"] })).toEqual([
       "accident",
       "closure",
     ]);

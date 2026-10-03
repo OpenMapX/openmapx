@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, expectTypeOf, it, vi } from "vitest";
 import { renderHookWithQuery, waitFor } from "@/test";
 
 vi.mock("@/integration-api/runtime/EnvProvider", () => ({
@@ -6,7 +6,7 @@ vi.mock("@/integration-api/runtime/EnvProvider", () => ({
 }));
 
 import { buildReportClaim } from "../claim";
-import { useSubmitReport, useVote } from "../useCrowdReports";
+import { type SubmitReportResult, useSubmitReport, useVote } from "../useCrowdReports";
 
 const GRANT_STORAGE_KEY = "openconditions.contrib.grant";
 const ENROLL_URL = "https://api.test/api/integrations/crowd-reports/enroll";
@@ -91,6 +91,25 @@ describe("useSubmitReport", () => {
     const [submitUrl, submitInit] = fetchMock.mock.calls[0];
     expect(submitUrl).toBe(REPORTS_URL);
     expect(JSON.parse(submitInit.body as string).reportingGrant).toBe("CACHED-GRANT");
+  });
+
+  it("passes on a landed record that has no evidence state", async () => {
+    seedGrant("CACHED-GRANT", Date.now());
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        record: { class: "situation", id: "r2" },
+        evidenceState: null,
+        routingEligible: false,
+      }),
+    });
+    const { result } = renderHookWithQuery(() => useSubmitReport());
+
+    result.current.mutate(CLAIM);
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(result.current.data?.evidenceState).toBeNull();
+    expectTypeOf<SubmitReportResult["evidenceState"]>().toEqualTypeOf<string | null>();
   });
 
   it("re-enrolls when the cached grant is expired", async () => {

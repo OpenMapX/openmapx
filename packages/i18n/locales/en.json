@@ -891,6 +891,7 @@
       "outdated": "Road conditions may have changed since this route was planned",
       "checkFailed": "Couldn't check road conditions for this route"
     },
+    "localAccessRoad": "Uses a road closed except for local access",
     "trafficDelay": "+{delay} traffic",
     "trafficDelayNormally": "normally {baseline}",
     "from": "from",

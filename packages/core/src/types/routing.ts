@@ -147,6 +147,11 @@ export interface Route {
    * delay attributable to current conditions.
    */
   baselineDuration?: number;
+  /**
+   * The route drives along a road closed to all but local access ("Anlieger
+   * frei"): it starts or ends on one, or can be reached only through one.
+   */
+  usesLocalAccessRoad?: true;
   geometry: LngLat[];
   legs: RouteLeg[];
   steps: RouteStep[];
@@ -274,6 +279,20 @@ export interface RoutingOptions {
    * at the origin and destination.
    */
   dwellSeconds?: (number | undefined)[];
+  /**
+   * The ends of the route near a road closed to all but local access. The
+   * engine closes such a road to every car; an end planned here may start or
+   * finish on it, or pass it to reach a street only reachable through it.
+   */
+  localAccess?: { origin?: LocalAccessEndpoint; destination?: LocalAccessEndpoint };
+}
+
+/** How one end of a route may use a road closed to all but local access. */
+export interface LocalAccessEndpoint {
+  /** The end may snap onto such a road: it lies on one, and no closure of every car is as near. */
+  snapOntoClosure: boolean;
+  /** Points on the nearest such roads, nearest first, through which the end may be reached. */
+  accessPoints: LngLat[];
 }
 
 /** A single point in a recorded GPS trace, optionally tagged with capture time. */

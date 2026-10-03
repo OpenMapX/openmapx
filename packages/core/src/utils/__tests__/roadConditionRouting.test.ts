@@ -72,6 +72,14 @@ describe("road-condition routing evidence", () => {
     ).toContain("unverified_rights");
   });
 
+  it("routes a closure for cars outright as it routes one for all traffic", () => {
+    const cars = { kind: "classes" as const, include: [{ class: "car" as const }] };
+    const rule = effect("fr1/closure", "closure", { applicability: cars });
+    const e = { ...event(), effects: [rule] };
+    e.routingEvidence!["fr1/closure"]!.applicability = cars;
+    expect(getRoadConditionRoutingDecision(e, rule, { evaluatedAt: now }).eligible).toBe(true);
+  });
+
   it("routes an effect only on its own evidence, of this situation and this kind", () => {
     const e = event();
     delete e.routingEvidence;

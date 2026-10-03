@@ -309,12 +309,23 @@ const selectsCars = (selectors: VehicleApplicability["include"]) =>
       CAR_CLASSES.has(s.class) &&
       Object.keys(s).every((k) => k === "class" || k === "raw"),
   ) ?? false;
+/**
+ * Whether an exception could spare an ordinary car: it names cars, or names
+ * no class and selects by what a vehicle is (weight, fuel, occupancy), which
+ * a car may meet. An exception by usage alone (emergency services, residents,
+ * deliveries) excepts a purpose, not cars, so through traffic stays closed.
+ */
+const sparesCars = (s: NonNullable<VehicleApplicability["except"]>[number]) =>
+  s.class !== undefined
+    ? CAR_CLASSES.has(s.class)
+    : Object.keys(s).some((k) => k !== "usage" && k !== "raw");
 const excludesCars = (selectors: VehicleApplicability["except"]) =>
-  selectors?.some((s) => s.class === undefined || CAR_CLASSES.has(s.class)) ?? false;
+  selectors?.some(sparesCars) ?? false;
 
 /**
  * Whether an effect binds every passenger car: all vehicles, or a class
- * selection naming cars unconditionally, and no exception that could spare a car.
+ * selection naming cars unconditionally, and no exception that could spare a
+ * car. OpenConditions' Valhalla exclusions decide the same.
  */
 export function bindsEveryCar(applicability: VehicleApplicability): boolean {
   if (applicability.kind === "unknown") return false;
@@ -333,6 +344,26 @@ export function closesRoadForCars(effect: RoadConditionEffect): boolean {
   if (isRestrictionEvidence(effect) || !bindsEveryCar(effect.applicability)) return false;
   if (effect.kind === "closure") return !NON_CARRIAGEWAY_SCOPES.has(effect.scope);
   return effect.kind === "lane_restriction" && effect.vehicleImpact === "all_lanes_closed";
+}
+
+/** Exceptions that let a car in to reach a place on the road ("Anlieger frei"). */
+const LOCAL_ACCESS_USAGES = new Set(["local_access", "residents"]);
+
+/**
+ * Whether an effect closes the road to through traffic but excepts local
+ * access: a route may still start or end on it, or pass it to reach a place
+ * only reachable through it.
+ */
+export function isLocalAccessClosure(effect: RoadConditionEffect): boolean {
+  if (!closesRoadForCars(effect)) return false;
+  return (
+    effect.applicability.except?.some(
+      (s) =>
+        s.usage !== undefined &&
+        LOCAL_ACCESS_USAGES.has(s.usage) &&
+        Object.keys(s).every((k) => k === "usage" || k === "raw"),
+    ) ?? false
+  );
 }
 
 /** The speed an effect caps every car to, in km/h; undefined when it caps none. */

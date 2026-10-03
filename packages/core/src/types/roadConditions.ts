@@ -193,7 +193,9 @@ export interface RoadConditionEvent {
 export interface RoadConditionsQuery {
   /** Original sources excluded before provider-side representative selection. */
   excludedSourceIds?: string[];
+  /** Registry kind codes; a situation must be of one of them. */
   kinds?: string[];
+  /** Bare registry type codes (`accident`, not `incident.accident`), AND-ed with `kinds`. */
   types?: string[];
   minSeverity?: RoadConditionSeverityLabel;
   /**

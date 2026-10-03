@@ -128,7 +128,7 @@ describe("fetchRoadConditions", () => {
 
     const out = await fetchRoadConditions([13.39, 52.49, 13.41, 52.51], {
       kinds: ["incident", "roadworks"],
-      types: ["incident.accident"],
+      types: ["accident"],
       minSeverity: "moderate",
     });
 
@@ -137,7 +137,7 @@ describe("fetchRoadConditions", () => {
       expect.objectContaining({
         bbox: "13.39,52.49,13.41,52.51",
         kinds: "incident,roadworks",
-        types: "incident.accident",
+        types: "accident",
         minSeverity: "moderate",
       }),
     );

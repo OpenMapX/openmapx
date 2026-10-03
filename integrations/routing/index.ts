@@ -2,7 +2,9 @@ import {
   type ConnectorStandard,
   type EvVehicleSpec,
   type JunctionLookupResult,
+  type LngLat,
   overpassQuerySafe,
+  type Route,
   type TravelMode,
 } from "@openmapx/core";
 import {
@@ -36,6 +38,7 @@ import {
   mapJunctionWays,
   parseJunctionPoints,
 } from "./junctions.js";
+import { routeUsesLocalAccessRoad } from "./local-access.js";
 import { createRoutingOrchestrator } from "./orchestrator.js";
 import { roadConditionImpactForRequest } from "./road-condition-routing.js";
 import { NoScheduleProviderError, runSchedulePlan } from "./schedule-plan.js";
@@ -129,13 +132,14 @@ async function planDirectionsRequest(ctx: IntegrationContext, request: ParsedDir
     baseRoutingOptions.departAt,
     baseRoutingOptions.arriveBy,
   );
-  const { exclusions, hasExclusions, exclusionsHash, roadConditionImpact } =
+  const { exclusions, hasExclusions, exclusionsHash, roadConditionImpact, localAccess } =
     await applyClosureExclusions(ctx, waypoints, avoidClosures, closureRefTime, request.travelMode);
 
   return {
     closureRefTime,
     hasExclusions,
     roadConditionImpact,
+    localAccessLines: localAccess?.lines ?? [],
     keyParams: createDirectionsCacheIdentity(request, exclusionsHash),
     routingOptions: {
       ...baseRoutingOptions,
@@ -144,8 +148,16 @@ async function planDirectionsRequest(ctx: IntegrationContext, request: ParsedDir
         excludeLocations: exclusions.points,
         excludePolygons: exclusions.polygons,
       }),
+      ...(localAccess ? { localAccess: localAccess.plan } : {}),
     },
   };
+}
+
+/** Marks each route that drives along a road closed to all but local access. */
+function markLocalAccessRoutes(routes: readonly Route[], lines: readonly LngLat[][]): void {
+  for (const route of routes) {
+    if (routeUsesLocalAccessRoad(route.geometry, lines)) route.usesLocalAccessRoad = true;
+  }
 }
 
 /** Parse an OSM `maxspeed` tag to km/h, or undefined when not a plain number. */
@@ -368,8 +380,14 @@ export function setup(ctx: IntegrationContext): void {
       requireTimeAware,
       routingOptions: baseRoutingOptions,
     } = request;
-    const { closureRefTime, hasExclusions, keyParams, routingOptions, roadConditionImpact } =
-      await planDirectionsRequest(ctx, request);
+    const {
+      closureRefTime,
+      hasExclusions,
+      keyParams,
+      routingOptions,
+      roadConditionImpact,
+      localAccessLines,
+    } = await planDirectionsRequest(ctx, request);
 
     // When exclusions are present, only use providers that explicitly honour
     // the generic exclusion contract. Falling back to an engine that ignores
@@ -442,6 +460,7 @@ export function setup(ctx: IntegrationContext): void {
           throw lastErr ?? new Error("All routing providers failed");
         },
       );
+      markLocalAccessRoutes(result.routes, localAccessLines);
       if (responseRoadConditionImpact)
         result.roadConditionImpact = await verifyRouteTraffic(
           ctx,
@@ -503,8 +522,14 @@ export function setup(ctx: IntegrationContext): void {
       requireTimeAware,
       routingOptions: baseRoutingOptions,
     } = request;
-    const { closureRefTime, hasExclusions, keyParams, routingOptions, roadConditionImpact } =
-      await planDirectionsRequest(ctx, request);
+    const {
+      closureRefTime,
+      hasExclusions,
+      keyParams,
+      routingOptions,
+      roadConditionImpact,
+      localAccessLines,
+    } = await planDirectionsRequest(ctx, request);
 
     let resolvedChain = getOptimizeProviders(travelMode, { requireTimeAware });
     // When exclusions are present, only use providers that explicitly honour
@@ -581,6 +606,7 @@ export function setup(ctx: IntegrationContext): void {
           throw lastErr ?? new Error("All route optimizers failed");
         },
       );
+      markLocalAccessRoutes(result.routes, localAccessLines);
       if (responseRoadConditionImpact)
         result.roadConditionImpact = await verifyRouteTraffic(
           ctx,

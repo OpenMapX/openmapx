@@ -891,6 +891,7 @@
       "outdated": "Die Straßenbedingungen können sich seit der Routenplanung geändert haben",
       "checkFailed": "Straßenbedingungen für diese Route konnten nicht geprüft werden"
     },
+    "localAccessRoad": "Nutzt eine gesperrte Straße (Anlieger frei)",
     "trafficDelay": "+{delay} Verkehr",
     "trafficDelayNormally": "normalerweise {baseline}",
     "from": "von",

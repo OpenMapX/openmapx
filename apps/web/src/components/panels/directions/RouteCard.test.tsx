@@ -170,6 +170,21 @@ describe("RouteCard arrival time", () => {
   });
 });
 
+describe("RouteCard local access", () => {
+  it.each([
+    ["en", "Uses a road closed except for local access"],
+    ["de", "Nutzt eine gesperrte Straße (Anlieger frei)"],
+  ] as const)("says in %s when the route uses a road open only to local access", (locale, text) => {
+    renderCard({ ...baseRoute, usesLocalAccessRoad: true }, "metric", locale);
+    expect(screen.getByTestId("local-access-route-status").textContent).toBe(text);
+  });
+
+  it("says nothing for a route that uses none", () => {
+    renderCard(baseRoute);
+    expect(screen.queryByTestId("local-access-route-status")).toBeNull();
+  });
+});
+
 describe("RouteCard road-condition context", () => {
   const notices: Array<{
     availability: RoadConditionRouteImpact["availability"];

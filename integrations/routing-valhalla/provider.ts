@@ -9,7 +9,7 @@ import { readTrafficProof } from "./traffic-proof.js";
  */
 
 import type { DirectionsResult, Route, RouteLeg, RouteStep, TravelMode } from "@openmapx/core";
-import { decodePolyline, fetchJson } from "@openmapx/core";
+import { decodePolyline, FetchJsonHttpError, fetchJson } from "@openmapx/core";
 import type {
   ManeuverLane,
   ManeuverSign,
@@ -570,7 +570,9 @@ function buildClosureSafeCostingOptions(
   // otherwise applies those bits to explicit future requests, while bike and
   // pedestrian costings do not reliably apply them at all. Make every request
   // outside the verified depart-now motorised envelope ignore binary closures.
-  costingOptions.ignore_closures = !usesCurrentClosures;
+  // Valhalla refuses the key, even when false, beside a location's
+  // `exclude_closures`, so it is only ever sent as true.
+  if (!usesCurrentClosures) costingOptions.ignore_closures = true;
   return { costingOptions, usesCurrentClosures };
 }
 
@@ -607,15 +609,11 @@ export function buildTrafficRequestExtras(
 ): Record<string, unknown> {
   if (!enabled || !options.useLiveTraffic) return {};
 
+  // A recosting carries its costing options flat; nested under
+  // `costing_options` Valhalla ignores them and recosts with live speeds.
   const extras: Record<string, unknown> = {
     recostings: [
-      {
-        costing,
-        name: "baseline",
-        costing_options: {
-          [costing]: { ...costingOptions, speed_types: BASELINE_SPEED_TYPES },
-        },
-      },
+      { costing, name: "baseline", ...costingOptions, speed_types: BASELINE_SPEED_TYPES },
     ],
   };
 
@@ -663,8 +661,11 @@ interface ValhallaMatrixResponse {
 interface ValhallaLocation {
   lon: number;
   lat: number;
-  type: "break";
+  type: "break" | "through" | "via";
   waiting?: number;
+  /** 0 lets an end snap onto a street only reachable through a closed road. */
+  minimum_reachability?: number;
+  search_filter?: { exclude_closures: false };
 }
 
 /**
@@ -678,18 +679,67 @@ interface ValhallaLocation {
 export function buildLocations(
   waypoints: [number, number][],
   options: RoutingOptions,
+  localAccess?: RoutingOptions["localAccess"],
 ): ValhallaLocation[] {
   const last = waypoints.length - 1;
   return waypoints.map((wp, index) => {
     const dwell = options.dwellSeconds?.[index];
     const waiting = index > 0 && index < last && typeof dwell === "number" && dwell > 0 ? dwell : 0;
+    const end =
+      index === 0 ? localAccess?.origin : index === last ? localAccess?.destination : undefined;
     return {
       lon: wp[0],
       lat: wp[1],
       type: "break" as const,
       ...(waiting > 0 ? { waiting } : {}),
+      ...(end ? { minimum_reachability: 0 } : {}),
+      ...(end?.snapOntoClosure ? { search_filter: { exclude_closures: false as const } } : {}),
     };
   });
+}
+
+/** Valhalla found no path between the locations (error 442). */
+function isNoPath(error: unknown): boolean {
+  return (
+    error instanceof FetchJsonHttpError &&
+    error.status === 400 &&
+    /"error_code"\s*:\s*442\b/.test(error.message)
+  );
+}
+
+/** Extra requests at most when an end is reachable only through a local-access road. */
+const MAX_ACCESS_ATTEMPTS = 4;
+
+/**
+ * The location lists to try when an end near a road closed to all but local
+ * access found no path: a location on the road at each access point, the
+ * destination's before the origin's, first `through` (no U-turn), then `via`.
+ * Valhalla lets a route leave or enter consecutive closed edges only at a
+ * location on them, so a street behind the road is reached through it.
+ */
+export function localAccessAttempts(
+  locations: readonly ValhallaLocation[],
+  localAccess: NonNullable<RoutingOptions["localAccess"]>,
+): ValhallaLocation[][] {
+  const attempts: ValhallaLocation[][] = [];
+  const at = (point: [number, number], type: "through" | "via"): ValhallaLocation => ({
+    lon: point[0],
+    lat: point[1],
+    type,
+    search_filter: { exclude_closures: false },
+  });
+  const ends = [
+    { points: localAccess.destination?.accessPoints ?? [], index: locations.length - 1 },
+    { points: localAccess.origin?.accessPoints ?? [], index: 1 },
+  ];
+  for (const { points, index } of ends) {
+    for (const point of points) {
+      for (const type of ["through", "via"] as const) {
+        attempts.push([...locations.slice(0, index), at(point, type), ...locations.slice(index)]);
+      }
+    }
+  }
+  return attempts.slice(0, MAX_ACCESS_ATTEMPTS);
 }
 
 export const valhallaService: RoutingProvider = {
@@ -715,7 +765,10 @@ export const valhallaService: RoutingProvider = {
     const { costingOptions, usesCurrentClosures } = buildClosureSafeCostingOptions(options, mode);
     const effectiveTrafficOptions = { ...options, useLiveTraffic: usesCurrentClosures };
 
-    const locations = buildLocations(waypoints, options);
+    // Only a request that honours closures may relax its ends: a location's
+    // `exclude_closures` beside `ignore_closures` is an engine error.
+    const localAccess = usesCurrentClosures ? options.localAccess : undefined;
+    const locations = buildLocations(waypoints, options, localAccess);
 
     const body: Record<string, unknown> = {
       locations,
@@ -742,16 +795,33 @@ export const valhallaService: RoutingProvider = {
     if (waypoints.length === 2) {
       body.alternates = REQUESTED_ALTERNATES;
     }
+    // A destination on a closed road is reachable only by the bidirectional
+    // search; the time-dependent forward search finds no path to it.
+    if (localAccess) body.prioritize_bidirectional = true;
 
     const requestId = randomUUID();
     const startedAt = Date.now();
     if (usesCurrentClosures) body.openmapx_request_id = requestId;
-    const data = await fetchJson<ValhallaResponse>(endpoint("/route"), {
-      timeoutMs: 15_000,
-      userAgent: null,
-      headers: { "Content-Type": "application/json" },
-      errorMessage: valhallaErrorMessage("Valhalla error"),
-      init: { method: "POST", body: JSON.stringify(body) },
+    const post = (request: Record<string, unknown>) =>
+      fetchJson<ValhallaResponse>(endpoint("/route"), {
+        timeoutMs: 15_000,
+        userAgent: null,
+        headers: { "Content-Type": "application/json" },
+        errorMessage: valhallaErrorMessage("Valhalla error"),
+        init: { method: "POST", body: JSON.stringify(request) },
+      });
+    const data = await post(body).catch(async (error: unknown) => {
+      if (!localAccess || !isNoPath(error)) throw error;
+      // No alternates beside a location on the road: they need exactly two.
+      const { alternates: _alternates, ...single } = body;
+      for (const attempt of localAccessAttempts(locations, localAccess)) {
+        try {
+          return await post({ ...single, locations: attempt });
+        } catch (retryError) {
+          if (!isNoPath(retryError)) throw retryError;
+        }
+      }
+      return post({ ...body, locations: buildLocations(waypoints, options) });
     });
     const travelMode = mode as TravelMode;
     const trafficProof =

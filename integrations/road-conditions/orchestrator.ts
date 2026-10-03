@@ -110,14 +110,16 @@ export async function aggregateRoadConditions(
 }
 
 /**
- * Whether a situation is of a requested kind or `kind.type`. With both lists
- * given, either may match; with neither, every situation does.
+ * Whether a situation is of a requested kind and of a requested type (a bare
+ * type code), as OpenConditions filters `/situations`. An absent or empty list
+ * does not narrow.
  */
 function matchesClassification(e: RoadConditionEvent, opts?: RoadConditionsQuery): boolean {
   const kinds = opts?.kinds ?? [];
   const types = opts?.types ?? [];
-  if (kinds.length === 0 && types.length === 0) return true;
-  return kinds.includes(e.kind) || types.includes(`${e.kind}.${e.type}`);
+  return (
+    (kinds.length === 0 || kinds.includes(e.kind)) && (types.length === 0 || types.includes(e.type))
+  );
 }
 
 /**

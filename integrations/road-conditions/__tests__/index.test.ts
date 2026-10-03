@@ -440,18 +440,18 @@ describe("GET /events filters", () => {
     return { h, seen };
   }
 
-  it("forwards kinds, kind.type pairs and a severity label to the providers", async () => {
+  it("forwards kinds, types and a severity label to the providers", async () => {
     const { h, seen } = capturing();
     await h.get({
       bbox: BBOX,
       kinds: "roadworks, closure",
-      types: "incident.accident",
+      types: "works",
       minSeverity: "major",
       horizonDays: "7",
     });
     expect(seen[0]).toEqual({
       kinds: ["closure", "roadworks"],
-      types: ["incident.accident"],
+      types: ["works"],
       minSeverity: "major",
       horizonDays: 7,
     });

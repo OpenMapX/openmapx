@@ -253,6 +253,7 @@ export {
   closesRoadForCars,
   effectInForceAt,
   effectValidity,
+  isLocalAccessClosure,
   isRestrictionEvidence,
   isVehicleSpecific,
   localizedTextFor,

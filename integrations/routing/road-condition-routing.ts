@@ -6,6 +6,7 @@ import {
   type RoadConditionEffect,
   type RoadConditionEvent,
   type RoadConditionRouteImpact,
+  speedCapKph,
   type TravelMode,
 } from "@openmapx/core";
 
@@ -75,8 +76,11 @@ export function assessRoadConditionForRoute(
   // Restriction evidence outranks every other disposition, including the
   // legacy-geometry path, which would otherwise let a vehicle-conditioned
   // rule steer a route without any routing evidence at all. A rule naming
-  // cars outright still closes the road for them, so it keeps its geometry.
-  if (isRestrictionEvidence(effect) || (isVehicleSpecific(effect) && !closesRoadForCars(effect))) {
+  // cars outright still closes or caps the road for them, as the shared
+  // routing decision holds, but binds no route that is not driven by car.
+  const bindsThisCar =
+    context.mode === "driving" && (closesRoadForCars(effect) || speedCapKph(effect) !== undefined);
+  if (isRestrictionEvidence(effect) || (isVehicleSpecific(effect) && !bindsThisCar)) {
     return { disposition: "ignore", reasons: ["vehicle_specific_restriction"], validUntil: null };
   }
   if (!event.routingEvidence?.[effect.id]) {

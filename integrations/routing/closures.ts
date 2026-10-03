@@ -6,7 +6,12 @@ import type {
   RoadConditionRouteImpact,
   TravelMode,
 } from "@openmapx/core";
-import { closesRoadForCars, effectInForceAt, haversineDistance } from "@openmapx/core";
+import {
+  closesRoadForCars,
+  effectInForceAt,
+  haversineDistance,
+  isLocalAccessClosure,
+} from "@openmapx/core";
 import type { IntegrationContext, RoadConditionsProvider } from "@openmapx/integration-framework";
 import { assessRoadConditionForRoute } from "./road-condition-routing.js";
 
@@ -14,6 +19,46 @@ export interface ClosureExclusions {
   points: LngLat[];
   polygons: LngLat[][];
   roadConditionImpact: RoadConditionRouteImpact;
+  /** Lines of the roads the engine's live traffic closes to all but local access. */
+  localAccessLines: LngLat[][];
+  /** Lines of the closures no car may use. */
+  hardLines: LngLat[][];
+  /**
+   * Geometry of local-access closures with no routing evidence, not yet in
+   * `points`/`polygons`: whether to exclude them depends on the route's ends.
+   */
+  legacyLocalAccess: Array<{ type: string; coordinates?: unknown }>;
+}
+
+/** The lines a closure geometry lies along; a point is a line of one vertex, a polygon its outer ring. */
+export function geometryLines(geometry: { type: string; coordinates?: unknown }): LngLat[][] {
+  const line = (coords: number[][]) => sampleCoords(coords);
+  switch (geometry.type) {
+    case "Point": {
+      const p = toLngLat(geometry.coordinates as number[]);
+      return p ? [[p]] : [];
+    }
+    case "MultiPoint":
+      return (geometry.coordinates as number[][]).flatMap((c) => {
+        const p = toLngLat(c);
+        return p ? [[p]] : [];
+      });
+    case "LineString":
+      return [line(geometry.coordinates as number[][])];
+    case "MultiLineString":
+      return (geometry.coordinates as number[][][]).map(line);
+    case "Polygon":
+      return [line((geometry.coordinates as number[][][])[0] ?? [])];
+    case "MultiPolygon":
+      return (geometry.coordinates as number[][][][]).map((poly) => line(poly[0] ?? []));
+    case "GeometryCollection":
+      return (
+        (geometry as { geometries?: Array<{ type: string; coordinates?: unknown }> }).geometries ??
+        []
+      ).flatMap(geometryLines);
+    default:
+      return [];
+  }
 }
 
 /**
@@ -140,7 +185,7 @@ function sampleCoords(coords: number[][]): LngLat[] {
   return out;
 }
 
-function geometryToExclusions(
+export function geometryToExclusions(
   geometry: { type: string; coordinates?: unknown },
   points: LngLat[],
   polygons: LngLat[][],
@@ -224,6 +269,9 @@ export async function activeClosuresForBbox(
   const unavailable = (reason: string): ClosureExclusions => ({
     points: [],
     polygons: [],
+    localAccessLines: [],
+    hardLines: [],
+    legacyLocalAccess: [],
     roadConditionImpact: {
       availability: "unavailable",
       evaluatedAt: evaluatedAt.toISOString(),
@@ -246,6 +294,9 @@ export async function activeClosuresForBbox(
   const disallowed = (await ctx.getDisallowedSourceIds?.()) ?? new Set<string>();
   const points: LngLat[] = [];
   const polygons: LngLat[][] = [];
+  const localAccessLines: LngLat[][] = [];
+  const hardLines: LngLat[][] = [];
+  const legacyLocalAccess: Array<{ type: string; coordinates?: unknown }> = [];
   let sawLegacyGeometry = false;
   let sawRoutingEvidence = false;
   let providerFailed = false;
@@ -285,7 +336,28 @@ export async function activeClosuresForBbox(
           const deadline = Date.parse(routeDecision.validUntil);
           if (Number.isFinite(deadline)) deadlines.push(deadline);
         }
-        if (routeDecision.disposition !== "legacy-geometry") continue;
+        if (routeDecision.disposition !== "legacy-geometry") {
+          // A closure in the shared live traffic closes the road in the
+          // engine; its line decides how the route's ends are relaxed.
+          if (
+            closesRoadForCars(effect) &&
+            assessRoadConditionForRoute(event, effect, {
+              evaluatedAt: evaluatedAt.getTime(),
+              travelAt: refTime.getTime(),
+              mode,
+              sharedTrafficApplied: true,
+              disallowedSources: disallowed,
+            }).disposition === "shared-traffic"
+          ) {
+            const geometry = effectGeometry(event, effect);
+            if (geometry) {
+              (isLocalAccessClosure(effect) ? localAccessLines : hardLines).push(
+                ...geometryLines(geometry),
+              );
+            }
+          }
+          continue;
+        }
         sawLegacyGeometry = true;
         if (isCrowdNonRoutable(event)) continue;
         if (!closesRoadForCars(effect)) continue;
@@ -293,6 +365,11 @@ export async function activeClosuresForBbox(
         const geometry = effectGeometry(event, effect);
         if (!geometry || excluded.has(geometry)) continue;
         excluded.add(geometry);
+        if (isLocalAccessClosure(effect)) {
+          legacyLocalAccess.push(geometry);
+          continue;
+        }
+        hardLines.push(...geometryLines(geometry));
         geometryToExclusions(geometry, points, polygons, ctx);
       }
     }
@@ -311,6 +388,9 @@ export async function activeClosuresForBbox(
   return {
     points,
     polygons,
+    localAccessLines,
+    hardLines,
+    legacyLocalAccess,
     roadConditionImpact: {
       availability,
       evaluatedAt: evaluatedAt.toISOString(),

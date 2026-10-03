@@ -233,6 +233,7 @@ export type {
   IsochronePolygon,
   IsochroneResult,
   IsochroneTravelMode,
+  LocalAccessEndpoint,
   ManeuverLane,
   ManeuverSign,
   MatchEdge,

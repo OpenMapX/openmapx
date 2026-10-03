@@ -1,9 +1,12 @@
 import type { RoadConditionEvent, RoadConditionRoutingEvidence } from "../types/roadConditions";
 import {
+  bindsEveryCar,
+  closesRoadForCars,
   effectValidity,
   isRestrictionEvidence,
   isVehicleSpecific,
   type RoadConditionEffect,
+  speedCapKph,
 } from "./roadConditionEffects";
 
 /**
@@ -81,10 +84,14 @@ export function isRoadConditionRoutingEvidence(
   )
     return false;
   const a = value.applicability;
+  const selectors = (v: unknown) =>
+    v === undefined || (Array.isArray(v) && v.length <= 100 && v.every(object));
   if (
     !object(a) ||
     !["all", "classes", "unknown"].includes(a.kind as string) ||
-    (a.raw !== undefined && !strings(a.raw))
+    (a.raw !== undefined && !strings(a.raw)) ||
+    !selectors(a.include) ||
+    !selectors(a.except)
   )
     return false;
   const r = value.rights;
@@ -149,7 +156,10 @@ export function getRoadConditionRoutingDecision(
   const travel = options.travelAt ?? now;
   // Checked before any evidence branch: a vehicle-specific or uninterpretable
   // rule must never reach shared routing, whatever the evidence claims.
-  if (isRestrictionEvidence(effect) || isVehicleSpecific(effect))
+  // A class selection naming cars outright binds every car, so its closure or
+  // speed cap shapes car routing exactly as an all-traffic one does.
+  const bindsCars = closesRoadForCars(effect) || speedCapKph(effect) !== undefined;
+  if (isRestrictionEvidence(effect) || (isVehicleSpecific(effect) && !bindsCars))
     return { eligible: false, reasons: ["vehicle_specific_restriction"], validUntil: null };
   const e = event.routingEvidence?.[effect.id];
   if (!e || e.schema_version !== 2)
@@ -187,7 +197,11 @@ export function getRoadConditionRoutingDecision(
   if (e.record_revision !== e.binding_revision || !e.graph_generation || !e.resolver_version)
     reasons.push("obsolete_binding");
   if (!["forward", "reverse", "both"].includes(e.direction_mode)) reasons.push("unknown_direction");
-  if (e.applicability?.kind !== "all") reasons.push("unsupported_vehicle_scope");
+  if (
+    e.applicability?.kind !== "all" &&
+    !(e.applicability?.kind === "classes" && bindsCars && bindsEveryCar(e.applicability))
+  )
+    reasons.push("unsupported_vehicle_scope");
   if (
     !e.rights ||
     e.rights.source_redistribution !== "yes" ||

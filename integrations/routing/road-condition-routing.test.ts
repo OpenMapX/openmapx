@@ -142,6 +142,40 @@ describe("assessRoadConditionForRoute", () => {
     ).toBe("legacy-geometry");
   });
 
+  it.each(["cycling", "walking"] as const)(
+    "lets a closure that names only cars leave a %s route alone",
+    (mode) => {
+      const carClosure = effect("test:1/closure", "closure", {
+        applicability: { kind: "classes", include: [{ class: "car" }] },
+      });
+      const legacy = roadConditionEvent({ effects: [carClosure] });
+      expect(
+        assessRoadConditionForRoute(legacy, carClosure, {
+          ...context,
+          mode,
+          allowLegacyGeometry: true,
+        }),
+      ).toEqual({
+        disposition: "ignore",
+        reasons: ["vehicle_specific_restriction"],
+        validUntil: null,
+      });
+    },
+  );
+
+  it.each([
+    ["closure", {}],
+    ["speed_limit", { limit: { value: 60, unit: "km/h" } }],
+  ] as const)("routes a %s that names cars outright through shared traffic", (kind, fields) => {
+    const cars = { kind: "classes" as const, include: [{ class: "car" as const }] };
+    const fx = effect(`oc:1/${kind}`, kind, { ...fields, applicability: cars });
+    const event = boundEvent({}, fx, { applicability: cars });
+    expect(
+      assessRoadConditionForRoute(event, fx, { ...context, sharedTrafficApplied: true })
+        .disposition,
+    ).toBe("shared-traffic");
+  });
+
   it("still applies an unconditional closure with valid evidence", () => {
     const event = boundEvent();
     expect(

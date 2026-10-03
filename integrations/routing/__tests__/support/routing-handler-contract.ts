@@ -1,3 +1,4 @@
+import type { RoadConditionEvent } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { describe, expect, it, vi } from "vitest";
 import { setup } from "../../index.js";
@@ -57,6 +58,7 @@ interface RoutingHandlerEnvironmentOptions {
   contextOverrides?: Partial<IntegrationContext>;
   routingProviders: RoutingProviderFixture[];
   closurePoints?: [number, number][];
+  closureEvents?: RoadConditionEvent[];
   additionalIntegrations?: Record<string, unknown[]>;
   metricsRecorder?: IntegrationContext["metricsRecorder"];
 }
@@ -65,13 +67,16 @@ export function createRoutingHandlerEnvironment(options: RoutingHandlerEnvironme
   getHandler(path: string): RoutingTestHandler;
 } {
   const handlers = new Map<string, RoutingTestHandler>();
-  const closureEvents = (options.closurePoints ?? []).map((coordinates, index) =>
-    roadConditionEvent({
-      id: `closure:${index}`,
-      provider: "road-conditions-stub",
-      geometry: { type: "Point", coordinates },
-    }),
-  );
+  const closureEvents = [
+    ...(options.closurePoints ?? []).map((coordinates, index) =>
+      roadConditionEvent({
+        id: `closure:${index}`,
+        provider: "road-conditions-stub",
+        geometry: { type: "Point", coordinates },
+      }),
+    ),
+    ...(options.closureEvents ?? []),
+  ];
 
   const context = {
     getIntegrationsByDomain(domain: string) {

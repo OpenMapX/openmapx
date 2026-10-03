@@ -3,6 +3,7 @@ import {
   bindsEveryCar,
   closesRoadForCars,
   effectInForceAt,
+  isLocalAccessClosure,
   localizedTextFor,
   readRoadConditionEffects,
   speedCapKph,
@@ -57,8 +58,27 @@ describe("what an effect does to cars", () => {
       }),
     ).toBe(false);
     expect(bindsEveryCar({ kind: "classes", include: [{ class: "hgv" }] })).toBe(false);
-    expect(bindsEveryCar({ kind: "all", except: [{ usage: "residents" }] })).toBe(false);
+    // An exception for a purpose spares no ordinary car; one by fuel may.
+    expect(bindsEveryCar({ kind: "all", except: [{ usage: "residents" }] })).toBe(true);
+    expect(bindsEveryCar({ kind: "all", except: [{ fuel: "electric" }] })).toBe(false);
     expect(bindsEveryCar({ kind: "unknown" })).toBe(false);
+  });
+
+  it("tells a closure open to local access from one no car may use", () => {
+    const except = (...usages: string[]) =>
+      effect("c", "closure", {
+        applicability: { kind: "all", except: usages.map((usage) => ({ usage })) },
+      });
+    const offRoad = effect("c", "closure", {
+      scope: "cycleway",
+      applicability: { kind: "all", except: [{ usage: "local_access" }] },
+    });
+    expect(isLocalAccessClosure(except("local_access"))).toBe(true);
+    expect(isLocalAccessClosure(except("residents"))).toBe(true);
+    expect(isLocalAccessClosure(except("local_access", "emergency_services"))).toBe(true);
+    expect(isLocalAccessClosure(except("emergency_services"))).toBe(false);
+    expect(isLocalAccessClosure(effect("c", "closure"))).toBe(false);
+    expect(isLocalAccessClosure(offRoad)).toBe(false);
   });
 
   it("closes the road for a carriageway closure or every lane closed, not for a cycleway", () => {

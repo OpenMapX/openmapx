@@ -73,8 +73,9 @@ export function setup(ctx: IntegrationContext): void {
   // GET /events?bbox=west,south,east,north[&kinds=&types=&minSeverity=&horizonDays=]
   // Aggregates every enabled road-conditions provider into one GeoJSON
   // FeatureCollection — consumed by both the map overlay and navigation.
-  // `kinds` are registry kinds, `types` registry `kind.type` pairs, and
-  // `minSeverity` a severity label; an unknown label reads as no threshold.
+  // `kinds` are registry kinds and `types` bare registry type codes, AND-ed
+  // as OpenConditions filters them; `minSeverity` is a severity label, and an
+  // unknown label reads as no threshold.
   ctx.registerRoute("GET", "/events", async (req, reply) => {
     const query = scalarQueries(req.query);
     const bbox = parseBbox(query.bbox);

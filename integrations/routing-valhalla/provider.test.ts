@@ -423,9 +423,11 @@ describe("valhallaService.getRoute exclusion body params", () => {
           speed_types: ["freeflow", "constrained", "predicted", "current"],
         },
       });
+      // Valhalla refuses `ignore_closures` beside a location's `exclude_closures`,
+      // even when false: only an explicit true is ever sent.
       expect(
         (capturedBody.costing_options as Record<string, Record<string, unknown>>)[costing],
-      ).toHaveProperty("ignore_closures", false);
+      ).not.toHaveProperty("ignore_closures");
     },
   );
 
@@ -594,16 +596,13 @@ describe("buildTrafficRequestExtras", () => {
       true,
     );
     expect(extras.recostings).toEqual([
+      // Valhalla reads a recosting's options flat on it; nested ones are ignored.
       {
         costing: "auto",
         name: "baseline",
-        costing_options: {
-          auto: {
-            maneuver_penalty: 10,
-            use_tolls: 0,
-            speed_types: ["freeflow", "constrained", "predicted"],
-          },
-        },
+        maneuver_penalty: 10,
+        use_tolls: 0,
+        speed_types: ["freeflow", "constrained", "predicted"],
       },
     ]);
   });
@@ -722,6 +721,146 @@ describe("getRoute request body", () => {
     const body = bodyOf(spy);
     expect(body).not.toHaveProperty("prioritize_bidirectional");
     expect(body).not.toHaveProperty("recostings");
+  });
+});
+
+describe("getRoute near a road closed to all but local access", () => {
+  const okResponse = {
+    trip: {
+      summary: { length: 1, time: 60 },
+      legs: [
+        {
+          shape: "_p~iF~ps|U",
+          summary: { length: 1, time: 60 },
+          maneuvers: [
+            {
+              type: 1,
+              instruction: "Drive north.",
+              length: 1,
+              time: 60,
+              begin_shape_index: 0,
+              end_shape_index: 1,
+            },
+          ],
+        },
+      ],
+    },
+  };
+  const noPath = () =>
+    new Response('{"error_code":442,"error":"No path could be found for input"}', {
+      status: 400,
+    });
+  const ok = () => Response.json(okResponse);
+  const WPS: [number, number][] = [
+    [13.3, 52.5],
+    [13.486, 52.4373],
+  ];
+  const onStreet: [number, number] = [13.486, 52.437];
+  const behind: [number, number] = [13.4855, 52.4369];
+  const localAccess = {
+    destination: { snapOntoClosure: true, accessPoints: [onStreet, behind] },
+  };
+
+  const run = async (responses: Array<() => Response>, options: Record<string, unknown>) => {
+    const bodies: Record<string, unknown>[] = [];
+    let i = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
+        const respond = responses[Math.min(i++, responses.length - 1)]!;
+        return respond();
+      }),
+    );
+    const result = await valhallaService.getRoute(WPS, "driving", options);
+    return { bodies, result };
+  };
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("lets the destination snap onto the road and reach a street behind it", async () => {
+    const { bodies } = await run([ok], { useLiveTraffic: true, localAccess });
+    const [body] = bodies;
+    const locations = body!["locations"] as Record<string, unknown>[];
+    expect(locations[0]).not.toHaveProperty("search_filter");
+    expect(locations[1]).toMatchObject({
+      search_filter: { exclude_closures: false },
+      minimum_reachability: 0,
+    });
+    expect(body!["prioritize_bidirectional"]).toBe(true);
+  });
+
+  it("only relaxes reachability for an end that must not snap onto the road", async () => {
+    const { bodies } = await run([ok], {
+      useLiveTraffic: true,
+      localAccess: { origin: { snapOntoClosure: false, accessPoints: [onStreet] } },
+    });
+    const locations = bodies[0]!["locations"] as Record<string, unknown>[];
+    expect(locations[0]).toEqual({ lon: 13.3, lat: 52.5, type: "break", minimum_reachability: 0 });
+  });
+
+  it.each([
+    ["a bike", "cycling", { useLiveTraffic: true }],
+    ["a planned trip", "driving", { useLiveTraffic: true, departAt: "2026-10-04T10:00" }],
+  ] as const)("relaxes nothing for %s, which ignores closures", async (_name, mode, options) => {
+    const bodies: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init?: RequestInit) => {
+        bodies.push(JSON.parse(init?.body as string) as Record<string, unknown>);
+        return ok();
+      }),
+    );
+    await valhallaService.getRoute(WPS, mode, { ...options, localAccess });
+    const locations = bodies[0]!["locations"] as Record<string, unknown>[];
+    expect(locations[1]).toEqual({ lon: 13.486, lat: 52.4373, type: "break" });
+  });
+
+  it("reaches an end behind the road through its nearest point when there is no path", async () => {
+    const { bodies, result } = await run([noPath, ok], { useLiveTraffic: true, localAccess });
+    expect(bodies).toHaveLength(2);
+    const locations = bodies[1]!["locations"] as Record<string, unknown>[];
+    expect(locations).toEqual([
+      expect.objectContaining({ lon: 13.3, lat: 52.5, type: "break" }),
+      { lon: 13.486, lat: 52.437, type: "through", search_filter: { exclude_closures: false } },
+      expect.objectContaining({ lon: 13.486, lat: 52.4373, type: "break" }),
+    ]);
+    expect(result.routes).toHaveLength(1);
+  });
+
+  it("tries through, then via, at most four points, then the request as it was", async () => {
+    const { bodies } = await run([noPath, noPath, noPath, noPath, noPath, ok], {
+      useLiveTraffic: true,
+      localAccess,
+    });
+    const inserted = bodies.slice(1, 5).map((b) => {
+      const l = (b["locations"] as Record<string, unknown>[])[1]!;
+      return [l["type"], l["lat"]];
+    });
+    expect(inserted).toEqual([
+      ["through", 52.437],
+      ["via", 52.437],
+      ["through", 52.4369],
+      ["via", 52.4369],
+    ]);
+    const last = bodies[5]!["locations"] as Record<string, unknown>[];
+    expect(last).toHaveLength(2);
+    expect(last[1]).toEqual({ lon: 13.486, lat: 52.4373, type: "break" });
+  });
+
+  it("passes on any other engine error at once", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async () => new Response('{"error_code":171,"error":"No suitable edges"}', { status: 400 }),
+      ),
+    );
+    await expect(
+      valhallaService.getRoute(WPS, "driving", { useLiveTraffic: true, localAccess }),
+    ).rejects.toThrow("No suitable edges");
+    expect(vi.mocked(fetch)).toHaveBeenCalledTimes(1);
   });
 });
 

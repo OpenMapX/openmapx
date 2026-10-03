@@ -1,8 +1,9 @@
 import { createHash } from "node:crypto";
-import type { RoadConditionRouteImpact, TravelMode } from "@openmapx/core";
+import type { LngLat, RoadConditionRouteImpact, RoutingOptions, TravelMode } from "@openmapx/core";
 import { timeZoneAt, zonedWallClockToInstant } from "@openmapx/core";
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { activeClosuresForBbox } from "./closures.js";
+import { activeClosuresForBbox, geometryLines, geometryToExclusions } from "./closures.js";
+import { clearOfEndpoints, nearbyLines, planLocalAccess } from "./local-access.js";
 
 /**
  * Resolve the travel instant for closure-time evaluation: the chosen
@@ -43,6 +44,11 @@ export interface ClosureExclusionResult {
   hasExclusions: boolean;
   exclusionsHash: string | null;
   roadConditionImpact: RoadConditionRouteImpact | null;
+  /**
+   * The route's ends near a road closed to all but local access, and the
+   * lines of those roads; absent when no end is near one.
+   */
+  localAccess?: { plan: NonNullable<RoutingOptions["localAccess"]>; lines: LngLat[][] };
 }
 
 /**
@@ -78,6 +84,7 @@ export async function applyClosureExclusions(
   ];
 
   let exclusions = empty;
+  let localAccess: ClosureExclusionResult["localAccess"];
   let roadConditionImpact: RoadConditionRouteImpact = {
     availability: "unavailable",
     evaluatedAt: new Date().toISOString(),
@@ -86,16 +93,40 @@ export async function applyClosureExclusions(
   };
   try {
     const collected = await activeClosuresForBbox(ctx, bbox, at, mode);
-    exclusions = { points: collected.points, polygons: collected.polygons };
+    exclusions = { points: [...collected.points], polygons: [...collected.polygons] };
+    // Without routing evidence a road open to local access stays open only
+    // where an end of the route lies on it; elsewhere it closes like any other.
+    const localLines = [...collected.localAccessLines];
+    for (const geometry of collected.legacyLocalAccess) {
+      const lines = geometryLines(geometry);
+      if (lines.every((line) => clearOfEndpoints(line, waypoints))) {
+        geometryToExclusions(geometry, exclusions.points, exclusions.polygons, ctx);
+      } else {
+        localLines.push(...lines);
+      }
+    }
+    const plan = planLocalAccess(waypoints, localLines, collected.hardLines);
+    if (plan) localAccess = { plan, lines: nearbyLines(waypoints, localLines) };
     roadConditionImpact = collected.roadConditionImpact;
   } catch (err) {
     ctx.log.warn("[routing] failed to fetch closures; routing without exclusions", err as Error);
   }
 
   const hasExclusions = exclusions.points.length > 0 || exclusions.polygons.length > 0;
-  const exclusionsHash = hasExclusions
-    ? hashKey("excl", { points: exclusions.points, polygons: exclusions.polygons })
-    : null;
+  const exclusionsHash =
+    hasExclusions || localAccess
+      ? hashKey("excl", {
+          points: exclusions.points,
+          polygons: exclusions.polygons,
+          ...(localAccess ? { localAccess: localAccess.plan } : {}),
+        })
+      : null;
 
-  return { exclusions, hasExclusions, exclusionsHash, roadConditionImpact };
+  return {
+    exclusions,
+    hasExclusions,
+    exclusionsHash,
+    roadConditionImpact,
+    ...(localAccess ? { localAccess } : {}),
+  };
 }

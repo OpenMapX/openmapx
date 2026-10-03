@@ -129,7 +129,8 @@ export function useContributorSession() {
 /** The contributions-api's answer to a landed report: the record it became and its evidence. */
 export interface SubmitReportResult {
   record: { class: "situation"; id: string };
-  evidenceState: string;
+  /** OpenConditions' evidence state; null for a record it holds no evidence for. */
+  evidenceState: string | null;
   routingEligible: boolean;
 }
 

@@ -297,6 +297,15 @@ export function RouteCard({
           {t(`roadConditionNotice.${roadConditionNotice}`)}
         </Typography>
       )}
+      {route.usesLocalAccessRoad && (
+        <Typography
+          variant="caption"
+          data-testid="local-access-route-status"
+          sx={{ color: "text.secondary", display: "block", mt: 0.25 }}
+        >
+          {t("localAccessRoad")}
+        </Typography>
+      )}
     </>
   );
 
