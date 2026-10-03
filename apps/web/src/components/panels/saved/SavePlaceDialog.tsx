@@ -21,6 +21,7 @@ import {
   useSavedLists,
   useSavePlace,
 } from "@openmapx/core";
+import { useQueryClient } from "@tanstack/react-query";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { BRAND, BRAND_LIGHT } from "@/integration-api/runtime/theme";
@@ -50,48 +51,143 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
   const [newName, setNewName] = useState("");
   const createInputRef = useRef<HTMLInputElement>(null);
 
+  const queryClient = useQueryClient();
+  const operations = useRef(
+    new Map<
+      string,
+      {
+        placeId: string;
+        listId: string;
+        desired: boolean;
+        present: boolean;
+        savedId: string | null;
+        running: boolean;
+      }
+    >(),
+  );
+  const displayedPlace = useRef(place.id);
+  displayedPlace.current = place.id;
+  const mounted = useRef(true);
   useEffect(() => {
-    if (savedInListIds) {
-      setCheckedLists(new Set(savedInListIds));
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const checked = new Set(savedInListIds ?? []);
+    for (const [key, operation] of operations.current) {
+      if (operation.placeId !== place.id) continue;
+      if (!operation.running && checked.has(operation.listId) === operation.desired) {
+        operations.current.delete(key);
+      } else if (operation.desired) checked.add(operation.listId);
+      else checked.delete(operation.listId);
     }
-  }, [savedInListIds]);
+    setCheckedLists(checked);
+  }, [savedInListIds, place.id]);
 
-  const handleToggle = useCallback(
-    async (listId: string) => {
-      const isCurrentlyChecked = checkedLists.has(listId);
-
-      if (isCurrentlyChecked) {
-        setCheckedLists((prev) => {
-          const next = new Set(prev);
-          next.delete(listId);
+  const setMembership = useCallback(
+    (listId: string, desired: boolean) => {
+      const capturedPlace = place;
+      const key = JSON.stringify([place.id, listId]);
+      let operation = operations.current.get(key);
+      if (!operation) {
+        operation = {
+          placeId: place.id,
+          listId,
+          desired,
+          present: checkedLists.has(listId),
+          savedId: null,
+          running: false,
+        };
+        operations.current.set(key, operation);
+      }
+      operation.desired = desired;
+      const updateCheckbox = (checked: boolean) => {
+        if (!mounted.current || displayedPlace.current !== capturedPlace.id) return;
+        setCheckedLists((previous) => {
+          const next = new Set(previous);
+          if (checked) next.add(listId);
+          else next.delete(listId);
           return next;
         });
-
+      };
+      updateCheckbox(desired);
+      if (operation.running) return;
+      operation.running = true;
+      const current = operation;
+      void (async () => {
         try {
-          const res = await apiClient.get<{ places: SavedPlace[] }>(
-            `${API_ENDPOINTS.savedLists}/${listId}/places`,
-          );
-          const match = res.places.find((p) => p.placeId === place.id);
-          if (match) {
-            removePlaceMutation.mutate(match.id);
+          while (true) {
+            while (current.present !== current.desired) {
+              if (current.desired) {
+                const saved = await savePlaceMutation.mutateAsync({
+                  listId,
+                  name: capturedPlace.name,
+                  address: capturedPlace.address || null,
+                  lat: capturedPlace.coordinates[1],
+                  lng: capturedPlace.coordinates[0],
+                  placeId: capturedPlace.id,
+                });
+                current.savedId = saved.id;
+                current.present = true;
+              } else {
+                if (!current.savedId) {
+                  const response = await apiClient.get<{ places: SavedPlace[] }>(
+                    `${API_ENDPOINTS.savedLists}/${listId}/places`,
+                  );
+                  current.savedId =
+                    response.places.find((p) => p.placeId === capturedPlace.id)?.id ?? null;
+                  if (!current.savedId) {
+                    current.present = false;
+                    continue;
+                  }
+                  // A reselect while resolving an existing row needs no deletion.
+                  if (current.desired) continue;
+                }
+                await removePlaceMutation.mutateAsync(current.savedId);
+                current.savedId = null;
+                current.present = false;
+              }
+            }
+            // Discard any membership response captured between the serialized writes.
+            await queryClient.cancelQueries({
+              queryKey: ["savedCheck", capturedPlace.id],
+              exact: true,
+            });
+            if (current.present !== current.desired) continue;
+            queryClient.setQueryData<string[]>(["savedCheck", capturedPlace.id], (previous) => {
+              const next = new Set(previous ?? []);
+              if (current.present) next.add(listId);
+              else next.delete(listId);
+              return [...next];
+            });
+            break;
           }
         } catch {
-          setCheckedLists((prev) => new Set([...prev, listId]));
+          operations.current.delete(key);
+          updateCheckbox(current.present);
+        } finally {
+          current.running = false;
+          void queryClient.invalidateQueries({
+            queryKey: ["savedCheck", capturedPlace.id],
+            exact: true,
+          });
         }
-      } else {
-        setCheckedLists((prev) => new Set([...prev, listId]));
-        haptics.success();
-        savePlaceMutation.mutate({
-          listId,
-          name: place.name,
-          address: place.address || null,
-          lat: place.coordinates[1],
-          lng: place.coordinates[0],
-          placeId: place.id,
-        });
-      }
+      })();
     },
-    [checkedLists, place, savePlaceMutation, removePlaceMutation],
+    [checkedLists, place, queryClient, savePlaceMutation, removePlaceMutation],
+  );
+
+  const handleToggle = useCallback(
+    (listId: string) => {
+      const pending = operations.current.get(JSON.stringify([place.id, listId]));
+      const desired = !(pending?.desired ?? checkedLists.has(listId));
+      if (desired) haptics.success();
+      setMembership(listId, desired);
+    },
+    [place.id, checkedLists, setMembership],
   );
 
   const handleCreateStart = () => {
@@ -111,15 +207,7 @@ export function SavePlaceDialog({ open, onClose, place }: Props) {
       {
         onSuccess: (newList) => {
           setCreating(false);
-          savePlaceMutation.mutate({
-            listId: newList.id,
-            name: place.name,
-            address: place.address || null,
-            lat: place.coordinates[1],
-            lng: place.coordinates[0],
-            placeId: place.id,
-          });
-          setCheckedLists((prev) => new Set([...prev, newList.id]));
+          setMembership(newList.id, true);
         },
       },
     );
