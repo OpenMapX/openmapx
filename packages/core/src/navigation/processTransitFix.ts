@@ -1,7 +1,11 @@
 import type { TransitStep, TripItinerary } from "@openmapx/mobility-core/transit";
 import type { TransitLegCapture } from "./mobileProtocol";
 import { snapPreparedRoute } from "./routeMatcher";
-import { type PreparedTransitProgress, prepareTransitProgress } from "./transitProgress";
+import {
+  type PreparedTransitProgress,
+  prepareTransitProgress,
+  stopsUntilAlight,
+} from "./transitProgress";
 import { walkLegStepProgress } from "./transitWalk";
 import type { FixInput } from "./types";
 
@@ -185,21 +189,13 @@ function stopsRemainingOnLeg(
   captures: readonly TransitLegCapture[],
   legIndex: number,
   snapped: [number, number],
+  prepared: PreparedTransitProgress,
 ): number | null {
   const capture = captureFor(captures, legIndex);
   if (capture?.status !== "captured" || capture.stops.length === 0) return null;
-  // The captured slice is board→alight in ride order, so "remaining" is simply
-  // how many entries sit after the nearest one.
-  let nearestIndex = 0;
-  let nearestDistance = Number.POSITIVE_INFINITY;
-  capture.stops.forEach((stop, index) => {
-    const distance = metresBetween(snapped, [stop.lng, stop.lat]);
-    if (distance < nearestDistance) {
-      nearestDistance = distance;
-      nearestIndex = index;
-    }
-  });
-  return Math.max(0, capture.stops.length - 1 - nearestIndex);
+  const leg = prepared.legs[legIndex];
+  if (!leg) return null;
+  return stopsUntilAlight(leg.matcher, capture.stops, snapped).stopsRemaining;
 }
 
 export interface TransitTickInput {
@@ -312,13 +308,17 @@ export function processTransitFix(input: TransitTickInput): TransitTickResult {
       const plausibleByTime = !Number.isFinite(scheduledEnd) || nowMs >= scheduledEnd - 5 * 60_000;
 
       const nextIsCloser = next !== null && next.deviationMeters <= NEXT_LEG_DEVIATION_METERS;
-      const alightProximity = stopsRemainingOnLeg(captures, state.currentLegIndex, match.snapped);
+      const alightProximity = stopsRemainingOnLeg(
+        captures,
+        state.currentLegIndex,
+        match.snapped,
+        prepared,
+      );
 
       const shouldAdvance =
         state.currentLegIndex < legs.length - 1 &&
         ((match.fraction >= ADVANCE_FRACTION && nextIsCloser) ||
-          (endpointDistance <= ENDPOINT_PROXIMITY_METERS && plausibleByTime) ||
-          (alightProximity === 0 && state.phase === "riding"));
+          (endpointDistance <= ENDPOINT_PROXIMITY_METERS && plausibleByTime));
 
       // Phase within the leg, before any advance.
       if (isTransitLeg(leg)) {

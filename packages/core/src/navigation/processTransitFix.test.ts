@@ -177,6 +177,19 @@ describe("boarding and riding", () => {
 });
 
 describe("leg advancement", () => {
+  it("keeps riding when the alight stop is nearest but still over a kilometre away", () => {
+    const result = tick({
+      state: { ...freshTransitTickState(NOW), currentLegIndex: 1, phase: "riding" },
+      fix: fix([8.68, 50.1], NOW + 17 * 60_000),
+      nowMs: NOW + 17 * 60_000,
+    });
+    expect(result.state.currentLegIndex).toBe(1);
+    expect(result.state.phase).toBe("riding");
+    expect(result.events.filter((e) => e.type === "alight" || e.type === "transfer")).toEqual([]);
+    expect(result.events).toContainEqual(
+      expect.objectContaining({ type: "approaching-alight", stopsRemaining: 1 }),
+    );
+  });
   it("advances at most one leg per tick", () => {
     const { state } = run([{ fix: fix(at(WALK_B, 0.5), NOW + 1_000), nowMs: NOW + 1_000 }]);
     expect(state.currentLegIndex).toBeLessThanOrEqual(1);
