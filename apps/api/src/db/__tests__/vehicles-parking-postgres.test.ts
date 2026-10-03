@@ -1,6 +1,7 @@
 import { and, eq, isNull } from "drizzle-orm";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { db } from "../index";
+import Fastify, { type FastifyInstance } from "fastify";
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { db, sql } from "../index";
 import { parkedLocation, personalVehicle, user } from "../schema";
 
 /**
@@ -9,6 +10,11 @@ import { parkedLocation, personalVehicle, user } from "../schema";
  * vehicle foreign key cascades. Both only mean anything against real
  * PostgreSQL, so this suite runs where the migrations have been applied.
  */
+vi.mock("../../utils/require-auth", () => ({
+  requireAuthHook: async () => {},
+  getUserId: () => "vehicles-parking-test-user",
+}));
+
 const TEST_USER = "vehicles-parking-test-user";
 const skipDatabase = process.env.OPENMAPX_RUN_DATABASE_TESTS !== "1";
 
@@ -18,6 +24,17 @@ async function reset(): Promise<void> {
 }
 
 describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", () => {
+  let app: FastifyInstance;
+  beforeAll(async () => {
+    const { garageRoute } = await import("../../routes/garage");
+    app = Fastify();
+    await app.register(garageRoute, { prefix: "/api" });
+    await app.ready();
+  });
+  afterAll(async () => {
+    await app?.close();
+  });
+
   beforeEach(async () => {
     await reset();
     await db.insert(user).values({
@@ -28,6 +45,53 @@ describe.skipIf(skipDatabase)("personal vehicles and parking with PostgreSQL", (
   });
 
   afterEach(reset);
+
+  it("selects exactly one default under simultaneous first creates", async () => {
+    // Delay insert so both unprotected handlers can observe an empty garage.
+    // The fixed handler blocks the second request on the account row instead.
+    await sql`CREATE FUNCTION garage_test_insert_delay() RETURNS trigger LANGUAGE plpgsql AS
+      $$ BEGIN PERFORM pg_sleep(0.1); RETURN NEW; END $$`;
+    await sql`CREATE TRIGGER garage_test_insert_delay BEFORE INSERT ON personal_vehicle
+      FOR EACH ROW EXECUTE FUNCTION garage_test_insert_delay()`;
+    try {
+      const responses = await Promise.all(
+        ["First", "Second"].map((name) =>
+          app.inject({
+            method: "POST",
+            url: "/api/vehicles",
+            payload: { name, kind: "car", powertrain: "petrol" },
+          }),
+        ),
+      );
+      expect(responses.map((r) => r.statusCode)).toEqual([200, 200]);
+      const rows = await db
+        .select()
+        .from(personalVehicle)
+        .where(eq(personalVehicle.userId, TEST_USER));
+      expect(rows.filter((r) => r.isDefault)).toHaveLength(1);
+    } finally {
+      await sql`DROP TRIGGER garage_test_insert_delay ON personal_vehicle`;
+      await sql`DROP FUNCTION garage_test_insert_delay()`;
+    }
+  });
+
+  it("admits only one concurrent create into the last garage slot", async () => {
+    for (let i = 0; i < 11; i++) await addVehicle(`existing-${i}`, `Existing ${i}`);
+    const responses = await Promise.all(
+      Array.from({ length: 4 }, (_, i) =>
+        app.inject({
+          method: "POST",
+          url: "/api/vehicles",
+          payload: { name: `Concurrent ${i}`, kind: "car", powertrain: "petrol" },
+        }),
+      ),
+    );
+    expect(responses.filter((r) => r.statusCode === 200)).toHaveLength(1);
+    expect(responses.filter((r) => r.statusCode === 409)).toHaveLength(3);
+    expect(
+      await db.select().from(personalVehicle).where(eq(personalVehicle.userId, TEST_USER)),
+    ).toHaveLength(12);
+  });
 
   async function addVehicle(id: string, name: string): Promise<void> {
     await db

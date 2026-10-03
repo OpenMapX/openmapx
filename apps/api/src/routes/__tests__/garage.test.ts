@@ -12,11 +12,12 @@ function prime(...results: unknown[][]) {
   queue.push(...results);
 }
 
-function makeChain() {
-  const result = queue.shift() ?? [];
+function makeChain(lock = false) {
+  const result = lock ? [{ id: "user-1" }] : (queue.shift() ?? []);
   const chain: Record<string, unknown> = {};
   for (const m of [
     "from",
+    "for",
     "where",
     "limit",
     "orderBy",
@@ -36,7 +37,7 @@ function makeChain() {
 }
 
 const fakeDb = {
-  select: () => makeChain(),
+  select: (fields?: Record<string, unknown>) => makeChain(fields?.id === "account-id"),
   insert: () => makeChain(),
   update: () => makeChain(),
   delete: () => makeChain(),
@@ -46,6 +47,7 @@ const fakeDb = {
 vi.mock("../../db/index.js", () => ({ db: fakeDb }));
 
 vi.mock("../../db/schema.js", () => ({
+  user: { id: "account-id" },
   personalVehicle: {
     id: "id",
     userId: "userId",

@@ -2,9 +2,16 @@ import { MAX_VEHICLES_PER_USER, normalizeParkedDraft, normalizeVehicleDraft } fr
 import { and, asc, desc, eq, ne, sql } from "drizzle-orm";
 import type { FastifyPluginAsync } from "fastify";
 import { db } from "../db/index";
-import { parkedLocation, personalVehicle } from "../db/schema";
+import { parkedLocation, personalVehicle, user } from "../db/schema";
 import { getUserId, requireAuthHook } from "../utils/require-auth";
 import { declareRouteAuth } from "../utils/route-auth";
+
+type GarageTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
+
+/** Empty garages have no vehicle row to lock; serialize on their owning account. */
+async function lockGarage(tx: GarageTransaction, userId: string): Promise<void> {
+  await tx.select({ id: user.id }).from(user).where(eq(user.id, userId)).for("update");
+}
 
 export const garageRoute: FastifyPluginAsync = async (fastify) => {
   declareRouteAuth(fastify, "session");
@@ -35,21 +42,16 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     const draft = normalizeVehicleDraft(req.body);
     if (!draft.ok) return reply.status(400).send({ error: draft.reason });
 
-    const counted = await db
-      .select({ count: sql<number>`count(*)::int` })
-      .from(personalVehicle)
-      .where(eq(personalVehicle.userId, userId));
-    const existing = counted[0]?.count ?? 0;
-    if (existing >= MAX_VEHICLES_PER_USER) {
-      return reply.status(409).send({ error: "vehicle limit reached" });
-    }
-
-    // The first vehicle is always the default: a garage of one with nothing
-    // selected would make every consumer fall back to "no vehicle".
-    const isDefault = draft.value.isDefault || existing === 0;
-    const id = crypto.randomUUID();
-
-    await db.transaction(async (tx) => {
+    const created = await db.transaction(async (tx) => {
+      await lockGarage(tx, userId);
+      const counted = await tx
+        .select({ count: sql<number>`count(*)::int` })
+        .from(personalVehicle)
+        .where(eq(personalVehicle.userId, userId));
+      const existing = counted[0]?.count ?? 0;
+      if (existing >= MAX_VEHICLES_PER_USER) return null;
+      const isDefault = draft.value.isDefault || existing === 0;
+      const id = crypto.randomUUID();
       if (isDefault) {
         await tx
           .update(personalVehicle)
@@ -57,29 +59,29 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
           .where(eq(personalVehicle.userId, userId));
       }
       await tx.insert(personalVehicle).values({ id, userId, ...draft.value, isDefault });
+      return { id, ...draft.value, isDefault };
     });
-
-    return reply.send({ id, ...draft.value, isDefault });
+    if (!created) return reply.status(409).send({ error: "vehicle limit reached" });
+    return reply.send(created);
   });
 
   fastify.patch("/vehicles/:id", async (req, reply) => {
     const userId = getUserId(req);
     const { id } = req.params as { id: string };
 
-    const existing = await db
-      .select()
-      .from(personalVehicle)
-      .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)))
-      .limit(1);
-    if (existing.length === 0) {
-      return reply.status(404).send({ error: "Vehicle not found" });
-    }
-
-    const merged = { ...existing[0], ...(req.body as Record<string, unknown>) };
-    const draft = normalizeVehicleDraft(merged);
-    if (!draft.ok) return reply.status(400).send({ error: draft.reason });
-
-    await db.transaction(async (tx) => {
+    const error = await db.transaction(async (tx) => {
+      await lockGarage(tx, userId);
+      const existing = await tx
+        .select()
+        .from(personalVehicle)
+        .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)))
+        .limit(1);
+      if (existing.length === 0) return { status: 404, error: "Vehicle not found" };
+      const draft = normalizeVehicleDraft({
+        ...existing[0],
+        ...(req.body as Record<string, unknown>),
+      });
+      if (!draft.ok) return { status: 400, error: draft.reason };
       if (draft.value.isDefault) {
         await tx
           .update(personalVehicle)
@@ -90,8 +92,9 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
         .update(personalVehicle)
         .set(draft.value)
         .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)));
+      return null;
     });
-
+    if (error) return reply.status(error.status).send({ error: error.error });
     return reply.send({ ok: true });
   });
 
@@ -99,34 +102,33 @@ export const garageRoute: FastifyPluginAsync = async (fastify) => {
     const userId = getUserId(req);
     const { id } = req.params as { id: string };
 
-    const existing = await db
-      .select({ id: personalVehicle.id, isDefault: personalVehicle.isDefault })
-      .from(personalVehicle)
-      .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)))
-      .limit(1);
-    if (existing.length === 0) {
-      return reply.status(404).send({ error: "Vehicle not found" });
-    }
-
-    await db.transaction(async (tx) => {
+    const deleted = await db.transaction(async (tx) => {
+      await lockGarage(tx, userId);
+      const existing = await tx
+        .select({ id: personalVehicle.id, isDefault: personalVehicle.isDefault })
+        .from(personalVehicle)
+        .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)))
+        .limit(1);
+      if (existing.length === 0) return false;
       await tx
         .delete(personalVehicle)
         .where(and(eq(personalVehicle.id, id), eq(personalVehicle.userId, userId)));
-      if (!existing[0].isDefault) return;
-      // Leaving a garage with no default would silently deselect the user's car.
-      const next = await tx
-        .select({ id: personalVehicle.id })
-        .from(personalVehicle)
-        .where(eq(personalVehicle.userId, userId))
-        .orderBy(asc(personalVehicle.createdAt))
-        .limit(1);
-      if (next.length === 0) return;
-      await tx
-        .update(personalVehicle)
-        .set({ isDefault: true })
-        .where(and(eq(personalVehicle.id, next[0].id), eq(personalVehicle.userId, userId)));
+      if (existing[0].isDefault) {
+        const next = await tx
+          .select({ id: personalVehicle.id })
+          .from(personalVehicle)
+          .where(eq(personalVehicle.userId, userId))
+          .orderBy(asc(personalVehicle.createdAt), asc(personalVehicle.id))
+          .limit(1);
+        if (next.length)
+          await tx
+            .update(personalVehicle)
+            .set({ isDefault: true })
+            .where(and(eq(personalVehicle.id, next[0].id), eq(personalVehicle.userId, userId)));
+      }
+      return true;
     });
-
+    if (!deleted) return reply.status(404).send({ error: "Vehicle not found" });
     return reply.send({ ok: true });
   });
 
