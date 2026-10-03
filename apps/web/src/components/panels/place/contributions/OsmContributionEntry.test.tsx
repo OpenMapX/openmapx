@@ -18,6 +18,7 @@ vi.mock("@openmapx/core", async () => {
 });
 
 const dialogProps = vi.fn();
+let authCallbackPath: string | undefined;
 vi.mock("./OsmContributionDialog", () => ({
   consumeContributeCallbackMarker: () => false,
   OsmContributionDialog: (props: Record<string, unknown>) => {
@@ -27,7 +28,24 @@ vi.mock("./OsmContributionDialog", () => ({
 }));
 
 vi.mock("@/components/auth/AuthDialog", () => ({
-  AuthDialog: ({ open }: { open: boolean }) => (open ? <div data-testid="auth-dialog" /> : null),
+  AuthDialog: (props: {
+    open: boolean;
+    onClose: () => void;
+    onAuthenticated?: () => void;
+    callbackPath?: string;
+  }) => {
+    authCallbackPath = props.callbackPath;
+    return props.open ? (
+      <div data-testid="auth-dialog">
+        <button type="button" onClick={props.onClose}>
+          Cancel authentication
+        </button>
+        <button type="button" onClick={props.onAuthenticated}>
+          Complete authentication
+        </button>
+      </div>
+    ) : null;
+  },
 }));
 
 const { OsmContributionEntry } = await import("./OsmContributionEntry");
@@ -40,6 +58,7 @@ beforeEach(() => {
   capabilities.mockReturnValue({ osmContributionsEnabled: true });
   session.mockReturnValue({ data: { user: { id: "u1" } } });
   dialogProps.mockClear();
+  authCallbackPath = undefined;
 });
 
 describe("visibility", () => {
@@ -73,6 +92,64 @@ describe("visibility", () => {
 });
 
 describe("activation", () => {
+  it("continues when the session arrives while authentication is still open", async () => {
+    session.mockReturnValue({ data: null } as never);
+    const view = renderEntry("node/12");
+    await userEvent.click(screen.getByTestId("osm-contribution-entry"));
+    session.mockReturnValue({ data: { user: { id: "u1" } } });
+    view.rerender(<OsmContributionEntry osmId="node/12" />);
+    expect(await screen.findByTestId("osm-contribution-dialog")).not.toBeNull();
+    expect(screen.queryByTestId("auth-dialog")).toBeNull();
+  });
+
+  it("continues when the session arrives after successful authentication closes", async () => {
+    session.mockReturnValue({ data: null } as never);
+    const view = renderEntry("node/12");
+    await userEvent.click(screen.getByTestId("osm-contribution-entry"));
+    await userEvent.click(screen.getByText("Complete authentication"));
+    expect(screen.queryByTestId("osm-contribution-dialog")).toBeNull();
+    session.mockReturnValue({ data: { user: { id: "u1" } } });
+    view.rerender(<OsmContributionEntry osmId="node/12" />);
+    expect(await screen.findByTestId("osm-contribution-dialog")).not.toBeNull();
+    expect(screen.queryByTestId("auth-dialog")).toBeNull();
+  });
+
+  it("does not resume after authentication is cancelled", async () => {
+    session.mockReturnValue({ data: null } as never);
+    const view = renderEntry("node/12");
+    await userEvent.click(screen.getByTestId("osm-contribution-entry"));
+    await userEvent.click(screen.getByText("Cancel authentication"));
+    session.mockReturnValue({ data: { user: { id: "u1" } } });
+    view.rerender(<OsmContributionEntry osmId="node/12" />);
+    expect(screen.queryByTestId("osm-contribution-dialog")).toBeNull();
+  });
+
+  it("clears authentication intent when the selected place changes", async () => {
+    session.mockReturnValue({ data: null } as never);
+    const view = renderEntry("node/12");
+    await userEvent.click(screen.getByTestId("osm-contribution-entry"));
+    view.rerender(<OsmContributionEntry osmId="way/42" />);
+    expect(screen.queryByTestId("auth-dialog")).toBeNull();
+    session.mockReturnValue({ data: { user: { id: "u1" } } });
+    view.rerender(<OsmContributionEntry osmId="way/42" />);
+    expect(screen.queryByTestId("osm-contribution-dialog")).toBeNull();
+  });
+
+  it("keeps the selected place in the content-free social callback", async () => {
+    window.history.replaceState(
+      null,
+      "",
+      "/?place=osm%3Anode%3A12&at=13.4%2C52.5#map=16/52.5/13.4",
+    );
+    session.mockReturnValue({ data: null } as never);
+    renderEntry("node/12");
+    await userEvent.click(screen.getByTestId("osm-contribution-entry"));
+    expect(authCallbackPath).toBe(
+      "/?place=osm%3Anode%3A12&at=13.4%2C52.5&osm-contribute=1#map=16/52.5/13.4",
+    );
+    window.history.replaceState(null, "", "/");
+  });
+
   it("opens the sign-in dialog when signed out", async () => {
     session.mockReturnValue({ data: null } as never);
     renderEntry("node/12");

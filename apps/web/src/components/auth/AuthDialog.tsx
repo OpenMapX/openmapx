@@ -33,11 +33,19 @@ interface AuthDialogProps {
   open: boolean;
   onClose: () => void;
   dismissible?: boolean;
+  /** Successful sign-in, distinct from dismissal. Defaults to onClose. */
+  onAuthenticated?: () => void;
   /** Fixed same-origin return path supplied by the hosting page. */
   callbackPath?: string;
 }
 
-export function AuthDialog({ open, onClose, dismissible = true, callbackPath }: AuthDialogProps) {
+export function AuthDialog({
+  open,
+  onClose,
+  onAuthenticated,
+  dismissible = true,
+  callbackPath,
+}: AuthDialogProps) {
   const t = useTranslations("auth");
   const tMobile = useTranslations("mobileAuth");
   const systemAuth = useSystemAuth();
@@ -93,6 +101,12 @@ export function AuthDialog({ open, onClose, dismissible = true, callbackPath }: 
     onClose();
   };
 
+  const handleAuthenticated = () => {
+    resetForm();
+    setMode("sign-in");
+    (onAuthenticated ?? onClose)();
+  };
+
   const handleDialogClose = () => {
     if (dismissible) handleClose();
   };
@@ -138,7 +152,7 @@ export function AuthDialog({ open, onClose, dismissible = true, callbackPath }: 
           return;
         }
       }
-      handleClose();
+      handleAuthenticated();
     } catch {
       setError(t("signInFailed"));
     } finally {
@@ -168,7 +182,7 @@ export function AuthDialog({ open, onClose, dismissible = true, callbackPath }: 
           return;
         }
       }
-      handleClose();
+      handleAuthenticated();
     } catch {
       setError(t("verificationFailed"));
     } finally {
@@ -234,7 +248,7 @@ export function AuthDialog({ open, onClose, dismissible = true, callbackPath }: 
         // this is not a degraded path — it is the only one that works.
         const outcome = await systemAuth.runSystemAuth("sign-in");
         if (outcome === "ok") {
-          handleClose();
+          handleAuthenticated();
           return;
         }
         setError(
@@ -251,7 +265,7 @@ export function AuthDialog({ open, onClose, dismissible = true, callbackPath }: 
         setError(String(passkeyError.message ?? t("passkeySignInFailed")));
         return;
       }
-      handleClose();
+      handleAuthenticated();
     } catch {
       setError(t("passkeyAuthFailed"));
     } finally {
@@ -271,7 +285,7 @@ export function AuthDialog({ open, onClose, dismissible = true, callbackPath }: 
       if (route === "system-browser") {
         const outcome = await systemAuth.runSystemAuth("sign-in");
         if (outcome === "ok") {
-          handleClose();
+          handleAuthenticated();
           return;
         }
         setError(

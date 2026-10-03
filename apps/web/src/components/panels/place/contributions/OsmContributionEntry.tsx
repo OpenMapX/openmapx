@@ -9,6 +9,7 @@ import { useTranslations } from "next-intl";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AuthDialog } from "@/components/auth/AuthDialog";
 import { consumeContributeCallbackMarker, OsmContributionDialog } from "./OsmContributionDialog";
+import { callbackUrlFor } from "./OsmContributionGate";
 
 interface Props {
   /** The canonical `Place.ids.osm` value, or undefined when the place has none. */
@@ -29,11 +30,29 @@ export function OsmContributionEntry({ osmId }: Props) {
   const [authOpen, setAuthOpen] = useState(false);
   const [editorOpen, setEditorOpen] = useState(false);
   const entryRef = useRef<HTMLDivElement>(null);
+  const [pendingRef, setPendingRef] = useState<string | null>(null);
+  const [callbackPath, setCallbackPath] = useState<string>();
 
   const ref = useMemo(() => parseOsmElementId(osmId), [osmId]);
+  const refKey = ref ? `${ref.type}/${ref.id}` : null;
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: a new place cancels the previous flow
+  useEffect(() => {
+    setPendingRef(null);
+    setAuthOpen(false);
+    setEditorOpen(false);
+  }, [refKey]);
+
+  useEffect(() => {
+    if (pendingRef && pendingRef === refKey && session?.user && osmContributionsEnabled) {
+      setPendingRef(null);
+      setAuthOpen(false);
+      setEditorOpen(true);
+    }
+  }, [pendingRef, refKey, session?.user, osmContributionsEnabled]);
 
   // Returning from the OAuth consent screen reopens the flow. The marker is a
-  // boolean only — the element reference and draft are never in the URL.
+  // boolean only — the public place link is retained, but no draft enters the URL.
   useEffect(() => {
     if (consumeContributeCallbackMarker()) setEditorOpen(true);
   }, []);
@@ -42,6 +61,10 @@ export function OsmContributionEntry({ osmId }: Props) {
 
   const handleClick = () => {
     if (!session?.user) {
+      setPendingRef(refKey);
+      const callback = new URL(callbackUrlFor(window.location.href));
+      callback.searchParams.set("place", `osm:${ref.type}:${ref.id}`);
+      setCallbackPath(`${callback.pathname}${callback.search}${callback.hash}`);
       setAuthOpen(true);
       return;
     }
@@ -49,6 +72,7 @@ export function OsmContributionEntry({ osmId }: Props) {
   };
 
   const closeAuth = () => {
+    setPendingRef(null);
     setAuthOpen(false);
     entryRef.current?.focus();
   };
@@ -72,7 +96,12 @@ export function OsmContributionEntry({ osmId }: Props) {
         <ListItemText primary={t("entry")} secondary={t("entryDescription")} />
       </ListItemButton>
 
-      <AuthDialog open={authOpen} onClose={closeAuth} />
+      <AuthDialog
+        open={authOpen}
+        onClose={closeAuth}
+        onAuthenticated={() => setAuthOpen(false)}
+        callbackPath={callbackPath}
+      />
       {editorOpen && session?.user && (
         <OsmContributionDialog open ref_={ref} onClose={closeEditor} />
       )}
