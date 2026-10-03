@@ -27,7 +27,7 @@
     "babel-preset-expo": "~57.0.12",
     "expo": "~57.0.24",
     "expo-application": "~57.0.3",
-    "expo-build-properties": "~57.0.21",
+    "expo-build-properties": "~58.0.3",
     "expo-constants": "~57.0.19",
     "expo-keep-awake": "~57.0.2",
     "expo-location": "~57.0.19",
