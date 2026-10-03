@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   joinSegmentSpeedLimits,
   osrmRouteSegmentSpeedLimits,
@@ -245,7 +245,7 @@ describe("osrmSegmentSpeedLimits", () => {
 });
 
 describe("osrmRouteSegmentSpeedLimits", () => {
-  // Standard OSRM returns maxspeed on the LEG (one entry per overview segment),
+  // Compatible servers may return maxspeed on the LEG (one entry per overview segment),
   // not on steps. The overview here has 3 coords = 2 segments.
   const baseRoute = {
     distance: 200,
@@ -274,7 +274,7 @@ describe("osrmRouteSegmentSpeedLimits", () => {
     ],
   };
 
-  it("builds per-segment limits from the leg annotation (standard OSRM)", () => {
+  it("builds per-segment limits from an optional leg annotation", () => {
     expect(osrmRouteSegmentSpeedLimits(baseRoute)).toEqual([50, 70]);
   });
 
@@ -336,4 +336,50 @@ describe("osrmService.temporal", () => {
       timeDependentTravel: "unsupported",
     });
   });
+});
+
+describe("osrmService requests", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it.each(["getRoute", "optimizeRoute"] as const)(
+    "%s omits unsupported maxspeed requests while preserving response extensions",
+    async (method) => {
+      let requestedUrl: URL | undefined;
+      const route = {
+        distance: 120,
+        duration: 30,
+        geometry: osrmStep.geometry,
+        legs: [{ summary: "Main St", distance: 120, duration: 30, steps: [osrmStep] }],
+      };
+      vi.stubGlobal("fetch", async (input: string) => {
+        requestedUrl = new URL(input);
+        return Response.json({
+          code: "Ok",
+          routes: [route],
+          trips: [route],
+          waypoints: [{ waypoint_index: 0 }, { waypoint_index: 1 }],
+        });
+      });
+
+      const request = osrmService[method];
+      if (!request) throw new Error(`OSRM does not implement ${method}`);
+      const result = await request(
+        [
+          [0, 0],
+          [0.001, 0],
+        ],
+        "driving",
+      );
+
+      expect(requestedUrl?.searchParams.has("annotations")).toBe(false);
+      expect(requestedUrl?.pathname).toBe(
+        method === "getRoute" ? "/route/v1/driving/0,0;0.001,0" : "/trip/v1/driving/0,0;0.001,0",
+      );
+      expect(requestedUrl?.searchParams.get("steps")).toBe("true");
+      expect(requestedUrl?.searchParams.get("geometries")).toBe("geojson");
+      expect(requestedUrl?.searchParams.get("overview")).toBe("full");
+      expect(result.routes[0].steps?.[0].speedLimit).toBe(50);
+      expect(result.routes[0].segmentSpeedLimits).toEqual([50]);
+    },
+  );
 });

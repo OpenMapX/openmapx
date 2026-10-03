@@ -77,8 +77,8 @@ interface OsrmLeg {
   distance: number;
   duration: number;
   steps: OsrmStep[];
-  // Standard OSRM attaches the `annotations=maxspeed` data to the LEG (one entry
-  // per overview-geometry segment), not to individual steps.
+  // Optional maxspeed extension from compatible servers, one entry per
+  // overview-geometry segment. Standard OSRM does not expose posted limits.
   annotation?: OsrmAnnotation;
 }
 
@@ -204,7 +204,7 @@ function osrmSpeedLimit(step: OsrmStep): number | undefined {
 
 /**
  * Posted speed limit (km/h) for each geometry segment of a step, aligned to the
- * step's `geometry.length - 1` segments. OSRM's `maxspeed` annotation is already
+ * step's `geometry.length - 1` segments. The optional `maxspeed` extension is
  * per-segment, so this normalizes each entry (mph→km/h, unknown→null) and pads
  * with null if the annotation is shorter than the segment count.
  */
@@ -222,8 +222,8 @@ function normalizeMaxspeedArray(maxspeed: OsrmMaxspeed[] | undefined): (number |
 /**
  * Per-segment speed limits for a whole OSRM route, aligned to the overview
  * geometry (`coords - 1`). Reads the leg-level `annotation.maxspeed` (where
- * standard OSRM puts it) first, falling back to per-step annotation for servers
- * that attach it to steps. Returns undefined when neither is present or the
+ * compatible servers may put it) first, falling back to per-step annotation
+ * for servers that attach it to steps. Returns undefined when neither is present or the
  * lengths don't line up (then navigation uses the per-step `speedLimit` or the
  * live map-match instead). Exported for testing.
  */
@@ -366,7 +366,6 @@ export const osrmService: RoutingProvider = {
     url.searchParams.set("overview", "full");
     url.searchParams.set("geometries", "geojson");
     url.searchParams.set("steps", "true");
-    url.searchParams.set("annotations", "maxspeed");
     // OSRM only supports alternatives with exactly 2 waypoints
     if (waypoints.length === 2) {
       url.searchParams.set("alternatives", "3");
@@ -403,7 +402,6 @@ export const osrmService: RoutingProvider = {
     url.searchParams.set("overview", "full");
     url.searchParams.set("geometries", "geojson");
     url.searchParams.set("steps", "true");
-    url.searchParams.set("annotations", "maxspeed");
     url.searchParams.set("source", "first");
     url.searchParams.set("destination", "last");
     url.searchParams.set("roundtrip", "false");
