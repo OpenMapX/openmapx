@@ -184,6 +184,9 @@ export function corsOptions(trustedWebOrigins: readonly string[] = configuredTru
   return {
     origin: [...trustedWebOrigins],
     credentials: true,
+    // Explicitly cover the API mutation verbs; the CORS plugin defaults to
+    // GET/HEAD/POST, which blocks credential saves and other cross-origin edits.
+    methods: ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     // Browser clients need these response headers when the web app and API are
     // on different origins (the default local-development topology).
     exposedHeaders: [

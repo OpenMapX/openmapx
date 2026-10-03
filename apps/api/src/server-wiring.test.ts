@@ -138,6 +138,39 @@ describe("corsOptions", () => {
     await app.close();
   });
 
+  it.each(["PUT", "PATCH", "DELETE"])("allows trusted browser preflight for %s", async (method) => {
+    vi.stubEnv("CORS_ORIGIN", "http://allowed.test");
+    const app = await corsApp();
+    try {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/api/thing",
+        headers: { origin: "http://allowed.test", "access-control-request-method": method },
+      });
+      expect(res.statusCode).toBe(204);
+      expect(res.headers["access-control-allow-origin"]).toBe("http://allowed.test");
+      expect(res.headers["access-control-allow-credentials"]).toBe("true");
+      expect(String(res.headers["access-control-allow-methods"]).split(/,\s*/)).toContain(method);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("does not admit an untrusted mutation preflight", async () => {
+    vi.stubEnv("CORS_ORIGIN", "http://allowed.test");
+    const app = await corsApp();
+    try {
+      const res = await app.inject({
+        method: "OPTIONS",
+        url: "/api/thing",
+        headers: { origin: "http://evil.test", "access-control-request-method": "PUT" },
+      });
+      expect(res.headers["access-control-allow-origin"]).toBeUndefined();
+    } finally {
+      await app.close();
+    }
+  });
+
   it("uses normalized exact origins from the shared web-origin policy", async () => {
     vi.stubEnv("CORS_ORIGIN", "HTTPS://ALLOWED.TEST:443");
     const app = await corsApp();
