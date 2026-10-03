@@ -93,6 +93,13 @@ describe("validateAdminOperationCatalog", () => {
     expect(() => validateAdminOperationCatalog([drifted])).toThrow(/data\./);
   });
 
+  it("rejects an unknown effect within the data operation family", () => {
+    const drifted = definition({
+      effect: () => ({ kind: "data.nonexistent" }) as never,
+    });
+    expect(() => validateAdminOperationCatalog([drifted])).toThrow(/known data\./);
+  });
+
   it("rejects an invalid version", () => {
     expect(() => validateAdminOperationCatalog([definition({ version: 0 })])).toThrow(/version/);
   });

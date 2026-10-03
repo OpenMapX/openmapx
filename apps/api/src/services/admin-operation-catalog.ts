@@ -1,4 +1,4 @@
-import type { OpsOperation } from "@openmapx/core/ops";
+import { OPS_OPERATION_KINDS, type OpsOperation } from "@openmapx/core/ops";
 import { z } from "zod";
 import {
   countriesSchema,
@@ -402,8 +402,12 @@ export function validateAdminOperationCatalog(
       throw new Error(`${label} needs an example that satisfies its schema: ${sample.error}`);
     }
     const effect = definition.effect(sample.input);
-    if (typeof effect.kind !== "string" || !effect.kind.startsWith("data.")) {
-      throw new Error(`${label} effect must stay inside the data. operation family`);
+    if (
+      typeof effect.kind !== "string" ||
+      !effect.kind.startsWith("data.") ||
+      !OPS_OPERATION_KINDS.includes(effect.kind)
+    ) {
+      throw new Error(`${label} effect must use a known data. operation kind`);
     }
     if (definition.preview(sample.input).length === 0) {
       throw new Error(`${label} preview must produce at least one line`);
