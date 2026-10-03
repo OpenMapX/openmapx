@@ -13,6 +13,7 @@ import TextField from "@mui/material/TextField";
 import Typography from "@mui/material/Typography";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
+import { useLocale, useTranslations } from "next-intl";
 import { useState } from "react";
 import { runAdminOperation } from "../operations/adminOperationsApi";
 import { useAdminToast } from "../shared/AdminToast";
@@ -49,6 +50,8 @@ export function resolveSearchIndexRegion(
 }
 
 export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
+  const t = useTranslations("adminSearchIndex");
+  const locale = useLocale();
   const showToast = useAdminToast();
   const queryClient = useQueryClient();
   const [region, setRegion] = useState("");
@@ -61,7 +64,7 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
       });
       const body = (await response.json().catch(() => ({}))) as SearchIndexStatus;
       if (response.status === 404) return body;
-      if (!response.ok) throw new Error(body.error ?? "Failed to load search index status");
+      if (!response.ok) throw new Error(body.error ?? t("loadFailed"));
       return body;
     },
     refetchInterval: (query) => (query.state.data?.building ? 10_000 : 60_000),
@@ -71,13 +74,13 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
   const operation = useMutation({
     mutationFn: () => runAdminOperation(apiUrl, "search-index-build", { region: effectiveRegion }),
     onSuccess: (jobId) => {
-      showToast(`Queued search-index build (${jobId})`);
+      showToast(t("queued", { jobId }));
       setConfirmOpen(false);
       void queryClient.invalidateQueries({ queryKey: ["admin", "jobs"] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "search-index", "status"] });
     },
     onError: (error) =>
-      showToast(error instanceof Error ? error.message : "Operation failed", "error"),
+      showToast(error instanceof Error ? error.message : t("operationFailed"), "error"),
   });
 
   return (
@@ -87,11 +90,19 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
           <Stack direction="row" sx={{ gap: 1, alignItems: "center", mb: 0.5 }}>
             <SearchIcon color="primary" />
             <Typography component="h2" variant="h6">
-              OSM code and alias search
+              {t("title")}
             </Typography>
             {(status?.status || status?.building) && (
               <Chip
-                label={status?.building ? "building" : status.status}
+                label={
+                  status?.building
+                    ? t("building")
+                    : status.status === "failed"
+                      ? t("failed")
+                      : status.status === "ready"
+                        ? t("ready")
+                        : t("building")
+                }
                 color={
                   status?.status === "failed" ? "error" : status?.stale ? "warning" : "primary"
                 }
@@ -100,31 +111,30 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
             )}
           </Stack>
           <Typography variant="body2" sx={{ color: "text.secondary" }}>
-            Build the regional OSM alias, reference, and conservative acronym index atomically.
+            {t("description")}
           </Typography>
         </Box>
         <Button startIcon={<RefreshIcon />} onClick={() => statusQuery.refetch()}>
-          Refresh
+          {t("refresh")}
         </Button>
         <Button component={Link} href="/admin/activity" variant="text">
-          View jobs
+          {t("viewJobs")}
         </Button>
       </Stack>
 
       {statusQuery.isError && (
         <Alert severity="error" sx={{ mt: 1.5 }}>
-          {statusQuery.error instanceof Error ? statusQuery.error.message : "Status unavailable"}
+          {statusQuery.error instanceof Error ? statusQuery.error.message : t("statusUnavailable")}
         </Alert>
       )}
       {status?.ok === false && (
         <Alert severity="info" sx={{ mt: 1.5 }}>
-          No local OSM alias index is published. Airport and configured transit-code search remain
-          available.
+          {t("notPublished")}
         </Alert>
       )}
       {status?.stale && (
         <Alert severity="warning" sx={{ mt: 1.5 }}>
-          A newer OSM PBF is available. The previous index remains searchable until rebuilt.
+          {t("stale")}
         </Alert>
       )}
       {status?.lastError && (
@@ -137,11 +147,14 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
       {status?.ok && (
         <Stack direction="row" sx={{ gap: 3, flexWrap: "wrap", mt: 1.5 }}>
           {[
-            ["Region", status.region ?? "—"],
-            ["Places", status.placeCount?.toLocaleString() ?? "—"],
-            ["Terms", status.termCount?.toLocaleString() ?? "—"],
-            ["Epoch", status.epoch ?? "—"],
-            ["Published", status.publishedAt ? new Date(status.publishedAt).toLocaleString() : "—"],
+            [t("region"), status.region ?? "—"],
+            [t("places"), status.placeCount?.toLocaleString(locale) ?? "—"],
+            [t("terms"), status.termCount?.toLocaleString(locale) ?? "—"],
+            [t("epoch"), status.epoch ?? "—"],
+            [
+              t("published"),
+              status.publishedAt ? new Date(status.publishedAt).toLocaleString(locale) : "—",
+            ],
           ].map(([label, value]) => (
             <Box key={label}>
               <Typography variant="caption" sx={{ color: "text.secondary" }}>
@@ -160,7 +173,7 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
         sx={{ gap: 1, mt: 2, alignItems: { sm: "center" } }}
       >
         <TextField
-          label="Region"
+          label={t("region")}
           placeholder={status?.region ?? "europe/germany"}
           value={region}
           onChange={(event) => setRegion(event.target.value)}
@@ -171,15 +184,15 @@ export function SearchIndexMaintenance({ apiUrl }: { apiUrl: string }) {
           disabled={!canBuildSearchIndex(status, effectiveRegion, operation.isPending)}
           onClick={() => setConfirmOpen(true)}
         >
-          {status?.stale ? "Rebuild index" : "Build index"}
+          {status?.stale ? t("rebuild") : t("build")}
         </Button>
       </Stack>
 
       <ConfirmDialog
         open={confirmOpen}
-        title="Build OSM search index"
-        message={`Build and atomically publish the OSM code and alias index for "${effectiveRegion}"? This can be CPU-, disk-, and database-intensive.`}
-        confirmLabel="Start build"
+        title={t("confirmTitle")}
+        message={t("confirmMessage", { region: effectiveRegion })}
+        confirmLabel={t("startBuild")}
         loading={operation.isPending}
         onCancel={() => setConfirmOpen(false)}
         onConfirm={() => operation.mutate()}

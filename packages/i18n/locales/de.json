@@ -4261,5 +4261,30 @@
     "expires": "Läuft am {date} ab",
     "verified": "Verifiziert",
     "unverified": "Nicht verifiziert"
+  },
+  "adminSearchIndex": {
+    "title": "Suche nach OSM-Codes und Aliasnamen",
+    "description": "Den regionalen Index für OSM-Aliasnamen, Referenzen und konservativ abgeleitete Akronyme atomar erstellen.",
+    "refresh": "Aktualisieren",
+    "viewJobs": "Aufträge anzeigen",
+    "building": "Wird erstellt",
+    "ready": "Bereit",
+    "failed": "Fehlgeschlagen",
+    "loadFailed": "Der Status des Suchindex konnte nicht geladen werden",
+    "queued": "Erstellung des Suchindex eingereiht ({jobId})",
+    "operationFailed": "Vorgang fehlgeschlagen",
+    "statusUnavailable": "Status nicht verfügbar",
+    "notPublished": "Es ist kein lokaler OSM-Aliasindex veröffentlicht. Die Suche nach Flughäfen und konfigurierten ÖPNV-Codes bleibt verfügbar.",
+    "stale": "Eine neuere OSM-PBF-Datei ist verfügbar. Der bisherige Index bleibt bis zur Neuerstellung durchsuchbar.",
+    "region": "Region",
+    "places": "Orte",
+    "terms": "Begriffe",
+    "epoch": "Epoche",
+    "published": "Veröffentlicht",
+    "rebuild": "Index neu erstellen",
+    "build": "Index erstellen",
+    "confirmTitle": "OSM-Suchindex erstellen",
+    "confirmMessage": "Den OSM-Code- und Aliasindex für „{region}“ erstellen und atomar veröffentlichen? Dies kann CPU, Datenträger und Datenbank stark beanspruchen.",
+    "startBuild": "Erstellung starten"
   }
 }

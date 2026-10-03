@@ -4261,5 +4261,30 @@
     "expires": "Expires {date}",
     "verified": "Verified",
     "unverified": "Unverified"
+  },
+  "adminSearchIndex": {
+    "title": "OSM code and alias search",
+    "description": "Build the regional OSM alias, reference, and conservative acronym index atomically.",
+    "refresh": "Refresh",
+    "viewJobs": "View jobs",
+    "building": "Building",
+    "ready": "Ready",
+    "failed": "Failed",
+    "loadFailed": "Failed to load search index status",
+    "queued": "Queued search-index build ({jobId})",
+    "operationFailed": "Operation failed",
+    "statusUnavailable": "Status unavailable",
+    "notPublished": "No local OSM alias index is published. Airport and configured transit-code search remain available.",
+    "stale": "A newer OSM PBF is available. The previous index remains searchable until rebuilt.",
+    "region": "Region",
+    "places": "Places",
+    "terms": "Terms",
+    "epoch": "Epoch",
+    "published": "Published",
+    "rebuild": "Rebuild index",
+    "build": "Build index",
+    "confirmTitle": "Build OSM search index",
+    "confirmMessage": "Build and atomically publish the OSM code and alias index for \"{region}\"? This can be CPU-, disk-, and database-intensive.",
+    "startBuild": "Start build"
   }
 }
