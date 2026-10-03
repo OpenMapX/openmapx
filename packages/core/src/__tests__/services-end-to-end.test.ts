@@ -231,8 +231,9 @@ describe.skipIf(!manifestsPresent)(
       it("links the optional timeline highlight to its feature documentation", () => {
         const readme = readFileSync(join(repoRoot, "README.md"), "utf8");
         expect(readme).toContain(
-          "[Optional personal timeline](docs/features/personal-timeline.md)",
+          "[Optional personal timeline](docs/docs/features/personal-timeline.md)",
         );
+        expect(existsSync(join(repoRoot, "docs/docs/features/personal-timeline.md"))).toBe(true);
       });
 
       it("selects the complete isolated topology without an app-to-worker runtime edge", async () => {
