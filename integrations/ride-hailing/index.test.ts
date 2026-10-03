@@ -139,3 +139,36 @@ describe("GET /:provider/handoff", () => {
     expect(body.handoff.webUrl).toBe("https://m.uber.com/looking?x=1");
   });
 });
+
+describe("precise trip response cache policy", () => {
+  it.each([
+    ["GET", "/providers"],
+    ["POST", "/quotes"],
+    ["GET", "/:provider/open"],
+    ["GET", "/:provider/handoff"],
+  ])("never stores %s %s success or validation responses", async (method, path) => {
+    const { route } = host();
+    for (const query of [pickupQuery, {}]) {
+      const r = reply();
+      await route(method, path)(
+        { query, params: { provider: "uber" }, body: { ...query, providerIds: ["uber"] } },
+        r,
+      );
+      expect(r.headers["Cache-Control"]).toBe("no-store");
+    }
+  });
+
+  it.each(["/:provider/open", "/:provider/handoff"])(
+    "does not store %s unknown-provider errors",
+    async (path) => {
+      const { route } = host();
+      const r = reply();
+      await route("GET", path)(
+        { query: pickupQuery, params: { provider: "unknown" }, body: null },
+        r,
+      );
+      expect(r.state.code).toBe(404);
+      expect(r.headers["Cache-Control"]).toBe("no-store");
+    },
+  );
+});

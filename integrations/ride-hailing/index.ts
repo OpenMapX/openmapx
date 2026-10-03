@@ -34,6 +34,7 @@ export function setup(ctx: IntegrationContext): void {
   const orchestrator = createRideOrchestrator(ctx);
 
   ctx.registerRoute("GET", "/providers", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const parsed = parseRideQuery(scalarQueries(req.query));
     if (!parsed.ok) {
       reply.status(400).send({ error: parsed.error });
@@ -41,7 +42,6 @@ export function setup(ctx: IntegrationContext): void {
     }
     // Availability depends on the caller's coordinates and, for some providers,
     // the current time, so this response is per-request and never shared.
-    reply.header("Cache-Control", "no-store");
     reply.send(await orchestrator.listProviders(parsed.request));
   });
 
@@ -67,6 +67,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/:provider/open", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const provider = orchestrator.getProvider(req.params.provider ?? "");
     if (!provider) {
       reply.status(404).send({ error: "Unknown ride provider" });
@@ -83,6 +84,7 @@ export function setup(ctx: IntegrationContext): void {
   });
 
   ctx.registerRoute("GET", "/:provider/handoff", async (req, reply) => {
+    reply.header("Cache-Control", "no-store");
     const provider = orchestrator.getProvider(req.params.provider ?? "");
     if (!provider) {
       reply.status(404).send({ error: "Unknown ride provider" });
