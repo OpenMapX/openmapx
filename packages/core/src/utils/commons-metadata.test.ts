@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { PlacePhoto } from "../types/place";
-import { fetchCommonsMetadata, isDisplayablePhoto } from "./commons-metadata";
+import { fetchCommonsMetadata, isDisplayablePhoto, parseCommonsPage } from "./commons-metadata";
 
 describe("fetchCommonsMetadata strict lookup", () => {
   it("surfaces upstream failure while preserving the default empty-map fallback", async () => {
@@ -76,5 +76,43 @@ describe("isDisplayablePhoto for legacy Commons entries", () => {
     },
   ])("$name", ({ photo, visible }) => {
     expect(isDisplayablePhoto(photo as PlacePhoto)).toBe(visible);
+  });
+});
+
+describe("parseCommonsPage author attribution", () => {
+  it("preserves visible artist spans and links", () => {
+    const photo = parseCommonsPage({
+      imageinfo: [
+        {
+          url: "https://upload.wikimedia.org/wikipedia/commons/photo.jpg",
+          mime: "image/jpeg",
+          extmetadata: {
+            Artist: {
+              value:
+                '<a href="/wiki/User:Artist">Artist</a><span style="display: inline;"> and Artist</span>',
+            },
+          },
+        },
+      ],
+    });
+    expect(photo?.author).toBe("Artist and Artist");
+    expect(photo?.authorUrl).toBe("https://commons.wikimedia.org/wiki/User:Artist");
+  });
+
+  it("omits the hidden Commons unknown-author marker", () => {
+    // Artist from File:Starbucks coffee wordmark.png in the Commons API.
+    const photo = parseCommonsPage({
+      title: "File:Starbucks coffee wordmark.png",
+      imageinfo: [
+        {
+          url: "https://upload.wikimedia.org/wikipedia/commons/wordmark.png",
+          mime: "image/png",
+          extmetadata: {
+            Artist: { value: 'Unknown author<span style="display: none;">Unknown author</span>' },
+          },
+        },
+      ],
+    });
+    expect(photo?.author).toBe("Unknown author");
   });
 });

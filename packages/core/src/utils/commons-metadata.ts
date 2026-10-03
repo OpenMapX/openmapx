@@ -197,9 +197,17 @@ export async function fetchCommonsMetadata(
   return result;
 }
 
-/** Strip HTML tags. */
+/** Strip HTML tags and Commons hidden author markers. */
 function stripHtml(html: string): string {
-  return html.replace(/<[^>]*>/g, "").trim();
+  // Commons Unknown author emits a second copy in a hidden
+  // span. Removing tags alone would concatenate it with the visible author.
+  return html
+    .replace(
+      /<span\b[^>]*\bstyle\s*=\s*(["'])[^"']*\bdisplay\s*:\s*none\s*(?:;[^"']*)?\1[^>]*>[\s\S]*?<\/span\s*>/gi,
+      "",
+    )
+    .replace(/<[^>]*>/g, "")
+    .trim();
 }
 
 /** Extract the first href from HTML. */
