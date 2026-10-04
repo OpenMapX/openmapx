@@ -3,7 +3,7 @@ import { vi } from "vitest";
 
 vi.mock("../../redis.js", () => ({ redis: null }));
 
-vi.mock("../../db.js", () => ({
+vi.mock("../../db/index.js", () => ({
   db: {
     select: vi.fn().mockReturnValue({
       from: vi.fn().mockReturnValue({

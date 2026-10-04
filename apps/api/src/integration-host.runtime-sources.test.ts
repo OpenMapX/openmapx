@@ -24,7 +24,7 @@ const attribution = vi.hoisted(() => {
 
 vi.mock("./redis.js", () => ({ redis: null }));
 
-vi.mock("./db.js", () => {
+vi.mock("./db/index.js", () => {
   const rows = () => Promise.resolve([]);
   return {
     db: {
