@@ -26,17 +26,24 @@ export async function setup(ctx: IntegrationContext, fetchJson?: GofsFetchJson):
   // hold up API boot for as long as its TCP timeouts take. Bound it: a feed
   // that cannot answer within the budget is simply not offered this time
   // round, which is the same outcome as failing its probe.
-  const feeds = await Promise.race([
-    createGofsCatalog(ctx, fetchJson).resolveFeeds(),
-    new Promise<CatalogEntry[]>((resolve) => {
-      setTimeout(() => {
-        ctx.log.warn(
-          `GOFS catalog resolve exceeded ${CATALOG_RESOLVE_BUDGET_MS}ms; starting with no feeds`,
-        );
-        resolve([]);
-      }, CATALOG_RESOLVE_BUDGET_MS).unref?.();
-    }),
-  ]);
+  let deadline: ReturnType<typeof setTimeout> | undefined;
+  let feeds: CatalogEntry[];
+  try {
+    feeds = await Promise.race([
+      createGofsCatalog(ctx, fetchJson).resolveFeeds(),
+      new Promise<CatalogEntry[]>((resolve) => {
+        deadline = setTimeout(() => {
+          ctx.log.warn(
+            `GOFS catalog resolve exceeded ${CATALOG_RESOLVE_BUDGET_MS}ms; starting with no feeds`,
+          );
+          resolve([]);
+        }, CATALOG_RESOLVE_BUDGET_MS);
+        deadline.unref?.();
+      }),
+    ]);
+  } finally {
+    clearTimeout(deadline);
+  }
 
   for (const feed of feeds) {
     const provider = createGofsRideProvider(ctx, feed, fetchJson);

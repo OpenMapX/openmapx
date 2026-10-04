@@ -55,3 +55,34 @@ describe("ride-gofs setup", () => {
     expect(ctx.registered.ride.map((p) => p.id)).toEqual(["gofs-example"]);
   });
 });
+
+describe("GOFS catalog startup deadline", () => {
+  it("does not warn that startup timed out after the feeds registered successfully", async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = ctxWith({ feeds });
+      const warn = vi.spyOn(ctx.log, "warn");
+      await setup(ctx, stubFetch);
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(ctx.registered.ride).toHaveLength(2);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("still starts without feeds and warns when discovery exceeds the deadline", async () => {
+    vi.useFakeTimers();
+    try {
+      const ctx = ctxWith({ feeds });
+      const warn = vi.spyOn(ctx.log, "warn");
+      const pending = setup(ctx, () => new Promise(() => {}));
+      await vi.advanceTimersByTimeAsync(10_000);
+      await pending;
+      expect(ctx.registered.ride).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(expect.stringMatching(/exceeded.*starting with no feeds/));
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
