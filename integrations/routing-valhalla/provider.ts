@@ -53,6 +53,22 @@ export function setValhallaBidirectionalAlternates(enabled: boolean): void {
   VALHALLA_BIDIRECTIONAL_ALTERNATES = enabled;
 }
 
+function hostedByStadia(): boolean {
+  try {
+    return /(^|\.)stadiamaps\.com$/.test(new URL(VALHALLA_URL).hostname.toLowerCase());
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Manifest sourceId of the endpoint that answers requests, so a route credits
+ * Stadia Maps only when Stadia actually computed it.
+ */
+export function valhallaSourceIds(): string[] {
+  return [hostedByStadia() ? "stadia-maps" : "valhalla"];
+}
+
 /** Build a Valhalla endpoint URL, appending `api_key` when configured. */
 function endpoint(path: string): string {
   const url = `${VALHALLA_URL}${path}`;
@@ -825,7 +841,7 @@ export const valhallaService: RoutingProvider = {
     });
     const travelMode = mode as TravelMode;
     const trafficProof =
-      usesCurrentClosures && !/(^|\.)stadiamaps\.com$/.test(new URL(VALHALLA_URL).hostname)
+      usesCurrentClosures && !hostedByStadia()
         ? readTrafficProof(
             data.openmapx_traffic_proof,
             requestId,
@@ -842,7 +858,11 @@ export const valhallaService: RoutingProvider = {
       }
     }
 
-    if (trafficProof) for (const route of routes) route.trafficProof = trafficProof;
+    const sourceIds = valhallaSourceIds();
+    for (const route of routes) {
+      route.sourceIds = sourceIds;
+      if (trafficProof) route.trafficProof = trafficProof;
+    }
 
     return {
       waypoints,
@@ -890,7 +910,7 @@ export const valhallaService: RoutingProvider = {
     });
     const travelMode = mode as TravelMode;
     const trafficProof =
-      usesCurrentClosures && !/(^|\.)stadiamaps\.com$/.test(new URL(VALHALLA_URL).hostname)
+      usesCurrentClosures && !hostedByStadia()
         ? readTrafficProof(
             data.openmapx_traffic_proof,
             requestId,
@@ -906,7 +926,11 @@ export const valhallaService: RoutingProvider = {
     const optimizedOrder =
       data.trip.locations?.map((loc) => loc.original_index ?? 0) ?? waypoints.map((_, i) => i);
 
-    if (trafficProof) for (const route of routes) route.trafficProof = trafficProof;
+    const sourceIds = valhallaSourceIds();
+    for (const route of routes) {
+      route.sourceIds = sourceIds;
+      if (trafficProof) route.trafficProof = trafficProof;
+    }
 
     return {
       waypoints,

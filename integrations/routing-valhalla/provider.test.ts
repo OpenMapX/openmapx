@@ -402,6 +402,16 @@ describe("valhallaService.getRoute exclusion body params", () => {
     expect(capturedBody.turn_lanes).toBe(true);
   });
 
+  it("credits the self-hosted source unless Stadia Maps served the route", async () => {
+    setValhallaUrl("http://valhalla:8002");
+    const selfHosted = await valhallaService.getRoute(WPS, "driving", {});
+    expect(selfHosted.routes[0]?.sourceIds).toEqual(["valhalla"]);
+
+    setValhallaUrl("https://api.stadiamaps.com");
+    const stadia = await valhallaService.getRoute(WPS, "driving", {});
+    expect(stadia.routes[0]?.sourceIds).toEqual(["stadia-maps"]);
+  });
+
   it("preserves maneuver road names for incident matching", async () => {
     const result = await valhallaService.getRoute(WPS, "driving", {});
     expect(result.routes[0]?.steps[0]?.roadNames).toEqual(["A 57", "E 31"]);

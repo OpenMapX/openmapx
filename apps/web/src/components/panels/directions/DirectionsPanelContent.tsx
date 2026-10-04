@@ -100,6 +100,7 @@ import {
 import { shareCurrentUrl } from "@/lib/deepLink";
 import { buildScheduleRequest } from "@/lib/directions/scheduleRequest";
 import { useForegroundLocation } from "@/lib/mobile/useForegroundLocation";
+import { routeAttributions } from "@/lib/routeAttributions";
 import { useRouteImpacts } from "./useRouteImpacts";
 
 const GROUND_FALLBACK_MODES = ["walking", "cycling", "driving", "motorcycle"] as const;
@@ -747,14 +748,14 @@ export function DirectionsPanelContent() {
     // credit none rather than guess the wrong one (OSM stays credited by the
     // always-on base-map control regardless).
     if (data?.provider) {
-      return attributionsForProviders(registry, [data.provider]);
+      return routeAttributions(registry, data.provider, data.routes[activeRouteIndex]);
     }
     const healthy = registry.getByDomain("routing").filter((r) => {
       const cap = caps[r.id];
       return cap ? cap.available && cap.healthy : false;
     });
     return healthy.length === 1 ? attributionsForProviders(registry, [healthy[0].id]) : [];
-  }, [registry, caps, data?.provider]);
+  }, [registry, caps, data?.provider, data?.routes, activeRouteIndex]);
 
   const getCachedTime = (m: TravelMode): string | undefined => {
     if (!allWaypointsFilled) return undefined;

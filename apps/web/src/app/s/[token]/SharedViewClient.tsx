@@ -19,9 +19,9 @@ import { useLocale, useTranslations } from "next-intl";
 import { useMemo } from "react";
 import { SharedMapView } from "@/components/share/SharedMapView";
 import { AttributionStrip } from "@/components/ui/AttributionStrip";
-import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { buildDirectionsDeepLinkUrl, buildLocationShareUrl } from "@/lib/deepLink";
 import { resolveListIcon } from "@/lib/listIcon";
+import { routeAttributions } from "@/lib/routeAttributions";
 
 /**
  * The deep-link builders return absolute URLs, but this component also renders
@@ -170,8 +170,8 @@ function SharedRouteContent({
   const t = useTranslations("share");
   const registry = useIntegrationRegistry();
   const routingAttributions = useMemo(
-    () => (provider ? attributionsForProviders(registry, [provider]) : []),
-    [registry, provider],
+    () => routeAttributions(registry, provider, activeRoute),
+    [registry, provider, activeRoute],
   );
   const openUrl = toRelative(
     buildDirectionsDeepLinkUrl("http://share.invalid/", {

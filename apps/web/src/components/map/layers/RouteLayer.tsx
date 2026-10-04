@@ -14,9 +14,9 @@ import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayer
 import { useDrawnDirectionsRoutes } from "@/integration-api/map/useDrawnDirectionsRoutes";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
-import { attributionsForProviders } from "@/lib/attributionForProviders";
 import { getMapObstructionInsets, subscribeMapObstructions } from "@/lib/mapObstructions";
 import { EV_CHARGING_SOURCE_ID, openChargerPlace } from "@/lib/openChargerPlace";
+import { routeAttributions } from "@/lib/routeAttributions";
 import { ROUTE_ALT_OPACITY, ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { routePillAnchors } from "./routePillAnchors";
 
@@ -81,11 +81,11 @@ export function RouteLayer() {
   // attribution control — so the credit persists when the directions panel is
   // closed (the panel shows the same credit while open).
   const registry = useIntegrationRegistry();
-  const routeAttributions = useMemo(
-    () => (navigating ? [] : attributionsForProviders(registry, [provider])),
-    [registry, provider, navigating],
+  const routeCredits = useMemo(
+    () => (navigating ? [] : routeAttributions(registry, provider, routes[activeRouteIndex])),
+    [registry, provider, routes, activeRouteIndex, navigating],
   );
-  useMapAttributions("route", routeAttributions);
+  useMapAttributions("route", routeCredits);
 
   const hasWaypoints = waypoints.some((waypoint) => waypoint.coords !== null);
   const routeFeatures = useMemo(() => {

@@ -31,7 +31,7 @@ vi.mock("@/integration-api/map/useDrawnDirectionsRoutes", () => ({
   }),
 }));
 vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
-vi.mock("@/lib/attributionForProviders", () => ({ attributionsForProviders: () => [] }));
+vi.mock("@/lib/routeAttributions", () => ({ routeAttributions: () => [] }));
 vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
 vi.mock("next-intl", () => ({
   useLocale: () => "en",

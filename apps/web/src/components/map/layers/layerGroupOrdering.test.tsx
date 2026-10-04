@@ -20,7 +20,7 @@ vi.mock("@/integration-api/map/MapContext", () => ({
   }),
 }));
 vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
-vi.mock("@/lib/attributionForProviders", () => ({ attributionsForProviders: () => [] }));
+vi.mock("@/lib/routeAttributions", () => ({ routeAttributions: () => [] }));
 vi.mock("@/integration-api/overlay/useIntegrationAttribution", () => ({
   useIntegrationDomainAttribution: vi.fn(),
 }));

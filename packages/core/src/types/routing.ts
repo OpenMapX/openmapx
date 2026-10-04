@@ -169,6 +169,13 @@ export interface Route {
   /** Human-readable summary of the primary road, e.g. "via A57" */
   summary?: string;
   /**
+   * Manifest `sourceId`s of the backend that computed this route, for
+   * attribution. Set by engines whose integration declares several possible
+   * backends (e.g. self-hosted Valhalla vs Stadia Maps); absent otherwise, and
+   * consumers then credit the provider's declared sources.
+   */
+  sourceIds?: string[];
+  /**
    * Whether the route uses a toll road, as its engine reported it. `undefined`
    * when the engine does not say — never read that as toll-free.
    */

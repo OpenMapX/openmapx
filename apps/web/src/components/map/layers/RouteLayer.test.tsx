@@ -72,7 +72,7 @@ vi.mock("maplibre-gl", () => ({
   },
 }));
 vi.mock("@/integration-api/overlay/useMapAttributions", () => ({ useMapAttributions: vi.fn() }));
-vi.mock("@/lib/attributionForProviders", () => ({ attributionsForProviders: () => [] }));
+vi.mock("@/lib/routeAttributions", () => ({ routeAttributions: () => [] }));
 vi.mock("@openmapx/integration-framework/react", () => ({ useIntegrationRegistry: () => ({}) }));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<Record<string, unknown>>()),

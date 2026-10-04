@@ -112,6 +112,7 @@ function copyRoute(route: Route): Route {
     mode: route.mode,
     ...(route.segmentSpeedLimits && { segmentSpeedLimits: [...route.segmentSpeedLimits] }),
     ...(route.summary !== undefined && { summary: route.summary }),
+    ...(route.sourceIds && { sourceIds: [...route.sourceIds] }),
     ...(route.elevation && { elevation: [...route.elevation] }),
     ...(route.elevationInterval !== undefined && { elevationInterval: route.elevationInterval }),
   };
@@ -270,6 +271,7 @@ function validateRoute(value: unknown): value is Route {
     return false;
   }
   if (!isOptionalString(route.summary)) return false;
+  if (route.sourceIds !== undefined && !isStringArray(route.sourceIds)) return false;
   if (
     route.elevation &&
     (!Array.isArray(route.elevation) || !route.elevation.every(isFiniteNumber))

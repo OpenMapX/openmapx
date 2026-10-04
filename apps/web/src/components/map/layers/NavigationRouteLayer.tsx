@@ -9,7 +9,7 @@ import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import type { MapLayerGroup, SlottedLayer } from "@/integration-api/map/mapLayerGroup";
 import { useMapLayerGroup } from "@/integration-api/map/useMapLayerGroup";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
-import { attributionsForProviders } from "@/lib/attributionForProviders";
+import { routeAttributions } from "@/lib/routeAttributions";
 import { ROUTE_COLORS, ROUTE_WIDTHS } from "@/lib/routeStyle";
 import { buildNavRouteLine, navRouteProgressFraction } from "./navRouteSplit";
 import type { DynamicLineState } from "./useMapDynamicLineState";
@@ -41,8 +41,8 @@ export function NavigationRouteLayer() {
   // so the credit shows during turn-by-turn (the directions panel is gone).
   const registry = useIntegrationRegistry();
   const navRouteAttributions = useMemo(
-    () => (status === "idle" ? [] : attributionsForProviders(registry, [routeProvider])),
-    [registry, routeProvider, status],
+    () => (status === "idle" ? [] : routeAttributions(registry, routeProvider, route)),
+    [registry, routeProvider, route, status],
   );
   useMapAttributions("nav-route", navRouteAttributions);
 

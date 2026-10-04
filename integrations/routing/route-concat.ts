@@ -38,6 +38,7 @@ export function concatenateRoutes(routes: Route[]): Route {
   const everyHasElevation = routes.every(
     (route) => route.elevation !== undefined && route.elevationInterval === interval,
   );
+  const sourceIds = [...new Set(routes.flatMap((route) => route.sourceIds ?? []))];
 
   for (const route of routes) {
     // The shared endpoint would otherwise appear twice and introduce a
@@ -71,6 +72,7 @@ export function concatenateRoutes(routes: Route[]): Route {
     ...(everyHasSpeedLimits ? { segmentSpeedLimits: speedLimits } : {}),
     ...(routes[0].summary ? { summary: routes[0].summary } : {}),
     ...(hasTolls === undefined ? {} : { hasTolls }),
+    ...(sourceIds.length > 0 ? { sourceIds } : {}),
     ...(everyHasElevation && interval !== undefined
       ? { elevation, elevationInterval: interval }
       : {}),
