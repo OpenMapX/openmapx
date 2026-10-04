@@ -345,6 +345,11 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   for (const dir of result.writableBindDirs ?? []) {
     mkdirSync(dir, { recursive: true });
   }
+  // app-api bind-mounts `${OPENMAPX_HOST_DIR}/custom_integrations`, a path the
+  // renderer cannot resolve. Left to Docker it is created root-owned on first
+  // start, and the ops-agent then refuses to start on its next boot because
+  // its authority scan only trusts directories owned by the checkout's user.
+  mkdirSync(join(paths.root, "custom_integrations"), { recursive: true, mode: 0o755 });
   return {
     servicesRendered: enabled.length,
     composePath: paths.composeOutPath,
