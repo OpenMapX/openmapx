@@ -36,6 +36,25 @@ const renderList = (props: Partial<Parameters<typeof RideQuoteList>[0]> = {}) =>
   );
 
 describe("RideQuoteList", () => {
+  it.each([
+    ["#FFFFFF", "rgba(0, 0, 0, 0.87)"],
+    ["#042553", "rgb(255, 255, 255)"],
+  ])("keeps product names readable on %s without a feed text colour", (color, expected) => {
+    renderList({ quotes: [{ ...quoted, product: { ...quoted.product, color } }] });
+    expect(getComputedStyle(screen.getByText("Regular Ride")).color).toBe(expected);
+  });
+
+  it("uses the feed's background and text colours for the product chip", () => {
+    renderList({
+      quotes: [
+        { ...quoted, product: { ...quoted.product, color: "#042553", textColor: "#FFFFFF" } },
+      ],
+    });
+    const chip = screen.getByText("Regular Ride");
+    expect(getComputedStyle(chip).backgroundColor).toBe("rgb(4, 37, 83)");
+    expect(getComputedStyle(chip).color).toBe("rgb(255, 255, 255)");
+  });
+
   it("renders one row per quote with its fare", () => {
     renderList();
     expect(screen.getByText("Regular Ride").textContent).toBe("Regular Ride");

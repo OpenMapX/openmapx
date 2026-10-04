@@ -1,6 +1,7 @@
 "use client";
 
 import Box from "@mui/material/Box";
+import { useTheme } from "@mui/material/styles";
 import Typography from "@mui/material/Typography";
 import type { RideQuote } from "@openmapx/core";
 import { formatDuration } from "@openmapx/core";
@@ -36,6 +37,7 @@ export function RideQuoteList({
   locale?: string;
 }) {
   const t = useTranslations("directions");
+  const theme = useTheme();
 
   if (quotes.length === 0) {
     return (
@@ -70,7 +72,22 @@ export function RideQuoteList({
           }}
         >
           <Box sx={{ minWidth: 0 }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, lineHeight: 1.2 }}>
+            <Typography
+              variant="body2"
+              sx={{
+                fontWeight: 600,
+                lineHeight: 1.2,
+                ...(quote.product.color && {
+                  display: "inline-block",
+                  bgcolor: quote.product.color,
+                  color:
+                    quote.product.textColor ?? theme.palette.getContrastText(quote.product.color),
+                  borderRadius: 99,
+                  px: 1,
+                  py: 0.5,
+                }),
+              }}
+            >
               {quote.product.name}
             </Typography>
             {quote.pickupEtaSeconds !== undefined && (
