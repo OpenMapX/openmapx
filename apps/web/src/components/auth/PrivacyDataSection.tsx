@@ -29,7 +29,7 @@ import {
   withdrawPrivacyDataRequest,
 } from "@openmapx/core";
 import { useFormatter, useTranslations } from "next-intl";
-import { forwardRef, useCallback, useEffect, useState } from "react";
+import { forwardRef, useCallback, useEffect, useRef, useState } from "react";
 import { downloadPrivacyDeviceData } from "@/lib/privacyDeviceData";
 
 const PENDING_REAUTH_KEY = "openmapx:privacy:pending-reauth";
@@ -63,10 +63,16 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
     const [assistedRequestId, setAssistedRequestId] = useState("");
     const [assistedProofComplete, setAssistedProofComplete] = useState(false);
 
+    const mounted = useRef(false);
+    const loadVersion = useRef(0);
     const load = useCallback(async () => {
+      if (!mounted.current) return;
+      const version = ++loadVersion.current;
+      const isCurrent = () => mounted.current && version === loadVersion.current;
       setLoading(true);
       try {
         const result = await getPrivacyDataRequests();
+        if (!isCurrent()) return;
         const detailed = await Promise.all(
           result.requests.slice(0, 20).map(async (request) => {
             try {
@@ -83,17 +89,23 @@ export const PrivacyDataSection = forwardRef<HTMLHeadingElement>(
             }
           }),
         );
+        if (!isCurrent()) return;
         setRequests(detailed);
         setError(null);
       } catch {
-        setError(t("privacyData.loadFailed"));
+        if (isCurrent()) setError(t("privacyData.loadFailed"));
       } finally {
-        setLoading(false);
+        if (isCurrent()) setLoading(false);
       }
     }, [t]);
 
     useEffect(() => {
+      mounted.current = true;
       void load();
+      return () => {
+        mounted.current = false;
+        ++loadVersion.current;
+      };
     }, [load]);
 
     useEffect(() => {
