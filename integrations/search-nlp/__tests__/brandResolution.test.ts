@@ -2,6 +2,28 @@ import { describe, expect, it } from "vitest";
 import { resolveBrandPredicates } from "../brand-resolution";
 
 describe("resolveBrandPredicates", () => {
+  it.each([undefined, "nz"])(
+    "leaves duplicate exact brand names untouched with country %s",
+    (country) => {
+      // Coffee Culture names distinct chains in the bundled catalog; viewport
+      // ranking cannot establish which identity the query means.
+      const filter = {
+        selectors: [{ tags: [{ key: "amenity", op: "=" as const, value: "cafe" }] }],
+        require: [{ key: "brand", op: "=" as const, value: "Coffee Culture" }],
+      };
+      expect(resolveBrandPredicates(filter, country)).toBe(filter);
+    },
+  );
+
+  it("leaves an exact operator-only name untouched", () => {
+    // Cambridge has operator identities but no brand identity in the catalog.
+    const filter = {
+      selectors: [{ tags: [{ key: "shop", op: "=" as const, value: "supermarket" }] }],
+      require: [{ key: "brand", op: "=" as const, value: "Cambridge" }],
+    };
+    expect(resolveBrandPredicates(filter, undefined)).toBe(filter);
+  });
+
   it("replaces a name predicate naming a catalogued chain with its QID", () => {
     // "Lidl" has one exact-name catalog entry (Q151954); "Aldi" has none — the
     // catalog splits it into "Aldi Nord"/"Aldi Süd" (matchedOn "alias"), so it

@@ -19,10 +19,13 @@ export function resolveBrandPredicates(
   let changed = false;
   const next = require.map((pred) => {
     if (pred.key !== "brand" || pred.op !== "=" || !pred.value) return pred;
-    const [top] = suggestBrands(pred.value, country, 1);
+    const [top, runnerUp] = suggestBrands(pred.value, country, 2, "brand");
     if (top?.matchedOn !== "name") return pred;
     // Guard against a prefix hit: only an exact name match may substitute.
     if (top.name.toLowerCase() !== pred.value.toLowerCase()) return pred;
+    // Exact canonical names share the highest text score, so a second exact
+    // hit proves ambiguity regardless of country or popularity ranking.
+    if (runnerUp?.name.toLowerCase() === pred.value.toLowerCase()) return pred;
     changed = true;
     return { key: "brand:wikidata", op: "=" as const, value: top.qid };
   });
