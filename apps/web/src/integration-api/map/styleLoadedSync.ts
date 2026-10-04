@@ -2,47 +2,45 @@ import type { Map as MapLibreMap } from "maplibre-gl";
 
 /**
  * Run a style-dependent callback now and after each style rebuild. While the
- * style is loading, keep exactly one idle retry and remove it on replacement
- * or teardown so an obsolete effect can never mutate the new style.
+ * stylesheet is unparsed, retry on idle or render. `getStyle()` returns
+ * undefined until parsing completes; unlike `isStyleLoaded()`, it does not
+ * wait for all source tiles and images. Continuous repaint can prevent idle,
+ * so render is observed only while waiting for the parsed stylesheet.
  */
 export function subscribeStyleLoaded(map: MapLibreMap, apply: () => void): () => void {
   let disposed = false;
-  let idleRetryScheduled = false;
+  let retryScheduled = false;
 
-  const onIdle = () => {
-    if (idleRetryScheduled) {
-      map.off("idle", onIdle);
-      idleRetryScheduled = false;
-    }
-    sync();
-  };
+  function clearRetry() {
+    if (!retryScheduled) return;
+    map.off("idle", sync);
+    map.off("render", sync);
+    retryScheduled = false;
+  }
 
   function sync() {
     if (disposed) return;
-    if (!map.isStyleLoaded()) {
-      if (!idleRetryScheduled) {
-        idleRetryScheduled = true;
-        void map.once("idle", onIdle);
+    if (!map.getStyle()) {
+      if (!retryScheduled) {
+        retryScheduled = true;
+        map.on("idle", sync);
+        map.on("render", sync);
       }
       return;
     }
 
-    if (idleRetryScheduled) {
-      map.off("idle", onIdle);
-      idleRetryScheduled = false;
-    }
+    clearRetry();
     apply();
   }
 
   sync();
+  map.on("style.load", sync);
   map.on("styledata", sync);
 
   return () => {
     disposed = true;
+    map.off("style.load", sync);
     map.off("styledata", sync);
-    if (idleRetryScheduled) {
-      map.off("idle", onIdle);
-      idleRetryScheduled = false;
-    }
+    clearRetry();
   };
 }

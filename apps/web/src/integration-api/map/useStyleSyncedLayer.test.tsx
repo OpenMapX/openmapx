@@ -20,8 +20,12 @@ function Harness({ mapContext, visible }: { mapContext: MapContextValue; visible
 }
 
 describe("useStyleSyncedLayer lifecycle", () => {
-  it("removes a delayed idle retry when the overlay unmounts", () => {
+  it("removes retries for an unparsed stylesheet when the overlay unmounts", () => {
     const fake = createFakeMap({ styleLoaded: false });
+    const parsedStyle = fake.map.getStyle();
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      fake.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
     const mapRef = { current: fake.map };
     const mapContext = { mapRef, mapReady: true, styleVersion: 0 } as MapContextValue;
     const { unmount } = render(<Harness mapContext={mapContext} visible />);
@@ -29,6 +33,7 @@ describe("useStyleSyncedLayer lifecycle", () => {
     expect(fake.state.handlers.get("idle")?.size).toBe(1);
     unmount();
     expect(fake.state.handlers.get("idle")?.size).toBe(0);
+    expect(fake.state.handlers.get("render")?.size).toBe(0);
 
     fake.state.styleLoaded = true;
     fake.emit("idle");

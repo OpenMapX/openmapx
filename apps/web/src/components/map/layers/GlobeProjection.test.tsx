@@ -111,11 +111,16 @@ describe("GlobeProjection sky lifecycle", () => {
     expect(fake.state.handlers.get("style.load")?.size ?? 0).toBe(0);
   });
 
-  it("waits for a loaded style and rebuilds a single sky after style/context replacement", () => {
+  it("waits for a parsed stylesheet and rebuilds a single sky after style/context replacement", () => {
     fake.state.styleLoaded = false;
+    const parsedStyle = fake.map.getStyle();
+    let parsed = false;
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      parsed ? parsedStyle : (undefined as never),
+    );
     const { rerender, unmount } = render(<GlobeProjection />);
     expect(fake.map.getLayer(SPACE_ID)).toBeUndefined();
-    fake.state.styleLoaded = true;
+    parsed = true;
     act(() => fake.emit("style.load"));
     expect(fake.map.getLayer(SPACE_ID)).toBeDefined();
 
@@ -124,7 +129,7 @@ describe("GlobeProjection sky lifecycle", () => {
     context.styleVersion++;
     rerender(<GlobeProjection />);
     expect([...fake.state.layers.keys()].filter((id) => id === SPACE_ID)).toHaveLength(1);
-    expect(fake.state.handlers.get("style.load")?.size).toBe(1);
+    expect(fake.state.handlers.get("style.load")?.size).toBe(2);
     expect(fake.state.cameraTransitions).toEqual([]);
     unmount();
     expect(fake.map.getLayer(SPACE_ID)).toBeUndefined();

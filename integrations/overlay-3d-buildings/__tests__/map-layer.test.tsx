@@ -295,9 +295,13 @@ describe("BuildingExtrusionLayer", () => {
   it("does not restore an obsolete selection when a delayed idle arrives", () => {
     render(<BuildingExtrusionLayer />);
     fake.state.styleLoaded = false;
+    const parsedStyle = fake.map.getStyle();
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      fake.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
     act(() => fake.emit("styledata"));
 
-    // Tiles finish before React handles the user's off choice, but the old
+    // Parsing finishes before React handles the user's off choice, but the old
     // style callback is still waiting for the later idle event.
     fake.state.styleLoaded = true;
     act(() => toggleOverlay("3d-buildings", { kind: "user" }));
@@ -318,7 +322,8 @@ describe("BuildingExtrusionLayer", () => {
       fake.emit("styledata");
       fake.emit("styledata");
     });
-    expect(fake.state.handlers.get("idle")?.size).toBe(1);
+    expect(fake.state.handlers.get("idle")?.size ?? 0).toBe(0);
+    expect(fake.state.handlers.get("render")?.size ?? 0).toBe(0);
     fake.state.styleLoaded = true;
     act(() => fake.emit("idle"));
     expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
@@ -328,6 +333,10 @@ describe("BuildingExtrusionLayer", () => {
   it("cannot recreate buildings from a pending callback after unmount", () => {
     const { unmount } = render(<BuildingExtrusionLayer />);
     fake.state.styleLoaded = false;
+    const parsedStyle = fake.map.getStyle();
+    vi.spyOn(fake.map, "getStyle").mockImplementation(() =>
+      fake.state.styleLoaded ? parsedStyle : (undefined as never),
+    );
     act(() => fake.emit("styledata"));
     unmount();
     fake.state.layers.delete(LAYER_ID);
