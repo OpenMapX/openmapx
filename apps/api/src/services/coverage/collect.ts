@@ -78,19 +78,21 @@ function nowIso(now: Date): string {
   return now.toISOString();
 }
 
+/**
+ * The coverage domain of an integration's source: from the manifest domain
+ * the source names, else from the integration's domains.
+ */
 function domainForIntegration(
   integration: LoadedIntegration,
+  source: { domain?: string } = {},
 ): CoverageCollection["streams"][number]["domain"] | null {
   if (integration.id === "ev-charging") return "ev";
   if (integration.id === "parking") return "parking";
-  if (integration.manifest.domains.includes("geocoding")) return "addresses";
-  if (integration.manifest.domains.includes("poi-search")) return "pois";
-  if (
-    integration.manifest.domains.includes("transit") ||
-    integration.manifest.domains.includes("live-transit")
-  )
-    return "transit";
-  if (integration.manifest.domains.includes("road-conditions")) return "traffic";
+  const domains = source.domain !== undefined ? [source.domain] : integration.manifest.domains;
+  if (domains.includes("geocoding")) return "addresses";
+  if (domains.includes("poi-search")) return "pois";
+  if (domains.includes("transit") || domains.includes("live-transit")) return "transit";
+  if (domains.includes("road-conditions")) return "traffic";
   return null;
 }
 
@@ -140,9 +142,9 @@ function addCatalogStreams(
   );
   const output = [...streams];
   for (const integration of integrations) {
-    const domain = domainForIntegration(integration);
-    if (!domain) continue;
     for (const source of integration.manifest.dataSources ?? []) {
+      const domain = domainForIntegration(integration, source);
+      if (!domain) continue;
       const identity = `integration:${integration.id}:${source.sourceId}`;
       if (existing.has(identity)) continue;
       output.push(catalogStream(integration, source.sourceId, source.name, domain, at));

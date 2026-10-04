@@ -57,6 +57,13 @@ export interface DataSourceMarkerStyle {
   type?: "circle" | "icon";
 }
 
+/**
+ * Why a data-source answer may lack results: `area` when a source fetched
+ * only part of the view, so a closer view loads more; `unavailable` when a
+ * source did not answer at all, which a closer view does not change.
+ */
+export type DataSourcePartialReason = "area" | "unavailable";
+
 export interface DataSourceMeta {
   minZoom: number;
   markerStyle: DataSourceMarkerStyle;
@@ -86,6 +93,8 @@ export interface DataSourceFilterDef {
 export interface DataSourceResult {
   id: string;
   name: string;
+  /** The title shown, translated, when `name` is empty: what the item is (e.g. "Fuel station"). */
+  fallbackName?: I18nToken;
   coordinates: LngLat;
   source: string;
   /** All contributing source ids when a result merges records from multiple providers. */
@@ -253,6 +262,8 @@ export interface DataSourceDetail {
    */
   providerId?: string;
   name: string;
+  /** The title shown, translated, when `name` is empty: what the item is (e.g. "Fuel station"). */
+  fallbackName?: I18nToken;
   coordinates: LngLat;
   /** Identity used by the place resolver to gate OSM snapping. See {@link OsmIdentity}. */
   identity?: OsmIdentity;

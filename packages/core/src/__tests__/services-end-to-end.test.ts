@@ -4,6 +4,7 @@ import { load as parseYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import {
   expandServiceSelection,
+  type LoadedService,
   renderCompose,
   ServiceRegistry,
   validateServiceManifest,
@@ -45,6 +46,90 @@ describe.skipIf(!manifestsPresent)(
           }),
         ]),
       );
+    });
+
+    describe("OpenConditions bridge", () => {
+      const bridges: Record<string, string[]> = {
+        postgis: ["openconditions-ingest", "openconditions-contributions-api"],
+        "app-api": ["openconditions-ingest", "openconditions-contributions-api"],
+        "data-manager": ["openconditions-ingest"],
+        overpass: ["openconditions-ingest"],
+      };
+
+      function community(id: string): LoadedService {
+        return {
+          manifest: {
+            id,
+            name: id,
+            version: "1.0.0",
+            quality: "community-verified",
+            container: { image: `ghcr.io/openconditions/${id}`, tag: "latest", expose: [4100] },
+          },
+          directory: `/community/${id}`,
+          isBuiltIn: false,
+          enabled: true,
+        };
+      }
+
+      function networksOf(composeYaml: string): Record<string, unknown> {
+        const doc = parseYaml(composeYaml) as {
+          services: Record<string, { networks: unknown }>;
+        };
+        return Object.fromEntries(
+          Object.keys(bridges).map((id) => [id, doc.services[id]?.networks]),
+        );
+      }
+
+      it("declares exactly the OpenConditions services each audited bridge talks to", async () => {
+        const registry = new ServiceRegistry({ rootDir: repoRoot });
+        await registry.load();
+        for (const [id, targets] of Object.entries(bridges)) {
+          expect(registry.get(id)?.manifest.communityNetworkAccess, id).toEqual(targets);
+        }
+      });
+
+      it("renders the real built-ins without OpenConditions installed, silently", async () => {
+        const registry = new ServiceRegistry({ rootDir: repoRoot });
+        await registry.load();
+        const enabled = registry.list().map((s) => ({
+          ...s,
+          enabled: s.enabled || s.manifest.id in bridges,
+        }));
+        const result = renderCompose(
+          enabled.filter((s) => s.enabled),
+          { domain: "example.com", allServices: enabled },
+        );
+        for (const network of Object.values(networksOf(result.composeYaml))) {
+          expect(JSON.stringify(network)).not.toContain("openmapx-community-");
+        }
+        expect(JSON.stringify(result.warnings ?? [])).not.toContain("openconditions");
+      });
+
+      it("joins each bridge to the OpenConditions networks once they are installed", async () => {
+        const registry = new ServiceRegistry({ rootDir: repoRoot });
+        await registry.load();
+        const oc = [
+          community("openconditions-ingest"),
+          community("openconditions-contributions-api"),
+        ];
+        const all = [
+          ...registry.list().map((s) => ({ ...s, enabled: s.enabled || s.manifest.id in bridges })),
+          ...oc,
+        ];
+        const result = renderCompose(
+          all.filter((s) => s.enabled),
+          { domain: "example.com", allServices: all },
+        );
+        const networks = networksOf(result.composeYaml);
+        for (const [id, targets] of Object.entries(bridges)) {
+          const names = JSON.stringify(networks[id]);
+          expect(names, id).toContain('"openmapx"');
+          for (const target of targets) expect(names, id).toContain(`openmapx-community-${target}`);
+        }
+        expect(JSON.stringify(networks["data-manager"])).not.toContain(
+          "openmapx-community-openconditions-contributions-api",
+        );
+      });
     });
 
     it("publishes /api but denies the internal-only sub-prefix at the proxy", async () => {

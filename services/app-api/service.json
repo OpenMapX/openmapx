@@ -5,6 +5,7 @@
   "description": "Fastify BFF gateway. Proxies external services and registers integrations.",
   "license": "MIT",
   "quality": "built-in",
+  "communityNetworkAccess": ["openconditions-ingest", "openconditions-contributions-api"],
   "subjectData": {
     "storesPersonalData": true,
     "strategy": "collector",

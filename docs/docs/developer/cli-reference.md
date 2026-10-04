@@ -177,8 +177,10 @@ Install only from sources you trust because service components still execute
 code and declarative artifacts still influence the UI.
 
 Installing the [OpenConditions](https://github.com/openconditions/openconditions)
-bundle (road-conditions overlay + companion ingest service), published as the
-first verified catalog entry, is one command:
+bundle (ingest service + contributions API, read through the built-in
+`openconditions` integration, which feeds roads — the road-conditions overlay,
+navigation and closure avoidance — and fuel, the fuel-station layer),
+published as the first verified catalog entry, is one command:
 
 ```bash
 pnpm openmapx ext install openconditions

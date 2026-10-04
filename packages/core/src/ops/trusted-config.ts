@@ -121,7 +121,20 @@ export const trustedConfigurationPayloadSchema = z
   .strictObject({
     domain,
     selectedRoots: z.array(serviceId).max(256),
-    serviceConfigs: z.array(z.strictObject({ serviceId, values: configValues })).max(256),
+    serviceConfigs: z
+      .array(
+        z.strictObject({
+          serviceId,
+          values: configValues,
+          // Keys whose value the host env supplies; rendered as a reference, never a value.
+          envKeys: z
+            .array(configKey)
+            .max(128)
+            .refine((keys) => new Set(keys).size === keys.length)
+            .optional(),
+        }),
+      )
+      .max(256),
     integrationConfigs: z
       .array(z.strictObject({ integrationId: serviceId, values: configValues }))
       .max(256),

@@ -5,6 +5,7 @@
   "description": "Downloads and shares source data (OSM PBFs, GTFS feeds, tile assets) with consumer services.",
   "license": "MIT",
   "quality": "built-in",
+  "communityNetworkAccess": ["openconditions-ingest"],
   "subjectData": {
     "storesPersonalData": true,
     "strategy": "operator_task",
@@ -116,6 +117,7 @@
       "NOTABLE_PLACES_SPARQL_URL": "${NOTABLE_PLACES_SPARQL_URL:-}",
       "NOTABLE_PLACES_MIN_SITELINKS": "${NOTABLE_PLACES_MIN_SITELINKS:-}",
       "OPENCONDITIONS_URL": "${OPENCONDITIONS_URL:-}",
+      "OPENCONDITIONS_OPERATOR_TOKEN": "${OPENCONDITIONS_OPERATOR_TOKEN:-}",
       "TRAFFIC_EXTRACT_CRON": "${TRAFFIC_EXTRACT_CRON:-}",
       "TRAFFIC_LIVE_CRON": "${TRAFFIC_LIVE_CRON:-}",
       "TRAFFIC_ROAD_CONDITIONS_MODE": "${TRAFFIC_ROAD_CONDITIONS_MODE:-shadow}",

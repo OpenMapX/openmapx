@@ -35,6 +35,7 @@ export type {
   DataSourceMapContextSelection,
   DataSourceMarkerStyle,
   DataSourceMeta,
+  DataSourcePartialReason,
   DataSourceResult,
   OsmIdentity,
   PricingPlanEntry,

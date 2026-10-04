@@ -8,9 +8,13 @@ sidebar_position: 6
 
 This guide is for authors who want to ship an OpenMapX integration in their **own
 repository** — not as a built-in inside the OpenMapX monorepo. OpenConditions
-(`openconditions/openconditions`) is the running example throughout: it publishes
-road-condition observations and needs both an installable presentation integration
-and a companion service (the Fastify daemon that owns the data and API behavior).
+(`openconditions/openconditions`) is the running example for the companion
+service: a Fastify daemon that owns road-condition data and serves it over HTTP.
+Its OpenMapX client is not part of the extension. A community artifact cannot run
+backend code in app-api, so OpenMapX reads OpenConditions through its reviewed
+built-in `openconditions` integration, configured with `OPENCONDITIONS_URL`. The
+integration steps below use a hypothetical declarative `conditions` integration
+published from `<owner>/<repo>`.
 
 If you are developing a built-in integration inside the monorepo instead, start
 with [Writing an integration](./writing-an-integration.md) — the paths and
@@ -173,7 +177,7 @@ standalone integration the quickest dev/manual path is the CLI installer:
 
 ```sh
 pnpm openmapx integrations install \
-  https://github.com/openconditions/openconditions/releases/download/v1.0.0/conditions.tar.gz \
+  https://github.com/<owner>/<repo>/releases/download/v1.0.0/conditions.tar.gz \
   --artifact --sha256 <hash>
 ```
 
@@ -305,9 +309,9 @@ the authoring CLI:
 
 ```sh
 openmapx-ext bundle \
-  --id openconditions --name "OpenConditions" --version 1.0.0 --platform 1.0 \
-  --service "https://github.com/openconditions/openconditions,v1.0.0,conditions-ingest" \
-  --integration "https://github.com/openconditions/openconditions/releases/download/v1.0.0/conditions.tar.gz,<sha256>,conditions" \
+  --id conditions --name "Conditions" --version 1.0.0 --platform 1.0 \
+  --service "https://github.com/<owner>/<repo>,v1.0.0,conditions-ingest" \
+  --integration "https://github.com/<owner>/<repo>/releases/download/v1.0.0/conditions.tar.gz,<sha256>,conditions" \
   --out extension.json
 ```
 

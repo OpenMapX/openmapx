@@ -43,9 +43,6 @@ export interface CategoryPlaceResult {
   provenance?: PlaceProvenance[];
   /** Curated subset of OSM tags surfaced for client-side facet filters (see FILTERABLE_TAG_KEYS). */
   osmTags?: Record<string, string>;
-  fuelPrices?: { e5?: number; e10?: number; diesel?: number };
-  fuelPricesUpdatedAt?: string;
-  fuelAttribution?: { label: string; url: string };
 }
 
 /**

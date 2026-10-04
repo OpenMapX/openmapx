@@ -62,6 +62,7 @@ import {
   useCommandPaletteStore,
   useCountryFromCoordinates,
   useDataSourceStore,
+  useDataSources,
   useDebounce,
   useDirectionsStore,
   useGeocoding,
@@ -367,10 +368,16 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   // Labeled places (Home, Work, custom) for search suggestions
   const { data: labeledPlaces } = useLabeledPlaces();
 
-  // Data source categories from integration manifests
+  // Data source categories from integration manifests, offered only while the
+  // API lists the source: an unlisted one would answer every search empty.
+  // Until the list arrives, or when it cannot be read, every one is offered.
   const registry = useIntegrationRegistry();
+  const { data: listedDataSources } = useDataSources();
   const dataSourceCategories = useMemo(() => {
-    const withSearchCat = registry.getWithSearchCategory();
+    const listed = listedDataSources && new Set(listedDataSources.sources.map((s) => s.id));
+    const withSearchCat = registry
+      .getWithSearchCategory()
+      .filter((i) => listed === undefined || listed.has(i.id));
     return withSearchCat
       .map((i) => {
         const sc = i.frontend?.searchCategory as
@@ -380,7 +387,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
         return { id: sc.id, label: sc.label ?? sc.id, iconPath: sc.iconPath, integrationId: i.id };
       })
       .filter((x): x is NonNullable<typeof x> => x !== null);
-  }, [registry]);
+  }, [registry, listedDataSources]);
 
   // Clean up blur timeout on unmount
   useEffect(() => {

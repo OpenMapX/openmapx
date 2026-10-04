@@ -41,10 +41,23 @@ export function resolveToken(token: I18nToken, opts: ResolveOptions): string {
     const value =
       lookupKey(catalog[opts.locale], effectiveKey) ??
       lookupKey(catalog[opts.fallbackLocale], effectiveKey);
-    if (value !== undefined) return format(value, opts.locale, token.values);
+    if (value !== undefined) return format(value, opts.locale, resolveValues(token.values, opts));
   }
 
   return key;
+}
+
+/** Token-valued placeholders are resolved first, with the same locale and catalogs. */
+function resolveValues(
+  values: I18nToken["values"],
+  opts: ResolveOptions,
+): Record<string, string | number> | undefined {
+  if (!values) return undefined;
+  const out: Record<string, string | number> = {};
+  for (const [name, value] of Object.entries(values)) {
+    out[name] = typeof value === "object" && value !== null ? resolveToken(value, opts) : value;
+  }
+  return out;
 }
 
 function lookupKey(catalog: unknown, key: string): string | undefined {

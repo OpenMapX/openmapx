@@ -89,11 +89,23 @@ function validateAndResolve(
   }));
   const enabled = allServices.filter((service) => service.enabled);
   const serviceConfigs = new Map<string, Record<string, unknown>>();
+  const serviceConfigEnvKeys = new Map<string, string[]>();
   for (const entry of payload.serviceConfigs) {
     const service = serviceById.get(entry.serviceId);
     if (!service || !enabledIds.has(entry.serviceId)) throw new Error(FAILED);
     validateConfig(entry.values, service.manifest.configSchema);
     serviceConfigs.set(entry.serviceId, entry.values);
+    if (entry.envKeys?.length) {
+      // An env reference names a non-secret field of this service, and only one
+      // the payload carries no value for: the env layer wins over everything else.
+      const fields = new Set(
+        coreServices.configSchemaKeys(service.manifest.configSchema).map(({ key }) => key),
+      );
+      for (const key of entry.envKeys) {
+        if (!fields.has(key) || key in entry.values) throw new Error(FAILED);
+      }
+      serviceConfigEnvKeys.set(entry.serviceId, entry.envKeys);
+    }
   }
   for (const entry of payload.integrationConfigs) {
     const schema = integrationSchemas.get(entry.integrationId);
@@ -137,7 +149,7 @@ function validateAndResolve(
     }
     serviceSecrets.set(entry.serviceId, entry.values);
   }
-  return { allServices, enabled, serviceConfigs, serviceSecrets };
+  return { allServices, enabled, serviceConfigs, serviceConfigEnvKeys, serviceSecrets };
 }
 
 async function writeDurable(
@@ -181,7 +193,9 @@ function safeGenerationTree(path: string): { entries: number; bytes: number } {
   }
   let entries = 1;
   let bytes = 0;
-  const visit = (directory: string) => {
+  // Secret files are 0444 inside their 0700 directories (see commitGeneration);
+  // every other generated file is private to the owner.
+  const visit = (directory: string, secrets: boolean) => {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       entries += 1;
       if (entries > 1024) throw new Error(FAILED);
@@ -190,16 +204,16 @@ function safeGenerationTree(path: string): { entries: number; bytes: number } {
       if (stats.uid !== owner || stats.isSymbolicLink()) throw new Error(FAILED);
       if (stats.isDirectory()) {
         if ((stats.mode & 0o777) !== 0o700) throw new Error(FAILED);
-        visit(child);
+        visit(child, secrets || (directory === path && entry.name === ".generated-secrets"));
       } else if (stats.isFile()) {
-        if (stats.nlink !== 1 || ![0o400, 0o600].includes(stats.mode & 0o777))
-          throw new Error(FAILED);
+        const modes = secrets ? [0o444] : [0o400, 0o600];
+        if (stats.nlink !== 1 || !modes.includes(stats.mode & 0o777)) throw new Error(FAILED);
         bytes += stats.size;
       } else throw new Error(FAILED);
       if (bytes > MAX_GENERATION_BYTES) throw new Error(FAILED);
     }
   };
-  visit(path);
+  visit(path, false);
   return { entries, bytes };
 }
 
@@ -396,6 +410,7 @@ async function commitGeneration(
       infraDir: options.infraDir,
       allServices: resolved.allServices,
       resolvedServiceConfigs: resolved.serviceConfigs,
+      serviceConfigEnvKeys: resolved.serviceConfigEnvKeys,
       serviceSecretKeys: new Map(
         [...resolved.serviceSecrets].map(([id, values]) => [id, Object.keys(values)]),
       ),
@@ -433,7 +448,12 @@ async function commitGeneration(
         const serviceDirectory = join(secretsRoot, serviceId);
         mkdirSync(serviceDirectory, { mode: 0o700 });
         for (const [key, value] of Object.entries(values)) {
-          await writeDurable(join(serviceDirectory, key), value, 0o400);
+          // Compose bind-mounts a file secret with its host owner and mode (it
+          // ignores `uid`/`mode` for file sources), so a container running as
+          // another uid (OpenConditions runs as 1001) could not read an 0400
+          // file. The 0700 directories above are the host-side boundary; the
+          // file itself is readable by whichever container mounts it.
+          await writeDurable(join(serviceDirectory, key), value, 0o444);
         }
         await syncDirectory(serviceDirectory);
       }

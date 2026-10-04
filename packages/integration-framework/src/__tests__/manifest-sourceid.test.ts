@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { dataSourceSchema } from "../manifest.js";
+import { dataSourceSchema, validateManifest } from "../manifest.js";
 
 const base = {
   name: "x",
@@ -38,5 +38,26 @@ describe("dataSourceSchema.sourceId", () => {
     expect(
       dataSourceSchema.safeParse({ ...base, sourceId: "x", termsUrl: "javascript:x" }).success,
     ).toBe(false);
+  });
+});
+
+describe("dataSources[].domain", () => {
+  const manifest = (domain: string) => ({
+    id: "multi",
+    domains: ["road-conditions", "fuel-stations"],
+    dataSources: [
+      { ...base, sourceId: "nl-ndw-events" },
+      { ...base, sourceId: "osm-fuel", domain },
+    ],
+  });
+
+  it("names one of the integration's own domains", () => {
+    expect(validateManifest(manifest("fuel-stations"))).toEqual({ valid: true, errors: [] });
+  });
+
+  it("rejects a domain the integration does not declare", () => {
+    expect(validateManifest(manifest("parking")).errors).toEqual([
+      'dataSources[osm-fuel].domain "parking" is not one of the manifest domains',
+    ]);
   });
 });

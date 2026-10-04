@@ -11,6 +11,14 @@ export const dataSourceSchema = z.object({
   // Source matching — connects this entry to provider source values
   sourceId: feedIdSchema,
 
+  /**
+   * The integration domain whose data this source supplies, for an
+   * integration in several domains whose sources serve different ones.
+   * Decides where the source is credited by domain and its legal-page
+   * section. Defaults to the integration's first domain.
+   */
+  domain: z.string().min(1).optional(),
+
   // Identity
   name: z.string(),
   url: z.string(),
@@ -334,6 +342,14 @@ export const integrationManifestSchema = z.object({
   quality: z.enum(["built-in", "community-verified", "community"]).optional(),
 
   dataSources: z.array(dataSourceSchema).optional(),
+  /**
+   * The integration supplies its data sources at runtime through
+   * `ctx.setDataSources()` instead of a static `dataSources` list — for an
+   * integration that fronts an upstream whose feed set changes without an
+   * OpenMapX release. Legal-table purpose/data-sent strings are keyed
+   * `domain:<domain>` under `strings/<locale>.json` `dataSources`.
+   */
+  runtimeDataSources: z.literal(true).optional(),
 
   infrastructure: infrastructureSchema.optional(),
   subjectData: integrationSubjectDataSchema.optional(),
@@ -460,6 +476,52 @@ export function createManifestAttribution(): ManifestAttributionStore {
   };
 }
 
+export type DataSourceValidationResult =
+  | { valid: true; errors: []; dataSource: IntegrationDataSource }
+  | { valid: false; errors: string[] };
+
+/** Rules beyond the schema shape that every data source must meet. */
+function dataSourceRuleErrors(ds: IntegrationDataSource, domains: readonly string[]): string[] {
+  const errors: string[] = [];
+  if (!ds.sourceId) errors.push("dataSources[].sourceId is required");
+  if (!ds.name) errors.push("dataSources[].name is required");
+  if (!ds.url) errors.push("dataSources[].url is required");
+  if (!ds.license) errors.push("dataSources[].license is required");
+  if (!ds.providerCountry) errors.push("dataSources[].providerCountry is required");
+  if (!ds.providerPrivacyUrl) errors.push("dataSources[].providerPrivacyUrl is required");
+  if (ds.domain !== undefined && !domains.includes(ds.domain)) {
+    errors.push(
+      `dataSources[${ds.sourceId}].domain "${ds.domain}" is not one of the manifest domains`,
+    );
+  }
+  return errors;
+}
+
+/**
+ * Validate one data source against the rules a manifest's static
+ * `dataSources` entries meet at load, for an integration with the given
+ * `domains`. The host applies it to every source an integration supplies
+ * through `ctx.setDataSources()`. A valid result carries the parsed source,
+ * with unknown keys stripped.
+ */
+export function validateDataSource(
+  raw: unknown,
+  domains: readonly string[],
+): DataSourceValidationResult {
+  const parsed = dataSourceSchema.safeParse(raw);
+  if (!parsed.success) {
+    return {
+      valid: false,
+      errors: parsed.error.issues.map(
+        (issue) => `dataSources[].${issue.path.join(".")}: ${issue.message}`,
+      ),
+    };
+  }
+  const errors = dataSourceRuleErrors(parsed.data, domains);
+  if (errors.length > 0) return { valid: false, errors };
+  return { valid: true, errors: [], dataSource: parsed.data };
+}
+
 export function validateManifest(raw: unknown): ManifestValidationResult {
   const result = integrationManifestSchema.safeParse(raw);
   if (result.success) {
@@ -482,13 +544,13 @@ export function validateManifest(raw: unknown): ManifestValidationResult {
         "manifest.healthCheck is required for integrations with infrastructure dependencies (requires)",
       );
     }
+    if (manifest.runtimeDataSources && manifest.dataSources?.length) {
+      errors.push(
+        "manifest.dataSources must be empty when runtimeDataSources is set — the integration supplies its sources through ctx.setDataSources()",
+      );
+    }
     for (const ds of manifest.dataSources ?? []) {
-      if (!ds.sourceId) errors.push("dataSources[].sourceId is required");
-      if (!ds.name) errors.push("dataSources[].name is required");
-      if (!ds.url) errors.push("dataSources[].url is required");
-      if (!ds.license) errors.push("dataSources[].license is required");
-      if (!ds.providerCountry) errors.push("dataSources[].providerCountry is required");
-      if (!ds.providerPrivacyUrl) errors.push("dataSources[].providerPrivacyUrl is required");
+      errors.push(...dataSourceRuleErrors(ds, manifest.domains));
     }
 
     return { valid: errors.length === 0, errors };

@@ -20,7 +20,7 @@ export const sharedStrings: LocaleStrings = {
  *
  * For shared vocabulary, prefer `sharedT.*` typed constants below.
  */
-export function token(key: string, values?: Record<string, string | number>): I18nToken {
+export function token(key: string, values?: I18nToken["values"]): I18nToken {
   return values ? { $t: key, values } : { $t: key };
 }
 

@@ -75,6 +75,8 @@ const operationsPolicy = resolveOperationsProfileFromEnv();
 // run before app.listen(), and the bake route needs to know whether
 // OpenConditions is configured at registration time.
 const openConditionsUrl = process.env.OPENCONDITIONS_URL?.trim() ?? "";
+// Sent as a bearer token with every OpenConditions read when set.
+const openConditionsToken = process.env.OPENCONDITIONS_OPERATOR_TOKEN?.trim() ?? "";
 
 // Shared by the build route and the scheduled refresh so the two never overlap.
 const notablePlaces = {
@@ -94,6 +96,7 @@ registerApi(app, {
     bakePredicted: () =>
       bakePredicted({
         openConditionsUrl,
+        openConditionsToken,
         // bakePredicted's logger takes (msg, extra); app.log is Pino and takes
         // (obj, msg). Same adapter shape as asCronLogger in cron.ts.
         logger: {
@@ -228,6 +231,7 @@ async function start(): Promise<void> {
         singleFlight,
         logger: app.log,
         openConditionsUrl,
+        openConditionsToken,
         onTrafficWriterFailure: (err) => {
           app.log.error(
             { err },
@@ -238,7 +242,7 @@ async function start(): Promise<void> {
           process.exit(1);
         },
         getCoveredWayIds: openConditionsUrl
-          ? () => fetchCoveredWayIds(openConditionsUrl)
+          ? () => fetchCoveredWayIds(openConditionsUrl, openConditionsToken)
           : undefined,
       }),
     setupPoiScheduler: () =>

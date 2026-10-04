@@ -1,3 +1,4 @@
+import { services as coreServices } from "@openmapx/core/server";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 // Mock the DB module before importing the resolver so the real postgres
@@ -21,6 +22,7 @@ vi.mock("../../db/schema", () => ({
 
 // Import AFTER the mocks are registered.
 import {
+  resolveAllServiceConfigs,
   resolveEffectiveServiceConfig,
   resolveServiceConfigWithSources,
 } from "../service-config-resolver";
@@ -89,5 +91,70 @@ describe("resolveServiceConfigWithSources", () => {
   it("returns {} for a service with no configSchema", async () => {
     const r = await resolveServiceConfigWithSources({ id: "test" });
     expect(r).toEqual({});
+  });
+});
+
+describe("resolveAllServiceConfigs", () => {
+  const schema = {
+    properties: {
+      memory_limit: { type: "string", default: "1g" },
+      workers: { type: "number", default: 4 },
+    },
+  };
+
+  it("reports env-sourced keys out of band and never puts their value in the render values", async () => {
+    selectLimitMock.mockResolvedValueOnce([{ config: { workers: 8 } }]);
+    process.env.SERVICE_TEST_MEMORY_LIMIT = "secret-ish-8g";
+    const { values, envKeys } = await resolveAllServiceConfigs([
+      { id: "test", configSchema: schema },
+    ]);
+    expect(values.get("test")).toEqual({ workers: 8 });
+    expect(envKeys.get("test")).toEqual(["memory_limit"]);
+    expect(JSON.stringify([...values])).not.toContain("secret-ish-8g");
+  });
+
+  it("carries an env-sourced proxy host's value, so the render routes the host the env names", async () => {
+    selectLimitMock.mockResolvedValueOnce([]);
+    process.env.SERVICE_TEST_APPLICATION_HOSTS = "maps.example.org";
+    const manifest = {
+      id: "test",
+      configSchema: {
+        properties: {
+          APPLICATION_HOSTS: { type: "string", default: "localhost" },
+          workers: { type: "number", default: 4 },
+        },
+      },
+      exposure: {
+        proxy: {
+          enabled: true,
+          host: { default: "timeline.{domain}", configKey: "APPLICATION_HOSTS" },
+        },
+      },
+    };
+    const { values, envKeys } = await resolveAllServiceConfigs([
+      {
+        id: manifest.id,
+        configSchema: manifest.configSchema,
+        proxyHostConfigKey: manifest.exposure.proxy.host.configKey,
+      },
+    ]);
+    expect(values.get("test")).toEqual({ APPLICATION_HOSTS: "maps.example.org", workers: 4 });
+    expect(envKeys.get("test") ?? []).toEqual([]);
+    expect(
+      coreServices.resolveProxyHost(manifest as never, {
+        domain: "example.com",
+        resolvedServiceConfigs: values,
+        serviceConfigEnvKeys: envKeys,
+      }),
+    ).toBe("maps.example.org");
+  });
+
+  it("reports no env keys when nothing comes from the environment", async () => {
+    selectLimitMock.mockResolvedValueOnce([]);
+    const { values, envKeys } = await resolveAllServiceConfigs([
+      { id: "test", configSchema: schema },
+    ]);
+    expect(values.get("test")).toEqual({ memory_limit: "1g", workers: 4 });
+    expect(envKeys.get("test") ?? []).toEqual([]);
   });
 });

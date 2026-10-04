@@ -1,0 +1,816 @@
+{
+  "id": "openconditions-ingest",
+  "name": "OpenConditions Ingest",
+  "version": "0.1.0",
+  "description": "Fetches open road-condition and fuel-price feeds (NDW, Autobahn, Digitraffic, DriveBC, WZDx, Tankerkoenig, and others), normalises them to the canonical model, and writes them to the shared PostGIS `conditions` schema for OpenMapX to read. Also serves public, rate-limited emitter feeds (GeoJSON, TraFF, DATEX II, GTFS-RT, JSON-LD, Valhalla exclusions, SSE).",
+  "author": "OpenConditions",
+  "license": "AGPL-3.0-or-later",
+  "homepage": "https://openconditions.org",
+  "documentation": "https://github.com/openconditions/openconditions",
+  "quality": "community-verified",
+  "container": {
+    "image": "ghcr.io/openconditions/ingest",
+    "tag": "latest",
+    "expose": [
+      4100
+    ],
+    "networkAliases": [
+      "openconditions-ingest"
+    ],
+    "environment": {
+      "PORT": "4100",
+      "HOST": "0.0.0.0",
+      "OPENCONDITIONS_RAW_DIR": "/data/raw",
+      "OPENCONDITIONS_ARCHIVE_DIR": "/data/archive",
+      "OPENCONDITIONS_STATE_DIR": "/data"
+    },
+    "memory": "${OPENCONDITIONS_INGEST_MEMORY:-4g}",
+    "restart": "unless-stopped",
+    "dependsOn": [
+      {
+        "service": "postgis",
+        "condition": "service_healthy"
+      }
+    ],
+    "healthcheck": {
+      "type": "http",
+      "path": "/status",
+      "port": 4100,
+      "interval": "30s",
+      "timeout": "5s",
+      "retries": 5,
+      "startPeriod": "30s"
+    }
+  },
+  "volumes": [
+    {
+      "name": "openmapx-openconditions-ingest-data",
+      "mountAt": "/data",
+      "backup": false,
+      "readOnly": false
+    }
+  ],
+  "provides": [
+    "openconditions/road-conditions-data"
+  ],
+  "ownsSchema": "conditions",
+  "configSchema": {
+    "type": "object",
+    "properties": {
+      "DATABASE_URL": {
+        "type": "string",
+        "title": "Database URL",
+        "description": "Required. PostgreSQL/PostGIS connection URL of the shared OpenMapX database, e.g. postgresql://postgres:<POSTGRES_PASSWORD>@postgis:5432/openmapx. The service refuses to start without it.",
+        "x-openmapx-secret": true
+      },
+      "OPENCONDITIONS_OPERATOR_TOKEN": {
+        "type": "string",
+        "title": "Operator token",
+        "description": "Bearer token granting the operator scope (restricted sources, no rate limit); at least 32 characters, or the service fails boot. Must equal OpenMapX's own OPENCONDITIONS_OPERATOR_TOKEN, which app-api and the data-manager send. Unset, OpenMapX reads in the public scope and serves no Tankerkönig (DE), E-Control (AT) or OpenStreetMap fuel station.",
+        "x-openmapx-secret": true
+      },
+      "SEGMENT_REGIONS": {
+        "type": "string",
+        "title": "Road graph regions",
+        "description": "Complete JSON array of {id,bbox,tz,pbfUrls?,highwayClasses?}. Used by import, binding coverage and speed profiles. Unset or [] means no configured graph coverage. See graph-binding documentation.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "SEGMENT_HIGHWAY_CLASSES": {
+        "type": "string",
+        "title": "Road graph highway classes",
+        "description": "Comma-separated OSM highway values the road-graph import keeps. Empty: the built-in set.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "BIND_ENABLED": {
+        "type": "string",
+        "title": "Bind records to the road graph",
+        "description": "\"false\" turns binding records to road-graph segments off. Empty: on.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "BIND_MAX_OFFSET_M": {
+        "type": "string",
+        "title": "Binding max offset (m)",
+        "description": "How far a record's geometry may lie from a segment and still bind to it. Empty: the built-in default.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "BIND_CONCURRENCY": {
+        "type": "string",
+        "title": "Binding concurrency",
+        "description": "Records bound in parallel. Empty: the built-in default.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENLR_RESOLVER_URL": {
+        "type": "string",
+        "title": "OpenLR resolver URL",
+        "description": "URL of the OpenLR map-match resolver service. Empty: observations that carry only OpenLR (no coordinates) are dropped rather than resolved.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_FETCH_TIMEOUT_MS": {
+        "type": "string",
+        "title": "Feed fetch timeout (ms)",
+        "description": "Timeout of every feed fetch. Empty: 60000.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_EGRESS_ALLOWED_HOSTS": {
+        "type": "string",
+        "title": "Egress allowed private hosts",
+        "description": "Comma-separated hostnames the egress guard lets the service fetch although they resolve to private addresses, e.g. overpass for a self-hosted Overpass on the compose network. Empty: none.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_DOWNLOAD_MAX_BYTES": {
+        "type": "string",
+        "title": "Artifact download cap (bytes)",
+        "description": "Largest artifact (PBF extract) a download streams. Empty: 8 GiB.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_DOWNLOAD_TIMEOUT_MS": {
+        "type": "string",
+        "title": "Artifact download timeout (ms)",
+        "description": "Overall timeout of an artifact download. Empty: 30 minutes.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "RATE_LIMIT_MAX": {
+        "type": "string",
+        "title": "Rate limit: requests per window",
+        "description": "Requests one client may make per rate-limit window.",
+        "default": "120",
+        "x-openmapx-secret": false
+      },
+      "RATE_LIMIT_WINDOW_MS": {
+        "type": "string",
+        "title": "Rate limit window (ms)",
+        "description": "Length of the rate-limit window.",
+        "default": "60000",
+        "x-openmapx-secret": false
+      },
+      "STREAM_MAX_CONNECTIONS": {
+        "type": "string",
+        "title": "Live streams open at once",
+        "description": "Server-sent-event streams the service holds open at once.",
+        "default": "100",
+        "x-openmapx-secret": false
+      },
+      "TRUST_PROXY_CIDRS": {
+        "type": "string",
+        "title": "Trusted proxy ranges",
+        "description": "Immediate reverse-proxy address ranges to trust for client IPs; only one proxy hop is accepted.",
+        "default": "loopback,linklocal,uniquelocal",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_RAW_MAX_BYTES": {
+        "type": "string",
+        "title": "Raw archive cap (bytes)",
+        "description": "Cap on the raw payload archive's stored bytes; 0 = no cap. Empty: 10 GiB.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_HISTORY_DAYS": {
+        "type": "string",
+        "title": "Record history (days)",
+        "description": "How long a tombstoned record and its revisions stay for the history API. Empty: 90.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_ON_DEMAND_DEADLINE_MS": {
+        "type": "string",
+        "title": "On-demand read deadline (ms)",
+        "description": "How long a read waits for its on-demand fetches before it answers from storage. Empty: 3000.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_FEEDS_REMOTE_URL": {
+        "type": "string",
+        "title": "Remote feed bundle URL",
+        "description": "URL of a remote feed bundle ({ \"files\": { \"<domain>/<region>\": <region file>, \"credentials\": <credentials file> } }, e.g. a published atlas/<domain>.json) to pull feeds from: the way to run a custom catalogue here, whose feeds add to or override the baked-in feeds by id. Only used when remote-pull is enabled.",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_FEEDS_REMOTE_ENABLED": {
+        "type": "string",
+        "title": "Enable remote feed-pull",
+        "description": "Set to \"true\" to opt the instance into remote-pull (default off). The bundle is checked like the baked catalogue and every URL is egress-guarded; a snapshot is kept on the service's volume so the instance survives the remote being down.",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_INSTANCE_ID": {
+        "type": "string",
+        "title": "Instance id",
+        "description": "This instance's stable id, the namespace of every record it originates and its name to federation peers: lower-case letters, digits, dots and dashes, e.g. maps.example.org. Set it before federating, and to the same value as the contributions API's. Empty: local.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_ARCHIVE_KEEP_NIGHTS": {
+        "type": "string",
+        "title": "Archive nights kept",
+        "description": "Nights of dated files the nightly archive keeps; 0 keeps every night. Empty: 30.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "ARCHIVE_CRON": {
+        "type": "string",
+        "title": "Archive schedule",
+        "description": "Cron of the nightly archive build (UTC); \"off\" disables it. Empty: 30 3 * * *.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "SEGMENT_PROFILE_CRON": {
+        "type": "string",
+        "title": "Segment profile schedule",
+        "description": "Cron of the weekly segment speed-profile derivation (UTC); \"off\" disables it. Empty: 30 3 * * 1.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "SEGMENT_REBUILD_CRON": {
+        "type": "string",
+        "title": "Segment rebuild schedule",
+        "description": "Cron of the weekly road-graph segment rebuild (UTC); \"off\" disables it. Empty: 0 4 * * 1.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_SHRINK_TRIPWIRE_RATIO": {
+        "type": "string",
+        "title": "Shrink tripwire ratio",
+        "description": "An event feed's complete snapshot whose count does not exceed this share of its last published count is skipped as a likely partial parse, e.g. 0.1. Empty or 0: only a drop to zero is skipped.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_MAX_FEED_BYTES": {
+        "type": "string",
+        "title": "Feed response cap (bytes)",
+        "description": "Largest feed response, compressed or decompressed. Empty: 256 MiB.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_MAX_REDIRECTS": {
+        "type": "string",
+        "title": "Feed redirects",
+        "description": "Redirects a feed fetch follows. Empty: 5.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_MAX_OBSERVATIONS_PER_POLL": {
+        "type": "string",
+        "title": "Readings per poll",
+        "description": "Cap on the readings one poll may hold; a poll above it fails. Empty: 1000000.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_OSM_MAXSPEED_FALLBACK": {
+        "type": "string",
+        "title": "OSM maxspeed fallback",
+        "description": "\"false\" turns off the nightly fallback that fills a sensor without a speed baseline from OpenStreetMap maxspeed tags. Empty: on.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_RAW_ZSTD_LEVEL": {
+        "type": "string",
+        "title": "Raw archive compression level",
+        "description": "zstd level of the raw payload archive. Empty: 9.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_RAW_HOT_HOURS": {
+        "type": "string",
+        "title": "Raw archive: hours kept whole",
+        "description": "Hours every distinct raw payload is kept. Empty: 48.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_RAW_THIN_DAYS_SITUATION": {
+        "type": "string",
+        "title": "Raw archive: days thinned (situation feeds)",
+        "description": "Days situation feeds then keep one raw payload an hour. Empty: 14.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_RAW_THIN_DAYS_OBSERVATION": {
+        "type": "string",
+        "title": "Raw archive: days thinned (flow feeds)",
+        "description": "Days flow feeds then keep one raw payload an hour. Empty: 7.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_ROLLUP_HOURLY_DAYS": {
+        "type": "string",
+        "title": "Hourly rollups kept (days)",
+        "description": "Days hourly reading rollups are kept. Empty: 35.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "OPENCONDITIONS_ROLLUP_DAILY_DAYS": {
+        "type": "string",
+        "title": "Daily rollups kept (days)",
+        "description": "Days daily reading rollups are kept. Empty: 400.",
+        "default": "",
+        "x-openmapx-secret": false
+      },
+      "AR_BA_CORTES_EVENTS_CLIENT_ID": {
+        "type": "string",
+        "title": "Buenos Aires transport — client_id",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://api-transporte.buenosaires.gob.ar/registro",
+          "urlLabel": "BA transport API registration",
+          "steps": [
+            "Register / request a key at api-transporte.buenosaires.gob.ar/registro. The client_id + client_secret pair is sent to you by email."
+          ],
+          "notes": "CC-BY-2.5-AR (commercial OK)."
+        }
+      },
+      "AR_BA_CORTES_EVENTS_CLIENT_SECRET": {
+        "type": "string",
+        "title": "Buenos Aires transport — client_secret",
+        "x-openmapx-secret": true
+      },
+      "AT_ASFINAG_EVENTS_USER": {
+        "type": "string",
+        "title": "ASFINAG (Austria) — username",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://contentportal.asfinag.at/",
+          "urlLabel": "ASFINAG content portal",
+          "steps": [
+            "Create an ASFINAG account at contentportal.asfinag.at.",
+            "Enable access to 'Verkehrsmeldungen zu ungeplanten und sicherheitsrelevanten Ereignissen' at contentportal.asfinag.at/data/details/unplannedevents.",
+            "Enable access to 'Verkehrsmeldungen zu geplanten Ereignissen' (roadworks) at contentportal.asfinag.at/data/details/roadworks_detailed."
+          ],
+          "notes": "CC-BY-4.0 for the two open event packages (some ASFINAG packages are paid)."
+        }
+      },
+      "AT_ASFINAG_EVENTS_PASSWORD": {
+        "type": "string",
+        "title": "ASFINAG (Austria) — password",
+        "x-openmapx-secret": true
+      },
+      "AU_NSW_LIVETRAFFIC_EVENTS_API_KEY": {
+        "type": "string",
+        "title": "Live Traffic NSW API key (Australia)",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://opendata.transport.nsw.gov.au/data/user/register",
+          "urlLabel": "Register at Transport NSW Open Data",
+          "steps": [
+            "Register at opendata.transport.nsw.gov.au/data/user/register.",
+            "Create an API token under your account (Account → API tokens) and copy it. No need to create a separate application — the token alone authorises the live-hazard endpoints."
+          ],
+          "cost": "Free",
+          "notes": "CC-BY-4.0; attribution \"Transport for NSW\"."
+        }
+      },
+      "AU_QLD_TRAFFIC_EVENTS_API_KEY": {
+        "type": "string",
+        "title": "QLDTraffic API key (Australia) — optional",
+        "description": "Optional. A public key is bundled by default; set this only to use your own quota.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.qldtraffic.qld.gov.au/",
+          "urlLabel": "QLDTraffic",
+          "notes": "Optional — the bundled public key is shared + rate-limited (100 req/min). Set your own to avoid 429s.",
+          "email": {
+            "to": "QLDTraffic@tmr.qld.gov.au",
+            "subject": "QLDTraffic API key request",
+            "body": "Organisation name, contact person, email, and application name."
+          }
+        }
+      },
+      "AU_VIC_TRANSPORTVIC_API_KEY": {
+        "type": "string",
+        "title": "Transport Victoria Open Data key",
+        "description": "Ocp-Apim-Subscription-Key header value from the Transport Victoria Open Data Portal. Serves the Freeway Travel Time feed and the planned and unplanned disruption feeds.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://opendata.transport.vic.gov.au/",
+          "urlLabel": "Transport Victoria Open Data Portal",
+          "steps": [
+            "Create an account at opendata.transport.vic.gov.au (email verification + authenticator 2FA).",
+            "Open My Account → Profile → API tokens; the key is generated there.",
+            "Copy the key and set it as the Ocp-Apim-Subscription-Key value."
+          ],
+          "cost": "Free",
+          "notes": "CC-BY-4.0 (Freeway Travel Time — NOT the CC-BY-NC Bluetooth feed); attribution \"Department of Transport and Planning (Victoria)\". Rate limit 5 req/min."
+        }
+      },
+      "MOBILITHEK_CERT": {
+        "type": "string",
+        "title": "Mobilithek — client certificate (PEM)",
+        "description": "PEM contents of the machine-account client certificate (mutual TLS). ONE certificate authenticates every Mobilithek feed — set it once, then just add each feed's subscription id. Recommended: generate your own keypair with `openssl req -x509 -newkey rsa:4096 -nodes -days 825 -keyout mobilithek.key.pem -out mobilithek.cert.pem -subj \"/CN=openmapx-mobilithek\"`, upload mobilithek.cert.pem under the machine account's 'Zertifikat hochladen' tab (no SMS needed), then paste mobilithek.cert.pem here and mobilithek.key.pem in the key field. Alternative: convert an issued .p12 with `openssl pkcs12 -in m.p12 -clcerts -nokeys | openssl x509` (cert) and `openssl pkcs12 -in m.p12 -nocerts -nodes | openssl rsa` (key).",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://mobilithek.info/registration-request",
+          "urlLabel": "Mobilithek registration",
+          "steps": [
+            "Register your organisation at mobilithek.info/registration-request; leave 'Organisation relevant gemäß MDV/PBefG' unchecked.",
+            "Subscribe to the offer(s) you want (each feed's offer IDs are listed in its subscription-id field).",
+            "Create a machine account at mobilithek.info/organisation/machine-accounts and upload your own certificate (generate it with the openssl command shown in this field's description, no SMS needed). Paste the certificate PEM here and its private key in the key field."
+          ],
+          "notes": "This ONE certificate authenticates every Mobilithek feed — set it once, then add each feed's subscription id. (The NRW state network is published under 'LVZ.NRW', not 'Straßen.NRW'.)"
+        }
+      },
+      "MOBILITHEK_KEY": {
+        "type": "string",
+        "title": "Mobilithek — client private key (PEM)",
+        "description": "PEM contents of the certificate's private key, with no passphrase (generate with openssl -nodes, or strip an issued .p12 key with openssl rsa). Stays with us — never uploaded to Mobilithek. Shared by every Mobilithek feed.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_VERKEHR_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "NRW (LVZ.NRW) Mobilithek — subscription id(s)",
+        "description": "Numeric subscription id(s) from mobilithek.info/organisation/subscriptions (one per subscribed offer, e.g. roadworks 648508602333433856 + incidents 648512079906336768). List multiple comma-separated; the feed fans out one HTTPS client-pull per id. DL-DE-ZERO-2.0.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_DUESSELDORF_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Düsseldorf Mobilithek — subscription id",
+        "description": "Subscription id for the Düsseldorf/dmotion offer (110000000002056000). Uses the shared MOBILITHEK_CERT/KEY. DL-DE-ZERO-2.0.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_KOELN_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Köln Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the Köln offers (110000000002900004, 110000000002899004, 110000000003011002). Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. DL-DE-ZERO-2.0.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_UNNA_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Kreis Unna Mobilithek — subscription id",
+        "description": "Subscription id for the Kreis Unna offer (930448553981730816). Uses the shared MOBILITHEK_CERT/KEY. DL-DE-ZERO-2.0.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_MOBIDROM_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "NRW.Mobidrom Mobilithek — subscription id(s)",
+        "description": "Subscription id for the NRW.Mobidrom bundled roadworks offer 884461110418108416. Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. CC-BY-SA-4.0 — ShareAlike; kept in its own feed so it never folds into a more permissive source.",
+        "x-openmapx-secret": true
+      },
+      "DE_BY_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Bayern Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the Bayerische Straßenbauverwaltung offers (110000000002506000, 110000000002507001). Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_BW_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Baden-Württemberg Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the BW Landesmeldestelle offer 857127500689977344. Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. DL-DE-BY-2.0 (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_BE_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Berlin Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the Berlin SenMVKU offer 801096621061234688. Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. DL-DE-BY-2.0 (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_BB_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Brandenburg Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the Landesbetrieb Straßenwesen Brandenburg offer 636547428851101696. Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. DL-DE-BY-2.0 (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_HB_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Bremen Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the Verkehrsmanagementzentrale Bremen offer 608390979298140160. Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. DL-DE-BY-2.0 (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_HH_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Hamburg Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the LSBG Hamburg offer 110000000003540000. Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. DL-DE-BY-2.0 (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_HE_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Hessen Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the Hessen Mobil offers (841292914668498944, 862010418143330304). Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_MV_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Mecklenburg-Vorpommern Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the LSBV M-V offers (110000000002802000, 818137060259840000). Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_NI_NLSTBV_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "NLStBV (Niedersachsen) Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the NLStBV offers (110000000002749000, 951153778962972672, 656880550985773056). Comma-separated. Hannover is a separate feed with its own id. Uses the shared MOBILITHEK_CERT/KEY. DL-DE-ZERO-2.0.",
+        "x-openmapx-secret": true
+      },
+      "DE_NI_HANNOVER_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Hannover Mobilithek — subscription id",
+        "description": "Subscription id for the Landeshauptstadt Hannover offer (633691473746571264). Uses the shared MOBILITHEK_CERT/KEY. DL-DE-ZERO-2.0.",
+        "x-openmapx-secret": true
+      },
+      "DE_SN_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Sachsen Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the LASuV Sachsen offer 608439575154401280 (+ Leipzig 952541268382826496). Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. CC-BY-4.0 (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_ST_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Sachsen-Anhalt Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the Landesstraßenbaubehörde Sachsen-Anhalt offer 110000000003150000. Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. DL-DE-BY-2.0 (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_SH_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Schleswig-Holstein Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the LBV.SH offers (110000000003237002, 110000000003387000). Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. CC-BY-4.0 (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_TH_MOBILITHEK_EVENTS_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Thüringen Mobilithek — subscription id(s)",
+        "description": "Subscription id(s) for the TLBV offer 110000000003051000. Comma-separated. Uses the shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV (attribution required).",
+        "x-openmapx-secret": true
+      },
+      "DE_HH_AUTOBAHN_FLOW_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NL Nord (HH/SH) — Fahrstreifendaten (q/v) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 781571665935880192 (Fahrstreifendaten q und v, NL Nord). Uses the shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_HH_AUTOBAHN_FLOW_SITES_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NL Nord (HH/SH) — Verortung (geometry) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 781573761405784064 (Verortung of the NL-Nord Fahrstreifendaten). Supplies the measurement-site geometry the q/v feed joins against. Shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_AUTOBAHN_FLOW_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NRW — Fahrstreifendaten (q/v) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003476000 (Fahrstreifendaten Q und v, NRW). Shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_AUTOBAHN_FLOW_SITES_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NRW — Verortung (geometry) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003477000 (Verortung der Fahrstreifendaten NRW). Shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_HE_AUTOBAHN_FLOW_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn VZD (Hessen) — Fahrstreifendaten (q/v) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 619101149275615232. Shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_HE_AUTOBAHN_FLOW_SITES_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn VZD (Hessen) — Verortung (geometry) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003126003. Shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_BW_AUTOBAHN_FLOW_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NL Südwest (BW) — Verkehrsmessquerschnitte (Q,V) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003216000. Shared MOBILITHEK_CERT/KEY. License provisionally LicenseRef-GeoNutzV — confirm the offer Einlegeblatt.",
+        "x-openmapx-secret": true
+      },
+      "DE_BW_AUTOBAHN_FLOW_SITES_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NL Südwest (BW) — Verortung (geometry) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003217000. Shared MOBILITHEK_CERT/KEY.",
+        "x-openmapx-secret": true
+      },
+      "DE_BY_AUTOBAHN_FLOW_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn Bayern — Dynamische Messdaten (q/v) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 748580849261105152 (Dynamische Messdaten BAB Bayern fahrstreifenfein). Shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_AUTOBAHN_LOS_FLOW_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NRW — fahrstreifenfeine Verkehrslage (LoS) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003478000. Shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_NW_AUTOBAHN_LOS_FLOW_SITES_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NRW — fahrstreifenfeine Verkehrslage Verortung Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003479000. Shared MOBILITHEK_CERT/KEY. LicenseRef-GeoNutzV.",
+        "x-openmapx-secret": true
+      },
+      "DE_BW_AUTOBAHN_LOS_FLOW_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NL Südwest (BW) — Verkehrslage (LoS) Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003216001. Shared MOBILITHEK_CERT/KEY. Confirm license via Einlegeblatt.",
+        "x-openmapx-secret": true
+      },
+      "DE_BW_AUTOBAHN_LOS_FLOW_SITES_SUBSCRIPTION_ID": {
+        "type": "string",
+        "title": "Autobahn NL Südwest (BW) — Verkehrslage Verortung Mobilithek subscription id",
+        "description": "Numeric subscription id for Mobilithek offer 110000000003218001. Shared MOBILITHEK_CERT/KEY.",
+        "x-openmapx-secret": true
+      },
+      "DK_VEJDIREKTORATET_EVENTS_API_KEY": {
+        "type": "string",
+        "title": "Vejdirektoratet key (Denmark)",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://du-portal-ui.dataudveksler.app.vd.dk/data/416/overview",
+          "urlLabel": "Danish data exchanger — dataset 416",
+          "steps": [
+            "Register on the data exchanger (Dataudveksleren) using an eID — choose 'International' for an eID from another European country. Leave the 'Dataowner consent' checkbox unchecked (it's the publisher agreement).",
+            "Create a service account at du-portal-ui.dataudveksler.app.vd.dk/profile/service-accounts.",
+            "Associate the service account with dataset 416 (Traffic Events and Road Works snapshot — NOT 415, which is AMQP-only). The dataset page then shows the data-access URL and the credential the service account presents."
+          ],
+          "notes": "CC-BY-4.0; attribution \"Vejdirektoratet.\" Access is via a service account, not a plain API key — confirm from the dataset page whether its credential is a header/query token or an OAuth2 client-credentials pair."
+        }
+      },
+      "EE_TARKTEE_EVENTS_API_KEY": {
+        "type": "string",
+        "title": "Tark Tee key (Estonia)",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://tarktee.transpordiamet.ee/#/en/datex-registration",
+          "urlLabel": "Register at Tark Tee",
+          "steps": [
+            "Register for the DATEX II API at tarktee.transpordiamet.ee/#/en/datex-registration (Transpordiamet 'Smart Road' gateway); a key is issued after registration. The old tarktee.mnt.ee domain is retired."
+          ],
+          "notes": "CC-BY-4.0 (commercial OK)."
+        }
+      },
+      "GB_NATIONALHIGHWAYS_EVENTS_API_KEY": {
+        "type": "string",
+        "title": "National Highways NTIS key (England)",
+        "description": "Ocp-Apim-Subscription-Key header value.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://developer.data.nationalhighways.co.uk/signin",
+          "urlLabel": "National Highways developer portal",
+          "steps": [
+            "Register / sign in at developer.data.nationalhighways.co.uk/signin.",
+            "Subscribe to the 'unlimited' product at developer.data.nationalhighways.co.uk/subscription#product=unlimited (one product grants the APIM key for all NTIS DATEX feeds, incl. Road and Lane Closures v2.0).",
+            "Copy the Ocp-Apim-Subscription-Key from your profile at developer.data.nationalhighways.co.uk/profile."
+          ],
+          "notes": "OGL-UK-3.0; attribution \"Contains National Highways data © Crown copyright and database right.\""
+        }
+      },
+      "HR_HC_USER": {
+        "type": "string",
+        "title": "Hrvatske ceste (Croatia) — B2B username",
+        "description": "HTTP Basic username for the promet-info B2B feeds (Croatia).",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.hrvatske-ceste.hr/",
+          "urlLabel": "Hrvatske ceste",
+          "steps": [
+            "There is no self-service portal — request B2B account credentials from Hrvatske ceste (the promet-info operator), via hrvatske-ceste.hr or the data.gov.hr dataset page.",
+            "Ask for the events publication (\"HC Prometni događaji DatexII v3\") to be enabled on the account as well as roadworks — the two are authorised separately."
+          ],
+          "notes": "Open licence (commercial OK); access is gated on the B2B account."
+        }
+      },
+      "HR_HC_PASSWORD": {
+        "type": "string",
+        "title": "Hrvatske ceste (Croatia) — B2B password",
+        "x-openmapx-secret": true
+      },
+      "NO_VEGVESEN_USER": {
+        "type": "string",
+        "title": "Statens vegvesen (Norway) — username",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.vegvesen.no/en/fag/technology/open-data/a-selection-of-open-data/what-is-datex/get-access/",
+          "urlLabel": "Statens vegvesen — get DATEX access",
+          "steps": [
+            "Request a free account for the DATEX II server via the 'Get access' page (Open data → What is DATEX → Get access)."
+          ],
+          "cost": "Free",
+          "notes": "NLOD-2.0 (commercial OK). One account serves the events and the traffic-speed feeds."
+        }
+      },
+      "NO_VEGVESEN_PASSWORD": {
+        "type": "string",
+        "title": "Statens vegvesen (Norway) — password",
+        "x-openmapx-secret": true
+      },
+      "SE_TRAFIKVERKET_API_KEY": {
+        "type": "string",
+        "title": "Trafikverket key (Sweden)",
+        "description": "Authentication key: sent as ?authenticationkey= to the DATEX II situation feed and in the POST request body to the traffic-flow feed.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://data.trafikverket.se/oauth2/Account/register",
+          "urlLabel": "Sign up at Trafikverket",
+          "steps": [
+            "Sign up at data.trafikverket.se/oauth2/Account/register.",
+            "Create an authentication key under data.trafikverket.se/mypage/systems (My systems)."
+          ],
+          "cost": "Free",
+          "notes": "CC0 — no restrictions. API endpoint: api.trafikinfo.trafikverket.se/v2/data.json (the bare host has no web page)."
+        }
+      },
+      "SG_LTA_API_KEY": {
+        "type": "string",
+        "title": "LTA DataMall AccountKey (Singapore)",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://datamall.lta.gov.sg/content/datamall/en/request-for-api.html",
+          "urlLabel": "Request LTA API access",
+          "steps": [
+            "Request an API account via the form at datamall.lta.gov.sg/content/datamall/en/request-for-api.html.",
+            "The AccountKey is emailed to you."
+          ],
+          "cost": "Free",
+          "notes": "Singapore ODL (commercial OK); attribution to the Land Transport Authority. Serves the Traffic Incidents and Traffic Speed Bands feeds."
+        }
+      },
+      "SI_NAP_EVENTS_USER": {
+        "type": "string",
+        "title": "NAP Slovenia (promet.si) — username",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://www.nap.si/en/registration",
+          "urlLabel": "Register at NAP Slovenia",
+          "steps": [
+            "Register at nap.si/en/registration (DARS / DRSI).",
+            "Request access and tick exactly the two DATEX II v3.3 datasets (under 'Other contents', XML, english): 'Traffic events (DATEX II v3.3)' and 'Roadworks (DATEX II v3.3)'. Leave everything else unticked.",
+            "Fill the Purpose/Description (min. 100 chars), set a Time period, agree to the terms, and submit. Ready-to-paste purpose: OpenMapX (https://openmapx.com) is a free, open-source maps and navigation app; we ingest the Traffic events and Roadworks DATEX II v3.3 datasets to display live road conditions and route around closures and roadworks in Slovenia, with CC-BY-SA attribution shown to users."
+          ],
+          "notes": "CC-BY-SA (ShareAlike). The B2B host (b2b.ncup.si) is credential-gated; the NAP account is sent as HTTP Basic — confirm the exact scheme when granted."
+        }
+      },
+      "SI_NAP_EVENTS_PASSWORD": {
+        "type": "string",
+        "title": "NAP Slovenia (promet.si) — password",
+        "x-openmapx-secret": true
+      },
+      "US_NY_511_API_KEY": {
+        "type": "string",
+        "title": "511NY API key (New York)",
+        "description": "Query key for the 511NY events and winter road conditions feeds.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://511ny.org/my511/register",
+          "urlLabel": "Create a 511NY account",
+          "steps": [
+            "Create an account at 511ny.org/my511/register.",
+            "Request an API key at 511ny.org/developers/help. The form asks for your reasons, and submitting accepts the Developer's Access Agreement (DAA), which permits commercial redistribution.",
+            "Ready-to-paste reason: OpenMapX (https://openmapx.com) is a free, open-source maps and navigation app. I would use the 511NY events feed to display live incidents, road work, and closures on the map and to help travelers route around active disruptions in New York, with 'Powered by 511NY' attribution shown to users. It serves the general public at no charge; the data is shown only to end users, not resold or provided to any third-party data broker."
+          ],
+          "cost": "Free",
+          "notes": "Attribution required: \"Powered by 511NY\". 10 calls per 60s across the account, shared by both feeds."
+        }
+      },
+      "US_OH_OHGO_API_KEY": {
+        "type": "string",
+        "title": "OHGO API key",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://ohgo.com/developer",
+          "urlLabel": "OHGO developer registration",
+          "steps": [
+            "Register for a free OHGO developer account at ohgo.com/developer and create an API key.",
+            "Set US_OH_OHGO_API_KEY to the key value; the feeds activate on the next scheduler cycle."
+          ],
+          "notes": "Free key. Data is U.S. government public domain. Serves the travel delays, construction and incidents feeds."
+        }
+      },
+      "DE_TANKERKOENIG_FUEL_API_KEY": {
+        "type": "string",
+        "title": "Tankerkönig API Key",
+        "description": "Tankerkoenig API key for German fuel prices.",
+        "x-openmapx-secret": true,
+        "x-openmapx-setup": {
+          "url": "https://onboarding.tankerkoenig.de/",
+          "urlLabel": "Request Tankerkönig API key",
+          "steps": [
+            "Open onboarding.tankerkoenig.de (linked from creativecommons.tankerkoenig.de via 'API-Key').",
+            "Enter a working email address and describe your non-commercial use case.",
+            "Agree to the CC BY 4.0 terms (attribution to tankerkoenig.de required).",
+            "Submit the form; registration is reviewed manually and can take a few days.",
+            "Receive the API key by email once approved."
+          ],
+          "cost": "Free for non-commercial use (commercial use needs a paid agreement).",
+          "notes": "Data is CC BY 4.0 (MTS-K) — attribution required. Free-tier limits: 1 request/min, 25 km radius.",
+          "email": {
+            "to": "info@tankerkoenig.de",
+            "subject": "Tankerkönig API key request (non-commercial)",
+            "body": "Hello,\n\nI would like to request a free non-commercial Tankerkönig API key.\n\nUse case: displaying current German fuel prices in a self-hosted, non-commercial OpenMapX map application.\n\nI agree to the CC BY 4.0 terms and will attribute the data to tankerkoenig.de.\n\nThank you."
+          }
+        }
+      },
+      "OVERPASS_URL": {
+        "type": "string",
+        "title": "Overpass URL",
+        "description": "Base URL of the Overpass instance (http://overpass:80, https://overpass-api.de) or its full interpreter URL (http://overpass:80/api/interpreter), as OpenMapX's OVERPASS_URL accepts: queries go to the base URL plus /api/interpreter. Defaults to the public instance, which allows about 10,000 requests a day; point it at a self-hosted Overpass for heavier use. A private host also needs OPENCONDITIONS_EGRESS_ALLOWED_HOSTS.",
+        "default": "https://overpass-api.de",
+        "x-openmapx-secret": false
+      }
+    }
+  },
+  "ui": {
+    "category": "data"
+  }
+}

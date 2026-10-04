@@ -67,9 +67,15 @@ export type {
   DataSourceMapContextSelection,
   DataSourceMarkerStyle,
   DataSourceMeta,
+  DataSourcePartialReason,
   DataSourceResult,
+  DataSourceSearchResult,
   DirectionsResult,
   ForecastAirQualityQuery,
+  FuelProduct,
+  FuelStation,
+  FuelStationProvider,
+  FuelStationQuery,
   GeocodingBias,
   GeocodingProvider,
   GtfsCatalogFeed,
@@ -239,6 +245,7 @@ export type {
 export { toIntegrationMeta } from "./loader";
 export type {
   CredentialSetup,
+  DataSourceValidationResult,
   IntegrationDataSource,
   IntegrationFrontend,
   IntegrationHealthCheck,
@@ -257,6 +264,7 @@ export {
   INTEGRATION_ID_REGEX,
   integrationManifestSchema,
   readCredentialSetup,
+  validateDataSource,
   validateManifest,
 } from "./manifest";
 export { PLATFORM_VERSION, satisfiesPlatformVersion } from "./platform";

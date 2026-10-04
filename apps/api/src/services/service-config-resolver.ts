@@ -25,7 +25,7 @@ import { eq } from "drizzle-orm";
 import { db } from "../db";
 import { serviceConfig } from "../db/schema";
 
-const { configSchemaKeys, resolveServiceConfigFromEnv, serviceConfigEnvPrefix } = coreServices;
+const { configSchemaKeys, resolveServiceConfigFromEnv } = coreServices;
 
 // Re-export the core types so callers (route handlers, tests) don't need to
 // reach into `@openmapx/core` directly. Services can in principle land on any
@@ -47,6 +47,12 @@ export interface ResolveServiceConfigInput {
    * env/default cascade without constructing a full manifest.
    */
   containerEnv?: Record<string, string>;
+  /**
+   * The config key naming the service's proxy host (`exposure.proxy.host.configKey`).
+   * The host is routed by Traefik labels, which a Compose env reference
+   * cannot fill, so its env value is carried like a database value.
+   */
+  proxyHostConfigKey?: string;
 }
 
 /**
@@ -124,36 +130,45 @@ export async function resolveEffectiveServiceConfig(
   return Object.fromEntries(Object.entries(resolved).map(([key, entry]) => [key, entry.value]));
 }
 
+/** What the compose render needs from the config cascade, per service id. */
+export interface ResolvedServiceConfigs {
+  /** Values from defaults and the database, written into the rendered YAML. */
+  values: Map<string, Record<string, unknown>>;
+  /**
+   * Keys whose effective value comes from the host env. Their value is never
+   * carried: the renderer writes a `${SERVICE_<ID>_<KEY>:-}` reference
+   * instead, so operator env values stay in `infra/docker/.env`.
+   */
+  envKeys: Map<string, string[]>;
+}
+
 /**
  * Batch version: resolve configs for many services in parallel. Used by the
  * compose-render path where we need the full map before handing control to
- * the renderer.
- *
- * For values whose source is `env`, emit a Docker Compose substitution
- * placeholder (`${SERVICE_<ID>_<KEY>:-}`) instead of the literal value, so
- * operator-set env values (which can include secrets) stay in
- * `infra/docker/.env` and never get baked into the rendered YAML. Values
- * sourced from defaults or the database are written verbatim — the database
- * isn't expected to hold secrets today (no `x-openmapx-secret` field on any
- * service configSchema), and defaults are public manifest values.
+ * the renderer. Values sourced from defaults or the database are carried
+ * verbatim (defaults are public manifest values; secrets live in the vault,
+ * not here); env-sourced keys are reported out of band in `envKeys`, except
+ * the proxy host key, whose env value is carried: the rendered labels route it.
  */
 export async function resolveAllServiceConfigs(
   manifests: ResolveServiceConfigInput[],
-): Promise<Map<string, Record<string, unknown>>> {
+): Promise<ResolvedServiceConfigs> {
   const entries = await Promise.all(
     manifests.map(async (m) => {
       const resolved = await resolveServiceConfigWithSources(m);
-      const prefix = serviceConfigEnvPrefix(m.id);
       const flat: Record<string, unknown> = {};
+      const fromEnv: string[] = [];
       for (const [key, entry] of Object.entries(resolved)) {
-        if (entry.source === "env") {
-          flat[key] = `\${${prefix}${key.toUpperCase()}:-}`;
-        } else {
-          flat[key] = entry.value;
-        }
+        if (entry.source === "env" && key !== m.proxyHostConfigKey) fromEnv.push(key);
+        else flat[key] = entry.value;
       }
-      return [m.id, flat] as const;
+      return { id: m.id, flat, fromEnv };
     }),
   );
-  return new Map(entries);
+  return {
+    values: new Map(entries.map(({ id, flat }) => [id, flat])),
+    envKeys: new Map(
+      entries.filter(({ fromEnv }) => fromEnv.length > 0).map(({ id, fromEnv }) => [id, fromEnv]),
+    ),
+  };
 }

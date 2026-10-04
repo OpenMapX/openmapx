@@ -66,11 +66,9 @@ export interface MobilityDataSourceProvider {
   readonly serviceIds?: string[];
   readonly coverage?: { countries?: string[]; bbox?: [number, number, number, number] };
 
+  isAvailable?(): boolean;
   getFilters(): Promise<DataSourceFilterDef[]>;
-  search(
-    bbox: BoundingBox,
-    filters?: Record<string, unknown>,
-  ): Promise<MobilityResult<DataSourceResult[]>>;
+  search(bbox: BoundingBox, filters?: Record<string, unknown>): Promise<DataSourceSearchResult>;
   getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>>;
   getMapContext?(
     bbox: BoundingBox,
@@ -78,9 +76,32 @@ export interface MobilityDataSourceProvider {
     options?: DataSourceMapContextSelection,
   ): Promise<MobilityResult<DataSourceMapContext | null>>;
 }
+
+// MobilityResult<DataSourceResult[]> plus why it may lack results, if it may.
+interface DataSourceSearchResult extends MobilityResult<DataSourceResult[]> {
+  partial?: "area" | "unavailable";
+}
 ```
 
 A few things to note up front:
+
+- `isAvailable()` is asked every time the sources are listed. A source that
+  answers `false` is left out of the list, so the web app offers no chip or
+  search category for it; absent means always available. The `fuel` source
+  uses it to stay hidden while no `fuel-stations` provider is registered.
+- A search answer with `partial` set may lack results, and says why:
+  - `"area"`: a source fetched only part of the view (it covered only some of
+    its cells, ran out of time or requests, or the answer was cut at a cap). A
+    narrower view or a later read holds more.
+  - `"unavailable"`: a source did not answer, or is not ready yet. Zooming in
+    does not help.
+
+  Leave `partial` out of a complete answer. When an answer is partial for both
+  reasons, send `"area"`. The route never caches a partial answer, sends it
+  with `Cache-Control: no-store` and passes `partial` to the client. The client
+  treats it as stale at once and asks again every 5 seconds, at most three
+  times, while the view stays put. Only for `"area"` does the list suggest
+  zooming in.
 
 - `id` is the stable provider id (`"fuel"`, `"ev-charging"`). It must match the
   manifest's `frontend.searchCategory.id` so the orchestrator can connect the
@@ -152,28 +173,22 @@ client resolves those tokens against the right integration's string catalog.
 
 ## A worked example
 
-The `fuel` integration is a compact, complete data source. Its `index.ts` wires
-the provider into the context:
+The `fuel` integration is a compact, complete data source. It fetches nothing
+itself: it orchestrates every enabled integration that registers a
+`FuelStationProvider` (domain `fuel-stations`) through
+`ctx.registerFuelStationProvider`. Its `index.ts` wires the data source into the
+context:
 
 ```ts
-import { setOverpassUrl } from "@openmapx/core";
 import { createDataSourceResolver } from "@openmapx/integration-data-source/resolver";
 import type { IntegrationContext } from "@openmapx/integration-framework";
 import { registerPlaceResolver } from "@openmapx/place-ids";
-import { setDeTankerkoenigApiKey, setFuelLogger } from "./providers/factory.js";
-import { fuelProvider, setManifestDataSources } from "./providers/provider.js";
+import { createFuelDataSource } from "./data-source.js";
 
 export function setup(ctx: IntegrationContext): void {
-  const resolved = ctx.getRequiredService("overpass");
-  if (resolved?.url) setOverpassUrl(resolved.url);
-  setFuelLogger(ctx.log);
-  setDeTankerkoenigApiKey(ctx.config["de-tankerkoenig-api-key"] as string | undefined);
-
-  // Load attribution from the manifest *before* registering the provider,
-  // so its `attribution` getter has data when the framework reads it.
-  setManifestDataSources(ctx.manifest.dataSources ?? []);
-  ctx.registerMobilityDataSource(fuelProvider);
-  registerPlaceResolver(fuelProvider.id, createDataSourceResolver(fuelProvider));
+  const source = createFuelDataSource(ctx);
+  ctx.registerMobilityDataSource(source);
+  registerPlaceResolver(source.id, createDataSourceResolver(source));
 }
 ```
 
@@ -187,61 +202,61 @@ wraps the provider's `getDetail` for that.
 The provider itself implements the contract. Trimmed to the load-bearing parts:
 
 ```ts
-import { freshnessNow } from "@openmapx/mobility-core/freshness";
-import { type MobilityResult, withAttribution } from "@openmapx/mobility-core/result";
-import { createManifestAttribution } from "@openmapx/integration-framework";
+export function createFuelDataSource(ctx: IntegrationContext): MobilityDataSourceProvider {
+  return {
+    id: "fuel",
+    meta: META, // minZoom, icon markerStyle, placeCategory…
+    searchCacheTtl: 120,
+    detailCacheTtl: 120,
+    attribution: [], // the manifest declares no sources; credits travel per station
 
-// Manifest-driven attribution store, populated in setup() above.
-const attribution = createManifestAttribution();
-export const setManifestDataSources = attribution.set;
+    async getFilters() {
+      return [{ id: "fuelType", label: "Fuel Type", type: "multi-select", options: [/* … */] }];
+    },
 
-class FuelDataSourceProvider implements MobilityDataSourceProvider {
-  readonly id = "fuel";
-  readonly meta = META; // minZoom, icon markerStyle, placeCategory…
-  readonly searchCacheTtl = 120;
-  readonly detailCacheTtl = 120;
+    async search(bbox, filters) {
+      const pricesOnly = filters?.pricesOnly === true;
+      // Every covering FuelStationProvider in parallel; failures are tolerated.
+      const { stations } = await aggregateFuelStations(
+        ctx,
+        [bbox.west, bbox.south, bbox.east, bbox.north],
+        { pricesOnly },
+      );
+      const kept = stations.filter(
+        (s) => !pricesOnly || s.products.some((p) => p.available !== false && p.price),
+      );
+      return withAttribution(
+        kept.map(mapFuelStationToResult), // each result carries its station's credits
+        kept.flatMap((s) => s.attributions), // deduplicated by sourceId in the real code
+        freshnessNow({ hasRealtimeData: false }),
+      );
+    },
 
-  // Mirrors what the provider attaches to each result.
-  get attribution(): Attribution[] {
-    return attribution.all();
-  }
-
-  async getFilters(): Promise<DataSourceFilterDef[]> {
-    return [{ id: "fuelType", label: "Fuel Type", type: "multi-select", options: [/* … */] }];
-  }
-
-  async search(
-    bbox: BoundingBox,
-    filters?: Record<string, unknown>,
-  ): Promise<MobilityResult<DataSourceResult[]>> {
-    // Country-specific price feed if one covers the bbox; else OSM locations.
-    const stations = await searchFuelStations(bbox);
-    const results = (stations ?? (await searchByCategory(CATEGORY_FILTERS.fuel, bbox))).map(
-      mapToResult,
-    );
-
-    return withAttribution(
-      results,
-      attribution.forResults(results), // credit only the sources present
-      freshnessNow({ hasRealtimeData: false }),
-    );
-  }
-
-  async getDetail(itemId: string): Promise<MobilityResult<DataSourceDetail | null>> {
-    const detail = await this.fetchDetail(itemId);
-    const attr = attribution.bySource(extractSourcePrefix(detail?.id ?? ""));
-    return withAttribution(detail, attr ? [attr] : [], freshnessNow());
-  }
+    async getDetail(itemId) {
+      // The provider that holds the station answers; no preceding search needed.
+      const station = await findFuelStation(ctx, itemId);
+      return withAttribution(
+        station ? mapFuelStationToDetail(station) : null,
+        station?.attributions ?? [],
+        freshnessNow({ hasRealtimeData: false }),
+      );
+    },
+  };
 }
-
-export const fuelProvider = new FuelDataSourceProvider();
 ```
 
-The provider returns plain OpenStreetMap locations where no national price feed
-reaches and switches to the country feed where one does — which is the simplest
-form of multi-source behavior. `getFilters` declares a single `fuelType`
-multi-select that the orchestrator caches and the frontend renders into the
-filter panel.
+The data source concatenates the providers' stations in registration order —
+each provider dedups its own — and re-applies the filters it pushed down
+(`fuelType` and `pricesOnly`; the sketch shows only the latter), so a provider
+that ignores them cannot widen the answer. `getFilters` declares a single
+`fuelType` multi-select that the orchestrator caches and the frontend renders
+into the filter panel.
+
+Because `fuel` aggregates providers rather than reading feeds itself, its
+manifest declares no `dataSources`. Credits come from each station's
+`attributions`, which the mapper turns into the per-record
+`DataSourceResult.attributions` / `DataSourceDetail.attributions` that the map
+strip and the place card render (see [Attribution and freshness](#attribution-and-freshness)).
 
 ## Multi-source merging
 
@@ -327,12 +342,18 @@ store gives you three readers:
   feeds.
 
 Returning only the credited subset is what makes the map's attribution strip
-show _just_ the feeds visible right now — browsing fuel in one German city
-credits Tankerkönig alone, not the whole European stack. The frontend layer
-intersects the manifest's declared sources with the `sourceId`s in the response,
-adds any per-record `result.attributions`, and feeds the result into the map's
-attribution control, which appears while the layer is on and clears when it is
-switched off.
+show _just_ the feeds visible right now — browsing EV charging in one city
+credits the feeds with stations there, not every declared registry. The
+frontend layer intersects the manifest's declared sources with the `sourceId`s
+in the response, adds every per-record `result.attributions`, and feeds the
+result into the map's attribution control, which appears while the layer is on
+and clears when it is switched off.
+
+Per-record credits are first-class. An integration that orchestrates other
+providers (such as `fuel`) declares no `dataSources` and credits every result
+and detail through its `attributions` alone. The layer renders those without a
+manifest entry and raises its development warning only for envelope credits
+that neither the manifest declares nor a record carries.
 
 **Freshness.** Every result carries a `Freshness` stamp:
 

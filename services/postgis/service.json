@@ -6,6 +6,7 @@
   "license": "PostgreSQL",
   "quality": "built-in",
   "homepage": "https://postgis.net/",
+  "communityNetworkAccess": ["openconditions-ingest", "openconditions-contributions-api"],
   "subjectData": {
     "storesPersonalData": false,
     "strategy": "not_personal",

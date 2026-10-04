@@ -21,7 +21,6 @@ import {
   usePlaceStore,
   useSidebarStore,
 } from "@openmapx/core";
-import { dataSourceToAttribution } from "@openmapx/integration-framework";
 import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import { isI18nToken, type Translatable } from "@openmapx/integration-framework/strings";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
@@ -38,7 +37,7 @@ import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
-import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
+import { dataSourceLayerCredits } from "@/lib/attributionForProviders";
 import { dataSourceBrandImageId, loadDataSourceBrandMarker } from "@/lib/dataSourceBrandMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { createMarkerSvg } from "@/lib/markerSvg";
@@ -110,7 +109,7 @@ export function availStateOf(result: {
 
 function buildGeoJson(
   results: DataSourceResult[],
-  translateSummary: (summary: Translatable | undefined) => string | undefined,
+  translate: (value: Translatable | undefined) => string | undefined,
   imageId?: string,
 ) {
   return {
@@ -123,11 +122,11 @@ function buildGeoJson(
       },
       properties: {
         id: r.id,
-        name: r.name,
+        name: r.name || (translate(r.fallbackName) ?? ""),
         source: r.source,
         variant: r.variant,
         status: r.status ?? "",
-        summary: translateSummary(r.summary) ?? "",
+        summary: translate(r.summary) ?? "",
         operator: r.operator ?? "",
         kind: r.kind ?? "",
         availState: availStateOf(r),
@@ -326,60 +325,21 @@ export function DataSourceLayer() {
     mapContextSelection,
   );
 
-  // Attribution for the active integration's data sources. Filtered to the
-  // providers the envelope actually credited for this response — e.g.
-  // browsing fuel in Aachen only emits Tankerkoenig credit, not the full EU
-  // stack of country-specific fuel providers.
-  //
-  // While the search query is in flight we emit nothing; otherwise a freshly-
-  // selected source would briefly show ALL manifest credits, then snap to
-  // the actually-credited subset on first response. Once the response has
-  // landed and `searchAttributions` is empty, we fall back to the full
-  // manifest *only when there are visible results* — providers that don't
-  // yet emit envelope attributions still need credits surfaced, but an
-  // empty result set (zoomed out, no coverage area) shouldn't advertise
-  // every declared publisher.
+  // Attribution for the active layer: the manifest's declared sources the
+  // envelope credited for this response, plus every visible record's own
+  // credits — see `dataSourceLayerCredits` for the fallback and in-flight rules.
   const dataSourceAttributions = useMemo<Attribution[]>(() => {
     if (!activeSource) return [];
-    if (searchIsFetching && searchAttributions.length === 0) return [];
-    const meta = registry.get(activeSource);
-    const dataSources = meta?.dataSources ?? [];
-    const creditedIds = new Set(searchAttributions.map((a) => a.sourceId));
-    const filtered = dataSources.filter((ds) => creditedIds.has(ds.sourceId));
-    if (filtered.length === 0 && creditedIds.size > 0) {
-      // Envelope credited sources the manifest doesn't declare — flag this in
-      // dev so manifests/providers can be reconciled. In prod we still show
-      // the full manifest to avoid an empty strip with rendered data.
-      if (process.env.NODE_ENV !== "production") {
-        console.warn(
-          `[DataSourceLayer] envelope.attributions for "${activeSource}" reference sourceIds ` +
-            `not declared in the integration manifest: ${[...creditedIds].join(", ")}`,
-        );
-      }
-    }
-    // Pick the credited set:
-    //  - envelope credited subset when present
-    //  - otherwise fall back to the full manifest, BUT only when there are
-    //    visible results (an empty viewport with no markers shouldn't
-    //    advertise every publisher the integration declared)
-    //  - otherwise nothing
-    const creditedSources =
-      filtered.length > 0 ? filtered : filteredResults.length > 0 ? dataSources : [];
-    const manifestCredits = creditedSources.map(dataSourceToAttribution);
-    // Surface per-record `result.attributions` (e.g. France IRVE municipal
-    // publishers under Licence Ouverte) so license-required per-publisher
-    // credit reaches the map strip alongside the manifest credits.
-    const seen = new Set(manifestCredits.map((a) => a.sourceId));
-    const runtimeCredits: Attribution[] = [];
-    for (const result of filteredResults) {
-      for (const attr of result.attributions ?? []) {
-        const credit = runtimeAttributionToAttribution(attr);
-        if (seen.has(credit.sourceId)) continue;
-        seen.add(credit.sourceId);
-        runtimeCredits.push(credit);
-      }
-    }
-    return [...manifestCredits, ...runtimeCredits];
+    return dataSourceLayerCredits({
+      sourceLabel: activeSource,
+      dataSources: registry.get(activeSource)?.dataSources ?? [],
+      envelope: searchAttributions,
+      results: filteredResults,
+      isFetching: searchIsFetching,
+      // Credits nothing can render are flagged in dev so manifests and
+      // providers can be reconciled.
+      warn: process.env.NODE_ENV !== "production" ? console.warn : undefined,
+    });
   }, [activeSource, registry, searchAttributions, searchIsFetching, filteredResults]);
   useMapAttributions(
     activeSource ? `data-source:${activeSource}` : "data-source",
@@ -388,7 +348,10 @@ export function DataSourceLayer() {
 
   // Show pin marker for hovered item
   const hoveredResult = filteredResults.find((r) => r.id === hoveredItemId) ?? null;
-  usePinMarker(hoveredResult?.coordinates ?? null, hoveredResult?.name ?? "");
+  usePinMarker(
+    hoveredResult?.coordinates ?? null,
+    hoveredResult ? hoveredResult.name || resolveToken(hoveredResult.fallbackName) : "",
+  );
 
   // Track whether we've set the initial searchBbox
   const initialBboxSetRef = useRef(false);

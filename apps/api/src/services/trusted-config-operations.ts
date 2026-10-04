@@ -80,6 +80,7 @@ export async function applyTrustedConfiguration(
       id: service.manifest.id,
       configSchema: service.manifest.configSchema,
       containerEnv: service.manifest.container.environment,
+      proxyHostConfigKey: service.manifest.exposure?.proxy?.host?.configKey,
     })),
   );
   const serviceSecrets = await Promise.all(
@@ -96,10 +97,14 @@ export async function applyTrustedConfiguration(
   const payload = trustedConfigurationPayloadSchema.parse({
     domain: envString("DOMAIN", "localhost"),
     selectedRoots,
-    serviceConfigs: enabledServices.map((service) => ({
-      serviceId: service.manifest.id,
-      values: serviceConfigMap.get(service.manifest.id) ?? {},
-    })),
+    serviceConfigs: enabledServices.map((service) => {
+      const envKeys = serviceConfigMap.envKeys.get(service.manifest.id);
+      return {
+        serviceId: service.manifest.id,
+        values: serviceConfigMap.values.get(service.manifest.id) ?? {},
+        ...(envKeys ? { envKeys } : {}),
+      };
+    }),
     integrationConfigs: integrations.map((integration) => ({
       integrationId: integration.id,
       values: nonSecretConfig(

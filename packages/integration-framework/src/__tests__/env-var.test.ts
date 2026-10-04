@@ -3,8 +3,8 @@ import { integrationEnvVarName } from "../env-var.js";
 
 describe("integrationEnvVarName", () => {
   it("normalizes hyphens in both id and key", () => {
-    expect(integrationEnvVarName("fuel", "de-tankerkoenig-api-key")).toBe(
-      "INTEGRATION_FUEL_DE_TANKERKOENIG_API_KEY",
+    expect(integrationEnvVarName("parking", "db-parking-api-key")).toBe(
+      "INTEGRATION_PARKING_DB_PARKING_API_KEY",
     );
   });
   it("handles hyphenated integration ids", () => {

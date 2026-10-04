@@ -149,6 +149,35 @@ describe("CoverageService", () => {
     expect(JSON.stringify(collected)).not.toContain("secret internal address");
   });
 
+  it("files a source under the coverage domain its own manifest domain names", async () => {
+    const both = integration();
+    both.id = "openconditions";
+    both.manifest.id = "openconditions";
+    both.manifest.domains = ["road-conditions", "fuel-stations"];
+    both.manifest.dataSources = [
+      { ...both.manifest.dataSources![0]!, sourceId: "nl-ndw-events", name: "NDW" },
+      { ...both.manifest.dataSources![0]!, sourceId: "osm-fuel", domain: "fuel-stations" },
+    ];
+    both.providers = new Map();
+    const collected = await collectCoverageData({
+      now: () => new Date("2026-09-10T12:00:00.000Z"),
+      integrations: [both],
+      dataManager: {
+        read: async () => {
+          throw new Error("Unavailable");
+        },
+      },
+      loadBindings: async () => new Map(),
+      loadPolicy: async () => ({ allowGreyArea: true, allowNonCommercial: true }),
+      providerHealth: null,
+      integrationHealth: () => ({ updatedAt: null, results: [] }),
+    });
+    // Fuel has no coverage domain; it is not traffic coverage.
+    expect(collected.streams.map((s) => [s.sourceId, s.domain])).toEqual([
+      ["nl-ndw-events", "traffic"],
+    ]);
+  });
+
   it("uses the aggregate scheduled health check and expires positive evidence", () => {
     const collection = makeCollection(makeStream("2026-09-10T13:00:00.000Z"));
     collection.catalog = buildCoverageCatalog([integration()]);

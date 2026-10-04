@@ -25,6 +25,11 @@
  *      (a lighter re-assertion of what `check-legal-tables` already covers,
  *      kept here so this gate is self-contained).
  *
+ * An integration whose manifest sets `runtimeDataSources: true` has no static
+ * sourceIds to check: the host validates each sourceId it supplies at runtime
+ * against `feedIdSchema`. This gate names such integrations in its output and
+ * rejects a `poi-sources.ts` in one, since ingested feeds need static sourceIds.
+ *
  * Run on demand with `pnpm check-feed-ids`.
  */
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -69,6 +74,14 @@ function discoverIntegrations(baseDir: string): DiscoveredIntegration[] {
     out.push({ id: manifest.id ?? entry.name, manifest, dir });
   }
   return out;
+}
+
+/** Ids of the integrations under `repoRoot` that supply their sources at runtime. */
+export function runtimeDataSourceIntegrations(repoRoot: string): string[] {
+  return discoverIntegrations(join(repoRoot, "integrations"))
+    .filter((it) => it.manifest.runtimeDataSources === true)
+    .map((it) => it.id)
+    .sort();
 }
 
 /**
@@ -176,6 +189,12 @@ export function collectFeedIdViolations(repoRoot: string): string[] {
   const poiSourceIntegrationIds = discoverPoiSourceIntegrationIds(integrationsDir);
   for (const integrationId of poiSourceIntegrationIds) {
     const it = byId.get(integrationId);
+    if (it?.manifest.runtimeDataSources === true) {
+      violations.push(
+        `${integrationId}: poi-sources.ts needs static manifest sourceIds, but the manifest sets runtimeDataSources`,
+      );
+      continue;
+    }
     const poiSourcesPath = join(integrationsDir, integrationId, "poi-sources.ts");
     if (!existsSync(poiSourcesPath)) {
       violations.push(`${integrationId}: expected poi-sources.ts not found at ${poiSourcesPath}`);
@@ -272,6 +291,13 @@ export function collectFeedIdViolations(repoRoot: string): string[] {
 
 function main(): void {
   const violations = collectFeedIdViolations(REPO_ROOT);
+
+  for (const id of runtimeDataSourceIntegrations(REPO_ROOT)) {
+    console.log(
+      `ℹ ${id}: runtime data sources — no static sourceIds to check; the host validates ` +
+        `each supplied sourceId against feedIdSchema.`,
+    );
+  }
 
   if (violations.length === 0) {
     const integrations = discoverIntegrations(INTEGRATIONS_DIR);

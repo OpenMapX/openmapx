@@ -227,6 +227,7 @@ they surface are described on the
 {
   dataSources?: Array<{
     sourceId: string;                 // stable, globally unique
+    domain?: string;                  // one of `domains`; defaults to the first
     name: string;
     url: string;
     license: string;
@@ -259,13 +260,144 @@ integrations, which lets attribution be resolved by source no matter which
 integration declared it. Provider code should not hand-roll `Attribution`
 objects — the framework's `createManifestAttribution()` helper turns
 `dataSources` into the canonical attribution shape so credit metadata lives only
-in the manifest.
+in the data source list: the static manifest list, or, for a runtime
+integration, the list it supplies with `setDataSources` (see
+[Runtime data sources](#runtime-data-sources)).
+
+An integration in several domains whose sources serve different ones sets
+`domain` on each source that does not belong to its first domain. The source is
+then listed under that domain's section of the legal pages, and an overlay that
+credits a whole domain credits it only there. The built-in OpenConditions
+integration sets it on every source it supplies at runtime (see below), so its
+fuel feeds are not credited on the traffic overlays.
 
 :::note[Source IDs connect manifests to results]
 A provider tags each result with the `sourceId` it came from, and the host maps
 that back to the manifest entry to render the right license. Keep `sourceId`
 values stable; renaming one orphans existing attribution.
 :::
+
+### Runtime data sources
+
+Some integrations front an upstream whose feeds change without an OpenMapX
+release. Such an integration sets `"runtimeDataSources": true` in its manifest,
+leaves `dataSources` out, and supplies the list from code:
+
+```ts
+export async function setup(ctx: IntegrationContext) {
+  const accepted = ctx.setDataSources(await loadSourcesFromUpstream(ctx));
+  serveOnly(accepted);
+}
+```
+
+Manifest validation rejects the flag next to a non-empty static `dataSources`
+list. `setDataSources` throws for an integration without the flag. Each source
+in the list is validated like a static entry, with `validateDataSource` from
+`@openmapx/integration-framework`: the required fields must be present and
+`domain` must be one of the manifest's `domains`. The host drops an invalid
+source, a repeated `sourceId`, or a `sourceId` another live integration already
+declares, and logs a warning that names it (and, for the last, both
+integrations). It keeps the rest.
+
+`setDataSources` returns the accepted list. A dropped source is neither
+credited nor gated by the data-use policy, so the integration serves records
+only of the sources in the returned list, never of the list it passed. The mock
+context of `@openmapx/integration-framework/testing` applies the same rules
+within one integration.
+
+The accepted list replaces `manifest.dataSources`. From then on:
+
+- `GET /api/integrations` serves it, so the legal pages and the web
+  attribution show it within one registry poll.
+- The attribution index is rebuilt from the live registry.
+- The data-use policy is re-evaluated. Its rules match on `commercialUse`, so
+  a source the operator's policy excludes is excluded as soon as it appears.
+
+Call `setDataSources` again whenever the upstream list changes. A reload
+re-reads the manifest from disk, so each new generation starts with an empty
+list and must supply its sources again. The retired generation's list is never
+served or indexed.
+
+The legal tables need a purpose and the data sent for every source. A runtime
+integration can't key these strings by `sourceId`, so it provides one entry per
+domain under `dataSources` in `strings/<locale>.json`. The keys have the form
+`domain:<domain>`:
+
+```json
+{
+  "dataSources": {
+    "domain:road-conditions": { "purpose": "…", "dataSent": "…" },
+    "domain:fuel-stations": { "purpose": "…", "dataSent": "…" }
+  }
+}
+```
+
+`pnpm check-legal-tables` requires a complete entry and a legal section heading
+for every declared domain. It rejects any other key. The other manifest gates
+(`check-feed-ids`, `check-data-flows`, `check-credential-keys`,
+`check-legal-urls`) name a runtime integration in their output instead of
+reading its sources. Because the hosts it contacts are not declared,
+`check-data-flows` holds its code to the allowlist and checks its media hosts
+as server-only. `check-credential-keys` fails a credential-keyed integration
+that sets the flag.
+
+The built-in `openconditions` integration is a runtime integration. Its sources
+are the feeds of the OpenConditions instance at `OPENCONDITIONS_URL`, which the
+instance lists at `GET /sources`. The integration reads that list during
+`setup()` and every five minutes after, and maps each entry to a data source:
+
+- the feed id becomes the `sourceId`;
+- the feed's `homepage` becomes the credit link (`url`);
+- the licence, attribution, terms and privacy URL carry over;
+- the feed's rights become `commercialUse` and `redistribution` (a granted
+  redistribution right of a share-alike feed is `conditional`); its terms note
+  becomes a usage condition, and a share-alike feed gets one more, stating that
+  a database derived from it must be published under the same licence;
+- `providerCountry` is the feed's country, or `EU` / `INT` for a European or
+  international feed;
+- every source is `server-only`, since OpenMapX reads it through OpenConditions.
+
+OpenConditions `roads` feeds are credited under `road-conditions`, and `fuel`
+feeds under `fuel-stations`. Feeds of other OpenConditions domains are left out.
+OpenConditions lists restricted feeds too, since the list is metadata, not
+records. Each `/sources` answer names the `scope` it was served in, and an
+answer without one is malformed (the last good list stays). In the `public`
+scope, which never serves a restricted feed's records, the integration lists
+only the unrestricted feeds as data sources; in the `operator` scope it lists
+every feed. The scope is OpenConditions' own: a token set in OpenMapX but not
+held by the instance still reads in public scope and credits no restricted
+feed. In a fused fuel reading, the contributor `crowd` (the instance's own
+community reports) is credited as such; any other contributor not on the list
+drops the reading.
+The providers serve only the sources the host accepted (see above).
+
+Its `domain:<domain>` strings describe what each domain's sources receive in
+general terms, without naming a source, since the instance decides its feeds.
+Revisit them whenever OpenConditions adds on-demand sources to a domain: the
+road-conditions string states that none fetch on demand today.
+
+`setup()` waits up to three seconds for the first list before it registers the
+providers, so credits and legal pages are complete once the providers serve. If
+the instance is unreachable, the providers still register. The list follows
+once a read succeeds; a failed read is retried after 30 seconds and keeps the
+last good list. The outage is logged once, and so is the recovery.
+
+The providers fail closed. Until the first list arrives, the data-use policy
+has nothing to gate, so they serve nothing:
+
+- a road display or flow read is empty;
+- a routing read rejects, as it does when OpenConditions is down;
+- a fuel search returns no stations and is marked `partial: "unavailable"`.
+  The `data-source` route never caches a partial answer, and the client asks
+  again a few times in the next seconds. Zooming in would not help, so the fuel
+  list does not suggest it; it does for `partial: "area"`, which the provider
+  sends when OpenConditions reports incomplete coverage or the read stops at
+  its station cap.
+
+After the first list, a feed record whose source is not listed is left out.
+This also holds for a feed a later refresh drops. Crowd and federated road
+reports are not catalogue feeds and pass. Fuel credits that a record carries
+without a link take the `homepage` from the live list.
 
 ## The integration context
 
@@ -378,11 +510,13 @@ interface IntegrationContext {
   registerKnowledgeProvider(p: KnowledgeProvider): void; // → "knowledge"
   registerGtfsCatalogProvider(p: GtfsCatalogProvider): void; // → "gtfs-catalog"
   registerRoadConditionsProvider(p: RoadConditionsProvider): void; // → "road-conditions"
+  registerFuelStationProvider(p: FuelStationProvider): void; // → "fuel-stations"
 
   registerPoiSources(sources: readonly PoiSource[]): void; // → data-manager ingest
   registerRoute(method, path, handler, options?): void; // options.rateLimitTier
   registerHealthCheck(fn: CustomHealthCheckFn): void; // overrides manifest probe
   registerDisclosure(d: Disclosure): void; // surfaces a capability note
+  setDataSources(list: IntegrationDataSource[]): IntegrationDataSource[]; // runtimeDataSources only; returns the accepted list
 }
 ```
 

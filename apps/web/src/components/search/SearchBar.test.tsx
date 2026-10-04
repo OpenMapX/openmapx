@@ -14,6 +14,7 @@ const useSearchSuggestionsMock = vi.fn();
 const useBrandSuggestMock = vi.fn();
 const usePresetSuggestMock = vi.fn();
 const useChipTranslationsMock = vi.fn();
+const useDataSourcesMock = vi.fn();
 const resolveStopAsPlaceMock = vi.fn();
 const useMediaQueryMock = vi.fn();
 let voiceResult: ((transcript: string, isFinal: boolean) => void) | undefined;
@@ -38,6 +39,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
     resolveStopAsPlace: (...a: unknown[]) => resolveStopAsPlaceMock(...a),
     usePresetSuggest: (...a: unknown[]) => usePresetSuggestMock(...a),
     useChipTranslations: (...a: unknown[]) => useChipTranslationsMock(...a),
+    useDataSources: () => useDataSourcesMock(),
     useLabeledPlaces: () => ({ data: undefined }),
     // The mobile empty state only needs a signed-out session. Keep the real
     // Better Auth client (and its delayed browser lifecycle) out of this test.
@@ -127,6 +129,9 @@ beforeEach(() => {
   useBrandSuggestMock.mockReset().mockReturnValue({ data: undefined });
   usePresetSuggestMock.mockReset().mockReturnValue({ data: undefined });
   useChipTranslationsMock.mockReset().mockReturnValue({ data: {} });
+  useDataSourcesMock
+    .mockReset()
+    .mockReturnValue({ data: { sources: [{ id: "parking", categoryChipLabel: "Parking" }] } });
   resolveStopAsPlaceMock.mockReset();
   useMediaQueryMock.mockReset().mockReturnValue(false);
   flyToMock.mockReset();
@@ -242,6 +247,62 @@ describe("SearchBar", () => {
     });
     fireEvent.click(screen.getByRole("option", { name: "Parking search.searchCategory" }));
     expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DATASOURCE);
+  });
+
+  it("offers no data-source category the API does not list", async () => {
+    // A source the API leaves out (no provider behind it) would answer every search empty.
+    useDataSourcesMock.mockReturnValue({ data: { sources: [] } });
+    const registry = new IntegrationRegistry([
+      {
+        id: "fuel",
+        name: "Fuel",
+        enabled: true,
+        domains: ["data-source"],
+        frontend: { searchCategory: { id: "fuel", label: "Gas Stations" } },
+      },
+    ]);
+    render(
+      <IntegrationRegistryContext.Provider value={registry}>
+        <SearchBar />
+      </IntegrationRegistryContext.Provider>,
+      { wrapper: createQueryWrapper() },
+    );
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "gas stations" } });
+
+    await act(() => new Promise((resolve) => setTimeout(resolve, 300)));
+    expect(screen.queryByRole("option", { name: "Gas Stations search.searchCategory" })).toBeNull();
+  });
+
+  it.each<[string, Record<string, unknown>]>([
+    ["loading", { data: undefined, isLoading: true }],
+    ["failed", { data: undefined, isError: true }],
+  ])("keeps the data-source categories while the list is %s", async (_, list) => {
+    // Without the list there is nothing to filter by, so nothing is taken out.
+    useDataSourcesMock.mockReturnValue(list);
+    const registry = new IntegrationRegistry([
+      {
+        id: "parking",
+        name: "Parking",
+        enabled: true,
+        domains: ["data-source"],
+        frontend: { searchCategory: { id: "parking-lots", label: "Car parks" } },
+      },
+    ]);
+    render(
+      <IntegrationRegistryContext.Provider value={registry}>
+        <SearchBar />
+      </IntegrationRegistryContext.Provider>,
+      { wrapper: createQueryWrapper() },
+    );
+    const input = screen.getByLabelText("search.ariaLabel");
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: "car parks" } });
+
+    expect(
+      await screen.findByRole("option", { name: "Car parks search.searchCategory" }),
+    ).toBeDefined();
   });
 
   it("labels suggestion distance from the shown user location", async () => {

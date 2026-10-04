@@ -49,7 +49,8 @@ export function useIntegrationSourceAttributions(
  * vehicles published by live-transit-entur, live-transit-db-ris,
  * live-transit-motis, and live-transit-siri-sx-ch). License compliance
  * requires the strip to credit every contributing publisher, not just the
- * orchestrator's own (typically empty) manifest entry.
+ * orchestrator's own (typically empty) manifest entry. A source that names
+ * its `domain` is credited in that domain only.
  */
 export function useIntegrationDomainAttribution(domain: string, active: boolean): void {
   const registry = useIntegrationRegistry();
@@ -59,11 +60,13 @@ export function useIntegrationDomainAttribution(domain: string, active: boolean)
     const out: Attribution[] = [];
     for (const meta of members) {
       for (const ds of meta.dataSources ?? []) {
-        out.push(dataSourceToAttribution(ds));
+        if (ds.domain === undefined || ds.domain === domain) {
+          out.push(dataSourceToAttribution(ds));
+        }
       }
     }
     return out;
-  }, [active, members]);
+  }, [active, members, domain]);
   useMapAttributions(`domain:${domain}`, attributions);
 }
 

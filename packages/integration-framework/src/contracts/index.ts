@@ -17,6 +17,12 @@ export {
   assertTransitProviderContract,
 } from "./assert-contract";
 export type {
+  FuelProduct,
+  FuelStation,
+  FuelStationProvider,
+  FuelStationQuery,
+} from "./fuel-station-provider.js";
+export type {
   AutocompleteResult,
   GeocodingBias,
   GeocodingProvider,
@@ -45,7 +51,9 @@ export type {
   DataSourceMapContextSelection,
   DataSourceMarkerStyle,
   DataSourceMeta,
+  DataSourcePartialReason,
   DataSourceResult,
+  DataSourceSearchResult,
   MobilityDataSourceProvider,
   OsmIdentity,
   PricingPlanEntry,

@@ -51,6 +51,7 @@ import {
 } from "./jobs/traffic/evidence.js";
 import { readTrafficGraphState } from "./jobs/traffic/graph-generation.js";
 import { createLiveTrafficWriter } from "./jobs/traffic/live-writer-client.js";
+import { openConditionsHeaders } from "./jobs/traffic/openconditions-auth.js";
 import { fetchTrafficPolicy, type TrafficPolicy } from "./jobs/traffic/policy.js";
 import { buildTrafficReceipts, type TrafficApplicationSnapshot } from "./jobs/traffic/receipts.js";
 import {
@@ -248,6 +249,12 @@ export interface CronSetupOptions {
    * has it installed.
    */
   openConditionsUrl?: string;
+  /**
+   * Operator token sent as `Authorization: Bearer` with every OpenConditions
+   * read, so restricted sources reach the traffic graph too. Defaults to
+   * `OPENCONDITIONS_OPERATOR_TOKEN`; unset reads in public scope.
+   */
+  openConditionsToken?: string;
   /**
    * data-manager's own view of the same `traffic.tar` file the Valhalla
    * container mmaps. They don't share a container filesystem — Valhalla mounts
@@ -1085,6 +1092,9 @@ export function setupCron(options: CronSetupOptions): CronHandles {
   else log.info("traffic-extract: guard cron scheduled", { expression: trafficExtractExpr });
 
   const openConditionsUrl = options.openConditionsUrl ?? envString("OPENCONDITIONS_URL", "");
+  const openConditionsToken =
+    options.openConditionsToken ?? envString("OPENCONDITIONS_OPERATOR_TOKEN", "");
+  const openConditionsRequest = { headers: openConditionsHeaders(openConditionsToken) };
   const trafficTarPath =
     options.trafficTarPath ??
     envString("TRAFFIC_TAR_PATH", join(options.dataDir, "valhalla", "osm-pbf", "traffic.tar"));
@@ -1095,6 +1105,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       const res = await fetchWithTimeout(
         `${openConditionsUrl}/segments/speed.csv`,
         TRAFFIC_LIVE_FETCH_TIMEOUT_MS,
+        openConditionsRequest,
       );
       if (!res.ok) {
         throw new Error(`traffic-live: OpenConditions speed feed responded ${res.status}`);
@@ -1129,6 +1140,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       const res = await fetchWithTimeout(
         `${openConditionsUrl}/segments/conditions.json`,
         TRAFFIC_LIVE_FETCH_TIMEOUT_MS,
+        openConditionsRequest,
       );
       if (!res.ok) {
         throw new Error(`traffic-live: OpenConditions conditions feed responded ${res.status}`);
@@ -1529,7 +1541,7 @@ export function setupCron(options: CronSetupOptions): CronHandles {
       return;
     }
     try {
-      const result = await bake({ openConditionsUrl, logger: log });
+      const result = await bake({ openConditionsUrl, openConditionsToken, logger: log });
       log.info("traffic-predicted: cycle complete", { ...result });
     } catch (err) {
       log.error("traffic-predicted: cycle failed", { err: (err as Error).message });

@@ -1,50 +1,83 @@
 {
   "name": "Fuel Prices",
-  "description": "Gas station locations and real-time fuel prices",
-  "dataSources": {
-    "de-tankerkoenig": {
-      "purpose": "German fuel station prices (E5, E10, Diesel)",
-      "dataSent": "Center coordinates (latitude, longitude), search radius (max 25 km)",
-      "dataReceived": "Gas stations with name, brand, address, coordinates, live diesel/E5/E10 prices, open/closed status"
-    },
-    "at-econtrol": {
-      "purpose": "Austrian fuel station prices (Diesel, Super 95)",
-      "dataSent": "Center coordinates (latitude, longitude), search radius, fuel type (diesel and Super 95 queried separately)",
-      "dataReceived": "Gas stations with name, address, coordinates, prices per fuel type, open/closed status"
-    },
-    "fr-prixcarburants": {
-      "purpose": "French fuel station prices (6 fuel types)",
-      "dataSent": "Center coordinates (latitude, longitude), search radius",
-      "dataReceived": "Gas stations with address, coordinates, prices for 6 fuel types with update timestamps"
-    },
-    "es-minetur": {
-      "purpose": "Spanish fuel station prices (5 fuel types)",
-      "dataSent": "No user data (fetches entire national dataset)",
-      "dataReceived": "All Spanish gas stations with name, address, coordinates, prices for 5 fuel types"
-    },
-    "osm": {
-      "purpose": "Fuel station locations (global fallback, no prices)",
-      "dataSent": "Bounding box coordinates",
-      "dataReceived": "OSM fuel station nodes with name, operator, address"
-    }
-  },
+  "description": "Gas stations with their fuel grades and prices, from every enabled fuel-station provider",
   "section": {
-    "fuelPrices": "Fuel Prices",
-    "latestGradeUpdate": "Latest reported update among fuel types"
+    "fuelPrices": "Fuel Prices"
   },
   "column": {
     "fuelType": "Fuel Type",
     "price": "Price"
   },
+  "product": {
+    "notSold": "Not sold",
+    "noPrice": "No price reported",
+    "priceAt": "Updated {at, date, short}, {at, time, short}",
+    "service": "{service, select, self {Self-service} served {Served} other {}}",
+    "servicePriceAt": "{service, select, self {Self-service} served {Served} other {}} · updated {at, date, short}, {at, time, short}"
+  },
   "fuel": {
-    "diesel": "Diesel",
     "e5": "E5 (Super 95)",
     "e10": "E10",
     "sp98": "SP98 (Super 98)",
     "e85": "E85 (Ethanol)",
-    "lpg": "LPG (Autogas)"
+    "diesel": "Diesel",
+    "diesel_premium": "Premium diesel",
+    "hvo100": "HVO100 (renewable diesel)",
+    "b7": "B7 diesel",
+    "b10": "B10 diesel",
+    "b100": "B100 (biodiesel)",
+    "lpg": "LPG (Autogas)",
+    "cng": "CNG (natural gas)",
+    "lng": "LNG (liquefied natural gas)",
+    "h2_350": "Hydrogen 350 bar",
+    "h2_700": "Hydrogen 700 bar",
+    "adblue": "AdBlue",
+    "ethanol": "Ethanol",
+    "kerosene": "Kerosene",
+    "e25": "E25",
+    "renewable_petrol": "Renewable petrol",
+    "agricultural_diesel": "Agricultural diesel",
+    "methanol": "Methanol",
+    "ammonia": "Ammonia",
+    "e5_premium": "Premium 95 (E5)",
+    "sp98_e10": "Super 98 (E10)",
+    "cng_bio": "Bio-CNG",
+    "lng_bio": "Bio-LNG"
   },
   "summary": {
-    "priceList": "{prices}"
-  }
+    "priceList": "{scope, select, car {{prices}} hgv {{hgvPrices} (HGV)} other {{prices} · {hgvPrices} (HGV)}}",
+    "price": "{label} {amount}",
+    "join": "{head} · {tail}",
+    "grade": {
+      "e5": "E5",
+      "e10": "E10",
+      "sp98": "98",
+      "e85": "E85",
+      "diesel": "D",
+      "diesel_premium": "Premium diesel",
+      "hvo100": "HVO100",
+      "b7": "B7",
+      "b10": "B10",
+      "b100": "B100",
+      "lpg": "LPG",
+      "cng": "CNG",
+      "lng": "LNG",
+      "h2_350": "H2 350",
+      "h2_700": "H2 700",
+      "adblue": "AdBlue",
+      "ethanol": "Ethanol",
+      "kerosene": "Kerosene",
+      "e25": "E25",
+      "renewable_petrol": "Renewable petrol",
+      "agricultural_diesel": "Agricultural diesel",
+      "methanol": "Methanol",
+      "ammonia": "Ammonia",
+      "e5_premium": "Premium 95 (E5)",
+      "sp98_e10": "Super 98 (E10)",
+      "cng_bio": "Bio-CNG",
+      "lng_bio": "Bio-LNG"
+    }
+  },
+  "fuelHgv": "{grade} (HGV)",
+  "stationFallbackName": "Fuel station"
 }

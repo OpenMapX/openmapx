@@ -301,7 +301,21 @@ pnpm openmapx services update valhalla
 ```
 
 The admin panel's **Save & Apply** button does the equivalent in one
-click. For the broader picture of what goes in `.env` and how the admin panel
+click for the service it is pressed on. The two are not interchangeable,
+though:
+
+- The CLI renders without database access, so it resolves only defaults and
+  `.env`, and every value saved in the admin config form falls back to its
+  default in that render.
+- **Save & Apply** applies the values saved in the form and recreates only
+  that one service. It never reads `.env`, so a setting kept there is applied
+  with the CLI. The admin panel never recreates `app-api` itself.
+
+Pick one home per setting: keep it in `.env` as `SERVICE_<ID>_<KEY>` and apply
+it with the CLI, or save it in the form and apply it with **Save & Apply**.
+`app-api` and the data-manager read `.env` only when their containers are
+created; after changing a variable they read, recreate them from the host with
+`pnpm openmapx services start app-api data-manager`. For the broader picture of what goes in `.env` and how the admin panel
 fits in, see [Configuration](./configuration.md).
 
 :::note[Data-manager credentials are separate]

@@ -106,15 +106,15 @@ show; the _Origins_ column is a representative sample, not the full list — mos
 categories aggregate many regional feeds, and OpenStreetMap is the global
 fallback for the location-only sources.
 
-| Category         | What it shows                                 | Origins (representative)                                                                                                                                                                  |
-| ---------------- | --------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **EV charging**  | Charging stations, status, connectors         | OpenChargeMap, AFDC/NREL, Bundesnetzagentur, France IRVE, NOBIL, SFOE, NDW/DOT-NL, EVRoam NZ, E-Control AT, and national feeds across Europe, Asia, and Australia; OpenStreetMap fallback |
-| **Fuel**         | Gas stations + live prices                    | Tankerkönig (DE), E-Control (AT), Prix Carburants (FR), Minetur (ES), OpenStreetMap                                                                                                       |
-| **Parking**      | Parking + Park & Ride, live occupancy         | ParkAPI / ParkenDD, MobiData BW, DB BahnPark, Autobahn GmbH, plus many city and regional open-data portals, OpenStreetMap                                                                 |
-| **Bike sharing** | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                  |
-| **Car sharing**  | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                 |
-| **E-scooters**   | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                 |
-| **Webcams**      | Traffic + scenic cameras, still or live video | Windy, OpenStreetMap, Caltrans, TfL, NPS, many US 511 feeds, Finland/Sweden/Norway/Iceland/Spain, Ontario, Hong Kong, NSW, and Taiwan                                                     |
+| Category         | What it shows                                 | Origins (representative)                                                                                                                                                                                   |
+| ---------------- | --------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **EV charging**  | Charging stations, status, connectors         | OpenChargeMap, AFDC/NREL, Bundesnetzagentur, France IRVE, NOBIL, SFOE, NDW/DOT-NL, EVRoam NZ, E-Control AT, and national feeds across Europe, Asia, and Australia; OpenStreetMap fallback                  |
+| **Fuel**         | Gas stations + per-grade prices               | Every enabled fuel-station provider: OpenConditions' national price feeds (Prix Carburants, Minetur; with the operator token also Tankerkönig/MTS-K and E-Control) and OpenStreetMap (operator token only) |
+| **Parking**      | Parking + Park & Ride, live occupancy         | ParkAPI / ParkenDD, MobiData BW, DB BahnPark, Autobahn GmbH, plus many city and regional open-data portals, OpenStreetMap                                                                                  |
+| **Bike sharing** | Docks + free-floating bikes, availability     | GBFS feeds via the MobilityData catalog, CityBikes, Nextbike, Donkey Republic, Deutsche Bahn, Entur (NO)                                                                                                   |
+| **Car sharing**  | Car-sharing stations + vehicles               | GBFS catalog, Entur, Cambio, Communauto, CoopStroom, Dégage, and German municipal portals                                                                                                                  |
+| **E-scooters**   | Free-floating scooters + operator zones       | GBFS catalog, Entur (NO), NRW.Mobidrom (Voi, Lime), Felyx                                                                                                                                                  |
+| **Webcams**      | Traffic + scenic cameras, still or live video | Windy, OpenStreetMap, Caltrans, TfL, NPS, many US 511 feeds, Finland/Sweden/Norway/Iceland/Spain, Ontario, Hong Kong, NSW, and Taiwan                                                                      |
 
 A few notes on origins:
 
@@ -145,8 +145,14 @@ require credentials, declared per integration:
 - **EV charging** can use API keys for OpenChargeMap, NREL/AFDC (US/CA), and
   NOBIL (Nordics); without them it still works from the open registries and
   OpenStreetMap.
-- **Fuel** needs a Tankerkönig key for German live prices; other countries' feeds
-  and OpenStreetMap locations need none.
+- **Fuel** comes from [OpenConditions](../administration/community-extensions.md#example-openconditions);
+  without it the fuel source is not offered and has no chip. Credentials for
+  keyed price feeds (such as Tankerkönig for Germany) are configured in
+  OpenConditions. Germany (Tankerkönig: redistribution not granted), Austria
+  (E-Control: no licence asserted) and every station known only from
+  OpenStreetMap (ODbL share-alike) also need the
+  [operator token](../administration/community-extensions.md#the-operator-token)
+  set on both sides; without it the fuel layer shows France and Spain only.
 - **Parking** can use credentials for DB BahnPark, Transport for NSW, and the
   Newcastle UTMC feed.
 - **Webcams** can use a Windy key plus per-state US DOT 511 keys.

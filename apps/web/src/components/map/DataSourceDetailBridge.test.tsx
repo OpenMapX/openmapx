@@ -4,17 +4,43 @@ import { StrictMode } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { DataSourceDetailBridge } from "./DataSourceDetailBridge";
 
-const response = vi.hoisted(() => ({ detail: { id: "P", name: "Parking", coordinates: [8, 50] } }));
+const response = vi.hoisted(() => ({
+  detail: { id: "P", name: "Parking", coordinates: [8, 50] } as Record<string, unknown>,
+}));
 vi.mock("@openmapx/core", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@openmapx/core")>()),
   useDataSourceDetail: () => ({ data: response.detail }),
   useDataSources: () => ({ data: undefined }),
+}));
+const resolveToken = vi.hoisted(
+  () => (value: unknown) =>
+    typeof value === "object" && value !== null ? `t:${(value as { $t: string }).$t}` : "",
+);
+vi.mock("@/components/panels/place/useDataSourceI18nResolver", () => ({
+  useDataSourceI18nResolver: () => resolveToken,
 }));
 
 beforeEach(() => {
   response.detail = { id: "P", name: "Parking", coordinates: [8, 50] };
   useDataSourceStore.getState().selectItem("parking", "P");
   useSidebarStore.getState().closeAll();
+});
+
+it("titles a detail its sources name nothing by its translated fallback name", () => {
+  useDataSourceStore.getState().selectItem("fuel", "F");
+  response.detail = {
+    id: "F",
+    name: "",
+    fallbackName: { $t: "stationFallbackName" },
+    coordinates: [8, 50],
+    sources: ["osm-fuel"],
+    sections: [],
+  };
+  const view = render(<DataSourceDetailBridge />);
+  expect(usePlaceStore.getState().selectedPlace?.name).toBe("t:stationFallbackName");
+  view.unmount();
+  useDataSourceStore.getState().clearSelection();
+  usePlaceStore.getState().setSelectedPlace(null);
 });
 
 it("does not reclaim a newer transit selection on a retained data-source refetch", () => {

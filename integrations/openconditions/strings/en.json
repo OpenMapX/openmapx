@@ -1,0 +1,16 @@
+{
+  "name": "OpenConditions",
+  "description": "Live road conditions (incidents, roadworks, closures and traffic flow) and fuel stations with their prices from an OpenConditions instance",
+  "dataSources": {
+    "domain:road-conditions": {
+      "purpose": "Road incidents, roadworks, closures and traffic flow, read through OpenConditions",
+      "dataSent": "Nothing about the user: OpenMapX sends the OpenConditions server only map and route areas (bounding boxes), and OpenConditions reads road data by area from its own store, filled by polling its sources on its own schedule. A source it fetched on demand (none today) would receive the grid cells covering the area",
+      "dataReceived": "Situations with location, validity, severity and their effects on traffic"
+    },
+    "domain:fuel-stations": {
+      "purpose": "Fuel stations and their fuel prices, read through OpenConditions",
+      "dataSent": "Nothing about the user. OpenConditions fetches some sources on demand: such a source receives the grid cells, or their centre points, covering the searched map area (or a box of about 200 m around a station when one is opened), and a keyed source also receives the operator's API key. Sources OpenConditions polls in bulk receive nothing",
+      "dataReceived": "Stations with address, brand, opening hours, the fuels they sell and their prices"
+    }
+  }
+}

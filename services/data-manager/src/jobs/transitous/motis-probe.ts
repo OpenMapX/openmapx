@@ -57,7 +57,11 @@ function isTransientFetchError(error: unknown): boolean {
  * exact same response fine, so the probe path stays on the classic client. Only
  * used for our own idempotent GET probes/polls.
  */
-function rawHttpGet(url: string, timeoutMs: number): Promise<Response> {
+function rawHttpGet(
+  url: string,
+  timeoutMs: number,
+  headers?: Record<string, string>,
+): Promise<Response> {
   return new Promise((resolve, reject) => {
     const client = url.startsWith("https:") ? httpsClient : httpClient;
     let settled = false;
@@ -67,7 +71,7 @@ function rawHttpGet(url: string, timeoutMs: number): Promise<Response> {
       clearTimeout(timer);
       fn();
     };
-    const req = client.get(url, (res) => {
+    const req = client.get(url, { headers }, (res) => {
       const chunks: Buffer[] = [];
       res.on("data", (chunk) => chunks.push(chunk as Buffer));
       res.on("end", () =>
@@ -96,24 +100,27 @@ function rawHttpGet(url: string, timeoutMs: number): Promise<Response> {
  * through their mocked global `fetch`. Kept tiny so the real network path
  * (retry/timeout) is exercised only by motis-probe's own tests.
  */
-export const probeHttp: { get: (url: string, timeoutMs: number) => Promise<Response> } = {
+export const probeHttp: {
+  get: (url: string, timeoutMs: number, headers?: Record<string, string>) => Promise<Response>;
+} = {
   get: rawHttpGet,
 };
 
 /**
  * GET with a timeout, retrying only transient socket faults (idempotent
  * probes/polls). Each attempt gets a fresh timeout; a deliberate timeout is not
- * retried.
+ * retried. `headers` go out with every attempt.
  */
 export async function fetchWithTimeout(
   url: string,
   timeoutMs: number,
-  retries = 2,
+  options: { retries?: number; headers?: Record<string, string> } = {},
 ): Promise<Response> {
+  const retries = options.retries ?? 2;
   let lastError: unknown;
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
-      return await probeHttp.get(url, timeoutMs);
+      return await probeHttp.get(url, timeoutMs, options.headers);
     } catch (error) {
       lastError = error;
       if (attempt === retries || !isTransientFetchError(error)) throw error;

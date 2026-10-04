@@ -24,6 +24,13 @@
  * keyed object (not an array), and every key must match a real manifest
  * sourceId (no stale/mistyped orphan keys).
  *
+ * An integration whose manifest sets `runtimeDataSources: true` has no static
+ * sources: the host validates each source it supplies at runtime, and the legal
+ * tables take that source's purpose/dataSent from the entry keyed
+ * `domain:<domain>`. For such an integration this check requires a complete
+ * `domain:<d>` entry and a section heading for every declared domain, accepts
+ * only `domain:<d>` keys, and names the integration in its output.
+ *
  * Anything wrong is reported grouped by integration and the process exits
  * non-zero so the commit is blocked. Run on demand with `pnpm check-legal-tables`.
  */
@@ -31,6 +38,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import type {
+  IntegrationDataSource,
   IntegrationManifest,
   IntegrationStrings,
   LoadedIntegrationMeta,
@@ -84,7 +92,7 @@ const ATTRIBUTION_COLUMNS: { key: keyof AttributionRow; label: string; field: st
   { key: "license", label: "License", field: "manifest dataSources[].license" },
 ];
 
-interface DiscoveredIntegration {
+export interface DiscoveredIntegration {
   id: string;
   manifest: IntegrationManifest;
   strings: IntegrationStrings;
@@ -92,7 +100,7 @@ interface DiscoveredIntegration {
 }
 
 /** One row that has at least one empty cell, with the columns that are blank. */
-interface RowIssue {
+export interface RowIssue {
   dir: string;
   locale: string;
   table: "Privacy Policy (/privacy)" | "Terms of Service (/terms)";
@@ -162,12 +170,27 @@ function toMeta(it: DiscoveredIntegration): LoadedIntegrationMeta {
   };
 }
 
+/**
+ * The integration's sources in the order the generators emit their rows: grouped
+ * by legal section in first-seen order, manifest order within a section. Lets a
+ * flattened row be traced back to its sourceId when one integration spans
+ * several sections.
+ */
+function sourcesInRowOrder(meta: LoadedIntegrationMeta): IntegrationDataSource[] {
+  const bySection = new Map<string, IntegrationDataSource[]>();
+  for (const ds of meta.dataSources ?? []) {
+    const domain = legalSectionDomain(meta, ds);
+    const key = DOMAIN_TO_SECTION_KEY[domain] ?? domain;
+    bySection.set(key, [...(bySection.get(key) ?? []), ds]);
+  }
+  return [...bySection.values()].flat();
+}
+
 function checkIntegration(meta: LoadedIntegrationMeta, dir: string): RowIssue[] {
   const issues: RowIssue[] = [];
-  const sources = meta.dataSources ?? [];
+  const sources = sourcesInRowOrder(meta);
 
   for (const locale of LOCALES) {
-    // Privacy table: every data source contributes a row (dynamic sources included).
     const privacyRows = generatePrivacySectionsFromManifests([meta], locale).flatMap(
       (section) => section.rows,
     );
@@ -184,9 +207,6 @@ function checkIntegration(meta: LoadedIntegrationMeta, dir: string): RowIssue[] 
       }
     });
 
-    // Attribution table: dynamic sources are excluded, so rows track the
-    // non-dynamic sources in manifest order.
-    const nonDynamic = sources.filter((ds) => !ds.dynamic);
     const attributionRows = generateAttributionSectionsFromManifests([meta], locale).flatMap(
       (section) => section.rows,
     );
@@ -197,7 +217,7 @@ function checkIntegration(meta: LoadedIntegrationMeta, dir: string): RowIssue[] 
           dir,
           locale,
           table: "Terms of Service (/terms)",
-          source: nonDynamic[i]?.sourceId ?? row.source ?? `#${i}`,
+          source: sources[i]?.sourceId ?? row.source ?? `#${i}`,
           missing,
         });
       }
@@ -207,15 +227,55 @@ function checkIntegration(meta: LoadedIntegrationMeta, dir: string): RowIssue[] 
   return issues;
 }
 
+const isRuntime = (it: DiscoveredIntegration): boolean => it.manifest.runtimeDataSources === true;
+
+const domainKey = (domain: string): string => `domain:${domain}`;
+
+/**
+ * A runtime integration's sources take purpose and dataSent from the
+ * `domain:<d>` entry of their domain, so every declared domain needs a
+ * complete entry in every locale.
+ */
+function checkRuntimeDomainStrings(it: DiscoveredIntegration): string[] {
+  const problems: string[] = [];
+  for (const locale of LOCALES) {
+    const ds = it.strings[locale]?.dataSources as Record<string, unknown> | undefined;
+    for (const domain of it.manifest.domains ?? []) {
+      const key = domainKey(domain);
+      const entry = ds && typeof ds === "object" && !Array.isArray(ds) ? ds[key] : undefined;
+      if (!entry || typeof entry !== "object") {
+        problems.push(
+          `${locale}: strings.dataSources["${key}"] is missing — runtime sources of domain "${domain}" take purpose and dataSent from it`,
+        );
+        continue;
+      }
+      const fields = entry as Record<string, unknown>;
+      if (isEmpty(fields.purpose) && isEmpty(fields.service)) {
+        problems.push(`${locale}: strings.dataSources["${key}"].purpose is empty`);
+      }
+      if (isEmpty(fields.dataSent)) {
+        problems.push(`${locale}: strings.dataSources["${key}"].dataSent is empty`);
+      }
+    }
+  }
+  return problems;
+}
+
 /**
  * Structural guards that keep the sourceId-keyed contract intact: localized
  * `dataSources` must be an OBJECT keyed by manifest sourceId (never a positional
  * array again), and every key must match an actual manifest source (no stale or
- * mistyped keys that silently describe nothing).
+ * mistyped keys that silently describe nothing). A runtime integration's keys
+ * are `domain:<d>` for its declared domains instead.
  */
 function checkStructure(it: DiscoveredIntegration): string[] {
   const problems: string[] = [];
-  const sourceIds = new Set((it.manifest.dataSources ?? []).map((d) => d.sourceId));
+  const runtime = isRuntime(it);
+  const allowedKeys = new Set(
+    runtime
+      ? (it.manifest.domains ?? []).map(domainKey)
+      : (it.manifest.dataSources ?? []).map((d) => d.sourceId),
+  );
   for (const locale of LOCALES) {
     const ds = it.strings[locale]?.dataSources as unknown;
     if (ds == null) continue;
@@ -227,9 +287,11 @@ function checkStructure(it: DiscoveredIntegration): string[] {
       continue;
     }
     for (const key of Object.keys(ds)) {
-      if (!sourceIds.has(key)) {
+      if (!allowedKeys.has(key)) {
         problems.push(
-          `${locale}: strings.dataSources key "${key}" has no matching manifest sourceId`,
+          runtime
+            ? `${locale}: strings.dataSources key "${key}" is not "domain:<d>" for a manifest domain`
+            : `${locale}: strings.dataSources key "${key}" has no matching manifest sourceId`,
         );
       }
     }
@@ -244,18 +306,27 @@ function checkStructure(it: DiscoveredIntegration): string[] {
  * data, and a heading falls back to the raw key when its catalog entry is
  * missing — so assert every contributing domain maps to a section key whose
  * catalog entries exist, and every exposure value used has a catalog label.
- * (check-translations separately guarantees en/de parity for the strings.)
+ * (check-translations separately guarantees en/de parity for the strings.) A
+ * runtime integration can credit a source in any declared domain, so every
+ * declared domain needs its headings.
  */
 function checkHeadings(it: DiscoveredIntegration): string[] {
   const problems: string[] = [];
   const legal = legalSectionStrings("en");
-  const domain = legalSectionDomain({ domains: it.manifest.domains ?? [] });
-  const key = DOMAIN_TO_SECTION_KEY[domain];
-  if (!key) {
-    problems.push(
-      `domain "${domain}" has no section key — add it to DOMAIN_TO_SECTION_KEY in generateLegalSections.ts`,
-    );
-  } else {
+  const integration = { domains: it.manifest.domains ?? [] };
+  const domains = new Set(
+    isRuntime(it)
+      ? integration.domains
+      : (it.manifest.dataSources ?? []).map((ds) => legalSectionDomain(integration, ds)),
+  );
+  for (const domain of domains) {
+    const key = DOMAIN_TO_SECTION_KEY[domain];
+    if (!key) {
+      problems.push(
+        `domain "${domain}" has no section key — add it to DOMAIN_TO_SECTION_KEY in generateLegalSections.ts`,
+      );
+      continue;
+    }
     if (!(key in legal.privacySections)) {
       problems.push(
         `Privacy heading missing — add legal.privacySections.${key} to the i18n catalog`,
@@ -280,31 +351,55 @@ function checkHeadings(it: DiscoveredIntegration): string[] {
   return problems;
 }
 
-function main(): void {
-  const integrations = discoverIntegrations(INTEGRATIONS_DIR);
-  const contributing = integrations.filter((it) => it.manifest.dataSources?.length);
+export interface LegalTableProblems {
+  /** Integrations with static sources, whose rows are checked cell by cell. */
+  contributing: DiscoveredIntegration[];
+  /** Integrations that supply their sources at runtime. */
+  runtime: DiscoveredIntegration[];
+  rowIssues: RowIssue[];
+  structuralByDir: Map<string, string[]>;
+}
+
+export function collectLegalTableProblems(integrationsDir: string): LegalTableProblems {
+  const integrations = discoverIntegrations(integrationsDir);
+  const runtime = integrations.filter(isRuntime);
+  const contributing = integrations.filter(
+    (it) => !isRuntime(it) && it.manifest.dataSources?.length,
+  );
 
   const structuralByDir = new Map<string, string[]>();
-  for (const it of integrations) {
-    const problems = checkStructure(it);
-    if (problems.length) structuralByDir.set(it.dir, problems);
-  }
-  // Heading coverage is only meaningful for integrations that actually render rows.
-  for (const it of contributing) {
-    const headingProblems = checkHeadings(it);
-    if (headingProblems.length) {
-      structuralByDir.set(it.dir, [...(structuralByDir.get(it.dir) ?? []), ...headingProblems]);
-    }
-  }
+  const addProblems = (dir: string, problems: string[]) => {
+    if (problems.length)
+      structuralByDir.set(dir, [...(structuralByDir.get(dir) ?? []), ...problems]);
+  };
+  for (const it of integrations) addProblems(it.dir, checkStructure(it));
+  for (const it of runtime) addProblems(it.dir, checkRuntimeDomainStrings(it));
+  // Heading coverage is only meaningful for integrations that render rows.
+  for (const it of [...contributing, ...runtime]) addProblems(it.dir, checkHeadings(it));
 
   const rowIssues: RowIssue[] = [];
   for (const it of contributing) {
     rowIssues.push(...checkIntegration(toMeta(it), it.dir));
   }
 
+  return { contributing, runtime, rowIssues, structuralByDir };
+}
+
+function main(): void {
+  const { contributing, runtime, rowIssues, structuralByDir } =
+    collectLegalTableProblems(INTEGRATIONS_DIR);
+
+  for (const it of runtime) {
+    console.log(
+      `ℹ ${it.id}: runtime data sources — no static rows to check; the host validates each ` +
+        `source it supplies, and its domain:<d> strings and headings are checked here.`,
+    );
+  }
+
   if (rowIssues.length === 0 && structuralByDir.size === 0) {
     console.log(
       `✓ Legal tables complete: ${contributing.length} integration(s) with data sources, ` +
+        `${runtime.length} with runtime data sources, ` +
         `no empty cells across ${LOCALES.length} locale(s).`,
     );
     return;
@@ -342,4 +437,8 @@ function main(): void {
   process.exit(1);
 }
 
-main();
+// Only run when executed directly (`pnpm check-legal-tables`), not when a test
+// imports `collectLegalTableProblems`.
+if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  main();
+}

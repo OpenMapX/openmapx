@@ -137,8 +137,8 @@ export function RoadConditionsLayer() {
   const layerVisible = useOverlayLayerVisible(OVERLAY_ID);
   // This overlay's manifest declares no dataSources of its own — the feeds it
   // paints (NDW, Autobahn GmbH, Digitraffic, DriveBC, WZDx) are published by
-  // the external `road-conditions-openconditions` provider registered under the
-  // shared domain. Credit the domain, the same way overlay-traffic-flow does;
+  // the `openconditions` integration's provider registered under the shared
+  // domain. Credit the domain, the same way overlay-traffic-flow does;
   // crediting this integration's own manifest registered nothing at all.
   useIntegrationDomainAttribution(CREDIT_DOMAIN, layerVisible);
   useOverlayExclusion(OVERLAY_ID, layerVisible);

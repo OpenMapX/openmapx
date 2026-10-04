@@ -46,9 +46,11 @@ import {
 } from "@/components/panels/datasource/GroupedMultiSelectSection";
 import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
+import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
 import { translateDataSourceLabel, translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { BrandMark } from "../shared/BrandMark";
+import { DataSourcePartialNotice } from "./DataSourcePartialNotice";
 
 /** Matches 3-decimal Euro prices like "2.119" within a summary string. */
 const EURO_PRICE_GLOBAL_RE = /(\d+\.\d{2})(\d)\s*\u20ac/g;
@@ -220,6 +222,7 @@ export function DataSourceFilterContent() {
   const tc = useTranslations("common");
   const activeSource = useDataSourceStore((s) => s.activeSource);
   const resolveToken = useDataSourceI18nResolver(activeSource ?? undefined);
+  const titleOf = (result: DataSourceResult) => result.name || resolveToken(result.fallbackName);
   const filters = useDataSourceStore((s) => s.filters);
   const searchBbox = useDataSourceStore((s) => s.searchBbox);
   const viewportZoom = useDataSourceStore((s) => s.viewportZoom);
@@ -230,6 +233,7 @@ export function DataSourceFilterContent() {
   const setHoveredItemId = useDataSourceStore((s) => s.setHoveredItemId);
   const openingHoursFilter = useOpeningHoursStore((s) => s.openingHoursFilter);
   const { setSelectedPlace } = usePlaceStore();
+  const { zoomIn } = useMap();
   const onHoverEnd = useCallback(() => setHoveredItemId(null), [setHoveredItemId]);
   const [sortAsc, setSortAsc] = useState(true);
   const [activeSortKey, setActiveSortKey] = useState<string | null>(null);
@@ -259,6 +263,7 @@ export function DataSourceFilterContent() {
     isLoading,
     isFetching,
     isError,
+    partial,
   } = useDataSourceSearch(
     shouldFetch ? activeSource : null,
     shouldFetch ? searchBbox : null,
@@ -527,8 +532,8 @@ export function DataSourceFilterContent() {
                       createPlace({
                         primaryScheme: activeSource,
                         ids: { [activeSource]: result.id },
-                        name: result.name,
-                        address: result.name,
+                        name: titleOf(result),
+                        address: titleOf(result),
                         coordinates: result.coordinates,
                         category: sourceMeta?.placeCategory,
                         rawCategory: sourceMeta?.placeCategoryRaw,
@@ -545,12 +550,12 @@ export function DataSourceFilterContent() {
                     {result.branding && (
                       <BrandMark
                         branding={result.branding}
-                        fallbackName={result.operator ?? result.name}
+                        fallbackName={result.operator ?? titleOf(result)}
                         size={26}
                       />
                     )}
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <ResultItemName>{result.name}</ResultItemName>
+                      <ResultItemName>{titleOf(result)}</ResultItemName>
                       {shouldShowOperatorCaption(result) && (
                         <Typography
                           variant="caption"
@@ -623,6 +628,12 @@ export function DataSourceFilterContent() {
           </Box>
         )}
       </Box>
+      {partial === "area" && !belowMinZoom && !showLoading && !isError && (
+        <>
+          <Divider />
+          <DataSourcePartialNotice onZoomIn={zoomIn} />
+        </>
+      )}
       {/* Status footer */}
       {(belowMinZoom ||
         showLoading ||

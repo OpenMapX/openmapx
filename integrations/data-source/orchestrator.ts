@@ -47,6 +47,8 @@ export function createDataSourceOrchestrator(ctx: IntegrationContext) {
       const name = integration.manifest.frontend?.searchCategory?.label ?? id;
 
       for (const p of domainProviders) {
+        // An unavailable source would answer every search empty; no chip offers it.
+        if (p.isAvailable?.() === false) continue;
         const filters = await ctx.cache.withCache(`ds:filters:${p.id}`, FILTER_TTL, () =>
           p.getFilters(),
         );

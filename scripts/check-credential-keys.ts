@@ -20,6 +20,9 @@
  *      (an unchecked string index), so renaming a manifest key without
  *      updating the accessor passes `tsc` silently — this check is the only
  *      thing that catches that drift.
+ *   4. None of them sets `runtimeDataSources`: check 2 needs static sourceIds,
+ *      so a governed integration that supplies its sources at runtime fails
+ *      instead of passing with nothing checked.
  *
  * All other integrations are exempt: single-provider integrations whose id
  * already names the provider legitimately keep bare camelCase keys (e.g.
@@ -42,7 +45,6 @@ const INTEGRATIONS_DIR = join(REPO_ROOT, "integrations");
  */
 export const CREDENTIAL_KEYED_INTEGRATIONS = [
   "ev-charging",
-  "fuel",
   "parking",
   "scooter-sharing",
   "bike-sharing",
@@ -227,6 +229,14 @@ export function collectCredentialKeyViolations(repoRoot: string): string[] {
     const loaded = loadManifest(integrationId, integrationsDir);
     if (!loaded) {
       violations.push(`${integrationId}: expected manifest.json not found at ${path}`);
+      continue;
+    }
+
+    if (loaded.manifest.runtimeDataSources === true) {
+      violations.push(
+        `${integrationId}: manifest sets runtimeDataSources, so its credential keys cannot be ` +
+          `checked against static sourceIds — a credential-keyed integration must declare its sources`,
+      );
       continue;
     }
 

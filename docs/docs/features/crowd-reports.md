@@ -46,8 +46,11 @@ OpenConditions contributions service. Install the OpenConditions extension (or
 another compatible service) and set its endpoint for `app-api`:
 
 ```bash
-OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions:4200
+OPENCONDITIONS_CONTRIBUTIONS_URL=http://openconditions-contributions-api:4200
 ```
+
+`openconditions-contributions-api` is the OpenConditions contributions
+service's name on its network, which `app-api` joins.
 
 The development fallback is `http://localhost:4200`, the contributions
 service's default port; without a reachable

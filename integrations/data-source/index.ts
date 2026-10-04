@@ -58,14 +58,25 @@ export function setup(ctx: IntegrationContext): void {
     const cacheKey = orchestrator.searchCacheKey(req.params.id, bbox, filters);
 
     try {
-      const envelope = await ctx.cache.withCache(cacheKey, searchTtl, () =>
-        provider.search(bbox, filters),
+      // A partial answer lacks results a later read may hold; caching it would
+      // serve the gap for the whole TTL.
+      const envelope = await ctx.cache.withCache(
+        cacheKey,
+        searchTtl,
+        () => provider.search(bbox, filters),
+        undefined,
+        (result) => result.partial === undefined,
       );
-      reply.header("Cache-Control", `public, max-age=${Math.min(searchTtl, 300)}`);
+      const partial = envelope.partial;
+      reply.header(
+        "Cache-Control",
+        partial ? "no-store" : `public, max-age=${Math.min(searchTtl, 300)}`,
+      );
       reply.send({
         data: envelope.data,
         attributions: envelope.attributions,
         freshness: envelope.freshness,
+        ...(partial ? { partial } : {}),
       });
     } catch (err) {
       if (err instanceof ConfigurationError) {

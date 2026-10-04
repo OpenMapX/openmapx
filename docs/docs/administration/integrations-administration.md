@@ -21,10 +21,9 @@ focuses on the admin side. The panel and the API behind it are mapped in the
 [Admin panel tour](./admin-panel.md); installing third-party integrations is
 covered in [Community extensions](./community-extensions.md).
 
-Community integrations — such as the OpenConditions road-conditions provider —
-configure, bind, and probe exactly like the built-in ones described here once
-installed; see [Community extensions](./community-extensions.md) for how to
-install them.
+Community integrations configure, bind, and probe exactly like the built-in ones
+described here once installed; see [Community extensions](./community-extensions.md)
+for how to install them.
 
 ## The integration list
 
@@ -104,11 +103,11 @@ INTEGRATION_GEOCODING_MAPTILER_APIKEY=your-key-here
 ```
 
 Region-first hyphenated keys are normalized the same way. For example, the
-`de-tankerkoenig-api-key` config key of the `fuel` integration is set by:
+`db-parking-api-key` config key of the `parking` integration is set by:
 
 ```bash
-# infra/docker/.env — overrides the `de-tankerkoenig-api-key` setting of the `fuel` integration
-INTEGRATION_FUEL_DE_TANKERKOENIG_API_KEY=your-key-here
+# infra/docker/.env — overrides the `db-parking-api-key` setting of the `parking` integration
+INTEGRATION_PARKING_DB_PARKING_API_KEY=your-key-here
 ```
 
 For the bigger picture of where settings live — `.env`, the admin panel, and how

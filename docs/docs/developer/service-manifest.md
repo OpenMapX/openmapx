@@ -157,13 +157,36 @@ peers. They retain ordinary outbound internet access through their own bridge.
 
 An audited built-in may declare top-level `communityNetworkAccess` with exact
 community service ids when a reviewed bridge genuinely needs to initiate a
-connection to that community container. The renderer rejects unknown targets,
-built-in targets, and normalized-name collisions. The capability is authorized
-from registry provenance (`isBuiltIn` / `firstParty`), never from the manifest's
-self-declared `quality`; a hand-built community `LoadedService` is rejected again
-at the render boundary. No shipped built-in opts in initially. If multiple
-community containers need to discover each other, define an explicit reviewed
-multi-component service bundle instead of widening platform-network access.
+connection to that community container. The renderer rejects built-in targets
+and normalized-name collisions; a target that is not installed or not enabled
+is skipped silently, so a bridge may name a community service before it is
+installed. The capability is authorized from registry provenance
+(`isBuiltIn` / `firstParty`), never from the manifest's self-declared
+`quality`; a hand-built community `LoadedService` is rejected again at the
+render boundary.
+
+Four shipped built-ins opt in, all for OpenConditions, whose services own the
+shared database's `conditions` schema: `postgis` (both OpenConditions services
+connect to the database), `app-api` (its `openconditions` integration reads the
+ingest service, and its crowd-reports relay forwards to the contributions API),
+`data-manager` (its traffic cycle reads the ingest service) and `overpass` (the
+ingest service queries a self-hosted Overpass). Two properties of this audited
+exception are accepted, not accidental:
+
+- The bridge is matched by service id, not by where the extension came from.
+  Installing any extension whose service claims `openconditions-ingest` or
+  `openconditions-contributions-api` gives that service the same network reach
+  to these built-ins. Postgres still needs credentials the operator only gives
+  OpenConditions, so the reach is to the port, not the data.
+- The bridge is bidirectional. A network carries traffic both ways, so the
+  OpenConditions containers can also open connections to `app-api` and
+  `data-manager`, including their unauthenticated internal endpoints
+  (`/internal/metrics`, `/internal/poi-sources/count`, the data-manager's
+  `/live`, `/status` and `/internal/metrics`), which the proxy denies publicly.
+
+If multiple community containers need to discover each other, define an
+explicit reviewed multi-component service bundle instead of widening
+platform-network access.
 
 ### `container.healthcheck`
 

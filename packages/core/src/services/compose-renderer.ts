@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { dump as yamlDump, load as yamlLoad } from "js-yaml";
+import { configSchemaKeys, serviceConfigEnvPrefix } from "./config-resolver";
 import {
   EXTERNAL_PROXY_NETWORK_KEY,
   PROXY_CERT_RESOLVER_LABEL_VALUE,
@@ -194,6 +195,16 @@ export interface RenderContext {
    * merge time (docker-compose env values are strings).
    */
   resolvedServiceConfigs?: Map<string, Record<string, unknown>>;
+  /**
+   * Per-service non-secret config keys whose effective value comes from the
+   * host environment (`SERVICE_<ID>_<KEY>`). The renderer writes each as the
+   * Compose reference `${SERVICE_<ID>_<KEY>:-}`, so the value stays in
+   * `infra/docker/.env` and never enters the rendered YAML. The reference is
+   * platform-generated, so it is written after a community service's own
+   * values are escaped; it can only name the service's own namespace. A key
+   * that is not a non-secret field of the service's configSchema is refused.
+   */
+  serviceConfigEnvKeys?: Map<string, string[]>;
   /**
    * Per-service list of secret config keys that currently have a vault value.
    * The renderer wires each as a Docker `secrets:` mount (source
@@ -424,6 +435,39 @@ function escapeCommunityComposeInterpolation(snippet: ComposeServiceSnippet): vo
   }
 }
 
+/** A variable name Compose can interpolate. */
+const COMPOSE_VARIABLE = /^[A-Za-z_][A-Za-z0-9_]*$/;
+
+/**
+ * Point each env-sourced config key at its host variable,
+ * `${SERVICE_<ID>_<KEY>:-}`. Only a non-secret field of the service's own
+ * configSchema qualifies, so the reference never names another variable. A
+ * key whose variable name Compose cannot parse (`a.b`, `foo-bar`) would break
+ * the whole file or interpolate a different variable, so its reference is
+ * escaped like any other value and reaches the container as text.
+ */
+function writeServiceConfigEnvReferences(
+  snippet: ComposeServiceSnippet,
+  m: ServiceManifest,
+  envKeys: readonly string[],
+): void {
+  if (envKeys.length === 0) return;
+  const fields = new Set(configSchemaKeys(m.configSchema).map(({ key }) => key));
+  const prefix = serviceConfigEnvPrefix(m.id);
+  const env = snippet.environment ?? {};
+  for (const key of envKeys) {
+    if (!fields.has(key)) {
+      throw new Error(
+        `Service "${m.id}": env-sourced config key "${key}" is not a non-secret configSchema field`,
+      );
+    }
+    const name = `${prefix}${key.toUpperCase()}`;
+    const reference = `\${${name}:-}`;
+    env[key] = COMPOSE_VARIABLE.test(name) ? reference : escapeComposeInterpolation(reference);
+  }
+  snippet.environment = env;
+}
+
 /** Top-level Docker secret name for a service's vault key (namespaced per service). */
 export function serviceSecretName(serviceId: string, key: string): string {
   return `${serviceId}__${key}`;
@@ -630,11 +674,16 @@ export function renderServiceSnippet(
     const allServices = ctx.allServices ?? [service];
     for (const targetId of communityNetworkAccess) {
       const target = allServices.find((candidate) => candidate.manifest.id === targetId);
-      if (!target || target.isBuiltIn || !target.enabled) {
+      if (target?.isBuiltIn) {
         throw new Error(
-          `Service "${m.id}" communityNetworkAccess target "${targetId}" is not an enabled community service`,
+          `Service "${m.id}" communityNetworkAccess target "${targetId}" is a built-in service, not a community service`,
         );
       }
+      // A bridge declares the community services it serves once they are
+      // installed; until then (or while one is disabled) there is no network
+      // to join, so the render goes on without it, silently: that is the
+      // default deployment, not an advisory.
+      if (!target || !target.enabled) continue;
       networks.push(communityNetworkName(targetId));
     }
     snippet.networks = c.networkAliases?.length
@@ -734,6 +783,7 @@ export function renderServiceSnippet(
   if (!service.isBuiltIn) {
     escapeCommunityComposeInterpolation(snippet);
   }
+  writeServiceConfigEnvReferences(snippet, m, ctx.serviceConfigEnvKeys?.get(m.id) ?? []);
 
   if (c.dependsOn?.length) {
     snippet.depends_on = Object.fromEntries(
@@ -800,6 +850,14 @@ function isValidResolvedHostname(value: string): boolean {
 export function resolveProxyHost(m: ServiceManifest, ctx: RenderContext): string | undefined {
   const host = m.exposure?.proxy?.host;
   if (!host) return undefined;
+
+  // An env reference reaches the container but not the labels: routing the
+  // default host while the service answers another would fail silently.
+  if (host.configKey && ctx.serviceConfigEnvKeys?.get(m.id)?.includes(host.configKey)) {
+    throw new Error(
+      `Service "${m.id}": proxy host config key "${host.configKey}" comes from the environment as a reference; its value must be resolved before rendering`,
+    );
+  }
 
   const configured = host.configKey
     ? ctx.resolvedServiceConfigs?.get(m.id)?.[host.configKey]

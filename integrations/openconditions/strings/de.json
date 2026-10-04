@@ -1,0 +1,16 @@
+{
+  "name": "OpenConditions",
+  "description": "Aktuelle Straßenlage (Ereignisse, Baustellen, Sperrungen und Verkehrsfluss) und Tankstellen mit ihren Preisen aus einer OpenConditions-Instanz",
+  "dataSources": {
+    "domain:road-conditions": {
+      "purpose": "Verkehrsereignisse, Baustellen, Sperrungen und Verkehrsfluss, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer: OpenMapX übermittelt dem OpenConditions-Server nur Karten- und Routenausschnitte (Begrenzungsrahmen), und OpenConditions liest die Straßendaten nach Gebiet aus seinem eigenen Bestand, den es durch Abruf seiner Quellen nach eigenem Zeitplan füllt. Eine Quelle, die es bei Bedarf abfragte (derzeit keine), erhielte die Rasterzellen, die das Gebiet abdecken",
+      "dataReceived": "Verkehrslagen mit Ort, Gültigkeit, Schwere und ihren Auswirkungen auf den Verkehr"
+    },
+    "domain:fuel-stations": {
+      "purpose": "Tankstellen und ihre Kraftstoffpreise, gelesen über OpenConditions",
+      "dataSent": "Nichts über die Nutzer. OpenConditions fragt manche Quellen bei Bedarf ab: Eine solche Quelle erhält die Rasterzellen oder deren Mittelpunkte, die den gesuchten Kartenausschnitt abdecken (bzw. beim Öffnen einer Tankstelle einen Ausschnitt von etwa 200 m um sie), und eine Quelle mit Schlüssel zusätzlich den API-Schlüssel des Betreibers. Quellen, die OpenConditions im Gesamtabruf liest, erhalten nichts",
+      "dataReceived": "Tankstellen mit Adresse, Marke, Öffnungszeiten, den angebotenen Kraftstoffen und ihren Preisen"
+    }
+  }
+}

@@ -36,6 +36,68 @@ export function runtimeAttributionToAttribution(attr: DataSourceAttribution): At
   };
 }
 
+export interface DataSourceLayerCreditsInput {
+  /** The active data source id, for the diagnostic message. */
+  sourceLabel: string;
+  /** The integration manifest's declared sources (may be empty). */
+  dataSources: IntegrationDataSource[];
+  /** The search envelope's attributions. */
+  envelope: Attribution[];
+  /** The visible results; their per-record `attributions` are credited too. */
+  results: { attributions?: DataSourceAttribution[] }[];
+  /** Whether the search is in flight. */
+  isFetching: boolean;
+  /** Receives a diagnostic for credits nothing can render; omit to stay silent. */
+  warn?: (message: string) => void;
+}
+
+/**
+ * The credits the map strip shows for a data-source layer.
+ *
+ * Manifest-declared sources are narrowed to those the envelope credited (or,
+ * when the envelope credited none, all of them — but only while results are
+ * visible). Per-record `result.attributions` are first-class credits beside
+ * them: an aggregating integration (e.g. `fuel`, which orchestrates providers
+ * and declares no sources itself) credits each record's sources this way.
+ * While the first response is in flight nothing is credited, so a freshly
+ * selected layer never flashes every declared publisher.
+ */
+export function dataSourceLayerCredits(input: DataSourceLayerCreditsInput): Attribution[] {
+  const { dataSources, envelope, results } = input;
+  if (input.isFetching && envelope.length === 0) return [];
+
+  const creditedIds = new Set(envelope.map((a) => a.sourceId));
+  const filtered = dataSources.filter((ds) => creditedIds.has(ds.sourceId));
+  const creditedSources = filtered.length > 0 ? filtered : results.length > 0 ? dataSources : [];
+  const manifestCredits = creditedSources.map(dataSourceToAttribution);
+
+  const seen = new Set(manifestCredits.map((a) => a.sourceId));
+  const runtimeCredits: Attribution[] = [];
+  for (const result of results) {
+    for (const attr of result.attributions ?? []) {
+      const credit = runtimeAttributionToAttribution(attr);
+      if (seen.has(credit.sourceId)) continue;
+      seen.add(credit.sourceId);
+      runtimeCredits.push(credit);
+    }
+  }
+
+  if (filtered.length === 0 && input.warn) {
+    // An envelope credit is rendered when the manifest declares it or a
+    // record carries it; flag only the ones neither does.
+    const perRecord = new Set(runtimeCredits.map((c) => c.name));
+    const unrendered = envelope.filter((a) => !perRecord.has(a.name)).map((a) => a.sourceId);
+    if (unrendered.length > 0) {
+      input.warn(
+        `[DataSourceLayer] envelope.attributions for "${input.sourceLabel}" reference sourceIds ` +
+          `not declared in the integration manifest: ${unrendered.join(", ")}`,
+      );
+    }
+  }
+
+  return [...manifestCredits, ...runtimeCredits];
+}
+
 /**
  * Minimal slice of `IntegrationRegistry` this helper depends on. Keeping it
  * structural (rather than importing the class) makes the helper trivially

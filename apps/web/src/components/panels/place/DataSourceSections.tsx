@@ -43,13 +43,6 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   ocm: { icon: <EvStationIcon sx={{ fontSize: 20 }} />, titleKey: "evCharging" },
   // Fuel
   fuel: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
-  "de-tankerkoenig": {
-    icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />,
-    titleKey: "fuelPrices",
-  },
-  france: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
-  spain: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
-  austria: { icon: <LocalGasStationIcon sx={{ fontSize: 20 }} />, titleKey: "fuelPrices" },
   // Bike Sharing
   "bike-sharing": { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, titleKey: "bikeSharing" },
   nextbike: { icon: <PedalBikeIcon sx={{ fontSize: 20 }} />, titleKey: "bikeSharing" },
@@ -141,7 +134,7 @@ const SOURCE_HEADERS: Record<string, { icon: ReactNode; titleKey: string }> = {
   "tw-tdx-webcam": { icon: <VideocamIcon sx={{ fontSize: 20 }} />, titleKey: "webcams" },
 };
 
-function resolveSourceHeader(
+export function resolveSourceHeader(
   detail: DataSourceDetail,
   domain?: string,
 ): {
@@ -155,10 +148,16 @@ function resolveSourceHeader(
   const exactMatch = SOURCE_HEADERS[primarySource];
   if (exactMatch) return { ...exactMatch, titleFallback: null };
 
-  // Try prefix (e.g., "tankerkoenig" from "tankerkoenig/uuid", "nextbike" from "nextbike/362/1234")
+  // Try prefix (e.g., "nextbike" from "nextbike/362/1234")
   const prefix = primarySource.split("/")[0];
   const prefixMatch = SOURCE_HEADERS[prefix];
   if (prefixMatch) return { ...prefixMatch, titleFallback: null };
+
+  // The data source that produced the detail: feed ids such as
+  // "de-tankerkoenig-fuel" have no header of their own, and a detail attached
+  // to an OSM place arrives under the place's scheme, not the data source's.
+  const providerMatch = detail.providerId ? SOURCE_HEADERS[detail.providerId] : undefined;
+  if (providerMatch) return { ...providerMatch, titleFallback: null };
 
   // Fall back to the calling integration's domain (e.g. "osm" source rendered
   // under the ev-charging / parking / webcam domain).

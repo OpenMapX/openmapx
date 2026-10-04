@@ -43,11 +43,12 @@ export async function registerAdminComposeRoutes(
     // Resolve the full config cascade (defaults + DB + env) for every enabled
     // service before rendering, so `SERVICE_<ID>_<KEY>=...` on the host and
     // admin-panel-saved values both land in the generated compose env.
-    const resolvedServiceConfigs = await resolveAllServiceConfigs(
+    const { values: resolvedServiceConfigs, envKeys } = await resolveAllServiceConfigs(
       enabled.map((s) => ({
         id: s.manifest.id,
         configSchema: s.manifest.configSchema,
         containerEnv: s.manifest.container.environment,
+        proxyHostConfigKey: s.manifest.exposure?.proxy?.host?.configKey,
       })),
     );
     if (enabled.some((s) => s.manifest.id === "app-api")) {
@@ -61,6 +62,7 @@ export async function registerAdminComposeRoutes(
       composeOutDir: COMPOSE_OUT_DIR,
       allServices: registry.list(),
       resolvedServiceConfigs,
+      serviceConfigEnvKeys: envKeys,
     });
     reply.header("Content-Type", "text/yaml; charset=utf-8");
     return result.composeYaml;

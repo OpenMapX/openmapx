@@ -6,6 +6,7 @@ import {
   readdirSync,
   readFileSync,
   rmSync,
+  statSync,
   symlinkSync,
   unlinkSync,
   writeFileSync,
@@ -151,7 +152,41 @@ describe("ops-agent trusted configuration runtime", () => {
     expect(
       readFileSync(join(paths.current, ".generated-secrets", "alpha", "PRIVATE_SETTING"), "utf8"),
     ).toBe(secretValue);
+    // Compose bind-mounts a file secret keeping its owner and mode, so a container
+    // running as another uid must be able to read it; the 0700 directories are
+    // the host-side boundary.
+    expect(
+      statSync(join(paths.current, ".generated-secrets", "alpha", "PRIVATE_SETTING")).mode & 0o777,
+    ).toBe(0o444);
+    expect(statSync(join(paths.current, ".generated-secrets")).mode & 0o777).toBe(0o700);
+    expect(statSync(join(paths.current, ".generated-secrets", "alpha")).mode & 0o777).toBe(0o700);
     await expect(initializeTrustedConfigurationRuntime(paths.infraDir)).resolves.toBeUndefined();
+  });
+
+  it("renders an env-sourced config key as a reference to the host env, never as a value", async () => {
+    const paths = fixture();
+    const runtime = createUnavailableRuntime();
+    installTrustedConfigurationRuntime(runtime, {
+      services: [service("alpha"), service("beta")],
+      integrationSchemas: new Map([["routing", { enabled: { type: "boolean" } }]]),
+      infraDir: paths.infraDir,
+    });
+    const revisionId = "cfg1_0123456789abcdef0123456789abcdef0123456789a";
+    const operation = { kind: "stack.render" as const, revisionId };
+    const trusted = claim(
+      operation,
+      payload({
+        serviceConfigs: [{ serviceId: "alpha", values: {}, envKeys: ["PUBLIC_SETTING"] }],
+      }),
+    );
+    await dispatchOpsOperation(runtime, operation, {
+      signal: new AbortController().signal,
+      emitLog: vi.fn(),
+      claim: trusted,
+    });
+    expect(readFileSync(paths.compose, "utf8")).toContain(
+      "PUBLIC_SETTING: ${SERVICE_ALPHA_PUBLIC_SETTING:-}",
+    );
   });
 
   it.each([
@@ -163,6 +198,26 @@ describe("ops-agent trusted configuration runtime", () => {
     [
       "secret in environment config",
       payload({ serviceConfigs: [{ serviceId: "alpha", values: { PRIVATE_SETTING: "blocked" } }] }),
+    ],
+    [
+      "env reference to a secret",
+      payload({
+        serviceConfigs: [{ serviceId: "alpha", values: {}, envKeys: ["PRIVATE_SETTING"] }],
+      }),
+    ],
+    [
+      "env reference to an undeclared key",
+      payload({
+        serviceConfigs: [{ serviceId: "alpha", values: {}, envKeys: ["ARBITRARY_ENV"] }],
+      }),
+    ],
+    [
+      "env reference beside a value for the same key",
+      payload({
+        serviceConfigs: [
+          { serviceId: "alpha", values: { PUBLIC_SETTING: "x" }, envKeys: ["PUBLIC_SETTING"] },
+        ],
+      }),
     ],
     [
       "undeclared secret file",

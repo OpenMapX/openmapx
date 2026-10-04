@@ -36,6 +36,23 @@ describe("resolveToken", () => {
     expect(out).toBe("Quelle");
   });
 
+  it("resolves a token-valued placeholder first, in the same locale", () => {
+    const out = resolveToken(
+      { $t: "summary.spacesOf", values: { free: { $t: "row.freeSpaces" }, capacity: 10 } },
+      { locale: "de", fallbackLocale: "en", shared, integration: parking },
+    );
+    expect(out).toBe("Freie Plätze/10 frei");
+  });
+
+  it("passes a null or undefined placeholder through as before", () => {
+    const values = { free: null, capacity: undefined } as unknown as Record<string, number>;
+    const out = resolveToken(
+      { $t: "summary.spacesOf", values },
+      { locale: "en", fallbackLocale: "en", shared, integration: parking },
+    );
+    expect(typeof out).toBe("string");
+  });
+
   it("resolves an integration-scoped token against the integration catalog", () => {
     const out = resolveToken(
       { $t: "row.freeSpaces" },

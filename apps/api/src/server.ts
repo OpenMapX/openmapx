@@ -25,7 +25,7 @@ import {
   reloadIntegrations,
   setDisallowedIntegrationResolver,
   setDisallowedSourceResolver,
-  setIntegrationsReloadedHook,
+  setIntegrationSourcesChangedHook,
   setRoadConditionsPolicyResolver,
   shutdownIntegrations,
 } from "./integration-host";
@@ -304,15 +304,16 @@ server.addHook("preSerialization", (request, _reply, payload, done) => {
 setDisallowedSourceResolver(getGatedSourceIds);
 setRoadConditionsPolicyResolver(getRoadConditionsPolicySnapshot);
 setDisallowedIntegrationResolver(getGatedIntegrationIds);
-// Reloading integrations changes the source set the gated sets are derived
-// from, so drop the policy's memoized gated sets when the registry is rebuilt
-// and kick a refresh right away — the synchronous getters behind the response
-// filter serve the last-good sets until a refresh replaces them. (The admin
-// settings route does the same, awaited, on a policy-toggle change.)
-setIntegrationsReloadedHook(() => {
+// Reloading integrations, or a runtime integration replacing its data sources,
+// changes the source set the gated sets are derived from, so drop the policy's
+// memoized gated sets and kick a refresh right away — the synchronous getters
+// behind the response filter serve the last-good sets until a refresh replaces
+// them. (The admin settings route does the same, awaited, on a policy-toggle
+// change.)
+setIntegrationSourcesChangedHook(() => {
   invalidateDataUsePolicy();
   void refreshDataUsePolicy().catch((err) => {
-    server.log.warn(err, "Data-use policy refresh after integration reload failed");
+    server.log.warn(err, "Data-use policy refresh after an integration source change failed");
   });
 });
 

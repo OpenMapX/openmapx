@@ -1,0 +1,20 @@
+{
+  "id": "openconditions",
+  "version": "1.0.0",
+  "author": "OpenMapX",
+  "license": "AGPL-3.0-or-later",
+  "subjectData": {
+    "storesPersonalData": false,
+    "strategy": "not_personal",
+    "registrationIds": [],
+    "operatorInstructions": null
+  },
+  "domains": ["road-conditions", "fuel-stations"],
+  "requires": [{ "service": "openconditions-ingest", "optional": true }],
+  "backend": {
+    "routes": false
+  },
+  "quality": "built-in",
+  "category": "Traffic",
+  "runtimeDataSources": true
+}

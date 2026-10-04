@@ -4,6 +4,7 @@ import { dirname, join } from "node:path";
 import { envString } from "@openmapx/core/server-env";
 import { runOpsOperation } from "../../ops-client.js";
 import { fetchCoveredWayIds } from "./covered-ways.js";
+import { openConditionsHeaders } from "./openconditions-auth.js";
 import { encodePredictedSpeeds, expandHourlyToBuckets } from "./predicted-encode.js";
 import {
   loadWaysToEdges as loadWaysToEdgesDefault,
@@ -77,6 +78,8 @@ interface TrafficLogger {
 export interface BakePredictedDeps {
   /** Base URL of the OpenConditions ingest extension (`GET {url}/segments/profiles.json`). */
   openConditionsUrl: string;
+  /** `OPENCONDITIONS_OPERATOR_TOKEN`, sent as a bearer token with every OpenConditions read when set. */
+  openConditionsToken?: string;
   /** Host-visible directory the per-tile CSVs are written to. Defaults under `DATA_DIR`. */
   csvDir?: string;
   /** Test seam; production creates a unique directory for every prepared bake. */
@@ -151,8 +154,13 @@ function defaultCsvDir(): string {
   );
 }
 
-async function defaultFetchProfiles(openConditionsUrl: string): Promise<ProfileSegment[]> {
-  const res = await fetch(`${openConditionsUrl}/segments/profiles.json`);
+async function defaultFetchProfiles(
+  openConditionsUrl: string,
+  openConditionsToken: string | undefined,
+): Promise<ProfileSegment[]> {
+  const res = await fetch(`${openConditionsUrl}/segments/profiles.json`, {
+    headers: openConditionsHeaders(openConditionsToken),
+  });
   if (!res.ok) {
     throw new Error(`bake-predicted: OpenConditions profiles feed responded ${res.status}`);
   }
@@ -214,9 +222,12 @@ export async function bakePredicted(deps: BakePredictedDeps): Promise<BakePredic
   const preparedGeneration = deps.preparedGeneration ?? randomUUID();
   const csvDir = deps.csvDir ?? join(defaultCsvDir(), preparedGeneration);
 
-  const fetchProfiles = deps.fetchProfiles ?? (() => defaultFetchProfiles(deps.openConditionsUrl));
+  const fetchProfiles =
+    deps.fetchProfiles ??
+    (() => defaultFetchProfiles(deps.openConditionsUrl, deps.openConditionsToken));
   const resolveCoveredWayIds =
-    deps.getCoveredWayIds ?? (() => fetchCoveredWayIds(deps.openConditionsUrl));
+    deps.getCoveredWayIds ??
+    (() => fetchCoveredWayIds(deps.openConditionsUrl, deps.openConditionsToken));
   const loadEdges = deps.loadWaysToEdges ?? (() => loadWaysToEdgesDefault());
   const refreshWays = deps.refreshWaysToEdges ?? refreshWaysToEdgesDefault;
 

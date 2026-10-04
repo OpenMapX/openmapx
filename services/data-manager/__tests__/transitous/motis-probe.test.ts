@@ -45,7 +45,7 @@ describe("fetchWithTimeout (node:http, bypassing undici)", () => {
       }
       res.end("{}");
     });
-    const res = await fetchWithTimeout(`${base}/plan`, 2000, 3);
+    const res = await fetchWithTimeout(`${base}/plan`, 2000, { retries: 3 });
     expect(res.status).toBe(200);
     expect(n).toBe(3);
   });
@@ -54,7 +54,21 @@ describe("fetchWithTimeout (node:http, bypassing undici)", () => {
     const base = await listen(() => {
       /* intentionally never responds */
     });
-    await expect(fetchWithTimeout(`${base}/plan`, 300, 3)).rejects.toThrow(/timed out/);
+    await expect(fetchWithTimeout(`${base}/plan`, 300, { retries: 3 })).rejects.toThrow(
+      /timed out/,
+    );
+  });
+
+  it("sends the given request headers", async () => {
+    let authorization: string | undefined;
+    const base = await listen((req, res) => {
+      authorization = req.headers.authorization;
+      res.end("{}");
+    });
+    await fetchWithTimeout(`${base}/segments/speed.csv`, 2000, {
+      headers: { Authorization: "Bearer op-token" },
+    });
+    expect(authorization).toBe("Bearer op-token");
   });
 
   it("surfaces a non-2xx status without throwing", async () => {

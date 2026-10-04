@@ -2,18 +2,11 @@
 
 import { useTravelTimeStore } from "@integrations/overlay-tool-travel-time/store";
 import DirectionsBusIcon from "@mui/icons-material/DirectionsBus";
-import ErrorOutlinedIcon from "@mui/icons-material/ErrorOutlined";
-import InfoOutlinedIcon from "@mui/icons-material/InfoOutlined";
-import RefreshIcon from "@mui/icons-material/Refresh";
 import TrainIcon from "@mui/icons-material/Train";
 import TramIcon from "@mui/icons-material/Tram";
-import ZoomInIcon from "@mui/icons-material/ZoomIn";
 import Box from "@mui/material/Box";
 import Button from "@mui/material/Button";
-import CircularProgress from "@mui/material/CircularProgress";
-import IconButton from "@mui/material/IconButton";
 import Skeleton from "@mui/material/Skeleton";
-import Tooltip from "@mui/material/Tooltip";
 import Typography from "@mui/material/Typography";
 import type {
   CategoryCardEnrichmentResponse,
@@ -45,12 +38,13 @@ import { useIntegrationRegistry } from "@openmapx/integration-framework/react";
 import type { TransitStop, TransportMode } from "@openmapx/mobility-core/transit";
 import type * as maplibregl from "maplibre-gl";
 import { useLocale, useTranslations } from "next-intl";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { distinctBrandQids, placeBrandIdentity } from "@/components/map/CategoryResultMarkers";
 import { PhotoAttribution } from "@/components/panels/place/PhotoAttribution";
 import { useExpandOnBackgroundTap } from "@/components/panels/sheet/sheetState";
 import { BrandLogo } from "@/components/search/BrandLogo";
 import { ResultItemName, ResultList, ResultListItem } from "@/components/ui/ResultListItem";
+import { ResultNotice } from "@/components/ui/ResultNotice";
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { useAttributionFromHooks } from "@/integration-api/overlay/useAttributionFromHooks";
@@ -71,68 +65,6 @@ const TRANSIT_MODE_ICONS: Partial<Record<TransportMode, typeof TrainIcon>> = {
   tram: TramIcon,
   bus: DirectionsBusIcon,
 };
-
-function ResultNotice({
-  tone,
-  children,
-  action,
-  pending = false,
-}: {
-  tone: "error" | "info";
-  children: ReactNode;
-  action?: { label: string; kind: "retry" | "zoom"; onClick: () => void };
-  pending?: boolean;
-}) {
-  const Icon = tone === "error" ? ErrorOutlinedIcon : InfoOutlinedIcon;
-  const ActionIcon = action?.kind === "zoom" ? ZoomInIcon : RefreshIcon;
-
-  return (
-    <Box
-      role={tone === "error" ? "alert" : "status"}
-      sx={{
-        display: "flex",
-        alignItems: "center",
-        gap: 1,
-        minHeight: 48,
-        minWidth: 0,
-        px: 1.5,
-        py: 0.5,
-        borderRadius: "24px",
-        bgcolor: `color-mix(in srgb, var(--mui-palette-${tone}-main) 11%, var(--mui-palette-background-paper))`,
-      }}
-    >
-      {pending ? (
-        <CircularProgress size={19} color="info" aria-hidden="true" sx={{ flexShrink: 0 }} />
-      ) : (
-        <Icon aria-hidden="true" sx={{ fontSize: 19, color: `${tone}.main`, flexShrink: 0 }} />
-      )}
-      <Typography variant="body2" sx={{ minWidth: 0, flex: 1, overflowWrap: "anywhere" }}>
-        {children}
-      </Typography>
-      {action && (
-        <Tooltip title={action.label}>
-          <IconButton
-            color={tone}
-            aria-label={action.label}
-            onClick={action.onClick}
-            sx={{
-              flex: "0 0 44px",
-              width: 44,
-              height: 44,
-              "&.Mui-focusVisible": {
-                outline: "2px solid",
-                outlineColor: `${tone}.main`,
-                outlineOffset: 2,
-              },
-            }}
-          >
-            <ActionIcon aria-hidden="true" fontSize="small" />
-          </IconButton>
-        </Tooltip>
-      )}
-    </Box>
-  );
-}
 
 function SearchLoading({ waitingForResponse }: { waitingForResponse: boolean }) {
   const ts = useTranslations("search");

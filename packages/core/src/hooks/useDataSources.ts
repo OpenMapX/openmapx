@@ -9,6 +9,7 @@ import type {
   DataSourceMapContext,
   DataSourceMapContextSelection,
   DataSourceMeta,
+  DataSourcePartialReason,
   DataSourceResult,
 } from "../types/dataSource";
 import type { BoundingBox } from "../types/geometry";
@@ -35,15 +36,49 @@ export function useDataSources() {
         undefined,
         apiQueryRequestOptions(signal, DETAIL_QUERY_POLICY),
       ),
-    staleTime: 60 * 60 * 1000,
+    // A source can join or leave the list at runtime (a fuel provider registering), and
+    // nothing tells the browser, so the list is asked again after a few minutes.
+    staleTime: 5 * 60 * 1000,
   });
+}
+
+/** A data-source search answer as the API sends it. */
+interface DataSourceSearchEnvelope extends MobilityEnvelope<DataSourceResult[]> {
+  /** Present when the area may hold results the answer lacks, saying why. */
+  partial?: DataSourcePartialReason;
+}
+
+export interface DataSourceSearchQueryResult
+  extends MobilityEnvelopeQueryResult<DataSourceResult[]> {
+  /**
+   * Why the area may hold results the answer lacks, or null when it does not:
+   * `area` when a closer view loads more, `unavailable` when a source did not answer.
+   */
+  partial: DataSourcePartialReason | null;
+}
+
+const SEARCH_STALE_MS = 30_000;
+/** How often, and how many times, a partial answer is asked again while the view stays put. */
+const PARTIAL_REFETCH_MS = 5_000;
+const PARTIAL_REFETCHES = 3;
+
+/**
+ * A partial answer is never fresh, and is asked again a few times: a source
+ * fetching the missing part lands it within seconds. The first fetch is
+ * update 1, so the count stops the refetches after the third.
+ */
+function partialRefetchInterval(query: {
+  state: { data?: DataSourceSearchEnvelope; dataUpdateCount: number };
+}): number | false {
+  const { data, dataUpdateCount } = query.state;
+  return data?.partial && dataUpdateCount <= PARTIAL_REFETCHES ? PARTIAL_REFETCH_MS : false;
 }
 
 export function useDataSourceSearch(
   sourceId: string | null,
   bbox: BoundingBox | null,
   filters: Record<string, unknown>,
-): MobilityEnvelopeQueryResult<DataSourceResult[]> {
+): DataSourceSearchQueryResult {
   const query = useQuery({
     queryKey: ["data-source-search", sourceId, bbox, filters],
     queryFn: ({ signal }) => {
@@ -63,17 +98,18 @@ export function useDataSourceSearch(
       if (Object.keys(activeFilters).length > 0) {
         params.filters = JSON.stringify(activeFilters);
       }
-      return apiClient.get<MobilityEnvelope<DataSourceResult[]>>(
+      return apiClient.get<DataSourceSearchEnvelope>(
         `${API_ENDPOINTS.dataSourceSearch}/${sourceId}/search`,
         params,
         apiQueryRequestOptions(signal, MAP_QUERY_POLICY),
       );
     },
     enabled: sourceId !== null && bbox !== null,
-    staleTime: 30_000,
+    staleTime: (q) => (q.state.data?.partial ? 0 : SEARCH_STALE_MS),
+    refetchInterval: partialRefetchInterval,
     gcTime: MAP_QUERY_POLICY.gcTime,
   });
-  return wrapMobilityEnvelope(query);
+  return { ...wrapMobilityEnvelope(query), partial: query.data?.partial ?? null };
 }
 
 export function useDataSourceDetail(

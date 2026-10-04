@@ -8,7 +8,7 @@ export type ParkingType = "garage" | "surface" | "underground" | "on-street" | "
  */
 export interface I18nTokenLike {
   $t: string;
-  values?: Record<string, string | number>;
+  values?: Record<string, string | number | I18nTokenLike>;
 }
 
 export interface ParkingSourceAttribution {

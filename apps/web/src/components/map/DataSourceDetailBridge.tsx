@@ -11,6 +11,7 @@ import {
   useSidebarStore,
 } from "@openmapx/core";
 import { useEffect, useMemo, useRef } from "react";
+import { useDataSourceI18nResolver } from "@/components/panels/place/useDataSourceI18nResolver";
 
 export function DataSourceDetailBridge() {
   const selectedItem = useDataSourceStore((s) => s.selectedItem);
@@ -47,6 +48,7 @@ export function DataSourceDetailBridge() {
     selectedItem?.sourceId ?? null,
     selectedItem?.itemId ?? null,
   );
+  const resolveToken = useDataSourceI18nResolver(selectedItem?.sourceId);
 
   useEffect(() => {
     if (!detail || !selectedItem) return;
@@ -65,14 +67,15 @@ export function DataSourceDetailBridge() {
     // data-source integration registers a resolver under its own id
     // (ev-charging, parking, fuel, …).
     const scheme = selectedItem.sourceId;
+    const name = detail.name || resolveToken(detail.fallbackName);
     const place: Place = createPlace({
       primaryScheme: scheme,
       ids: { [scheme]: detail.id },
-      name: detail.name,
+      name,
       address: addressParts.join(", "),
       city: detail.address?.town,
       coordinates: detail.coordinates,
-      category: sourceMeta?.placeCategory ?? detail.name,
+      category: sourceMeta?.placeCategory ?? name,
       rawCategory: sourceMeta?.placeCategoryRaw ?? "",
       website: detail.operator?.url,
       openingHours: detail.openingHours,
@@ -89,7 +92,7 @@ export function DataSourceDetailBridge() {
     }
     needsSelection.current = false;
     useSidebarStore.getState().openDetail(PANEL.PLACE_CARD);
-  }, [detail, selectedItem, setSelectedPlace, sourceMeta]);
+  }, [detail, selectedItem, setSelectedPlace, sourceMeta, resolveToken]);
 
   return null;
 }

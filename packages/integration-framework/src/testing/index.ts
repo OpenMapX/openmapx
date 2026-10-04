@@ -24,6 +24,7 @@ import type {
   SecretsClient,
 } from "../context.js";
 import type { AirQualityProvider } from "../contracts/air-quality-provider.js";
+import type { FuelStationProvider } from "../contracts/fuel-station-provider.js";
 import type { GeocodingProvider } from "../contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "../contracts/gtfs-catalog-provider.js";
 import type { KnowledgeProvider } from "../contracts/knowledge-provider.js";
@@ -39,6 +40,7 @@ import type { SearchSuggestionProvider } from "../contracts/search-suggestion-pr
 import type { StreetLevelProvider } from "../contracts/street-level-imagery-provider.js";
 import type { TransitProvider } from "../contracts/transit-provider.js";
 import type { WeatherProvider } from "../contracts/weather-provider.js";
+import { type IntegrationDataSource, validateDataSource } from "../manifest";
 
 export interface FakeMobilityHttpRequest {
   kind: "json" | "text";
@@ -207,6 +209,7 @@ export interface CapturedRegistrations {
   routing: RoutingProvider[];
   ride: RideProvider[];
   roadConditions: RoadConditionsProvider[];
+  fuelStations: FuelStationProvider[];
   photo: PhotoProvider[];
   streetLevel: StreetLevelProvider[];
   review: ReviewProvider[];
@@ -218,6 +221,8 @@ export interface CapturedRegistrations {
   routes: { method: string; path: string; handler: RouteHandler; options?: RouteOptions }[];
   healthChecks: CustomHealthCheckFn[];
   disclosures: Disclosure[];
+  /** Every list passed to `setDataSources()`, in call order. */
+  dataSourceLists: IntegrationDataSource[][];
 }
 
 export interface MockContextOverrides {
@@ -256,6 +261,7 @@ export function createMockIntegrationContext(
     routing: [],
     ride: [],
     roadConditions: [],
+    fuelStations: [],
     photo: [],
     streetLevel: [],
     review: [],
@@ -267,6 +273,7 @@ export function createMockIntegrationContext(
     routes: [],
     healthChecks: [],
     disclosures: [],
+    dataSourceLists: [],
   };
   const noop = () => undefined;
   const liveStore: LiveStoreClient = overrides.liveStore ?? {
@@ -316,6 +323,9 @@ export function createMockIntegrationContext(
     registerRoadConditionsProvider: (p) => {
       registered.roadConditions.push(p);
     },
+    registerFuelStationProvider: (p) => {
+      registered.fuelStations.push(p);
+    },
     registerPhotoProvider: (p) => {
       registered.photo.push(p);
     },
@@ -348,6 +358,18 @@ export function createMockIntegrationContext(
     },
     registerDisclosure: (d) => {
       registered.disclosures.push(d);
+    },
+    setDataSources: (list) => {
+      registered.dataSourceLists.push([...list]);
+      // The host's rules for one integration: valid against the manifest
+      // domains, each sourceId once.
+      const accepted: IntegrationDataSource[] = [];
+      for (const candidate of list) {
+        const result = validateDataSource(candidate, ctx.manifest.domains ?? []);
+        if (!result.valid || accepted.some((ds) => ds.sourceId === candidate.sourceId)) continue;
+        accepted.push(result.dataSource);
+      }
+      return accepted;
     },
     emit: noop,
     on: () => () => undefined,

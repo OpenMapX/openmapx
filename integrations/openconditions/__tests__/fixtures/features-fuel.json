@@ -1,0 +1,334 @@
+{
+  "records": [
+    {
+      "id": "oc:feature:test.local:a67be90d7c9e08332bd48ece645292a72da97dc47fb407ed5c82f76c09900129",
+      "kind": "fuel_station",
+      "name": [
+        {
+          "lang": "de",
+          "text": "TotalEnergies Berlin"
+        }
+      ],
+      "class": "feature",
+      "domain": "fuel",
+      "details": {
+        "v": 1,
+        "kind": "fuel_station",
+        "brand": "TotalEnergies",
+        "productsComplete": false
+      },
+      "location": {
+        "admin": {
+          "country": "DE"
+        },
+        "extent": "point",
+        "address": {
+          "city": "Berlin",
+          "street": "Margarete-Sommer-Str.",
+          "country": "DE",
+          "postalCode": "10407",
+          "houseNumber": "2"
+        },
+        "geometry": {
+          "type": "Point",
+          "coordinates": [13.440946, 52.530831]
+        },
+        "fuzziness": "exact",
+        "geometryOrigin": "source"
+      },
+      "revision": 1,
+      "freshness": {
+        "expiresAt": "2026-10-04T01:45:00.000Z",
+        "fetchedAt": "2026-10-04T01:30:00.000Z"
+      },
+      "lifecycle": "operational",
+      "provenance": {
+        "origin": "feed",
+        "privacy": {
+          "class": "authoritative"
+        },
+        "recordId": "474e5046-deaf-4f9b-9a32-9797b778f047",
+        "sourceId": "de-tankerkoenig-fuel",
+        "accessMode": "on_demand",
+        "instanceId": "test.local",
+        "attribution": {
+          "rights": {
+            "retention": "yes",
+            "reviewed_at": "2026-10-03T00:00:00.000Z",
+            "commercial_use": "yes",
+            "evidence_origin": "https://creativecommons.tankerkoenig.de/",
+            "evidence_version": "CC-BY-4.0",
+            "attribution_required": "yes",
+            "source_redistribution": "no",
+            "derived_redistribution": "yes"
+          },
+          "license": "CC-BY-4.0",
+          "provider": "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
+          "licenseUrl": "https://creativecommons.org/licenses/by/4.0/"
+        },
+        "sourceFormat": "tankerkoenig",
+        "mergedSources": [
+          {
+            "source": "osm-fuel",
+            "recordId": "oc:feature:osm-fuel:node/669891011",
+            "attribution": {
+              "rights": {
+                "retention": "yes",
+                "reviewed_at": null,
+                "commercial_use": "yes",
+                "evidence_origin": "https://opendatacommons.org/licenses/odbl/1-0/",
+                "evidence_version": "ODbL-1.0",
+                "attribution_required": "yes",
+                "source_redistribution": "yes",
+                "derived_redistribution": "yes"
+              },
+              "license": "ODbL-1.0",
+              "provider": "© OpenStreetMap contributors",
+              "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/"
+            },
+            "link": "same_asset"
+          }
+        ],
+        "derivedFrom": {
+          "records": [
+            {
+              "class": "feature",
+              "id": "oc:feature:de-tankerkoenig-fuel:474e5046-deaf-4f9b-9a32-9797b778f047"
+            },
+            {
+              "class": "feature",
+              "id": "oc:feature:osm-fuel:node/669891011"
+            }
+          ],
+          "method": "canonical_view",
+          "version": "1"
+        }
+      },
+      "recordedAt": "2026-10-04T01:30:00.000Z",
+      "canonicalId": "397bacdde6fc1c16bc6cbc5d6b4c7274e3a07014f9344ff85a6671e61cb54f79",
+      "contentHash": "d6cf60b90174f60a6073bc020b7e345ef0a7e5771ac6e37e169ed03010e726b1",
+      "temporality": "static",
+      "components": [
+        {
+          "key": "e5",
+          "kind": "fuel_product",
+          "details": {
+            "v": 1,
+            "per": "L",
+            "kind": "fuel_product",
+            "grade": "e5",
+            "priceBasis": "gross",
+            "priceLevel": "standard",
+            "vehicleScope": "any"
+          }
+        },
+        {
+          "key": "e10",
+          "kind": "fuel_product",
+          "details": {
+            "v": 1,
+            "per": "L",
+            "kind": "fuel_product",
+            "grade": "e10",
+            "priceBasis": "gross",
+            "priceLevel": "standard",
+            "vehicleScope": "any"
+          }
+        },
+        {
+          "key": "diesel",
+          "kind": "fuel_product",
+          "details": {
+            "v": 1,
+            "per": "L",
+            "kind": "fuel_product",
+            "grade": "diesel",
+            "priceBasis": "gross",
+            "priceLevel": "standard",
+            "vehicleScope": "any"
+          }
+        },
+        {
+          "key": "osm-fuel/sp98",
+          "kind": "fuel_product",
+          "details": {
+            "v": 1,
+            "per": "L",
+            "kind": "fuel_product",
+            "grade": "sp98",
+            "priceBasis": "gross",
+            "priceLevel": "standard",
+            "vehicleScope": "any"
+          }
+        },
+        {
+          "key": "osm-fuel/lpg",
+          "kind": "fuel_product",
+          "details": {
+            "v": 1,
+            "per": "L",
+            "kind": "fuel_product",
+            "grade": "lpg",
+            "priceBasis": "gross",
+            "priceLevel": "standard",
+            "vehicleScope": "any"
+          }
+        },
+        {
+          "key": "osm-fuel/diesel:hgv",
+          "kind": "fuel_product",
+          "details": {
+            "v": 1,
+            "per": "L",
+            "kind": "fuel_product",
+            "grade": "diesel",
+            "priceBasis": "gross",
+            "priceLevel": "standard",
+            "vehicleScope": "hgv"
+          }
+        }
+      ]
+    }
+  ],
+  "latest": {
+    "oc:feature:test.local:a67be90d7c9e08332bd48ece645292a72da97dc47fb407ed5c82f76c09900129": [
+      {
+        "property": "fuel.price",
+        "componentKey": "diesel",
+        "result": {
+          "per": "L",
+          "type": "money",
+          "amount": "1.009",
+          "currency": "EUR"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["de-tankerkoenig-fuel"]
+      },
+      {
+        "property": "fuel.price",
+        "componentKey": "e10",
+        "result": {
+          "per": "L",
+          "type": "money",
+          "amount": "1.009",
+          "currency": "EUR"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["de-tankerkoenig-fuel"]
+      },
+      {
+        "property": "fuel.price",
+        "componentKey": "e5",
+        "result": {
+          "per": "L",
+          "type": "money",
+          "amount": "1.009",
+          "currency": "EUR"
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["de-tankerkoenig-fuel"]
+      },
+      {
+        "property": "fuel.product_available",
+        "componentKey": "diesel",
+        "result": {
+          "type": "boolean",
+          "value": true
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["osm-fuel"]
+      },
+      {
+        "property": "fuel.product_available",
+        "componentKey": "osm-fuel/diesel:hgv",
+        "result": {
+          "type": "boolean",
+          "value": true
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["osm-fuel"]
+      },
+      {
+        "property": "fuel.product_available",
+        "componentKey": "e10",
+        "result": {
+          "type": "boolean",
+          "value": true
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["osm-fuel"]
+      },
+      {
+        "property": "fuel.product_available",
+        "componentKey": "e5",
+        "result": {
+          "type": "boolean",
+          "value": true
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["osm-fuel"]
+      },
+      {
+        "property": "fuel.product_available",
+        "componentKey": "osm-fuel/lpg",
+        "result": {
+          "type": "boolean",
+          "value": true
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["osm-fuel"]
+      },
+      {
+        "property": "fuel.product_available",
+        "componentKey": "osm-fuel/sp98",
+        "result": {
+          "type": "boolean",
+          "value": true
+        },
+        "phenomenonTime": {
+          "instant": "2026-10-04T01:30:00.000Z"
+        },
+        "source": "@fused",
+        "contributors": ["osm-fuel"]
+      }
+    ]
+  },
+  "next": null,
+  "coverage": {
+    "partial": false,
+    "sources": [
+      {
+        "id": "de-tankerkoenig-fuel",
+        "complete": true
+      },
+      {
+        "id": "osm-fuel",
+        "complete": true
+      }
+    ]
+  }
+}

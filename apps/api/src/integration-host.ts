@@ -10,6 +10,7 @@ import {
   createActivationTransactionScope,
   type HttpClient,
   type IntegrationContext,
+  type IntegrationDataSource,
   IntegrationEventBus,
   type IntegrationManifest,
   type IntegrationStrings,
@@ -20,6 +21,7 @@ import {
   type RouteOptions,
   satisfiesPlatformVersion,
   toIntegrationMeta,
+  validateDataSource,
   validateManifest,
 } from "@openmapx/integration-framework";
 import {
@@ -403,16 +405,119 @@ export function setDisallowedIntegrationResolver(fn: () => Promise<Set<string>>)
 }
 
 /**
- * Hook run after the integration registry is rebuilt by `reloadIntegrations`,
- * injected by server.ts to drop caches derived from the integration set — chiefly
- * the data-use policy's memoized gated source/integration sets, which are computed
- * from `getAllIntegrations()` and would otherwise stay stale until their own TTL.
- * Injected (not imported) to avoid a static cycle with the policy service.
+ * Hook run whenever the live registry's data sources change — after
+ * `reloadIntegrations` rebuilds the registry and after a live integration's
+ * `ctx.setDataSources()`. Injected by server.ts to drop caches derived from
+ * the source set — chiefly the data-use policy's memoized gated
+ * source/integration sets, which are computed from `getAllIntegrations()` and
+ * would otherwise stay stale until their own TTL. Injected (not imported) to
+ * avoid a static cycle with the policy service.
  */
-let integrationsReloadedHook: (() => void) | null = null;
+let integrationSourcesChangedHook: (() => void) | null = null;
 
-export function setIntegrationsReloadedHook(fn: () => void): void {
-  integrationsReloadedHook = fn;
+export function setIntegrationSourcesChangedHook(fn: () => void): void {
+  integrationSourcesChangedHook = fn;
+}
+
+function runIntegrationSourcesChangedHook(): void {
+  try {
+    integrationSourcesChangedHook?.();
+  } catch (err) {
+    _fastify?.log.warn(err, "Integration sources-changed hook failed");
+  }
+}
+
+let attributionRefresh: Promise<void> = Promise.resolve();
+
+/**
+ * Re-index attribution from the data sources of the live registry, which
+ * includes the lists runtime integrations supplied through
+ * `ctx.setDataSources()`. Serialized, and each run reads the registry when it
+ * starts, so a slow earlier refresh never overwrites a later one.
+ */
+function refreshAttributionFromRegistry(): Promise<void> {
+  attributionRefresh = attributionRefresh.then(async () => {
+    const index = getAttributionIndex();
+    if (!index) return;
+    index.setIntegrationManifests(
+      collectManifestDataSources(
+        Array.from(integrations.values(), (integration) => ({
+          manifest: integration.manifest as unknown as Record<string, unknown>,
+        })),
+      ),
+    );
+    try {
+      await index.reload();
+    } catch (err) {
+      _fastify?.log.warn(err, "AttributionIndex reload failed");
+    }
+  });
+  return attributionRefresh;
+}
+
+/** The live integration other than `id` that declares `sourceId`, if any. */
+function otherDeclarer(id: string, sourceId: string): string | undefined {
+  for (const other of integrations.values()) {
+    if (other.id === id) continue;
+    if (other.manifest.dataSources?.some((ds) => ds.sourceId === sourceId)) return other.id;
+  }
+  return undefined;
+}
+
+/**
+ * Validate and install a runtime integration's data sources and return the
+ * ones accepted. A source that fails the manifest rules, repeats a sourceId,
+ * or carries a sourceId another live integration already declares is dropped
+ * with a warning naming it. Only a live integration triggers the refreshes:
+ * one still being set up is covered by the refresh that follows its
+ * generation's activation.
+ */
+function setRuntimeDataSources(
+  integration: LoadedIntegration,
+  log: Logger,
+  list: IntegrationDataSource[],
+): IntegrationDataSource[] {
+  const { manifest } = integration;
+  if (manifest.runtimeDataSources !== true) {
+    throw new Error(
+      `Integration ${integration.id} cannot call setDataSources: its manifest does not set runtimeDataSources`,
+    );
+  }
+  if (!Array.isArray(list)) {
+    throw new Error(`Integration ${integration.id}: setDataSources expects an array`);
+  }
+  const accepted: IntegrationDataSource[] = [];
+  const seen = new Set<string>();
+  for (const candidate of list) {
+    const label =
+      candidate && typeof candidate.sourceId === "string" && candidate.sourceId
+        ? candidate.sourceId
+        : "(no sourceId)";
+    const result = validateDataSource(candidate, manifest.domains);
+    if (!result.valid) {
+      log.warn(`Dropping runtime data source ${label}: ${result.errors.join("; ")}`);
+      continue;
+    }
+    if (seen.has(result.dataSource.sourceId)) {
+      log.warn(`Dropping runtime data source ${label}: duplicate sourceId`);
+      continue;
+    }
+    const declarer = otherDeclarer(integration.id, result.dataSource.sourceId);
+    if (declarer !== undefined) {
+      log.warn(
+        `Dropping runtime data source ${label} of ${integration.id}: integration ${declarer} already declares it`,
+      );
+      continue;
+    }
+    seen.add(result.dataSource.sourceId);
+    accepted.push(result.dataSource);
+  }
+  manifest.dataSources = accepted;
+  if (integrations.get(integration.id) === integration) {
+    void refreshAttributionFromRegistry();
+    runIntegrationSourcesChangedHook();
+  }
+  return [...accepted];
 }
 
 function buildIntegrationContext(args: {
@@ -517,6 +622,11 @@ function buildIntegrationContext(args: {
       existing.push(provider);
       providers.set("road-conditions", existing);
     },
+    registerFuelStationProvider(provider) {
+      const existing = providers.get("fuel-stations") ?? [];
+      existing.push(provider);
+      providers.set("fuel-stations", existing);
+    },
     registerPhotoProvider(provider) {
       const existing = providers.get("photos") ?? [];
       existing.push(provider);
@@ -570,6 +680,9 @@ function buildIntegrationContext(args: {
     registerDisclosure(disclosure) {
       if (!integration.disclosures) integration.disclosures = [];
       integration.disclosures.push(disclosure);
+    },
+    setDataSources(list) {
+      return setRuntimeDataSources(integration, log, list);
     },
     emit(event: string, data: unknown) {
       contextEventBus.emit({
@@ -832,6 +945,10 @@ export async function initIntegrations(
     }
   }
 
+  // The index above was seeded from the manifests on disk; runtime integrations
+  // supplied their sources during setup, so re-index from the live registry.
+  await refreshAttributionFromRegistry();
+
   // Register the /api/integrations endpoint
   fastify.get("/api/integrations", async (request, reply) => {
     const disclosures = Array.from(integrations.values())
@@ -1070,7 +1187,6 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
   const stagedEventBus = new IntegrationEventBus();
   const next = new Map<string, LoadedIntegration>();
   const activationScope = createActivationTransactionScope();
-  let stagedManifestDataSources: ManifestDataSource[] = [];
 
   try {
     beginIntegrationRouteStaging();
@@ -1080,7 +1196,6 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
     // Re-discover and re-setup (topological sort by dependencies, same as cold start).
     const discovered = await discoverManifests(_integrationDirs);
     const sorted = topologicalSort(discovered);
-    stagedManifestDataSources = collectManifestDataSources(sorted);
 
     // Reload capability bindings and service registry for requires: resolution.
     let reloadBindings = new Map<string, Map<string, string>>();
@@ -1264,16 +1379,10 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
   }
 
   // Request-visible state is now committed. Refresh dependent indexes and
-  // invalidate derived caches before retiring the previous generation.
-  const existingIndex = getAttributionIndex();
-  if (existingIndex) {
-    existingIndex.setIntegrationManifests(stagedManifestDataSources);
-    try {
-      await existingIndex.reload();
-    } catch (err) {
-      _fastify.log.warn(err, "AttributionIndex reload failed");
-    }
-  }
+  // invalidate derived caches before retiring the previous generation. The
+  // index reads the live registry, so it carries the lists runtime
+  // integrations supplied while staging and nothing of the retired generation.
+  await refreshAttributionFromRegistry();
 
   const enabledCount = Array.from(integrations.values()).filter((i) => i.enabled).length;
   _fastify.log.info(
@@ -1282,11 +1391,7 @@ async function doReloadIntegrations(): Promise<ReloadResult> {
 
   // The data-use policy memoizes gated sets derived from the (now-rebuilt)
   // registry; drop them so the next request re-derives against the new set.
-  try {
-    integrationsReloadedHook?.();
-  } catch (err) {
-    _fastify.log.warn(err, "Post-reload cache invalidation hook failed");
-  }
+  runIntegrationSourcesChangedHook();
 
   for (const integration of previousIntegrations) {
     previousEventBus.emit({ type: "integration.unloaded", integrationId: integration.id });

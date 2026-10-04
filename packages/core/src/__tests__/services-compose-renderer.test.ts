@@ -154,6 +154,26 @@ describe("renderServiceSnippet", () => {
     ).toThrow(/Invalid proxy hostname/);
   });
 
+  it("refuses a proxy host whose config key is only an env reference, not its default", () => {
+    // The renderer writes `${SERVICE_TIMELINE_APPLICATION_HOSTS:-}` into the
+    // container env; Traefik would route the default host instead.
+    const service = svc("timeline", {
+      configSchema: { properties: { APPLICATION_HOSTS: { type: "string" } } },
+      exposure: {
+        proxy: {
+          enabled: true,
+          host: { default: "timeline.{domain}", configKey: "APPLICATION_HOSTS" },
+        },
+      },
+    } as never);
+    const ctx = {
+      domain: "example.com",
+      serviceConfigEnvKeys: new Map([["timeline", ["APPLICATION_HOSTS"]]]),
+    };
+    expect(() => resolveProxyHost(service.manifest, ctx)).toThrow(/APPLICATION_HOSTS/);
+    expect(() => renderServiceSnippet(service, ctx)).toThrow(/APPLICATION_HOSTS/);
+  });
+
   it("renders the default path-based proxy rule when no custom host is declared", () => {
     const service = svc("alpha", { exposure: { proxy: { enabled: true } } });
     expect(resolveProxyHost(service.manifest, { domain: "example.com" })).toBeUndefined();
@@ -249,14 +269,49 @@ describe("renderServiceSnippet", () => {
     expect(doc.services["weather-feed"].networks).toEqual(["openmapx-community-weather-feed"]);
   });
 
-  it("rejects an audited bridge target that is not enabled in the rendered stack", () => {
+  it("skips an audited bridge target that is disabled or not installed, silently", () => {
     const extension = { ...communitySvc("weather-feed"), enabled: false };
     const bridge = svc("audited-bridge", {
+      communityNetworkAccess: ["weather-feed", "bike-share"],
+    });
+    const result = renderCompose([bridge, extension], {});
+    const doc = parseYaml(result.composeYaml) as {
+      services: Record<string, { networks: string[] }>;
+      networks: Record<string, unknown>;
+    };
+
+    expect(doc.services["audited-bridge"].networks).toEqual(["openmapx"]);
+    expect(doc.networks).not.toHaveProperty("openmapx-community-weather-feed");
+    expect(result.warnings).toBeUndefined();
+  });
+
+  it("still rejects a bridge on host networking", () => {
+    const bridge = svc("audited-bridge", {
+      container: { image: "t/audited-bridge", tag: "latest", networkMode: "host" },
       communityNetworkAccess: ["weather-feed"],
     });
-    expect(() => renderCompose([bridge, extension], {})).toThrow(
-      /not an enabled community service/,
+    expect(() => renderCompose([bridge, communitySvc("weather-feed")], {})).toThrow(
+      /networkMode "host"/,
     );
+  });
+
+  it("joins only the enabled targets when some are absent", () => {
+    const bridge = svc("audited-bridge", {
+      communityNetworkAccess: ["weather-feed", "bike-share"],
+    });
+    const result = renderCompose([bridge, communitySvc("weather-feed")], {});
+    const doc = parseYaml(result.composeYaml) as {
+      services: Record<string, { networks: string[] }>;
+    };
+    expect(doc.services["audited-bridge"].networks).toEqual([
+      "openmapx",
+      "openmapx-community-weather-feed",
+    ]);
+  });
+
+  it("still rejects a built-in bridge target", () => {
+    const bridge = svc("audited-bridge", { communityNetworkAccess: ["redis"] });
+    expect(() => renderCompose([bridge, svc("redis")], {})).toThrow(/redis.*built-in/);
   });
 
   it("fails closed when different community ids normalize to the same network", () => {

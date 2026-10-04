@@ -1,4 +1,5 @@
 import { fetchWithTimeout } from "../transitous/motis-probe.js";
+import { openConditionsHeaders } from "./openconditions-auth.js";
 
 const COVERED_WAYS_FETCH_TIMEOUT_MS = 30_000;
 
@@ -102,11 +103,18 @@ export function parseConditionsWayIds(json: string): Set<number> {
  * The profiles and conditions halves are best-effort: the live writer is
  * load-bearing and runs far more often, so a failing companion feed degrades
  * to the live set rather than leaving the map unwritten.
+ *
+ * Every read carries `openConditionsToken` as the operator token when set.
  */
-export async function fetchCoveredWayIds(openConditionsUrl: string): Promise<Set<number>> {
+export async function fetchCoveredWayIds(
+  openConditionsUrl: string,
+  openConditionsToken?: string,
+): Promise<Set<number>> {
+  const request = { headers: openConditionsHeaders(openConditionsToken) };
   const res = await fetchWithTimeout(
     `${openConditionsUrl}/segments/speed.csv`,
     COVERED_WAYS_FETCH_TIMEOUT_MS,
+    request,
   );
   if (!res.ok) {
     throw new Error(`covered-ways: OpenConditions speed feed responded ${res.status}`);
@@ -117,6 +125,7 @@ export async function fetchCoveredWayIds(openConditionsUrl: string): Promise<Set
     const profileRes = await fetchWithTimeout(
       `${openConditionsUrl}/segments/profiles.json`,
       COVERED_WAYS_FETCH_TIMEOUT_MS,
+      request,
     );
     if (profileRes.ok) {
       for (const id of parseProfileWayIds(await profileRes.text())) ids.add(id);
@@ -129,6 +138,7 @@ export async function fetchCoveredWayIds(openConditionsUrl: string): Promise<Set
     const conditionsRes = await fetchWithTimeout(
       `${openConditionsUrl}/segments/conditions.json`,
       COVERED_WAYS_FETCH_TIMEOUT_MS,
+      request,
     );
     if (conditionsRes.ok) {
       for (const id of parseConditionsWayIds(await conditionsRes.text())) ids.add(id);

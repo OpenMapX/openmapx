@@ -66,7 +66,12 @@ interface ManifestDataSource {
   dpaUrl?: string;
 }
 
-/** Collect every (deduped) legal URL declared across the integration manifests. */
+/**
+ * Collect every (deduped) legal URL declared across the integration manifests.
+ * An integration whose manifest sets `runtimeDataSources: true` has no static
+ * URLs; it is reported, not checked, because its sources come from an upstream
+ * at runtime.
+ */
 function collectUrls(): Map<string, Usage[]> {
   const usages = new Map<string, Usage[]>();
   if (!existsSync(INTEGRATIONS_DIR)) return usages;
@@ -77,13 +82,23 @@ function collectUrls(): Map<string, Usage[]> {
     const manifestPath = join(dir, "manifest.json");
     if (!existsSync(manifestPath)) continue;
 
-    let manifest: { id?: string; dataSources?: ManifestDataSource[] };
+    let manifest: {
+      id?: string;
+      runtimeDataSources?: boolean;
+      dataSources?: ManifestDataSource[];
+    };
     try {
       manifest = JSON.parse(readFileSync(manifestPath, "utf-8"));
     } catch {
       continue;
     }
     const integrationId = manifest.id ?? entry.name;
+    if (manifest.runtimeDataSources === true) {
+      console.log(
+        `ℹ ${integrationId}: runtime data sources — their URLs are supplied by the upstream at runtime and not checked here.`,
+      );
+      continue;
+    }
 
     for (const ds of manifest.dataSources ?? []) {
       for (const field of URL_FIELDS) {

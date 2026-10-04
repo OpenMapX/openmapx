@@ -1,5 +1,29 @@
+import type { DataSourceDetail } from "@openmapx/core";
 import { describe, expect, it } from "vitest";
-import { pickRentalActionUrl } from "./DataSourceSections";
+import { pickRentalActionUrl, resolveSourceHeader } from "./DataSourceSections";
+
+describe("resolveSourceHeader", () => {
+  const fuelDetail: DataSourceDetail = {
+    id: "oc:feature:test.local:s1",
+    providerId: "fuel",
+    sources: ["de-tankerkoenig-fuel", "osm-fuel"],
+    name: "Aral",
+    coordinates: [13.4, 52.5],
+    sections: [],
+  };
+
+  it("titles a fuel detail attached to an OSM place by its data source", () => {
+    // The place's scheme is OSM's, and no header is keyed by the feed id.
+    expect(resolveSourceHeader(fuelDetail, "osm")).toMatchObject({
+      titleKey: "fuelPrices",
+      titleFallback: null,
+    });
+  });
+
+  it("titles a fuel detail without a domain by its data source", () => {
+    expect(resolveSourceHeader(fuelDetail)).toMatchObject({ titleKey: "fuelPrices" });
+  });
+});
 
 const action = {
   label: { $t: "action.openRentalApp" },

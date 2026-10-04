@@ -1,0 +1,86 @@
+{
+  "generatedAt": "2026-10-04T00:00:00.000Z",
+  "scope": "operator",
+  "sources": [
+    {
+      "id": "de-tankerkoenig-fuel",
+      "name": "Tankerkönig fuel prices (Germany)",
+      "domain": "fuel",
+      "product": "fuel",
+      "operator": "tankerkoenig",
+      "region": "de",
+      "country": "DE",
+      "accessMode": "on_demand",
+      "restricted": true,
+      "license": "CC-BY-4.0",
+      "licenseUrl": "https://creativecommons.org/licenses/by/4.0/",
+      "attribution": "Tankerkönig (MTS-K), CC BY 4.0 – https://creativecommons.tankerkoenig.de",
+      "homepage": "https://creativecommons.tankerkoenig.de",
+      "privacyUrl": "https://onboarding.tankerkoenig.de/datenschutz",
+      "terms": {
+        "url": "https://creativecommons.tankerkoenig.de/",
+        "reviewedAt": "2026-10-03",
+        "note": "API data must not be obtained or passed on by mineral oil companies, filling-station operators or IT providers working for them; a public API cannot exclude them"
+      },
+      "rights": {
+        "redistribution": false,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": false
+      }
+    },
+    {
+      "id": "nl-ndw-events",
+      "name": "NDW (Netherlands)",
+      "domain": "roads",
+      "product": "events",
+      "operator": "ndw",
+      "region": "nl",
+      "country": "NL",
+      "accessMode": "bulk",
+      "restricted": false,
+      "license": "CC0-1.0",
+      "licenseUrl": "https://creativecommons.org/publicdomain/zero/1.0/",
+      "attribution": "NDW / Rijkswaterstaat",
+      "homepage": "https://opendata.ndw.nu",
+      "privacyUrl": "https://www.ndw.nu/privacy",
+      "terms": {
+        "url": "https://www.ndw.nu/service/copyright",
+        "reviewedAt": "2026-09-12"
+      },
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": false,
+        "retention": true,
+        "shareAlike": false
+      }
+    },
+    {
+      "id": "osm-fuel",
+      "name": "OpenStreetMap filling stations",
+      "domain": "fuel",
+      "product": "fuel",
+      "operator": "osm",
+      "region": "global",
+      "accessMode": "on_demand",
+      "restricted": true,
+      "license": "ODbL-1.0",
+      "licenseUrl": "https://opendatacommons.org/licenses/odbl/1-0/",
+      "attribution": "© OpenStreetMap contributors",
+      "homepage": "https://www.openstreetmap.org/copyright",
+      "privacyUrl": "https://osmfoundation.org/wiki/Privacy_Policy",
+      "rights": {
+        "redistribution": true,
+        "derivedRedistribution": true,
+        "commercialUse": true,
+        "attributionRequired": true,
+        "retention": true,
+        "shareAlike": true
+      }
+    }
+  ]
+}

@@ -19,6 +19,11 @@
  *      while the integration emits image/media URLs for a host that the API
  *      image-proxy does NOT allowlist (so the browser would load it directly).
  *
+ * An integration whose manifest sets `runtimeDataSources: true` declares no
+ * source hosts: it is named in the output, any external host in its code must
+ * be allowlisted, and its media hosts are checked as if every source were
+ * server-only.
+ *
  * Accepted exceptions live in scripts/data-flows.allow.json. Run on demand with
  * `pnpm check-data-flows`.
  */
@@ -408,11 +413,19 @@ function main(): void {
     if (!existsSync(manifestPath)) continue;
     const manifest = readJson<{
       id?: string;
+      runtimeDataSources?: boolean;
       dataSources?: { url?: string; endUserExposure?: string; apiHosts?: string[] }[];
     }>(manifestPath);
     if (!manifest) continue;
     const id = manifest.id ?? entry.name;
     const sources = manifest.dataSources ?? [];
+    const runtime = manifest.runtimeDataSources === true;
+    if (runtime) {
+      console.log(
+        `ℹ ${id}: runtime data sources — no static source hosts are declared, so every ` +
+          "external host its code contacts must be allowlisted, and its media hosts are checked as server-only.",
+      );
+    }
 
     // Declared registrable domains: the host of each source's `url` plus any
     // explicit `apiHosts` (the real data-API host when it differs from `url`).
@@ -468,8 +481,10 @@ function main(): void {
       });
     }
 
-    // 2) Media-exposure: server-only source but media host not proxied.
-    const hasServerOnly = sources.some((s) => s.endUserExposure === "server-only");
+    // 2) Media-exposure: server-only source but media host not proxied. A
+    // runtime integration's exposure is only known at runtime, so it is held
+    // to the strictest reading.
+    const hasServerOnly = runtime || sources.some((s) => s.endUserExposure === "server-only");
     if (hasServerOnly) {
       for (const host of mediaHosts) {
         if (proxyAllows(host, proxyHosts)) continue;

@@ -15,9 +15,11 @@ export interface I18nToken {
   $t: string;
   /**
    * ICU MessageFormat placeholder values for the resolved template
-   * (e.g. {free: 3, capacity: 10} for "{free}/{capacity} free").
+   * (e.g. {free: 3, capacity: 10} for "{free}/{capacity} free"). A value may
+   * itself be a token, resolved first, so one message can embed translated
+   * parts.
    */
-  values?: Record<string, string | number>;
+  values?: Record<string, string | number | I18nToken>;
 }
 
 /**

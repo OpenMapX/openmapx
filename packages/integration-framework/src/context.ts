@@ -1,5 +1,6 @@
 import type { PoiSource } from "@openmapx/poi-source-registry";
 import type { AirQualityProvider } from "./contracts/air-quality-provider.js";
+import type { FuelStationProvider } from "./contracts/fuel-station-provider.js";
 import type { GeocodingProvider } from "./contracts/geocoding-provider.js";
 import type { GtfsCatalogProvider } from "./contracts/gtfs-catalog-provider.js";
 import type { KnowledgeProvider } from "./contracts/knowledge-provider.js";
@@ -18,7 +19,7 @@ import type { TransitProvider } from "./contracts/transit-provider.js";
 import type { WeatherProvider } from "./contracts/weather-provider.js";
 import type { OpaqueCursorCodec } from "./cursor";
 import type { LoadedIntegration } from "./loader";
-import type { IntegrationManifest } from "./manifest";
+import type { IntegrationDataSource, IntegrationManifest } from "./manifest";
 import type { RouteQuery } from "./query";
 import type { UpstreamRuntime } from "./upstream-runtime";
 
@@ -517,6 +518,12 @@ export interface IntegrationContext {
    * `road-conditions` orchestrator merges all registered providers.
    */
   registerRoadConditionsProvider(provider: RoadConditionsProvider): void;
+  /**
+   * Typed registrar for fuel-station providers (stations, products, prices).
+   * Stored under the `fuel-stations` key; the `fuel` orchestrator merges all
+   * registered providers.
+   */
+  registerFuelStationProvider(provider: FuelStationProvider): void;
   /** Typed registrar for photo providers. Stored under the `photos` key. */
   registerPhotoProvider(provider: PhotoProvider): void;
   /** Typed registrar for street-level imagery providers. Stored under the `street-level-imagery` key. */
@@ -544,6 +551,23 @@ export interface IntegrationContext {
   registerRoute(method: string, path: string, handler: RouteHandler, options?: RouteOptions): void;
   registerHealthCheck(fn: CustomHealthCheckFn): void;
   registerDisclosure(disclosure: Disclosure): void;
+  /**
+   * Replace this integration's data sources. Only for a manifest with
+   * `runtimeDataSources: true`; throws otherwise. Each source is validated
+   * like a static manifest entry (its `domain` must be one of the manifest
+   * domains) and an invalid or duplicate one is dropped with a warning, as is
+   * one whose sourceId another live integration already declares. Returns the
+   * sources the host accepted: an integration serves only those, since a
+   * dropped source is neither credited nor gated by the data-use policy. The
+   * host then serves the list through `GET /api/integrations` (legal pages,
+   * attribution), re-indexes attribution and re-evaluates the data-use policy.
+   * A reload starts the new generation with an empty list, so call this again
+   * from `setup()` or once the upstream list is known. A provider that reads
+   * `ctx.manifest.dataSources` when it is registered (air-quality's contract
+   * check does) sees only the list set by then, so register such providers
+   * after the first call.
+   */
+  setDataSources(list: IntegrationDataSource[]): IntegrationDataSource[];
 
   emit(event: string, data: unknown): void;
   on(event: string, handler: (data: unknown) => void): () => void;
