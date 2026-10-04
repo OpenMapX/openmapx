@@ -196,6 +196,12 @@
       "mountAt": "/var/lib/openmapx/subject-exports",
       "backup": false,
       "readOnly": false
+    },
+    {
+      "name": "openmapx-api-runtime-recovery",
+      "mountAt": "/app/infra/docker/.runtime-recovery",
+      "backup": false,
+      "readOnly": false
     }
   ],
   "exposure": {

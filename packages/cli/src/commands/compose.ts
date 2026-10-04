@@ -12,6 +12,7 @@ import { repoPaths } from "../lib/paths";
 import {
   assertPlatformFileTarget,
   ensurePlatformExportsKeyRingFile,
+  ensurePlatformOwnerOnlySecretFile,
   ensurePlatformPrivateDirectory,
   ensurePlatformSecretFile,
   PlatformFileTargetChangedError,
@@ -246,7 +247,8 @@ export async function renderComposeForRepo(opts: RenderRepoOptions): Promise<Ren
   );
   initializeErasureJournal(join(erasureDirectory, "journal.jsonl"), erasureJournalKey);
   ensurePlatformExportsKeyRingFile(subjectExportsMasterKeyPath);
-  ensurePlatformSecretFile(privacyBackupCapabilityKeyPath);
+  // app-api and ops-agent refuse this key unless only their uid can read it.
+  ensurePlatformOwnerOnlySecretFile(privacyBackupCapabilityKeyPath);
   ensurePlatformSecretFile(transitousRunnerCapabilityPath);
   const opsAgentApiToken = ensurePlatformSecretFile(opsAgentApiTokenPath);
   const opsAgentDataManagerToken = ensurePlatformSecretFile(opsAgentDataManagerTokenPath);

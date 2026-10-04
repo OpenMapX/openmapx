@@ -233,8 +233,14 @@ COPY packages/core/tsconfig.json ./packages/core/
 # directories the runtime actually writes are handed over; the rest of /app
 # stays read-only to the process. A root API process was the difference between
 # "compromised service" and "compromised container" for every remaining mount.
-RUN mkdir -p /app/custom_integrations /var/lib/openmapx/trusted-config && \
-    chown -R node:node /app/custom_integrations /var/lib/openmapx
+#
+# The runtime-recovery journal must be a 0700 directory the process owns; it
+# is a named volume, which Docker seeds with this directory's owner and mode.
+RUN mkdir -p /app/custom_integrations /var/lib/openmapx/trusted-config \
+      /app/infra/docker/.runtime-recovery && \
+    chown -R node:node /app/custom_integrations /var/lib/openmapx \
+      /app/infra/docker/.runtime-recovery && \
+    chmod 0700 /app/infra/docker/.runtime-recovery
 USER node
 
 WORKDIR /app/apps/api

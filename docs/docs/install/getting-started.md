@@ -33,6 +33,7 @@ Clone the repository and install the workspace once. `pnpm install` sets up the
 monorepo and the `openmapx` CLI; you never install anything globally.
 
 ```bash
+umask 022
 git clone https://github.com/OpenMapX/openmapx.git
 cd openmapx
 pnpm install
@@ -40,6 +41,11 @@ pnpm install
 
 From here on, every command is run as `pnpm openmapx <command>` from the repo
 root.
+
+The `ops-agent` refuses to start on a checkout that other users could modify,
+so its directories must not be group- or world-writable. Hosts whose default
+umask is `002` (common on Debian and Ubuntu for regular users) create exactly
+that; keep `umask 022` in the shell you clone, pull, and run the CLI from.
 
 ## 2. Configure your environment
 
@@ -80,6 +86,10 @@ OPENMAPX_LOCAL_ADMIN_TOKEN= # CLI ↔ loopback admin
 # Host wiring (Linux)
 OPENMAPX_HOST_DIR=         # absolute path of this checkout — run `pwd` here
 DOCKER_GID=                # docker-socket group id — `stat -c %g /var/run/docker.sock`
+
+# Transit scope — the data-manager will not start without it, even when no
+# transit engine is enabled: an empty list never means "the whole planet"
+TRANSITOUS_COUNTRIES=de
 ```
 
 `OPENMAPX_HOST_DIR` and `DOCKER_GID` let the private `ops-agent` broker container
@@ -164,13 +174,20 @@ time.
 
 ## 5. Bring up the infrastructure first
 
-Start the database, cache, proxy, and data-manager before anything else. The
-data-manager needs its `/data` volume mounted before you can ask it to download
-anything:
+Start the database, cache, proxy, API, and data-manager before anything else.
+The data-manager needs its `/data` volume mounted before you can ask it to
+download anything, and it waits for the database schema, which `app-api`
+creates when it boots:
 
 ```bash
-pnpm openmapx services start postgis redis traefik data-manager
+pnpm openmapx services start postgis redis traefik app-api data-manager
 ```
+
+`app-api` and `data-manager` are release images, so this first start also
+resolves the aggregate release (`ghcr.io/openmapx/release-manifest:latest`)
+into `infra/docker/docker-compose.release.yml`. The CLI refuses to start them
+without that pin; if the registry is unreachable, fix access and run
+`pnpm openmapx compose release`.
 
 Confirm the data-manager is healthy:
 
@@ -277,9 +294,10 @@ This re-renders, applies the hardlink plan, resolves the aggregate app release
 (`ghcr.io/openmapx/release-manifest:latest`) into
 `infra/docker/docker-compose.release.yml` if that overlay does not exist yet,
 and runs `docker compose up -d` for the whole enabled selection. The overlay
-pins the core app images as one coherent set; if the registry is unreachable
-the CLI warns loudly and you can pin later with `pnpm openmapx compose release`
-(the manual procedure in [Upgrading](./upgrading.md#4-resolve-the-complete-release-and-replace-containers)
+pins the core app images as one coherent set; without it the CLI refuses to
+start them. If the registry is unreachable, restore access and run
+`pnpm openmapx compose release` (the manual procedure in
+[Upgrading](./upgrading.md#4-resolve-the-complete-release-and-replace-containers)
 produces the same file). Prepared services start from the artifacts you built
 in step 7; any heavy engine builds its internal index from the OSM extract on
 first start, which is slow at continent or planet scale.

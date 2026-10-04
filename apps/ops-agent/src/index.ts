@@ -246,7 +246,9 @@ async function main(): Promise<void> {
   });
 }
 
-void main().catch(() => {
-  process.stderr.write("ops-agent failed to start\n");
+void main().catch((error: unknown) => {
+  // Only the message: startup errors carry fixed reasons, never key material.
+  const reason = error instanceof Error ? `: ${error.message}` : "";
+  process.stderr.write(`ops-agent failed to start${reason}\n`);
   process.exitCode = 1;
 });

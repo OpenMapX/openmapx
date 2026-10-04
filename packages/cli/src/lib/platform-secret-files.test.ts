@@ -18,6 +18,7 @@ import {
   assertPlatformSecretMetadata,
   assertPlatformSecretParentOwner,
   ensurePlatformExportsKeyRingFile,
+  ensurePlatformOwnerOnlySecretFile,
   ensurePlatformPrivateDirectory,
   ensurePlatformSecretFile,
   rotatePlatformSecretFile,
@@ -334,6 +335,21 @@ describe("ensurePlatformSecretFile", () => {
       }),
     ).toThrow(original);
     expect(readdirSync(secretDir).filter((name) => name.endsWith(".tmp"))).toHaveLength(1);
+  });
+});
+
+describe("ensurePlatformOwnerOnlySecretFile", () => {
+  it("creates the key owner-only and tightens a key provisioned world-readable", () => {
+    const path = join(tempDir(), "secrets", "privacy-backup-capability-key");
+    const first = ensurePlatformOwnerOnlySecretFile(path, {
+      randomBytes: () => Buffer.alloc(32, 23),
+    });
+    expect(first).toBe(canonicalPassword(23));
+    expect(statSync(path).mode & 0o777).toBe(0o400);
+
+    chmodSync(path, 0o444);
+    expect(ensurePlatformOwnerOnlySecretFile(path)).toBe(first);
+    expect(statSync(path).mode & 0o777).toBe(0o400);
   });
 });
 
