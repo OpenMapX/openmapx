@@ -54,6 +54,22 @@ export function setTransitousUrl(url: string): void {
   transitousInstance.client.setConfig({ baseUrl: url });
 }
 
+/**
+ * Manifest sourceIds of the instance that answered. A deployment without its
+ * own MOTIS points the local endpoint at Transitous, which is then credited
+ * as Transitous rather than a self-hosted MOTIS.
+ */
+function sourceIdsFor(instance: MotisInstance): string[] {
+  if (instance === transitousInstance) return ["transitous"];
+  try {
+    const host = new URL(motisLocalBaseUrl).hostname.toLowerCase();
+    if (host === "transitous.org" || host.endsWith(".transitous.org")) return ["transitous"];
+  } catch {
+    // An unparsable endpoint is not Transitous.
+  }
+  return ["motis"];
+}
+
 async function isMotisLocalReachable(): Promise<boolean> {
   try {
     const res = await fetch(`${motisLocalBaseUrl}/api/v1/plan`, {
@@ -70,7 +86,7 @@ async function preferredMotisClient() {
   return (await isMotisLocalReachable()) ? motisLocalInstance : transitousInstance;
 }
 
-function matchToSearchResult(match: Match): SearchResult {
+function matchToSearchResult(match: Match, instance: MotisInstance): SearchResult {
   const type: SearchResult["type"] = match.type === "ADDRESS" ? "address" : "poi";
   return {
     id: match.id,
@@ -79,13 +95,12 @@ function matchToSearchResult(match: Match): SearchResult {
     type,
     confidence: match.score / 100,
     rawCategory: match.category,
+    sourceIds: sourceIdsFor(instance),
   };
 }
 
-function matchToAutocompleteResult(
-  match: Match,
-  instance: { provider: string },
-): AutocompleteResult {
+function matchToAutocompleteResult(match: Match, instance: MotisInstance): AutocompleteResult {
+  const sourceIds = sourceIdsFor(instance);
   if (match.type === "STOP") {
     const stop = {
       id: match.id,
@@ -102,6 +117,7 @@ function matchToAutocompleteResult(
       type: "transit_stop",
       transitStop: stop,
       rawCategory: match.category,
+      sourceIds,
     };
   }
 
@@ -112,6 +128,7 @@ function matchToAutocompleteResult(
     coordinates: [match.lon, match.lat],
     type,
     rawCategory: match.category,
+    sourceIds,
   };
 }
 
@@ -126,7 +143,7 @@ export const motisGeocodingService: GeocodingProviderImpl = {
           language: lang ? [lang] : undefined,
         },
       });
-      const results = (data ?? []).map(matchToSearchResult);
+      const results = (data ?? []).map((m) => matchToSearchResult(m, instance));
       if (results.length > 0 || instance === transitousInstance) return results;
     } catch {
       if (instance === transitousInstance) return [];
@@ -140,7 +157,7 @@ export const motisGeocodingService: GeocodingProviderImpl = {
           language: lang ? [lang] : undefined,
         },
       });
-      return (data ?? []).map(matchToSearchResult);
+      return (data ?? []).map((m) => matchToSearchResult(m, transitousInstance));
     } catch {
       return [];
     }
