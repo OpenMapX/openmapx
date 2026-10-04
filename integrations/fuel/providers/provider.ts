@@ -11,6 +11,7 @@ import {
   extractSourcePrefix,
   fetchJson,
   gapFillBranding,
+  overpassQuerySafe,
   searchByCategory,
 } from "@openmapx/core";
 import type { MobilityDataSourceProvider } from "@openmapx/integration-framework";
@@ -181,6 +182,37 @@ class FuelDataSourceProvider implements MobilityDataSourceProvider {
   }
 
   private async fetchDetail(itemId: string): Promise<DataSourceDetail | null> {
+    const osmId = /^osm:(node|way|relation)\/([1-9]\d*)$/.exec(itemId);
+    if (osmId) {
+      const [, type, id] = osmId;
+      if (!Number.isSafeInteger(Number(id))) return null;
+      const data = await overpassQuerySafe(
+        `[out:json][timeout:10];${type}(${id});out body center;`,
+        null,
+      );
+      const element = data?.elements.find((el) => el.type === type && el.id === Number(id));
+      if (element?.tags?.amenity !== "fuel") return null;
+      const coordinates =
+        element.type === "node"
+          ? element
+          : (element as { center?: { lat: number; lon: number } }).center;
+      if (!coordinates || !Number.isFinite(coordinates.lat) || !Number.isFinite(coordinates.lon)) {
+        return null;
+      }
+      const tags = element.tags;
+      return {
+        id: itemId,
+        sources: ["osm"],
+        name: tags.name ?? tags.brand ?? "Gas Station",
+        coordinates: [coordinates.lon, coordinates.lat],
+        identity: { brand: tags.brand, operator: tags.operator, network: tags.network },
+        operator: tags.operator || tags.brand ? { name: tags.operator ?? tags.brand } : undefined,
+        osmTags: tags,
+        sections: [],
+        branding: gapFillBranding(undefined, tags, resolveBrand),
+      };
+    }
+
     // DE tankerkoenig stations: fetch enriched detail from their API
     if (itemId.startsWith("de-tankerkoenig/")) {
       const uuid = itemId.replace(/^de-tankerkoenig\//, "");
