@@ -49,7 +49,8 @@ export interface DecodedMotisRentalId {
 }
 
 const DEFAULT_TRANSITOUS_URL = process.env.TRANSITOUS_URL ?? "https://api.transitous.org";
-const DEFAULT_MOTIS_URL = process.env.MOTIS_URL ?? "http://localhost:8081";
+/** The self-hosted MOTIS, if any; without one rentals come from Transitous. */
+const DEFAULT_MOTIS_URL = process.env.MOTIS_URL?.trim() || undefined;
 const LOCAL_BREAKER_FAILURES = 2;
 const LOCAL_BREAKER_OPEN_MS = 15_000;
 
@@ -676,10 +677,10 @@ export function createMotisRentalsClient(options: {
   transitousUrl?: string;
   rentalSourceIndex?: readonly MotisRentalSourceIndexEntry[];
 }): MotisRentalsClient {
-  const localInstance: MotisInstance = {
-    client: createClient({ baseUrl: configuredUrl(options.motisUrl, DEFAULT_MOTIS_URL) }),
-    origin: "motis-local",
-  };
+  const localUrl = options.motisUrl?.trim() || DEFAULT_MOTIS_URL;
+  const localInstance: MotisInstance | undefined = localUrl
+    ? { client: createClient({ baseUrl: localUrl }), origin: "motis-local" }
+    : undefined;
   const hostedInstance: MotisInstance = {
     client: createClient({ baseUrl: configuredUrl(options.transitousUrl, DEFAULT_TRANSITOUS_URL) }),
     origin: "transitous",
@@ -691,7 +692,7 @@ export function createMotisRentalsClient(options: {
   return {
     async fetchMotisRentals(bbox, formFactors) {
       const now = Date.now();
-      if (now >= localBreakerOpenUntil) {
+      if (localInstance && now >= localBreakerOpenUntil) {
         const local = await queryRentals(localInstance, bbox);
         if (local.data) {
           localFailures = 0;

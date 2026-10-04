@@ -33,20 +33,20 @@ const transitousInstance: MotisInstance = (() => {
   return { client, prefix: "mo:", provider: "mo" };
 })();
 
-let motisLocalBaseUrl = "http://localhost:8081";
+let motisLocalBaseUrl: string | undefined;
 
 const motisLocalInstance: MotisInstance = (() => {
-  const client = createClient({
-    baseUrl: motisLocalBaseUrl,
-    querySerializer: QUERY_SERIALIZER,
-  });
+  const client = createClient({ querySerializer: QUERY_SERIALIZER });
   return { client, prefix: "ms:", provider: "ms" };
 })();
 
-/** Update the local MOTIS base URL (called from setup() when service registry resolves it). */
-export function setMotisLocalUrl(url: string): void {
+/**
+ * Set the self-hosted MOTIS base URL (called from setup()); undefined when the
+ * deployment has none, so every lookup goes to Transitous directly.
+ */
+export function setMotisLocalUrl(url: string | undefined): void {
   motisLocalBaseUrl = url;
-  motisLocalInstance.client.setConfig({ baseUrl: url });
+  if (url) motisLocalInstance.client.setConfig({ baseUrl: url });
 }
 
 /** Update the Transitous cloud base URL. */
@@ -54,23 +54,13 @@ export function setTransitousUrl(url: string): void {
   transitousInstance.client.setConfig({ baseUrl: url });
 }
 
-/**
- * Manifest sourceIds of the instance that answered. A deployment without its
- * own MOTIS points the local endpoint at Transitous, which is then credited
- * as Transitous rather than a self-hosted MOTIS.
- */
+/** Manifest sourceIds of the instance that answered. */
 function sourceIdsFor(instance: MotisInstance): string[] {
-  if (instance === transitousInstance) return ["transitous"];
-  try {
-    const host = new URL(motisLocalBaseUrl).hostname.toLowerCase();
-    if (host === "transitous.org" || host.endsWith(".transitous.org")) return ["transitous"];
-  } catch {
-    // An unparsable endpoint is not Transitous.
-  }
-  return ["motis"];
+  return instance === transitousInstance ? ["transitous"] : ["motis"];
 }
 
 async function isMotisLocalReachable(): Promise<boolean> {
+  if (!motisLocalBaseUrl) return false;
   try {
     const res = await fetch(`${motisLocalBaseUrl}/api/v1/plan`, {
       method: "HEAD",

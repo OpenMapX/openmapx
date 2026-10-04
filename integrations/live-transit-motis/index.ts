@@ -16,62 +16,53 @@ import {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { mapMotisAlert, mapMotisAlertSeverity } from "@openmapx/mobility-core/motis-alerts";
-import {
-  createMotisInstance,
-  isTransitousUrl,
-  type MotisInstance,
-} from "@openmapx/mobility-core/motis-client";
+import { createMotisInstance, type MotisInstance } from "@openmapx/mobility-core/motis-client";
 import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
 
 const attribution = createManifestAttribution();
 
-/**
- * Final fallback when neither the `motis` service registry entry nor
- * `ctx.config.endpoint` resolves to a URL. Matches the convention used by
- * `transit-motis-local`, `geocoding-motis`, and `services/data-manager`'s
- * promote stage so a single deployment-wide `MOTIS_URL` env var threads
- * through every consumer of the local instance.
- */
-const FALLBACK_MOTIS_URL = "http://localhost:8081";
 const TRANSITOUS_URL = "https://api.transitous.org";
 const PROVIDER_ID = "live-transit-motis";
 const SOURCE_ID = "motis-rt";
 const ALERT_PREFIX = "mr:";
 
 /**
- * Resolution order: service registry → manifest config → MOTIS_URL env →
- * localhost fallback. Lets ops pick whichever surface fits their topology
- * without touching the integration code.
+ * The self-hosted MOTIS endpoint, if the deployment has one. Resolution order:
+ * service registry → manifest config → MOTIS_URL env, the same chain as
+ * `transit-motis` and `geocoding-motis`. Undefined without one; live data then
+ * comes from Transitous directly.
  */
-function resolveMotisUrl(ctx: IntegrationContext): string {
+function resolveMotisUrl(ctx: IntegrationContext): string | undefined {
   const resolved = ctx.getRequiredService?.("motis");
-  return (
-    resolved?.url ??
-    (ctx.config.endpoint as string | undefined) ??
-    process.env.MOTIS_URL ??
-    FALLBACK_MOTIS_URL
-  );
+  return [resolved?.url, ctx.config.endpoint, process.env.MOTIS_URL]
+    .find(
+      (candidate): candidate is string =>
+        typeof candidate === "string" && candidate.trim().length > 0,
+    )
+    ?.trim();
 }
 
 interface LiveTransitMotisInstances {
-  local: MotisInstance;
-  /** Source credited for the local endpoint: Transitous when it serves it. */
-  localSourceId: string;
+  /** The self-hosted MOTIS; absent when the deployment runs on Transitous. */
+  local?: MotisInstance;
   transitous: MotisInstance;
 }
 
 function createLiveTransitMotisInstances(ctx: IntegrationContext): LiveTransitMotisInstances {
   const localUrl = resolveMotisUrl(ctx);
   return {
-    localSourceId: isTransitousUrl(localUrl) ? "transitous" : SOURCE_ID,
-    local: createMotisInstance({
-      baseUrl: localUrl,
-      prefix: "ms:",
-      provider: "ms",
-      userAgent: USER_AGENT_TRANSIT,
-    }),
+    ...(localUrl
+      ? {
+          local: createMotisInstance({
+            baseUrl: localUrl,
+            prefix: "ms:",
+            provider: "ms",
+            userAgent: USER_AGENT_TRANSIT,
+          }),
+        }
+      : {}),
     transitous: createMotisInstance({
       baseUrl: (ctx.config.transitousUrl as string | undefined)?.trim() || TRANSITOUS_URL,
       prefix: "mo:",
@@ -85,14 +76,24 @@ function routeForId(
   id: string,
   instances: LiveTransitMotisInstances,
 ): { client: MotisInstance["client"]; sourceId: string; attribution: Attribution[] } {
-  const remote = id.startsWith("mo:");
-  const sourceId = remote ? "transitous" : instances.localSourceId;
+  const local = id.startsWith("mo:") ? undefined : instances.local;
+  const sourceId = local ? SOURCE_ID : "transitous";
   const attr = attribution.bySource(sourceId);
   return {
-    client: remote ? instances.transitous.client : instances.local.client,
+    client: (local ?? instances.transitous).client,
     sourceId,
     attribution: attr ? [attr] : [],
   };
+}
+
+/** The instance serving interpolated vehicles, and the source it credits. */
+function vehicleSource(instances: LiveTransitMotisInstances): {
+  instance: MotisInstance;
+  sourceId: string;
+} {
+  return instances.local
+    ? { instance: instances.local, sourceId: SOURCE_ID }
+    : { instance: instances.transitous, sourceId: "transitous" };
 }
 
 /** MOTIS id prefixes the local + cloud + RT providers all share. */
@@ -208,8 +209,9 @@ export function setup(ctx: IntegrationContext): void {
       tripUpdates: true,
     },
     async getVehiclePositions(bbox: BBox) {
-      const attr = attribution.bySource(instances.localSourceId);
-      const data = await getInterpolatedVehicles(instances.local, instances.localSourceId, bbox);
+      const { instance, sourceId } = vehicleSource(instances);
+      const attr = attribution.bySource(sourceId);
+      const data = await getInterpolatedVehicles(instance, sourceId, bbox);
       return withAttribution(data, attr ? [attr] : [], freshnessNow({ hasRealtimeData: true }));
     },
     async getAlertsForStop(stopId) {
@@ -266,5 +268,6 @@ export const __testing = {
   createLiveTransitMotisInstances,
   resolveMotisUrl,
   routeForId,
+  vehicleSource,
   stripPrefix,
 };

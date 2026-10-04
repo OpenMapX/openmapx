@@ -31,17 +31,3 @@ export function createMotisInstance(options: MotisInstanceOptions): MotisInstanc
   });
   return { client, prefix: options.prefix, provider: options.provider };
 }
-
-/**
- * Whether a MOTIS base URL points at the public Transitous instance. A
- * deployment without its own MOTIS service routes the "local" MOTIS endpoint
- * there, and must then credit Transitous rather than a self-hosted MOTIS.
- */
-export function isTransitousUrl(url: string): boolean {
-  try {
-    const host = new URL(url).hostname.toLowerCase();
-    return host === "transitous.org" || host.endsWith(".transitous.org");
-  } catch {
-    return false;
-  }
-}

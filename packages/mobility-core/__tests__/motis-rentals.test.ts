@@ -319,6 +319,22 @@ describe("MOTIS rental request fallback", () => {
     expect(calls[0]?.url).toContain("local.test");
   });
 
+  it("asks Transitous directly when the deployment has no local MOTIS", async () => {
+    const client = createMotisRentalsClient({ transitousUrl: "https://hosted.test" });
+    const calls: string[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (input: string | URL | Request) => {
+        calls.push(requestUrl(input));
+        return jsonResponse(fixture());
+      }),
+    );
+    const snapshot = await client.fetchMotisRentals([13.3, 52.4, 13.5, 52.6]);
+    expect(snapshot.origin).toBe("transitous");
+    expect(calls).toHaveLength(1);
+    expect(calls[0]).toContain("hosted.test");
+  });
+
   it("falls back to hosted only for a local transport/5xx failure", async () => {
     const client = createMotisRentalsClient({
       motisUrl: "https://local.test",

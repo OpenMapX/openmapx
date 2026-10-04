@@ -18,7 +18,7 @@ describe("resolveLocalMotisUrl", () => {
     );
   });
 
-  it("uses the localhost fallback when no non-empty candidate exists", () => {
-    expect(resolveLocalMotisUrl(null, undefined, "")).toBe("http://localhost:8081");
+  it("reports no local MOTIS when no non-empty candidate exists", () => {
+    expect(resolveLocalMotisUrl(null, undefined, "")).toBeUndefined();
   });
 });

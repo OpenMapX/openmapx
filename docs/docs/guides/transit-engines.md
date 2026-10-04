@@ -382,6 +382,12 @@ Inside Docker, containers reach the engine at `http://motis:8080`; the
 `/admin/integrations/transit-motis`) are manual overrides that win over the
 registry when set.
 
+Without a self-hosted MOTIS (no `motis` service and no `MOTIS_URL`), these
+integrations use the public [Transitous](https://transitous.org/) API directly
+and credit it as the source. Features that need a local dataset (route
+patterns, stop timetables, trip refresh, and exact reachability checks) are
+then unavailable.
+
 **OTP** is wired through the `transit-otp` integration. Its endpoint resolves in
 the same way — service registry when `otp` is enabled, then the admin-panel
 `endpoint` value, then `INTEGRATION_TRANSIT_OTP_ENDPOINT`, falling back to

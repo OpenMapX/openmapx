@@ -28,7 +28,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  setMotisLocalUrl("http://localhost:8081");
+  setMotisLocalUrl(undefined);
   vi.unstubAllGlobals();
   vi.clearAllMocks();
 });
@@ -40,12 +40,13 @@ describe("MOTIS geocoder attribution", () => {
     expect(result?.sourceIds).toEqual(["motis"]);
   });
 
-  it("credits Transitous when the local endpoint is Transitous", async () => {
-    setMotisLocalUrl("https://api.transitous.org");
+  it("asks Transitous directly when the deployment has no local MOTIS", async () => {
+    setMotisLocalUrl(undefined);
     const [suggestion] = await motisGeocodingService.autocomplete("bushof", "de");
     const [result] = await motisGeocodingService.geocode("bushof", "de");
     expect(suggestion?.sourceIds).toEqual(["transitous"]);
     expect(result?.sourceIds).toEqual(["transitous"]);
+    expect(fetch).not.toHaveBeenCalled();
   });
 
   it("credits Transitous when the local MOTIS is unreachable", async () => {

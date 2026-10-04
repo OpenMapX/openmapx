@@ -10,11 +10,23 @@ export interface TransitMotisInstances {
   transitousInstance: MotisInstance;
 }
 
-export function createTransitMotisInstances(options: {
-  localUrl: string;
+export interface TransitousInstanceOptions {
   transitousUrl?: string;
   transitousUserAgent?: string;
-}): TransitMotisInstances {
+}
+
+export function createTransitousInstance(options: TransitousInstanceOptions): MotisInstance {
+  return createMotisInstance({
+    baseUrl: options.transitousUrl?.trim() || DEFAULT_TRANSITOUS_URL,
+    prefix: "mo:",
+    provider: "mo",
+    userAgent: options.transitousUserAgent?.trim() || USER_AGENT_TRANSIT,
+  });
+}
+
+export function createTransitMotisInstances(
+  options: TransitousInstanceOptions & { localUrl: string },
+): TransitMotisInstances {
   const local = {
     baseUrl: options.localUrl,
     prefix: "ms:",
@@ -27,11 +39,6 @@ export function createTransitMotisInstances(options: {
       ...local,
       timeoutMs: REACHABILITY_TIMEOUT_MS,
     }),
-    transitousInstance: createMotisInstance({
-      baseUrl: options.transitousUrl?.trim() || DEFAULT_TRANSITOUS_URL,
-      prefix: "mo:",
-      provider: "mo",
-      userAgent: options.transitousUserAgent?.trim() || USER_AGENT_TRANSIT,
-    }),
+    transitousInstance: createTransitousInstance(options),
   };
 }

@@ -12,7 +12,8 @@ interface CtxHandle {
   getProvider(): RealtimeProvider;
 }
 
-function createCtx(config: Record<string, unknown> = {}): CtxHandle {
+// A self-hosted MOTIS unless a test passes its own config.
+function createCtx(config: Record<string, unknown> = { endpoint: "http://motis:8080" }): CtxHandle {
   let provider: RealtimeProvider | undefined;
   const ctx = {
     config,
@@ -339,11 +340,11 @@ describe("live-transit-motis provider", () => {
       expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://env.example:9000");
     });
 
-    it("uses the localhost default when nothing else is wired", async () => {
+    it("reports no local MOTIS when nothing is wired", async () => {
       delete process.env.MOTIS_URL;
       const mod = await loadModule();
       const ctx = ctxWith({ service: null });
-      expect(mod.__testing.resolveMotisUrl(ctx)).toBe("http://localhost:8081");
+      expect(mod.__testing.resolveMotisUrl(ctx)).toBeUndefined();
     });
   });
 
@@ -373,7 +374,7 @@ describe("live-transit-motis provider", () => {
 
     it("routeForId picks the client + attribution by id prefix", async () => {
       const mod = await loadModule();
-      const { ctx } = createCtx();
+      const { ctx } = createCtx({ endpoint: "http://motis:8080" });
       mod.setup(ctx);
       const { createLiveTransitMotisInstances, routeForId } = mod.__testing;
       const instances = createLiveTransitMotisInstances(ctx);
@@ -386,15 +387,20 @@ describe("live-transit-motis provider", () => {
       expect(routeForId("ms:x", instances).attribution[0]?.sourceId).toBe("motis-rt");
     });
 
-    it("credits Transitous when the local endpoint is Transitous", async () => {
+    it("serves everything from Transitous without a local MOTIS", async () => {
       const mod = await loadModule();
-      const { ctx } = createCtx({ endpoint: "https://api.transitous.org" });
+      const { ctx } = createCtx({});
       mod.setup(ctx);
-      const { createLiveTransitMotisInstances, routeForId } = mod.__testing;
+      const { createLiveTransitMotisInstances, routeForId, vehicleSource } = mod.__testing;
       const instances = createLiveTransitMotisInstances(ctx);
 
-      expect(instances.localSourceId).toBe("transitous");
-      expect(routeForId("ms:x", instances).attribution[0]?.sourceId).toBe("transitous");
+      expect(instances.local).toBeUndefined();
+      expect(routeForId("8000105", instances).client).toBe(instances.transitous.client);
+      expect(routeForId("8000105", instances).attribution[0]?.sourceId).toBe("transitous");
+      expect(vehicleSource(instances)).toEqual({
+        instance: instances.transitous,
+        sourceId: "transitous",
+      });
     });
 
     it("queries Transitous for mo: stops and the local instance for ms: stops", async () => {

@@ -6,15 +6,16 @@ export function setup(ctx: IntegrationContext): void {
   assertHttpUrlConfig(ctx.config.endpoint, "endpoint");
   assertHttpUrlConfig(ctx.config.transitousUrl, "transitousUrl");
 
-  // Resolution order: service registry → manifest config → MOTIS_URL env →
-  // localhost fallback. Mirrors transit-motis-local + live-transit-motis +
-  // services/data-manager so ops can set MOTIS_URL once for the whole stack.
+  // The self-hosted MOTIS, if any: service registry → manifest config →
+  // MOTIS_URL env, the same chain as transit-motis and live-transit-motis.
+  // Without one every lookup goes to Transitous directly.
   const resolved = ctx.getRequiredService("motis");
-  const url =
-    resolved?.url ??
-    (ctx.config.endpoint as string | undefined) ??
-    process.env.MOTIS_URL ??
-    "http://localhost:8081";
+  const url = [resolved?.url, ctx.config.endpoint, process.env.MOTIS_URL]
+    .find(
+      (candidate): candidate is string =>
+        typeof candidate === "string" && candidate.trim().length > 0,
+    )
+    ?.trim();
   const transitousUrl = ctx.config.transitousUrl as string | undefined;
   ctx.onActivate(() => {
     setMotisLocalUrl(url);
