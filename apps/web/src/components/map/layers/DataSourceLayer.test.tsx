@@ -1,5 +1,5 @@
 import { createPlace, useDataSourceStore, useParkingStore, usePlaceStore } from "@openmapx/core";
-import { act, render } from "@testing-library/react";
+import { act, render, waitFor } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
 import { createFakeMap } from "@/test";
 import { MapClickHandler } from "../MapClickHandler";
@@ -10,12 +10,19 @@ const mapRef = { current: fake.map };
 const t = (key: string) => key;
 let resolveToken = (_token: unknown) => "English";
 let reads = 0;
+const logoLoad = vi.fn();
+vi.mock("@/lib/dataSourceBrandMarker", () => ({
+  dataSourceBrandImageId: (url: string) => `ds-brand-${encodeURIComponent(url)}`,
+  loadDataSourceBrandMarker: (...args: unknown[]) => logoLoad(...args),
+}));
 const results = [
   {
     id: "one",
     name: "One",
     source: "sample",
     summary: { $t: "summary" },
+    branding: undefined as { logoUrl: string } | undefined,
+    availability: undefined as { available: number; total: number } | undefined,
     get coordinates() {
       reads++;
       return [8, 50];
@@ -187,4 +194,118 @@ it("refreshes locale and context data, clears context, and handles zoom and sour
   expect(fake.state.sources.has("ds-sample")).toBe(false);
   view.unmount();
   context = undefined;
+});
+
+it("adds a supplied logo pin while retaining live availability styling and fallback", async () => {
+  results[0].branding = { logoUrl: "https://provider.example/logo.png" };
+  results[0].availability = { available: 0, total: 4 };
+  logoLoad.mockImplementation(async (...args: unknown[]) => {
+    const [map, url, isCurrent] = args as [import("maplibre-gl").Map, string, () => boolean];
+    if (isCurrent()) map.addImage(`ds-brand-${encodeURIComponent(url)}`, {} as never);
+    return isCurrent();
+  });
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const view = render(<DataSourceLayer />);
+  await waitFor(() => expect(fake.map.getLayer("ds-sample-brand-logos")).toBeDefined());
+  expect(logoLoad).toHaveBeenCalledWith(
+    fake.map,
+    results[0].branding.logoUrl,
+    expect.any(Function),
+  );
+  const data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
+  expect(data.features[0].properties?.brandImageId).toBe(
+    "ds-brand-https%3A%2F%2Fprovider.example%2Flogo.png",
+  );
+  expect(fake.map.getLayer("ds-sample-markers")?.type).toBe("circle");
+  expect(fake.map.getLayer("ds-sample-brand-halos")?.type).toBe("circle");
+  expect(data.features[0].properties?.availState).toBe("busy");
+  expect(fake.map.getPaintProperty("ds-sample-brand-halos", "circle-color")).toEqual([
+    "match",
+    ["get", "availState"],
+    "available",
+    "#2E7D32",
+    "busy",
+    "#F9A825",
+    ["literal", "red"],
+  ]);
+  view.unmount();
+  results[0].branding = undefined;
+  results[0].availability = undefined;
+});
+
+it("ignores late logos after source changes and reloads logos after style replacement", async () => {
+  results[0].branding = { logoUrl: "https://provider.example/race.png" };
+  const pending: { current: () => boolean; resolve: (loaded: boolean) => void }[] = [];
+  logoLoad.mockImplementation(
+    (...args: unknown[]) =>
+      new Promise<boolean>((resolve) =>
+        pending.push({ current: args[2] as () => boolean, resolve }),
+      ),
+  );
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const view = render(<DataSourceLayer />);
+  expect(pending).toHaveLength(1);
+  fake.state.styleLoaded = false;
+  // Tile loading does not invalidate the still-current stylesheet/source.
+  expect(pending[0].current()).toBe(true);
+  fake.state.styleLoaded = true;
+  act(() => fake.map.setStyle({} as never));
+  expect(pending).toHaveLength(2);
+  expect(pending[0].current()).toBe(false);
+  expect(pending[1].current()).toBe(true);
+  await act(async () => pending[0].resolve(false));
+  act(() => useDataSourceStore.setState({ activeSource: null }));
+  expect(pending[1].current()).toBe(false);
+  await act(async () => pending[1].resolve(false));
+  expect(fake.map.getSource("ds-sample")).toBeUndefined();
+  expect(fake.map.getLayer("ds-sample-brand-logos")).toBeUndefined();
+  view.unmount();
+  results[0].branding = undefined;
+  results[0].availability = undefined;
+});
+
+it("keeps generic pins after a logo failure without retrying each style notification", async () => {
+  results[0].branding = { logoUrl: "https://provider.example/missing.png" };
+  logoLoad.mockReset().mockResolvedValue(false);
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const view = render(<DataSourceLayer />);
+  await act(async () => {});
+  act(() => {
+    for (let i = 0; i < 20; i++) fake.emit("styledata");
+  });
+  expect(logoLoad).toHaveBeenCalledTimes(1);
+  const data = fake.state.sources.get("ds-sample")?.data as GeoJSON.FeatureCollection;
+  expect(data.features[0].properties?.brandImageId).toBeUndefined();
+  expect(fake.map.getLayer("ds-sample-markers")).toBeDefined();
+  view.unmount();
+  results[0].branding = undefined;
+  results[0].availability = undefined;
+});
+
+it("selects a branded result once when overlapping layers receive the same click", () => {
+  useDataSourceStore.setState({ activeSource: "sample", filters: {}, viewportZoom: 12 });
+  const select = vi.spyOn(useDataSourceStore.getState(), "selectItem");
+  const view = render(<DataSourceLayer />);
+  fake.state.renderedFeatures.set("ds-sample-markers", [
+    {
+      type: "Feature",
+      geometry: { type: "Point", coordinates: [8, 50] },
+      properties: { id: "one", name: "One" },
+    } as never,
+  ]);
+  const originalEvent = new MouseEvent("click");
+  const handlers = ["ds-sample-markers", "ds-sample-brand-halos", "ds-sample-brand-logos"].map(
+    (layerId) =>
+      fake.state.listenerCalls.findLast(
+        (call) => call.method === "on" && call.event === "click" && call.layerId === layerId,
+      )?.handler,
+  );
+  act(() => {
+    for (const handler of handlers)
+      handler?.({ originalEvent, point: { x: 1, y: 2 }, lngLat: { lng: 8, lat: 50 } });
+  });
+  expect(select).toHaveBeenCalledTimes(1);
+  view.unmount();
+  select.mockRestore();
+  fake.state.renderedFeatures.clear();
 });

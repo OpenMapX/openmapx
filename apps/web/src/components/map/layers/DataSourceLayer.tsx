@@ -39,6 +39,7 @@ import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
 import { subscribeStyleLoaded } from "@/integration-api/map/styleLoadedSync";
 import { useMapAttributions } from "@/integration-api/overlay/useMapAttributions";
 import { runtimeAttributionToAttribution } from "@/lib/attributionForProviders";
+import { dataSourceBrandImageId, loadDataSourceBrandMarker } from "@/lib/dataSourceBrandMarker";
 import { translateDataSourceSummary } from "@/lib/dataSourceSummaryI18n";
 import { createMarkerSvg } from "@/lib/markerSvg";
 import { pickDataSourceContextAction } from "./dataSourceContextInteraction";
@@ -59,6 +60,14 @@ function sourceId(dsId: string) {
 
 function markersLayerId(dsId: string) {
   return `ds-${dsId}-markers`;
+}
+
+function brandLogosLayerId(dsId: string) {
+  return `ds-${dsId}-brand-logos`;
+}
+
+function brandHalosLayerId(dsId: string) {
+  return `ds-${dsId}-brand-halos`;
 }
 
 function labelsLayerId(dsId: string) {
@@ -122,6 +131,7 @@ function buildGeoJson(
         operator: r.operator ?? "",
         kind: r.kind ?? "",
         availState: availStateOf(r),
+        logoUrl: r.branding?.logoUrl ?? "",
         ...(imageId ? { imageId } : {}),
       },
     })),
@@ -198,6 +208,8 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
   try {
     if (map.getLayer(mapContextOutline)) map.removeLayer(mapContextOutline);
     if (map.getLayer(mapContextFill)) map.removeLayer(mapContextFill);
+    if (map.getLayer(brandLogosLayerId(dsId))) map.removeLayer(brandLogosLayerId(dsId));
+    if (map.getLayer(brandHalosLayerId(dsId))) map.removeLayer(brandHalosLayerId(dsId));
     if (map.getLayer(labels)) map.removeLayer(labels);
     if (map.getLayer(markers)) map.removeLayer(markers);
     if (map.getSource(mapContextSid)) map.removeSource(mapContextSid);
@@ -207,6 +219,8 @@ function removeLayers(map: maplibregl.Map, dsId: string) {
   }
   unregisterLayerSlot(mapContextOutline);
   unregisterLayerSlot(mapContextFill);
+  unregisterLayerSlot(brandLogosLayerId(dsId));
+  unregisterLayerSlot(brandHalosLayerId(dsId));
   unregisterLayerSlot(labels);
   unregisterLayerSlot(markers);
 }
@@ -236,11 +250,15 @@ export function DataSourceLayer() {
     const labelsLid = labelsLayerId(activeSource);
     const contextFillLid = mapContextFillLayerId(activeSource);
     const contextOutlineLid = mapContextOutlineLayerId(activeSource);
+    INTERACTIVE_LAYER_IDS.add(brandLogosLayerId(activeSource));
+    INTERACTIVE_LAYER_IDS.add(brandHalosLayerId(activeSource));
     INTERACTIVE_LAYER_IDS.add(markersLid);
     INTERACTIVE_LAYER_IDS.add(labelsLid);
     INTERACTIVE_LAYER_IDS.add(contextFillLid);
     INTERACTIVE_LAYER_IDS.add(contextOutlineLid);
     return () => {
+      INTERACTIVE_LAYER_IDS.delete(brandLogosLayerId(activeSource));
+      INTERACTIVE_LAYER_IDS.delete(brandHalosLayerId(activeSource));
       INTERACTIVE_LAYER_IDS.delete(markersLid);
       INTERACTIVE_LAYER_IDS.delete(labelsLid);
       INTERACTIVE_LAYER_IDS.delete(contextFillLid);
@@ -451,7 +469,12 @@ export function DataSourceLayer() {
     const map = mapRef.current;
     if (!map || !mapReady) return;
 
+    let cancelled = false;
+    const attempted = new WeakMap<object, Set<string>>();
+    let brandedData = geojson;
+    let brandedKey = "";
     const syncLayer = () => {
+      if (cancelled) return;
       if (!activeSource || !activeMeta) {
         if (activeSource) removeLayers(map, activeSource);
         return;
@@ -471,7 +494,95 @@ export function DataSourceLayer() {
       const useIconMarkers = activeMeta.markerStyle.type === "icon";
       const imageId = useIconMarkers ? `ds-marker-${activeSource}` : undefined;
 
-      publish(map, sid, geojson);
+      const urls = [...new Set(geojson.features.map((f) => f.properties.logoUrl).filter(Boolean))];
+      const ready = urls.filter((url) => map.hasImage(dataSourceBrandImageId(url)));
+      const key = JSON.stringify(ready);
+      if (key !== brandedKey) {
+        brandedKey = key;
+        brandedData = ready.length
+          ? {
+              ...geojson,
+              features: geojson.features.map((feature) => ({
+                ...feature,
+                properties: {
+                  ...feature.properties,
+                  ...(ready.includes(feature.properties.logoUrl)
+                    ? { brandImageId: dataSourceBrandImageId(feature.properties.logoUrl) }
+                    : {}),
+                },
+              })),
+            }
+          : geojson;
+      }
+      const source = publish(map, sid, brandedData);
+      const sourceAttempts = attempted.get(source) ?? new Set<string>();
+      attempted.set(source, sourceAttempts);
+      for (const url of urls) {
+        if (map.hasImage(dataSourceBrandImageId(url)) || sourceAttempts.has(url)) continue;
+        sourceAttempts.add(url);
+        const isCurrent = () => !cancelled && map.getSource(sid) === source;
+        void loadDataSourceBrandMarker(map, url, isCurrent).then((loaded) => {
+          if (loaded && isCurrent()) syncLayer();
+          else if (!isCurrent()) sourceAttempts.delete(url);
+        });
+      }
+      if (urls.length) {
+        const haloId = brandHalosLayerId(activeSource);
+        const logoId = brandLogosLayerId(activeSource);
+        const filter: maplibregl.FilterSpecification = ["has", "brandImageId"];
+        const opacity: maplibregl.ExpressionSpecification = [
+          "case",
+          ["==", ["get", "status"], "non-operational"],
+          activeMeta.markerStyle.inactiveOpacity,
+          1,
+        ];
+        if (!map.getLayer(haloId))
+          addLayerInSlot(
+            map,
+            {
+              id: haloId,
+              type: "circle",
+              source: sid,
+              filter,
+              paint: {
+                "circle-radius": 18,
+                "circle-color": [
+                  "match",
+                  ["get", "availState"],
+                  "available",
+                  "#2E7D32",
+                  "busy",
+                  "#F9A825",
+                  buildVariantColorExpression(activeMeta.markerStyle),
+                ],
+                "circle-opacity": opacity,
+                "circle-stroke-color": "white",
+                "circle-stroke-width": 1.5,
+                "circle-stroke-opacity": opacity,
+              },
+            },
+            "overlay-markers",
+            17,
+          );
+        if (!map.getLayer(logoId))
+          addLayerInSlot(
+            map,
+            {
+              id: logoId,
+              type: "symbol",
+              source: sid,
+              filter,
+              layout: {
+                "icon-image": ["get", "brandImageId"],
+                "icon-allow-overlap": true,
+                "icon-ignore-placement": true,
+              },
+              paint: { "icon-opacity": opacity },
+            },
+            "overlay-markers",
+            18,
+          );
+      }
 
       const mapContextData = mapContext?.geojson;
       if (mapContextData && mapContextData.features.length > 0) {
@@ -639,7 +750,11 @@ export function DataSourceLayer() {
       }
     };
 
-    return subscribeStyleLoaded(map, syncLayer);
+    const unsubscribe = subscribeStyleLoaded(map, syncLayer);
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, [
     activeSource,
     activeMeta,
@@ -705,12 +820,21 @@ export function DataSourceLayer() {
     const contextFillLid = mapContextFillLayerId(activeSource);
     const currentSource = activeSource;
 
+    const handledClicks = new WeakSet<object>();
     const onClick = (e: MapMouseEvent) => {
       if (getMapClickOwner(e)) return;
+      const event = e.originalEvent ?? e;
+      if (handledClicks.has(event)) return;
       // Query both markers and labels layers
-      const layers = [markersLid, labelsLid].filter((l) => map.getLayer(l));
+      const layers = [
+        brandLogosLayerId(activeSource),
+        brandHalosLayerId(activeSource),
+        markersLid,
+        labelsLid,
+      ].filter((l) => map.getLayer(l));
       const features = map.queryRenderedFeatures(e.point, { layers });
       if (!features.length) return;
+      handledClicks.add(event);
       const props = features[0].properties as {
         id: string;
         name: string;
@@ -741,7 +865,12 @@ export function DataSourceLayer() {
     };
 
     const onMouseMove = (e: MapMouseEvent) => {
-      const layers = [markersLid, labelsLid].filter((id) => !!map.getLayer(id));
+      const layers = [
+        brandLogosLayerId(activeSource),
+        brandHalosLayerId(activeSource),
+        markersLid,
+        labelsLid,
+      ].filter((id) => !!map.getLayer(id));
       if (layers.length === 0) return;
       const features = map.queryRenderedFeatures(e.point, { layers });
       if (features.length > 0) {
@@ -755,7 +884,12 @@ export function DataSourceLayer() {
 
     const onContextClick = (e: MapMouseEvent) => {
       if (getMapClickOwner(e)) return;
-      const markerLayers = [markersLid, labelsLid].filter((id) => !!map.getLayer(id));
+      const markerLayers = [
+        brandLogosLayerId(activeSource),
+        brandHalosLayerId(activeSource),
+        markersLid,
+        labelsLid,
+      ].filter((id) => !!map.getLayer(id));
       const markerHitCount = map.queryRenderedFeatures(e.point, { layers: markerLayers }).length;
       if (!map.getLayer(contextFillLid)) return;
       const feature = map.queryRenderedFeatures(e.point, { layers: [contextFillLid] })[0];
@@ -772,6 +906,8 @@ export function DataSourceLayer() {
     };
 
     // Bind to markers layer
+    map.on("click", brandLogosLayerId(activeSource), onClick);
+    map.on("click", brandHalosLayerId(activeSource), onClick);
     map.on("click", markersLid, onClick);
 
     // Also bind to labels layer (for icon mode) — MapLibre no-ops on nonexistent layers
@@ -781,6 +917,8 @@ export function DataSourceLayer() {
     map.on("mousemove", onMouseMove);
 
     return () => {
+      map.off("click", brandLogosLayerId(activeSource), onClick);
+      map.off("click", brandHalosLayerId(activeSource), onClick);
       map.off("click", markersLid, onClick);
       map.off("click", labelsLid, onClick);
       map.off("click", contextFillLid, onContextClick);
