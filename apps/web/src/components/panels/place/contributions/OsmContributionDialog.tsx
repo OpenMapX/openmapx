@@ -123,9 +123,11 @@ export function OsmContributionDialog({ open, ref_, onClose }: Props) {
    * When direct editing is switched off or unauthorized but notes are still
    * permitted, the flow opens on the note path rather than dead-ending: the
    * design keeps the note and advanced-editor handoffs available wherever
-   * their own permissions allow.
+   * their own permissions allow. With direct editing switched off, an account
+   * that cannot write notes yet is gated on the note scope, never on write_api.
    */
-  const gateIntent = canEdit || !canNote ? "edit" : "note";
+  const gateIntent =
+    account?.directEditingEnabled === false || (!canEdit && canNote) ? "note" : "edit";
 
   useEffect(() => {
     if (!open) return;

@@ -181,6 +181,13 @@ Ordinary sign-in requests only `openid read_prefs`. The write permissions
 (`write_api`, `write_notes`) are requested incrementally, the first time someone
 actually contributes.
 
+OpenStreetMap only grants scopes that are registered on the application, so
+enable all four permissions on it: **Sign in using OpenStreetMap** (`openid`),
+**Read user preferences** (`read_prefs`), **Modify the map** (`write_api`) and
+**Modify notes** (`write_notes`). Without the write permissions, sign-in keeps
+working but contributing fails with an `invalid_scope` error from OSM. Adding
+them later keeps the existing client ID and secret.
+
 ### Testing against the OpenStreetMap development API
 
 The development instance is a **separate** OpenStreetMap deployment: it needs

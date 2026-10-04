@@ -473,6 +473,35 @@ describe("notes-only permission", () => {
     expect(await screen.findByText("osmContributions.gateScopeAction")).not.toBeNull();
     expect(screen.queryByText("osmContributions.noteDisclosure")).toBeNull();
   });
+
+  it("asks for the notes permission when direct editing is off and nothing is granted", async () => {
+    state.capabilities = {
+      data: {
+        ...CAPABILITIES,
+        directEditingEnabled: false,
+        canWriteApi: false,
+        canWriteNotes: false,
+      },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+    renderDialog();
+    expect(await screen.findByText("osmContributions.gateScopeNoteBody")).not.toBeNull();
+    expect(screen.queryByText("osmContributions.gateScopeBody")).toBeNull();
+  });
+
+  it("offers the note flow when direct editing is off even with write_api granted", async () => {
+    state.capabilities = {
+      data: { ...CAPABILITIES, directEditingEnabled: false, canWriteNotes: false },
+      isPending: false,
+      isError: false,
+      refetch: vi.fn(),
+    };
+    renderDialog();
+    expect(await screen.findByText("osmContributions.gateScopeNoteBody")).not.toBeNull();
+    expect(screen.queryByText("osmContributions.errorDirectEditingDisabled")).toBeNull();
+  });
 });
 
 describe("errors", () => {
