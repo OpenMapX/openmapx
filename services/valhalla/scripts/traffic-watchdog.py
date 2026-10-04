@@ -572,6 +572,12 @@ def writer_lock(state_path):
     while True:
         try:
             lock.mkdir(mode=0o700)
+            if os.geteuid() == 0:
+                # The data-manager runs as the shared directory's owner. It has
+                # to read and clear a lock this root process leaves behind when
+                # its container is killed; atomic_json below follows suit.
+                owner = lock.parent.stat()
+                os.chown(lock, owner.st_uid, owner.st_gid)
             break
         except FileExistsError:
             if time.monotonic() >= until:

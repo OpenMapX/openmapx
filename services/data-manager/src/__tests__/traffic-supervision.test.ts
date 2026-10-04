@@ -52,4 +52,29 @@ describe("traffic writer supervision", () => {
       await rm(dir, { recursive: true, force: true });
     }
   });
+  it("waits out a watchdog lock whose pid lives in another container", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "traffic-supervision-"));
+    const statePath = join(dir, "state");
+    const lock = `${statePath}.lock`;
+    try {
+      await mkdir(lock);
+      await writeFile(
+        join(lock, "owner.json"),
+        JSON.stringify({ pid: process.pid, acquiredAt: 0, owner: "valhalla-watchdog" }),
+      );
+      let stopped = false;
+      const stopWorker = async () => {
+        stopped = true;
+      };
+
+      await recoverTrafficWriterLock({ statePath, now: 5 * 60_000, workerPid: 123, stopWorker });
+      expect(await readFile(join(lock, "owner.json"), "utf8")).toContain("valhalla-watchdog");
+
+      await recoverTrafficWriterLock({ statePath, now: 11 * 60_000, workerPid: 123, stopWorker });
+      await expect(readFile(join(lock, "owner.json"))).rejects.toMatchObject({ code: "ENOENT" });
+      expect(stopped).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
 });
