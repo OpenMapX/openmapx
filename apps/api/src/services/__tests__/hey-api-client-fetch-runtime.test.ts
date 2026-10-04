@@ -230,6 +230,7 @@ describe("@hey-api/client-fetch runtime integrations", () => {
         id: "stop:1",
         label: "Berlin Hbf",
         rawCategory: "station",
+        sourceIds: ["transitous"],
         type: "poi",
       },
     ]);
