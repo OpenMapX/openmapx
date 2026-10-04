@@ -91,7 +91,7 @@ import { hasNlpConsent, isNlpCloudDeclined, setNlpConsent } from "@/components/u
 import { usePlaceEnrichment } from "@/hooks/usePlaceEnrichment";
 import { useMap } from "@/integration-api/map/MapContext";
 import { BRAND } from "@/integration-api/runtime/theme";
-import { attributionsForProviders, mergeAttributions } from "@/lib/attributionForProviders";
+import { mergeAttributions } from "@/lib/attributionForProviders";
 import {
   useAiSearchDisclosure,
   useIntegrationDisclosures,
@@ -103,6 +103,7 @@ import {
 } from "@/lib/launchExplore";
 import { useMeasuredMapObstruction } from "@/lib/mapObstructions";
 import { isConfidentPlaceMatch, typedAddressIn } from "@/lib/placeMatch";
+import { servedAttributions } from "@/lib/servedAttributions";
 import { useHydrated } from "@/lib/useHydrated";
 import { useRecentSearchStore } from "@/stores/recentSearchStore";
 import {
@@ -670,8 +671,9 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
 
   // Credit only the geocoder(s) that actually produced the suggestions on
   // screen. Each geocoded item carries its serving integration id
-  // (AutocompleteResult.provider, tagged by the geocoding orchestrator);
-  // category / NLP / labeled / preset suggestions have none, so a dropdown
+  // (AutocompleteResult.provider, tagged by the geocoding orchestrator) and,
+  // for a geocoder with several possible backends, the one that answered
+  // (`sourceIds`); category / NLP / labeled / preset suggestions have none, so a dropdown
   // without geocoded results shows no geocoder credit — rather than the old
   // behaviour of crediting every healthy geocoder regardless of who served.
   // Plain const (not a hook): this sits below an early return, and the lookup
@@ -691,7 +693,7 @@ export function SearchBar({ surface = "map" }: SearchBarProps) {
   const hasVisibleAggregateSuggestion = [...aggregateProviderIds].some((provider) =>
     visibleProviderIds.has(provider),
   );
-  const geocodingAttributions = attributionsForProviders(registry, visibleProviderIds);
+  const geocodingAttributions = servedAttributions(registry, effectiveSuggestions);
   const visibleAttributions = mergeAttributions(
     hasVisibleAggregateSuggestion ? (aggregateSearchData?.attributions ?? []) : [],
     geocodingAttributions,

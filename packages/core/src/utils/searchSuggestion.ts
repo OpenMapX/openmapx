@@ -669,6 +669,7 @@ function mergeDuplicate(
   for (const provider of providerIds(weaker)) {
     if (!contributingProviders.includes(provider)) contributingProviders.push(provider);
   }
+  const sourceIds = [...new Set([...(stronger.sourceIds ?? []), ...(weaker.sourceIds ?? [])])];
   // A geocoder's row for the Louvre and the notable-places row are one place;
   // it keeps the fame either of them knew.
   const fame = Math.max(stronger.fame ?? 0, weaker.fame ?? 0);
@@ -690,6 +691,7 @@ function mergeDuplicate(
       stronger.ids || weaker.ids ? { ...(weaker.ids ?? {}), ...(stronger.ids ?? {}) } : undefined,
     ...(fame > 0 ? { fame } : {}),
     contributingProviders: contributingProviders.length > 0 ? contributingProviders : undefined,
+    ...(sourceIds.length > 0 ? { sourceIds } : {}),
   };
 }
 

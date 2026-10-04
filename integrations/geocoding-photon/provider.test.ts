@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { photonService, setPhotonUrl } from "./provider.js";
+import { photonService, photonSourceIds, setPhotonUrl } from "./provider.js";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -17,6 +17,16 @@ afterEach(() => {
   setPhotonUrl("https://photon.komoot.io");
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe("photonSourceIds", () => {
+  it("credits Komoot only when its public instance answers", () => {
+    expect(photonSourceIds()).toEqual(["photon"]);
+    setPhotonUrl("https://photon.komoot.io");
+    expect(photonSourceIds()).toEqual(["komoot"]);
+    setPhotonUrl("http://photon:2322");
+    expect(photonSourceIds()).toEqual(["photon"]);
+  });
 });
 
 describe("Photon geocoding provider", () => {
@@ -73,6 +83,7 @@ describe("Photon geocoding provider", () => {
         type: "poi",
         confidence: 1,
         rawCategory: "railway/station",
+        sourceIds: ["photon"],
       },
       {
         id: "osm:way/999",
@@ -81,6 +92,7 @@ describe("Photon geocoding provider", () => {
         type: "street",
         confidence: 1,
         rawCategory: "highway/residential",
+        sourceIds: ["photon"],
       },
       {
         id: "osm:relation/62578",
@@ -89,6 +101,7 @@ describe("Photon geocoding provider", () => {
         type: "region",
         confidence: 1,
         rawCategory: "boundary/administrative",
+        sourceIds: ["photon"],
       },
     ]);
     expect(String(mockFetch.mock.calls[0]?.[0])).toContain("/api");

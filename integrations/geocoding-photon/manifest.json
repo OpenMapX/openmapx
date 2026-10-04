@@ -38,6 +38,22 @@
   "dataSources": [
     {
       "sourceId": "photon",
+      "name": "Photon",
+      "url": "https://github.com/komoot/photon",
+      "license": "Apache License 2.0 (software); ODbL (OSM data)",
+      "licenseUrl": "https://github.com/komoot/photon/blob/master/LICENSE",
+      "attribution": "© <a href=\"https://www.openstreetmap.org/copyright\">OpenStreetMap contributors</a>",
+      "notes": "Self-hosted or other operator-configured Photon endpoint. Requests stay with the instance operator's chosen host.",
+      "commercialUse": "yes",
+      "providerCountry": "XX",
+      "providerPrivacyUrl": "https://github.com/komoot/photon",
+      "endUserExposure": "server-only",
+      "personalData": false,
+      "cookies": false,
+      "dpaAvailable": false
+    },
+    {
+      "sourceId": "komoot",
       "name": "Photon (Komoot)",
       "url": "https://photon.komoot.io/",
       "license": "Apache License 2.0 (software); ODbL (OSM data)",
@@ -49,7 +65,8 @@
       "endUserExposure": "server-only",
       "personalData": false,
       "cookies": false,
-      "dpaAvailable": false
+      "dpaAvailable": false,
+      "notes": "Komoot's public Photon instance, used only when no self-hosted or other endpoint is configured."
     }
   ],
   "requires": [

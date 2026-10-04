@@ -25,6 +25,20 @@ export function setPhotonUrl(url: string): void {
   PHOTON_URL = url;
 }
 
+/**
+ * Manifest sourceId of the endpoint that answers, so a result credits Komoot
+ * only when Komoot's public instance served it.
+ */
+export function photonSourceIds(): string[] {
+  try {
+    const host = new URL(PHOTON_URL).hostname.toLowerCase();
+    if (host === "komoot.io" || host.endsWith(".komoot.io")) return ["komoot"];
+  } catch {
+    // An unparsable endpoint is not Komoot's.
+  }
+  return ["photon"];
+}
+
 // A search box needs both nearby places and famous far ones, and no single
 // Photon bias returns both. Photon's location bias is a radius, set by a map
 // zoom it takes as an integer, plus a weight for prominence against distance.
@@ -131,6 +145,7 @@ export const photonService: GeocodingProviderImpl = {
       params.lon = String(proximity[0]);
     }
     const data = await fetchPhoton(params, "/api", lang);
+    const sourceIds = photonSourceIds();
     return data.features.map((f) => ({
       id: makeId(f.properties),
       label: buildLabel(f.properties),
@@ -138,6 +153,7 @@ export const photonService: GeocodingProviderImpl = {
       type: mapType(f.properties.osm_key),
       confidence: 1,
       rawCategory: `${f.properties.osm_key}/${f.properties.osm_value}`,
+      sourceIds,
     }));
   },
 
@@ -192,6 +208,7 @@ export const photonService: GeocodingProviderImpl = {
       ...base,
       ...(bias ? biasParams(bias, WIDE_BIAS) : { limit: UNBIASED_LIMIT }),
     });
+    const sourceIds = photonSourceIds();
     return features.map((f) => {
       const short = f.properties.name ?? buildLabel(f.properties);
       const full = buildLabel(f.properties);
@@ -204,6 +221,7 @@ export const photonService: GeocodingProviderImpl = {
         type: mapType(f.properties.osm_key),
         iconPath: resolvePoiIconPath(f.properties.osm_value),
         rawCategory: `${f.properties.osm_key}/${f.properties.osm_value}`,
+        sourceIds,
         ...(native
           ? {
               searchMatch: { kind: "name", value: native, normalized: normalizeSearchTerm(native) },

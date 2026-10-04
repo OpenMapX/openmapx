@@ -20,6 +20,12 @@ export interface SearchResult {
    * See `integrations/geocoding/orchestrator.ts`.
    */
   provider?: string;
+  /**
+   * Manifest `sourceId`s of the backend that answered, set by a provider that
+   * can talk to several (e.g. self-hosted Photon vs Komoot's public instance)
+   * so attribution credits only that one. Absent otherwise.
+   */
+  sourceIds?: string[];
 }
 
 export interface ReverseGeocodingResult {
@@ -78,6 +84,13 @@ export interface AutocompleteResult {
   fame?: number;
   /** All providers retained when equivalent suggestions are conflated. */
   contributingProviders?: string[];
+  /**
+   * Manifest `sourceId`s of the backend that answered, set by a provider that
+   * can talk to several (e.g. self-hosted Photon vs Komoot's public instance)
+   * so attribution credits only that one; unioned when suggestions are
+   * conflated. Absent otherwise.
+   */
+  sourceIds?: string[];
   /**
    * Integration ID of the geocoder that actually produced this suggestion (e.g.
    * "geocoding-photon"). Tagged by the orchestrator so attribution can credit

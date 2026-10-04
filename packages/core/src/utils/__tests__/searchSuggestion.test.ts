@@ -527,6 +527,31 @@ describe("search suggestion primitives", () => {
     expect(merged[0].contributingProviders).toEqual(["geocoding-entur", "geocoder"]);
   });
 
+  it("keeps the reported backends of both conflated suggestions", () => {
+    const merged = mergeAutocompleteSuggestions(
+      [
+        {
+          id: "nsr:StopPlace:337",
+          label: "Oslo S",
+          coordinates: [10.75, 59.911],
+          type: "transit_stop",
+          provider: "geocoding-entur",
+        },
+        {
+          id: "osm:node/1",
+          label: "Oslo S",
+          coordinates: [10.751, 59.911],
+          type: "poi",
+          provider: "geocoding-photon",
+          sourceIds: ["photon"],
+        },
+      ],
+      { query: "oslo" },
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].sourceIds).toEqual(["photon"]);
+  });
+
   it("keeps a station apart from the same-named square it serves", () => {
     const merged = mergeAutocompleteSuggestions(
       [
