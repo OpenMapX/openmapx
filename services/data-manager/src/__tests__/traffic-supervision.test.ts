@@ -56,21 +56,30 @@ describe("traffic writer supervision", () => {
     const dir = await mkdtemp(join(tmpdir(), "traffic-supervision-"));
     const statePath = join(dir, "state");
     const lock = `${statePath}.lock`;
+    const writeOwner = (acquiredAt: number) =>
+      writeFile(
+        join(lock, "owner.json"),
+        JSON.stringify({ pid: process.pid, acquiredAt, owner: "valhalla-watchdog" }),
+      );
     try {
       await mkdir(lock);
-      await writeFile(
-        join(lock, "owner.json"),
-        JSON.stringify({ pid: process.pid, acquiredAt: 0, owner: "valhalla-watchdog" }),
-      );
+      await writeOwner(Date.now());
       let stopped = false;
       const stopWorker = async () => {
         stopped = true;
       };
 
-      await recoverTrafficWriterLock({ statePath, now: 5 * 60_000, workerPid: 123, stopWorker });
+      // A forced recovery (traffic maintenance in progress) leaves it alone.
+      await recoverTrafficWriterLock({
+        statePath,
+        now: Number.MAX_SAFE_INTEGER,
+        workerPid: 123,
+        stopWorker,
+      });
       expect(await readFile(join(lock, "owner.json"), "utf8")).toContain("valhalla-watchdog");
 
-      await recoverTrafficWriterLock({ statePath, now: 11 * 60_000, workerPid: 123, stopWorker });
+      await writeOwner(Date.now() - 11 * 60_000);
+      await recoverTrafficWriterLock({ statePath, workerPid: 123, stopWorker });
       await expect(readFile(join(lock, "owner.json"))).rejects.toMatchObject({ code: "ENOENT" });
       expect(stopped).toBe(false);
     } finally {

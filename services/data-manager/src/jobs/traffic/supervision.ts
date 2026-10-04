@@ -32,13 +32,16 @@ export async function recoverTrafficWriterLock(options: {
     typeof owner?.acquiredAt === "number" && Number.isFinite(owner.acquiredAt)
       ? Math.min(owner.acquiredAt, modified)
       : modified;
-  const age = (options.now ?? Date.now()) - acquiredAt;
   if (owner.owner === "valhalla-watchdog") {
-    if (age < WATCHDOG_LOCK_STALE_MS) return;
+    // Judged on the real clock: a forced `now` speaks only for this
+    // supervisor's own writer. Traffic maintenance starts Valhalla while its
+    // fence is still up, so forcing here would pull the lock out from under
+    // the watchdog mid-clear and the engine would never be admitted.
+    if (Date.now() - acquiredAt < WATCHDOG_LOCK_STALE_MS) return;
     await rm(lock, { recursive: true, force: true });
     return;
   }
-  if (age < 20_000) return;
+  if ((options.now ?? Date.now()) - acquiredAt < 20_000) return;
   if (owner.pid === options.workerPid && options.workerPid !== undefined) {
     await options.stopWorker(); // Wait for actual exit before another writer can run.
   } else if (owner.pid !== undefined) {
