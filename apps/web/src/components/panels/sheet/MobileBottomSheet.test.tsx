@@ -271,3 +271,88 @@ describe("bottom obstruction publishing", () => {
     expect(getMapObstructionInsets().bottom).toBe(0);
   });
 });
+
+describe("controlled transition interruption", () => {
+  it.each(["scrollend", "settle"])(
+    "reports a user-interrupted transition on %s without another snap event",
+    (completion) => {
+      vi.useFakeTimers();
+      vi.stubGlobal("matchMedia", () => ({ matches: false }));
+      const onChange = vi.fn();
+      const view = (detent: "peek" | "full") => (
+        <MobileBottomSheet
+          id="interrupted"
+          zIndex={1}
+          detents={TWO_SNAP}
+          detent={detent}
+          onDetentChange={onChange}
+        >
+          <div>content</div>
+        </MobileBottomSheet>
+      );
+      const { container, rerender } = render(view("peek"));
+      const host = container.querySelector("bottom-sheet") as HTMLElement;
+      Object.defineProperty(host, "snapToPoint", { value: vi.fn(), configurable: true });
+      rerender(view("full"));
+      act(() =>
+        host.dispatchEvent(
+          new CustomEvent("snap-position-change", {
+            detail: { snapIndex: 1, sheetState: "partially-expanded" },
+          }),
+        ),
+      );
+      expect(onChange).not.toHaveBeenCalled();
+      act(() => {
+        if (completion === "scrollend") host.dispatchEvent(new Event("scrollend"));
+        else {
+          host.dispatchEvent(new Event("scroll"));
+          vi.advanceTimersByTime(150);
+        }
+      });
+      expect(onChange).toHaveBeenCalledWith("peek");
+      vi.useRealTimers();
+    },
+  );
+
+  it("reverses an opening transition before its first snap notification", () => {
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    const onChange = vi.fn();
+    const view = (detent: "peek" | "full") => (
+      <MobileBottomSheet
+        id="controlled"
+        zIndex={1}
+        detents={TWO_SNAP}
+        detent={detent}
+        onDetentChange={onChange}
+      >
+        <div>content</div>
+      </MobileBottomSheet>
+    );
+    const { container, rerender } = render(view("peek"));
+    const host = container.querySelector("bottom-sheet") as HTMLElement & {
+      snapToPoint: ReturnType<typeof vi.fn>;
+    };
+    host.snapToPoint = vi.fn();
+    rerender(view("full"));
+    expect(host.snapToPoint).toHaveBeenLastCalledWith(2, { behavior: "smooth" });
+    rerender(view("peek"));
+    expect(host.snapToPoint).toHaveBeenLastCalledWith(1, { behavior: "smooth" });
+    act(() =>
+      host.dispatchEvent(
+        new CustomEvent("snap-position-change", {
+          detail: { snapIndex: 2, sheetState: "expanded" },
+        }),
+      ),
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    act(() => host.dispatchEvent(new Event("scrollend")));
+    act(() =>
+      host.dispatchEvent(
+        new CustomEvent("snap-position-change", {
+          detail: { snapIndex: 2, sheetState: "expanded" },
+        }),
+      ),
+    );
+    expect(onChange).toHaveBeenCalledWith("full");
+  });
+});

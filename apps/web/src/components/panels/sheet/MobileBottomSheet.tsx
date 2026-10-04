@@ -133,6 +133,7 @@ export function MobileBottomSheet({
     isExpanded: false,
   });
   const detentRef = useRef<Detent>(detents.initial);
+  const pendingDetentRef = useRef<Detent | null>(null);
   // Read fresh inside the snap listener without re-subscribing it whenever
   // the caller passes a new callback identity.
   const onDetentChangeRef = useRef(onDetentChange);
@@ -206,24 +207,38 @@ export function MobileBottomSheet({
     [host, detents],
   );
 
+  const settleControlledTransition = useCallback(() => {
+    const requested = pendingDetentRef.current;
+    pendingDetentRef.current = null;
+    if (requested != null && requested !== detentRef.current) {
+      onDetentChangeRef.current?.(detentRef.current);
+    }
+  }, []);
+
   // The React wrapper only spreads props onto the custom element; it wires no
   // events, so the listener has to be attached imperatively.
   useEffect(() => {
     if (!host) return;
     const onSnap = (event: Event) => {
       const next = detentFromSnapEvent((event as CustomEvent<SnapDetail>).detail, detents);
+      if (pendingDetentRef.current === next.detent) pendingDetentRef.current = null;
       if (detentRef.current !== next.detent) {
         detentRef.current = next.detent;
         haptics.tap();
-        onDetentChangeRef.current?.(next.detent);
+        if (pendingDetentRef.current == null) onDetentChangeRef.current?.(next.detent);
       }
       setState((prev) =>
         prev.detent === next.detent && prev.isExpanded === next.isExpanded ? prev : next,
       );
     };
+    const onScrollEnd = settleControlledTransition;
     host.addEventListener("snap-position-change", onSnap);
-    return () => host.removeEventListener("snap-position-change", onSnap);
-  }, [host, detents]);
+    host.addEventListener("scrollend", onScrollEnd);
+    return () => {
+      host.removeEventListener("snap-position-change", onSnap);
+      host.removeEventListener("scrollend", onScrollEnd);
+    };
+  }, [host, detents, settleControlledTransition]);
 
   // Controlled operation: an external change to `detent` (a caller collapsing
   // the sheet after handling a menu action, or driving it from a boolean prop
@@ -232,7 +247,9 @@ export function MobileBottomSheet({
   // change that originated from the sheet itself (a drag or a tap), which
   // would otherwise fight the gesture that's already in progress.
   useEffect(() => {
-    if (detent == null || detent === detentRef.current) return;
+    if (detent == null || (detent === detentRef.current && pendingDetentRef.current == null))
+      return;
+    pendingDetentRef.current = detent;
     snapTo(detent);
   }, [detent, snapTo]);
 
@@ -270,6 +287,7 @@ export function MobileBottomSheet({
       // The camera only re-frames once the sheet comes to rest, never mid-drag.
       window.clearTimeout(settle);
       settle = window.setTimeout(() => {
+        settleControlledTransition();
         publishMapObstruction(
           id,
           "bottom",
@@ -292,7 +310,7 @@ export function MobileBottomSheet({
       publishMobilePanelHeight(id, null);
       publishMapObstruction(id, "bottom", null);
     };
-  }, [host, id, obscured]);
+  }, [host, id, obscured, settleControlledTransition]);
 
   // A new cap, or a sheet coming out from under the one that covered it, still
   // has to reach the camera — but neither is a drag, so both land at once
