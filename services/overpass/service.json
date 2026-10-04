@@ -22,7 +22,7 @@
       "OVERPASS_MODE": "init",
       "OVERPASS_PLANET_URL": "file:///osm/data.osm.bz2",
       "OVERPASS_PLANET_PREPROCESS": "rm -f /db/planet.osm.bz2 && ln -s /osm/data.osm.bz2 /db/planet.osm.bz2",
-      "OVERPASS_DIFF_URL": "https://planet.openstreetmap.org/replication/day/",
+      "OVERPASS_DIFF_URL": "${OVERPASS_DIFF_URL:-https://planet.openstreetmap.org/replication/day/}",
       "OVERPASS_COMPRESSION": "lz4",
       "OVERPASS_RULES_LOAD": "10",
       "OVERPASS_SPACE": "${OVERPASS_SPACE:-107374182400}",
