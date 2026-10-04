@@ -51,6 +51,25 @@ describe("useDrawnDirectionsRoutes", () => {
     expect(result.current.navigating).toBe(false);
   });
 
+  it("requests driving geometry while retaining the ride display mode", () => {
+    act(() => {
+      useDirectionsStore.setState({ mode: "ride", waypoints: FILLED_WAYPOINTS });
+    });
+    const { result } = renderHook(() => useDrawnDirectionsRoutes(), {
+      wrapper: createQueryWrapper(),
+    });
+    expect(result.current.mode).toBe("ride");
+    expect(useDirectionsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "driving",
+        waypoints: [
+          [13.4, 52.5],
+          [13.5, 52.6],
+        ],
+      }),
+    );
+  });
+
   it("reports the transit mode and withholds waypoints from the ground-engine query", () => {
     act(() => {
       useDirectionsStore.setState({ mode: "transit", waypoints: FILLED_WAYPOINTS });
@@ -101,6 +120,24 @@ const CONSTRAINED_WAYPOINTS: Waypoint[] = [
 describe("useDrawnDirectionsRoutes scheduled trips", () => {
   afterEach(() => {
     useDirectionsStore.getState().close();
+    act(() => useDirectionsStore.setState({ mode: "driving" }));
+  });
+
+  it("uses driving for a ride with waypoint time constraints", () => {
+    act(() => {
+      useDirectionsStore.setState({ mode: "ride", waypoints: CONSTRAINED_WAYPOINTS });
+    });
+    renderHook(() => useDrawnDirectionsRoutes(), { wrapper: createQueryWrapper() });
+    expect(useScheduledDirectionsMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: "driving",
+        waypoints: [
+          [13.4, 52.5],
+          [13.45, 52.55],
+          [13.5, 52.6],
+        ],
+      }),
+    );
   });
 
   it("builds the same scheduled request the panel builds", () => {

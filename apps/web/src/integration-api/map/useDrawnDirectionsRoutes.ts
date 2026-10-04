@@ -83,6 +83,8 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
   // dark so a reroute doesn't leave the original planned line stranded on the
   // map — and so this layer's fitBounds never fights the navigation camera.
   const navigating = useNavigationStore((s) => s.status) !== "idle";
+  // Ride mode previews the same road geometry as the panel's driving query.
+  const routeMode = mode === "ride" ? "driving" : mode;
 
   const routeWaypoints = useMemo(
     () =>
@@ -101,7 +103,7 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
         ? null
         : buildScheduleRequest({
             waypoints,
-            mode,
+            mode: routeMode,
             timeMode,
             tripTime,
             avoidHighways,
@@ -115,6 +117,7 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
       navigating,
       isEvMode,
       mode,
+      routeMode,
       waypoints,
       timeMode,
       tripTime,
@@ -129,9 +132,13 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
   const { data: scheduledData } = useScheduledDirections(scheduleRequest);
 
   const tripDepartAt =
-    timeMode === "depart" && tripTime ? toDateTimeLocalString(tripTime) : undefined;
+    mode !== "ride" && timeMode === "depart" && tripTime
+      ? toDateTimeLocalString(tripTime)
+      : undefined;
   const tripArriveBy =
-    timeMode === "arrive" && tripTime ? toDateTimeLocalString(tripTime) : undefined;
+    mode !== "ride" && timeMode === "arrive" && tripTime
+      ? toDateTimeLocalString(tripTime)
+      : undefined;
 
   const { data } = useDirections({
     // Transit uses the transit-plan endpoint and flights deep-link out — neither
@@ -144,7 +151,7 @@ export function useDrawnDirectionsRoutes(): DrawnDirectionsRoutes {
         : allFilled
           ? routeWaypoints
           : [],
-    mode,
+    mode: routeMode,
     avoidHighways,
     avoidTolls,
     avoidFerries,
