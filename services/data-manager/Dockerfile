@@ -119,7 +119,7 @@ SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # CVE-2026-89157 and CVE-2026-89161.
 RUN apt-get update \
     && apt-get install -y --no-install-recommends \
-      osmium-tool curl unzip bzip2 ca-certificates age \
+      osmium-tool curl unzip bzip2 lbzip2 ca-certificates age \
       git python3 python3-pip python3-venv wget rsync openssh-client \
       libexpat1=2.5.0-1+deb12u4 libpcre2-8-0 \
     && rm -rf /var/lib/apt/lists/*

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { dirname, join } from "node:path";
 import { execa } from "execa";
@@ -16,29 +16,26 @@ export interface ConvertOverpassOptions {
 export async function convertPbfToBz2(opts: ConvertOverpassOptions): Promise<void> {
   mkdirSync(dirname(opts.targetBz2), { recursive: true });
 
-  // osmium cat reads PBF and writes a bz2-compressed OSM XML — Overpass's
-  // expected `planet.osm.bz2` format. The bz2 encoder is the bottleneck
-  // (single-threaded by default), so hint osmium to use parallel pbzip2 with
-  // one worker per CPU. On a 16-core box this typically cuts wall time ~10×.
+  // Overpass wants bz2-compressed OSM XML (`planet.osm.bz2`). libosmium's bz2
+  // writer is single-threaded and the encoder is the bottleneck (~1.5 MB/s of
+  // output), so osmium writes plain XML to a pipe and lbzip2 compresses it on
+  // every core. The result lands in a temporary file renamed over the target
+  // only once both processes succeed, so a failed run never leaves a truncated
+  // `data.osm.bz2` behind.
   const threads = Math.max(2, availableParallelism());
-  const child = execa(
-    "osmium",
-    [
-      "cat",
-      opts.sourcePbf,
-      "-o",
-      opts.targetBz2,
-      "-O",
-      "--output-format",
-      `osm.bz2,pbzip2_threads=${threads}`,
-    ],
-    { stdio: "inherit" },
-  );
+  const temporary = `${opts.targetBz2}.tmp`;
+  const osmium = execa("osmium", ["cat", opts.sourcePbf, "-f", "osm", "-o", "-"], {
+    stderr: "inherit",
+  });
+  const compressed = osmium.pipe("lbzip2", ["-n", String(threads), "-c"], {
+    stdout: { file: temporary },
+    stderr: "inherit",
+  });
 
   const poll = opts.onProgress
     ? setInterval(() => {
         try {
-          opts.onProgress?.(statSync(opts.targetBz2).size);
+          opts.onProgress?.(statSync(temporary).size);
         } catch {
           // tmp file not created yet
         }
@@ -46,7 +43,11 @@ export async function convertPbfToBz2(opts: ConvertOverpassOptions): Promise<voi
     : null;
 
   try {
-    await child;
+    await compressed;
+    renameSync(temporary, opts.targetBz2);
+  } catch (error) {
+    rmSync(temporary, { force: true });
+    throw error;
   } finally {
     if (poll) clearInterval(poll);
   }

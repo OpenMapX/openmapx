@@ -110,6 +110,11 @@ infra/docker/.generated-secrets/
 infra/docker/.maintenance/
 # Service runtime-recovery journal written by apps/api on every boot
 infra/docker/.runtime-recovery/
+# Backups and ops-agent state written on the deployment host
+infra/docker/backups/
+infra/docker/.ops-agent-releases/
+infra/docker/.trusted-config-generations/
+infra/docker/.trusted-config-current
 infra/docker/services/transitous/api-keys.json
 services/motis/tools/transitous/api-keys.json
 services/.community/
