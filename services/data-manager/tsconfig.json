@@ -13,5 +13,11 @@
     "lib": ["ES2023", "DOM"],
     "types": ["node"]
   },
-  "include": ["src/**/*", "__tests__/**/*"]
+  "include": [
+    "src/**/*",
+    "__tests__/**/*",
+    "scripts/bench-postgis.ts",
+    "scripts/postgis-diagnostics.ts",
+    "scripts/postgis/**/*"
+  ]
 }

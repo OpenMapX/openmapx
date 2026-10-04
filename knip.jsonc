@@ -104,7 +104,11 @@
       "ignoreDependencies": ["@openstreetmap/id-tagging-schema"]
     },
     "services/data-manager": {
-      "entry": ["src/jobs/overture/eval/*.ts"],
+      "entry": [
+        "src/jobs/overture/eval/*.ts",
+        "scripts/bench-postgis.ts",
+        "scripts/postgis-diagnostics.ts"
+      ],
       // The glyph utility loads this CommonJS package through its compatibility
       // loader because the dependency does not expose an ESM entry point.
       "ignoreDependencies": ["@mapbox/glyph-pbf-composite"]

@@ -500,6 +500,11 @@ all durations, including overflow. Metrics describe the current API process and
 reset on restart. Data-manager jobs are written by a separate process and keep
 polling.
 
+## PostgreSQL query diagnostics
+
+For opt-in statement counters and a disposable synthetic database benchmark,
+see [PostgreSQL diagnostics and benchmarks](./postgresql-diagnostics.md).
+
 ## Where to go next
 
 - **[Admin panel](./admin-panel.md)** — the Overview dashboard and how access is
