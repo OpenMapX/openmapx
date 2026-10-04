@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { maptilerGeocodingService, setMaptilerApiKey } from "./provider.js";
+import { maptilerGeocodingService, resolveMaptilerApiKey, setMaptilerApiKey } from "./provider.js";
 
 let mockFetch: ReturnType<typeof vi.fn>;
 
@@ -270,5 +270,13 @@ describe("MapTiler geocoding provider", () => {
     setMaptilerApiKey(undefined);
     await expect(maptilerGeocodingService.geocode("anything")).rejects.toThrow(/API key/);
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe("resolveMaptilerApiKey", () => {
+  it("prefers the integration's own key and falls back to MAPTILER_KEY", () => {
+    expect(resolveMaptilerApiKey("own", { MAPTILER_KEY: "shared" })).toBe("own");
+    expect(resolveMaptilerApiKey(undefined, { MAPTILER_KEY: "shared" })).toBe("shared");
+    expect(resolveMaptilerApiKey(" ", { MAPTILER_KEY: " " })).toBeUndefined();
   });
 });

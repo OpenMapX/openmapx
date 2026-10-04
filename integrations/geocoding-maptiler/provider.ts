@@ -4,7 +4,7 @@ import type {
 } from "@openmapx/integration-geocoding/types";
 /**
  * MapTiler Geocoding API client.
- * Requires MAPTILER_KEY env var.
+ * Requires an API key: the integration's `apiKey`, else MAPTILER_KEY.
  * https://docs.maptiler.com/cloud/geocoding/
  */
 
@@ -31,6 +31,19 @@ const SEARCH_TYPES =
 let apiKey: string | undefined;
 export function setMaptilerApiKey(value: string | undefined): void {
   apiKey = value && value.length > 0 ? value : undefined;
+}
+
+/**
+ * The integration's own `apiKey`, or else the deployment-wide `MAPTILER_KEY`
+ * the tile proxy uses, so one key set in `.env` serves both maps and search.
+ */
+export function resolveMaptilerApiKey(
+  configured: string | undefined,
+  env: NodeJS.ProcessEnv = process.env,
+): string | undefined {
+  const own = configured?.trim();
+  if (own) return own;
+  return env.MAPTILER_KEY?.trim() || undefined;
 }
 
 interface MaptilerFeature {

@@ -1,7 +1,9 @@
 import type { IntegrationContext } from "@openmapx/integration-framework";
-import { maptilerGeocodingService, setMaptilerApiKey } from "./provider.js";
+import { maptilerGeocodingService, resolveMaptilerApiKey, setMaptilerApiKey } from "./provider.js";
 
 export function setup(ctx: IntegrationContext): void {
-  ctx.onActivate(() => setMaptilerApiKey(ctx.config.apiKey as string | undefined));
+  ctx.onActivate(() =>
+    setMaptilerApiKey(resolveMaptilerApiKey(ctx.config.apiKey as string | undefined)),
+  );
   ctx.registerGeocodingProvider(maptilerGeocodingService);
 }
