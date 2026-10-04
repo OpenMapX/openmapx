@@ -1,4 +1,9 @@
-import { getOverlayEntry, registerOverlayEntry, toggleOverlay } from "@openmapx/core";
+import {
+  getOverlayEntry,
+  registerOverlayEntry,
+  toggleOverlay,
+  useNavigationStore,
+} from "@openmapx/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, createFakeMap, type FakeMap, render } from "@/test";
 import manifest from "../manifest.json";
@@ -57,6 +62,7 @@ function addBaseStyle(): void {
 }
 
 beforeEach(() => {
+  useNavigationStore.setState({ status: "idle" });
   styleVersion = 0;
   fake = createFakeMap({ zoom: 16, pitch: 20, maxPitch: 70 });
   mapRef = { current: fake.map };
@@ -74,6 +80,41 @@ afterEach(() => {
 });
 
 describe("BuildingExtrusionLayer", () => {
+  it("hides buildings for navigation and restores the normal map selection", () => {
+    render(<BuildingExtrusionLayer />);
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    fake.state.pitch = 55;
+    act(() => fake.emit("pitch"));
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("none");
+    act(() => useNavigationStore.setState({ status: "idle" }));
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+  });
+
+  it("preserves explicit navigation buildings through overview and resets the next session", () => {
+    fake.state.pitch = 0;
+    render(<BuildingExtrusionLayer />);
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    fake.state.pitch = 55;
+    act(() => fake.emit("pitch"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    act(() => toggleOverlay("3d-buildings", { kind: "user" }));
+    fake.state.pitch = 0;
+    act(() => fake.emit("pitch"));
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    fake.state.pitch = 55;
+    act(() => fake.emit("pitch"));
+    expect(fake.state.layout.get(LAYER_ID)?.visibility).toBe("visible");
+    act(() => useNavigationStore.setState({ status: "arrived" }));
+    expect(useBuildingsStore.getState().layerVisible).toBe(true);
+    act(() => useNavigationStore.setState({ status: "idle" }));
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    act(() => useNavigationStore.setState({ status: "navigating" }));
+    expect(useBuildingsStore.getState().layerVisible).toBe(false);
+    act(() => useNavigationStore.setState({ status: "idle" }));
+  });
+
   it("rebinds camera synchronization to a replacement map without resetting manual-off", () => {
     const { rerender } = render(<BuildingExtrusionLayer />);
     act(() => toggleOverlay("3d-buildings", { kind: "user" }));

@@ -1,6 +1,6 @@
 "use client";
 
-import { runOverlayTransaction, useOverlayExclusion } from "@openmapx/core";
+import { runOverlayTransaction, useNavigationStore, useOverlayExclusion } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
 import { useEffect, useRef } from "react";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
@@ -41,6 +41,13 @@ export function BuildingExtrusionLayer() {
   const prevVisibleRef = useRef(false);
   const wasTiltedRef = useRef(false);
   const currentMap = mapRef.current;
+
+  useEffect(() => {
+    const sync = () =>
+      useBuildingsStore.getState().syncNavigation(useNavigationStore.getState().status !== "idle");
+    sync();
+    return useNavigationStore.subscribe(sync);
+  }, []);
 
   useEffect(() => {
     void styleVersion;
@@ -148,6 +155,10 @@ export function BuildingExtrusionLayer() {
     const syncViewState = () => {
       const tilted = map.getPitch() > TILT_THRESHOLD;
       const state = useBuildingsStore.getState();
+      if (useNavigationStore.getState().status !== "idle") {
+        wasTiltedRef.current = tilted;
+        return;
+      }
       if (!tilted && state.cameraAutoEnableBlocked) state.setCameraAutoEnableBlocked(false);
       if (tilted === wasTiltedRef.current) return;
       wasTiltedRef.current = tilted;
