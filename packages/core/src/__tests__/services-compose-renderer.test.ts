@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { load as parseYaml } from "js-yaml";
 import { describe, expect, it } from "vitest";
 import {
+  hostPortVariable,
   renderCompose,
   renderServiceSnippet,
   resolveProxyHost,
@@ -289,6 +290,7 @@ describe("renderServiceSnippet", () => {
     expect(pinned.container_name).toBe("motis-staging");
   });
 
+  // biome-ignore-start lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
   it("renders host port mapping when exposure.hostPorts is set", () => {
     const snippet = renderServiceSnippet(
       svc("alpha", {
@@ -298,7 +300,26 @@ describe("renderServiceSnippet", () => {
       }),
       {},
     );
-    expect(snippet.ports).toEqual(["127.0.0.1:8080:80/tcp"]);
+    expect(snippet.ports).toEqual(["127.0.0.1:${ALPHA_HOST_PORT:-8080}:80/tcp"]);
+  });
+
+  it("names one host-port variable per published container port", () => {
+    const single = svc("data-manager", {
+      exposure: { hostPorts: [{ container: 4000, host: 4000 }] },
+    }).manifest;
+    const multi = svc("traefik", {
+      exposure: {
+        hostPorts: [
+          { container: 80, host: 80 },
+          { container: 443, host: 443 },
+          { container: 443, host: 443, protocol: "udp" },
+        ],
+      },
+    }).manifest;
+
+    expect(hostPortVariable(single, 4000)).toBe("DATA_MANAGER_HOST_PORT");
+    expect(hostPortVariable(multi, 443)).toBe("TRAEFIK_HOST_PORT_443");
+    expect(hostPortVariable(multi, 8080)).toBeUndefined();
   });
 
   it("defaults community host ports to loopback", () => {
@@ -337,7 +358,10 @@ describe("renderServiceSnippet", () => {
       }),
       {},
     );
-    expect(snippet.ports).toEqual(["443:443", "443:443/udp"]);
+    expect(snippet.ports).toEqual([
+      "${ALPHA_HOST_PORT:-443}:443",
+      "${ALPHA_HOST_PORT:-443}:443/udp",
+    ]);
   });
 
   it("renders Traefik labels when exposure.proxy.enabled", () => {
@@ -351,9 +375,54 @@ describe("renderServiceSnippet", () => {
     const labels = snippet.labels as Record<string, string>;
     expect(labels["traefik.enable"]).toBe("true");
     expect(labels["traefik.http.routers.alpha.rule"]).toContain("PathPrefix(`/alpha`)");
-    expect(labels["traefik.http.routers.alpha.entrypoints"]).toBe("websecure");
+    expect(labels["traefik.http.routers.alpha.entrypoints"]).toBe(
+      "${OPENMAPX_PROXY_ENTRYPOINT:-websecure}",
+    );
+    expect(labels["traefik.http.routers.alpha.tls.certresolver"]).toBe(
+      "${OPENMAPX_PROXY_CERT_RESOLVER:-letsencrypt}",
+    );
     expect(labels["traefik.http.middlewares.alpha-strip.stripprefix.prefixes"]).toBe("/alpha");
     expect(labels["traefik.http.services.alpha.loadbalancer.server.port"]).toBe("3000");
+    expect(labels["traefik.docker.network"]).toBeUndefined();
+  });
+  // biome-ignore-end lint/suspicious/noTemplateCurlyInString: literal Docker Compose interpolation under test
+
+  it("joins routed first-party services to an operator-run proxy network", () => {
+    const routed = svc("alpha", {
+      exposure: { proxy: { enabled: true, pathPrefix: "/alpha" } },
+      container: { image: "t/alpha", tag: "latest", expose: [3000], networkAliases: ["a"] },
+    });
+    const internal = svc("beta");
+
+    const result = renderCompose([routed, internal], {
+      domain: "example.com",
+      externalProxyNetwork: "proxy",
+    });
+    const doc = parseYaml(result.composeYaml) as {
+      services: Record<string, { networks: unknown; labels?: Record<string, string> }>;
+      networks: Record<string, unknown>;
+    };
+
+    expect(doc.services.alpha?.networks).toEqual({
+      openmapx: { aliases: ["a"] },
+      "openmapx-proxy": {},
+    });
+    expect(doc.services.alpha?.labels?.["traefik.docker.network"]).toBe("proxy");
+    expect(doc.services.beta?.networks).toEqual(["openmapx"]);
+    expect(doc.networks["openmapx-proxy"]).toEqual({ name: "proxy", external: true });
+  });
+
+  it("keeps the bundled proxy layout when no external network is configured", () => {
+    const routed = svc("alpha", { exposure: { proxy: { enabled: true, pathPrefix: "/alpha" } } });
+
+    const result = renderCompose([routed], { domain: "example.com", externalProxyNetwork: null });
+    const doc = parseYaml(result.composeYaml) as {
+      services: Record<string, { networks: unknown }>;
+      networks: Record<string, unknown>;
+    };
+
+    expect(doc.services.alpha?.networks).toEqual(["openmapx"]);
+    expect(doc.networks["openmapx-proxy"]).toBeUndefined();
   });
 
   it("renders environment from manifest when no resolved config present", () => {

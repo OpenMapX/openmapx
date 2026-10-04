@@ -25,6 +25,7 @@
       "OPENMAPX_REGION": "${OPENMAPX_REGION:-europe/germany}",
       "OPENMAPX_ALLOWED_REGIONS": "${OPENMAPX_ALLOWED_REGIONS:-europe/germany}",
       "OPENMAPX_ALLOWED_COUNTRIES": "${OPENMAPX_ALLOWED_COUNTRIES:-DE}",
+      "OPENMAPX_PROXY_NETWORK": "${OPENMAPX_PROXY_NETWORK:-}",
       "DOCKER_CONFIG": "/home/node/.docker",
       "OPS_AGENT_API_TOKEN_FILE": "/run/secrets/ops-agent-api-token",
       "OPS_AGENT_DATA_MANAGER_TOKEN_FILE": "/run/secrets/ops-agent-data-manager-token",

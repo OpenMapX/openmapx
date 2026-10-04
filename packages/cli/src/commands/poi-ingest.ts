@@ -1,10 +1,9 @@
 import { services } from "@openmapx/core/server";
 import type { Command } from "commander";
+import { dataManagerUrl } from "../lib/data-manager-url";
 import { log, table } from "../lib/output";
 
 const { DataManagerClient } = services;
-
-const DEFAULT_DM_URL = process.env.DATA_MANAGER_URL ?? "http://localhost:4000";
 
 function formatTs(value: unknown): string {
   if (typeof value !== "string") return "-";
@@ -83,7 +82,7 @@ function printSourcesTable(rows: SourceSummary[]): void {
 
 function dataManagerHint(): void {
   log.dim(
-    `(hint: data-manager URL is ${DEFAULT_DM_URL} — override with DATA_MANAGER_URL; auth uses DATA_MANAGER_AUTH_TOKEN)`,
+    `(hint: data-manager URL is ${dataManagerUrl()} — override with DATA_MANAGER_URL; auth uses DATA_MANAGER_AUTH_TOKEN)`,
   );
 }
 
@@ -96,7 +95,7 @@ export function registerPoiIngestCommands(program: Command): void {
     .command("state")
     .description("Print overall POI ingest state (counts by domain + status)")
     .action(async () => {
-      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
       try {
         const state = await client.poiIngestState();
         const drift = state.registryCountMatchesUpstream;
@@ -147,7 +146,7 @@ export function registerPoiIngestCommands(program: Command): void {
     .option("--domain <name>", "Filter by domain (e.g. ev-charging, parking)")
     .option("--status <name>", "Filter by status (active | stale | failed | unknown)")
     .action(async (options: { domain?: string; status?: string }) => {
-      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
       try {
         const rows = await client.poiIngestSources({
           domain: options.domain,
@@ -165,7 +164,7 @@ export function registerPoiIngestCommands(program: Command): void {
     .command("show <sourceId>")
     .description("Print full detail for one POI source (declaration + last run + recent jobs)")
     .action(async (sourceId: string) => {
-      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
       try {
         const detail = await client.poiIngestSource(sourceId);
         console.log(JSON.stringify(detail, null, 2));
@@ -182,7 +181,7 @@ export function registerPoiIngestCommands(program: Command): void {
     .option("--live-only", "Only refresh the live cache (not allowed for bundled sources)")
     .option("--idempotency-key <key>", "Optional idempotency key to dedupe replays")
     .action(async (sourceId: string, options: { liveOnly?: boolean; idempotencyKey?: string }) => {
-      const client = new DataManagerClient({ baseUrl: DEFAULT_DM_URL });
+      const client = new DataManagerClient({ baseUrl: dataManagerUrl() });
       try {
         const res = await client.poiIngestSync(sourceId, {
           liveOnly: options.liveOnly,

@@ -1,3 +1,4 @@
+import { readExternalProxyNetwork } from "./external-proxy";
 import type { LoadedService, ServiceConsumes, ServiceProduces } from "./types";
 
 export const SERVICE_SELECTION_ENV = "OPENMAPX_ENABLED_SERVICES";
@@ -34,6 +35,13 @@ export interface ExpandServiceSelectionOptions {
   allowMissingSelected?: boolean;
   /** Include the built-in proxy when selected services expose proxy routes. */
   includeProxyForProxiedServices?: boolean;
+  /**
+   * Docker network of an operator-run reverse proxy. While one is configured
+   * the bundled `traefik` is never selected, not even as a requested root, so
+   * it cannot claim the host's ports 80/443. `undefined` reads
+   * `OPENMAPX_PROXY_NETWORK`; `null` ignores the environment.
+   */
+  externalProxyNetwork?: string | null;
 }
 
 interface ProducerEntry {
@@ -204,8 +212,13 @@ export function expandServiceSelection(
   const missingIds: string[] = [];
   const warnings: string[] = [];
   const queue: string[] = [];
+  const externalProxy =
+    opts.externalProxyNetwork === null
+      ? undefined
+      : (opts.externalProxyNetwork ?? readExternalProxyNetwork());
 
   function enqueue(id: string, reason: string): void {
+    if (externalProxy && id === "traefik") return;
     const svc = byId.get(id);
     if (!svc) {
       warnings.push(`Service "${id}" referenced by ${reason} is not installed`);

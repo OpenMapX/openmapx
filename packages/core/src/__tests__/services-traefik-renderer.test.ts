@@ -71,6 +71,10 @@ function routingFromLabels(labels: Record<string, string>) {
   return { routers, services, middlewares };
 }
 
+function composeDefault(value: string | undefined): string | undefined {
+  return value?.replace(/^\$\{[A-Z0-9_]+:-(.*)\}$/, "$1");
+}
+
 describe("generated Traefik file configuration", () => {
   const labelSets = labelsByService();
   const manifests = loadBuiltIns()
@@ -98,8 +102,10 @@ describe("generated Traefik file configuration", () => {
       for (const [name, router] of Object.entries(actual.http.routers)) {
         const labelRouter = expected.routers[name] as Record<string, string>;
         expect(router.rule).toBe(labelRouter.rule);
-        expect(router.entryPoints).toEqual([labelRouter.entrypoints]);
-        expect(router.tls.certResolver).toBe(labelRouter["tls.certresolver"]);
+        // Labels interpolate the operator-run proxy's entrypoint and resolver;
+        // the bundled Traefik is what their defaults describe.
+        expect(router.entryPoints).toEqual([composeDefault(labelRouter.entrypoints)]);
+        expect(router.tls.certResolver).toBe(composeDefault(labelRouter["tls.certresolver"]));
         expect(router.middlewares?.join(",")).toBe(labelRouter.middlewares);
         expect(router.priority === undefined ? undefined : String(router.priority)).toBe(
           labelRouter.priority,

@@ -202,6 +202,24 @@ describe("expandServiceSelection", () => {
     ]);
   });
 
+  it("never selects the bundled traefik behind an operator-run proxy", () => {
+    const services = [
+      svc("traefik"),
+      svc("app-web", { exposure: { proxy: { enabled: true, pathPrefix: "/" } } }),
+    ];
+
+    const selection = expandServiceSelection(services, ["traefik", "app-web"], {
+      externalProxyNetwork: "proxy",
+    });
+
+    expect(selection.enabledIdsOrdered).toEqual(["app-web"]);
+    expect(selection.missingIds).toEqual([]);
+    expect(
+      expandServiceSelection(services, ["app-web"], { externalProxyNetwork: null })
+        .enabledIdsOrdered,
+    ).toEqual(["traefik", "app-web"]);
+  });
+
   it("reports explicit missing roots but tolerates missing defaults when requested", () => {
     const services = [svc("app-api")];
 

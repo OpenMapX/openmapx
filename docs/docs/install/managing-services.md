@@ -334,6 +334,38 @@ service that requests a non-loopback host port as **publicly accessible** before
 you confirm. The exposure fields themselves are documented in the Developer
 section's service-manifest reference.
 
+A loopback port that is already taken on the host can be moved from
+`infra/docker/.env` with `<SERVICE>_HOST_PORT`, for example
+`DATA_MANAGER_HOST_PORT=14000` or `POSTGIS_HOST_PORT=15432`. The CLI follows
+`DATA_MANAGER_HOST_PORT` when it talks to the data-manager.
+
+### Behind an existing reverse proxy
+
+On a host where another Traefik already owns ports 80 and 443, OpenMapX can
+route through it instead of starting its own. That Traefik must use the Docker
+provider. Set its network, entrypoint and certificate resolver in
+`infra/docker/.env`:
+
+```bash
+OPENMAPX_PROXY_NETWORK=proxy
+OPENMAPX_PROXY_ENTRYPOINT=https
+OPENMAPX_PROXY_CERT_RESOLVER=myresolver
+```
+
+The bundled `traefik` service is then never selected. Every routed service
+(`app-web`, `app-api`, `well-known`, `tileserver`, …) joins the external
+network, and its labels carry the entrypoint, resolver and network. Re-render
+and start the stack as usual.
+
+Copy `services/traefik/config/dynamic/middlewares.yml` into the external
+Traefik's file-provider directory. The routes reference its middlewares with
+`@file`, and Traefik disables a router whose middleware is missing. Without
+`internal-deny@file`, requests to `/api/internal` fall through to the general
+`/api` route and reach endpoints that are meant to be unreachable from outside.
+The bundled Traefik also adds HSTS on its entrypoint. Behind your own proxy,
+configure HSTS there, for example with the `hsts@file` middleware from the same
+file.
+
 ## Where to go next
 
 - **[Getting started](./getting-started.md)** — the first-deployment walkthrough

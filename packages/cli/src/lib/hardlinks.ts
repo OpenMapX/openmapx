@@ -26,6 +26,7 @@ import {
   applyHardlinkPlan,
   type HardlinkEntry,
 } from "@openmapx/hardlinks";
+import { dataManagerUrl } from "./data-manager-url";
 import { repoPaths } from "./paths";
 
 const { DataManagerClient } = coreServices;
@@ -42,8 +43,7 @@ export interface ApplyGeneratedHardlinkOptions {
    */
   requirePlan?: boolean;
   /**
-   * Override the data-manager URL. Defaults to `DATA_MANAGER_URL` from the
-   * environment, falling back to `http://localhost:4000`.
+   * Override the data-manager URL. Defaults to {@link dataManagerUrl}.
    */
   dataManagerUrl?: string;
   /**
@@ -138,7 +138,7 @@ export async function applyGeneratedHardlinks(
   mkdirSync(dataRoot, { recursive: true });
 
   if (!opts.forceLocal) {
-    const baseUrl = opts.dataManagerUrl ?? process.env.DATA_MANAGER_URL ?? "http://localhost:4000";
+    const baseUrl = opts.dataManagerUrl ?? dataManagerUrl();
     const timeout = opts.reachabilityTimeoutMs ?? 1500;
     if (await dataManagerReachable(baseUrl, timeout)) {
       const client = new DataManagerClient({ baseUrl });

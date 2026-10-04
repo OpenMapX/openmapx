@@ -1,6 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join, relative, resolve } from "node:path";
 import { dump as yamlDump, load as yamlLoad } from "js-yaml";
+import {
+  EXTERNAL_PROXY_NETWORK_KEY,
+  PROXY_CERT_RESOLVER_LABEL_VALUE,
+  PROXY_ENTRYPOINT_LABEL_VALUE,
+  readExternalProxyNetwork,
+} from "./external-proxy";
 import { detectConsumesCycle } from "./resolver";
 import { assertRenderSandbox } from "./sandbox-policy";
 import type {
@@ -225,6 +231,33 @@ export interface RenderContext {
    * `RenderResult.writableBindDirs` when omitted.
    */
   bindDirSink?: string[];
+  /**
+   * Docker network of an operator-run reverse proxy (see `external-proxy.ts`).
+   * `undefined` reads `OPENMAPX_PROXY_NETWORK`; `null` forces the bundled
+   * Traefik regardless of the environment.
+   */
+  externalProxyNetwork?: string | null;
+}
+
+function externalProxyNetwork(ctx: RenderContext): string | undefined {
+  if (ctx.externalProxyNetwork === null) return undefined;
+  return ctx.externalProxyNetwork ?? readExternalProxyNetwork();
+}
+
+/**
+ * Compose variable that moves a first-party service's published host port, so
+ * a host that already uses the default port can relocate it from `.env`:
+ * `<SERVICE>_HOST_PORT`, or `<SERVICE>_HOST_PORT_<CONTAINER_PORT>` when the
+ * service publishes more than one container port.
+ */
+export function hostPortVariable(
+  manifest: ServiceManifest,
+  containerPort: number,
+): string | undefined {
+  const containerPorts = new Set((manifest.exposure?.hostPorts ?? []).map((p) => p.container));
+  if (!containerPorts.has(containerPort)) return undefined;
+  const base = `${manifest.id.toUpperCase().replace(/[^A-Z0-9]+/g, "_")}_HOST_PORT`;
+  return containerPorts.size === 1 ? base : `${base}_${containerPort}`;
 }
 
 // Maps `@`-prefixed special bind sources (literals only) to concrete host
@@ -532,7 +565,10 @@ export function renderServiceSnippet(
       // safe default for community services explicit and local-only.
       const bindAddress = p.bindAddress ?? (service.isBuiltIn ? undefined : "127.0.0.1");
       const bind = bindAddress ? `${bindAddress}:` : "";
-      return `${bind}${p.host}:${p.container}${proto}`;
+      // Community ports stay literal: their interpolation is escaped below.
+      const variable = service.isBuiltIn ? hostPortVariable(m, p.container) : undefined;
+      const host = variable ? `\${${variable}:-${p.host}}` : String(p.host);
+      return `${bind}${host}:${p.container}${proto}`;
     });
   }
 
@@ -614,6 +650,17 @@ export function renderServiceSnippet(
     snippet.networks = { openmapx: { aliases: [...c.networkAliases] } };
   } else {
     snippet.networks = ["openmapx"];
+  }
+
+  // Behind an operator-run proxy, a routed first-party service also joins that
+  // proxy's network. Community services never receive a platform route.
+  const proxyNetwork = externalProxyNetwork(ctx);
+  if (proxyNetwork && service.isBuiltIn && m.exposure?.proxy?.enabled && snippet.networks) {
+    const networks = Array.isArray(snippet.networks)
+      ? Object.fromEntries(snippet.networks.map((network) => [network, {}]))
+      : { ...snippet.networks };
+    networks[EXTERNAL_PROXY_NETWORK_KEY] = {};
+    snippet.networks = networks;
   }
 
   const volumes: string[] = [];
@@ -784,10 +831,12 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
     [`traefik.http.routers.${id}.rule`]: pathPrefix
       ? `Host(\`${domain}\`) && PathPrefix(\`${pathPrefix}\`)`
       : `Host(\`${domain}\`)`,
-    [`traefik.http.routers.${id}.entrypoints`]: "websecure",
-    [`traefik.http.routers.${id}.tls.certresolver`]: "letsencrypt",
+    [`traefik.http.routers.${id}.entrypoints`]: PROXY_ENTRYPOINT_LABEL_VALUE,
+    [`traefik.http.routers.${id}.tls.certresolver`]: PROXY_CERT_RESOLVER_LABEL_VALUE,
     [`traefik.http.services.${id}.loadbalancer.server.port`]: String(targetPort),
   };
+  const proxyNetwork = externalProxyNetwork(ctx);
+  if (proxyNetwork) labels["traefik.docker.network"] = proxyNetwork;
 
   const middlewares: string[] = [];
   if (proxy.stripPrefix) {
@@ -814,8 +863,8 @@ function renderTraefikLabels(m: ServiceManifest, ctx: RenderContext): Record<str
     const routerName = `${id}-r${i + 1}`;
     const matcher = route.path ? `Path(\`${route.path}\`)` : `PathPrefix(\`${route.pathPrefix}\`)`;
     labels[`traefik.http.routers.${routerName}.rule`] = `Host(\`${domain}\`) && ${matcher}`;
-    labels[`traefik.http.routers.${routerName}.entrypoints`] = "websecure";
-    labels[`traefik.http.routers.${routerName}.tls.certresolver`] = "letsencrypt";
+    labels[`traefik.http.routers.${routerName}.entrypoints`] = PROXY_ENTRYPOINT_LABEL_VALUE;
+    labels[`traefik.http.routers.${routerName}.tls.certresolver`] = PROXY_CERT_RESOLVER_LABEL_VALUE;
     labels[`traefik.http.routers.${routerName}.service`] = id;
     if (route.middleware?.length) {
       labels[`traefik.http.routers.${routerName}.middlewares`] = route.middleware.join(",");
@@ -990,6 +1039,17 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
       .filter((service) => service.enabled && !service.isBuiltIn)
       .map((service) => [communityNetworkName(service.manifest.id), { driver: "bridge" }]),
   );
+  const proxyNetwork = externalProxyNetwork(ctx);
+  const joinsProxyNetwork = Object.values(composeServices).some(
+    (snippet) =>
+      !Array.isArray(snippet.networks) &&
+      snippet.networks !== undefined &&
+      EXTERNAL_PROXY_NETWORK_KEY in snippet.networks,
+  );
+  const externalNetworks =
+    proxyNetwork && joinsProxyNetwork
+      ? { [EXTERNAL_PROXY_NETWORK_KEY]: { name: proxyNetwork, external: true } }
+      : {};
   const composeDoc = {
     services: composeServices,
     networks: {
@@ -1006,6 +1066,7 @@ export function renderCompose(services: LoadedService[], ctx: RenderContext): Re
         ipam: { config: [{ subnet: "fd4d:5058::/64" }] },
       },
       ...communityNetworks,
+      ...externalNetworks,
     },
     ...(Object.keys(namedVolumes).length ? { volumes: namedVolumes } : {}),
     ...(Object.keys(composeSecrets).length ? { secrets: composeSecrets } : {}),

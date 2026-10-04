@@ -4,7 +4,10 @@ import { log, table } from "../lib/output";
 
 // Mirrors the admin Extensions store over HTTP. Loopback short-circuits auth
 // in `requireAdmin`; set OPENMAPX_API_URL for a tunneled remote API.
-const API = process.env.API_URL ?? process.env.OPENMAPX_API_URL ?? "http://localhost:3001";
+// Read per call: `infra/docker/.env` loads after this module is imported.
+function apiUrl(): string {
+  return process.env.API_URL ?? process.env.OPENMAPX_API_URL ?? "http://localhost:3001";
+}
 
 interface CatalogView {
   id: string;
@@ -46,7 +49,7 @@ export function registerExtCommands(program: Command): void {
       if (opts.query) sp.set("q", opts.query);
       if (opts.trust) sp.set("trust", opts.trust);
       if (opts.type) sp.set("type", opts.type);
-      const res = await adminFetch(`${API}/api/admin/extensions/catalog?${sp}`);
+      const res = await adminFetch(`${apiUrl()}/api/admin/extensions/catalog?${sp}`);
       if (!res.ok) {
         log.err(`HTTP ${res.status}: ${await res.text()}`);
         process.exit(1);
@@ -79,7 +82,7 @@ export function registerExtCommands(program: Command): void {
     .command("list")
     .description("List installed extensions")
     .action(async () => {
-      const res = await adminFetch(`${API}/api/admin/extensions/installed`);
+      const res = await adminFetch(`${apiUrl()}/api/admin/extensions/installed`);
       if (!res.ok) {
         log.err(`HTTP ${res.status}: ${await res.text()}`);
         process.exit(1);
@@ -111,7 +114,7 @@ export function registerExtCommands(program: Command): void {
     .description("Install an extension by catalog id or by extension.json URL")
     .action(async (idOrUrl: string) => {
       const body = isUrl(idOrUrl) ? { manifestUrl: idOrUrl } : { id: idOrUrl };
-      const res = await adminFetch(`${API}/api/admin/extensions/install`, {
+      const res = await adminFetch(`${apiUrl()}/api/admin/extensions/install`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -128,7 +131,9 @@ export function registerExtCommands(program: Command): void {
     .command("update <id>")
     .description("Update an installed extension to the catalog's current version")
     .action(async (id: string) => {
-      const res = await adminFetch(`${API}/api/admin/extensions/update/${id}`, { method: "POST" });
+      const res = await adminFetch(`${apiUrl()}/api/admin/extensions/update/${id}`, {
+        method: "POST",
+      });
       const data = (await res.json()) as { jobId?: string; error?: string };
       if (!res.ok) {
         log.err(data.error ?? `HTTP ${res.status}`);
@@ -141,7 +146,7 @@ export function registerExtCommands(program: Command): void {
     .command("remove <id>")
     .description("Uninstall an extension (removes its services and integrations)")
     .action(async (id: string) => {
-      const res = await adminFetch(`${API}/api/admin/extensions/${id}`, { method: "DELETE" });
+      const res = await adminFetch(`${apiUrl()}/api/admin/extensions/${id}`, { method: "DELETE" });
       const data = (await res.json()) as { jobId?: string; error?: string };
       if (!res.ok) {
         log.err(data.error ?? `HTTP ${res.status}`);
