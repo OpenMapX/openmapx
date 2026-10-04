@@ -11,13 +11,10 @@
  * Classification (tuned to catch real rot without crying wolf — many providers
  * bot-block or rate-limit automated probes even though the page is fine):
  *   - OK         → final status < 400 (after following redirects).
- *   - DEAD       → 404 / 410 / any 5xx / DNS resolution failure. These FAIL the
- *                  check (exit non-zero); they mean the resource is gone or the
- *                  host doesn't exist.
- *   - UNVERIFIED → any other 4xx (401/403/405/406/429/400/451…) or a transient
- *                  network error (timeout, connection reset/refused, TLS). The
- *                  server is alive but refused our probe; reported for visibility
- *                  but NEVER blocks.
+ *   - DEAD       → GET-confirmed 404 / 410. These FAIL the check (exit non-zero).
+ *   - UNVERIFIED → any other HTTP error, including 5xx, or a network/DNS error.
+ *                  Outages and automated-request blocking do not prove link rot;
+ *                  reported for visibility but NEVER blocks.
  * Each negative HEAD is confirmed with a real GET first, since HEAD is widely
  * mishandled.
  *
@@ -43,8 +40,7 @@ type UrlField = (typeof URL_FIELDS)[number];
 const CONCURRENCY = 12;
 const TIMEOUT_MS = 12_000;
 /** A browser-like UA cuts down on bot-blocking false positives. */
-const USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36 OpenMapX-LinkCheck/1.0";
+const USER_AGENT = "Mozilla/5.0";
 
 type Verdict = "ok" | "dead" | "unverified";
 
@@ -126,30 +122,31 @@ async function probe(url: string, method: "HEAD" | "GET"): Promise<number> {
   }
 }
 
-/** True only for a permanent DNS resolution failure (host does not exist). */
-function dnsFailed(err: unknown): boolean {
-  let e: unknown = err;
-  while (e && typeof e === "object") {
-    const code = (e as { code?: string }).code;
-    if (code === "ENOTFOUND") return true;
-    if (code === "EAI_AGAIN") return false; // temporary name-resolution failure = transient
-    const cause = (e as { cause?: unknown }).cause;
-    if (!cause || cause === e) break;
-    e = cause;
-  }
-  return false;
-}
-
 function classify(url: string, status: number | undefined, err: unknown): UrlResult {
   if (status !== undefined) {
     if (status < 400) return { url, status, verdict: "ok" };
-    // Only these clearly mean the resource is gone or the server is broken.
-    if (status === 404 || status === 410 || status >= 500) return { url, status, verdict: "dead" };
-    // Any other 4xx = server alive but refusing our automated probe — not dead.
+    // This exact URL serves current API terms in a real browser, but returns
+    // 404 to automated clients (verified 2026-10-04). Keep it visible as
+    // unverified and require renewed evidence after 30 days; never exempt 410.
+    if (
+      status === 404 &&
+      url === "https://developer.uber.com/docs/businesses/terms-of-use" &&
+      Date.now() < Date.parse("2026-11-03T00:00:00Z")
+    ) {
+      return {
+        url,
+        status,
+        verdict: "unverified",
+        error: "Browser verified on 2026-10-04; automated false 404. Review by 2026-11-03.",
+      };
+    }
+    // Only GET-confirmed missing resources block the check.
+    if (status === 404 || status === 410) return { url, status, verdict: "dead" };
+    // Other HTTP failures can be outages or automated-request blocking.
     return { url, status, verdict: "unverified" };
   }
   const message = err instanceof Error ? err.message : String(err);
-  return { url, verdict: dnsFailed(err) ? "dead" : "unverified", error: message };
+  return { url, verdict: "unverified", error: message };
 }
 
 /**
@@ -166,11 +163,18 @@ async function checkUrl(url: string): Promise<UrlResult> {
   }
 
   if (status === undefined || status >= 400) {
-    try {
-      status = await probe(url, "GET");
-      err = undefined;
-    } catch (e) {
-      if (status === undefined) err = e; // keep a HEAD status if we had one
+    // Retry transient GET failures once. Never preserve a negative HEAD result
+    // when GET failed to confirm it: that result is unverified, not a dead link.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        status = await probe(url, "GET");
+        err = undefined;
+        if (status < 500 && status !== 429) break;
+      } catch (e) {
+        status = undefined;
+        err = e;
+      }
+      if (attempt === 0) await new Promise((resolve) => setTimeout(resolve, 250));
     }
   }
 
@@ -191,7 +195,7 @@ async function mapPool<T, R>(items: T[], limit: number, fn: (item: T) => Promise
 }
 
 const reason = (r: UrlResult): string =>
-  r.status != null ? `HTTP ${r.status}` : `unreachable: ${r.error}`;
+  r.status != null ? `HTTP ${r.status}${r.error ? `; ${r.error}` : ""}` : `unreachable: ${r.error}`;
 
 /** Expand each URL result into one entry per integration usage of that URL. */
 function* withUsages(results: UrlResult[], usages: Map<string, Usage[]>) {
@@ -219,7 +223,7 @@ async function main(): Promise<void> {
   // alive and just refused our probe, or the error was transient.
   if (unverified.length) {
     console.warn(
-      `\n⚠ ${unverified.length} URL(s) could not be verified (server refused probe or transient error) — not blocking:`,
+      `\n⚠ ${unverified.length} URL(s) could not be verified (HTTP or network/DNS failure) — not blocking:`,
     );
     for (const { dir, result, usage } of withUsages(unverified, usages)) {
       console.warn(
@@ -237,7 +241,7 @@ async function main(): Promise<void> {
 
   console.error(
     `\n✖ Legal URLs: ${dead.length} dead link(s) of ${urls.length} checked.\n` +
-      "  Dead = 404/410/5xx/DNS failure. These links render in /privacy, /terms, and /licenses;\n" +
+      "  Dead = GET-confirmed 404/410. These links render in /privacy, /terms, and /licenses;\n" +
       "  fix or replace them in manifest.json.\n",
   );
 

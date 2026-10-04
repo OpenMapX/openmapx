@@ -56,7 +56,7 @@
         "description": "Requires a Karhoo demand-partner account. Storing this does not yet enable a Karhoo provider — no adapter is implemented.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
-          "url": "https://developer.karhoo.com/",
+          "url": "https://karhoo.readme.io/",
           "urlLabel": "Karhoo developer portal",
           "steps": [
             "Contact Karhoo to open a demand-partner account — credentials are registered by a Karhoo representative, not self-service.",
@@ -73,7 +73,7 @@
         "description": "Requires a Karhoo demand-partner account. Storing this does not yet enable a Karhoo provider — no adapter is implemented.",
         "x-openmapx-secret": true,
         "x-openmapx-setup": {
-          "url": "https://developer.karhoo.com/",
+          "url": "https://karhoo.readme.io/",
           "urlLabel": "Karhoo developer portal",
           "steps": [
             "Open a Karhoo demand-partner account through a Karhoo representative.",

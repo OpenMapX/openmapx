@@ -665,11 +665,11 @@
     {
       "sourceId": "nl-dotnl",
       "name": "Publicly accessible charging points (DOT-NL / NDW)",
-      "url": "https://dotnl.ndw.nu/",
+      "url": "https://english.ndw.nu/dataportals/dot-nl",
       "apiHosts": ["opendata.ndw.nu"],
       "license": "DOT-NL National Access Point open data (NDW)",
       "licenseUrl": "https://dotnl.ndw.nu/",
-      "attribution": "Charging data via <a href=\"https://dotnl.ndw.nu/\">DOT-NL</a> (NDW)",
+      "attribution": "Charging data via <a href=\"https://english.ndw.nu/dataportals/dot-nl\">DOT-NL</a> (NDW)",
       "commercialUse": "yes",
       "providerCountry": "NL",
       "providerPrivacyUrl": "https://www.ndw.nu/service/privacy",
