@@ -386,6 +386,17 @@ describe("live-transit-motis provider", () => {
       expect(routeForId("ms:x", instances).attribution[0]?.sourceId).toBe("motis-rt");
     });
 
+    it("credits Transitous when the local endpoint is Transitous", async () => {
+      const mod = await loadModule();
+      const { ctx } = createCtx({ endpoint: "https://api.transitous.org" });
+      mod.setup(ctx);
+      const { createLiveTransitMotisInstances, routeForId } = mod.__testing;
+      const instances = createLiveTransitMotisInstances(ctx);
+
+      expect(instances.localSourceId).toBe("transitous");
+      expect(routeForId("ms:x", instances).attribution[0]?.sourceId).toBe("transitous");
+    });
+
     it("queries Transitous for mo: stops and the local instance for ms: stops", async () => {
       const motisClient = await import("@motis-project/motis-client");
       vi.mocked(motisClient.stoptimes).mockResolvedValue({

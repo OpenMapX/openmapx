@@ -2,7 +2,7 @@ import type { AttributionIndexHandle } from "@openmapx/integration-framework";
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import type { TransitStop, TripItinerary } from "@openmapx/mobility-core/transit";
 import { describe, expect, it } from "vitest";
-import { attribution } from "../attributions.js";
+import { attribution, setLocalEndpoint } from "../attributions.js";
 import { __testing, annotateLegsWithAttribution, extractFeedTags } from "../local.js";
 import { encodeMotisRoutePatternId } from "../route-pattern-id.js";
 
@@ -140,6 +140,24 @@ describe("transit-motis feed attribution", () => {
     };
     const wrapped = __testing.wrapLocal(stop, undefined);
     expect(wrapped.attributions).toEqual(__testing.attributionLocal());
+  });
+
+  it("credits Transitous when the local endpoint is Transitous", () => {
+    setLocalEndpoint("https://api.transitous.org");
+    try {
+      const stop: TransitStop = {
+        id: "ms:nl-OpenOV_4187449",
+        name: "Aachen, Elisenbrunnen",
+        lat: 50.77,
+        lng: 6.09,
+        modes: ["bus"],
+        provider: "ms",
+      };
+      const wrapped = __testing.wrapLocal(stop, undefined);
+      expect(wrapped.attributions.map((a) => a.sourceId)).toEqual(["transitous"]);
+    } finally {
+      setLocalEndpoint("http://motis:8080");
+    }
   });
 
   it("extractFeedTags walks nested trip-plan shapes (legs with from/to stop ids)", () => {

@@ -16,7 +16,11 @@ import {
 import type { Attribution } from "@openmapx/mobility-core/attribution";
 import { freshnessNow } from "@openmapx/mobility-core/freshness";
 import { mapMotisAlert, mapMotisAlertSeverity } from "@openmapx/mobility-core/motis-alerts";
-import { createMotisInstance, type MotisInstance } from "@openmapx/mobility-core/motis-client";
+import {
+  createMotisInstance,
+  isTransitousUrl,
+  type MotisInstance,
+} from "@openmapx/mobility-core/motis-client";
 import { getMotisVehicleRadar } from "@openmapx/mobility-core/motis-radar";
 import { withAttribution } from "@openmapx/mobility-core/result";
 import type { LiveTransitVehicle } from "@openmapx/mobility-core/transit";
@@ -53,13 +57,17 @@ function resolveMotisUrl(ctx: IntegrationContext): string {
 
 interface LiveTransitMotisInstances {
   local: MotisInstance;
+  /** Source credited for the local endpoint: Transitous when it serves it. */
+  localSourceId: string;
   transitous: MotisInstance;
 }
 
 function createLiveTransitMotisInstances(ctx: IntegrationContext): LiveTransitMotisInstances {
+  const localUrl = resolveMotisUrl(ctx);
   return {
+    localSourceId: isTransitousUrl(localUrl) ? "transitous" : SOURCE_ID,
     local: createMotisInstance({
-      baseUrl: resolveMotisUrl(ctx),
+      baseUrl: localUrl,
       prefix: "ms:",
       provider: "ms",
       userAgent: USER_AGENT_TRANSIT,
@@ -76,13 +84,15 @@ function createLiveTransitMotisInstances(ctx: IntegrationContext): LiveTransitMo
 function routeForId(
   id: string,
   instances: LiveTransitMotisInstances,
-): { client: MotisInstance["client"]; attribution: Attribution[] } {
-  if (id.startsWith("mo:")) {
-    const attr = attribution.bySource("transitous");
-    return { client: instances.transitous.client, attribution: attr ? [attr] : [] };
-  }
-  const attr = attribution.bySource("motis-rt");
-  return { client: instances.local.client, attribution: attr ? [attr] : [] };
+): { client: MotisInstance["client"]; sourceId: string; attribution: Attribution[] } {
+  const remote = id.startsWith("mo:");
+  const sourceId = remote ? "transitous" : instances.localSourceId;
+  const attr = attribution.bySource(sourceId);
+  return {
+    client: remote ? instances.transitous.client : instances.local.client,
+    sourceId,
+    attribution: attr ? [attr] : [],
+  };
 }
 
 /** MOTIS id prefixes the local + cloud + RT providers all share. */
@@ -170,12 +180,13 @@ function deltaFromItinerary(
  */
 async function getInterpolatedVehicles(
   instance: MotisInstance,
+  sourceId: string,
   bbox: BBox,
 ): Promise<LiveTransitVehicle[]> {
   const vehicles = await getMotisVehicleRadar(instance, bbox);
   return vehicles.map((vehicle) => ({
     ...vehicle,
-    sourceId: SOURCE_ID,
+    sourceId,
     mode: vehicle.mode ?? "bus",
     displayLabel: vehicle.label ?? "Transit",
     positionKind: "interpolated",
@@ -197,12 +208,12 @@ export function setup(ctx: IntegrationContext): void {
       tripUpdates: true,
     },
     async getVehiclePositions(bbox: BBox) {
-      const attr = attribution.bySource(SOURCE_ID);
-      const data = await getInterpolatedVehicles(instances.local, bbox);
+      const attr = attribution.bySource(instances.localSourceId);
+      const data = await getInterpolatedVehicles(instances.local, instances.localSourceId, bbox);
       return withAttribution(data, attr ? [attr] : [], freshnessNow({ hasRealtimeData: true }));
     },
     async getAlertsForStop(stopId) {
-      const { client, attribution: attr } = routeForId(stopId, instances);
+      const { client, sourceId, attribution: attr } = routeForId(stopId, instances);
       try {
         const { data } = await stoptimes({
           client,
@@ -213,7 +224,7 @@ export function setup(ctx: IntegrationContext): void {
           mapMotisAlert(alert, {
             index,
             idPrefix: ALERT_PREFIX,
-            providers: [SOURCE_ID],
+            providers: [sourceId],
             affectedStopIds: [stopId],
           }),
         );

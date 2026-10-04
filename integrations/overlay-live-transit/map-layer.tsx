@@ -1,8 +1,8 @@
 "use client";
 
 import {
+  buildAttributionHtml,
   escapeHtml,
-  sanitizeUrl,
   useDebouncedCallback,
   useNavigationStore,
   useOverlayExclusion,
@@ -224,8 +224,6 @@ function buildPopupHtml(
   const label = escapeHtml(vehicle.displayLabel);
   const secondary = escapeHtml(vehicle.secondaryLabel ?? "");
   const provider = registry.findDataSource(vehicle.sourceId);
-  const providerName = escapeHtml(provider?.name ?? vehicle.sourceId);
-  const providerUrl = provider?.url ? sanitizeUrl(provider.url) : "";
   const updatedAt = new Date(vehicle.updatedAt).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
@@ -263,9 +261,8 @@ function buildPopupHtml(
   </div>`
       : "";
 
-  const attributionHtml = providerUrl
-    ? `<a href="${providerUrl}" target="_blank" rel="noreferrer" style="color:inherit;text-decoration:underline">${providerName}</a>`
-    : providerName;
+  // The same credit every other non-chip surface renders for this source.
+  const attributionHtml = provider ? buildAttributionHtml(provider) : escapeHtml(vehicle.sourceId);
 
   return `<div style="font-family:'Plus Jakarta Sans',Arial,sans-serif;min-width:210px">
     <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
