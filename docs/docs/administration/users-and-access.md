@@ -201,7 +201,10 @@ account. Two providers are built in:
 
 Each provider only appears in the sign-in dialog once its client credentials are
 present in the environment (`OSM_CLIENT_ID` / `OSM_CLIENT_SECRET`,
-`MAPILLARY_CLIENT_ID` / `MAPILLARY_CLIENT_SECRET`). Linking lets a user connect
+`MAPILLARY_CLIENT_ID` / `MAPILLARY_CLIENT_SECRET`), and each provider's
+application must list `https://<DOMAIN>/api/auth/callback/<provider>` as its
+redirect URL (see
+[Redirect URLs](../install/configuration.md#redirect-urls)). Linking lets a user connect
 these to an email account and pull in a profile picture; they manage their
 linked accounts from their own account settings, not from the admin panel.
 

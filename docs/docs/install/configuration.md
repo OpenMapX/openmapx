@@ -122,6 +122,31 @@ provider.
 | `MAPILLARY_CLIENT_ID`     | Mapillary OAuth client id (re-uses the same app as `MAPILLARY_TOKEN`). Register at the [Mapillary developer dashboard](https://www.mapillary.com/dashboard/developers). | Optional. Commented |
 | `MAPILLARY_CLIENT_SECRET` | Mapillary OAuth client secret.                                                                                                                                          | Optional. Commented |
 
+### Redirect URLs
+
+Each provider redirects back to `<BETTER_AUTH_URL>/api/auth/callback/<provider>`.
+Register exactly this URL with the provider: the OpenStreetMap application's
+**Redirect URIs** and the Mapillary application's **Callback URL**. Sign-in
+and account linking fail with any other path. OpenStreetMap shows "The
+requested redirect URI is malformed or doesn't match the client redirect URI".
+Mapillary sends the person to the registered URL, which then answers 404.
+
+In Docker Compose, port 3001 has no direct host port binding; external traffic
+routes through Traefik, so use your public domain (or localhost when running
+without TLS):
+
+```text
+https://<DOMAIN>/api/auth/callback/openstreetmap
+https://<DOMAIN>/api/auth/callback/mapillary
+```
+
+For a standalone local API dev setup (`pnpm dev`) that is:
+
+```text
+http://127.0.0.1:3001/api/auth/callback/openstreetmap
+http://127.0.0.1:3001/api/auth/callback/mapillary
+```
+
 ## OpenStreetMap contributions
 
 Lets a signed-in person publish a curated correction to an **existing**
@@ -149,27 +174,8 @@ operator turns them on deliberately.
 
 Contributions reuse the same OAuth app as OpenStreetMap sign-in
 (`OSM_CLIENT_ID` / `OSM_CLIENT_SECRET`). Without **both** credentials the
-feature reports itself disabled even if the flags are on — it fails closed.
-
-Register the redirect URL exactly as Better Auth's generic-OAuth route expects:
-
-```text
-<BETTER_AUTH_URL>/api/auth/oauth2/callback/openstreetmap
-```
-
-For a standalone local API dev setup (`pnpm dev`) that is:
-
-```text
-http://127.0.0.1:3001/api/auth/oauth2/callback/openstreetmap
-```
-
-In Docker Compose, port 3001 has no direct host port binding; external traffic
-routes through Traefik, so use your public domain (or localhost when running
-without TLS):
-
-```text
-https://<DOMAIN>/api/auth/oauth2/callback/openstreetmap
-```
+feature reports itself disabled even if the flags are on — it fails closed. Its
+redirect URL is the one under [Redirect URLs](#redirect-urls).
 
 Ordinary sign-in requests only `openid read_prefs`. The write permissions
 (`write_api`, `write_notes`) are requested incrementally, the first time someone

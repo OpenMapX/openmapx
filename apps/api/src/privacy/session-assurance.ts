@@ -21,7 +21,6 @@ export function assuranceMethodForAuthPath(
     normalized === "/sign-in/social" ||
     normalized === "/callback/:id" ||
     normalized.startsWith("/callback/") ||
-    normalized.startsWith("/oauth2/callback/") ||
     normalized === "/one-tap/callback"
   )
     return "federated";
