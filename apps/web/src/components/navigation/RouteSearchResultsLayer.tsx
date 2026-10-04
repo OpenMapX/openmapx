@@ -2,7 +2,8 @@
 
 import type { AlongRoutePoi, CategoryPlace } from "@openmapx/core";
 import type * as maplibregl from "maplibre-gl";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { brandImageId, loadBrandMarkerImage } from "@/components/map/CategoryResultMarkers";
 import { addLayerInSlot } from "@/integration-api/map/layerStack";
 import { useMap } from "@/integration-api/map/MapContext";
 import { getMapClickOwner } from "@/integration-api/map/mapClickOwnership";
@@ -13,12 +14,17 @@ import { createMarkerSvg } from "@/lib/markerSvg";
 const SOURCE = "route-search-source";
 const LAYER = "route-search-layer";
 
-function ensurePinImage(map: maplibregl.Map, id: string, iconPath: string): void {
+function ensurePinImage(
+  map: maplibregl.Map,
+  id: string,
+  iconPath: string,
+  isCurrent: () => boolean,
+): void {
   if (map.hasImage(id) || !iconPath) return;
   const svg = createMarkerSvg(iconPath, BRAND_HEX, 56);
   const img = new Image(56, 56);
   img.onload = () => {
-    if (!map.hasImage(id)) map.addImage(id, img, { pixelRatio: 2 });
+    if (isCurrent() && !map.hasImage(id)) map.addImage(id, img, { pixelRatio: 2 });
   };
   img.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
 }
@@ -33,15 +39,24 @@ export function RouteSearchResultsLayer({
   results,
   iconPath,
   categoryKey,
+  brandQid,
   onSelect,
 }: {
   results: AlongRoutePoi<CategoryPlace>[];
   iconPath: string;
   categoryKey: string;
+  brandQid?: string;
   onSelect: (poi: AlongRoutePoi<CategoryPlace>) => void;
 }) {
   const { mapRef, mapReady, styleVersion } = useMap();
-  const imageId = `route-search-pin-${categoryKey}`;
+  const fallbackImageId = `route-search-pin-${categoryKey}`;
+  const [loadedBrand, setLoadedBrand] = useState<{ qid: string; styleVersion: number } | null>(
+    null,
+  );
+  const imageId =
+    loadedBrand?.qid === brandQid && loadedBrand?.styleVersion === styleVersion
+      ? brandImageId(loadedBrand.qid)
+      : fallbackImageId;
   const { publish: publishGeoJson } = useGeoJsonSourceDataBridge({
     mapRef,
     mapReady,
@@ -86,8 +101,20 @@ export function RouteSearchResultsLayer({
   useEffect(() => {
     void styleVersion; // re-register the image after a style swap clears it
     const map = mapRef.current;
-    if (map && mapReady) ensurePinImage(map, imageId, iconPath);
-  }, [mapRef, mapReady, styleVersion, imageId, iconPath]);
+    if (!map || !mapReady) return;
+    let active = true;
+    const source = map.getSource(SOURCE);
+    const isCurrent = () => active && mapRef.current === map && map.getSource(SOURCE) === source;
+    ensurePinImage(map, fallbackImageId, iconPath, isCurrent);
+    if (brandQid) {
+      void loadBrandMarkerImage(map, brandQid, isCurrent).then((loaded) => {
+        if (loaded && isCurrent()) setLoadedBrand({ qid: brandQid, styleVersion });
+      });
+    }
+    return () => {
+      active = false;
+    };
+  }, [mapRef, mapReady, styleVersion, fallbackImageId, iconPath, brandQid]);
 
   useEffect(() => {
     void styleVersion; // re-populate after the source is recreated on a style swap

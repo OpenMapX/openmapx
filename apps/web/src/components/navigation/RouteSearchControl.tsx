@@ -204,6 +204,7 @@ export function RouteSearchControl() {
           results={results}
           iconPath={activeIconPath}
           categoryKey={activeKey}
+          brandQid={brand?.qid}
           onSelect={handleSelect}
         />
       )}
