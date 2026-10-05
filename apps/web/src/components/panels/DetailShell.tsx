@@ -17,6 +17,7 @@ const MobileBottomSheet = lazy(() =>
 );
 
 const CARD_GAP = 24;
+const NAV_OVERLAY_Z_INDEX = 1300;
 const DETAIL_CARD_WIDTH = 376;
 
 // Re-exported so existing imports of `DetailChromeContext` from this module
@@ -40,13 +41,17 @@ export function DetailShell({ children }: { children: ReactNode }) {
   const theme = useTheme();
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
   const t = useTranslations("common");
+  const navigating = useNavigationStore((s) => s.status !== "idle");
 
   if (isMobile) {
     return (
       <Suspense fallback={null}>
         <MobileBottomSheet
           id="detail"
-          zIndex={11}
+          // During navigation, join the nav overlay's layer (1300). PanelHost
+          // renders after it, so the sheet covers the nav sheet, while dialogs
+          // opened from the card portal to the end of <body> and stay on top.
+          zIndex={navigating ? NAV_OVERLAY_Z_INDEX : 11}
           detents={PLACE_DETENTS}
           ariaLabel={t("detailsPanelAriaLabel")}
         >

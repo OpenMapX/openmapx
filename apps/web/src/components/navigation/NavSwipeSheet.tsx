@@ -1,7 +1,6 @@
 "use client";
 
 import Box from "@mui/material/Box";
-import { useSidebarStore } from "@openmapx/core";
 import { useTranslations } from "next-intl";
 import { type ReactNode, useLayoutEffect, useMemo, useRef, useState } from "react";
 import type { DetentConfig } from "@/components/panels/sheet/detents";
@@ -50,7 +49,6 @@ export function NavSwipeSheet({
   children: ReactNode;
 }) {
   const t = useTranslations("navigation");
-  const placeCardOpen = useSidebarStore((s) => s.activeDetailId !== null);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
   const [headerPx, setHeaderPx] = useState(0);
@@ -105,8 +103,6 @@ export function NavSwipeSheet({
       onDetentChange={(next) => onExpandedChange(next === "full")}
       hideHandle
       disableContentSafeArea
-      // A place tapped mid-route opens its own sheet; step aside until it closes.
-      obscured={placeCardOpen}
     >
       <Box ref={headerRef}>
         <Box
