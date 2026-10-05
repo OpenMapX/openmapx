@@ -926,7 +926,9 @@ describe("OperatorFeedRelayStore", () => {
   });
 
   it("applies one total deadline across acquisition and serving", async () => {
+    vi.useFakeTimers();
     const callerAbort = new AbortController();
+    const acquisitionStarted = deferred();
     let acquisitionSignal: AbortSignal | undefined;
     const relay = new OperatorFeedRelayStore({
       maxEntries: 1,
@@ -934,6 +936,7 @@ describe("OperatorFeedRelayStore", () => {
       serveIdleMs: 1_000,
       download: async (options) => {
         acquisitionSignal = options.signal;
+        acquisitionStarted.resolve();
         return await new Promise((_, reject) => {
           options.signal?.addEventListener("abort", () => reject(options.signal?.reason), {
             once: true,
@@ -948,14 +951,19 @@ describe("OperatorFeedRelayStore", () => {
     });
 
     try {
-      await expect(
-        relay.consume({
-          handle: registration.handle,
-          runId: "run-total-deadline",
-          signal: callerAbort.signal,
-        }),
-      ).rejects.toThrow(/deadline|timeout/i);
+      const consuming = relay.consume({
+        handle: registration.handle,
+        runId: "run-total-deadline",
+        signal: callerAbort.signal,
+      });
+      consuming.catch(() => {});
+      // The clock only moves once the download is in flight, so the deadline
+      // always lands on the acquisition however slow the work directory is.
+      await acquisitionStarted.promise;
+      await vi.advanceTimersByTimeAsync(20);
+      await expect(consuming).rejects.toThrow(/deadline|timeout/i);
       expect(acquisitionSignal?.aborted).toBe(true);
+      vi.useRealTimers();
       expect(() =>
         relay.register({
           runId: "run-after-total-deadline",
