@@ -275,37 +275,46 @@ describe("MapStylePoiClickHandler", () => {
     expect(usePlaceStore.getState().selectedPlace).toBeNull();
   });
 
-  it.each(["navigating", "rerouting", "arrived"] as const)(
-    "neither selects a POI nor drops a pin while %s",
-    (status) => {
-      const fake = new FakeMap({ "poi-label": [pointFeature({ name: "Museum" }, { id: 42 })] });
+  describe.each(["navigating", "rerouting", "arrived"] as const)("while %s", (status) => {
+    const tap = (fake: FakeMap) =>
+      act(() =>
+        fake.emit("click", {
+          point: { x: 12, y: 24 },
+          lngLat: { lng: 8, lat: 50 },
+          originalEvent: new MouseEvent("click"),
+        }),
+      );
+    const renderBoth = (fake: FakeMap) => {
       mapContextTest.mapRef.current = fake;
       useNavigationStore.setState({ status });
-      const view = render(
+      // Guidance runs with the directions rail collapsed (or no rail at all).
+      useSidebarStore.setState({ activeSidebarId: PANEL.DIRECTIONS, collapsed: true });
+      return render(
         <>
           <MapClickHandler />
           <MapStylePoiClickHandler />
         </>,
       );
-      const poiHit: Record<string, MapGeoJSONFeature[]> = {
-        "poi-label": [pointFeature({ name: "Museum" })],
-      };
-      for (const features of [poiHit, {}]) {
-        fake.setFeatures(features);
-        act(() =>
-          fake.emit("click", {
-            point: { x: 12, y: 24 },
-            lngLat: { lng: 8, lat: 50 },
-            originalEvent: new MouseEvent("click"),
-          }),
-        );
-      }
+    };
+
+    it("opens the place card for a POI and leaves the hidden sidebar alone", () => {
+      const fake = new FakeMap({ "poi-label": [pointFeature({ name: "Museum" }, { id: 42 })] });
+      renderBoth(fake);
+      tap(fake);
+      expect(usePlaceStore.getState().selectedPlace?.name).toBe("Museum");
+      expect(useSidebarStore.getState().activeSidebarId).toBe(PANEL.DIRECTIONS);
+      expect(useSidebarStore.getState().activeDetailId).toBe(PANEL.PLACE_CARD);
+    });
+
+    it("drops no pin for a tap on plain map", () => {
+      const fake = new FakeMap({});
+      renderBoth(fake);
+      tap(fake);
       expect(usePlaceStore.getState().selectedPlace).toBeNull();
-      expect(useSidebarStore.getState().activeSidebarId).toBeNull();
+      expect(useSidebarStore.getState().activeDetailId).toBeNull();
       expect(useMapClickStore.getState().clickedLngLat).toBeNull();
-      view.unmount();
-    },
-  );
+    });
+  });
 
   it("sets the pointer cursor only over a named POI", () => {
     const fake = new FakeMap({ "poi-label": [pointFeature({ name: "Smithsonian" })] });

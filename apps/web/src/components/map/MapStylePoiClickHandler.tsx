@@ -60,6 +60,12 @@ export function stylePoiPlace(target: StylePoiTarget): Place {
 
 function openPlace(place: Place, setSelectedPlace: (place: Place) => void) {
   setSelectedPlace(place);
+  // Navigation hides every sidebar and shows only the floating place card, so
+  // bypass openDetail, which would route a rail-less card to the hidden sidebar.
+  if (useNavigationStore.getState().status !== "idle") {
+    useSidebarStore.setState({ activeDetailId: PANEL.PLACE_CARD });
+    return;
+  }
   const sidebarId = useSidebarStore.getState().activeSidebarId;
   if (!sidebarId || sidebarId === PANEL.PLACE) {
     // Sidebar is empty or already showing a place — take it over and close any
@@ -169,8 +175,6 @@ export function MapStylePoiClickHandler() {
 
     const onClick = (e: MapMouseEvent) => {
       if (getMapClickOwner(e)) return;
-      // Place panels only get in the way while navigating.
-      if (useNavigationStore.getState().status !== "idle") return;
       const target = findStylePoiAtPoint(
         map,
         e.point,
