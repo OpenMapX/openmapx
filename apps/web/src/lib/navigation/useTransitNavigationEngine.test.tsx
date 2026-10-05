@@ -244,13 +244,17 @@ describe("useTransitNavigationEngine stop areas", () => {
     useNavigationStore.getState().startTransitNavigation(walkThenRide());
     renderEngine();
     await waitFor(() => expect(getOptional).toHaveBeenCalled());
-    await act(async () => {});
 
     // At the platform's far end: 60 m short of the pole, beyond the default circle.
-    act(() => fixHandler?.({ coords: [0.00001, -0.00054], accuracy: 5, timestampMs: Date.now() }));
-    expect(useNavigationStore.getState().transitProgress).toMatchObject({
-      currentLegIndex: 1,
-      phase: "waiting-to-board",
+    // The area lands asynchronously, so the rider keeps reporting until it does.
+    await waitFor(() => {
+      act(() =>
+        fixHandler?.({ coords: [0.00001, -0.00054], accuracy: 5, timestampMs: Date.now() }),
+      );
+      expect(useNavigationStore.getState().transitProgress).toMatchObject({
+        currentLegIndex: 1,
+        phase: "waiting-to-board",
+      });
     });
   });
 
