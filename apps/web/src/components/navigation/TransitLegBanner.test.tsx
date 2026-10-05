@@ -7,7 +7,7 @@ import {
   type TransitProgress,
 } from "@openmapx/core";
 import type { TripLeg } from "@openmapx/mobility-core/transit";
-import { render } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("next-intl", () => ({
@@ -35,6 +35,7 @@ vi.mock("@openmapx/core", async (importOriginal) => {
   };
 });
 
+import { notifyGetOff, playAlarmTone } from "@/lib/navigation/navNotify";
 import { TransitLegBanner } from "./TransitLegBanner";
 
 /** A leg on a fresh geometry array, so its index is genuinely built here. */
@@ -138,5 +139,52 @@ describe("TransitLegBanner leg index ownership", () => {
     );
 
     expect(readRouteMatcherCounters().preparations).toBe(2);
+  });
+});
+
+describe("TransitLegBanner while waiting at the boarding stop", () => {
+  afterEach(() => vi.clearAllMocks());
+
+  const waitingAt = (lng: number): TransitProgress => ({
+    ...progressAt(lng),
+    phase: "waiting-to-board",
+  });
+
+  it("names where to get off rather than the stop the rider stands at", () => {
+    render(
+      <TransitLegBanner
+        leg={freshLeg()}
+        legIndex={0}
+        totalLegs={2}
+        transitProgress={waitingAt(0)}
+      />,
+    );
+    expect(screen.getByText("alightAtCount")).toBeTruthy();
+    expect(screen.queryByText("nextStop")).toBeNull();
+  });
+
+  it("shows the next stop once aboard", () => {
+    render(
+      <TransitLegBanner
+        leg={freshLeg()}
+        legIndex={0}
+        totalLegs={2}
+        transitProgress={progressAt(0.0005)}
+      />,
+    );
+    expect(screen.getByText("nextStop")).toBeTruthy();
+  });
+
+  it("never sounds the get-off alarm before boarding", () => {
+    render(
+      <TransitLegBanner
+        leg={freshLeg()}
+        legIndex={0}
+        totalLegs={2}
+        transitProgress={waitingAt(0.0035)}
+      />,
+    );
+    expect(playAlarmTone).not.toHaveBeenCalled();
+    expect(notifyGetOff).not.toHaveBeenCalled();
   });
 });

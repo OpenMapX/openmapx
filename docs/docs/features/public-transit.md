@@ -130,6 +130,13 @@ vehicle it follows the trip stop by stop, refreshes the itinerary, shows the
 vehicle around you on a radar-style map, and surfaces platform changes,
 cancellations, occupancy, and service alerts as they arrive.
 
+A stop counts as reached as soon as you step onto it. Navigation uses the stop's
+real shape from OpenStreetMap — the platform your bus or train leaves from, or
+else the whole station — instead of a single point, so waiting anywhere along a
+long platform counts, getting off at either end of it does too, and a transfer
+inside a station still guides you on to the next platform. Where nothing is
+mapped, a circle sized for the vehicle stands in.
+
 The ride sheet can be swiped through upcoming stops and keeps scheduled and
 real-time values distinct. Transfer cards show the next line, platform, walking
 handoff, and connection risk; when a connection becomes endangered the app can
