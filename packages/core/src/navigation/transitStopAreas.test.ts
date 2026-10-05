@@ -9,6 +9,7 @@ import {
   stopAreaDistance,
   stopAreaShapeDistance,
   stopAreaTolerance,
+  transitStopAreaKey,
   transitStopsNeedingAreas,
 } from "./transitStopAreas";
 
@@ -173,7 +174,7 @@ const STATION = {
 describe("resolveTransitLegTargets", () => {
   it("shares the boarding area between the walk that reaches it and the ride", () => {
     const targets = resolveTransitLegTargets(trip([east(LNG, -500), LAT]), {
-      [BOARD.stopId]: area(BOARD.stopId, { platform: [PLATFORM], station: [STATION] }),
+      [`${BOARD.stopId}|`]: area(BOARD.stopId, { platform: [PLATFORM], station: [STATION] }),
     });
     expect(targets[0].end).toContain(PLATFORM);
     expect(targets[1].board).toBe(targets[0].end);
@@ -181,7 +182,7 @@ describe("resolveTransitLegTargets", () => {
 
   it("falls back from platform to station to a default circle", () => {
     const stationOnly = resolveTransitLegTargets(trip([east(LNG, -500), LAT]), {
-      [BOARD.stopId]: area(BOARD.stopId, { station: [STATION] }),
+      [`${BOARD.stopId}|`]: area(BOARD.stopId, { station: [STATION] }),
     });
     expect(stationOnly[0].end).toContain(STATION);
     const nothing = resolveTransitLegTargets(trip([east(LNG, -500), LAT]));
@@ -191,7 +192,7 @@ describe("resolveTransitLegTargets", () => {
   it("skips an area the walk already starts in, as within one station", () => {
     // The transfer walk begins on another platform of the same station.
     const targets = resolveTransitLegTargets(trip([east(LNG, 120), north(LAT, 60)]), {
-      [BOARD.stopId]: area(BOARD.stopId, { station: [STATION] }),
+      [`${BOARD.stopId}|`]: area(BOARD.stopId, { station: [STATION] }),
     });
     expect(targets[0].end).toEqual([defaultStopAreaShape([LNG, LAT], "bus")]);
   });
@@ -208,8 +209,47 @@ describe("resolveTransitLegTargets", () => {
 describe("transitStopsNeedingAreas", () => {
   it("lists every boarding and alighting stop once, with its vehicle mode", () => {
     expect(transitStopsNeedingAreas(trip([east(LNG, -500), LAT]))).toEqual([
-      { stopId: BOARD.stopId, lat: LAT, lng: LNG, name: BOARD.name, mode: "bus" },
-      { stopId: ALIGHT.stopId, lat: ALIGHT.lat, lng: ALIGHT.lng, name: ALIGHT.name, mode: "bus" },
+      {
+        key: `${BOARD.stopId}|`,
+        stopId: BOARD.stopId,
+        lat: LAT,
+        lng: LNG,
+        name: BOARD.name,
+        mode: "bus",
+      },
+      {
+        key: `${ALIGHT.stopId}|`,
+        stopId: ALIGHT.stopId,
+        lat: ALIGHT.lat,
+        lng: ALIGHT.lng,
+        name: ALIGHT.name,
+        mode: "bus",
+      },
+    ]);
+  });
+});
+
+describe("transitStopAreaKey", () => {
+  it("separates the platforms a station-level id shares", () => {
+    const arriving = { stopId: "db:8000001", platformCode: "2" };
+    const leaving = { stopId: "db:8000001", platformCode: "7" };
+    expect(transitStopAreaKey(arriving)).not.toBe(transitStopAreaKey(leaving));
+    expect(transitStopAreaKey({ platformCode: "2" })).toBeNull();
+  });
+
+  it("asks for each platform of a transfer station once", () => {
+    const station = { name: "Hbf", lat: LAT, lng: LNG, stopId: "db:8000001" };
+    const transfer = {
+      legs: [
+        { mode: "rail", tripId: "a", from: { ...ALIGHT }, to: { ...station, platformCode: "2" } },
+        { mode: "rail", tripId: "b", from: { ...station, platformCode: "7" }, to: { ...BOARD } },
+      ],
+    } as unknown as TripItinerary;
+    expect(transitStopsNeedingAreas(transfer).map((stop) => stop.key)).toEqual([
+      `${ALIGHT.stopId}|`,
+      "db:8000001|2",
+      "db:8000001|7",
+      `${BOARD.stopId}|`,
     ]);
   });
 });

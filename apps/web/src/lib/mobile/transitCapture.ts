@@ -13,7 +13,7 @@
  * invent stops that would put someone off a train in the wrong place.
  */
 
-import { transitStopsNeedingAreas } from "@openmapx/core/navigation";
+import { transitStopAreaSchema, transitStopsNeedingAreas } from "@openmapx/core/navigation";
 import {
   type ApiClient,
   type BuildTransitPackageResult,
@@ -167,11 +167,12 @@ export async function prepareTransitStart(
   const tripIds = riddenTripIds(input.itinerary);
 
   // The stops' shapes travel too: underground there is no fetching them later.
+  const needs = transitStopsNeedingAreas(input.itinerary);
   const [fetched, areas] = await Promise.all([
     mapWithLimit(tripIds, CAPTURE_CONCURRENCY, (tripId) =>
       fetchJourneyStops(tripId, input.client, input.signal),
     ),
-    mapWithLimit(transitStopsNeedingAreas(input.itinerary), CAPTURE_CONCURRENCY, (stop) =>
+    mapWithLimit(needs, CAPTURE_CONCURRENCY, (stop) =>
       fetchStopArea(stop, input.client, input.signal),
     ),
   ]);
@@ -188,7 +189,11 @@ export async function prepareTransitStart(
   }
 
   const stopAreas: Record<string, TransitStopArea> = {};
-  for (const area of areas) if (area) stopAreas[area.stopId] = area;
+  needs.forEach((need, index) => {
+    const area = areas[index];
+    // A malformed area must cost only its own stop, never the whole start.
+    if (area && transitStopAreaSchema.safeParse(area).success) stopAreas[need.key] = area;
+  });
 
   const built = buildTransitNavigationPackage({
     itinerary: input.itinerary,

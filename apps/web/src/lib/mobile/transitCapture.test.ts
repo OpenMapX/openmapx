@@ -101,8 +101,26 @@ describe("prepareTransitStart", () => {
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(Object.keys(result.startPackage.stopAreas ?? {})).toEqual(["a0"]);
-    expect(result.startPackage.stopAreas?.a0?.platform).toEqual([shape]);
+    expect(Object.keys(result.startPackage.stopAreas ?? {})).toEqual(["a0|"]);
+    expect(result.startPackage.stopAreas?.["a0|"]?.platform).toEqual([shape]);
+  });
+
+  it("drops a malformed stop area instead of refusing the trip", async () => {
+    const { client } = fakeClient(() => withStops(4));
+    const broken = { type: "line", coordinates: [[8, 50]], bufferMeters: 4 };
+    (client as unknown as { getOptional: unknown }).getOptional = vi.fn(async () => ({
+      data: { stopId: "a0", platform: [broken], station: [], source: "osm" },
+    }));
+
+    const result = await prepareTransitStart({
+      ...baseInput,
+      itinerary: itineraryWith(["t1"]),
+      client,
+    });
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.startPackage.stopAreas).toBeUndefined();
   });
 
   it("fetches a repeated trip once", async () => {

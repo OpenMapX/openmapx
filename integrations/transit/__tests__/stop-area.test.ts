@@ -89,6 +89,10 @@ describe("parseStopAreaQuery", () => {
     const a = query({ stopId: "s", platform: "1" });
     expect(stopAreaCacheKey(a)).not.toBe(stopAreaCacheKey({ ...a, lat: LAT + 0.01 }));
     expect(stopAreaCacheKey(a)).not.toBe(stopAreaCacheKey({ ...a, platform: "2" }));
+    expect(stopAreaCacheKey(a)).not.toBe(stopAreaCacheKey({ ...a, name: "Somewhere else" }));
+    expect(stopAreaCacheKey({ ...a, name: "Köln Hbf" })).toBe(
+      stopAreaCacheKey({ ...a, name: "Köln Hauptbahnhof" }),
+    );
   });
 
   it("searches wider around a station than around a bus stop", () => {
@@ -283,6 +287,16 @@ describe("deriveStopAreaFromOsm", () => {
       response([node(60, 60, 0, { highway: "bus_stop" })]),
     );
     expect(far).toBeNull();
+  });
+
+  it("turns a one-node platform way into a point the package accepts", () => {
+    const area = deriveStopAreaFromOsm(
+      query({ stopId: "mo:de-DELFI_de:05334:2:1:1", mode: "bus" }),
+      response([way(100, [[0, 0]], { highway: "platform", "ref:IFOPT": "de:05334:2:1:1" })]),
+    );
+    expect(area?.platform).toEqual([
+      { type: "point", coordinates: lngLat(0, 0), bufferMeters: 12 },
+    ]);
   });
 
   it("does not guess a platform for a train with no track", () => {

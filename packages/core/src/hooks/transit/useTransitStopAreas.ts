@@ -9,10 +9,15 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
+interface KeyedArea {
+  key: string;
+  area: TransitStopArea | null;
+}
+
 /** Module-level so React Query keeps the combined index stable between renders. */
-function indexAreas(results: UseQueryResult<TransitStopArea | null>[]): TransitStopAreaIndex {
+function indexAreas(results: UseQueryResult<KeyedArea>[]): TransitStopAreaIndex {
   const index: Record<string, TransitStopArea> = {};
-  for (const result of results) if (result.data) index[result.data.stopId] = result.data;
+  for (const result of results) if (result.data?.area) index[result.data.key] = result.data.area;
   return index;
 }
 
@@ -26,8 +31,10 @@ export function useTransitStopAreas(itinerary: TripItinerary | null): TransitSto
   return useQueries({
     queries: stops.map((stop) => ({
       queryKey: ["transit-stop-area", stop.stopId, stop.lat, stop.lng, stop.platform ?? null],
-      queryFn: ({ signal }: { signal: AbortSignal }) =>
-        fetchTransitStopArea(stop, undefined, { signal }),
+      queryFn: async ({ signal }: { signal: AbortSignal }): Promise<KeyedArea> => ({
+        key: stop.key,
+        area: await fetchTransitStopArea(stop, undefined, { signal }),
+      }),
       staleTime: DAY_MS,
       gcTime: DAY_MS,
       retry: 1,

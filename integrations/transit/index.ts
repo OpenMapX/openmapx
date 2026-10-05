@@ -439,7 +439,12 @@ export function setup(ctx: IntegrationContext): void {
       undefined,
       (value) => value.complete,
     );
-    reply.header("Cache-Control", "public, max-age=86400, s-maxage=604800");
+    // A lookup a source failed is worse than the next one will be: keep it
+    // out of every cache, not only the server's.
+    reply.header(
+      "Cache-Control",
+      resolved.complete ? "public, max-age=86400, s-maxage=604800" : "no-store",
+    );
     if (!resolved.area) {
       reply.status(204).send(null);
       return;

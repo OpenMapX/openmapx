@@ -241,7 +241,8 @@ export const transitStartPackageSchema = z
     itinerary: z.record(z.string(), z.unknown()),
     captures: z.array(transitLegCaptureSchema).max(MAX_LEGS).default([]),
     /** The shapes of the trip's stops, captured with the journeys; absent ones are circles. */
-    stopAreas: z.record(z.string().max(MAX_ID_LENGTH), transitStopAreaSchema).optional(),
+    // Keyed by stop id and platform (`transitStopAreaKey`).
+    stopAreas: z.record(z.string().max(MAX_ID_LENGTH + 65), transitStopAreaSchema).optional(),
     replanOptions: z.record(z.string(), z.unknown()).optional(),
     locale: localeSchema,
     units: unitsSchema,

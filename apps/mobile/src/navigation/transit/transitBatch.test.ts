@@ -370,7 +370,12 @@ describe("processTransitBatch stop areas", () => {
           ...(withAreas
             ? {
                 stopAreas: {
-                  "stop-a": { stopId: "stop-a", platform: [platform], station: [], source: "osm" },
+                  "stop-a|3": {
+                    stopId: "stop-a",
+                    platform: [platform],
+                    station: [],
+                    source: "osm",
+                  },
                 },
               }
             : {}),

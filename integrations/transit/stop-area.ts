@@ -100,6 +100,8 @@ export function stopAreaCacheKey(query: StopAreaQuery): string {
     query.lng.toFixed(4),
     query.platform ?? "",
     query.mode,
+    // Names decide the stop place where the id does not.
+    normaliseName(query.name)[0] ?? "",
   ].join(":");
 }
 
@@ -179,7 +181,8 @@ function closed(coords: LngLat[]): boolean {
 function wayPiece(
   coords: LngLat[],
   tags: Record<string, string>,
-): { type: "line" | "polygon"; coordinates: LngLat[] } {
+): { type: "point" | "line" | "polygon"; coordinates: LngLat[] } {
+  if (coords.length < 2) return { type: "point", coordinates: coords };
   // A closed platform outline is an area unless it says otherwise.
   const area = closed(coords) && tags.area !== "no";
   return area
@@ -326,6 +329,22 @@ function stopPositionShapes(feature: Feature): TransitStopAreaShape[] {
     }));
 }
 
+/** Most shapes and points a stop area may carry, as the mobile package accepts. */
+const MAX_SHAPES = 64;
+const MAX_SHAPE_POINTS = 2000;
+
+/** Drops shapes a consumer could not take, and keeps the count bounded. */
+function boundShapes(shapes: TransitStopAreaShape[]): TransitStopAreaShape[] {
+  return shapes
+    .filter((shape) =>
+      shape.type === "point"
+        ? true
+        : shape.coordinates.length >= (shape.type === "line" ? 2 : 3) &&
+          shape.coordinates.length <= MAX_SHAPE_POINTS,
+    )
+    .slice(0, MAX_SHAPES);
+}
+
 /** A hull around points, as a station area; null when degenerate or implausibly wide. */
 function hullShape(points: LngLat[], bufferMeters: number): TransitStopAreaShape | null {
   if (points.length === 0) return null;
@@ -437,8 +456,9 @@ export function deriveStopAreaFromOsm(
   const hull = stationFeatures.length >= 2 ? hullShape(stationPoints, BUFFER.station) : null;
   const station = hull ? [hull] : [];
 
-  if (platform.length === 0 && station.length === 0) return null;
-  return { stopId: query.stopId, platform, station, source: "osm" };
+  const bounded = boundShapes(platform);
+  if (bounded.length === 0 && station.length === 0) return null;
+  return { stopId: query.stopId, platform: bounded, station, source: "osm" };
 }
 
 /**

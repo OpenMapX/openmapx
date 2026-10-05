@@ -99,6 +99,7 @@ export {
   type TransitLegCapture,
   type TransitNavigationStartPackage,
   transitStartPackageSchema,
+  transitStopAreaSchema,
   WEB_TO_NATIVE_TYPES,
   type WebToNativeMessage,
   webToNativeSchema,
@@ -254,6 +255,8 @@ export {
   stopAreaTolerance,
   type TransitLegTargets,
   type TransitStopAreaIndex,
+  type TransitStopAreaNeed,
+  transitStopAreaKey,
   transitStopsNeedingAreas,
 } from "./transitStopAreas";
 export {

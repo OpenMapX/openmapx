@@ -165,8 +165,20 @@ export function spanMeters(points: readonly LngLat[]): number {
   return span;
 }
 
-/** Stop areas keyed by the itinerary's stop id. */
+/** Stop areas keyed by {@link transitStopAreaKey}. */
 export type TransitStopAreaIndex = Readonly<Record<string, TransitStopArea | undefined>>;
+
+/**
+ * Which stop area a trip's place needs: its stop id and platform together. A
+ * station-level id names every platform of the station, so the train a rider
+ * arrives on and the one they change to share it — but not their areas.
+ */
+export function transitStopAreaKey(place: {
+  stopId?: string;
+  platformCode?: string;
+}): string | null {
+  return place.stopId ? `${place.stopId}|${place.platformCode ?? ""}` : null;
+}
 
 /** The shapes that decide "at this stop" for one end of one leg. */
 export interface TransitLegTargets {
@@ -190,12 +202,13 @@ function placePoint(place: { lat: number; lng: number }): LngLat {
  * exactly a transfer between two platforms of one station.
  */
 function stopTarget(
-  place: { lat: number; lng: number; stopId?: string },
+  place: { lat: number; lng: number; stopId?: string; platformCode?: string },
   mode: string | undefined,
   areas: TransitStopAreaIndex,
   mustStartOutside?: LngLat,
 ): TransitStopAreaShape[] | null {
-  const area = place.stopId ? areas[place.stopId] : undefined;
+  const key = transitStopAreaKey(place);
+  const area = key ? areas[key] : undefined;
   const located = Number.isFinite(place.lat) && Number.isFinite(place.lng);
   const fallback = located ? [defaultStopAreaShape(placePoint(place), mode)] : [];
   const tiers: TransitStopAreaShape[][] = [];
@@ -253,24 +266,27 @@ export function resolveTransitLegTargets(
   return targets;
 }
 
-/** The stops whose areas a trip needs: every boarding and alighting stop. */
-export function transitStopsNeedingAreas(itinerary: TripItinerary): Array<{
+/** One stop area a trip needs, with the key its answer is indexed under. */
+export interface TransitStopAreaNeed {
+  key: string;
   stopId: string;
   lat: number;
   lng: number;
   name: string;
   platform?: string;
   mode: string;
-}> {
-  const stops = new Map<
-    string,
-    { stopId: string; lat: number; lng: number; name: string; platform?: string; mode: string }
-  >();
+}
+
+/** The stops whose areas a trip needs: every boarding and alighting platform. */
+export function transitStopsNeedingAreas(itinerary: TripItinerary): TransitStopAreaNeed[] {
+  const stops = new Map<string, TransitStopAreaNeed>();
   for (const leg of itinerary.legs ?? []) {
     if (!isTransit(leg)) continue;
     for (const place of [leg.from, leg.to]) {
-      if (!place.stopId || stops.has(place.stopId)) continue;
-      stops.set(place.stopId, {
+      const key = transitStopAreaKey(place);
+      if (!key || !place.stopId || stops.has(key)) continue;
+      stops.set(key, {
+        key,
         stopId: place.stopId,
         lat: place.lat,
         lng: place.lng,

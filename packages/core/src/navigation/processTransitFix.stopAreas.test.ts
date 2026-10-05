@@ -86,13 +86,13 @@ function platform(fromX: number, toX: number) {
 }
 
 const AREAS: TransitStopAreaIndex = {
-  [BOARD_QUAY.stopId]: {
+  [`${BOARD_QUAY.stopId}|${BOARD_QUAY.platformCode}`]: {
     stopId: BOARD_QUAY.stopId,
     platform: [platform(-200, 200)],
     station: [],
     source: "osm",
   } satisfies TransitStopArea,
-  [ALIGHT_QUAY.stopId]: {
+  [`${ALIGHT_QUAY.stopId}|${ALIGHT_QUAY.platformCode}`]: {
     stopId: ALIGHT_QUAY.stopId,
     platform: [platform(1300, 1700)],
     station: [],
@@ -265,7 +265,7 @@ describe("a transfer inside one station", () => {
     ],
   } as unknown as TripItinerary;
   const stationOnly: TransitStopAreaIndex = {
-    [P3.stopId]: {
+    [`${P3.stopId}|${P3.platformCode}`]: {
       stopId: P3.stopId,
       platform: [],
       station: [
